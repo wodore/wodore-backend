@@ -49,7 +49,6 @@ class Command(BaseCommand):
                 #./manage.py dumpdata --format yaml huts.Organization  -o server/apps/huts
                 fixture_path = os.path.relpath(f"{app_root}/fixtures/organizations.yaml")
                 call_command('dumpdata', "huts.Organization", format = "yaml", output = fixture_path) 
-                file = open(fixture_path, "r")
                 with open(fixture_path, "r") as file:
                     new_lines = [] # remove created and modified
                     for line in file.readlines():
@@ -57,6 +56,7 @@ class Command(BaseCommand):
                             new_lines.append(line)
                 with open(fixture_path, "w") as file:
                     file.writelines(new_lines)
+                self.stdout.write( self.style.WARNING(f"Make sure to copy any new/changed logo to '{media_src}'"))
                 self.stdout.write( self.style.SUCCESS(f"Successfully saved data to '{fixture_path}'"))
             except Exception as e:
                 self.stderr.write(str(e))
