@@ -28,6 +28,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
 
     # Extension:
     'colorfield',
+    'jsoneditor',
 
     # Default django apps:
     'django.contrib.auth',
@@ -131,6 +132,7 @@ TIME_ZONE = 'UTC'
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
 STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR.joinpath('static')
 
 STATICFILES_FINDERS = (
     'django.contrib.staticfiles.finders.FileSystemFinder',

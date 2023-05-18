@@ -1,0 +1,89 @@
+- model: huts.organization
+  pk: 1
+  fields:
+    slug: hrs
+    name: Alpsonline
+    fullname: Alpsonline
+    url: https://www.alpsonline.org/guest/login
+    link_hut_pattern: https://www.alpsonline.org/reservation/calendar?hut_id={{id}}&lang={{lang}}
+    attribution: ""
+    logo: huts/organizations/logos/hrs_icon.ico
+    color_light: "#689751"
+    color_dark: "#cbeba9"
+    order: 0
+- model: huts.organization
+  pk: 4
+  fields:
+    slug: sac
+    config: 
+      huts_tours: {en: huts-and-tours, de: huetten-und-touren, fr: cabanes-et-courses, it: capanne-e-escursioni} 
+      portal: {en: sac-route-portal, de: sac-tourenportal, fr: portail-des-courses-du-cas, it: portale-escursionistico-del-cas}
+    name: SAC
+    fullname: Schweizer Alpen Club
+    url: https://www.sac-cas.ch
+    link_hut_pattern: "https://www.sac-cas.ch/{{lang}}/{{config.huts_tours.get(lang,'de')}}/{{config.portal.get(lang,'de')}}/{{id}}"
+    attribution: ""
+    logo: huts/organizations/logos/sac_icon.ico
+    color_light: "#008000"
+    color_dark: "#008000"
+    order: 1
+- model: huts.organization
+  pk: 0
+  fields:
+    slug: gipfelbuch
+    props_schema: 
+      slug: "<id>-<name>"
+    name: Gipfelbuch
+    fullname: Gipfelbuch
+    url: https://www.gipfelbuch.ch
+    link_hut_pattern: https://www.gipfelbuch.ch/huetten/{{props.slug}}
+    attribution: ""
+    logo: huts/organizations/logos/gipfelbuch_icon.png
+    color_light: "#414140"
+    color_dark: "#9d9d9c"
+    order: 2
+- model: huts.organization
+  pk: 2
+  fields:
+    slug: nfs
+    config: 
+      house: 
+        de: hauser
+        fr: maison
+    name: Naturfreunde
+    fullname: Naturfreunde Schweiz
+    url: https://naturfreunde.ch
+    link_hut_pattern: "https://naturfreunde.ch/{{config.house.get(lang,'de')}})/{{props.slug}}"
+    attribution: ""
+    logo: huts/organizations/logos/nfs_icon.png
+    color_light: "#e5162a"
+    color_dark: "#e5162a"
+    order: 3
+- model: huts.organization
+  pk: 3
+  fields:
+    slug: osm
+    props_schema: 
+      object_type: ["node", "way"]
+    name: OSM
+    fullname: Open Street Map
+    url: https://www.openstreetmap.org
+    link_hut_pattern: https://www.openstreetmap.org/{{props.object_type}}/{{id}}
+    attribution: ""
+    logo: huts/organizations/logos/osm_icon.png
+    color_light: "#13325d"
+    color_dark: "#13325d"
+    order: 4
+- model: huts.organization
+  pk: 5
+  fields:
+    slug: wikidata
+    name: Wikidata
+    fullname: Wikidata
+    url: https://www.wikidata.org
+    link_hut_pattern: https://www.wikidata.org/wiki/{{id}}
+    attribution: ""
+    logo: huts/organizations/logos/wikidata_icon.ico
+    color_light: "#009640"
+    color_dark: "#009640"
+    order: 5

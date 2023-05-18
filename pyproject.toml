@@ -24,6 +24,8 @@ python-decouple = "^3.8"
 structlog = "^23.1"
 django-colorfield = "^0.8.0"
 pillow = "^9.5.0"
+django-model-utils = "^4.3.1"
+django-jsoneditor = "^0.2.4"
 
 
 [tool.poetry.group.dev.dependencies]
