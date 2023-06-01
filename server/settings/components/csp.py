@@ -11,9 +11,9 @@ Docs: https://github.com/mozilla/django-csp
 from typing import Tuple
 
 # These values might and will be redefined in `development.py` env:
-CSP_SCRIPT_SRC: Tuple[str, ...] = ("'self'",)
+CSP_SCRIPT_SRC: Tuple[str, ...] = ("'self'","'unsafe-inline'", "https://cdn.jsdelivr.net")
 CSP_IMG_SRC: Tuple[str, ...] = ("'self'",)
 CSP_FONT_SRC: Tuple[str, ...] = ("'self'",)
-CSP_STYLE_SRC: Tuple[str, ...] = ("'self'","'unsafe-inline'")
+CSP_STYLE_SRC: Tuple[str, ...] = ("'self'","'unsafe-inline'", "https://cdn.jsdelivr.net")
 CSP_DEFAULT_SRC: Tuple[str, ...] = ("'none'",)
 CSP_CONNECT_SRC: Tuple[str, ...] = ()

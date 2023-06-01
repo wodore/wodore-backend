@@ -24,11 +24,14 @@ SECRET_KEY = config('DJANGO_SECRET_KEY')
 INSTALLED_APPS: Tuple[str, ...] = (
     # Your apps go here:
     'server.apps.main',
-    'server.apps.huts',
+    'server.apps.organizations',
 
     # Extension:
+    'ninja',
     'colorfield',
     'jsoneditor',
+    'modeltrans',
+    'django_jsonform',
 
     # Default django apps:
     'django.contrib.auth',
@@ -111,13 +114,18 @@ DATABASES = {
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+#LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'de'
+#LANGUAGE_CODE = 'fr'
 
 USE_I18N = True
+#USE_I18N = False
 
 LANGUAGES = (
+    ('de', _('German')),
     ('en', _('English')),
-    ('ru', _('Russian')),
+    ('fr', _('French')),
+    ('it', _('Italian')),
 )
 
 LOCALE_PATHS = (
@@ -125,7 +133,8 @@ LOCALE_PATHS = (
 )
 
 USE_TZ = True
-TIME_ZONE = 'UTC'
+#TIME_ZONE = 'UTC'
+TIME_ZONE = 'Europe/Zurich'
 
 
 # Static files (CSS, JavaScript, Images)

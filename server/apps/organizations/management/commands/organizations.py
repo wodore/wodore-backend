@@ -1,9 +1,11 @@
 import os
+import traceback
 from django.core.management.base import BaseCommand, CommandError
 from ...models import Organization
 from django.core.management import call_command
 from django.conf import settings
 import shutil
+from ....djjmt.utils import override
 
 class Command(BaseCommand):
     help = "Initialize and drop data in Organizations table"
@@ -22,7 +24,7 @@ class Command(BaseCommand):
 
     def handle(self, drop: bool, fill: bool, all: bool, save: bool, ignore_media: bool, *args, **options):
         # get media files paths
-        logo_path = "/huts/organizations"
+        logo_path = "/organizations"
         media_dst = os.path.relpath(f"{settings.MEDIA_ROOT}/{logo_path}")
         app_root = os.path.join(os.path.dirname(__file__),"..","..")
         media_src = os.path.relpath(f"{app_root}/media/{logo_path}")
@@ -36,19 +38,18 @@ class Command(BaseCommand):
         if fill or all:
             self.stdout.write(f"Load data from 'organizations.yaml' fixtures")
             try:
-                call_command('loaddata', "organizations", app_label='huts') 
+                call_command('loaddata', "organizations", app_label='organizations') 
                 self.stdout.write( self.style.SUCCESS(f"Successfully loaded data"))
             except Exception as e:
-                self.stderr.write(str(e))
+                self.stderr.write(traceback.format_exc())
                 self.stdout.write(self.style.ERROR(f"Loaddata failed, fix issues and run again"))
             if not ignore_media:
                 self.stdout.write(f"Copy media files from '{media_src}' to '{media_dst}'")
                 shutil.copytree(media_src, media_dst, dirs_exist_ok=True)
         if save:
             try:
-                #./manage.py dumpdata --format yaml huts.Organization  -o server/apps/huts
                 fixture_path = os.path.relpath(f"{app_root}/fixtures/organizations.yaml")
-                call_command('dumpdata', "huts.Organization", format = "yaml", output = fixture_path) 
+                call_command('dumpdata', "organizations.Organization", format = "yaml", output = fixture_path) 
                 with open(fixture_path, "r") as file:
                     new_lines = [] # remove created and modified
                     for line in file.readlines():

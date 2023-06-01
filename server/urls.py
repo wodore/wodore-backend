@@ -15,9 +15,10 @@ from django.contrib.admindocs import urls as admindocs_urls
 from django.urls import include, path
 from django.views.generic import TemplateView
 from health_check import urls as health_urls
+from .apps.api.api_v1 import api as api_v1
 
-from server.apps.main import urls as main_urls
-from server.apps.main.views import index
+from .apps.main import urls as main_urls
+from .apps.main.views import index
 
 admin.autodiscover()
 
@@ -31,6 +32,9 @@ urlpatterns = [
     # django-admin:
     path('admin/doc/', include(admindocs_urls)),
     path('admin/', admin.site.urls),
+
+    # Api:
+    path("api/v1/", api_v1.urls),
 
     # Text and xml static files:
     path('robots.txt', TemplateView.as_view(
