@@ -42,31 +42,29 @@ class TranslationJSONField(JSONField):
             kwargs['langs'] = self.langs
         return name, path, args, kwargs
 
+    @property
+    def non_db_attrs(self):
+        return super().non_db_attrs + ("langs", "base_field")
+
     def contribute_to_class(self, cls, name, **kwargs):
         """
         Attach the custom translation descritor to the
         model attribute to control access to the field values.
         """
         super().contribute_to_class(cls, name, **kwargs)
-        setattr(cls, f'{name}__raw', TranslationJSONRawFieldDescriptor(name))
-        setattr(cls, name, TranslationJSONFieldDescriptor())
+        #_raw = TranslationJSONRawFieldDescriptor(name)
+        #setattr(cls, f'{name}__raw', _raw)
+        ##cls._meta.add_field(_raw, private=False)
+        _obj = TranslationJSONFieldDescriptor(field=self)
+        setattr(cls, name, _obj)
 
     def validate(self, value, model_instance):
         super().validate(value, model_instance)
         # TODO: check if the keys are valid language codes
 
-    #def formfield(self, **kwargs):
-    #    # This is a fairly standard way to set up some defaults
-    #    # while letting the caller override them.
-    #    defaults = {}
-    #    defaults.update(kwargs)
-    #    #defaults = {"form_class": self.base_field()}
-    #    return super().formfield(**defaults)
-
-
 class TranslationJSONFieldDescriptor:
-    def __init__(self):
-        self.json_value = {}
+    def __init__(self, field):
+        self.field = field
 
     def __get__(self, instance, owner, raw=False, lang=None) -> str | dict:
         """
@@ -80,19 +78,22 @@ class TranslationJSONFieldDescriptor:
         if instance is None:
             return self
 
+        field_name = self.field.attname
+        data = instance.__dict__
+        json_value = data.get(field_name, {})
         if raw is True:
-            return self.json_value
+            return json_value
 
         if lang is None:
             lang = get_normalised_language()
         if lang is None:
-            return self.json_value
+            return json_value
             #raise ImproperlyConfigured('Enable translations to use TranslationJSONField.')
 
-        if lang not in self.json_value:
+        if lang not in json_value:
             lang = normalise_language_code(settings.LANGUAGE_CODE)
 
-        return self.json_value.get(lang, None)
+        return json_value.get(lang, None)
 
     def __set__(self, instance, value):
         """
@@ -102,18 +103,24 @@ class TranslationJSONFieldDescriptor:
         and store it as an attribute on the descriptor for later use.
         Otherwise will set the passed value on the dict based on the active language.
         """
+        data = instance.__dict__
+        field_name = self.field.attname
+        if field_name in data:
+            json_value = data[field_name]
+        else:
+            json_value = {}
         if isinstance(value, str):
             lang = get_normalised_language()
             if lang is None:
                 #lang = 'de' # TODO use fallback default
                 raise ImproperlyConfigured('Enable translations to use TranslationJSONField.')
-            self.json_value[lang] = value
+            json_value[lang] = value
         else:
-            self.json_value = value
-        print(self.json_value)
+            json_value = value
+        data[field_name] = json_value
 
-    def __str__(self):
-        return self.get(lang="de")
+    #def __str__(self):
+        #return self.get(lang="de")
 
 
 class TranslationJSONRawFieldDescriptor:

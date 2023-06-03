@@ -30,8 +30,8 @@ class OrganizationSchema(ModelSchema):
 
 class OrganizationSchemaOut(OrganizationSchema, TranslationModel):
     slug: Optional[str] = None
-    name: str = Field(None)
-    fullname: str = None
+    name: str | dict = Field(None)
+    fullname: str | dict = None
     order: int = None
     #i18n: dict = None
     #name2_t : Translations = Translations(locale="en")
