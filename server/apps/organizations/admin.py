@@ -9,14 +9,14 @@ from django.db import models
 # Register your models here.
 
 from .models import Organization
-from ..djjmt.utils import override
+from ..djjmt.utils import override, activate
 
 
 @admin.register(Organization)
 #class OrganizationAdmin(ActiveLanguageMixin, admin.ModelAdmin[Organization]):
 class OrganizationAdmin(admin.ModelAdmin[Organization]):
     """Admin panel example for ``BlogPost`` model."""
-    list_display = ["slug", "name", "name_with_url", "light", "dark", "logo_thumb"]
+    list_display = ["slug", "name_t", "name_with_url", "light", "dark", "logo_thumb"]
     list_display_links = ["slug"]
     #fields = ["__str__"]
     readonly_fields = ['logo_preview', 'created', 'modified']
@@ -34,8 +34,13 @@ class OrganizationAdmin(admin.ModelAdmin[Organization]):
     def dark(self, obj):
         return self.show_color(obj.color_dark)
 
+    def name_t(self, obj):
+        with override():
+            return obj.name
+    name_t.short_description = "Short Name"
+
     def name_with_url(self, obj):
-        with override("de"):
+        with override():
             return mark_safe(f'<a target="_blank" href="{obj.url}"/>{obj.fullname}</a>')
 
     def logo_thumb(self, obj): #new

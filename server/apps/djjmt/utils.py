@@ -1,5 +1,6 @@
-#from django.utils.translation import get_language
-#from django.utils.translation import activate as lang_activate
+from django.utils.translation import get_language as django_get_language
+from django.utils.translation import activate as django_activate
+from django.utils.translation import deactivate as django_deactivate
 from contextlib import ContextDecorator
 
 #TODO activate django lang settings as well
@@ -22,19 +23,27 @@ def get_language():
     return _LANG
 
 class override(ContextDecorator):
-    def __init__(self, language, deactivate=False):
-        self.language = language
+    def __init__(self, language = None, deactivate=False):
+        if not language:
+            self.language = None
+        elif language.lower() in ["_", "default"]:
+            self.language = django_get_normalised_language()
+        else:
+            self.language = language
         self.deactivate = deactivate
 
     def __enter__(self):
         #self.old_language = get_language()
         if self.language is not None:
             activate(self.language)
+            django_activate(self.language)
         else:
             deactivate()
+            django_deactivate()
 
     def __exit__(self, exc_type, exc_value, traceback):
         deactivate()
+        django_deactivate()
         #if self.old_language is None:
         #    deactivate()
         #elif self.deactivate:
@@ -57,5 +66,10 @@ def normalise_language_code(lang_code):
 
 def get_normalised_language():
     lang = get_language()
+    if lang:
+        return normalise_language_code(lang)
+
+def django_get_normalised_language():
+    lang = django_get_language()
     if lang:
         return normalise_language_code(lang)

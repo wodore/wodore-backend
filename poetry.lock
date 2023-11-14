@@ -865,14 +865,14 @@ Django = ">=3.2"
 
 [[package]]
 name = "django-ninja"
-version = "0.21.0"
+version = "0.22.2"
 description = "Django Ninja - Fast Django REST framework"
 category = "main"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "django-ninja-0.21.0.tar.gz", hash = "sha256:3ed90fc55877408d5c42ec3d3cec8384c9a0cc7adf2cd66d6669561bed10a485"},
-    {file = "django_ninja-0.21.0-py3-none-any.whl", hash = "sha256:b6ed7647212a4647682b134a6f82277ecf02e9d99960777aa75d124685682d25"},
+    {file = "django_ninja-0.22.2-py3-none-any.whl", hash = "sha256:c53b098a8190f373ea2605c276a6061d48b2626500a9c6b9916c503e4b4a20eb"},
+    {file = "django_ninja-0.22.2.tar.gz", hash = "sha256:913ebde7571d6a6968c9ac0b9e8a24680c46444d44fdd552f8831dbeede1292c"},
 ]
 
 [package.dependencies]
@@ -3565,4 +3565,4 @@ dev = ["doc8", "flake8", "flake8-import-order", "rstcheck[sphinx]", "sphinx"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "c1c19321c79d383012f04fc810e7693f4ac1925eba843be2186806eb083b4151"
+content-hash = "82eaef1ddf891e5ad1d38b233368bea432dd72b175ea1c14adb98d73870aab14"
