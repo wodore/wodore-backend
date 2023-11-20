@@ -1,14 +1,10 @@
 from ninja import NinjaAPI, Swagger
 
-from ..organizations.api import router as organizations_router
-
 from .parser import MsgSpecParser
 from .renderer import MsgSpecRenderer
 
-api = NinjaAPI()
 
-
-api = NinjaAPI(docs=Swagger(), renderer=MsgSpecRenderer(), parser=MsgSpecParser())
+api = NinjaAPI(title="Wodore API", version="1.0.0", docs=Swagger(), renderer=MsgSpecRenderer(), parser=MsgSpecParser())
 
 root_path = "server.apps"
 

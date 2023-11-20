@@ -1,4 +1,6 @@
 from typing import Any
+
+from pydantic import ConfigDict
 from .models import Organization
 
 from ninja import ModelSchema
@@ -8,7 +10,7 @@ from ..djjmt.fields import TranslationSchema
 
 class OrganizationUpdate(ModelSchema):
     slug: str | None = None
-    name: dict[str, Any] | None = None
+    name: TranslationSchema | None = None
     order: int | None = None
 
     class Meta:
@@ -19,7 +21,7 @@ class OrganizationUpdate(ModelSchema):
 
 class OrganizationOptional(ModelSchema):
     name: str | TranslationSchema | None = None
-    description: str | TranslationSchema | None = None
+    # description: str | TranslationSchema | None = None
     order: int | None = None
 
     class Meta:

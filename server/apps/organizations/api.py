@@ -1,25 +1,29 @@
+from functools import wraps
 from django.db import IntegrityError
+from django.http import HttpRequest
 from django.shortcuts import get_object_or_404
 from ninja import Query, Router
-from typing import List, Dict
+from typing import Annotated, Any, Callable, List, Dict, TypeVar
+from typing_extensions import TypeAliasType
 
 from .models import Organization
 from .schema import OrganizationCreate, OrganizationOptional, OrganizationUpdate
 from ninja.errors import HttpError
 
-from ninja import ModelSchema
+from ninja import Schema
 
-from ..utils.query import Fields as QueryFields
-from ..djjmt.utils import override
-from ..djjmt.fields import TranslationSchema
+from ..utils.query import FieldsParam
+from ..djjmt.utils import with_language_param
+from ..djjmt.fields import LanguageParam
+
 
 router = Router()
 
 
 @router.get("/", response=List[OrganizationOptional], exclude_unset=True)
-def list_organizations(request, lang: str | None = None, fields: Query[QueryFields[OrganizationOptional]] = None):
-    with override(lang):
-        objs = fields.validate(list(Organization.objects.all()))
+@with_language_param("language")
+def list_organizations(request, lang: LanguageParam, fields: Query[FieldsParam[OrganizationOptional]]):
+    objs = fields.validate(list(Organization.objects.all()))
     return objs
 
 
@@ -37,12 +41,10 @@ def create_organization(request, payload: OrganizationCreate):
 
 
 @router.get("/{slug}", response=OrganizationOptional, exclude_unset=True)
-def organization_details(
-    request, slug: str, lang: str | None = None, fields: Query[QueryFields[OrganizationOptional]] = None
-):
+@with_language_param()
+def organization_details(request, slug: str, lang: LanguageParam, fields: Query[FieldsParam[OrganizationOptional]]):
     fields.update_default("__all__")
-    with override(lang):
-        obj = fields.validate(get_object_or_404(Organization, slug=slug))
+    obj = fields.validate(get_object_or_404(Organization, slug=slug))
     return obj
 
 

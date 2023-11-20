@@ -1,39 +1,52 @@
 from copy import deepcopy
+from typing import Annotated, Any
 from django.conf import settings
-#from django.db.models import JSONField
+
+# from django.db.models import JSONField
 from django_jsonform.models.fields import JSONField
 
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.translation import gettext_lazy as _
 from django.forms import CharField
 from django.db.models import TextField
-from pydantic import BaseModel
+from ninja import Query
+from pydantic import BaseModel, ConfigDict, Field
 
 from .utils import get_normalised_language, normalise_language_code
 
-class TranslationSchema(BaseModel):
-    de:  str = ""
-    en:  str = ""
-    fr:  str = ""
-    it:  str = ""
- 
+
+LANGUAGE_CODES = [lang[0] for lang in settings.LANGUAGES]
+
+# class TranslationSchema(BaseModel):
+#    de: str = ""
+#    en: str = ""
+#    fr: str = ""
+#    it: str = ""
+
+
+from pydantic import BaseModel, create_model
+
+lang_kwargs: Any = {lang[0]: (str | None, Field("", description=lang[1])) for lang in settings.LANGUAGES}
+TranslationSchema = create_model("TranslationSchema", **lang_kwargs, __doc__="Translations")
+
+
 class TranslationJSONField(JSONField):
-    description = _('A JSON object with translations')
+    description = _("A JSON object with translations")
 
     def __init__(self, base_field, langs=None, **kwargs):
         self.base_field = base_field
-        #_schema = deepcopy(TRANS_SCHEMA)
+        # _schema = deepcopy(TRANS_SCHEMA)
         self.langs = langs or settings.LANGUAGES
         kwargs["schema"] = deepcopy(self._schema)
-        defaults = {"default": dict, "blank" : True}
+        defaults = {"default": dict, "blank": True}
         defaults.update(kwargs)
         super().__init__(**defaults)
 
     def deconstruct(self):
         name, path, args, kwargs = super().deconstruct()
-        kwargs['base_field'] = self.base_field
+        kwargs["base_field"] = self.base_field
         if self.langs is not None:
-            kwargs['langs'] = self.langs
+            kwargs["langs"] = self.langs
         return name, path, args, kwargs
 
     @property
@@ -43,15 +56,11 @@ class TranslationJSONField(JSONField):
     @property
     def _schema(self):
         keys = {}
+        widget = "textarea" if isinstance(self.base_field, TextField) else "text"
         for lang in self.langs:
-            keys[lang[0]] = {'type': 'string', 'title': lang[1]}
-        if isinstance(self.base_field, TextField):
-            for key in keys:
-                keys[key]["widget"]  = "textarea"
-        schema = {'type': 'dict',
-                'keys': keys}
+            keys[lang[0]] = {"type": "string", "title": lang[1], "widget": widget}
+        schema = {"type": "dict", "keys": keys}
         return schema
-
 
     def contribute_to_class(self, cls, name, **kwargs):
         """
@@ -64,6 +73,7 @@ class TranslationJSONField(JSONField):
 
     def validate(self, value, model_instance):
         super().validate(value, model_instance)
+
 
 class TranslationJSONFieldDescriptor:
     def __init__(self, field):
@@ -89,9 +99,17 @@ class TranslationJSONFieldDescriptor:
             lang = get_normalised_language()
         if lang is None:
             return data
-        if lang not in data: # get fallback
+        if lang not in data:  # get fallback
             lang = normalise_language_code(settings.LANGUAGE_CODE)
-        return data.get(lang, None)
+        val = data.get(lang, None)
+        if val is None or val.lower() == "__none__":
+            return ""
+        elif not val:
+            lang = normalise_language_code(settings.LANGUAGE_CODE)
+            val = data.get(lang, None)
+            if val.lower() != "__none__":
+                return val
+        return val
 
     def __set__(self, instance, value):
         """
@@ -108,15 +126,22 @@ class TranslationJSONFieldDescriptor:
         if isinstance(value, str):
             lang = get_normalised_language()
             if lang is None:
-                #lang = 'de' # TODO use fallback default
-                raise ImproperlyConfigured('Enable translations to use TranslationJSONField.')
+                # lang = 'de' # TODO use fallback default
+                raise ImproperlyConfigured("Enable translations to use TranslationJSONField.")
+            # if value is None or value.lower() == "__none__":
+            #    if lang in data[field_name]:
+            #        del data[field_name][lang]
+            # else:
             data[field_name][lang] = value
         else:
-            json_value = value
+            # json_value = value.copy()
+            # for k, v in json_value.items():
+            #    if v is None or v.lower() == "__none__":
+            #        del value[k]
             data[field_name] = value
 
-    #def __str__(self):
-        #return self.get(lang="de")
+    # def __str__(self):
+    # return self.get(lang="de")
 
 
 class TranslationJSONRawFieldDescriptor:
@@ -134,3 +159,14 @@ class TranslationJSONRawFieldDescriptor:
 
     def __set__(self, instance, value):
         setattr(instance, self.field_name, value)
+
+
+LanguageParam = Annotated[
+    str | None,
+    Query(
+        None,
+        description=f"Select language code: {', '.join(LANGUAGE_CODES)} or _empty_ for all.",
+        # example=settings.LANGUAGE_CODE,
+        pattern=f"({'|'.join(LANGUAGE_CODES)})",
+    ),
+]

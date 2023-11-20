@@ -1,5 +1,6 @@
-from ninja import Field
-from typing import Any, List, Literal, Type, get_args
+from ninja import Field, Query
+from pydantic import ConfigDict, Field
+from typing import Annotated, Any, List, Literal, Type, get_args
 from typing import Generic, TypeVar
 
 from ninja.orm import create_schema
@@ -14,18 +15,23 @@ from pydantic.fields import FieldInfo
 from ninja import ModelSchema, Schema
 
 
-S_co = TypeVar("S_co", bound=Schema, covariant=True)
-T = TypeVar("T")
+S_co = TypeVar("S_co", bound=Schema)  # , covariant=True)
+
+# this does not work
+# FieldsParam = Annotated[Fields[S_co], Query()]
+# tried https://docs.pydantic.dev/latest/concepts/types/#generics (did not work)
 
 
-class Fields(Schema, Generic[S_co]):
+class FieldsParam(Schema, Generic[S_co]):
     """Specify which fields to return when query models."""
 
-    include: str = Field(
-        None, description="Comma separated list with field names, use `__all__` in order to include evry field."
+    include: Any = Query(
+        None,
+        description="Comma separated list with field names, use `__all__` in order to include every field.",
+        # example="__all__",
     )
-    exclude: str = Field(
-        None, description="Comma separated list with field names, if set it uses all fields expect the excluded ones."
+    exclude: Any = Query(
+        None, description="Comma separated list with field names, if set it uses all fields except the excluded ones."
     )
 
     @property
@@ -103,14 +109,14 @@ class Fields(Schema, Generic[S_co]):
             objs = TypeAdapter(self.get_schema())  # .validate_python(list(Organization.objects.all()))
         return objs
 
-    def update_default(self, include: str | list):
-        if self.include is None and self.exclude is None:
-            if isinstance(include, list):
-                include = ",".join(include)
-            self.include = include
-
     def validate(self, _obj: Any | None = None, validator: Literal["python", "json", "strings"] = "python"):
         if isinstance(_obj, list):
             return getattr(self.type_adapter(List), f"validate_{validator}")(_obj)
         else:
             return getattr(self.type_adapter(), f"validate_{validator}")(_obj)
+
+    def update_default(self, include: str | list):
+        if self.include is None and self.exclude is None:
+            if isinstance(include, list):
+                include = ",".join(include)
+            self.include = include
