@@ -28,6 +28,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     # Your apps go here:
     "server.apps.main",
     "server.apps.organizations",
+    "server.apps.admin",
     # Extension:
     "ninja",
     "colorfield",

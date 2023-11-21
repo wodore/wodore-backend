@@ -1,23 +1,31 @@
 from django.utils.html import mark_safe
 from jsoneditor.forms import JSONEditor
 from modeltrans.admin import ActiveLanguageMixin
+from unfold.decorators import display
 
 # Models
 from django.db import models
+
+from .views import OrganizationDetailView
 
 # Register your models here.
 
 from .models import Organization
 from ..djjmt.utils import override, django_get_normalised_language
 
+from ..admin.admin import ModelAdmin
+
 from django.contrib import admin
 
-try:
-    from unfold.admin import ModelAdmin
-except ModuleNotFoundError:
-    from django.contrib.admin import ModelAdmin
+# try:
+#    from unfold.admin import ModelAdmin
+# except ModuleNotFoundError:
+#    from django.contrib.admin import ModelAdmin
 
 from unfold.widgets import UnfoldAdminColorInputWidget
+
+from django.urls import path, reverse
+from django.utils.html import format_html
 
 
 @admin.register(Organization)
@@ -26,28 +34,42 @@ class OrganizationAdmin(ModelAdmin[Organization]):
     """Admin panel example for ``BlogPost`` model."""
 
     view_on_site = True
-    list_display = ["slug", "name_with_url", "description_t", "light", "dark", "logo_thumb"]
-    # list_editable = ["slug", "light"]
-    list_display_links = ["slug"]
-    search_fields = ["slug", "name"]
-    # fields = ["__str__"]
-    readonly_fields = ["logo_preview", "created", "modified"]
-    # formfield_overrides = {
-    #    models.JSONField: {'widget': JSONEditor(
-    #        init_options={"mode": "tree", "modes": ["tree", "code", "view"], "statusBar" : False, "navigationBar": False},
-    #    )},
-    # }
+    list_display = ["slug", "organization", "url_link", "light", "dark", "detail"]
+    list_display_links = ["slug", "organization"]
+    search_fields = ["slug", "name", "fullname"]
+    readonly_fields = ["created", "modified"]
 
-    def get_form(self, request, obj=None, change=False, **kwargs):
-        form = super().get_form(request, obj, change, **kwargs)
-        for key in form.base_fields:
-            if "color" in key:
-                form.base_fields[key].widget = UnfoldAdminColorInputWidget()
-        return form
+    def get_urls(self):
+        return [
+            path(
+                "<pk>/detail",
+                self.admin_site.admin_view(OrganizationDetailView.as_view()),
+                name=f"organizations_organization_detail",
+            ),
+            *super().get_urls(),
+        ]
 
-    def show_color(self, value, width=32, height=16):
+    @display(description="")
+    def detail(self, obj: Organization) -> str:
+        url = reverse("admin:organizations_organization_detail", args=[obj.pk])
+        view = (
+            f'<span><a class="text-sm" href="{url}"> <span class="material-symbols-outlined"> visibility </span> </a>'
+        )
+        url = reverse("admin:organizations_organization_change", args=[obj.pk])
+        edit = f'<a class="text-sm" href="{url}"> <span class="material-symbols-outlined"> edit </span> </a><span>'
+        return format_html(view + edit)
+
+    @display(header=True)
+    def organization(self, obj):
+        """
+        Third argument is short text which will appear as prefix in circle
+        """
+        with override(django_get_normalised_language()):
+            return (obj.name, obj.fullname, self.logo_thumb(obj))
+
+    def show_color(self, value, width=32, height=16, radius=4):
         return mark_safe(
-            f'<div style="background-color:{value};border-radius:4px;min-height:{height}px;min-width:{width}px;max-height:{height}px;max-width:{width}px"></div>'
+            f'<div style="background-color:{value};border-radius:{radius}px;min-height:{height}px;min-width:{width}px;max-height:{height}px;max-width:{width}px"></div>'
         )
 
     def light(self, obj):
@@ -56,28 +78,20 @@ class OrganizationAdmin(ModelAdmin[Organization]):
     def dark(self, obj):
         return self.show_color(obj.color_dark)
 
-    def name_t(self, obj):
-        with override(django_get_normalised_language()):
-            return obj.name
-
-    name_t.short_description = "Short Name"
-
+    @display(description="Description")
     def description_t(self, obj):
         with override(django_get_normalised_language()):
             return obj.description
 
-    description_t.short_description = "Descrption"
-
-    def name_with_url(self, obj):
-        with override(django_get_normalised_language()):
-            return mark_safe(f'<a target="_blank" href="{obj.url}"/>{obj.fullname}</a>')
-
-    name_with_url.short_description = "Name"
+    @display(description="URL", header=True)
+    def url_link(self, obj):
+        icon = '<span class="material-symbols-outlined" style="font-size:x-small">open_in_new</span>'
+        return mark_safe(f'<a class="text-sm" target="_blank" href="{obj.url}"/>{obj.url} {icon}</a>'), mark_safe(
+            f'<span class="text-xs">{obj.link_hut_pattern}</span>'
+        )
 
     def logo_thumb(self, obj):  # new
         return mark_safe(f'<img src = "{obj.logo.url}" width = "20"/>')
-
-    logo_thumb.short_description = "Logo"
 
     def logo_preview(self, obj):  # new
         return mark_safe(f'<img src = "{obj.logo.url}" width = "50"/>')

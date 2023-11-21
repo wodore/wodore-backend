@@ -34,9 +34,9 @@ UNFOLD = {
     #    "image": lambda request: static("sample/login-bg.jpg"),
     #    "redirect_after": lambda request: reverse_lazy("admin:APP_MODEL_changelist"),
     # },
-    # "STYLES": [
-    #    lambda request: static("css/style.css"),
-    # ],
+    "STYLES": [
+        lambda request: static("/css/styles.css"),
+    ],
     # "SCRIPTS": [
     #    lambda request: static("js/script.js"),
     # ],
