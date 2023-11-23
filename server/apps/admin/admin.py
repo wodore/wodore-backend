@@ -8,10 +8,14 @@ from django.contrib.auth.models import Group, User
 from django.contrib.auth.admin import GroupAdmin, UserAdmin
 
 from unfold.admin import ModelAdmin as UnfoldModelAdmin
-from unfold.widgets import UnfoldAdminColorInputWidget
+from unfold.widgets import UnfoldAdminColorInputWidget, UnfoldAdminTextInputWidget
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 
 from colorfield.fields import ColorWidget, ColorField
+
+
+from django_jsonform.forms.fields import JSONFormField
+from django_jsonform.widgets import JSONFormWidget
 
 
 class ModelAdmin(UnfoldModelAdmin):
@@ -23,8 +27,26 @@ class ModelAdmin(UnfoldModelAdmin):
         for key, model in form.base_fields.items():
             if isinstance(model.widget, ColorWidget):
                 form.base_fields[key].widget = UnfoldAdminColorInputWidget()
+            if isinstance(model, JSONFormField):
+                schema = {
+                    "keys": {
+                        "de": {"title": "German", "type": "string", "widget": "text"},
+                        "en": {"title": "English", "type": "string", "widget": "text"},
+                        "fr": {"title": "French", "type": "string", "widget": "text"},
+                        "it": {"title": "Italian", "type": "string", "widget": "text"},
+                    },
+                    "type": "dict",
+                }
+                field_class = ""
+                form.base_fields[key].widget = JSONFormWidget(schema=schema, attrs={"class": field_class})
+
         return form
 
+    # formfield_overrides = {
+    #    JSONField: {
+    #        "widget": JSONFormWidget(schema=ITEMS_SCHEMA),
+    #    }
+    # }
     # why does this not work?
     # formfield_overrides = {
     # }

@@ -92,10 +92,7 @@ class TranslationJSONFieldDescriptor:
             return self
 
         field_name = self.field.attname
-        ic(field_name)
         data = instance.__dict__.get(field_name, {})
-        ic(field_name)
-        ic(data)
         if raw is True:
             return data
         if lang is None:

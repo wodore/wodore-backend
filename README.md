@@ -4,12 +4,16 @@
 ```bash
 ./manage.py migrate
 ./manage.py loaddata --app huts organizations
-
 ```
 
 ```bash
 ./manage.py squashmigrations huts 0006 --squashed-name init
 ```
+
+```bash
+npx tailwindcss -o server/apps/admin/static/css/styles.css --watch
+```
+
 Wodore Backend
 
 This project was generated with [`wemake-django-template`](https://github.com/wemake-services/wemake-django-template). Current template version is: [351114a377e47417817c4c27a1362e708cf7ed59](https://github.com/wemake-services/wemake-django-template/tree/351114a377e47417817c4c27a1362e708cf7ed59). See what is [updated](https://github.com/wemake-services/wemake-django-template/compare/351114a377e47417817c4c27a1362e708cf7ed59...master) since then.

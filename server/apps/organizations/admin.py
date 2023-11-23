@@ -11,7 +11,7 @@ from .views import OrganizationDetailView
 # Register your models here.
 
 from .models import Organization
-from ..djjmt.utils import override, django_get_normalised_language
+from ..djjmt.utils import override, django_get_normalised_language, activate
 
 from ..admin.admin import ModelAdmin
 
@@ -34,10 +34,19 @@ class OrganizationAdmin(ModelAdmin[Organization]):
     """Admin panel example for ``BlogPost`` model."""
 
     view_on_site = True
-    list_display = ["slug", "organization", "url_link", "light", "dark", "detail"]
-    list_display_links = ["slug", "organization"]
+    list_display = ["organization", "url_link", "light", "dark", "detail"]
+    list_display_links = ["organization"]
     search_fields = ["slug", "name", "fullname"]
     readonly_fields = ["created", "modified"]
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        activate(django_get_normalised_language())
+        with override(django_get_normalised_language()):
+            # Change title
+            extra_context["original"] = self.model.objects.get(pk=object_id).name
+            extra_context["subtitle"] = self.model.objects.get(pk=object_id).name
+        return super().change_view(request, object_id, form_url, extra_context=extra_context)
 
     def get_urls(self):
         return [
@@ -64,6 +73,8 @@ class OrganizationAdmin(ModelAdmin[Organization]):
         """
         Third argument is short text which will appear as prefix in circle
         """
+        activate(django_get_normalised_language())
+        return (obj.name, obj.fullname, self.logo_thumb(obj))
         with override(django_get_normalised_language()):
             return (obj.name, obj.fullname, self.logo_thumb(obj))
 

@@ -123,7 +123,7 @@ LANGUAGE_CODE = "de"
 # LANGUAGE_CODE = 'fr'
 
 # USE_I18N = True
-USE_I18N = False
+USE_I18N = True
 
 LANGUAGES = (
     ("de", _("German")),

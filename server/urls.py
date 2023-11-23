@@ -52,6 +52,7 @@ urlpatterns = [
             content_type="text/plain",
         ),
     ),
+    path("i18n/", include("django.conf.urls.i18n")),
     # It is a good practice to have explicit index view:
     path("", index, name="index"),
 ]
