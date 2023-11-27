@@ -4,7 +4,13 @@ description = "Wodore Backend"
 version = "0.1.0"
 readme = "README.md"
 authors = ["tb <tb@wodore.com>"]
-packages = [{"include"= "server"}]
+packages = [{"include"= "server"}, 
+            {"include"= "djjmt",  from = "server/apps/"},
+            {"include"= "organizations",  from = "server/apps/"},
+            {"include"= "huts",  from = "server/apps/"},
+            {"include"= "manager",  from = "server/apps/"},
+            {"include"= "api",  from = "server/apps/"},
+            ]
 
 
 [tool.poetry.dependencies]
@@ -35,6 +41,11 @@ django-grappelli = "^3.0.8"
 django-admin-interface = "^0.26.1"
 django-admin-volt = "^1.0.10"
 django-unfold = "^0.16.0"
+mysqlclient = "^2.2.0"
+python-benedict = "^0.33.0"
+asyncify = "^0.9.2"
+overpy = "^0.6"
+geojson-pydantic = "^1.0.1"
 
 
 [tool.poetry.group.dev.dependencies]

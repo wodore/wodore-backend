@@ -978,10 +978,6 @@ video {
   transition-duration: 300ms;
 }
 
-.\[out\:json\] {
-  out: json;
-}
-
 @keyframes bounce {
   0%, 100% {
     transform: translateY(-25%);

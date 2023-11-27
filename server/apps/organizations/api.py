@@ -12,9 +12,9 @@ from ninja.errors import HttpError
 
 from ninja import Schema
 
-from ..utils.query import FieldsParam
-from ..djjmt.utils import with_language_param
-from ..djjmt.fields import LanguageParam
+from api.query import FieldsParam
+from djjmt.utils import with_language_param
+from djjmt.fields import LanguageParam
 
 
 router = Router()

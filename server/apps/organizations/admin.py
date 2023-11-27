@@ -11,9 +11,9 @@ from .views import OrganizationDetailView
 # Register your models here.
 
 from .models import Organization
-from ..djjmt.utils import override, django_get_normalised_language, activate
+from djjmt.utils import override, django_get_normalised_language, activate
 
-from ..admin.admin import ModelAdmin
+from manager.admin import ModelAdmin
 
 from django.contrib import admin
 

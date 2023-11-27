@@ -8,7 +8,8 @@
     fullname: 
       de: Alpsonline
     description: 
-      de: ''
+      de: 'Online Reservations System für Hütten.'
+      en: 'Online reservation system for mountain huts.'
     url: https://www.alpsonline.org/guest/login
     attribution: 
       de: ''
@@ -35,7 +36,8 @@
       fr: Club Alpin Suisse
       it: Club Alpino Svizzero
     description: 
-      de: ''
+      de: 'Der führende Verband für Bergsport in der Schweiz.'
+      en: 'Leading mountaineering club in Switzerland.'
     url: https://www.sac-cas.ch
     attribution: 
       de: ''
@@ -66,7 +68,7 @@
     fullname: 
       de: Gipfelbuch
     description: 
-      de: ''
+      de: 'Portal für aktuelle Verhältnisse, Tourenbeschreibungen und mehr.'
     url: https://www.gipfelbuch.ch
     attribution: 
       de: ''
@@ -88,11 +90,11 @@
     fullname: 
       de: Naturfreunde Schweiz
     description: 
-      de: ''
+      de: 'Organization der Naturefreunde Schweiz.'
     url: https://naturfreunde.ch
     attribution: 
       de: ''
-    link_hut_pattern: https://naturfreunde.ch/{{config.house.get(lang,'de')}})/{{props.slug}}
+    link_hut_pattern: https://naturfreunde.ch/{{config.house.get(lang,'de')}}/{{props.slug}}
     logo: organizations/logos/nfs_icon.png
     color_light: '#e5162a'
     color_dark: '#e5162a'
@@ -112,7 +114,7 @@
     fullname: 
       de: Open Street Map
     description: 
-      de: ''
+      de: 'Grösster Kartendienst mit frei verfügbaren Daten.'
     url: https://www.openstreetmap.org
     attribution: 
       de: ''
@@ -136,7 +138,7 @@
     fullname: 
       de: Wikidata
     description: 
-      de: ''
+      de: 'Freie Informationen, verwendet von Wikipedia.'
     url: https://www.wikidata.org
     attribution: 
       de: ''

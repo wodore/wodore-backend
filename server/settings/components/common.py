@@ -27,8 +27,9 @@ SECRET_KEY = config("DJANGO_SECRET_KEY")
 INSTALLED_APPS: Tuple[str, ...] = (
     # Your apps go here:
     "server.apps.main",
-    "server.apps.organizations",
-    "server.apps.admin",
+    "organizations",
+    "huts",
+    "manager",
     # Extension:
     "ninja",
     "colorfield",
@@ -41,6 +42,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.gis",
     # django-admin:
     # "admin_volt.apps.AdminVoltConfig",  # https://github.com/app-generator/django-admin-volt
     # "grappelli",  # https://django-grappelli.readthedocs.io/en/latest/
@@ -95,23 +97,40 @@ WSGI_APPLICATION = "server.wsgi.application"
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
 DATABASES = {
-    #'default': {
-    #    'ENGINE': 'django.db.backends.mysql',
-    #    'NAME': config('DB_NAME'),
-    #    'USER': config('DB_USER'),
-    #    'PASSWORD': config('DB_PASSWORD'),
-    #    'HOST': config('DB_HOST'),
-    #    'PORT': config('DB_PORT', cast=int),
-    #    'CONN_MAX_AGE': config('CONN_MAX_AGE', cast=int, default=60),
-    #    'OPTIONS': {
-    #        'connect_timeout': 10,
-    #        'options': '-c statement_timeout=15000ms',
-    #    },
-    # },
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
+        "ENGINE": "django.db.backends.postgresql",
+        "ENGINE": "django.contrib.gis.db.backends.postgis",
+        "NAME": config("POSTGRES_DB"),
+        "USER": config("POSTGRES_USER"),
+        "PASSWORD": config("POSTGRES_PASSWORD"),
+        "HOST": config("DJANGO_DATABASE_HOST"),
+        "PORT": config("DJANGO_DATABASE_PORT", cast=int),
+        "CONN_MAX_AGE": config("CONN_MAX_AGE", cast=int, default=60),
+        "OPTIONS": {
+            "connect_timeout": 10,
+            "options": "-c statement_timeout=15000ms",
+        },
+    },
+    # "default": {
+    #     "ENGINE": "django.db.backends.mysql",
+    #     "NAME": config("POSTGRES_DB"),
+    #     "USER": config("POSTGRES_USER"),
+    #     "PASSWORD": config("POSTGRES_PASSWORD"),
+    #     "HOST": config("DJANGO_DATABASE_HOST"),
+    #     "PORT": config("DJANGO_DATABASE_PORT", cast=int),
+    #     # "CONN_MAX_AGE": config("CONN_MAX_AGE", cast=int, default=60),
+    #     "OPTIONS": {
+    #         # "init_command": "SET GLOBAL MAX_EXECUTION_TIME = 3600",
+    #         "connect_timeout": 10,
+    #         # "max_statement_time": 10,
+    #         # "options": "-c statement_timeout=15000ms",
+    #         # "options": "-c max_execution_time=15000ms",
+    #     },
+    # },
+    # "default": {
+    #    "ENGINE": "django.db.backends.sqlite3",
+    #    "NAME": BASE_DIR / "db.sqlite3",
+    # }
 }
 
 

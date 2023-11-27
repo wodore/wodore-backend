@@ -17,7 +17,7 @@ CSP_SCRIPT_SRC: Tuple[str, ...] = (
     "'unsafe-eval'",
     "https://cdn.jsdelivr.net",
 )
-CSP_IMG_SRC: Tuple[str, ...] = ("'self'",)
+CSP_IMG_SRC: Tuple[str, ...] = ("'self'", "data:", "https:")
 CSP_FONT_SRC: Tuple[str, ...] = ("'self'", "https://fonts.googleapis.com", "https://fonts.gstatic.com")
 CSP_STYLE_SRC: Tuple[str, ...] = (
     "'self'",

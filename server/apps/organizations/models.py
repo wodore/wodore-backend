@@ -11,13 +11,18 @@ from django.db.models import (
     PositiveSmallIntegerField,
 )
 
+from djjmt.utils import override, django_get_normalised_language
+
 # from django_jsonform.models.fields import JSONField
 from django.utils import timezone
 from colorfield.fields import ColorField
 from typing import Optional
 from model_utils.models import TimeStampedModel
 from modeltrans.fields import TranslationField
-from ..djjmt.fields import TranslationJSONField
+
+from djjmt.fields import TranslationJSONField
+
+# from ..djjmt.fields import TranslationJSONField
 
 
 # Create your models here.
@@ -76,4 +81,5 @@ class Organization(TimeStampedModel):
         ordering = ["order"]
 
     def __str__(self) -> str:
-        return self.slug
+        with override(django_get_normalised_language()):
+            return self.name

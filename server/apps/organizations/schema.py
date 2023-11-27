@@ -5,7 +5,7 @@ from .models import Organization
 
 from ninja import ModelSchema
 
-from ..djjmt.fields import TranslationSchema
+from djjmt.fields import TranslationSchema
 
 
 class OrganizationUpdate(ModelSchema):

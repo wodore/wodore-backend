@@ -1,0 +1,29 @@
+version: '3'
+volumes:
+  pgdata:
+services:
+  db:
+    #image: "postgres:15-alpine"
+    image: "postgis/postgis:16-3.4-alpine"
+    restart: unless-stopped
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    #networks:
+    #  - postgresnet
+    env_file: ./config/.env
+    ports:
+      - "5432:5432"
+
+  #db:
+  #  image: mariadb:10.5
+  #  environment:
+  #    MYSQL_ROOT_PASSWORD: password
+  #    MYSQL_DATABASE: huts
+  #    MYSQL_USER: user
+  #    MYSQL_PASSWORD: password
+  #    MAX_EXECUTION_TIME: 10
+  #    MAX_STATEMENT_TIME: 10
+  #  volumes:
+  #    - data:/var/lib/mysql
+  #  ports:
+  #    - "3306:3306"

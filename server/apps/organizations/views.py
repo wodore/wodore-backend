@@ -8,7 +8,7 @@ from .models import Organization
 from django.contrib import admin
 
 from django.urls import path, reverse
-from ..djjmt.utils import override, django_get_normalised_language, activate
+from djjmt.utils import override, django_get_normalised_language, activate
 
 
 class OrganizationDetailView(PermissionRequiredMixin, DetailView):

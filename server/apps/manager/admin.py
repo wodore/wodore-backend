@@ -4,6 +4,7 @@ from django.contrib import admin
 
 from django.conf import settings
 from django.contrib import admin
+from django.contrib.gis.admin import GISModelAdmin
 from django.contrib.auth.models import Group, User
 from django.contrib.auth.admin import GroupAdmin, UserAdmin
 
@@ -18,9 +19,10 @@ from django_jsonform.forms.fields import JSONFormField
 from django_jsonform.widgets import JSONFormWidget
 
 
-class ModelAdmin(UnfoldModelAdmin):
+class ModelAdmin(GISModelAdmin, UnfoldModelAdmin):
     # Display submit button in filters
     list_filter_submit = True
+    # gis_widget_kwargs = {"default_zoom": 7}
 
     def get_form(self, request, obj=None, change=False, **kwargs):
         form = super().get_form(request, obj, change, **kwargs)
