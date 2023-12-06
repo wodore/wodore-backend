@@ -32,7 +32,7 @@ class OsmService:
             click.secho(*args, **kwargs)
 
     @lru_cache(10)
-    def _get_osm_hut_list_sync(self, limit: int = 1, lang: str = "de") -> List[HutOsm0Source]:
+    def get_osm_hut_list_sync(self, limit: int = 1, lang: str = "de") -> List[HutOsm0Source]:
         api = overpy.Overpass(url=self.request_url)
         # fetch all ways and nodes
         # SWISS
@@ -78,7 +78,7 @@ class OsmService:
 
     @lru_cache(10)
     async def get_osm_hut_list(self, limit: int = 5000, lang: str = "de") -> List[HutOsm0Source]:
-        db_huts = await asyncify(self._get_osm_hut_list_sync)(limit=limit, lang=lang)
+        db_huts = await asyncify(self.get_osm_hut_list_sync)(limit=limit, lang=lang)
         return db_huts
 
     # @lru_cache(10)

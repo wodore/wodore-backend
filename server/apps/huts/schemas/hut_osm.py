@@ -15,6 +15,8 @@ from rich import print as rprint
 from .point import Point
 from pydantic import BaseModel, Field
 
+from django.contrib.gis.geos import Point as dbPoint
+
 # from sqlmodel import Field, SQLModel
 # from pydantic_computed import Computed, computed
 # from ..hut import Hut
@@ -82,6 +84,10 @@ class HutOsm0Source(HutBaseSource):
             return Point(lat=self.center_lat, lon=self.center_lon)
         else:
             raise UserWarning(f"OSM coordinates are missing.")
+
+    def get_db_point(self) -> dbPoint:
+        pnt = self.get_point()
+        return dbPoint(pnt.lon, pnt.lat)
 
     # def get_hut(self, include_refs: bool = True) -> Hut:
     #    # _convert = HutOsm0Convert(**self.dict())

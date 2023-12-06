@@ -10,6 +10,7 @@ from django.db.models import (
     ImageField,
     PositiveSmallIntegerField,
 )
+from functools import lru_cache
 
 from djjmt.utils import override, django_get_normalised_language
 
@@ -54,6 +55,11 @@ class Organization(TimeStampedModel):
     config = JSONField(default=dict, blank=True, help_text="Configuration dictonary")
     props_schema = JSONField(default=dict, blank=True, help_text="Property schema")
     order = PositiveSmallIntegerField(unique=True)
+
+    @classmethod
+    @lru_cache(50)
+    def get_by_slug(cls, slug):
+        return cls.objects.get(slug=slug)
 
     @classmethod
     def get_fields_all(cls):
