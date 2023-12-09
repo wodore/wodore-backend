@@ -126,8 +126,8 @@ class TranslationJSONFieldDescriptor:
         if isinstance(value, str):
             lang = get_normalised_language()
             if lang is None:
-                # lang = 'de' # TODO use fallback default
-                raise ImproperlyConfigured("Enable translations to use TranslationJSONField.")
+                lang = "de"  # TODO use fallback default
+                # raise ImproperlyConfigured("Enable translations to use TranslationJSONField.")
             # if value is None or value.lower() == "__none__":
             #    if lang in data[field_name]:
             #        del data[field_name][lang]

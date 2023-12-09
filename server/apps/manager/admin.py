@@ -18,10 +18,17 @@ from colorfield.fields import ColorWidget, ColorField
 from django_jsonform.forms.fields import JSONFormField
 from django_jsonform.widgets import JSONFormWidget
 
+from django.db import models
+
+from .widgets import UnfoldJSONSuit, UnfoldReadonlyJSONSuit
+
+from jsonsuit.widgets import JSONSuit, ReadonlyJSONSuit
+
 
 class ModelAdmin(GISModelAdmin, UnfoldModelAdmin):
     # Display submit button in filters
-    list_filter_submit = True
+    list_filter_submit = False
+    formfield_overrides = {models.JSONField: {"widget": UnfoldJSONSuit}}
     # gis_widget_kwargs = {"default_zoom": 7}
 
     def get_form(self, request, obj=None, change=False, **kwargs):
@@ -29,18 +36,22 @@ class ModelAdmin(GISModelAdmin, UnfoldModelAdmin):
         for key, model in form.base_fields.items():
             if isinstance(model.widget, ColorWidget):
                 form.base_fields[key].widget = UnfoldAdminColorInputWidget()
-            if isinstance(model, JSONFormField):
-                schema = {
-                    "keys": {
-                        "de": {"title": "German", "type": "string", "widget": "text"},
-                        "en": {"title": "English", "type": "string", "widget": "text"},
-                        "fr": {"title": "French", "type": "string", "widget": "text"},
-                        "it": {"title": "Italian", "type": "string", "widget": "text"},
-                    },
-                    "type": "dict",
-                }
-                field_class = ""
-                form.base_fields[key].widget = JSONFormWidget(schema=schema, attrs={"class": field_class})
+            if isinstance(model.widget, JSONSuit):
+                form.base_fields[key].widget = UnfoldJSONSuit()
+            if isinstance(model.widget, ReadonlyJSONSuit):
+                form.base_fields[key].widget = UnfoldReadonlyJSONSuit()
+            # if isinstance(model, JSONFormField):
+            #    schema = {
+            #        "keys": {
+            #            "de": {"title": "German", "type": "string", "widget": "text"},
+            #            "en": {"title": "English", "type": "string", "widget": "text"},
+            #            "fr": {"title": "French", "type": "string", "widget": "text"},
+            #            "it": {"title": "Italian", "type": "string", "widget": "text"},
+            #        },
+            #        "type": "dict",
+            #    }
+            #    field_class = ""
+            #    form.base_fields[key].widget = JSONFormWidget(schema=schema, attrs={"class": field_class})
 
         return form
 

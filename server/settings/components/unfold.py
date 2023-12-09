@@ -86,9 +86,19 @@ UNFOLD = {
                 "separator": True,  # Top border
                 "items": [
                     {
+                        "title": _("Huts"),
+                        "icon": "house",
+                        "link": reverse_lazy("admin:huts_hut_changelist"),
+                    },
+                    {
                         "title": _("Organizations"),
                         "icon": "apartment",
                         "link": reverse_lazy("admin:organizations_organization_changelist"),
+                    },
+                    {
+                        "title": _("Contacts"),
+                        "icon": "contacts",
+                        "link": reverse_lazy("admin:huts_contact_changelist"),
                     },
                 ],
             },
@@ -110,18 +120,55 @@ UNFOLD = {
                     },
                 ],
             },
+            {
+                "title": _("Help"),
+                "separator": True,  # Top border
+                "items": [
+                    {
+                        "title": _("API"),
+                        "badge": "v1",
+                        "icon": "api",
+                        "link": "/api/v1/docs",  # todo use name # todo change unfold/helpers/app_list.html tempalte to use target=
+                    },
+                ],
+            },
         ],
     },
     "TABS": [
         {
             "models": [
-                "app_label.model_name_in_lowercase",
+                "huts.hut",
+                "huts.huttype",
+                "huts.hutsource",
             ],
             "items": [
                 {
-                    "title": _("API Docs"),
-                    "link": "api.v1.router",  # reverse_lazy("admin:app_label_model_name_changelist"),
-                    # "permission": "sample_app.permission_callback",
+                    "title": _("Huts"),
+                    "link": reverse_lazy("admin:huts_hut_changelist"),
+                },
+                {
+                    "title": _("Hut Types"),
+                    "link": reverse_lazy("admin:huts_huttype_changelist"),
+                },
+                {
+                    "title": _("Hut Sources"),
+                    "link": reverse_lazy("admin:huts_hutsource_changelist"),
+                },
+            ],
+        },
+        {
+            "models": [
+                "huts.contact",
+                "huts.contactfunction",
+            ],
+            "items": [
+                {
+                    "title": _("Contact"),
+                    "link": reverse_lazy("admin:huts_contact_changelist"),
+                },
+                {
+                    "title": _("Contact Functions"),
+                    "link": reverse_lazy("admin:huts_contactfunction_changelist"),
                 },
             ],
         },

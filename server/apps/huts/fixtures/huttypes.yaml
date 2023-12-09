@@ -1,0 +1,152 @@
+- model: huts.huttype
+  pk: 0
+  fields:
+    slug: unknown
+    level: 0
+    name_de: unbekannt
+    name_en: unknown
+    description_de: 'unbekannte Hüttenart'
+    description_en: 'unknown hut type'
+    symbol: huts/types/symbols/detailed/unknown.png
+    symbol_simple: huts/types/symbols/simple/unknown.png
+    icon: huts/types/icons/unknown.png
+- model: huts.huttype
+  pk: 1
+  fields:
+    slug: campground
+    level: 10
+    name_de: Biwak Platz
+    name_en: campground
+    description_de: 'möglicher Biwak Platz, keine Infrastruktur'
+    description_en: 'possible campground without infrastructure'
+    symbol: huts/types/symbols/detailed/campground.png
+    symbol_simple: huts/types/symbols/simple/campground.png
+    icon: huts/types/icons/campground.png
+- model: huts.huttype
+  pk: 2
+  fields:
+    slug: basic-shelter
+    level: 20
+    name_de: einfacher Unterstand
+    name_en: basic shelter
+    description_de: 'einfacher Understand ohne viel Infrastruktur'
+    description_en: 'basic shelter without much infrastructure'
+    symbol: huts/types/symbols/detailed/basic_shelter.png
+    symbol_simple: huts/types/symbols/simple/basic_shelter.png
+    icon: huts/types/icons/basic_shelter.png
+- model: huts.huttype
+  pk: 3
+  fields:
+    slug: camping
+    level: 25
+    name_de: Campingplatz
+    name_en: camping
+    description_de: 'Campingplatz mit Infrastruktur'
+    description_en: 'Camping with infrastructure'
+    symbol: huts/types/symbols/detailed/camping.png
+    symbol_simple: huts/types/symbols/simple/camping.png
+    icon: huts/types/icons/camping.png
+- model: huts.huttype
+  pk: 4
+  fields:
+    slug: bivouac
+    level: 30
+    name_de: Biwak
+    name_en: bivouac
+    description_de: 'Biwak, oftmals Alpin gelegen mit schwierigem Zustieg'
+    description_en: 'bivouac, usually high up with difficult ascent' #TODO
+    symbol: huts/types/symbols/detailed/bivouac.png
+    symbol_simple: huts/types/symbols/simple/bivouac.png
+    icon: huts/types/icons/bivouac.png
+- model: huts.huttype
+  pk: 5
+  fields:
+    slug: unattended-hut
+    level: 40
+    name_de: unbewartete Hütte
+    name_en: unattended hut
+    description_de: 'Unbewartete Hütte, oftmals gut eingereichtet'
+    description_en: 'unattended hut which are usually well equipped'
+    symbol: huts/types/symbols/detailed/unattended_hut.png
+    symbol_simple: huts/types/symbols/simple/unattended_hut.png
+    icon: huts/types/icons/unattended_hut.png
+- model: huts.huttype
+  pk: 6
+  fields:
+    slug: hut
+    level: 50
+    name_de: Hütte
+    name_en: hut
+    description_de: 'bewartete (Berg) Hütte, kann in der Nebensaison auch unbewartet sein'
+    description_en: 'attended (mountain) hut, can be unattended in the offseason'
+    symbol: huts/types/symbols/detailed/hut.png
+    symbol_simple: huts/types/symbols/simple/hut.png
+    icon: huts/types/icons/hut.png
+- model: huts.huttype
+  pk: 7
+  fields:
+    slug: alp
+    level: 55
+    name_de: Alp
+    name_en: alp
+    description_de: 'Alp mit Übernachtungsmöglichkeit'
+    description_en: 'alp with overnight accommodation (not all year)'
+    symbol: huts/types/symbols/detailed/alp.png
+    symbol_simple: huts/types/symbols/simple/alp.png
+    icon: huts/types/icons/alp.png
+- model: huts.huttype
+  pk: 8
+  fields:
+    slug: basic-hotel
+    level: 70
+    name_de: einfaches Hotel
+    name_en: basic hotel
+    description_de: 'Einfaches, nicht luxuriöses, günstiges Hotel, oft auch mit Massenlager'
+    description_en: 'basic, non luxiouris, cheap hotel, often with tourist camp'
+    symbol: huts/types/symbols/detailed/basic_hotel.png
+    symbol_simple: huts/types/symbols/simple/basic_hotel.png
+    icon: huts/types/icons/basic_hotel.png
+- model: huts.huttype
+  pk: 9
+  fields:
+    slug: hostel
+    level: 75
+    name_de: Jugendherberge
+    name_en: hostel
+    symbol: huts/types/symbols/detailed/hostel.png
+    symbol_simple: huts/types/symbols/simple/hostel.png
+    icon: huts/types/icons/hostel.png
+- model: huts.huttype
+  pk: 10
+  fields:
+    slug: hotel
+    level: 90
+    name_de: Hotel
+    name_en: hotel
+    symbol: huts/types/symbols/detailed/hotel.png
+    symbol_simple: huts/types/symbols/simple/hotel.png
+    icon: huts/types/icons/hotel.png
+- model: huts.huttype
+  pk: 11 
+  fields:
+    slug: special
+    level: 80
+    name_de: Spezial
+    name_en: special
+    description_de: 'Spezielle Übernachtungsmöglichkeit'
+    description_en: 'special overnight accommodation'
+    symbol: huts/types/symbols/detailed/special.png
+    symbol_simple: huts/types/symbols/simple/special.png
+    icon: huts/types/icons/special.png
+- model: huts.huttype
+  pk: 12 
+  fields:
+    slug: restaurant
+    level: 100
+    name_de: Restaurant
+    name_en: restaurant
+    description_de: 'Restaurant ohne Übernachtungsmöglichkeit'
+    description_en: 'restaurant without overnight accommodation'
+    symbol: huts/types/symbols/detailed/restaurant.png
+    symbol_simple: huts/types/symbols/simple/restaurant.png
+    icon: huts/types/icons/restaurant.png

@@ -2,6 +2,7 @@ from typing import Optional, Tuple
 from pydantic import BaseModel, condecimal, model_validator
 from huts.GPSConverter import GPSConverter
 from geojson_pydantic import Point as geoPoint
+from django.contrib.gis.geos import Point as dbPoint
 
 # from sqlmodel import Field, SQLModel
 
@@ -128,6 +129,10 @@ class Point(BaseModel):
     @property
     def geojson(self) -> geoPoint:
         return geoPoint(coordinates=self.lon_lat, type="Point")
+
+    @property
+    def db(self) -> dbPoint:
+        return dbPoint(self.lon, self.lat)
 
     # @property
     # def sql_point(self) -> func.ST_Distance_Sphere:

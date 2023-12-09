@@ -36,6 +36,8 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "jsoneditor",
     "modeltrans",
     "django_jsonform",
+    "jsonsuit.apps.JSONSuitConfig",  # https://github.com/tooreht/django-jsonsuit
+    "django_countries",
     # Default django apps:
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -151,11 +153,20 @@ LANGUAGES = (
     ("it", _("Italian")),
 )
 
+LANGUAGE_CODES = [lang[0] for lang in LANGUAGES]
 LOCALE_PATHS = ("locale/",)
 
 USE_TZ = True
 # TIME_ZONE = 'UTC'
 TIME_ZONE = "Europe/Zurich"
+MODELTRANS_FALLBACK = {
+    "default": (LANGUAGE_CODE,),
+    "de": ("en", "fr"),
+    "en": ("de", "fr"),
+    "it": ("fr", "de", "en"),
+    "fr": ("it", "de", "en"),
+}
+COUNTRIES_ONLY = ["DE", "CH", "AT", "FR", "IT"]
 
 
 # Static files (CSS, JavaScript, Images)
@@ -252,3 +263,6 @@ EMAIL_TIMEOUT = 5
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
+
+
+JSONSUIT_WIDGET_THEME = "tomorrow"

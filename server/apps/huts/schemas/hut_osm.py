@@ -6,6 +6,7 @@ from typing import Literal, Optional, List
 from .hut_base import HutBaseSource
 import click
 from rich import print as rprint
+from djjmt.fields import TranslationSchema
 
 # from app.models.utils.locale import Translations
 # from ..utils.hut_fields import Contact, Monthly, MonthlyOptions, Open, Catering
@@ -13,7 +14,7 @@ from rich import print as rprint
 # from typing_extensions import TypedDict
 # from .point import Elevation, Latitude, Longitude, Point
 from .point import Point
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from django.contrib.gis.geos import Point as dbPoint
 
@@ -21,6 +22,10 @@ from django.contrib.gis.geos import Point as dbPoint
 # from pydantic_computed import Computed, computed
 # from ..hut import Hut
 # from ..utils.hut_fields import HutType
+
+from huts.models import HutType
+
+from huts.logic.hut_type import guess_hut_type
 
 
 class OSMTags(BaseModel):  #:, table=True):
@@ -86,8 +91,7 @@ class HutOsm0Source(HutBaseSource):
             raise UserWarning(f"OSM coordinates are missing.")
 
     def get_db_point(self) -> dbPoint:
-        pnt = self.get_point()
-        return dbPoint(pnt.lon, pnt.lat)
+        return self.get_point().db
 
     # def get_hut(self, include_refs: bool = True) -> Hut:
     #    # _convert = HutOsm0Convert(**self.dict())
@@ -106,6 +110,111 @@ class HutOsm0Source(HutBaseSource):
     def get_printable_fields(cls, alias=False):
         properties = ["osm_type"] + [f"tags.{k}" for k in list(OSMTags.__fields__.keys())]
         return properties
+
+
+class HutOsm0Convert(BaseModel):
+    source: HutOsm0Source
+
+    @property
+    def _tags(self) -> OSMTags:
+        return self.source.tags
+
+    @computed_field
+    @property
+    def name(self) -> dict[str, str]:
+        return TranslationSchema(de=self._tags.name[:69]).model_dump()
+
+    @computed_field
+    @property
+    def description(self) -> dict[str, str]:
+        return TranslationSchema(en=self._tags.note or "").model_dump()
+
+    @computed_field
+    @property
+    def note(self) -> dict[str, str]:
+        return self.description
+
+    @computed_field
+    @property
+    def point(self) -> Point:
+        lat = self.source.lat or self.source.center_lat
+        lon = self.source.lon or self.source.center_lon
+        if not (lat and lon):
+            raise UserWarning(f"OSM coordinates are missing: {self._tags.name} (#{self.source.id})")
+        return Point(lat=lat, lon=lon)
+
+    @computed_field
+    @property
+    def url(self) -> str:
+        url = ""
+        if self._tags.website:
+            url = self._tags.website
+        elif self._tags.contact_website:
+            url = self._tags.contact_website
+        if len(url) > 200:
+            url = ""
+        return url
+
+    @computed_field
+    @property
+    def elevation(self) -> float | None:
+        if self._tags.ele:
+            return self._tags.ele
+        else:
+            return None
+
+    @computed_field
+    @property
+    def capacity(self) -> Optional[int]:
+        tags = self._tags
+        cap = None
+        if tags.capacity:
+            cap = tags.capacity
+        elif tags.beds:
+            cap = tags.beds
+        elif tags.bed:
+            cap = tags.bed
+        try:
+            if not cap is None:
+                cap = int(cap)
+        except ValueError:
+            cap = None
+        return cap
+
+    @computed_field
+    @property
+    def capacity_shelter(self) -> Optional[int]:
+        if self._tags.winter_room:
+            try:
+                return int(self._tags.winter_room)  # capacity in tag
+            except ValueError:
+                pass
+        if self._tags.tourism == "wilderness_hut":
+            return self.capacity
+        return None
+
+    @computed_field
+    @property
+    def type(self) -> str:
+        """Returns type slug"""
+        _orgs = ""
+        if self._tags.operator:
+            _orgs = "sac" if "sac" in self._tags.operator else ""
+        return guess_hut_type(
+            name=self.name.get("de", ""),
+            capacity=self.capacity,
+            capacity_shelter=self.capacity_shelter,
+            elevation=self.elevation,
+            organization=_orgs,
+            osm_tag=self._tags.tourism,
+        )
+
+    @computed_field
+    @property
+    def is_active(self) -> bool:
+        if self._tags.access:
+            return self._tags.access in ["yes", "public", "customers", "permissive"]
+        return True
 
 
 # class HutOsm0Convert(HutOsm0Source):

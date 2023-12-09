@@ -3,16 +3,15 @@
   fields:
     slug: hrs
     is_active: true
-    name: 
-      de: Alpsonline
-    fullname: 
-      de: Alpsonline
-    description: 
-      de: 'Online Reservations System für Hütten.'
-      en: 'Online reservation system for mountain huts.'
-    url: https://www.alpsonline.org/guest/login
-    attribution: 
-      de: ''
+    name_de: Alpsonline
+    fullname_de: Alpsonline
+    description_de: 'Online Reservations System für Hütten.'
+    description_en: 'Online reservation system for mountain huts.'
+    url_de: https://www.alpsonline.org/guest/login?lang=de_CH
+    url_en: https://www.alpsonline.org/guest/login?lang=en
+    url_fr: https://www.alpsonline.org/guest/login?lang=fr
+    url_it: https://www.alpsonline.org/guest/login?lang=it
+    attribution_de: ''
     link_hut_pattern: https://www.alpsonline.org/reservation/calendar?hut_id={{id}}&lang={{lang}}
     logo: organizations/logos/hrs_icon.ico
     color_light: '#689751'
@@ -25,22 +24,21 @@
   fields:
     slug: sac
     is_active: true
-    name: 
-      de: SAC
-      en: SAC
-      fr: CAS
-      it: CAS
-    fullname: 
-      de: Schweizer Alpen Club
-      en: Swiss Alpine Club
-      fr: Club Alpin Suisse
-      it: Club Alpino Svizzero
-    description: 
-      de: 'Der führende Verband für Bergsport in der Schweiz.'
-      en: 'Leading mountaineering club in Switzerland.'
-    url: https://www.sac-cas.ch
-    attribution: 
-      de: ''
+    name_de: SAC
+    name_en: SAC
+    name_fr: CAS
+    name_it: CAS
+    fullname_de: Schweizer Alpen Club
+    fullname_en: Swiss Alpine Club
+    fullname_fr: Club Alpin Suisse
+    fullname_it: Club Alpino Svizzero
+    description_de: 'Der führende Verband für Bergsport in der Schweiz.'
+    description_en: 'Leading mountaineering club in Switzerland.'
+    url_de: https://www.sac-cas.ch/de/
+    url_en: https://www.sac-cas.ch/en/
+    url_fr: https://www.sac-cas.ch/fr/
+    url_it: https://www.sac-cas.ch/it/
+    attribution_de: ''
     link_hut_pattern: https://www.sac-cas.ch/{{lang}}/{{config.huts_tours.get(lang,'de')}}/{{config.portal.get(lang,'de')}}/{{id}}
     logo: organizations/logos/sac_icon.ico
     color_light: '#008000'
@@ -63,15 +61,11 @@
   fields:
     slug: gipfelbuch
     is_active: true
-    name: 
-      de: Gipfelbuch
-    fullname: 
-      de: Gipfelbuch
-    description: 
-      de: 'Portal für aktuelle Verhältnisse, Tourenbeschreibungen und mehr.'
-    url: https://www.gipfelbuch.ch
-    attribution: 
-      de: ''
+    name_de: Gipfelbuch
+    fullname_de: Gipfelbuch
+    description_de: 'Portal für aktuelle Verhältnisse, Tourenbeschreibungen und mehr.'
+    url_de: https://www.gipfelbuch.ch
+    attribution_de: ''
     link_hut_pattern: https://www.gipfelbuch.ch/huetten/{{props.slug}}
     logo: organizations/logos/gipfelbuch_icon.png
     color_light: '#414140'
@@ -85,15 +79,12 @@
   fields:
     slug: nfs
     is_active: true
-    name: 
-      de: Naturfreunde
-    fullname: 
-      de: Naturfreunde Schweiz
-    description: 
-      de: 'Organization der Naturefreunde Schweiz.'
-    url: https://naturfreunde.ch
-    attribution: 
-      de: ''
+    name_de: Naturfreunde
+    fullname_de: Naturfreunde Schweiz
+    description_de: 'Organization der Naturefreunde Schweiz.'
+    url_de: https://naturfreunde.ch
+    url_fr: https://naturfreunde.ch/fr/
+    attribution_de: ''
     link_hut_pattern: https://naturfreunde.ch/{{config.house.get(lang,'de')}}/{{props.slug}}
     logo: organizations/logos/nfs_icon.png
     color_light: '#e5162a'
@@ -109,15 +100,11 @@
   fields:
     slug: osm
     is_active: true
-    name: 
-      de: OSM
-    fullname: 
-      de: Open Street Map
-    description: 
-      de: 'Grösster Kartendienst mit frei verfügbaren Daten.'
-    url: https://www.openstreetmap.org
-    attribution: 
-      de: ''
+    name_de: OSM
+    fullname_de: Open Street Map
+    description_de: 'Grösster Kartendienst mit frei verfügbaren Daten.'
+    url_de: https://www.openstreetmap.org
+    attribution_de: ''
     link_hut_pattern: https://www.openstreetmap.org/{{props.object_type}}/{{id}}
     logo: organizations/logos/osm_icon.png
     color_light: '#13325d'
@@ -133,15 +120,11 @@
   fields:
     slug: wikidata
     is_active: true
-    name: 
-      de: Wikidata
-    fullname: 
-      de: Wikidata
-    description: 
-      de: 'Freie Informationen, verwendet von Wikipedia.'
-    url: https://www.wikidata.org
-    attribution: 
-      de: ''
+    name_de: Wikidata
+    fullname_de: Wikidata
+    description_de: 'Freie Informationen, verwendet von Wikipedia.'
+    url_de: https://www.wikidata.org
+    attribution_de: ''
     link_hut_pattern: https://www.wikidata.org/wiki/{{id}}
     logo: organizations/logos/wikidata_icon.ico
     color_light: '#009640'

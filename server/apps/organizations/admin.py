@@ -1,4 +1,5 @@
-from django.utils.html import mark_safe
+from django.utils.safestring import mark_safe
+from djjmt import fields
 from jsoneditor.forms import JSONEditor
 from modeltrans.admin import ActiveLanguageMixin
 from unfold.decorators import display
@@ -11,11 +12,12 @@ from .views import OrganizationDetailView
 # Register your models here.
 
 from .models import Organization
-from djjmt.utils import override, django_get_normalised_language, activate
 
 from manager.admin import ModelAdmin
 
 from django.contrib import admin
+
+from manager.widgets import UnfoldJSONSuit
 
 # try:
 #    from unfold.admin import ModelAdmin
@@ -26,27 +28,33 @@ from unfold.widgets import UnfoldAdminColorInputWidget
 
 from django.urls import path, reverse
 from django.utils.html import format_html
+from .forms import OrganizationAdminFieldsets
+
+from translations.forms import required_i18n_fields_form_factory
 
 
 @admin.register(Organization)
 # class OrganizationAdmin(ActiveLanguageMixin, admin.ModelAdmin[Organization]):
-class OrganizationAdmin(ModelAdmin[Organization]):
+class OrganizationAdmin(ModelAdmin):
     """Admin panel example for ``BlogPost`` model."""
 
+    form = required_i18n_fields_form_factory("name", "fullname")
+    fieldsets = OrganizationAdminFieldsets
     view_on_site = True
-    list_display = ["organization", "url_link", "light", "dark", "detail"]
+    list_display = ["organization", "url_link", "light", "dark", "order_small", "detail"]
     list_display_links = ["organization"]
-    search_fields = ["slug", "name", "fullname"]
-    readonly_fields = ["created", "modified"]
+    search_fields = ["slug", "name_i18n", "fullname_i18n"]
+    readonly_fields = [
+        "name_i18n",
+        "fullname_i18n",
+        "description_i18n",
+        "url_i18n",
+        "attribution_i18n",
+        "created",
+        "modified",
+    ]
 
-    def change_view(self, request, object_id, form_url="", extra_context=None):
-        extra_context = extra_context or {}
-        activate(django_get_normalised_language())
-        with override(django_get_normalised_language()):
-            # Change title
-            extra_context["original"] = self.model.objects.get(pk=object_id).name
-            extra_context["subtitle"] = self.model.objects.get(pk=object_id).name
-        return super().change_view(request, object_id, form_url, extra_context=extra_context)
+    # formfield_overrides = {models.JSONField: {"widget": UnfoldJSONSuit}}
 
     def get_urls(self):
         return [
@@ -73,10 +81,11 @@ class OrganizationAdmin(ModelAdmin[Organization]):
         """
         Third argument is short text which will appear as prefix in circle
         """
-        activate(django_get_normalised_language())
-        return (obj.name, obj.fullname, self.logo_thumb(obj))
-        with override(django_get_normalised_language()):
-            return (obj.name, obj.fullname, self.logo_thumb(obj))
+        return (obj.name_i18n, obj.fullname_i18n, self.logo_thumb(obj))
+
+    @display(description="#", ordering=None)
+    def order_small(self, obj):
+        return mark_safe(f"<small>{obj.order}</small>")
 
     def show_color(self, value, width=32, height=16, radius=4):
         return mark_safe(
@@ -91,8 +100,7 @@ class OrganizationAdmin(ModelAdmin[Organization]):
 
     @display(description="Description")
     def description_t(self, obj):
-        with override(django_get_normalised_language()):
-            return obj.description
+        return obj.description_i18n
 
     @display(description="URL", header=True)
     def url_link(self, obj):

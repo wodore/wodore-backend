@@ -1,0 +1,10 @@
+{% load i18n %}
+<div class="jsonsuit editable" data-jsonsuit="{{ name }}">
+  <button type="button" class="toggle button" data-raw="{% trans 'edit' %}" data-suit="{% trans 'view' %}">
+    {% trans 'edit' %}
+  </button>
+  <div class="relative">{{ textarea }}</div>
+  <div class="suit {{ view_class }}">
+    <pre style="background: unset"><code class="language-json" data-raw="{{ value }}"></code></pre>
+  </div>
+</div>
