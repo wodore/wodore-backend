@@ -216,6 +216,11 @@ class HutOsm0Convert(BaseModel):
             return self._tags.access in ["yes", "public", "customers", "permissive"]
         return True
 
+    @computed_field
+    @property
+    def props(self) -> dict[str, str]:
+        return {"osm_type": self.source.osm_type or "node"}
+
 
 # class HutOsm0Convert(HutOsm0Source):
 #    """Helper class to convert from OSM source to Hut class"""

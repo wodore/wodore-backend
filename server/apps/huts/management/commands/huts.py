@@ -1,4 +1,4 @@
-import os
+import os, sys
 import click
 import traceback
 from django.core.management.base import BaseCommand, CommandError
@@ -49,6 +49,7 @@ from django.core.management import call_command
 
 def init_huts_db(
     hut_sources: list[HutSource],
+    init: bool = False,
     update_existing: bool = False,
     overwrite_existing_fields: bool = False,
     extern_slug=None,
@@ -79,11 +80,14 @@ def init_huts_db(
             is_active=hut.is_active,
             country=hut.country,
             type=hut_types.get(str(hut.type), default_type),
+            review_status=Hut.ReviewStatusChoices.done if init else Hut.ReviewStatusChoices.review,
             **i18n_fields,
         )
         try:
             db_hut.save()
-            db_hut.organizations.add(organization)
+            db_hut.organizations.add(
+                organization, through_defaults={"props": hut.props, "source_id": hut_src.source_id}
+            )
             db_hut.refresh_from_db()
             hut_src.hut = db_hut
             hut_src.save()
@@ -135,37 +139,68 @@ class Command(BaseCommand):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._parser = None
+        self._organization = None
+
+    def expect_organization(self, organization: str, or_none=True) -> bool:
+        return (self._organization is None and or_none) or (self._organization or "").lower() == organization.lower()
 
     def add_arguments(self, parser):
         parser.add_argument("-d", "--drop", action="store_true", help="Drop entries in table")
         parser.add_argument("-f", "--fill", action="store_true", help="Fill table with default entries")
         parser.add_argument("-i", "--init", action="store_true", help="Initial data fill")
         parser.add_argument("-a", "--all", action="store_true", help="Run drop and fill commands")
-        parser.add_argument("-n", "--number", help="Number of entries", required=True, type=int)
+        parser.add_argument("-n", "--number", help="Number of entries", type=int)
+        parser.add_argument("-o", "--offset", help="Offset from the source, per default number of huts", type=int)
+        parser.add_argument("--organization", help="Organization slug, only add this one, otherwise all", type=str)
         self._parser = parser
 
-    def handle(self, drop: bool, fill: bool, all: bool, init: bool, number: int, lang: str = "de", *args, **options):
+    def handle(
+        self,
+        drop: bool,
+        fill: bool,
+        all: bool,
+        init: bool,
+        number: int,
+        offset: int | None,
+        organization: str | None = None,
+        lang: str = "de",
+        *args,
+        **options,
+    ):
+        self._organization = organization
+        model_name = "Hut"
         if drop or all:
+            drop_number = number
             db = Hut.objects
-            self.stdout.write(f"Drop {db.count()} entries from table 'Hut'")
-            db.all().delete()
-        elif fill or all:
-            # osm_service = OsmService()
-            ## t_osm_huts = asyncio.create_task(osm_service.get_osm_hut_list(limit=limit, lang=lang))
-            # osm_huts = osm_service.get_osm_hut_list_sync(limit=number, lang=lang)
-            # click.echo("Get OSM data")
-            ## osm_huts = await t_osm_huts
-            # click.secho("Fill table with OSM data", fg="magenta")
-            # huts = add_hut_source_db(osm_huts, reference="osm", init=init)
-            # print(huts)
+            entries = db.count()
+            if not entries:
+                click.echo(f"No entries for '{model_name}'")
+            else:
+                if drop_number:
+                    if drop_number > entries:
+                        drop_number = entries
+                    pks = db.all()[:drop_number].values_list("pk", flat=True)
+                else:
+                    drop_number = entries
+                    pks = db.all().values_list("pk", flat=True)
+                if click.confirm(f"Delete {drop_number} of {entries} entries?"):
+                    db.filter(pk__in=pks).delete()
+                self.stdout.write(f"Dropped {drop_number} entries from table '{model_name}'")
+        if fill or all:
+            if not number:
+                number = click.prompt("Number of entries to add", type=int)
 
-            click.echo("Get OSM data")
-            osm_huts = list(HutSource.objects.filter(organization__slug="osm").all()[:number])
-            # osm_schemas = [HutOsm0Convert(source=h.source_data) for h in osm_huts]
-            # hut_schemas = [HutSchema(**h.model_dump()) for h in osm_schemas]
-            init_huts_db(
-                osm_huts
-            )  # , update_existing=update_existing, overwrite_existing_fields=overwrite_existing_fields)
+            entries = Hut.objects.all().count()
+            if offset is None:
+                offset = entries
+            if self.expect_organization("osm", or_none=True):
+                click.echo("Get OSM data")
+                osm_huts = list(HutSource.objects.filter(organization__slug="osm").all()[offset : offset + number])
+                new_huts = len(osm_huts)
+                click.secho(f"Fill table with {new_huts} OSM entries (offset={offset})", fg="magenta")
+                init_huts_db(
+                    osm_huts, init=init
+                )  # , update_existing=update_existing, overwrite_existing_fields=overwrite_existing_fields)
 
         # if drop or all:
         #    db = Organization.objects

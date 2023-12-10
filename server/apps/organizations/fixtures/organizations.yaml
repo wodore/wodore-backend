@@ -66,13 +66,18 @@
     description_de: 'Portal für aktuelle Verhältnisse, Tourenbeschreibungen und mehr.'
     url_de: https://www.gipfelbuch.ch
     attribution_de: ''
-    link_hut_pattern: https://www.gipfelbuch.ch/huetten/{{props.slug}}
+    link_hut_pattern: https://www.gipfelbuch.ch/huetten/{{id}}-{{props.slug}}
     logo: organizations/logos/gipfelbuch_icon.png
     color_light: '#414140'
     color_dark: '#9d9d9c'
     config: {}
     props_schema:
-      slug: <id>-<name>
+      type: object,
+      properties:
+        slug:
+          description: "gipfelbuch specific slug"
+          type: string
+      required: ["slug"]
     order: 2
 - model: organizations.organization
   pk: 3
@@ -105,15 +110,19 @@
     description_de: 'Grösster Kartendienst mit frei verfügbaren Daten.'
     url_de: https://www.openstreetmap.org
     attribution_de: ''
-    link_hut_pattern: https://www.openstreetmap.org/{{props.object_type}}/{{id}}
+    link_hut_pattern: https://www.openstreetmap.org/{{props.osm_type}}/{{id}}
     logo: organizations/logos/osm_icon.png
     color_light: '#13325d'
     color_dark: '#13325d'
     config: {}
     props_schema:
-      object_type:
-      - node
-      - way
+      type: object,
+      properties:
+        osm_type:
+          description: "osm object type: node, way, or area"
+          type: string
+          enum: ["node", "way", "area"]
+      required: ["osm_type"]
     order: 4
 - model: organizations.organization
   pk: 5

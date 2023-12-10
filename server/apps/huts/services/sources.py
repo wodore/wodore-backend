@@ -159,6 +159,7 @@ class HutSourceService:
                 other_hut_src.save()
                 status = CreateOrUpdateStatus.updated
             else:
+                hut_source = other_hut_src
                 status = CreateOrUpdateStatus.exists
         except ObjectDoesNotExist:
             # else:  # new entry, does not exist yet

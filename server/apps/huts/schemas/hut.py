@@ -49,3 +49,5 @@ class HutSchema(BaseModel):
     capacity: Optional[int] = None
     capacity_shelter: Optional[int] = None
     type: Optional[str] = None
+
+    props: dict[str, str] = Field(dict())  # Property field, depends ond organization and hut

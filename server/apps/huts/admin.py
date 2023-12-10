@@ -1,9 +1,20 @@
+from django import forms
 from django.contrib import admin
 from django.forms import ModelForm
+from organizations.models import Organization
 from unfold import admin as unfold_admin
 from manager.admin import ModelAdmin
 from django.utils.safestring import mark_safe
-from .models import HutSource, Hut, Contact, ContactFunction, HutType, Owner, HutContactAssociation
+from .models import (
+    HutOrganizationAssociation,
+    HutSource,
+    Hut,
+    Contact,
+    ContactFunction,
+    HutType,
+    Owner,
+    HutContactAssociation,
+)
 from djjmt.utils import override, django_get_normalised_language, activate
 from unfold.decorators import display
 from django.utils.translation import gettext_lazy as _
@@ -89,13 +100,57 @@ class HutSourceInline(unfold_admin.StackedInline):
     max_num = 20
     show_change_link = True
     can_delete = False
-    classes = [
-        "collapse",
-    ]
+    classes = ["collapse"]
     formfield_overrides = {models.JSONField: {"widget": UnfoldReadonlyJSONSuit}}
 
     def has_add_permission(self, request, obj):
         return False
+
+
+class HutOrganizationAssociationViewInline(unfold_admin.TabularInline):
+    model = Hut.organizations.through
+    fields = ["organization", "source_id"]
+    # readonly_fields = ["organization", "source_id"]
+    can_delete = False
+    extra = 0
+    verbose_name = _("Organization")
+
+    def has_add_permission(self, request, obj):
+        return False
+
+    def has_change_permission(self, request, obj):
+        return False
+
+
+class OrgAdminForm(ModelForm):
+    schema = forms.JSONField(label="Props Schema", required=False, widget=UnfoldReadonlyJSONSuit())
+
+    class Meta:
+        model = HutOrganizationAssociation
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        instance = kwargs.get("instance")
+        initial = kwargs.get("initial", {})
+
+        if instance:
+            initial = {"schema": instance.organization.props_schema}
+
+        super().__init__(*args, **kwargs, initial=initial)
+
+    def save(self, commit=True):
+        # self.instance.customer_full_name = self.cleaned_data["first_name"] + " " + self.cleaned_data["last_name"]
+        return super().save(commit)
+
+
+class HutOrganizationAssociationEditInline(unfold_admin.StackedInline):
+    form = OrgAdminForm
+    model = Hut.organizations.through
+    fields = [("organization", "source_id"), "props", "schema"]
+    extra = 0
+    classes = ["collapse"]
+    formfield_overrides = {models.JSONField: {"widget": UnfoldJSONSuit}}
+    verbose_name = _("Edit Organization")
 
 
 @admin.register(Hut)
@@ -107,7 +162,7 @@ class HutsAdmin(ModelAdmin):
     )
     form = required_i18n_fields_form_factory("name")
     radio_fields = {"review_status": admin.HORIZONTAL}
-    list_prefetch_related = ("organizations",)
+    # list_select_related = ("organizations", "organizations__details")
     list_display = ["symbol_img", "title", "location", "elevation", "type", "logo_orgs", "is_active", "review_tag"]
     list_display_links = ["symbol_img", "title"]
     fieldsets = HutAdminFieldsets
@@ -118,10 +173,20 @@ class HutsAdmin(ModelAdmin):
         "created",
         "modified",
     ]
+    list_per_page = 20
 
     inlines = [
+        HutOrganizationAssociationViewInline,
+        HutOrganizationAssociationEditInline,
         HutSourceInline,
     ]
+
+    # TODO: does not work yet
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.prefetch_related(
+            models.Prefetch("organizations", queryset=HutOrganizationAssociation.objects.all(), to_attr="details")
+        )
 
     @display(
         description=_("Status"),
@@ -133,8 +198,7 @@ class HutsAdmin(ModelAdmin):
 
     @display(header=True)
     def title(self, obj):
-        activate(django_get_normalised_language())
-        return (obj.name, obj.owner)  # self.icon_thumb(obj.type.icon_simple.url))
+        return (obj.name_i18n, obj.owner)  # self.icon_thumb(obj.type.icon_simple.url))
 
     def location(self, obj):
         return f"{obj.point.y:.4f}, {obj.point.x:.4f}"
@@ -147,8 +211,8 @@ class HutsAdmin(ModelAdmin):
     def logo_orgs(self, obj):  # new
         # orgs = [o for o in obj.organizations.all()]
         imgs = [
-            f'<a href={o.url_i18n} target="blank"><img class="inline pr-2" src="{o.logo.url}" width="28" alt="{o.name}"/></a>'
-            for o in obj.organizations.all()
+            f'<a href={o.link} target="blank"><img class="inline pr-2" src="{o.logo}" width="28" alt="{o.name}"/></a>'
+            for o in obj.view_organizations()
         ]
 
         return mark_safe(f'<span>{"".join(imgs)}</span>')

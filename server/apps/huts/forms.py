@@ -39,15 +39,15 @@ HutAdminFieldsets = [
             "fields": [f"note_{code}" for code in settings.LANGUAGE_CODES],
         },
     ),
-    (
-        _("Organizations"),
-        {
-            "classes": ["collapse"],
-            "fields": [
-                "organizations",
-            ],
-        },
-    ),
+    # (
+    #    _("Organizations"),
+    #    {
+    #        "classes": ["collapse"],
+    #        "fields": [
+    #            "organizations",
+    #        ],
+    #    },
+    # ),
     (
         _("Geo"),
         {

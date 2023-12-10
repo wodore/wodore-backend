@@ -7,6 +7,7 @@ from organizations.models import Organization
 from huts.services.osm import OsmService
 from huts.services.sources import HutSourceService
 from huts.schemas import HutSourceTypes
+from huts.schemas.status import CreateOrUpdateStatus
 from django.core.management import call_command
 
 # from django.conf import settings
@@ -20,15 +21,13 @@ def add_hut_source_db(
     # update_existing: bool = False, overwrite_existing_fields: bool=False,
     init: bool,
     extern_slug=None,
-    # commit_per_hut: bool = False,
 ):
-    # session_id = str(uuid4())
-    # context = set_session_context(session_id=session_id)
-    # session = await get_return_async_session()
     hut_source_service = HutSourceService()
     organization_id = Organization.get_by_slug(slug=reference).id
     source_huts = []
+    number = 0
     for hut in huts:
+        number += 1
         shut = HutSource(
             source_id=hut.get_id(),
             point=hut.get_db_point(),
@@ -38,7 +37,20 @@ def add_hut_source_db(
         )
         review_status = ReviewStatusChoices.done if init else ReviewStatusChoices.new
         shut, status = hut_source_service.create(shut, new_review_status=review_status)
-        print(f"{shut}: {status}")
+        _hut_name = shut.name if len(shut.name) < 18 else shut.name[:15] + ".."
+        _name = (
+            f"  Hut {str(number): <3} {'`'+shut.source_id+'`':<15} {_hut_name:<20} {'('+str(shut.organization)+')':<8}"
+        )
+        click.echo(f"{_name: <48}", nl=False)
+        status_color = {
+            CreateOrUpdateStatus.updated: "yellow",
+            CreateOrUpdateStatus.created: "green",
+            CreateOrUpdateStatus.exists: "blue",
+            CreateOrUpdateStatus.ignored: "grey",
+        }
+        click.secho(f"  ... {status:<8}", fg=status_color.get(status, "red"), nl=False)
+        click.secho(f" (#{shut.id})", dim=True)
+        # print(f"{shut}: {status}")
         # shut.save()
         source_huts.append(shut)
     return source_huts
@@ -98,23 +110,37 @@ class Command(BaseCommand):
         parser.add_argument("-f", "--fill", action="store_true", help="Fill table with default entries")
         parser.add_argument("-i", "--init", action="store_true", help="Initial data fill")
         parser.add_argument("-a", "--all", action="store_true", help="Run drop and fill commands")
-        parser.add_argument("-n", "--number", help="Number of entries", required=True, type=int)
+        parser.add_argument("-n", "--number", help="Number of entries", required=False, type=int, default=None)
         self._parser = parser
 
     def handle(self, drop: bool, fill: bool, all: bool, init: bool, number: int, lang: str = "de", *args, **options):
+        model_name = "HutSource"
         if drop or all:
+            drop_number = number
             db = HutSource.objects
-            self.stdout.write(f"Drop {db.count()} entries from table 'HutSource'")
-            db.all().delete()
-        elif fill or all:
+            entries = db.count()
+            if not entries:
+                click.echo(f"No entries for '{model_name}'")
+            else:
+                if drop_number:
+                    if drop_number > entries:
+                        drop_number = entries
+                    pks = db.all()[:drop_number].values_list("pk", flat=True)
+                else:
+                    drop_number = entries
+                    pks = db.all().values_list("pk", flat=True)
+                if click.confirm(f"Delete {drop_number} of {entries} entries?"):
+                    db.filter(pk__in=pks).delete()
+                self.stdout.write(f"Dropped {drop_number} entries from table '{model_name}'")
+
+        if fill or all:
+            if not number:
+                number = 10
             osm_service = OsmService()
-            # t_osm_huts = asyncio.create_task(osm_service.get_osm_hut_list(limit=limit, lang=lang))
             osm_huts = osm_service.get_osm_hut_list_sync(limit=number, lang=lang)
             click.echo("Get OSM data")
-            # osm_huts = await t_osm_huts
             click.secho("Fill table with OSM data", fg="magenta")
             huts = add_hut_source_db(osm_huts, reference="osm", init=init)
-            print(huts)
         # if drop or all:
         #    db = Organization.objects
         #    self.stdout.write(f"Drop {db.count()} entries from table 'Organizations'")
