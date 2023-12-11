@@ -32,7 +32,7 @@ class OsmService:
             click.secho(*args, **kwargs)
 
     @lru_cache(10)
-    def get_osm_hut_list_sync(self, limit: int = 1, lang: str = "de") -> List[HutOsm0Source]:
+    def get_osm_hut_list_sync(self, limit: int = 1, lang: str = "de", offset: int = 0) -> List[HutOsm0Source]:
         api = overpy.Overpass(url=self.request_url)
         # fetch all ways and nodes
         # SWISS
@@ -41,9 +41,9 @@ class OsmService:
         bounder = 100.0
         lon_diff = lon[1] - lon[0]
         lat_diff = lat[1] - lat[0]
-        lon_range = lon_diff / bounder * limit
+        lon_range = lon_diff / bounder * limit + lon_diff / bounder * 2 * offset
         lon_range = lon_diff if lon_range > lon_diff else lon_range
-        lat_range = lat_diff / bounder * limit
+        lat_range = lat_diff / bounder * limit + lat_diff / bounder * 2 * offset
         lat_range = lat_diff if lat_range > lat_diff else lat_range
         lon_start = lon[0] + (lon_diff - lon_range) / 2
         lat_start = lat[0] + (lat_diff - lat_range) / 2

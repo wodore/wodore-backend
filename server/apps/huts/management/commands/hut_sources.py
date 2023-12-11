@@ -10,6 +10,8 @@ from huts.schemas import HutSourceTypes
 from huts.schemas.status import CreateOrUpdateStatus
 from django.core.management import call_command
 
+from server.core.management.base import CRUDCommand
+
 # from django.conf import settings
 # import shutil
 # from djjmt.utils import override
@@ -100,7 +102,7 @@ def add_hutsources_function(
     if _expect_organization("osm", selected_organization, or_none=True):
         osm_service = OsmService()
         parser.stdout.write(f"Get OSM data from '{osm_service.request_url}'")
-        osm_huts = osm_service.get_osm_hut_list_sync(limit=limit, lang=lang)
+        osm_huts = osm_service.get_osm_hut_list_sync(limit=limit, offset=offset, lang=lang)
         parser.stdout.write(f"Got {len(osm_huts)} results back, start filling database:")
         # click.secho("Fill table with OSM data", fg="magenta")
         huts = add_hut_source_db(osm_huts, reference="osm", init=init)
@@ -127,8 +129,8 @@ class Command(CRUDCommand):
         parser.add_argument("--organization", help="Organization slug, only add this one, otherwise all", type=str)
         parser.add_argument("--lang", help="Language to use (de, en, fr, it)", default="de", type=str)
 
-    def handle(self, init, organization, *args, **options):
-        super().handle(kwargs_add={"init": init, "selected_organization": organization}, **options)
+    def handle(self, init, organization, lang, *args, **options):
+        super().handle(kwargs_add={"init": init, "selected_organization": organization, "lang": lang}, **options)
 
 
 # class Command(BaseCommand):

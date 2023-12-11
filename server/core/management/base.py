@@ -97,13 +97,13 @@ def default_drop_function(parser: "CRUDCommand", force: bool, model: models.Mode
     entries = model.objects.all().count()
     db_force = force
     # check support for limit
-    err_msg = "'{}' parameter is not supported without custom manager 'drop()' function ('server.core.managers')"
+    err_msg = "'{}' parameter is not supported without custom manager's 'drop()' function (see 'server.core.managers')"
     if not hasattr(objects, "drop") and parser.use_limit_arg:
-        parser.stdout.write(parser.style.ERROR(err_msg.format("--limit")))
-        sys.exit(1)
+        parser.stdout.write(parser.style.WARNING(err_msg.format("--limit")))
+        limit = None
     if not hasattr(objects, "drop") and parser.use_offset_arg:
-        parser.stdout.write(parser.style.ERROR(err_msg.format("--offset")))
-        sys.exit(1)
+        parser.stdout.write(parser.style.WARNING(err_msg.format("--offset")))
+        offset = 0
 
     if not db_force and entries > 0:
         try:
@@ -121,7 +121,7 @@ def default_drop_function(parser: "CRUDCommand", force: bool, model: models.Mode
             if hasattr(objects, "drop"):
                 total_entries, tables = objects.drop(limit=limit, offset=offset)
             else:
-                total_entries, tables = objects.delete()
+                total_entries, tables = objects.all().delete()
             for table, deleted in tables.items():
                 parser.stdout.write(f"  > dropped {deleted} entries from table '{table}'")
             parser.stdout.write(
@@ -202,7 +202,9 @@ class CRUDCommand(BaseCommand):
         self.fixture_name = self.fixture_name or self.model_names
         if not self.fixture_name:
             raise AttributeError("'fixture_name' is needed, add it to the global variables in your class!")
-        if self.use_media_args or self.use_media_args is None:
+        if (
+            self.media_src and (not self.use_media_args == False or self.use_media_args is None)
+        ) or self.use_media_args:
             self.set_media_paths()
 
     def add_arguments(self, parser):
@@ -213,7 +215,7 @@ class CRUDCommand(BaseCommand):
         if self.use_update_arg:
             parser.add_argument("-u", "--update", action="store_true", help="Update existing entries")
         if self.use_limit_arg:
-            parser.add_argument("-n", "--limit", help="Limit of entries", type=int)
+            parser.add_argument("-l", "--limit", help="Limit of entries", type=int)
         if self.use_offset_arg:
             parser.add_argument("-o", "--offset", help="Offset of entries", type=int)
         if self.dump_function:
@@ -287,7 +289,7 @@ class CRUDCommand(BaseCommand):
         if self.use_offset_arg:
             offset = options.get("offset", None)
             if offset is None:
-                offset = entries
+                offset = 0
             kwargs["offset"] = offset
         ##   meda stuff
         if self.media_src:

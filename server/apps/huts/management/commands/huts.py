@@ -1,4 +1,5 @@
 import os, sys
+from typing import Tuple
 import click
 import traceback
 from django.core.management.base import BaseCommand, CommandError
@@ -59,19 +60,22 @@ def init_huts_db(
     overwrite_existing_fields: bool = False,
     extern_slug=None,
     commit_per_hut: bool = False,
-):
+) -> Tuple[int, int]:
     # hut_service = HutService(session=s)
     # osm_schemas = [HutOsm0Convert(source=h.source_data) for h in osm_huts]
     # hut_schemas = [HutSchema(**h.model_dump()) for h in osm_schemas]
-    number = 0
+    added_huts = 0
+    failed_huts = 0
+    hut_counter = 0
     fails = []
     default_type, _created = HutType.objects.get_or_create(slug="unknown")
     organization, _created = Organization.objects.get_or_create(slug="osm")
     hut_types = {ht.slug: ht for ht in HutType.objects.all()}
     for hut_src in hut_sources:
+        hut_counter += 1
         hut_osm_schema = HutOsm0Convert(source=hut_src.source_data)  # TODO: make generic
         hut = HutSchema(**hut_osm_schema.model_dump())
-        _name = f"  Hut {str(number): <3} '{hut.name.get('de')}'"
+        _name = f"  Hut {str(hut_counter): <3} '{hut.name.get('de')}'"
         click.echo(f"{_name: <48}", nl=False)
         i18n_fields = {}
         for field in ["name", "description", "note"]:
@@ -99,11 +103,12 @@ def init_huts_db(
                 hut_src.hut = db_hut
                 hut_src.save()
                 click.secho(f" ({db_hut.slug})", dim=True)
+            added_huts += 1
         except IntegrityError as e:
             err_msg = str(e).split("\n")[0]
             click.secho(f" {'('+db_hut.slug+')':<20} E: {err_msg}", dim=True)
+            failed_huts += 1
 
-        number += 1
         # try:
         #    hut, status = await hut_service.create_or_update(
         #        hut,
@@ -119,18 +124,12 @@ def init_huts_db(
         #    click.secho(e, dim=True)
         #    continue
         # click.secho(f"  ... {status:<8}", fg="green", nl=False)
-    click.echo(f"Done, added {number} huts")
+    # click.echo(f"Done, added {number} huts")
     if fails:
         click.secho("This hut failed:", fg="red")
     for f in fails:
         click.echo(f"- {f.name}")
-    # if not commit_per_hut:
-    #    try:
-    #        #await hut_service.session.commit()
-    #        await session.commit()
-    #    except OperationalError as e:
-    #        click.secho(f"Failed to commit any hut", fg="red")
-    #        click.secho(e, dim=True)
+    return added_huts, failed_huts
 
 
 def _expect_organization(organization: str, selected_organization: str | None, or_none=True) -> bool:
@@ -150,10 +149,13 @@ def add_huts_function(parser: "Command", offset, limit, init, update, force, sel
         parser.stdout.write(
             parser.style.NOTICE(f"Going to fill table with {new_huts} entries and an offset of {offset}")
         )
-        init_huts_db(
+        added, failed = init_huts_db(
             osm_huts, init=init
         )  # , update_existing=update_existing, overwrite_existing_fields=overwrite_existing_fields)
-        parser.stdout.write(parser.style.SUCCESS(f"Successfully added {len(huts)} new huts"))
+        if added:
+            parser.stdout.write(parser.style.SUCCESS(f"Successfully added {added} new hut{'s' if failed > 1 else ''}"))
+        if failed:
+            parser.stdout.write(parser.style.ERROR(f"Failed to add {failed} hut{'s' if failed > 1 else ''}"))
     else:
         parser.stdout.write(parser.style.WARNING(f"Selected organization '{selected_organization}' not supported."))
 
