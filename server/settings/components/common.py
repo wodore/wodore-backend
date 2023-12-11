@@ -30,6 +30,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "organizations",
     "huts",
     "manager",
+    "server.core",
     # Extension:
     "ninja",
     "colorfield",
@@ -38,6 +39,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "django_jsonform",
     "jsonsuit.apps.JSONSuitConfig",  # https://github.com/tooreht/django-jsonsuit
     "django_countries",
+    "computedfields",  # https://github.com/netzkolchose/django-computedfields
     # Default django apps:
     "django.contrib.auth",
     "django.contrib.contenttypes",

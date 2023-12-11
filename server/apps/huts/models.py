@@ -5,6 +5,7 @@ from django.contrib.gis.db import models
 from django.forms import ModelForm
 
 from organizations.models import Organization
+from computedfields.models import ComputedFieldsModel, computed
 
 from model_utils.models import TimeStampedModel
 
@@ -13,7 +14,6 @@ from django.utils.translation import gettext_lazy as _
 from django.utils.translation import get_language
 from django_countries.fields import CountryField
 
-from djjmt.utils import get_normalised_language, override, django_get_normalised_language, activate
 from djjmt.fields import TranslationJSONField
 from modeltrans.fields import TranslationField
 from modeltrans.manager import MultilingualManager
@@ -24,6 +24,8 @@ from django.utils.text import slugify
 from django.db.models import F, Value
 from django.db.models.functions import Concat
 
+from huts.managers import HutManager
+from server.core.managers import BaseMutlilingualManager
 
 from jinja2 import Environment
 
@@ -67,9 +69,7 @@ class HutSource(TimeStampedModel):
         ordering = [Lower("name"), "organization__order"]
 
     def __str__(self) -> str:
-        with override(django_get_normalised_language()):
-            # return f"{self.name} v{self.version} ({self.organization.name})"
-            return f"{self.name} v{self.version} ({self.organization.name})"
+        return f"{self.name} v{self.version} ({self.organization.name_i18n})"
 
 
 class ContactFunction(models.Model):
@@ -124,31 +124,66 @@ class Owner(TimeStampedModel):
             return self.name
 
 
-class HutContactAssociation(models.Model):
-    contact = models.ForeignKey(Contact, on_delete=models.CASCADE)
+class HutContactAssociation(TimeStampedModel):
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="details")
     hut = models.ForeignKey("Hut", on_delete=models.CASCADE)
     order = models.PositiveSmallIntegerField(blank=True, null=True)
 
     def __str__(self) -> str:
-        return f"{self.contact}, {self.hut}"
+        return f"{self.hut} <> {self.contact}"
+
+    class Meta(object):
+        verbose_name = _("Contacts to Hut")
+        unique_together = [["contact", "hut"]]
 
 
-class HutOrganizationAssociation(models.Model):
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="details")
+class HutOrganizationAssociation(TimeStampedModel, ComputedFieldsModel):
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="source")
     hut = models.ForeignKey("Hut", on_delete=models.CASCADE)
-    props = models.JSONField(help_text=_("Organization depend properties."), blank=True, default=dict)
+    props = models.JSONField(help_text=_("Organization dependend properties."), blank=True, default=dict)
     source_id = models.CharField(max_length=40, blank=True, null=True, default="", help_text="Source id")
+
+    # TODO: does not work for different languages, needs one field for each ...
+    @computed(
+        models.CharField(
+            max_length=200, blank=True, null=True, default="", help_text=_("Link to object by this organisation")
+        ),
+        depends=[("self", ["props", "source_id"]), ("organization", ["link_hut_pattern", "config", "slug"])],
+    )
+    def link(self):
+        lang = get_language() or settings.LANGUAGE_CODE  # TODO lang replace by query
+        link_pattern = self.organization.link_hut_pattern
+        _tmpl = Environment().from_string(link_pattern)
+        return _tmpl.render(
+            lang=lang,
+            slug=self.organization.slug,
+            id=self.source_id,
+            props=self.props,
+            config=self.organization.config,
+        )
+
+    @property
+    def link_i18n(self):
+        return self.link
+        # lang = get_language() or settings.LANGUAGE_CODE  # TODO lang replace by query
+        # if self.link is not None:
+        #    return self.link.replace("#LANG#", lang)
+        # return ""
 
     objects = MultilingualManager()
 
     def __str__(self) -> str:
-        return f"{self.organization}, {self.hut}"
+        return f"{self.hut} <> {self.organization}"
 
-    # TODO: add custom save which increses order
+    class Meta(object):
+        verbose_name = _("Organizations to Hut")
+        unique_together = [["organization", "hut"]]
 
 
 class HutType(models.Model):
     i18n = TranslationField(fields=("name", "description"))
+    objects = BaseMutlilingualManager()
+
     slug = models.SlugField(unique=True)
     # name = TranslationJSONField(models.CharField(max_length=100), help_text="Hut type name")
     # description = TranslationJSONField(models.CharField(max_length=400), help_text="Hut type description")
@@ -199,7 +234,11 @@ class Hut(TimeStampedModel):
         done = "done", _("done")
         reject = "reject", _("reject")
 
+    # manager
+    objects: HutManager = HutManager()
+    # translations
     i18n = TranslationField(fields=("name", "description", "note"))
+
     slug = models.SlugField(unique=True)
     review_status = models.TextField(
         max_length=12, choices=ReviewStatusChoices.choices, default=ReviewStatusChoices.review
@@ -239,6 +278,20 @@ class Hut(TimeStampedModel):
             return self.name.get("de")
         except AttributeError:
             return self.name
+
+    # @classmethod
+    # def drop(cls, number: int | None = None, offset: int | None = 0) -> int:
+    #    offset = offset or 0
+    #    db = cls.objects
+    #    entries = db.count()
+    #    if number is not None:
+    #        number_with_offset = number + offset
+    #        if number_with_offset > entries:
+    #            number_with_offset = entries
+    #        pks = db.all()[offset:number_with_offset].values_list("pk", flat=True)
+    #    else:
+    #        pks = db.all().values_list("pk", flat=True)
+    #    return db.filter(pk__in=pks).delete()[0]
 
     def save(self, *args, **kwargs):
         self.slug = self._create_slug_name(self.name_i18n)

@@ -163,6 +163,7 @@ class HutsAdmin(ModelAdmin):
     form = required_i18n_fields_form_factory("name")
     radio_fields = {"review_status": admin.HORIZONTAL}
     # list_select_related = ("organizations", "organizations__details")
+    # list_select_related = ["organizations__source"]
     list_display = ["symbol_img", "title", "location", "elevation", "type", "logo_orgs", "is_active", "review_tag"]
     list_display_links = ["symbol_img", "title"]
     fieldsets = HutAdminFieldsets
@@ -173,7 +174,7 @@ class HutsAdmin(ModelAdmin):
         "created",
         "modified",
     ]
-    list_per_page = 20
+    list_per_page = 100
 
     inlines = [
         HutOrganizationAssociationViewInline,
@@ -181,12 +182,12 @@ class HutsAdmin(ModelAdmin):
         HutSourceInline,
     ]
 
-    # TODO: does not work yet
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return qs.prefetch_related(
-            models.Prefetch("organizations", queryset=HutOrganizationAssociation.objects.all(), to_attr="details")
-        )
+    ## TODO: does not work yet
+    # def get_queryset(self, request):
+    #    qs = super().get_queryset(request)
+    #    return qs.prefetch_related(
+    #        models.Prefetch("organizations", queryset=HutOrganizationAssociation.objects.all(), to_attr="source")
+    #    )
 
     @display(
         description=_("Status"),
@@ -210,9 +211,13 @@ class HutsAdmin(ModelAdmin):
     @display(description=_("Organizations"))
     def logo_orgs(self, obj):  # new
         # orgs = [o for o in obj.organizations.all()]
+        # imgs = [
+        #    f'<a href={o.link} target="blank"><img class="inline pr-2" src="{o.logo}" width="28" alt="{o.name}"/></a>'
+        #    for o in obj.view_organizations()
+        # ]
         imgs = [
-            f'<a href={o.link} target="blank"><img class="inline pr-2" src="{o.logo}" width="28" alt="{o.name}"/></a>'
-            for o in obj.view_organizations()
+            f'<a href={o.source.first().link_i18n} target="blank"><img class="inline pr-2" src="{o.logo.url}" width="28" alt="{o.name_i18n}"/></a>'
+            for o in obj.organizations.all()
         ]
 
         return mark_safe(f'<span>{"".join(imgs)}</span>')

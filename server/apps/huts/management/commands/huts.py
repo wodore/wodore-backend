@@ -3,7 +3,8 @@ import click
 import traceback
 from django.core.management.base import BaseCommand, CommandError
 from django.db import IntegrityError
-from huts.models import HutSource, ReviewStatusChoices, Hut, HutType
+from huts.models import HutOrganizationAssociation, HutSource, ReviewStatusChoices, Hut, HutType
+import organizations
 from organizations.models import Organization
 from huts.services.osm import OsmService
 from huts.services.sources import HutSourceService
@@ -11,6 +12,7 @@ from huts.schemas import HutSourceTypes
 from huts.schemas.hut import HutSchema
 from huts.schemas.hut_osm import HutOsm0Convert
 from django.core.management import call_command
+from django.db import transaction
 
 # from django.conf import settings
 # import shutil
@@ -45,6 +47,9 @@ from django.core.management import call_command
 #        # shut.save()
 #        source_huts.append(shut)
 #    return source_huts
+from pathlib import Path
+from huts.models import HutType
+from server.core.management import CRUDCommand
 
 
 def init_huts_db(
@@ -84,16 +89,19 @@ def init_huts_db(
             **i18n_fields,
         )
         try:
-            db_hut.save()
-            db_hut.organizations.add(
-                organization, through_defaults={"props": hut.props, "source_id": hut_src.source_id}
-            )
-            db_hut.refresh_from_db()
-            hut_src.hut = db_hut
-            hut_src.save()
-            click.secho(f" ({db_hut.slug})", dim=True)
-        except IntegrityError:
-            click.secho(f" ({db_hut.slug} already exists)", dim=True)
+            with transaction.atomic():
+                db_hut.save()
+                new_org = HutOrganizationAssociation(
+                    hut=db_hut, organization=organization, props=hut.props, source_id=hut_src.source_id
+                )
+                new_org.save()
+                db_hut.refresh_from_db()
+                hut_src.hut = db_hut
+                hut_src.save()
+                click.secho(f" ({db_hut.slug})", dim=True)
+        except IntegrityError as e:
+            err_msg = str(e).split("\n")[0]
+            click.secho(f" {'('+db_hut.slug+')':<20} E: {err_msg}", dim=True)
 
         number += 1
         # try:
@@ -125,120 +133,47 @@ def init_huts_db(
     #        click.secho(e, dim=True)
 
 
-class Command(BaseCommand):
-    help = "Initialize and drop data in Organizations table"
-    suppressed_base_arguments = (
-        "--version",
-        "--settings",
-        "--pythonpath",
-        "--traceback",
-        "--no-color",
-        "--force-color",
-    )
+def _expect_organization(organization: str, selected_organization: str | None, or_none=True) -> bool:
+    return (selected_organization is None and or_none) or (selected_organization or "").lower() == organization.lower()
+
+
+def add_huts_function(parser: "Command", offset, limit, init, update, force, selected_organization, **kwargs):
+    total_entries = HutSource.objects.all().count()
+    if total_entries == 0:
+        parser.stdout.write(parser.style.WARNING("No entries in 'huts.HutSource', run first: 'app hut_sources --add'"))
+        sys.exit(1)
+
+    if _expect_organization("osm", selected_organization, or_none=True):
+        parser.stdout.write("Get OSM data where 'huts.HutSource.slug == osm'.")
+        osm_huts = list(HutSource.objects.filter(organization__slug="osm").all()[offset : offset + limit])
+        new_huts = len(osm_huts)
+        parser.stdout.write(
+            parser.style.NOTICE(f"Going to fill table with {new_huts} entries and an offset of {offset}")
+        )
+        init_huts_db(
+            osm_huts, init=init
+        )  # , update_existing=update_existing, overwrite_existing_fields=overwrite_existing_fields)
+        parser.stdout.write(parser.style.SUCCESS(f"Successfully added {len(huts)} new huts"))
+    else:
+        parser.stdout.write(parser.style.WARNING(f"Selected organization '{selected_organization}' not supported."))
+
+
+class Command(CRUDCommand):
+    # help = ""
+    model = Hut
+    model_names = "huts"
+    add_function = add_huts_function
+    use_limit_arg = True
+    use_offset_arg = True
+    use_update_arg = True
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._parser = None
-        self._organization = None
-
-    def expect_organization(self, organization: str, or_none=True) -> bool:
-        return (self._organization is None and or_none) or (self._organization or "").lower() == organization.lower()
 
     def add_arguments(self, parser):
-        parser.add_argument("-d", "--drop", action="store_true", help="Drop entries in table")
-        parser.add_argument("-f", "--fill", action="store_true", help="Fill table with default entries")
+        super().add_arguments(parser)
         parser.add_argument("-i", "--init", action="store_true", help="Initial data fill")
-        parser.add_argument("-a", "--all", action="store_true", help="Run drop and fill commands")
-        parser.add_argument("-n", "--number", help="Number of entries", type=int)
-        parser.add_argument("-o", "--offset", help="Offset from the source, per default number of huts", type=int)
         parser.add_argument("--organization", help="Organization slug, only add this one, otherwise all", type=str)
-        self._parser = parser
 
-    def handle(
-        self,
-        drop: bool,
-        fill: bool,
-        all: bool,
-        init: bool,
-        number: int,
-        offset: int | None,
-        organization: str | None = None,
-        lang: str = "de",
-        *args,
-        **options,
-    ):
-        self._organization = organization
-        model_name = "Hut"
-        if drop or all:
-            drop_number = number
-            db = Hut.objects
-            entries = db.count()
-            if not entries:
-                click.echo(f"No entries for '{model_name}'")
-            else:
-                if drop_number:
-                    if drop_number > entries:
-                        drop_number = entries
-                    pks = db.all()[:drop_number].values_list("pk", flat=True)
-                else:
-                    drop_number = entries
-                    pks = db.all().values_list("pk", flat=True)
-                if click.confirm(f"Delete {drop_number} of {entries} entries?"):
-                    db.filter(pk__in=pks).delete()
-                self.stdout.write(f"Dropped {drop_number} entries from table '{model_name}'")
-        if fill or all:
-            if not number:
-                number = click.prompt("Number of entries to add", type=int)
-
-            entries = Hut.objects.all().count()
-            if offset is None:
-                offset = entries
-            if self.expect_organization("osm", or_none=True):
-                click.echo("Get OSM data")
-                osm_huts = list(HutSource.objects.filter(organization__slug="osm").all()[offset : offset + number])
-                new_huts = len(osm_huts)
-                click.secho(f"Fill table with {new_huts} OSM entries (offset={offset})", fg="magenta")
-                init_huts_db(
-                    osm_huts, init=init
-                )  # , update_existing=update_existing, overwrite_existing_fields=overwrite_existing_fields)
-
-        # if drop or all:
-        #    db = Organization.objects
-        #    self.stdout.write(f"Drop {db.count()} entries from table 'Organizations'")
-        #    db.all().delete()
-        #    if not ignore_media and os.path.exists(media_dst):
-        #        self.stdout.write(f"Remove media file folder '{media_dst}'")
-        #        shutil.rmtree(media_dst)
-        # if fill or all:
-        #    self.stdout.write(f"Load data from 'organizations.yaml' fixtures")
-        #    try:
-        #        call_command("loaddata", "organizations", app_label="organizations")
-        #        self.stdout.write(self.style.SUCCESS(f"Successfully loaded data"))
-        #    except Exception as e:
-        #        self.stderr.write(traceback.format_exc())
-        #        self.stdout.write(self.style.ERROR(f"Loaddata failed, fix issues and run again"))
-        #    if not ignore_media:
-        #        self.stdout.write(f"Copy media files from '{media_src}' to '{media_dst}'")
-        #        shutil.copytree(media_src, media_dst, dirs_exist_ok=True)
-        # if save:
-        #    try:
-        #        fixture_path = os.path.relpath(f"{app_root}/fixtures/organizations.yaml")
-        #        call_command("dumpdata", "organizations.Organization", format="yaml", output=fixture_path)
-        #        with open(fixture_path, "r") as file:
-        #            new_lines = []  # remove created and modified
-        #            for line in file.readlines():
-        #                if "    modified: " not in line and "    created: " not in line:
-        #                    new_lines.append(line)
-        #        with open(fixture_path, "w") as file:
-        #            file.writelines(new_lines)
-        #        self.stdout.write(self.style.WARNING(f"Make sure to copy any new/changed logo to '{media_src}'"))
-        #        self.stdout.write(self.style.SUCCESS(f"Successfully saved data to '{fixture_path}'"))
-        #    except Exception as e:
-        #        self.stderr.write(str(e))
-        #        self.stdout.write(self.style.ERROR(f"Save data failed, fix issues and run again"))
-
-        # if not fill and not drop and not all and not save:
-        #    if self._parser is not None:
-        #        self._parser.print_help()
-        #    else:
-        #        self.stdout.write(self.style.NOTICE(f"Missing arguments"))
+    def handle(self, init, organization, *args, **options):
+        super().handle(kwargs_add={"init": init, "selected_organization": organization}, **options)

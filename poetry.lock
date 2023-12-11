@@ -786,6 +786,26 @@ files = [
 Pillow = ">=9.0.0"
 
 [[package]]
+name = "django-computedfields"
+version = "0.2.5"
+description = ""
+optional = false
+python-versions = "^3.10"
+files = []
+develop = false
+
+[package.dependencies]
+django = "^5.0"
+django-fast-update = "^0.2.3"
+typing-extensions = "^4.9.0"
+
+[package.source]
+type = "git"
+url = "https://github.com/TBxy/django-computedfields.git"
+reference = "django5.0"
+resolved_reference = "f5e396f8c836df41ce86bd0304bbfa5411c2aa42"
+
+[[package]]
 name = "django-countries"
 version = "7.5.1"
 description = "Provides a country field for Django models."
@@ -867,6 +887,19 @@ files = [
 [package.extras]
 dev = ["Django", "black", "django-stubs", "djangorestframework", "djangorestframework-stubs", "flake8", "flake8-bugbear", "isort", "mypy (<0.990)", "pdbpp", "pre-commit"]
 test = ["pytest", "pytest-cov", "pytest-django"]
+
+[[package]]
+name = "django-fast-update"
+version = "0.2.3"
+description = "Faster db updates for Django using UPDATE FROM VALUES sql variants."
+optional = false
+python-versions = "*"
+files = [
+    {file = "django-fast-update-0.2.3.tar.gz", hash = "sha256:76ad711a1dc193e20233458d584e51ad6d354663b8952ada768eec1d997abc3c"},
+]
+
+[package.dependencies]
+Django = ">=3.2"
 
 [[package]]
 name = "django-grappelli"
@@ -4020,4 +4053,4 @@ requests = "*"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "ed293d6ebded210afe5aa8ba7321935f423c8b435e1813b925fe9685d5af58ba"
+content-hash = "2976d833432f5a93dca755ebd4b335a69fcfb67c6d2deb193ea7b4afe96d7f06"

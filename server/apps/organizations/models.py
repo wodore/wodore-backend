@@ -3,6 +3,9 @@ from functools import lru_cache
 
 from django.utils.translation import gettext_lazy as _
 
+# from modeltrans.manager import MultilingualManager
+from server.core.managers import BaseMutlilingualManager
+
 # from django_jsonform.models.fields import JSONField
 from django.utils import timezone
 from colorfield.fields import ColorField
@@ -43,6 +46,8 @@ class Organization(TimeStampedModel):
     config = models.JSONField(default=dict, blank=True, help_text="Configuration dictonary")
     props_schema = models.JSONField(default=dict, blank=True, help_text="Property schema")
     order = models.PositiveSmallIntegerField(unique=True, default=0)
+
+    objects = BaseMutlilingualManager()
 
     @classmethod
     @lru_cache(50)
