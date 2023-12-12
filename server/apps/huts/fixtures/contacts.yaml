@@ -1,0 +1,26 @@
+- model: huts.contact
+  pk: 1
+  fields:
+    name: Hans Blatter
+    email: tb@wodore.com
+    phone: ''
+    mobile: ''
+    function: 1
+    url: ''
+    address: ''
+    note: ''
+    is_active: true
+    is_public: true
+- model: huts.contact
+  pk: 2
+  fields:
+    name: Sepp Blatter
+    email: tb@wodore.com
+    phone: ''
+    mobile: ''
+    function: 1
+    url: ''
+    address: ''
+    note: ''
+    is_active: true
+    is_public: true

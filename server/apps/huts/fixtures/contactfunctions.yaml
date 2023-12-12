@@ -1,0 +1,40 @@
+- model: huts.contactfunction
+  pk: 1
+  fields:
+    slug: warden
+    name_de: Huettenwart
+    icon: ''
+    priority: 10
+- model: huts.contactfunction
+  pk: 2
+  fields:
+    slug: helper
+    name_de: Huettenhilfe
+    icon: ''
+    priority: 40
+- model: huts.contactfunction
+  pk: 3
+  fields:
+    slug: famer
+    name_de: Bauer
+    icon: ''
+    priority: 15
+- model: huts.contactfunction
+  pk: 4
+  fields:
+    slug: owner
+    name_de: Eigentümer
+    priority: 30
+- model: huts.contactfunction
+  pk: 5
+  fields:
+    slug: chief
+    name_de: Hüttenchef
+    priority: 25
+- model: huts.contactfunction
+  pk: 6
+  fields:
+    slug: sectionchief
+    name_de: Sektionschef
+    priority: 60
+
