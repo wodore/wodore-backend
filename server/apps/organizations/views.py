@@ -6,7 +6,8 @@ from django.contrib import admin
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.urls import reverse
 from django.views.generic.detail import DetailView
-from djjmt.utils import activate, django_get_normalised_language
+
+from server.apps.djjmt.utils import activate, django_get_normalised_language
 
 from .models import Organization
 

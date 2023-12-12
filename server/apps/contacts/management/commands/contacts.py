@@ -2,12 +2,13 @@ import random
 
 from faker import Faker
 
-from huts.models import Contact, ContactFunction
 from server.core.management import CRUDCommand
+
+from ...models import Contact, ContactFunction
 
 
 def add_contact_function(parser, limit, **kwargs):
-    fake = Faker()
+    fake = Faker(["de", "fr", "it"])
     contact_functions_pks = ContactFunction.objects.all().values_list("pk", flat=True)
     parser.stdout.write("Add contacts:")
     for _ in range(limit):

@@ -1,9 +1,10 @@
 from typing import Any, Type, cast
 
 import msgspec
-from django.http import HttpRequest
 from ninja.parser import Parser
 from ninja.types import DictStrAny
+
+from django.http import HttpRequest
 
 
 def decoder_hook(type: Type, obj: Any) -> Any:
@@ -13,7 +14,8 @@ def decoder_hook(type: Type, obj: Any) -> Any:
     #    real, imag = obj
     #    return complex(real, imag)
     # Raise a NotImplementedError for other types
-    raise NotImplementedError(f"Objects of type {type} are not supported")
+    msg = f"Objects of type {type} are not supported"
+    raise NotImplementedError(msg)
 
 
 class MsgSpecParser(Parser):

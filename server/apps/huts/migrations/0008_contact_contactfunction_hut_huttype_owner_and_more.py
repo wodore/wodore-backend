@@ -4,7 +4,7 @@ import django.contrib.gis.db.models.fields
 import django.db.models.deletion
 import django.utils.timezone
 import django_countries.fields
-import djjmt.fields
+from server.apps import djjmt
 import model_utils.fields
 from django.db import migrations, models
 

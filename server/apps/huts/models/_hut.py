@@ -13,11 +13,12 @@ from django.utils.text import slugify
 from django.utils.translation import get_language
 from django.utils.translation import gettext_lazy as _
 
-from huts.managers import HutManager
-from organizations.models import Organization
+from server.apps.contacts.models import Contact
+from server.apps.organizations.models import Organization
+from server.apps.owners.models import Owner
 
+from ..managers import HutManager
 from ._associations import HutContactAssociation, HutOrganizationAssociation
-from ._contacts import Contact, Owner
 from ._hut_type import HutType
 
 

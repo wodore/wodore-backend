@@ -10,7 +10,8 @@ def encoder_hook(obj: Any) -> Any:
     if isinstance(obj, BaseModel):
         return obj.model_dump()
     # Raise a NotImplementedError for other types
-    raise NotImplementedError(f"Objects of type {type(obj)} are not supported")
+    msg = f"Objects of type {type(obj)} are not supported"
+    raise NotImplementedError(msg)
 
 
 class MsgSpecRenderer(BaseRenderer):

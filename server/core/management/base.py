@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Callable, Tuple
 
 import click
+
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
@@ -151,7 +152,7 @@ def default_drop_function(parser: "CRUDCommand", force: bool, model: models.Mode
 class CRUDCommand(BaseCommand):
     help = "Drop, add, update and save entries from, respectively, to database table."
 
-    model: models.Model | None = None  # REQUIRED
+    model: models.base.ModelBase | None = None  # REQUIRED
     model_names: str = ""  # REQUIRED
     app_label: str = ""  # if not main app model
 

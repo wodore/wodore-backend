@@ -1,12 +1,13 @@
 import click
-from huts.models import HutSource, ReviewStatusChoices
-from huts.schemas import HutSourceTypes
-from huts.schemas.status import CreateOrUpdateStatus
-from huts.services.osm import OsmService
-from huts.services.sources import HutSourceService
-from organizations.models import Organization
 
+from server.apps.organizations.models import Organization
 from server.core.management.base import CRUDCommand
+
+from ...models import HutSource, ReviewStatusChoices
+from ...schemas import HutSourceTypes
+from ...schemas.status import CreateOrUpdateStatus
+from ...services.osm import OsmService
+from ...services.sources import HutSourceService
 
 # from django.conf import settings
 # import shutil
@@ -36,9 +37,7 @@ def add_hut_source_db(
         review_status = ReviewStatusChoices.done if init else ReviewStatusChoices.new
         shut, status = hut_source_service.create(shut, new_review_status=review_status)
         _hut_name = shut.name if len(shut.name) < 18 else shut.name[:15] + ".."
-        _name = (
-            f"  Hut {number!s: <3} {'`'+shut.source_id+'`':<15} {_hut_name:<20} {'('+str(shut.organization)+')':<8}"
-        )
+        _name = f"  Hut {number!s: <3} {'`'+shut.source_id+'`':<15} {_hut_name:<20} {'('+str(shut.organization)+')':<8}"
         click.echo(f"{_name: <48}", nl=False)
         status_color = {
             CreateOrUpdateStatus.updated: "yellow",

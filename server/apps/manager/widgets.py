@@ -1,5 +1,7 @@
-from django.template.loader import render_to_string
 from jsonsuit.widgets import JSONSuit, ReadonlyJSONSuit
+
+from django.template.loader import render_to_string
+
 from unfold.widgets import BASE_INPUT_CLASSES
 
 

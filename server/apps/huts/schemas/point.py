@@ -1,9 +1,11 @@
 from typing import Tuple
 
-from django.contrib.gis.geos import Point as dbPoint
 from geojson_pydantic import Point as geoPoint
-from huts.GPSConverter import GPSConverter
 from pydantic import BaseModel, condecimal
+
+from django.contrib.gis.geos import Point as dbPoint
+
+from ..GPSConverter import GPSConverter
 
 # from sqlmodel import Field, SQLModel
 

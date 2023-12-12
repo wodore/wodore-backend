@@ -17,7 +17,8 @@ class BaseQuerySet(models.QuerySet):
             pks = qs.all()[offset:limit_with_offset].values_list("pk", flat=True)
         else:
             pks = qs.all().values_list("pk", flat=True)
-        return qs.filter(pk__in=pks).delete(**kwargs)
+        qs = qs.filter(pk__in=pks)
+        return qs.delete(**kwargs)
 
 
 class BaseManager(models.Manager):

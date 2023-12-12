@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from huts.models import HutType
-
 from server.core.management import CRUDCommand
+
+from ...models import HutType
 
 
 class Command(CRUDCommand):

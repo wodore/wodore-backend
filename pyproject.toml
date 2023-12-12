@@ -5,12 +5,12 @@ version = "0.1.0"
 readme = "README.md"
 authors = ["tb <tb@wodore.com>"]
 packages = [{"include"= "server"}, 
-            {"include"= "djjmt",  from = "server/apps/"},
-            {"include"= "translations",  from = "server/apps/"},
-            {"include"= "organizations",  from = "server/apps/"},
-            {"include"= "huts",  from = "server/apps/"},
-            {"include"= "manager",  from = "server/apps/"},
-            {"include"= "api",  from = "server/apps/"},
+            #{"include"= "djjmt",  from = "server/apps/"},
+            #{"include"= "translations",  from = "server/apps/"},
+            #{"include"= "organizations",  from = "server/apps/"},
+            #{"include"= "huts",  from = "server/apps/"},
+            #{"include"= "manager",  from = "server/apps/"},
+            #{"include"= "api",  from = "server/apps/"},
             ]
 
 
@@ -133,14 +133,15 @@ line-length = 120
 target-version = ["py38", "py39", "py310", "py311", "py312"]
 
 [tool.ruff.lint.isort]
-section-order = ["future", "standard-library", "third-party", "first-party", "ext_django", "django" , "server", "local-folder"]
+section-order = ["future", "standard-library", "third-party", "first-party", "ext_django", "django" , "unfold", "server", "local-folder"]
 single-line-exclusions = ["os", "json", "sys"]
 
 [tool.ruff.lint.isort.sections]
 # Group all Django imports into a separate section.
 "ext_django" = ["django_countries", "model_utils", "modeltrans"]
 "django" = ["django"]
-"server" = ["organizations", "huts", "server", "api", "translations"]
+"unfold" = ["unfold"]
+"server" = ["server"]
 
 [tool.coverage.report]
 exclude_lines = [

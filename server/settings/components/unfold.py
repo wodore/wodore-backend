@@ -91,14 +91,19 @@ UNFOLD = {
                         "link": reverse_lazy("admin:huts_hut_changelist"),
                     },
                     {
+                        "title": _("Owners"),
+                        "icon": "location_away",
+                        "link": reverse_lazy("admin:owners_owner_changelist"),
+                    },
+                    {
                         "title": _("Organizations"),
-                        "icon": "apartment",
+                        "icon": "corporate_fare",
                         "link": reverse_lazy("admin:organizations_organization_changelist"),
                     },
                     {
                         "title": _("Contacts"),
                         "icon": "contacts",
-                        "link": reverse_lazy("admin:huts_contact_changelist"),
+                        "link": reverse_lazy("admin:contacts_contact_changelist"),
                     },
                 ],
             },
@@ -158,22 +163,17 @@ UNFOLD = {
         },
         {
             "models": [
-                "huts.contact",
-                "huts.contactfunction",
-                "huts.owner",
+                "contacts.contact",
+                "contacts.contactfunction",
             ],
             "items": [
                 {
                     "title": _("Contacts"),
-                    "link": reverse_lazy("admin:huts_contact_changelist"),
+                    "link": reverse_lazy("admin:contacts_contact_changelist"),
                 },
                 {
                     "title": _("Contact Functions"),
-                    "link": reverse_lazy("admin:huts_contactfunction_changelist"),
-                },
-                {
-                    "title": _("Owners"),
-                    "link": reverse_lazy("admin:huts_owner_changelist"),
+                    "link": reverse_lazy("admin:contacts_contactfunction_changelist"),
                 },
             ],
         },

@@ -1,14 +1,17 @@
 from typing import Literal, Optional
 
+import click
+from pydantic import BaseModel, Field, computed_field
+
 from django.contrib.gis.geos import Point as dbPoint
-from djjmt.fields import TranslationSchema
+
+from server.apps.djjmt.fields import TranslationSchema
 
 # from sqlmodel import Field, SQLModel
 # from pydantic_computed import Computed, computed
 # from ..hut import Hut
 # from ..utils.hut_fields import HutType
-from huts.logic.hut_type import guess_hut_type
-from pydantic import BaseModel, Field, computed_field
+from ..logic.hut_type import guess_hut_type
 
 # import phonenumbers
 # from app.models.ref import HutRefLink
@@ -202,6 +205,16 @@ class HutOsm0Convert(BaseModel):
             organization=_orgs,
             osm_tag=self._tags.tourism,
         )
+
+    @computed_field
+    @property
+    def owner(self) -> str:
+        owner = self._tags.operator or ""
+        # if owner:
+        #    if len(owner) > 100:
+        #        click.secho(f"warning: owner too long: '{owner}'", fg="red")
+        #    owner = owner[:100]
+        return owner
 
     @computed_field
     @property

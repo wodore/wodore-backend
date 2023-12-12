@@ -4,9 +4,8 @@ from django.contrib.gis.db import models
 from django.db.models.functions import Lower
 from django.utils.translation import gettext_lazy as _
 
+from server.apps.organizations.models import Organization
 from server.core.managers import BaseManager
-
-from organizations.models import Organization
 
 
 class ReviewStatusChoices(models.TextChoices):

@@ -1,7 +1,9 @@
 from django.apps import AppConfig
+from django.utils.translation import gettext_lazy as _
 
 
-class AdminConfig(AppConfig):
+class ManagerConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = "manager"
+    name = "server.apps.manager"
     label = "manager"
+    verbose_name = _("Manager")

@@ -1,14 +1,14 @@
 from copy import deepcopy
 from typing import Annotated, Any
 
-from django.conf import settings
-from django.db.models import TextField
-from django.utils.translation import gettext_lazy as _
-
 # from django.db.models import JSONField
 from django_jsonform.models.fields import JSONField
 from ninja import Query
 from pydantic import Field
+
+from django.conf import settings
+from django.db.models import TextField
+from django.utils.translation import gettext_lazy as _
 
 from .utils import get_normalised_language, normalise_language_code
 

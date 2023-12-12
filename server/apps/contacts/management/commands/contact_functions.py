@@ -1,7 +1,6 @@
-from pathlib import Path
-
-from huts.models import ContactFunction
 from server.core.management import CRUDCommand
+
+from ...models import ContactFunction
 
 
 class Command(CRUDCommand):

@@ -2,7 +2,17 @@ import sys
 from typing import Tuple
 
 import click
-from django.db import IntegrityError, transaction
+
+from django.db import DataError, IntegrityError, transaction
+from django.utils.text import slugify
+
+from server.apps.organizations.models import Organization
+from server.apps.owners.models import Owner
+from server.core.management import CRUDCommand
+
+from ...models import Hut, HutOrganizationAssociation, HutSource, HutType
+from ...schemas.hut import HutSchema
+from ...schemas.hut_osm import HutOsm0Convert
 
 # from django.conf import settings
 # import shutil
@@ -35,12 +45,6 @@ from django.db import IntegrityError, transaction
 #        # shut.save()
 #        source_huts.append(shut)
 #    return source_huts
-from huts.models import Hut, HutOrganizationAssociation, HutSource, HutType
-from huts.schemas.hut import HutSchema
-from huts.schemas.hut_osm import HutOsm0Convert
-from organizations.models import Organization
-
-from server.core.management import CRUDCommand
 
 
 def init_huts_db(
@@ -82,6 +86,27 @@ def init_huts_db(
             review_status=Hut.ReviewStatusChoices.done if init else Hut.ReviewStatusChoices.review,
             **i18n_fields,
         )
+        osm_owner = hut_osm_schema.owner
+        owner = None
+        if osm_owner:
+            owner_slug = slugify(osm_owner)[:50]
+            try:
+                owner = Owner.objects.get(slug=owner_slug)
+            except Owner.DoesNotExist:
+                note = ""
+                if len(osm_owner) > 60:
+                    note = osm_owner
+                    osm_owner = osm_owner[:60]
+                owner = Owner(slug=owner_slug, name=osm_owner, note_de=note)
+                try:
+                    owner.save()
+                except DataError as e:
+                    err_msg = str(e).split("\n")[0]
+                    click.secho(f" {'(owner: '+owner_slug+')':<20} E: {err_msg}", dim=True)
+                    continue
+                owner.refresh_from_db()
+            db_hut.owner = owner
+
         try:
             with transaction.atomic():
                 db_hut.save()

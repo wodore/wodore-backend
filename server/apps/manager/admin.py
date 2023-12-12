@@ -1,4 +1,5 @@
 from colorfield.fields import ColorWidget
+from jsonsuit.widgets import JSONSuit, ReadonlyJSONSuit
 
 # Register your models here.
 from django.contrib import admin
@@ -6,7 +7,7 @@ from django.contrib.auth.admin import GroupAdmin, UserAdmin
 from django.contrib.auth.models import Group, User
 from django.contrib.gis.admin import GISModelAdmin
 from django.db import models
-from jsonsuit.widgets import JSONSuit, ReadonlyJSONSuit
+
 from unfold.admin import ModelAdmin as UnfoldModelAdmin
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 from unfold.widgets import UnfoldAdminColorInputWidget

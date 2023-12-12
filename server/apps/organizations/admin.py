@@ -4,9 +4,11 @@ from django.contrib import admin
 from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
-from manager.admin import ModelAdmin
-from translations.forms import required_i18n_fields_form_factory
+
 from unfold.decorators import display
+
+from server.apps.manager.admin import ModelAdmin
+from server.apps.translations.forms import required_i18n_fields_form_factory
 
 # try:
 #    from unfold.admin import ModelAdmin

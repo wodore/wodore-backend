@@ -1,5 +1,4 @@
-
-from djjmt.fields import TranslationSchema
+from server.apps.djjmt.fields import TranslationSchema
 from ninja import ModelSchema
 
 from .models import Organization

@@ -7,12 +7,13 @@ from typing import Tuple
 
 # import asyncio
 from deepdiff import DeepDiff
+
 from django.core.exceptions import ObjectDoesNotExist
 
 # from sqlmodel.ext.asyncio.session import AsyncSession
 # from sqlalchemy.orm import selectinload
-from huts.models import HutSource, ReviewStatusChoices
-from huts.schemas.status import CreateOrUpdateStatus
+from server.apps.huts.models import HutSource, ReviewStatusChoices
+from server.apps.huts.schemas.status import CreateOrUpdateStatus
 
 if __name__ == "__main__":  # only for testing
     root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))

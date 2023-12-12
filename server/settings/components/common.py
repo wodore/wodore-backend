@@ -22,12 +22,15 @@ SECRET_KEY = config("DJANGO_SECRET_KEY")
 # Application definition:
 
 INSTALLED_APPS: Tuple[str, ...] = (
-    # Your apps go here:
-    "server.apps.main",
-    "organizations",
-    "huts",
-    "manager",
+    # my server core:
     "server.core",
+    # my apps:
+    "server.apps.manager",
+    "server.apps.main",
+    "server.apps.organizations",
+    "server.apps.contacts",
+    "server.apps.owners",
+    "server.apps.huts",
     # Extension:
     "ninja",
     "colorfield",

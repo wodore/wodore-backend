@@ -1,12 +1,14 @@
 from typing import List
 
-from api.query import FieldsParam
-from django.db import IntegrityError
-from django.shortcuts import get_object_or_404
-from djjmt.fields import LanguageParam
-from djjmt.utils import with_language_param
 from ninja import Query, Router
 from ninja.errors import HttpError
+
+from django.db import IntegrityError
+from django.shortcuts import get_object_or_404
+
+from server.apps.api.query import FieldsParam
+from server.apps.djjmt.fields import LanguageParam
+from server.apps.djjmt.utils import with_language_param
 
 from .models import Organization
 from .schema import OrganizationCreate, OrganizationOptional, OrganizationUpdate

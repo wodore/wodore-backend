@@ -1,12 +1,14 @@
 from functools import lru_cache
 
 from colorfield.fields import ColorField
+
+from model_utils.models import TimeStampedModel
+from modeltrans.fields import TranslationField
+
 from django.db import models
 
 # from django_jsonform.models.fields import JSONField
 from django.utils.translation import gettext_lazy as _
-from model_utils.models import TimeStampedModel
-from modeltrans.fields import TranslationField
 
 # from modeltrans.manager import MultilingualManager
 from server.core.managers import BaseMutlilingualManager

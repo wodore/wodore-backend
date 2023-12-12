@@ -10,11 +10,12 @@ from django.contrib.gis.db import models
 from django.utils.translation import get_language
 from django.utils.translation import gettext_lazy as _
 
-from organizations.models import Organization
+from server.apps.contacts.models import Contact
+from server.apps.organizations.models import Organization
 
 
 class HutContactAssociation(TimeStampedModel):
-    contact = models.ForeignKey("Contact", on_delete=models.CASCADE, related_name="details")
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="details")
     hut = models.ForeignKey("Hut", on_delete=models.CASCADE)
     order = models.PositiveSmallIntegerField(blank=True, null=True)
 
@@ -25,6 +26,22 @@ class HutContactAssociation(TimeStampedModel):
         verbose_name = _("Contacts to Hut")
         unique_together = (("contact", "hut"),)
         ordering = ("contact__function__priority", "order", "hut__name")
+        app_label = "huts"
+
+
+# class OwnerContactAssociation(TimeStampedModel):
+#    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="owner_details")
+#    owner = models.ForeignKey(Owner, on_delete=models.CASCADE)
+#    order = models.PositiveSmallIntegerField(blank=True, null=True)
+#
+#    def __str__(self) -> str:
+#        return f"{self.owner} <> {self.contact}"
+#
+#    class Meta:
+#        verbose_name = _("Contacts to Owner")
+#        unique_together = (("contact", "owner"),)
+#        ordering = ("contact__function__priority", "order", "owner__name")
+#
 
 
 class HutOrganizationAssociation(TimeStampedModel, ComputedFieldsModel):
