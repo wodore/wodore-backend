@@ -1,10 +1,11 @@
+from contextlib import ContextDecorator
 from functools import wraps
 from typing import Any, Callable
+
 from django.http import HttpRequest
-from django.utils.translation import get_language as django_get_language
 from django.utils.translation import activate as django_activate
 from django.utils.translation import deactivate as django_deactivate
-from contextlib import ContextDecorator
+from django.utils.translation import get_language as django_get_language
 
 # TODO activate django lang settings as well
 

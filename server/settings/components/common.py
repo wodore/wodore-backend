@@ -14,9 +14,6 @@ from django.utils.translation import gettext_lazy as _
 
 from server.settings.components import BASE_DIR, config
 
-from django.urls import reverse_lazy
-from django.templatetags.static import static
-
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
@@ -102,7 +99,7 @@ WSGI_APPLICATION = "server.wsgi.application"
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.postgresql",
+        # "ENGINE": "django.db.backends.postgresql",
         "ENGINE": "django.contrib.gis.db.backends.postgis",
         "NAME": config("POSTGRES_DB"),
         "USER": config("POSTGRES_USER"),
@@ -253,7 +250,7 @@ SILENCED_SYSTEM_CHECKS = ["security.W019"]  # django-admin-interface
 REFERRER_POLICY = "same-origin"
 
 # https://github.com/adamchainz/django-permissions-policy#setting
-PERMISSIONS_POLICY: Dict[str, Union[str, List[str]]] = {}  # noqa: WPS234
+PERMISSIONS_POLICY: Dict[str, Union[str, List[str]]] = {}
 
 
 # Timeouts

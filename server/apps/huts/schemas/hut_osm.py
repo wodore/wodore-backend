@@ -1,12 +1,18 @@
-from typing import Literal, Optional, List
+from typing import Literal, Optional
+
+from django.contrib.gis.geos import Point as dbPoint
+from djjmt.fields import TranslationSchema
+
+# from sqlmodel import Field, SQLModel
+# from pydantic_computed import Computed, computed
+# from ..hut import Hut
+# from ..utils.hut_fields import HutType
+from huts.logic.hut_type import guess_hut_type
+from pydantic import BaseModel, Field, computed_field
 
 # import phonenumbers
 # from app.models.ref import HutRefLink
-
 from .hut_base import HutBaseSource
-import click
-from rich import print as rprint
-from djjmt.fields import TranslationSchema
 
 # from app.models.utils.locale import Translations
 # from ..utils.hut_fields import Contact, Monthly, MonthlyOptions, Open, Catering
@@ -14,18 +20,6 @@ from djjmt.fields import TranslationSchema
 # from typing_extensions import TypedDict
 # from .point import Elevation, Latitude, Longitude, Point
 from .point import Point
-from pydantic import BaseModel, Field, computed_field
-
-from django.contrib.gis.geos import Point as dbPoint
-
-# from sqlmodel import Field, SQLModel
-# from pydantic_computed import Computed, computed
-# from ..hut import Hut
-# from ..utils.hut_fields import HutType
-
-from huts.models import HutType
-
-from huts.logic.hut_type import guess_hut_type
 
 
 class OSMTags(BaseModel):  #:, table=True):
@@ -88,7 +82,7 @@ class HutOsm0Source(HutBaseSource):
         elif self.center_lat:
             return Point(lat=self.center_lat, lon=self.center_lon)
         else:
-            raise UserWarning(f"OSM coordinates are missing.")
+            raise UserWarning("OSM coordinates are missing.")
 
     def get_db_point(self) -> dbPoint:
         return self.get_point().db
@@ -175,7 +169,7 @@ class HutOsm0Convert(BaseModel):
         elif tags.bed:
             cap = tags.bed
         try:
-            if not cap is None:
+            if cap is not None:
                 cap = int(cap)
         except ValueError:
             cap = None

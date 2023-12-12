@@ -1,12 +1,8 @@
-from typing import Literal, Optional, List
+from typing import Optional
 
 # import phonenumbers
 # from app.models.ref import HutRefLink
-
-from .hut_base import HutBaseSource
-import click
-from rich import print as rprint
-from djjmt.fields import TranslationSchema
+from pydantic import BaseModel, Field
 
 # from app.models.utils.locale import Translations
 # from ..utils.hut_fields import Contact, Monthly, MonthlyOptions, Open, Catering
@@ -14,16 +10,12 @@ from djjmt.fields import TranslationSchema
 # from typing_extensions import TypedDict
 # from .point import Elevation, Latitude, Longitude, Point
 from .point import Point
-from pydantic import BaseModel, Field, computed_field
-
-from django.contrib.gis.geos import Point as dbPoint
 
 # from sqlmodel import Field, SQLModel
 # from pydantic_computed import Computed, computed
 # from ..hut import Hut
 # from ..utils.hut_fields import HutType
 
-from huts.models import HutType
 
 
 class HutSchema(BaseModel):

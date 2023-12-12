@@ -16,7 +16,7 @@ def main() -> None:
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'server.settings')
 
     try:
-        from django.core import management  # noqa: WPS433
+        from django.core import management
     except ImportError:
         raise ImportError(
             "Couldn't import Django. Are you sure it's installed and " +

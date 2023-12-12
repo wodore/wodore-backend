@@ -160,15 +160,20 @@ UNFOLD = {
             "models": [
                 "huts.contact",
                 "huts.contactfunction",
+                "huts.owner",
             ],
             "items": [
                 {
-                    "title": _("Contact"),
+                    "title": _("Contacts"),
                     "link": reverse_lazy("admin:huts_contact_changelist"),
                 },
                 {
                     "title": _("Contact Functions"),
                     "link": reverse_lazy("admin:huts_contactfunction_changelist"),
+                },
+                {
+                    "title": _("Owners"),
+                    "link": reverse_lazy("admin:huts_owner_changelist"),
                 },
             ],
         },

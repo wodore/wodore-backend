@@ -1,21 +1,15 @@
-from functools import wraps
+from typing import List
+
+from api.query import FieldsParam
 from django.db import IntegrityError
-from django.http import HttpRequest
 from django.shortcuts import get_object_or_404
+from djjmt.fields import LanguageParam
+from djjmt.utils import with_language_param
 from ninja import Query, Router
-from typing import Annotated, Any, Callable, List, Dict, TypeVar
-from typing_extensions import TypeAliasType
+from ninja.errors import HttpError
 
 from .models import Organization
 from .schema import OrganizationCreate, OrganizationOptional, OrganizationUpdate
-from ninja.errors import HttpError
-
-from ninja import Schema
-
-from api.query import FieldsParam
-from djjmt.utils import with_language_param
-from djjmt.fields import LanguageParam
-
 
 router = Router()
 

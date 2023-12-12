@@ -1,20 +1,29 @@
-from enum import unique
-from typing import Optional, List, Any
+from typing import Any, List, Optional
+
 from app.models.utils import PydanticType
 from app.models.utils.pydantic_type import IntEnum
 from core.db.mixins.timestamp_mixin import TimestampMixinSQLModel
+from geojson_pydantic import Feature, FeatureCollection
+from pydantic import BaseModel, conint, validator
 from pydantic.utils import GetterDict
+from sqlalchemy import Column
+from sqlmodel import JSON, Field, Relationship, SQLModel
+
+from .ref import HutRefLink, HutRefLinkBase
+from .utils.hut_fields import (
+    Access,
+    BookingOccupation,
+    Contact,
+    HutType,
+    Monthly,
+    Photo,
+    PhotoRead,
+    ReviewStatus,
+)
+from .utils.locale import TranslationModel, Translations
+
 #from typing_extensions import TypedDict
 from .utils.point import Elevation, Point, saPoint
-from .ref import HutRefLink, HutRefLinkBase
-from .utils.hut_fields import Contact, Monthly, PhotoRead, ReviewStatus, Access, Photo, HutType, BookingOccupation
-
-from .utils.locale import Translations, TranslationModel
-from sqlmodel import JSON, Field, SQLModel, Relationship
-from pydantic import HttpUrl, PositiveInt, BaseModel, conint, root_validator, validator
-from geojson_pydantic import Feature, FeatureCollection
-from sqlalchemy import Column, Numeric
-from rich import print as rprint
 
 NaturalInt = conint(ge=0)
 
@@ -30,7 +39,7 @@ class HutRefProps(BaseModel):
     color_dark:   Optional[str]
     ref_url:    Optional[str]
     props:      dict             = Field(default_factory=dict, description="additional properties")
-  
+
     def update(self, data: dict or "HutRefProps", force:bool=False) -> "HutRefProps":
         if isinstance(data, HutRefProps):
             data = data.dict()
@@ -81,11 +90,11 @@ class HutReadBase(BaseModel):
 
     name:       Optional[str]
     slug:       Optional[str]
-    type_id:      HutType = 0 # what type: caping, alpine, biwak .. 
+    type_id:      HutType = 0 # what type: caping, alpine, biwak ..
 
     class Config:
         getter_dict = Translator
- 
+
 class HutReadRefs(BaseModel):
     refs:       dict[str, HutRefProps] = Field(default_factory=dict)
     @validator('refs', pre=True)
@@ -101,7 +110,7 @@ class HutReadRefs(BaseModel):
                     ref_d[ref.slug] = link_props
             return ref_d
         return refs
-  
+
 class HutReadPhotos(BaseModel):
     photos:     Optional[List[PhotoRead]]
     @validator('photos', pre=True)
@@ -113,9 +122,8 @@ class HutReadPhotos(BaseModel):
             else:
                 out.append(p)
         return out
-  
+
 class HutGeoReadBasic(HutReadBase):
-    pass
 
     class Config:
         orm_mode = True
@@ -154,7 +162,7 @@ class HutBase(BaseModel):
     contacts:     List[Contact] = Field(default_factory=list, max_items=8, sa_column=Column(PydanticType(List[Contact])))
     url:         Optional[str] = Field(None, max_length=200)
     comment:     Optional[str] = Field(None, max_length=2000)#, sa_column=Column(VARCHAR(1000)))
-    
+
     photos:        List[Photo] = Field(default_factory=list, sa_column=Column(PydanticType(List[Photo])))
 
     country :              str = Field("CH", max_length=10)
@@ -179,7 +187,7 @@ class HutBase(BaseModel):
         props = model.from_orm(self)
         if not props.name:
             props.name = self.name_t._
-        return Feature(geometry=point, properties=props, id=self.id, type="Feature") 
+        return Feature(geometry=point, properties=props, id=self.id, type="Feature")
 
 
     class Config:

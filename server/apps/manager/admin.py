@@ -1,28 +1,17 @@
-from django.contrib import admin
+from colorfield.fields import ColorWidget
 
 # Register your models here.
-
-from django.conf import settings
 from django.contrib import admin
-from django.contrib.gis.admin import GISModelAdmin
-from django.contrib.auth.models import Group, User
 from django.contrib.auth.admin import GroupAdmin, UserAdmin
-
-from unfold.admin import ModelAdmin as UnfoldModelAdmin
-from unfold.widgets import UnfoldAdminColorInputWidget, UnfoldAdminTextInputWidget
-from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
-
-from colorfield.fields import ColorWidget, ColorField
-
-
-from django_jsonform.forms.fields import JSONFormField
-from django_jsonform.widgets import JSONFormWidget
-
+from django.contrib.auth.models import Group, User
+from django.contrib.gis.admin import GISModelAdmin
 from django.db import models
+from jsonsuit.widgets import JSONSuit, ReadonlyJSONSuit
+from unfold.admin import ModelAdmin as UnfoldModelAdmin
+from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
+from unfold.widgets import UnfoldAdminColorInputWidget
 
 from .widgets import UnfoldJSONSuit, UnfoldReadonlyJSONSuit
-
-from jsonsuit.widgets import JSONSuit, ReadonlyJSONSuit
 
 
 class ModelAdmin(GISModelAdmin, UnfoldModelAdmin):

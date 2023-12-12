@@ -1,6 +1,6 @@
-from server.core.managers import BaseManager
-
 from modeltrans.manager import MultilingualManager
+
+from server.core.managers import BaseManager
 
 
 class HutManager(MultilingualManager, BaseManager):

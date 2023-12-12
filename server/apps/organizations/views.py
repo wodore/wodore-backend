@@ -1,14 +1,14 @@
 import json
-from django.shortcuts import render
+
+from django.contrib import admin
 
 # Create your views here.
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.urls import reverse
 from django.views.generic.detail import DetailView
-from .models import Organization
-from django.contrib import admin
+from djjmt.utils import activate, django_get_normalised_language
 
-from django.urls import path, reverse
-from djjmt.utils import override, django_get_normalised_language, activate
+from .models import Organization
 
 
 class OrganizationDetailView(PermissionRequiredMixin, DetailView):

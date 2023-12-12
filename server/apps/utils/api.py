@@ -1,10 +1,8 @@
-from ninja import Field, Query
 from typing import List
 
+from ninja import Field, Query, Schema
 from ninja.errors import HttpError
 from ninja.orm import create_schema
-
-from ninja import Schema
 
 
 # @abc

@@ -1,19 +1,11 @@
-from ninja import Field, Query
-from pydantic import ConfigDict, Field
-from typing import Annotated, Any, List, Literal, Type, get_args
-from typing import Generic, TypeVar
-
-from ninja.orm import create_schema
-from ninja.errors import HttpError
-from pydantic import BaseModel, TypeAdapter
-
-
-from pydantic.fields import FieldInfo
+from typing import Any, Generic, List, Literal, Type, TypeVar
 
 # if TYPE_CHECKING:
-
-from ninja import ModelSchema, Schema
-
+from ninja import ModelSchema, Query, Schema
+from ninja.errors import HttpError
+from ninja.orm import create_schema
+from pydantic import TypeAdapter
+from pydantic.fields import FieldInfo
 
 S_co = TypeVar("S_co", bound=Schema)  # , covariant=True)
 

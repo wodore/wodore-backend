@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 import asyncio
-from pprint import pprint
-from typing import List
-from asyncify import asyncify
-import click
-import sys
-import overpy
-from functools import lru_cache
 import os
+import sys
+from functools import lru_cache
+from typing import List
+
+import click
+import overpy
+from asyncify import asyncify
 from rich import print as rprint
 
 if __name__ == "__main__":  # only for testing

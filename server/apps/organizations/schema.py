@@ -1,11 +1,8 @@
-from typing import Any
-
-from pydantic import ConfigDict
-from .models import Organization
-
-from ninja import ModelSchema
 
 from djjmt.fields import TranslationSchema
+from ninja import ModelSchema
+
+from .models import Organization
 
 
 class OrganizationUpdate(ModelSchema):

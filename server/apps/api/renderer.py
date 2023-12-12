@@ -1,7 +1,8 @@
-from ninja.renderers import BaseRenderer
-import msgspec
-from pydantic import BaseModel
 from typing import Any
+
+import msgspec
+from ninja.renderers import BaseRenderer
+from pydantic import BaseModel
 
 
 def encoder_hook(obj: Any) -> Any:

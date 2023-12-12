@@ -94,6 +94,7 @@ dennis = "^1.1"
 dump-env = "^1.3"
 ipython = "^8.13"
 icecream = "^2.1.3"
+faker = "^20.1.0"
 
 [tool.poetry.scripts]
 manage = 'manage:main'
@@ -131,10 +132,15 @@ build-backend = "poetry.core.masonry.api"
 line-length = 120
 target-version = ["py38", "py39", "py310", "py311", "py312"]
 
-[tool.isort]
-profile = "black"
-line_length = 120
-multi_line_output = 3
+[tool.ruff.lint.isort]
+section-order = ["future", "standard-library", "third-party", "first-party", "ext_django", "django" , "server", "local-folder"]
+single-line-exclusions = ["os", "json", "sys"]
+
+[tool.ruff.lint.isort.sections]
+# Group all Django imports into a separate section.
+"ext_django" = ["django_countries", "model_utils", "modeltrans"]
+"django" = ["django"]
+"server" = ["organizations", "huts", "server", "api", "translations"]
 
 [tool.coverage.report]
 exclude_lines = [
@@ -160,12 +166,12 @@ source = [
 ]
 
 [tool.ruff]
-
+exclude = ["*migrations/*.py"]
 select = [
   "E", "F", "W", # flake8
   "B",           # flake8-bugbear
   "I",           # isort
-  "ARG",         # flake8-unused-arguments
+  #"ARG",         # flake8-unused-arguments
   "C4",          # flake8-comprehensions
   "EM",          # flake8-errmsg
   "ICN",         # flake8-import-conventions

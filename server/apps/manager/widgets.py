@@ -1,8 +1,6 @@
-from unfold.widgets import TEXTAREA_CLASSES, TEXTAREA_EXPANDABLE_CLASSES, BASE_INPUT_CLASSES
-
 from django.template.loader import render_to_string
-
 from jsonsuit.widgets import JSONSuit, ReadonlyJSONSuit
+from unfold.widgets import BASE_INPUT_CLASSES
 
 
 class UnfoldJSONSuit(JSONSuit):

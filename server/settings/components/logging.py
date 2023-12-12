@@ -64,7 +64,7 @@ LOGGING = {
 
 
 @final
-class LoggingContextVarsMiddleware(object):
+class LoggingContextVarsMiddleware:
     """Used to reset ContextVars in structlog on each request."""
 
     def __init__(

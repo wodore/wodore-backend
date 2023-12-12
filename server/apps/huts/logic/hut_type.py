@@ -1,5 +1,4 @@
 import re
-from huts.models import HutType
 
 
 def guess_hut_type(

@@ -1,11 +1,8 @@
-from ninja.parser import Parser
-
-import msgspec
-
 from typing import Any, Type, cast
 
+import msgspec
 from django.http import HttpRequest
-
+from ninja.parser import Parser
 from ninja.types import DictStrAny
 
 

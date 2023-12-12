@@ -1,52 +1,50 @@
-from django import forms
-from django.contrib import admin
-from django.forms import ModelForm
-from organizations.models import Organization
-from unfold import admin as unfold_admin
 from manager.admin import ModelAdmin
-from django.utils.safestring import mark_safe
-from .models import (
-    HutOrganizationAssociation,
-    HutSource,
-    Hut,
-    Contact,
-    ContactFunction,
-    HutType,
-    Owner,
-    HutContactAssociation,
-)
-from djjmt.utils import override, django_get_normalised_language, activate
-from unfold.decorators import display
-from django.utils.translation import gettext_lazy as _
-from django.db.models import F
-from huts.models import HutSource, ReviewStatusChoices
-from modeltrans.admin import ActiveLanguageMixin
-from django.conf import settings
-from django.core.exceptions import ValidationError
-from django.db.models.functions import Lower
-from django.db import models
 from manager.widgets import UnfoldJSONSuit, UnfoldReadonlyJSONSuit
+from unfold import admin as unfold_admin
+from unfold.decorators import display
+
+from django import forms
+from django.conf import settings
+from django.contrib import admin
+from django.core.exceptions import ValidationError
+from django.db import models
+from django.db.models.functions import Lower
+from django.forms import ModelForm
+from django.utils.safestring import mark_safe
+from django.utils.translation import gettext_lazy as _
+
+from translations.forms import required_i18n_fields_form_factory
 
 from .forms import HutAdminFieldsets
-from translations.forms import required_i18n_fields_form_factory
+from .models import (
+    Contact,
+    ContactFunction,
+    Hut,
+    HutContactAssociation,
+    HutOrganizationAssociation,
+    HutSource,
+    HutType,
+    Owner,
+    ReviewStatusChoices,
+)
 
 # Register your models here.
 
 
 @admin.register(HutSource)
 # class OrganizationAdmin(ActiveLanguageMixin, admin.ModelAdmin[Organization]):
-class HutsSourceAdmin(ModelAdmin):
+class HutsSourceAdmin(ModelAdmin[HutSource]):
     """Admin panel example for ``BlogPost`` model."""
 
     # view_on_site = True
     # list_select_related = True
-    list_display = ["name", "organization", "review_comment", "is_active", "is_current", "version", "review_tag"]
-    list_filter = ["organization", "review_status", "is_active", "is_current", "version"]
-    list_display_links = ["name"]
-    search_fields = ["name"]
-    sortable_by = ["name", "organization"]
-    readonly_fields = ["created", "modified", "organization", "source_id", "name"]
-    fields = [
+    list_display = ("name", "organization", "review_comment", "is_active", "is_current", "version", "review_tag")
+    list_filter = ("organization", "review_status", "is_active", "is_current", "version")
+    list_display_links = ("name",)
+    search_fields = ("name",)
+    sortable_by = ("name", "organization")
+    readonly_fields = ("created", "modified", "organization", "source_id", "name")
+    fields = (
         ("source_id", "name"),
         ("organization", "version"),
         ("is_active", "is_current"),
@@ -57,7 +55,7 @@ class HutsSourceAdmin(ModelAdmin):
         "source_data",
         "previous_object",
         ("created", "modified"),
-    ]
+    )
     list_max_show_all = 2000
     radio_fields = {"review_status": admin.HORIZONTAL}
 
@@ -76,7 +74,7 @@ class HutsSourceAdmin(ModelAdmin):
         return obj.review_status
 
     def get_form(self, request, obj=None, **kwargs):
-        form = super(HutsSourceAdmin, self).get_form(request, obj, **kwargs)
+        form = super().get_form(request, obj, **kwargs)
         if obj is not None:
             form.base_fields["previous_object"].queryset = (
                 # HutSource.objects.select_related("organization")
@@ -87,20 +85,20 @@ class HutsSourceAdmin(ModelAdmin):
 
 class HutSourceInline(unfold_admin.StackedInline):
     model = HutSource
-    readonly_fields = [
+    readonly_fields = (
         "created",
         "modified",
         "organization",
         "source_id",
         "name",
-    ]  # , "source_data"] # TODO formated json
+    )  # , "source_data"] # TODO formated json
     radio_fields = {"review_status": admin.HORIZONTAL}
-    fields = [("organization", "source_id"), ("review_status"), ("review_comment"), "source_data", "is_active"]
+    fields = (("organization", "source_id"), ("review_status"), ("review_comment"), "source_data", "is_active")
     extra = 0
     max_num = 20
     show_change_link = True
     can_delete = False
-    classes = ["collapse"]
+    classes = ("collapse",)
     formfield_overrides = {models.JSONField: {"widget": UnfoldReadonlyJSONSuit}}
 
     def has_add_permission(self, request, obj):
@@ -109,7 +107,7 @@ class HutSourceInline(unfold_admin.StackedInline):
 
 class HutOrganizationAssociationViewInline(unfold_admin.TabularInline):
     model = Hut.organizations.through
-    fields = ["organization", "source_id"]
+    fields = ("organization", "source_id")
     # readonly_fields = ["organization", "source_id"]
     can_delete = False
     extra = 0
@@ -120,6 +118,22 @@ class HutOrganizationAssociationViewInline(unfold_admin.TabularInline):
 
     def has_change_permission(self, request, obj):
         return False
+
+
+class HutContactAssociationViewInline(unfold_admin.TabularInline):
+    model = Hut.contacts.through
+    fields = ("contact", "order")
+    autocomplete_fields = ("contact",)
+    # readonly_fields = ["organization", "source_id"]
+    # can_delete = False
+    extra = 0
+    verbose_name = _("Contact")
+
+    # def has_add_permission(self, request, obj):
+    #    return False
+
+    # def has_change_permission(self, request, obj):
+    #    return False
 
 
 class OrgAdminForm(ModelForm):
@@ -146,16 +160,16 @@ class OrgAdminForm(ModelForm):
 class HutOrganizationAssociationEditInline(unfold_admin.StackedInline):
     form = OrgAdminForm
     model = Hut.organizations.through
-    fields = [("organization", "source_id"), "props", "schema"]
+    fields = (("organization", "source_id"), "props", "schema")
     extra = 0
-    classes = ["collapse"]
+    classes = ("collapse",)
     formfield_overrides = {models.JSONField: {"widget": UnfoldJSONSuit}}
     verbose_name = _("Edit Organization")
 
 
 @admin.register(Hut)
 class HutsAdmin(ModelAdmin):
-    search_fields = ["name"]
+    search_fields = ("name",)
     list_select_related = (
         "type",
         "owner",
@@ -164,23 +178,24 @@ class HutsAdmin(ModelAdmin):
     radio_fields = {"review_status": admin.HORIZONTAL}
     # list_select_related = ("organizations", "organizations__details")
     # list_select_related = ["organizations__source"]
-    list_display = ["symbol_img", "title", "location", "elevation", "type", "logo_orgs", "is_active", "review_tag"]
-    list_display_links = ["symbol_img", "title"]
+    list_display = ("symbol_img", "title", "location", "elevation", "type", "logo_orgs", "is_active", "review_tag")
+    list_display_links = ("symbol_img", "title")
     fieldsets = HutAdminFieldsets
-    readonly_fields = [
+    readonly_fields = (
         "name_i18n",
         "description_i18n",
         "note_i18n",
         "created",
         "modified",
-    ]
+    )
     list_per_page = 100
 
-    inlines = [
+    inlines = (
+        HutContactAssociationViewInline,
         HutOrganizationAssociationViewInline,
         HutOrganizationAssociationEditInline,
         HutSourceInline,
-    ]
+    )
 
     ## TODO: does not work yet
     # def get_queryset(self, request):
@@ -225,20 +240,49 @@ class HutsAdmin(ModelAdmin):
 
 @admin.register(Contact)
 class ContactsAdmin(ModelAdmin):
-    search_fields = ["name"]
-    list_display = ["name", "email", "mobile", "phone", "function", "is_active", "is_public"]
+    search_fields = ("name", "email", "function__name_i18n")
+    list_display = ("name", "email", "mobile", "phone", "function", "is_active", "is_public")
+    list_filter = ("function", "is_active", "is_public")
+    readonly_fields = ("note_i18n",)
+    fieldsets = (
+        (
+            _("Main Information"),
+            {
+                "fields": (
+                    ("is_active", "is_public"),
+                    ("name", "email"),
+                    "function",
+                    ("mobile", "phone"),
+                    "url",
+                    "address",
+                    "note_i18n",
+                )
+            },
+        ),
+        (
+            _("Translations"),
+            {
+                "classes": ["collapse"],
+                "fields": [f"note_{code}" for code in settings.LANGUAGE_CODES],
+            },
+        ),
+    )
 
 
 @admin.register(Owner)
 class OwnersAdmin(ModelAdmin):
-    search_fields = ["name"]
-    list_display = ["name", "url", "note"]
+    search_fields = ("name",)
+    list_display = ("name", "url", "note")
 
 
 @admin.register(ContactFunction)
 class ContactFunctionsAdmin(ModelAdmin):
-    search_fields = ["name"]
-    list_display = ["slug", "name"]
+    search_fields = ("name",)
+    list_display = ("slug", "name", "priority")
+
+    # @display(description="level", ordering="priority")
+    # def prio(self, obj):  # new
+    #    return mark_safe(f"<small>{obj.priority}</small>")
 
 
 def required_i18n_fields_form(*fields):
@@ -260,26 +304,19 @@ def required_i18n_fields_form(*fields):
 @admin.register(HutType)
 class HutTypesAdmin(ModelAdmin):
     form = required_i18n_fields_form("name")
-    search_fields = ["name"]
-    list_display = ["title", "symbol_img", "icon_img", "comfort", "slug"]
-    readonly_fields = ["name_i18n", "description_i18n"]
-    fieldsets = [
+    search_fields = ("name",)
+    list_display = ("title", "symbol_img", "icon_img", "comfort", "slug")
+    readonly_fields = ("name_i18n", "description_i18n")
+    fieldsets = (
         (
             _("Main Information"),
-            {
-                "fields": [
-                    ("slug", "name_i18n", "level"),
-                    "description_i18n",
-                ]
-            },
+            {"fields": (("slug", "name_i18n", "level"), "description_i18n")},
         ),
         (
             _("Translations"),
             {
                 "classes": ["collapse"],
                 "fields": [
-                    # "name",
-                    # "description",
                     tuple([f"name_{code}" for code in settings.LANGUAGE_CODES]),
                 ]
                 + [f"description_{code}" for code in settings.LANGUAGE_CODES],
@@ -287,13 +324,9 @@ class HutTypesAdmin(ModelAdmin):
         ),
         (
             _("Symbols & Icon"),
-            {
-                "fields": [
-                    ("symbol", "symbol_simple", "icon"),
-                ]
-            },
+            {"fields": (("symbol", "symbol_simple", "icon"),)},
         ),
-    ]
+    )
 
     @display(header=True, description=_("Name and Description"), ordering=Lower("name_i18n"))
     def title(self, obj):
@@ -317,4 +350,4 @@ class HutTypesAdmin(ModelAdmin):
 
 @admin.register(HutContactAssociation)
 class HutContactAssociationsAdmin(ModelAdmin):
-    list_display = ["hut", "contact", "order"]
+    list_display = ("hut", "contact", "order")

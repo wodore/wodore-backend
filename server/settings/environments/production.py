@@ -49,12 +49,12 @@ MEDIA_ROOT = '/var/www/django/media'
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
 
-_PASS = 'django.contrib.auth.password_validation'  # noqa: S105
+_PASS = 'django.contrib.auth.password_validation'
 AUTH_PASSWORD_VALIDATORS = [
-    {'NAME': '{0}.UserAttributeSimilarityValidator'.format(_PASS)},
-    {'NAME': '{0}.MinimumLengthValidator'.format(_PASS)},
-    {'NAME': '{0}.CommonPasswordValidator'.format(_PASS)},
-    {'NAME': '{0}.NumericPasswordValidator'.format(_PASS)},
+    {'NAME': f'{_PASS}.UserAttributeSimilarityValidator'},
+    {'NAME': f'{_PASS}.MinimumLengthValidator'},
+    {'NAME': f'{_PASS}.CommonPasswordValidator'},
+    {'NAME': f'{_PASS}.NumericPasswordValidator'},
 ]
 
 

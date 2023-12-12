@@ -1,20 +1,19 @@
 #!/usr/bin/python2
-#-*- coding: utf-8 -*-
 
 #  The MIT License (MIT)
-#  
-#  Copyright (c) 2014 Federal Office of Topography swisstopo, Wabern, CH and Aaron Schmocker 
-#  
+#
+#  Copyright (c) 2014 Federal Office of Topography swisstopo, Wabern, CH and Aaron Schmocker
+#
 #  Permission is hereby granted, free of charge, to any person obtaining a copy
 #   of this software and associated documentation files (the "Software"), to deal
 #   in the Software without restriction, including without limitation the rights
 #   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 #   copies of the Software, and to permit persons to whom the Software is
 #   furnished to do so, subject to the following conditions:
-#  
+#
 #  The above copyright notice and this permission notice shall be included in
 #   all copies or substantial portions of the Software.
-#  
+#
 #  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 #   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 #   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -22,7 +21,7 @@
 #   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 #   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 #   THE SOFTWARE.
-# 
+#
 
 # WGS84 <-> LV03 converter based on the scripts of swisstopo written for python2.7
 # Aaron Schmocker [aaron@duckpond.ch]
@@ -37,9 +36,10 @@
 #   https://github.com/ValentinMinder/Swisstopo-WGS84-LV03/blob/master/scripts/py/wgs84_ch1903.py
 import math
 
-class GPSConverter(object):
+
+class GPSConverter:
     '''
-    GPS Converter class which is able to perform convertions between the 
+    GPS Converter class which is able to perform convertions between the
     CH1903 and WGS84 system.
     '''
     # Convert CH y/x/h to WGS height
@@ -83,11 +83,11 @@ class GPSConverter(object):
         minute = int(math.floor((dec - degree) * 60))
         second = (((dec - degree) * 60) - minute) * 60
         return degree + (float(minute) / 100) + (second / 10000)
-		
+
     # Convert sexagesimal angle (dd.mmss,ss) to seconds
     def SexAngleToSeconds(self, dms):
-        degree = 0 
-        minute = 0 
+        degree = 0
+        minute = 0
         second = 0
         degree = math.floor(dms)
         minute = math.floor((dms - degree) * 100)
@@ -103,7 +103,7 @@ class GPSConverter(object):
         minute = math.floor((dms - degree) * 100)
         second = (((dms - degree) * 100) - minute) * 100
         return degree + (minute / 60) + (second / 3600)
-    
+
     # Convert WGS lat/long (° dec) and height to CH h
     def WGStoCHh(self, lat, lng, h):
         lat = self.DecToSexAngle(lat)
@@ -157,7 +157,7 @@ class GPSConverter(object):
         d.append(self.CHtoWGSlng(east, north))
         d.append(self.CHtoWGSheight(east, north, height))
         return d
-        
+
     def WGS84toLV03(self, latitude, longitude, ellHeight):
         '''
         Convert WGS84 to LV03 Return an array of double that contaign east,
@@ -168,25 +168,25 @@ class GPSConverter(object):
         d.append(self.WGStoCHx(latitude, longitude))
         d.append(self.WGStoCHh(latitude, longitude, ellHeight))
         return d
-        
+
 
 # #!/usr/bin/python2
 # #-*- coding: utf-8 -*-
 
 # #  The MIT License (MIT)
-# #  
-# #  Copyright (c) 2014 Federal Office of Topography swisstopo, Wabern, CH and Aaron Schmocker 
-# #  
+# #
+# #  Copyright (c) 2014 Federal Office of Topography swisstopo, Wabern, CH and Aaron Schmocker
+# #
 # #  Permission is hereby granted, free of charge, to any person obtaining a copy
 # #   of this software and associated documentation files (the "Software"), to deal
 # #   in the Software without restriction, including without limitation the rights
 # #   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # #   copies of the Software, and to permit persons to whom the Software is
 # #   furnished to do so, subject to the following conditions:
-# #  
+# #
 # #  The above copyright notice and this permission notice shall be included in
 # #   all copies or substantial portions of the Software.
-# #  
+# #
 # #  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # #   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # #   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -194,7 +194,7 @@ class GPSConverter(object):
 # #   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # #   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # #   THE SOFTWARE.
-# # 
+# #
 
 # # WGS84 <-> LV03 converter based on the scripts of swisstopo written for python2.7
 # # Aaron Schmocker [aaron@duckpond.ch]
@@ -208,7 +208,7 @@ class GPSConverter(object):
 
 # class GPSConverter(object):
 #     '''
-#     GPS Converter class which is able to perform convertions between the 
+#     GPS Converter class which is able to perform convertions between the
 #     CH1903 and WGS84 system.
 #     '''
 #     # Convert CH y/x/h to WGS height
@@ -252,11 +252,11 @@ class GPSConverter(object):
 #         minute = int(math.floor((dec - degree) * 60))
 #         second = (((dec - degree) * 60) - minute) * 60
 #         return degree + (float(minute) / 100) + (second / 10000)
-# 		
+#
 #     # Convert sexagesimal angle (dd.mmss,ss) to seconds
 #     def SexAngleToSeconds(self, dms):
-#         degree = 0 
-#         minute = 0 
+#         degree = 0
+#         minute = 0
 #         second = 0
 #         degree = math.floor(dms)
 #         minute = math.floor((dms - degree) * 100)
@@ -272,7 +272,7 @@ class GPSConverter(object):
 #         minute = math.floor((dms - degree) * 100)
 #         second = (((dms - degree) * 100) - minute) * 100
 #         return degree + (minute / 60) + (second / 3600)
-    
+
 #     # Convert WGS lat/long (° dec) and height to CH h
 #     def WGStoCHh(self, lat, lng, h):
 #         lat = self.DecToSexAngle(lat)
@@ -326,7 +326,7 @@ class GPSConverter(object):
 #         d.append(self.CHtoWGSlng(east, north))
 #         d.append(self.CHtoWGSheight(east, north, height))
 #         return d
-        
+
 #     def WGS84toLV03(self, latitude, longitude, ellHeight):
 #         '''
 #         Convert WGS84 to LV03 Return an array of double that contaign east,
@@ -337,7 +337,7 @@ class GPSConverter(object):
 #         d.append(self.WGStoCHx(latitude, longitude))
 #         d.append(self.WGStoCHh(latitude, longitude, ellHeight))
 #         return d
-        
+
 if __name__ == "__main__":
     ''' Example usage for the GPSConverter class.'''
 
@@ -346,7 +346,7 @@ if __name__ == "__main__":
     # Coordinates
     wgs84 = [46.95108, 7.438637, 0]
     lv03  = []
-    
+
     # Convert WGS84 to LV03 coordinates
     lv03 = converter.WGS84toLV03(wgs84[0], wgs84[1], wgs84[2])
 

@@ -15,9 +15,8 @@ from django.contrib.admindocs import urls as admindocs_urls
 from django.urls import include, path
 from django.views.generic import TemplateView
 from health_check import urls as health_urls
-from .apps.api.api_v1 import api as api_v1
-from django.conf.urls.i18n import i18n_patterns
 
+from .apps.api.api_v1 import api as api_v1
 from .apps.main import urls as main_urls
 from .apps.main.views import index
 
@@ -59,8 +58,8 @@ urlpatterns = [
 # urlpatterns += i18n_patterns(path("admin/", admin.site.urls))
 
 if settings.DEBUG:  # pragma: no cover
-    import debug_toolbar  # noqa: WPS433
-    from django.conf.urls.static import static  # noqa: WPS433
+    import debug_toolbar
+    from django.conf.urls.static import static
 
     urlpatterns = [
         # URLs specific only to django-debug-toolbar:

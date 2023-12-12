@@ -1,19 +1,16 @@
 from copy import deepcopy
 from typing import Annotated, Any
+
 from django.conf import settings
+from django.db.models import TextField
+from django.utils.translation import gettext_lazy as _
 
 # from django.db.models import JSONField
 from django_jsonform.models.fields import JSONField
-
-from django.core.exceptions import ImproperlyConfigured
-from django.utils.translation import gettext_lazy as _
-from django.forms import CharField
-from django.db.models import TextField
 from ninja import Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
 from .utils import get_normalised_language, normalise_language_code
-
 
 LANGUAGE_CODES = [lang[0] for lang in settings.LANGUAGES]
 
@@ -24,7 +21,7 @@ LANGUAGE_CODES = [lang[0] for lang in settings.LANGUAGES]
 #    it: str = ""
 
 
-from pydantic import BaseModel, create_model
+from pydantic import create_model
 
 lang_kwargs: Any = {lang[0]: (str | None, Field("", description=lang[1])) for lang in settings.LANGUAGES}
 TranslationSchema = create_model("TranslationSchema", **lang_kwargs, __doc__="Translations")
@@ -121,7 +118,7 @@ class TranslationJSONFieldDescriptor:
         """
         data = instance.__dict__
         field_name = self.field.attname
-        if not field_name in data:
+        if field_name not in data:
             data[field_name] = {}
         if isinstance(value, str):
             lang = get_normalised_language()

@@ -1,25 +1,12 @@
-import os, sys
+import sys
 from typing import Tuple
+
 import click
-import traceback
-from django.core.management.base import BaseCommand, CommandError
-from django.db import IntegrityError
-from huts.models import HutOrganizationAssociation, HutSource, ReviewStatusChoices, Hut, HutType
-import organizations
-from organizations.models import Organization
-from huts.services.osm import OsmService
-from huts.services.sources import HutSourceService
-from huts.schemas import HutSourceTypes
-from huts.schemas.hut import HutSchema
-from huts.schemas.hut_osm import HutOsm0Convert
-from django.core.management import call_command
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 # from django.conf import settings
 # import shutil
 # from djjmt.utils import override
-
-
 # def add_hut_source_db(
 #    huts: HutSourceTypes,
 #    reference: str,
@@ -48,8 +35,11 @@ from django.db import transaction
 #        # shut.save()
 #        source_huts.append(shut)
 #    return source_huts
-from pathlib import Path
-from huts.models import HutType
+from huts.models import Hut, HutOrganizationAssociation, HutSource, HutType
+from huts.schemas.hut import HutSchema
+from huts.schemas.hut_osm import HutOsm0Convert
+from organizations.models import Organization
+
 from server.core.management import CRUDCommand
 
 
@@ -75,7 +65,7 @@ def init_huts_db(
         hut_counter += 1
         hut_osm_schema = HutOsm0Convert(source=hut_src.source_data)  # TODO: make generic
         hut = HutSchema(**hut_osm_schema.model_dump())
-        _name = f"  Hut {str(hut_counter): <3} '{hut.name.get('de')}'"
+        _name = f"  Hut {hut_counter!s: <3} '{hut.name.get('de')}'"
         click.echo(f"{_name: <48}", nl=False)
         i18n_fields = {}
         for field in ["name", "description", "note"]:

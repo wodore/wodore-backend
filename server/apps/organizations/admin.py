@@ -1,36 +1,22 @@
-from django.utils.safestring import mark_safe
-from djjmt import fields
-from jsoneditor.forms import JSONEditor
-from modeltrans.admin import ActiveLanguageMixin
-from unfold.decorators import display
-
-# Models
-from django.db import models
-
-from .views import OrganizationDetailView
-
-# Register your models here.
-
-from .models import Organization
-
-from manager.admin import ModelAdmin
-
 from django.contrib import admin
 
-from manager.widgets import UnfoldJSONSuit
+# Models
+from django.urls import path, reverse
+from django.utils.html import format_html
+from django.utils.safestring import mark_safe
+from manager.admin import ModelAdmin
+from translations.forms import required_i18n_fields_form_factory
+from unfold.decorators import display
 
 # try:
 #    from unfold.admin import ModelAdmin
 # except ModuleNotFoundError:
 #    from django.contrib.admin import ModelAdmin
-
-from unfold.widgets import UnfoldAdminColorInputWidget
-
-from django.urls import path, reverse
-from django.utils.html import format_html
 from .forms import OrganizationAdminFieldsets
 
-from translations.forms import required_i18n_fields_form_factory
+# Register your models here.
+from .models import Organization
+from .views import OrganizationDetailView
 
 
 @admin.register(Organization)
@@ -61,7 +47,7 @@ class OrganizationAdmin(ModelAdmin):
             path(
                 "<pk>/detail",
                 self.admin_site.admin_view(OrganizationDetailView.as_view()),
-                name=f"organizations_organization_detail",
+                name="organizations_organization_detail",
             ),
             *super().get_urls(),
         ]

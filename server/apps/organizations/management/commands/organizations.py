@@ -1,6 +1,8 @@
 from pathlib import Path
-from ...models import Organization
+
 from server.core.management import CRUDCommand
+
+from ...models import Organization
 
 
 class Command(CRUDCommand):

@@ -1,14 +1,10 @@
-import os
 import click
-import traceback
-from django.core.management.base import BaseCommand, CommandError
 from huts.models import HutSource, ReviewStatusChoices
-from organizations.models import Organization
-from huts.services.osm import OsmService
-from huts.services.sources import HutSourceService
 from huts.schemas import HutSourceTypes
 from huts.schemas.status import CreateOrUpdateStatus
-from django.core.management import call_command
+from huts.services.osm import OsmService
+from huts.services.sources import HutSourceService
+from organizations.models import Organization
 
 from server.core.management.base import CRUDCommand
 
@@ -41,7 +37,7 @@ def add_hut_source_db(
         shut, status = hut_source_service.create(shut, new_review_status=review_status)
         _hut_name = shut.name if len(shut.name) < 18 else shut.name[:15] + ".."
         _name = (
-            f"  Hut {str(number): <3} {'`'+shut.source_id+'`':<15} {_hut_name:<20} {'('+str(shut.organization)+')':<8}"
+            f"  Hut {number!s: <3} {'`'+shut.source_id+'`':<15} {_hut_name:<20} {'('+str(shut.organization)+')':<8}"
         )
         click.echo(f"{_name: <48}", nl=False)
         status_color = {
