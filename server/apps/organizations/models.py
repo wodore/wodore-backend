@@ -25,6 +25,7 @@ class Organization(TimeStampedModel):
 
     slug = models.SlugField(unique=True, verbose_name=_("Slug"), db_index=True)
     is_active = models.BooleanField(default=True, db_index=True, verbose_name=_("Active"))
+    is_public = models.BooleanField(default=False, db_index=True, verbose_name=_("Public"))
     name = models.CharField(max_length=100, default="", blank=True, null=True, verbose_name=_("Shortname"))
     fullname = models.CharField(max_length=100, default="", blank=True, null=True, verbose_name=_("Fullname"))
     description = models.TextField(default="", blank=True, null=True, help_text=_("Description"))

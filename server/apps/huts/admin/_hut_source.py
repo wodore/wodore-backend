@@ -13,7 +13,6 @@ from server.core.utils import text_shorten_html
 
 from ..models import (
     HutSource,
-    ReviewStatusChoices,
 )
 
 
@@ -73,11 +72,10 @@ class HutsSourceAdmin(ModelAdmin[HutSource]):
         description=_("Status"),
         ordering="status",
         label={
-            ReviewStatusChoices.new: "warning",  # green
-            ReviewStatusChoices.review: "info",  # blue
-            ReviewStatusChoices.done: "success",  # red
-            # ReviewStatusChoices.done: "warning",  # orange
-            # ReviewStatusChoices.reject: "danger",  # red
+            HutSource.ReviewStatusChoices.new: "warning",  # green
+            HutSource.ReviewStatusChoices.review: "info",  # blue
+            HutSource.ReviewStatusChoices.done: "success",  # red
+            HutSource.ReviewStatusChoices.failed: "danger",  # red
         },
     )
     def review_tag(self, obj):

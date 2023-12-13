@@ -3,6 +3,7 @@
   fields:
     slug: hrs
     is_active: true
+    is_public: true
     name_de: Alpsonline
     fullname_de: Alpsonline
     description_de: 'Online Reservations System für Hütten.'
@@ -24,6 +25,7 @@
   fields:
     slug: sac
     is_active: true
+    is_public: true
     name_de: SAC
     name_en: SAC
     name_fr: CAS
@@ -61,6 +63,7 @@
   fields:
     slug: gipfelbuch
     is_active: true
+    is_public: true
     name_de: Gipfelbuch
     fullname_de: Gipfelbuch
     description_de: 'Portal für aktuelle Verhältnisse, Tourenbeschreibungen und mehr.'
@@ -84,6 +87,7 @@
   fields:
     slug: nfs
     is_active: true
+    is_public: true
     name_de: Naturfreunde
     fullname_de: Naturfreunde Schweiz
     description_de: 'Organization der Naturefreunde Schweiz.'
@@ -105,6 +109,7 @@
   fields:
     slug: osm
     is_active: true
+    is_public: true
     name_de: OSM
     fullname_de: Open Street Map
     description_de: 'Grösster Kartendienst mit frei verfügbaren Daten.'
@@ -129,6 +134,7 @@
   fields:
     slug: wikidata
     is_active: true
+    is_public: false
     name_de: Wikidata
     fullname_de: Wikidata
     description_de: 'Freie Informationen, verwendet von Wikipedia.'
@@ -146,6 +152,7 @@
   fields:
     slug: refuges
     is_active: true
+    is_public: true
     name_de: Refuges
     fullname_de: RefugesInfo
     description_de: 'Freie Übernachtungs informationen in den Bergen (Französisch).'

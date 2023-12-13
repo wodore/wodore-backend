@@ -11,6 +11,7 @@ from django.templatetags.static import static
 from django.urls import reverse_lazy
 from django.utils.translation import gettext_lazy as _
 
+
 UNFOLD = {
     "SITE_TITLE": None,
     "SITE_HEADER": None,
@@ -28,7 +29,7 @@ UNFOLD = {
     "SITE_SYMBOL": "cottage",  # symbol from icon set
     "SHOW_HISTORY": True,  # show/hide "History" button, default: True
     "SHOW_VIEW_ON_SITE": True,  # show/hide "View on site" button, default: True
-    "ENVIRONMENT": "server.settings.unfold.environment_callback",
+    "ENVIRONMENT": "server.core.utils.environment_callback",
     # "DASHBOARD_CALLBACK": "sample_app.dashboard_callback",
     # "LOGIN": {
     #    "image": lambda request: static("sample/login-bg.jpg"),
@@ -213,14 +214,6 @@ def dashboard_callback(request, context):
         }
     )
     return context
-
-
-def environment_callback(request):
-    """
-    Callback has to return a list of two values represeting text value and the color
-    type of the label displayed in top right corner.
-    """
-    return ["Production", "danger"]  # info, danger, warning, success
 
 
 def badge_callback(request):

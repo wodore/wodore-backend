@@ -5,7 +5,7 @@ import click
 from server.apps.organizations.models import Organization
 from server.core.management.base import CRUDCommand
 
-from ...models import HutSource, ReviewStatusChoices
+from ...models import HutSource
 from ...schemas import HutSourceTypes
 from ...schemas.status import CreateOrUpdateStatus
 from ...services.osm import OsmService
@@ -41,7 +41,7 @@ def add_hut_source_db(
             name=hut.get_name(),
             source_data=hut.dict(),
         )
-        review_status = ReviewStatusChoices.done if init else ReviewStatusChoices.new
+        review_status = HutSource.ReviewStatusChoices.done if init else HutSource.ReviewStatusChoices.new
         shut, status = hut_source_service.create(shut, new_review_status=review_status)
         _hut_name = shut.name if len(shut.name) < 18 else shut.name[:15] + ".."
         _name = f"  Hut {number!s: <3} {'`'+shut.source_id+'`':<15} {_hut_name:<20} {'('+str(shut.organization)+')':<8}"

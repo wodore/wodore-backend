@@ -8,20 +8,22 @@ from server.apps.organizations.models import Organization
 from server.core.managers import BaseManager
 
 
-class ReviewStatusChoices(models.TextChoices):
+class _ReviewStatusChoices(models.TextChoices):
     # waiting = 'waiting'
     new = "new", _("new")
     review = "review", _("review")
     done = "done", _("done")
     old = "old", _("old")
+    failed = "failed", _("failed")
     reject = "reject", _("reject")
-    # todo: update db constraints if anything changes here
 
 
 class HutSource(TimeStampedModel):
     """
     Source data for huts, e.g from SAC.
     """
+
+    ReviewStatusChoices = _ReviewStatusChoices
 
     objects: BaseManager = BaseManager()
 
@@ -66,7 +68,7 @@ class HutSource(TimeStampedModel):
         constraints = (
             models.CheckConstraint(
                 name="%(app_label)s_%(class)s_review_status_valid",
-                check=models.Q(review_status__in=["new", "review", "done", "old", "reject"]),
+                check=models.Q(review_status__in=_ReviewStatusChoices.values),
             ),
         )
 

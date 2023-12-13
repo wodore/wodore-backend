@@ -23,13 +23,15 @@ from ._associations import HutContactAssociation, HutOrganizationAssociation
 from ._hut_type import HutType
 
 
-class Hut(TimeStampedModel):
-    class ReviewStatusChoices(models.TextChoices):
-        review = "review", _("review")
-        done = "done", _("done")
-        reject = "reject", _("reject")
-        # todo: update db constraints if anything changes here
+class _ReviewStatusChoices(models.TextChoices):
+    new = "new", _("new")
+    review = "review", _("review")
+    done = "done", _("done")
+    reject = "reject", _("reject")
 
+
+class Hut(TimeStampedModel):
+    ReviewStatusChoices = _ReviewStatusChoices
     # manager
     objects: HutManager = HutManager()
     # translations
@@ -68,7 +70,7 @@ class Hut(TimeStampedModel):
     )  # TODO: maybe notes with mutlipe notes and category
     photo = models.CharField(blank=True, default="", max_length=200, verbose_name=_("Hut photo"))
     country = CountryField()
-    point = models.PointField(blank=False, verbose_name="Location", db_index=True)
+    point = models.PointField(blank=False, verbose_name="Location")
     elevation = models.DecimalField(null=True, blank=True, max_digits=5, decimal_places=1, verbose_name=_("Elevation"))
     capacity = models.PositiveSmallIntegerField(blank=True, null=True, verbose_name=_("Capacity"))
     capacity_shelter = models.PositiveSmallIntegerField(
@@ -78,7 +80,9 @@ class Hut(TimeStampedModel):
         help_text=_("Only if an additional shelter is available, e.g. during winter."),
     )
 
-    type = models.ForeignKey(HutType, related_name="huts", on_delete=models.RESTRICT, verbose_name=_("Hut type"), db_index=True)
+    type = models.ForeignKey(
+        HutType, related_name="huts", on_delete=models.RESTRICT, verbose_name=_("Hut type"), db_index=True
+    )
     # organizations = models.ManyToManyField(Organization, related_name="huts", db_table="hut_organization_association")
     organizations = models.ManyToManyField(
         Organization,
@@ -106,7 +110,7 @@ class Hut(TimeStampedModel):
             ),
             models.CheckConstraint(
                 name="%(app_label)s_%(class)s_review_status_valid",
-                check=models.Q(review_status__in=["review", "done", "reject"]),
+                check=models.Q(review_status__in=_ReviewStatusChoices.values),
             ),
         )
 
