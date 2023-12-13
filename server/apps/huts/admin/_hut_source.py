@@ -9,6 +9,7 @@ from unfold.decorators import display
 
 from server.apps.manager.admin import ModelAdmin
 from server.apps.manager.widgets import UnfoldReadonlyJSONSuit
+from server.core.utils import text_shorten_html
 
 from ..models import (
     HutSource,
@@ -47,7 +48,7 @@ class HutsSourceAdmin(ModelAdmin[HutSource]):
 
     # view_on_site = True
     # list_select_related = True
-    list_display = ("name", "organization", "review_comment", "is_active", "is_current", "version", "review_tag")
+    list_display = ("name", "organization", "review_comment_short", "is_active", "is_current", "version", "review_tag")
     list_filter = ("organization", "review_status", "is_active", "is_current", "version")
     list_display_links = ("name",)
     search_fields = ("name",)
@@ -81,6 +82,10 @@ class HutsSourceAdmin(ModelAdmin[HutSource]):
     )
     def review_tag(self, obj):
         return obj.review_status
+
+    @display(description=_("Review Comment"))
+    def review_comment_short(self, obj):  # new
+        return text_shorten_html(obj.review_comment, width=100)
 
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)

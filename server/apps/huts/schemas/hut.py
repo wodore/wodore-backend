@@ -17,7 +17,6 @@ from .point import Point
 # from ..utils.hut_fields import HutType
 
 
-
 class HutSchema(BaseModel):
     """Hut schema"""
 
@@ -43,3 +42,10 @@ class HutSchema(BaseModel):
     type: Optional[str] = None
 
     props: dict[str, str] = Field(dict())  # Property field, depends ond organization and hut
+
+    def get_name(self, codes=("de", "fr", "en", "it")):
+        for code in codes:
+            _name = self.name.get(code)
+            if _name:
+                return _name
+        return ""

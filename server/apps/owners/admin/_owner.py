@@ -12,6 +12,7 @@ from unfold.decorators import display
 from server.apps.huts.models import Hut
 from server.apps.manager.admin import ModelAdmin
 from server.apps.translations.forms import required_i18n_fields_form_factory
+from server.core.utils import text_shorten_html
 
 from ..models import Owner
 
@@ -88,5 +89,4 @@ class OwnerAdmin(ModelAdmin):
 
     @display(description=_("Note"))
     def note_short(self, obj):  # new
-        note = textwrap.shorten(obj.note_i18n, width=100, placeholder="...")
-        return mark_safe(f'<small class="text-gray-500">{note}<small/>')
+        return text_shorten_html(obj.note_i18n, width=100)

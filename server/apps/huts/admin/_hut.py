@@ -1,3 +1,4 @@
+import textwrap
 from typing import ClassVar
 
 from django.contrib import admin
@@ -8,6 +9,7 @@ from unfold.decorators import display
 
 from server.apps.manager.admin import ModelAdmin
 from server.apps.translations.forms import required_i18n_fields_form_factory
+from server.core.utils import text_shorten_html
 
 from ..forms import HutAdminFieldsets
 from ..models import (
@@ -46,7 +48,7 @@ class HutsAdmin(ModelAdmin):
         "created",
         "modified",
     )
-    list_per_page = 100
+    list_per_page = 40
 
     inlines = (
         HutContactAssociationEditInline,
@@ -72,7 +74,11 @@ class HutsAdmin(ModelAdmin):
 
     @display(header=True)
     def title(self, obj):
-        return (obj.name_i18n, obj.owner)  # self.icon_thumb(obj.type.icon_simple.url))
+        if obj.owner:
+            owner = textwrap.shorten(obj.owner.name, width=30, placeholder="...")
+        else:
+            owner = "-"
+        return (obj.name_i18n, owner)  # self.icon_thumb(obj.type.icon_simple.url))
 
     def location(self, obj):
         return f"{obj.point.y:.4f}, {obj.point.x:.4f}"
@@ -89,7 +95,7 @@ class HutsAdmin(ModelAdmin):
         #    for o in obj.view_organizations()
         # ]
         imgs = [
-            f'<a href={o.source.first().link_i18n} target="blank"><img class="inline pr-2" src="{o.logo.url}" width="28" alt="{o.name_i18n}"/></a>'
+            f'<a href={o.source.get(hut=obj.id).link_i18n} target="blank"><img class="inline pr-2" src="{o.logo.url}" width="28" alt="{o.name_i18n}"/></a>'
             for o in obj.organizations.all()
         ]
 

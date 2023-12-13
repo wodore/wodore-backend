@@ -126,7 +126,11 @@ class HutSourceService:
             if other_hut_src.is_active is False:  # ignore if not active
                 return hut_source, CreateOrUpdateStatus.ignored
             # diff = DeepDiff(other_hut_src.source_data.dict(), hut_source.source_data.dict())
-            diff = DeepDiff(other_hut_src.source_data, hut_source.source_data)
+            diff = DeepDiff(
+                other_hut_src.source_data,
+                hut_source.source_data,
+                ignore_type_in_groups=[DeepDiff.numbers, (list, tuple)],
+            )
             if diff:  # something changed, add a new entry:
                 diff_comment = (
                     diff.pretty()

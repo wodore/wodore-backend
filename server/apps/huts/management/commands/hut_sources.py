@@ -1,3 +1,5 @@
+import sys
+
 import click
 
 from server.apps.organizations.models import Organization
@@ -7,6 +9,7 @@ from ...models import HutSource, ReviewStatusChoices
 from ...schemas import HutSourceTypes
 from ...schemas.status import CreateOrUpdateStatus
 from ...services.osm import OsmService
+from ...services.refuges_info import RefugesInfoService
 from ...services.sources import HutSourceService
 
 # from django.conf import settings
@@ -22,7 +25,11 @@ def add_hut_source_db(
     extern_slug=None,
 ):
     hut_source_service = HutSourceService()
-    organization_id = Organization.get_by_slug(slug=reference).id
+    try:
+        organization_id = Organization.get_by_slug(slug=reference).id
+    except Organization.DoesNotExist:
+        click.secho(f"Organiztion '{reference}' does not exist, add it first.", fg="red")
+        sys.exit(1)
     source_huts = []
     number = 0
     for hut in huts:
@@ -102,6 +109,16 @@ def add_hutsources_function(
         # click.secho("Fill table with OSM data", fg="magenta")
         huts = add_hut_source_db(osm_huts, reference="osm", init=init)
         parser.stdout.write(parser.style.SUCCESS(f"Successfully added {len(huts)} new huts"))
+    elif _expect_organization("refuges", selected_organization, or_none=True):
+        refuges_service = RefugesInfoService()
+        parser.stdout.write(f"Get Refuges data from '{refuges_service.request_url}'")
+        # check of offset and limit -> not supported
+        refuge_huts = refuges_service.get_hut_list(limit=limit)
+        parser.stdout.write(f"Got {len(refuge_huts)} results back, start filling database:")
+        # click.secho("Fill table with OSM data", fg="magenta")
+        huts = add_hut_source_db(refuge_huts, reference="refuges", init=init)
+        parser.stdout.write(parser.style.SUCCESS(f"Successfully added {len(huts)} new huts"))
+
     else:
         parser.stdout.write(parser.style.WARNING(f"Selected organization '{selected_organization}' not supported."))
 

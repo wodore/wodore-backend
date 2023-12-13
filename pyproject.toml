@@ -54,6 +54,7 @@ django-jsonsuit = "^0.5.0"
 jinja2 = "^3.1.2"
 easydict = "^1.11"
 django-computedfields = {git = "https://github.com/TBxy/django-computedfields.git", rev = "django5.0"}
+xmltodict = "^0.13.0"
 
 
 [tool.poetry.group.dev.dependencies]

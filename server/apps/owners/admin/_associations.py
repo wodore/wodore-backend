@@ -42,7 +42,7 @@ class OwnerHutAssociationsAdmin(ModelAdmin):
         "is_active",
         "review_tag",
     )
-    list_filter = ("is_active", "review_status")  # , "owner")
+    list_filter = ("is_active",)  # , "owner")
     readonly_fields = ("name_i18n",)
     fields = ("name_i18n", "owner", "review_status", "review_comment")
     autocomplete_fields = ("owner",)
@@ -55,10 +55,12 @@ class OwnerHutAssociationsAdmin(ModelAdmin):
 
     @display(description=_("Owner"), header=True)
     def owner_title(self, obj):  # new
-        return (
-            obj.owner.name_i18n,
-            mark_safe(f'<a href="{obj.owner.url}" target="_blank">{obj.owner.url}</a>'),
-        )  # , mark_safe(f'<img src = "{obj.type.symbol_simple.url}" width = "24"/>')
+        if obj.owner:
+            return (
+                obj.owner.name_i18n,
+                mark_safe(f'<a href="{obj.owner.url}" target="_blank">{obj.owner.url}</a>'),
+            )  # , mark_safe(f'<img src = "{obj.type.symbol_simple.url}" width = "24"/>')
+        return ("-", "")
 
     @display(description=_("Hut"), header=True)
     def hut_title(self, obj):  # new

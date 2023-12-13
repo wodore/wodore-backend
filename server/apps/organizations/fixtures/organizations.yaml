@@ -109,7 +109,7 @@
     fullname_de: Open Street Map
     description_de: 'Grösster Kartendienst mit frei verfügbaren Daten.'
     url_de: https://www.openstreetmap.org
-    attribution_de: ''
+    attribution_en: '(C) OpenStreetMap contributors'
     link_hut_pattern: https://www.openstreetmap.org/{{props.osm_type}}/{{id}}
     logo: organizations/logos/osm_icon.png
     color_light: '#13325d'
@@ -141,3 +141,37 @@
     config: {}
     props_schema: {}
     order: 5
+- model: organizations.organization
+  pk: 6
+  fields:
+    slug: refuges
+    is_active: true
+    name_de: Refuges
+    fullname_de: RefugesInfo
+    description_de: 'Freie Übernachtungs informationen in den Bergen (Französisch).'
+    description_en: 'Free shelter information for the mountains (French).'
+    url_de: https://www.refuges.info/
+    attribution_fr: '(C) Les refuges.info contributors'
+    attribution_en: '(C) The refuges.info contributors'
+    #link_hut_pattern: https://www.refuges.info/point/{{id}} # enough
+    link_hut_pattern: https://www.refuges.info/point/{{id}}/{{props.hut_type}}/{{props.slug}}  ## link without massif
+    #link_hut_pattern: https://www.refuges.info/point/{{id}}/{{hut_type}}/{{massif}}/{{slug}}  ## full link, but id is enough
+    logo: organizations/logos/refugesinfo_icon.png
+    color_light: '#e08020'
+    color_dark: '#874d12'
+    config: {}
+    props_schema:
+      type: object,
+      properties:
+        slug:
+          description: "hut slug by refuges.info"
+          type: string
+        hut_type:
+          description: "hut type by refuges.info: cabane-non-gardee, refuge-garde, gite-d-etape or batiment-en-montagne"
+          type: string
+          enum: ["cabane-non-gardee", "refuge-garde", "gite-d-etape", "batiment-en-montagne"]
+        #massif:
+        #  description: "region by refuges.info, see https://www.refuges.info/nav/352/zone/Alpes/?id_polygone_type=1"
+        #  type: string
+      required: ["slug", "hut_type"]
+    order: 6
