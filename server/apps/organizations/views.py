@@ -7,7 +7,6 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.urls import reverse
 from django.views.generic.detail import DetailView
 
-from server.apps.djjmt.utils import activate, django_get_normalised_language
 
 from .models import Organization
 
@@ -19,7 +18,6 @@ class OrganizationDetailView(PermissionRequiredMixin, DetailView):
     model = Organization
 
     def get_context_data(self, **kwargs):
-        activate(django_get_normalised_language())
         context = {
             **super().get_context_data(**kwargs),
             **admin.site.each_context(self.request),
@@ -27,8 +25,8 @@ class OrganizationDetailView(PermissionRequiredMixin, DetailView):
             "org": self.object,
             "config_json": json.dumps(self.object.config, indent=2),
             "props_schema_json": json.dumps(self.object.props_schema, indent=2),
-            "original": self.object.name,
-            "title": f"View Organization {self.object.name}",
+            "original": self.object.name_i18n,
+            "title": f"View Organization {self.object.name_i18n}",
             "edit_url": reverse("admin:organizations_organization_change", args=[self.object.pk]),
         }
         return context

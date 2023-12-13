@@ -27,7 +27,7 @@ class Owner(TimeStampedModel):
     url = models.URLField(blank=True, default="", max_length=200, verbose_name=_("URL"))
     note = models.TextField(blank=True, default="", max_length=500, verbose_name=_("Note"))
     contacts = models.ManyToManyField(
-        Contact, null=True, through=OwnerContactAssociation, related_name="owner", verbose_name=_("Contacts")
+        Contact, blank=True, through=OwnerContactAssociation, related_name="owner", verbose_name=_("Contacts")
     )
 
     class Meta:

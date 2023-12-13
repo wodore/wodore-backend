@@ -5,5 +5,5 @@ from ._associations import (
     HutOrganizationAssociationViewInline,
 )
 from ._hut import HutsAdmin
-from ._hut_source import HutsSourceAdmin
+from ._hut_source import HutSourceViewInline, HutsSourceAdmin
 from ._hut_type import HutTypesAdmin

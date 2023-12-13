@@ -1,4 +1,5 @@
 # from django.db import models
+from asyncio import constants
 from computedfields.models import ComputedFieldsModel, computed
 from jinja2 import Environment
 
@@ -15,40 +16,41 @@ from server.apps.organizations.models import Organization
 
 
 class HutContactAssociation(TimeStampedModel):
-    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="details")
-    hut = models.ForeignKey("Hut", on_delete=models.CASCADE)
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="details", db_index=True)
+    hut = models.ForeignKey("Hut", on_delete=models.CASCADE, db_index=True)
     order = models.PositiveSmallIntegerField(blank=True, null=True)
 
     def __str__(self) -> str:
         return f"{self.hut} <> {self.contact}"
 
     class Meta:
-        verbose_name = _("Contacts to Hut")
-        unique_together = (("contact", "hut"),)
+        verbose_name = _("Contact and Hut Association")
         ordering = ("contact__function__priority", "order", "hut__name")
         app_label = "huts"
-
-
-# class OwnerContactAssociation(TimeStampedModel):
-#    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="owner_details")
-#    owner = models.ForeignKey(Owner, on_delete=models.CASCADE)
-#    order = models.PositiveSmallIntegerField(blank=True, null=True)
-#
-#    def __str__(self) -> str:
-#        return f"{self.owner} <> {self.contact}"
-#
-#    class Meta:
-#        verbose_name = _("Contacts to Owner")
-#        unique_together = (("contact", "owner"),)
-#        ordering = ("contact__function__priority", "order", "owner__name")
-#
+        constraints = (
+            models.UniqueConstraint(name="%(app_label)s_%(class)s_unique_relationships", fields=["contact", "hut"]),
+        )
 
 
 class HutOrganizationAssociation(TimeStampedModel, ComputedFieldsModel):
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="source")
-    hut = models.ForeignKey("Hut", on_delete=models.CASCADE)
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="source", db_index=True)
+    hut = models.ForeignKey("Hut", on_delete=models.CASCADE, db_index=True)
     props = models.JSONField(help_text=_("Organization dependend properties."), blank=True, default=dict)
     source_id = models.CharField(max_length=40, blank=True, null=True, default="", help_text="Source id")
+    # link -> see below (computed)
+
+    class Meta:
+        verbose_name = _("Hut and Organization Association")
+        constraints = (
+            models.UniqueConstraint(
+                name="%(app_label)s_%(class)s_unique_relationships", fields=["organization", "hut"]
+            ),
+        )
+
+    objects = MultilingualManager()
+
+    def __str__(self) -> str:
+        return f"{self.hut} <> {self.organization}"
 
     # TODO: does not work for different languages, needs one field for each ...
     @computed(
@@ -76,12 +78,3 @@ class HutOrganizationAssociation(TimeStampedModel, ComputedFieldsModel):
         # if self.link is not None:
         #    return self.link.replace("#LANG#", lang)
         # return ""
-
-    objects = MultilingualManager()
-
-    def __str__(self) -> str:
-        return f"{self.hut} <> {self.organization}"
-
-    class Meta:
-        verbose_name = _("Organizations to Hut")
-        unique_together = (("organization", "hut"),)

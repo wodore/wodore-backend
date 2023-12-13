@@ -21,7 +21,7 @@ class _OwnerShowContactsEditInline(unfold_admin.TabularInline):
     """Owner showing contacts"""
 
     model = Owner.contacts.through
-    fields = ("hut",)  # how to to acces "hut__name", probably custom from
+    fields = ("contact",)  # how to to acces "hut__name", probably custom from
     autocomplete_fields = ("contact",)
     extra = 0
     verbose_name = _("Contacts")

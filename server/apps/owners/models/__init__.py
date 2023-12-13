@@ -1,4 +1,2 @@
-from ._associations import (
-    OwnerContactAssociation,
-)
+from ._associations import OwnerContactAssociation, OwnerHutProxy
 from ._owner import Owner

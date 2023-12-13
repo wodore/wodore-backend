@@ -15,6 +15,7 @@ class ReviewStatusChoices(models.TextChoices):
     done = "done", _("done")
     old = "old", _("old")
     reject = "reject", _("reject")
+    # todo: update db constraints if anything changes here
 
 
 class HutSource(TimeStampedModel):
@@ -24,27 +25,50 @@ class HutSource(TimeStampedModel):
 
     objects: BaseManager = BaseManager()
 
-    source_id = models.CharField(blank=False, max_length=100, help_text=_("Original id from source object."))
-    version = models.PositiveSmallIntegerField(default=0)
-    name = models.CharField(blank=False, max_length=100, help_text=_("Name of the object object."))
+    source_id = models.CharField(
+        blank=False, max_length=100, verbose_name=_("Source ID"), help_text=_("Original ID from source object.")
+    )
+    version = models.PositiveSmallIntegerField(default=0, verbose_name=_("Version"))
+    name = models.CharField(blank=False, max_length=100, verbose_name=_("Name"), help_text=_("Name of the object"))
     organization = models.ForeignKey(Organization, on_delete=models.RESTRICT)
-    point = models.PointField(blank=True, default=None)
-    is_active = models.BooleanField(default=True, db_index=True)
-    is_current = models.BooleanField(default=True, db_index=True)
+    point = models.PointField(blank=True, default=None, verbose_name=_("Location"))
+    is_active = models.BooleanField(
+        default=True,
+        db_index=True,
+        verbose_name=_("Active"),
+        help_text=_("If set to inactive no more updates are done from this source"),
+    )
+    is_current = models.BooleanField(default=True, db_index=True, verbose_name=_("Current Entry"))
     review_status = models.TextField(
-        max_length=12, choices=ReviewStatusChoices.choices, default=ReviewStatusChoices.new
+        max_length=12,
+        choices=ReviewStatusChoices.choices,
+        default=ReviewStatusChoices.new,
+        verbose_name=_("Review status"),
     )
-    review_comment = models.CharField(blank=True, default="", max_length=2000)
-    source_data = models.JSONField(help_text=_("Data from the source model."), blank=True, default=dict)
+    review_comment = models.CharField(blank=True, default="", verbose_name=_("Review comment"), max_length=2000)
+    source_data = models.JSONField(
+        verbose_name=_("Source data as JSON"), help_text=_("Data from the source model."), blank=True, default=dict
+    )
     previous_object = models.ForeignKey(
-        "self", blank=True, null=True, on_delete=models.RESTRICT, help_text=_("Id to the previous object.")
+        "self",
+        blank=True,
+        null=True,
+        on_delete=models.RESTRICT,
+        verbose_name=_("Previous Entry"),
+        help_text=_("Id to the previous object."),
     )
-    hut = models.ForeignKey("Hut", null=True, related_name="sources", on_delete=models.SET_NULL)
+    hut = models.ForeignKey("Hut", null=True, related_name="sources", on_delete=models.SET_NULL, verbose_name=_("Hut"))
 
     class Meta:
         verbose_name = "Hut Source"
         verbose_name_plural = "Hut Sources"
         ordering = (Lower("name"), "organization__order")
+        constraints = (
+            models.CheckConstraint(
+                name="%(app_label)s_%(class)s_review_status_valid",
+                check=models.Q(review_status__in=["new", "review", "done", "old", "reject"]),
+            ),
+        )
 
     def __str__(self) -> str:
         return f"{self.name} v{self.version} ({self.organization.name_i18n})"

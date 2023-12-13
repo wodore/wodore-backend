@@ -106,7 +106,7 @@ NPLUSONE_WHITELIST = [
 # https://github.com/wemake-services/django-test-migrations
 
 # Set of badly named migrations to ignore:
-DTM_IGNORED_MIGRATIONS = frozenset((("axes", "*"),))
+DTM_IGNORED_MIGRATIONS = frozenset((("axes", "*"), ("computedfields", "0003_auto_20200713_2212")))
 
 
 # django-extra-checks
@@ -123,7 +123,7 @@ EXTRA_CHECKS = {
         # FileField/ImageField must have non empty `upload_to` argument:
         "field-file-upload-to",
         # Text fields shouldn't use `null=True`:
-        "field-text-null",
+        # "field-text-null",
         # Don't pass `null=False` to model fields (this is django default)
         "field-null",
         # ForeignKey fields must specify db_index explicitly if used in

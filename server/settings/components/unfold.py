@@ -152,11 +152,11 @@ UNFOLD = {
                     "link": reverse_lazy("admin:huts_hut_changelist"),
                 },
                 {
-                    "title": _("Hut Types"),
+                    "title": _("Types"),
                     "link": reverse_lazy("admin:huts_huttype_changelist"),
                 },
                 {
-                    "title": _("Hut Sources"),
+                    "title": _("Sources"),
                     "link": reverse_lazy("admin:huts_hutsource_changelist"),
                 },
             ],
@@ -174,6 +174,27 @@ UNFOLD = {
                 {
                     "title": _("Contact Functions"),
                     "link": reverse_lazy("admin:contacts_contactfunction_changelist"),
+                },
+            ],
+        },
+        {
+            "models": [
+                "owners.owner",
+                "owners.ownercontactassociation",
+                "owners.ownerhutproxy",
+            ],
+            "items": [
+                {
+                    "title": _("Owners"),
+                    "link": reverse_lazy("admin:owners_owner_changelist"),
+                },
+                {
+                    "title": _("with Contacts"),
+                    "link": reverse_lazy("admin:owners_ownercontactassociation_changelist"),
+                },
+                {
+                    "title": _("with Huts"),
+                    "link": reverse_lazy("admin:owners_ownerhutproxy_changelist"),
                 },
             ],
         },
