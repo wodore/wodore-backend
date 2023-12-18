@@ -11,7 +11,6 @@ from django.templatetags.static import static
 from django.urls import reverse_lazy
 from django.utils.translation import gettext_lazy as _
 
-
 UNFOLD = {
     "SITE_TITLE": None,
     "SITE_HEADER": None,
@@ -78,7 +77,8 @@ UNFOLD = {
                         "icon": "dashboard",  # Supported icon set: https://fonts.google.com/icons
                         "link": reverse_lazy("admin:index"),
                         # "badge": "sample_app.badge_callback",
-                        # "permission": lambda request: request.user.is_superuser,
+                        "permission": lambda request: request.user.is_superuser,
+                        # "permission": lambda request: request.user.has_perm("huts.view_hut"),
                     },
                 ],
             },
@@ -90,21 +90,25 @@ UNFOLD = {
                         "title": _("Huts"),
                         "icon": "house",
                         "link": reverse_lazy("admin:huts_hut_changelist"),
+                        "permission": lambda request: request.user.has_perm("huts.view_hut"),
                     },
                     {
                         "title": _("Owners"),
                         "icon": "location_away",
                         "link": reverse_lazy("admin:owners_owner_changelist"),
+                        "permission": lambda request: request.user.has_perm("owners.view_owner"),
                     },
                     {
                         "title": _("Organizations"),
                         "icon": "corporate_fare",
                         "link": reverse_lazy("admin:organizations_organization_changelist"),
+                        "permission": lambda request: request.user.has_perm("organizations.view_organization"),
                     },
                     {
                         "title": _("Contacts"),
                         "icon": "contacts",
                         "link": reverse_lazy("admin:contacts_contact_changelist"),
+                        "permission": lambda request: request.user.has_perm("contacts.change_contact"),
                     },
                 ],
             },
@@ -135,6 +139,7 @@ UNFOLD = {
                         "badge": "v1",
                         "icon": "api",
                         "link": "/api/v1/docs",  # todo use name # todo change unfold/helpers/app_list.html tempalte to use target=
+                        "permission": lambda request: request.user.is_superuser,
                     },
                 ],
             },
@@ -151,14 +156,17 @@ UNFOLD = {
                 {
                     "title": _("Huts"),
                     "link": reverse_lazy("admin:huts_hut_changelist"),
+                    "permission": lambda request: request.user.has_perm("huts.view_hut"),
                 },
                 {
                     "title": _("Types"),
                     "link": reverse_lazy("admin:huts_huttype_changelist"),
+                    "permission": lambda request: request.user.has_perm("huts.view_huttype"),
                 },
                 {
                     "title": _("Sources"),
                     "link": reverse_lazy("admin:huts_hutsource_changelist"),
+                    "permission": lambda request: request.user.has_perm("huts.view_hutsource"),
                 },
             ],
         },
@@ -171,10 +179,12 @@ UNFOLD = {
                 {
                     "title": _("Contacts"),
                     "link": reverse_lazy("admin:contacts_contact_changelist"),
+                    "permission": lambda request: request.user.has_perm("contacts.view_contacts"),
                 },
                 {
                     "title": _("Contact Functions"),
                     "link": reverse_lazy("admin:contacts_contactfunction_changelist"),
+                    "permission": lambda request: request.user.has_perm("contacts.view_contactfunctions"),
                 },
             ],
         },
@@ -188,14 +198,17 @@ UNFOLD = {
                 {
                     "title": _("Owners"),
                     "link": reverse_lazy("admin:owners_owner_changelist"),
+                    "permission": lambda request: request.user.has_perm("owners.view_owner"),
                 },
                 {
                     "title": _("with Contacts"),
                     "link": reverse_lazy("admin:owners_ownercontactassociation_changelist"),
+                    "permission": lambda request: request.user.has_perm("owners.view_ownercontactassociation"),
                 },
                 {
                     "title": _("with Huts"),
                     "link": reverse_lazy("admin:owners_ownerhutproxy_changelist"),
+                    "permission": lambda request: request.user.has_perm("owners.view_ownerhutproxy"),
                 },
             ],
         },

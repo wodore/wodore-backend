@@ -9,7 +9,7 @@ from django.conf import settings
 from django.contrib.gis.db import models
 from django.contrib.postgres.indexes import GinIndex
 from django.db.models import F, Value
-from django.db.models.functions import Concat
+from django.db.models.functions import Concat, Lower
 from django.utils.text import slugify
 from django.utils.translation import get_language
 from django.utils.translation import gettext_lazy as _
@@ -38,14 +38,19 @@ class Hut(TimeStampedModel):
     i18n = TranslationField(fields=("name", "description", "note"))
 
     slug = models.SlugField(unique=True, verbose_name=_("Slug"), db_index=True)
-    review_status = models.TextField(
+    review_status = models.CharField(
         max_length=12,
         choices=ReviewStatusChoices.choices,
         default=ReviewStatusChoices.review,
         verbose_name=_("Review status"),
     )
-    review_comment = models.CharField(blank=True, default="", max_length=2000, verbose_name=_("Review comment"))
-    is_active = models.BooleanField(default=True, db_index=True, verbose_name=_("Active"))
+    review_comment = models.TextField(blank=True, default="", max_length=2000, verbose_name=_("Review comment"))
+    is_active = models.BooleanField(
+        default=True, db_index=True, verbose_name=_("Active"), help_text=_("Only shown to admin if not active")
+    )
+    is_public = models.BooleanField(
+        default=False, db_index=True, verbose_name=_("Public"), help_text=_("Only shown to editors if not public")
+    )
     name = models.CharField(max_length=100, verbose_name=_("Name"))
     description = models.TextField(max_length=2000, verbose_name="Description")
     owner = models.ForeignKey(
@@ -102,7 +107,7 @@ class Hut(TimeStampedModel):
 
     class Meta:
         verbose_name = _("Hut")
-        ordering = ("name_i18n",)
+        ordering = (Lower("name_i18n"),)
         indexes = (GinIndex(fields=["i18n"]),)
         constraints = (
             models.CheckConstraint(
@@ -120,6 +125,33 @@ class Hut(TimeStampedModel):
     def save(self, *args, **kwargs):
         self.slug = self._create_slug_name(self.name_i18n)
         super().save(*args, **kwargs)
+
+    def next(self) -> int | None:
+        """Returns next hut"""
+        order_by = Lower("name")
+        first_hut = Hut.objects.all().order_by(order_by).first()
+        first_id = first_hut.id if first_hut else None
+        next_id_dict = (
+            Hut.objects.annotate(lowername=order_by)
+            .filter(lowername__gt=self.name.lower())
+            .order_by("lowername")
+            .values("id")
+            .first()
+        )
+        return next_id_dict.get("id") if next_id_dict else first_id
+
+    def prev(self) -> int | None:
+        order_by = Lower("name")
+        last_hut = Hut.objects.all().order_by(order_by).last()
+        last_id = last_hut.id if last_hut else None
+        prev_id_dict = (
+            Hut.objects.annotate(lowername=order_by)
+            .filter(lowername__lt=self.name.lower())
+            .order_by("lowername")
+            .values("id")
+            .last()
+        )
+        return prev_id_dict.get("id") if prev_id_dict else last_id
 
     def organizations_query(self, organization: str | Organization | None = None, annotate=True):
         if isinstance(organization, Organization):

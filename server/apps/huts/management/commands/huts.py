@@ -1,8 +1,14 @@
+# type: ignore  # noqa: PGH003
+# TODO: add types
 import sys
-from typing import Tuple
+import typing as t
 
 import click
+from hut_services import BaseService
+from pydantic import BaseModel
 
+from django.conf import settings
+from django.contrib.gis.geos import Point as dbPoint
 from django.db import DataError, IntegrityError, transaction
 from django.utils.text import slugify
 
@@ -12,9 +18,11 @@ from server.core.management import CRUDCommand
 
 from ...models import Hut, HutOrganizationAssociation, HutSource, HutType
 from ...schemas.hut import HutSchema
-from ...schemas.hut_osm import HutOsm0Convert
-from ...schemas.hut_refuges_info import HutRefugesInfo0Convert
 
+# from ...schemas.hut_osm import HutOsm0Convert
+# from ...schemas.hut_refuges_info import HutRefugesInfo0Convert
+
+SERVICES: dict[str, t.Type[BaseService[BaseModel]]] = settings.SERVICES
 # from django.conf import settings
 # import shutil
 # from djjmt.utils import override
@@ -55,7 +63,7 @@ def init_huts_db(
     overwrite_existing_fields: bool = False,
     extern_slug=None,
     commit_per_hut: bool = False,
-) -> Tuple[int, int]:
+) -> t.Tuple[int, int]:
     # hut_service = HutService(session=s)
     # osm_schemas = [HutOsm0Convert(source=h.source_data) for h in osm_huts]
     # hut_schemas = [HutSchema(**h.model_dump()) for h in osm_schemas]
@@ -69,32 +77,42 @@ def init_huts_db(
     hut_types = {ht.slug: ht for ht in HutType.objects.all()}
     for hut_src in hut_sources:
         hut_counter += 1
-        source_class_name = hut_src.source_data.get("convert_class")
-        SrcClass = globals().get(source_class_name)
-        if SrcClass is None:
-            click.secho(f"Converter class '{source_class_name}' not imported!", fg="red")
-            sys.exit(1)
-        hut_src_schema = SrcClass(source=hut_src.source_data)
-        # TODO: move source class ou of dictionary and into model
-        hut = HutSchema(**hut_src_schema.model_dump())
-        _name = f"  Hut {hut_counter!s: <3} '{hut.get_name()}'"
+        orgs = hut_src.organization.slug
+        service = SERVICES.get(orgs)()
+        hut = service.convert(src=hut_src)
+        # source_class_name = hut_src.source_data.get("convert_class")
+        # SrcClass = globals().get(source_class_name)
+        # if SrcClass is None:
+        #    click.secho(f"Converter class '{source_class_name}' not imported!", fg="red")
+        #    sys.exit(1)
+        # hut_src_schema = SrcClass(source=hut_src.source_data)
+        ## TODO: move source class ou of dictionary and into model
+        # hut = HutSchema(**hut_src_schema.model_dump())
+        _name = f"  Hut {hut_counter!s: <3} '{hut.name.i18n}'"
         click.echo(f"{_name: <48}", nl=False)
         i18n_fields = {}
-        for field in ["name", "description", "note"]:
-            for code, value in getattr(hut, field).items():
-                i18n_fields[f"{field}_{code}"] = value
+        for field in ["name", "description", "notes"]:
+            model = getattr(hut, field)
+            if not model:
+                continue
+            if field == "notes":
+                model = model[0]
+            for code, value in model.model_dump(by_alias=True).items():
+                out_field = "note" if field == "notes" else field
+                i18n_fields[f"{out_field}_{code}"] = value
         db_hut = Hut(
-            point=hut.point.db,
-            elevation=hut.elevation,
-            capacity=hut.capacity,
+            point=dbPoint(hut.location.lon_lat),
+            elevation=hut.location.ele,
+            capacity=hut.capacity.opened,
             url=hut.url,
             is_active=hut.is_active,
+            is_public=hut.is_public,
             country=hut.country,
-            type=hut_types.get(str(hut.type), default_type),
+            type=hut_types.get(str(hut.hut_type.value), default_type),
             review_status=Hut.ReviewStatusChoices.done if init else Hut.ReviewStatusChoices.review,
             **i18n_fields,
         )
-        src_owner = hut_src_schema.owner
+        src_owner = hut.owner
         owner = None
         if src_owner:
             owner_slug = slugify(src_owner)[:50]
@@ -119,7 +137,10 @@ def init_huts_db(
             with transaction.atomic():
                 db_hut.save()
                 new_org = HutOrganizationAssociation(
-                    hut=db_hut, organization=hut_src.organization, props=hut.props, source_id=hut_src.source_id
+                    hut=db_hut,
+                    organization=hut_src.organization,
+                    props=hut_src.source_properties,
+                    source_id=hut_src.source_id,
                 )
                 new_org.save()
                 db_hut.refresh_from_db()
@@ -159,10 +180,10 @@ def _expect_organization(organization: str, selected_organization: str | None, o
     return (selected_organization is None and or_none) or (selected_organization or "").lower() == organization.lower()
 
 
-def add_huts_function(parser: "Command", offset, limit, init, update, force, selected_organization, **kwargs):
+def add_huts_function(obj: "Command", offset, limit, init, update, force, selected_organization, **kwargs):
     total_entries = HutSource.objects.all().count()
     if total_entries == 0:
-        parser.stdout.write(parser.style.WARNING("No entries in 'huts.HutSource', run first: 'app hut_sources --add'"))
+        obj.stdout.write(obj.style.WARNING("No entries in 'huts.HutSource', run first: 'app hut_sources --add'"))
         sys.exit(1)
 
     # if _expect_organization("osm", selected_organization, or_none=True):
@@ -174,14 +195,14 @@ def add_huts_function(parser: "Command", offset, limit, init, update, force, sel
     else:
         src_huts = list(HutSource.objects.all()[offset : offset + limit])
     new_huts = len(src_huts)
-    parser.stdout.write(parser.style.NOTICE(f"Going to fill table with {new_huts} entries and an offset of {offset}"))
+    obj.stdout.write(obj.style.NOTICE(f"Going to fill table with {new_huts} entries and an offset of {offset}"))
     added, failed = init_huts_db(
         src_huts, init=init
     )  # , update_existing=update_existing, overwrite_existing_fields=overwrite_existing_fields)
     if added:
-        parser.stdout.write(parser.style.SUCCESS(f"Successfully added {added} new hut{'s' if failed > 1 else ''}"))
+        obj.stdout.write(obj.style.SUCCESS(f"Successfully added {added} new hut{'s' if failed > 1 else ''}"))
     if failed:
-        parser.stdout.write(parser.style.ERROR(f"Failed to add {failed} hut{'s' if failed > 1 else ''}"))
+        obj.stdout.write(obj.style.ERROR(f"Failed to add {failed} hut{'s' if failed > 1 else ''}"))
     # else:
     #    parser.stdout.write(parser.style.WARNING(f"Selected organization '{selected_organization}' not supported."))
 

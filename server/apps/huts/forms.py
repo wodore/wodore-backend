@@ -6,9 +6,10 @@ HutAdminFieldsets = [
         _("Main Information"),
         {
             "fields": [
+                ("is_active", "is_public"),
                 ("slug", "type"),
-                ("name_i18n", "owner"),
-                "is_active",
+                ("name_i18n"),
+                "owner",
                 "review_status",
                 "review_comment",
                 "url",

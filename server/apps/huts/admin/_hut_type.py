@@ -46,17 +46,17 @@ class HutTypesAdmin(ModelAdmin):
     def title(self, obj):
         return (obj.name_i18n, obj.description_i18n, self.avatar(obj.symbol_simple.url))
 
-    @display(description="symbol")
+    @display(description=_("Symbol"))
     def symbol_img(self, obj):  # new
         return mark_safe(f'<img src = "{obj.symbol.url}" width = "34"/>')
 
-    @display(description="simple")
+    @display(description=_("Icon"))
     def icon_img(self, obj):  # new
         return mark_safe(f'<img src = "{obj.icon.url}" width = "16"/>')
 
     def avatar(self, url):  # new
         return mark_safe(f'<img src = "{url}" width = "20"/>')
 
-    @display(description="level", ordering="level")
+    @display(description=_("Level"), ordering="level")
     def comfort(self, obj):  # new
         return mark_safe(f"<small>{obj.level}</small>")

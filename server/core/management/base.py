@@ -2,23 +2,23 @@ import os
 import shutil
 import sys
 from pathlib import Path
-from typing import Callable, Tuple
+from typing import Any, Callable, ClassVar, Generic, Protocol, Tuple, TypeVar
 
 import click
 
 from django.conf import settings
 from django.core.management import call_command
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandParser
 from django.db import models
 from django.db.models.deletion import RestrictedError
 
 from server.core.managers import BaseManager
 
 
-def add_fixture_function(parser: "CRUDCommand", force: bool, model: models.Model, **kwargs):
+def add_fixture_function(obj: "CRUDCommand", force: bool, model: models.Model, **kwargs: Any) -> None:
     ignore_media = kwargs.get("ignore_media", False)
-    fixture_name = getattr(parser, "fixture_name", "")
-    parser.stdout.write(f"Load data from '{fixture_name}.yaml' fixtures")
+    fixture_name = getattr(obj, "fixture_name", "")
+    obj.stdout.write(f"Load data from '{fixture_name}.yaml' fixtures")
     if not force and model.objects.all().count() > 0:
         try:
             force = click.confirm("Careful this might overwrite exisitng data in the database, continue?", default=True)
@@ -27,28 +27,28 @@ def add_fixture_function(parser: "CRUDCommand", force: bool, model: models.Model
             sys.exit(0)
     if force or model.objects.all().count() == 0:
         try:
-            call_command("loaddata", fixture_name, app_label=parser.app_label)
-            parser.stdout.write(parser.style.SUCCESS("Successfully loaded data"))
+            call_command("loaddata", fixture_name, app_label=obj.app_label)
+            obj.stdout.write(obj.style.SUCCESS("Successfully loaded data"))
         except Exception as e:
-            parser.stdout.write(parser.style.ERROR("Loaddata failed, fix issues and run again, error message:"))
-            parser.stdout.write(parser.style.NOTICE(e.args[0]))
+            obj.stdout.write(obj.style.ERROR("Loaddata failed, fix issues and run again, error message:"))
+            obj.stdout.write(obj.style.NOTICE(e.args[0]))
             sys.exit(1)
-        if parser.media_src and not ignore_media:
-            media_src_rel = parser.media_src.relative_to(settings.BASE_DIR)
-            media_dst_rel = parser.media_dst.relative_to(settings.BASE_DIR)
-            parser.stdout.write(f"Copy media files from '{media_src_rel}' to '{media_dst_rel}'")
+        if obj.media_src and not ignore_media:
+            media_src_rel = obj.media_src.relative_to(settings.BASE_DIR)
+            media_dst_rel = obj.media_dst.relative_to(settings.BASE_DIR)
+            obj.stdout.write(f"Copy media files from '{media_src_rel}' to '{media_dst_rel}'")
             try:
-                shutil.copytree(parser.media_src, parser.media_dst, dirs_exist_ok=True)
-                parser.stdout.write(parser.style.SUCCESS("Successfully copied data"))
+                shutil.copytree(obj.media_src, obj.media_dst, dirs_exist_ok=True)
+                obj.stdout.write(obj.style.SUCCESS("Successfully copied data"))
             except FileNotFoundError as e:
-                parser.stdout.write(parser.style.ERROR("Could not copy files, error message:"))
-                parser.stdout.write(parser.style.NOTICE(e.args[1]))
+                obj.stdout.write(obj.style.ERROR("Could not copy files, error message:"))
+                obj.stdout.write(obj.style.NOTICE(e.args[1]))
                 sys.exit(1)
 
 
-def dump_fixture_function(parser: "CRUDCommand", force: bool, model: models.Model, **kwargs):
-    fixture_name = getattr(parser, "fixture_name", "")
-    fixture_path = parser.get_app_path() / "fixtures" / f"{fixture_name}.yaml"
+def dump_fixture_function(obj: "CRUDCommand", force: bool, model: models.Model, **kwargs: Any) -> None:
+    fixture_name = getattr(obj, "fixture_name", "")
+    fixture_path = obj.get_app_path() / "fixtures" / f"{fixture_name}.yaml"
     fixture_path_rel = fixture_path.relative_to(settings.BASE_DIR)
     meta = model._meta
     try:
@@ -61,10 +61,10 @@ def dump_fixture_function(parser: "CRUDCommand", force: bool, model: models.Mode
                 print()
                 do_abort = True
             if do_abort:
-                parser.stdout.write(parser.style.NOTICE(f"Do not write file '{fixture_path_rel}'"))
+                obj.stdout.write(obj.style.NOTICE(f"Do not write file '{fixture_path_rel}'"))
                 sys.exit(0)
 
-        call_command("dumpdata", f"{parser.app_label}.{meta.object_name}", format="yaml", output=fixture_path)
+        call_command("dumpdata", f"{obj.app_label}.{meta.object_name}", format="yaml", output=fixture_path)
         with open(fixture_path) as file:
             new_lines = []  # remove created and modified
             for line in file.readlines():
@@ -72,33 +72,34 @@ def dump_fixture_function(parser: "CRUDCommand", force: bool, model: models.Mode
                     new_lines.append(line)
         with open(fixture_path, "w") as file:
             file.writelines(new_lines)
-        if parser.media_src:
-            parser.stdout.write(
-                parser.style.WARNING(
-                    f"Make sure to manually copy any new/changed logo from '{parser.media_dst.relative_to(settings.BASE_DIR)}' to '{parser.media_src.relative_to(settings.BASE_DIR)}'"
+        if obj.media_src:
+            obj.stdout.write(
+                obj.style.WARNING(
+                    f"Make sure to manually copy any new/changed logo from '{obj.media_dst.relative_to(settings.BASE_DIR)}' to '{obj.media_src.relative_to(settings.BASE_DIR)}'"
                 )
             )
-        parser.stdout.write(parser.style.SUCCESS(f"Successfully saved data to '{fixture_path_rel}'"))
+        obj.stdout.write(obj.style.SUCCESS(f"Successfully saved data to '{fixture_path_rel}'"))
     except Exception as e:
-        parser.stdout.write(parser.style.ERROR("Save data failed, fix issue and run again, error message:"))
-        parser.stdout.write(parser.style.NOTICE(e.args[0]))
+        obj.stdout.write(obj.style.ERROR("Save data failed, fix issue and run again, error message:"))
+        obj.stdout.write(obj.style.NOTICE(e.args[0]))
         sys.exit(1)
 
 
-def default_drop_function(parser: "CRUDCommand", force: bool, model: models.Model, **kwargs):
+def default_drop_function(obj: "CRUDCommand", force: bool, model: models.Model, **kwargs: None) -> None:
     limit = kwargs.get("limit")
     offset = kwargs.get("offset")
     ignore_media = kwargs.get("ignore_media", False)
-    objects: BaseManager = model.objects
+    # objects: BaseManager = model.objects
+    objects = model.objects
     entries = model.objects.all().count()
     db_force = force
     # check support for limit
     err_msg = "'{}' parameter is not supported without custom manager's 'drop()' function (see 'server.core.managers')"
-    if not hasattr(objects, "drop") and parser.use_limit_arg:
-        parser.stdout.write(parser.style.WARNING(err_msg.format("--limit")))
+    if not hasattr(objects, "drop") and obj.use_limit_arg:
+        obj.stdout.write(obj.style.WARNING(err_msg.format("--limit")))
         limit = None
-    if not hasattr(objects, "drop") and parser.use_offset_arg:
-        parser.stdout.write(parser.style.WARNING(err_msg.format("--offset")))
+    if not hasattr(objects, "drop") and obj.use_offset_arg:
+        obj.stdout.write(obj.style.WARNING(err_msg.format("--offset")))
         offset = 0
 
     if not db_force and entries > 0:
@@ -108,9 +109,7 @@ def default_drop_function(parser: "CRUDCommand", force: bool, model: models.Mode
             db_force = False
             print()
     if entries == 0:
-        parser.stdout.write(
-            parser.style.NOTICE(f"Nothing to delete in table '{parser.app_label}.{model._meta.object_name}'")
-        )
+        obj.stdout.write(obj.style.NOTICE(f"Nothing to delete in table '{obj.app_label}.{model._meta.object_name}'"))
         db_force = False
     if db_force:
         try:
@@ -119,22 +118,20 @@ def default_drop_function(parser: "CRUDCommand", force: bool, model: models.Mode
             else:
                 total_entries, tables = objects.all().delete()
             for table, deleted in tables.items():
-                parser.stdout.write(f"  > dropped {deleted} entries from table '{table}'")
-            parser.stdout.write(
-                parser.style.SUCCESS(
+                obj.stdout.write(f"  > dropped {deleted} entries from table '{table}'")
+            obj.stdout.write(
+                obj.style.SUCCESS(
                     f"Successfully dropped {total_entries} entries from {len(tables)} table{'s' if len(tables) else ''}"
                 )
             )
         except RestrictedError as e:
-            parser.stdout.write(
-                parser.style.ERROR("Cannot drop due to restictions. Solve it first! The restriction is:")
-            )
-            parser.stdout.write(parser.style.NOTICE(e.args[0]))
+            obj.stdout.write(obj.style.ERROR("Cannot drop due to restictions. Solve it first! The restriction is:"))
+            obj.stdout.write(obj.style.NOTICE(e.args[0]))
             sys.exit(1)
     # media_src, media_dst = get_media(parser)
-    if parser.media_src and not ignore_media and parser.media_dst.exists:
-        media_dst_rel = parser.media_dst.relative_to(settings.BASE_DIR)
-        if os.path.exists(parser.media_dst):
+    if obj.media_src and not ignore_media and obj.media_dst.exists:
+        media_dst_rel = obj.media_dst.relative_to(settings.BASE_DIR)
+        if os.path.exists(obj.media_dst):
             media_force = force
             if not media_force:
                 try:
@@ -143,52 +140,66 @@ def default_drop_function(parser: "CRUDCommand", force: bool, model: models.Mode
                     media_force = False
                     print()
             if media_force:
-                shutil.rmtree(parser.media_dst)
-                parser.stdout.write(parser.style.SUCCESS(f"Successfully removed '{media_dst_rel}'"))
+                shutil.rmtree(obj.media_dst)
+                obj.stdout.write(obj.style.SUCCESS(f"Successfully removed '{media_dst_rel}'"))
         else:
-            parser.stdout.write(parser.style.NOTICE(f"Path '{media_dst_rel}' already removed"))
+            obj.stdout.write(obj.style.NOTICE(f"Path '{media_dst_rel}' already removed"))
 
 
-class CRUDCommand(BaseCommand):
+TModel = TypeVar("TModel", bound=models.Model)
+
+TFModel = TypeVar("TFModel", bound=models.Model)
+
+
+class CRUDFunction(Protocol, Generic[TFModel]):
+    __name__: str
+
+    def __call__(self, obj: "CRUDCommand[TFModel]", force: bool, model: models.Model, **kwargs: Any) -> None:
+        pass
+
+
+class CRUDCommand(BaseCommand, Generic[TModel]):
     help = "Drop, add, update and save entries from, respectively, to database table."
 
-    model: models.base.ModelBase | None = None  # REQUIRED
-    model_names: str = ""  # REQUIRED
+    model: TModel  # REQUIRED
+    model_names: str  # REQUIRED
     app_label: str = ""  # if not main app model
 
     # general settings
-    use_offset_arg = False
-    use_limit_arg = False
-    use_update_arg = False
-    use_media_args = (
+    use_offset_arg: bool = False
+    use_limit_arg: bool = False
+    use_update_arg: bool = False
+    use_media_args: bool | None = (
         None  # if None use it if media_src is set, if False never us it if True auto generate media_src if no given
     )
 
     # add settings
-    add_function: None | Callable = add_fixture_function
+    add_function: None | CRUDFunction[TModel] = add_fixture_function
     media_src: str | Path | None = None  # copy media file from this location to
     media_dst: str | Path | None = None  # this location (destination is not required an per default settins.MEDIA_ROOT)
     fixture_name: str = ""  # name for fixture under <app_label>/fixtures/<fixture_name>.yaml
 
     # drop settings
-    drop_function: None | Callable = default_drop_function  # drop_function(parser, limit, offset, force, **kwargs_add)
+    drop_function: None | CRUDFunction[
+        TModel
+    ] = default_drop_function  # drop_function(parser, limit, offset, force, **kwargs_add)
 
     # dump settings
-    dump_function: None | Callable = dump_fixture_function
+    dump_function: None | CRUDFunction[TModel] = dump_fixture_function
 
-    # BaseCommand settings
-    requires_system_checks = []  # noqa: RUF012
-    suppressed_base_arguments = (
-        "--version",
-        "--settings",
-        "--pythonpath",
-        "--traceback",
-        "--no-color",
-        "--force-color",
-    )
-
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        # BaseCommand settings
+        self.suppressed_base_arguments = {
+            "--version",
+            "--settings",
+            "--pythonpath",
+            "--traceback",
+            "--no-color",
+            "--force-color",
+        }
+        self.requires_system_checks = []  # type: ignore pyright
+
         ##   check for model
         if self.model is None:
             err_msg = "'model' is needed, add it to the global variables in your class!"
@@ -205,7 +216,7 @@ class CRUDCommand(BaseCommand):
         ) or self.use_media_args:
             self.set_media_paths()
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: CommandParser) -> None:
         if self.drop_function:
             parser.add_argument("-d", "--drop", action="store_true", help="Drop entries in table")
         if self.add_function:
@@ -227,7 +238,7 @@ class CRUDCommand(BaseCommand):
         parser.add_argument(
             "-f", "--force", action="store_true", help="Force, e.g. overwrite exisinting data (be careful!)"
         )
-        if self.add_function.__name__ == "add_fixture_function":
+        if self.add_function is not None and self.add_function.__name__ == "add_fixture_function":
             parser.add_argument("--fixture-name", help=f"Name of the fixtues (default: {self.fixture_name})")
         if self.media_src:
             parser.add_argument(
@@ -239,9 +250,9 @@ class CRUDCommand(BaseCommand):
                 help=f"Media source path (default: {self.media_src.relative_to(settings.BASE_DIR)})",
             )
 
-    def default_limit(self, drop, add, update, **kwargs):
+    def default_limit(self, drop: bool, add: bool, update: bool, **kwargs: Any) -> int:
         if drop:  # drop and add the same amount
-            return self.model.objects.all().count()
+            return int(self.model.objects.all().count())
         # elif add:
         return 100000  # all
 
@@ -252,9 +263,9 @@ class CRUDCommand(BaseCommand):
         kwargs_add: dict | None = None,
         kwargs_drop: dict | None = None,
         kwargs_dump: dict | None = None,
-        *args,
-        **options,
-    ):
+        *args: Any,
+        **options: Any,
+    ) -> None:
         ##   defaults
         dump = options.get("dump", None)
         drop = options.get("drop", None)
@@ -320,13 +331,13 @@ class CRUDCommand(BaseCommand):
                 self.stdout.write(self.style.WARNING("'dump_function' is not implemented"))
 
     def get_app_path(self) -> Path:
-        return settings.BASE_DIR / "server" / "apps" / self.app_label
+        return Path(settings.BASE_DIR) / "server" / "apps" / self.app_label
 
     def get_media_paths(self) -> Tuple[Path | None, Path | None]:
         if (self.media_src and self.use_media_args is not False) or self.use_media_args:
-            media_dst = Path(self.media_dst)
-            media_src = Path(self.media_src)
-            if not media_src.exists:
+            media_dst = Path(str(self.media_dst))
+            media_src = Path(str(self.media_src))
+            if not media_src.exists():
                 self.stdout.write(self.style.ERROR(f"'media_src' directory '{media_src}' does not exist."))
                 sys.exit(1)
             return media_src, media_dst
@@ -350,5 +361,9 @@ class CRUDCommand(BaseCommand):
         if self.media_src:
             self.media_src = Path(self.media_src)
         if self.media_dst:
+            self.media_dst = Path(self.media_dst)
+        if self.media_src is not None:
+            self.media_src = Path(self.media_src)
+        if self.media_dst is not None:
             self.media_dst = Path(self.media_dst)
         return self.media_src, self.media_dst

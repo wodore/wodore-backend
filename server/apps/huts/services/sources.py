@@ -12,7 +12,7 @@ from django.core.exceptions import ObjectDoesNotExist
 
 # from sqlmodel.ext.asyncio.session import AsyncSession
 # from sqlalchemy.orm import selectinload
-from server.apps.huts.models import HutSource, ReviewStatusChoices
+from server.apps.huts.models import HutSource
 from server.apps.huts.schemas.status import CreateOrUpdateStatus
 
 if __name__ == "__main__":  # only for testing
@@ -109,7 +109,7 @@ class HutSourceService:
     def create(
         self,
         hut_source: HutSource,
-        new_review_status: ReviewStatusChoices = ReviewStatusChoices.new
+        new_review_status: HutSource.ReviewStatusChoices = HutSource.ReviewStatusChoices.new
         # commit: bool = True,
         # refresh: bool = True,
         # update_existing: bool = False, overwrite_existing_fields: bool = False,
@@ -141,18 +141,18 @@ class HutSourceService:
                     .replace("]['", "].")
                     .replace("] ", "]' ")
                 )
-                if other_hut_src.review_status == ReviewStatusChoices.review and other_hut_src.review_comment:
+                if other_hut_src.review_status == HutSource.ReviewStatusChoices.review and other_hut_src.review_comment:
                     diff_comment += f"\n\nComments from version {other_hut_src.version}: {other_hut_src.review_comment}"
                 if len(diff_comment) >= 3000:
                     diff_comment = "alot changed, have a look ..."
                 hut_source.review_comment = diff_comment
-                hut_source.review_status = ReviewStatusChoices.review
+                hut_source.review_status = HutSource.ReviewStatusChoices.review
                 if other_hut_src is not None:
                     hut_source.previous_object = other_hut_src
                 hut_source.version = other_hut_src.version + 1
                 hut_source.save()
                 # self.session.add(hut_source)
-                other_hut_src.review_status = ReviewStatusChoices.old
+                other_hut_src.review_status = HutSource.ReviewStatusChoices.old
                 other_hut_src.is_current = False
                 other_hut_src.save()
                 status = CreateOrUpdateStatus.updated

@@ -33,7 +33,7 @@ class HutSource(TimeStampedModel):
     version = models.PositiveSmallIntegerField(default=0, verbose_name=_("Version"))
     name = models.CharField(blank=False, max_length=100, verbose_name=_("Name"), help_text=_("Name of the object"))
     organization = models.ForeignKey(Organization, on_delete=models.RESTRICT)
-    point = models.PointField(blank=True, default=None, verbose_name=_("Location"))
+    location = models.PointField(blank=True, default=None, verbose_name=_("Location"))
     is_active = models.BooleanField(
         default=True,
         db_index=True,
@@ -50,6 +50,12 @@ class HutSource(TimeStampedModel):
     review_comment = models.CharField(blank=True, default="", verbose_name=_("Review comment"), max_length=2000)
     source_data = models.JSONField(
         verbose_name=_("Source data as JSON"), help_text=_("Data from the source model."), blank=True, default=dict
+    )
+    source_properties = models.JSONField(
+        verbose_name=_("Source properties as JSON"),
+        help_text=_("Additional properties from the source model."),
+        blank=True,
+        default=dict,
     )
     previous_object = models.ForeignKey(
         "self",

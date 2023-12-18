@@ -8,11 +8,28 @@ For the full list of settings and their config, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
+import typing as t
 from typing import Dict, List, Tuple, Union
+
+from hut_services import BaseService, OsmService, RefugesInfoService
+from pydantic import BaseModel
 
 from django.utils.translation import gettext_lazy as _
 
 from server.settings.components import BASE_DIR, config
+
+try:
+    from hut_services_private import PRIVATE_SERVICES
+except ImportError:
+    PRIVATE_SERVICES = {}
+
+SERVICES: dict[str, t.Type[BaseService[BaseModel]]] = {
+    "osm": OsmService,  # type: ignore[dict-item]
+    "refuges": RefugesInfoService,  # type: ignore[dict-item]
+}
+
+if PRIVATE_SERVICES:
+    SERVICES.update(PRIVATE_SERVICES)  # type: ignore pyright
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
@@ -40,6 +57,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "jsonsuit.apps.JSONSuitConfig",  # https://github.com/tooreht/django-jsonsuit
     "django_countries",
     "computedfields",  # https://github.com/netzkolchose/django-computedfields
+    "django_extensions",  # https://django-extensions.readthedocs.io/
     # Default django apps:
     "django.contrib.auth",
     "django.contrib.contenttypes",

@@ -2,10 +2,14 @@ import textwrap
 from typing import ClassVar
 
 from django.contrib import admin
+from django.db.models.functions import Lower
+from django.http import HttpRequest
+from django.shortcuts import redirect
+from django.urls import reverse_lazy
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
-from unfold.decorators import display
+from unfold.decorators import action, display
 
 from server.apps.manager.admin import ModelAdmin
 from server.apps.translations.forms import required_i18n_fields_form_factory
@@ -37,8 +41,19 @@ class HutsAdmin(ModelAdmin):
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
     # list_select_related = ("organizations", "organizations__details")
     # list_select_related = ["organizations__source"]
-    list_display = ("symbol_img", "title", "location", "elevation", "type", "logo_orgs", "is_active", "review_tag")
+    list_display = (
+        "symbol_img",
+        "title",
+        "location",
+        "elevation",
+        "type",
+        "logo_orgs",
+        "is_active",
+        "is_public",
+        "review_tag",
+    )
     list_display_links = ("symbol_img", "title")
+    list_filter = ("is_active", "is_public", "type", "organizations")
     fieldsets = HutAdminFieldsets
     autocomplete_fields = ("owner",)
     readonly_fields = (
@@ -72,7 +87,7 @@ class HutsAdmin(ModelAdmin):
     def review_tag(self, obj):
         return obj.review_status
 
-    @display(header=True)
+    @display(header=True, ordering=Lower("name"))
     def title(self, obj):
         if obj.owner:
             owner = textwrap.shorten(obj.owner.name, width=30, placeholder="...")
@@ -89,14 +104,57 @@ class HutsAdmin(ModelAdmin):
 
     @display(description=_("Organizations"))
     def logo_orgs(self, obj):  # new
-        # orgs = [o for o in obj.organizations.all()]
-        # imgs = [
-        #    f'<a href={o.link} target="blank"><img class="inline pr-2" src="{o.logo}" width="28" alt="{o.name}"/></a>'
-        #    for o in obj.view_organizations()
-        # ]
         imgs = [
             f'<a href={o.source.get(hut=obj.id).link_i18n} target="blank"><img class="inline pr-2" src="{o.logo.url}" width="28" alt="{o.name_i18n}"/></a>'
             for o in obj.organizations.all()
         ]
 
         return mark_safe(f'<span>{"".join(imgs)}</span>')
+
+    ## ACTIONS
+    actions_row = (
+        "action_row_set_review_to_done",
+        "action_row_set_review_to_review",
+        "action_row_set_inactive",
+        "action_row_delete",
+    )
+    actions_detail = ("action_detail_prev", "action_detail_next")
+
+    ## TODO: check if form is saved, save form and show next (or tell them to save)
+    @action(description=_("Next"), permissions=["view"])
+    def action_detail_next(self, request: HttpRequest, object_id: int):  # obj: Hut):
+        obj = Hut.objects.get(id=object_id)
+        return redirect(reverse_lazy("admin:huts_hut_change", args=(obj.next() or object_id,)))
+
+    @action(description=_("Previous"), permissions=["view"])
+    def action_detail_prev(self, request: HttpRequest, object_id: int):  # obj: Hut):
+        obj = Hut.objects.get(id=object_id)
+        return redirect(reverse_lazy("admin:huts_hut_change", args=(obj.prev() or object_id,)))
+
+    @action(description=_(mark_safe("set to <b>done</b>")), permissions=["change"])
+    def action_row_set_review_to_done(self, request: HttpRequest, object_id: int):  # obj: Hut):
+        obj = Hut.objects.get(id=object_id)
+        obj.review_status = Hut.ReviewStatusChoices.done
+        obj.save()
+        return redirect(request.META.get("HTTP_REFERER"))
+
+    @action(description=_(mark_safe("set to <b>review</b>")), permissions=["change"])
+    def action_row_set_review_to_review(self, request: HttpRequest, object_id: int):  # obj: Hut):
+        obj = Hut.objects.get(id=object_id)
+        obj.review_status = Hut.ReviewStatusChoices.review
+        obj.save()
+        return redirect(request.META.get("HTTP_REFERER"))
+
+    @action(description=_(mark_safe("set to <b>reject</b> (inactive)")), permissions=["delete"])
+    def action_row_set_inactive(self, request: HttpRequest, object_id: int):  # obj: Hut):
+        obj = Hut.objects.get(id=object_id)
+        obj.review_status = Hut.ReviewStatusChoices.reject
+        obj.is_active = False
+        obj.save()
+        return redirect(request.META.get("HTTP_REFERER"))
+
+    @action(description=_(mark_safe("<b>delete</b> entry")), permissions=["delete"])
+    def action_row_delete(self, request: HttpRequest, object_id: int):  # obj: Hut):
+        obj = Hut.objects.get(id=object_id)
+        obj.delete()
+        return redirect(request.META.get("HTTP_REFERER"))
