@@ -11,7 +11,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 import typing as t
 from typing import Dict, List, Tuple, Union
 
-from hut_services import BaseService, OsmService, RefugesInfoService
+from hut_services import SERVICES, BaseService, OsmService, RefugesInfoService
 from pydantic import BaseModel
 
 from django.utils.translation import gettext_lazy as _
@@ -22,11 +22,6 @@ try:
     from hut_services_private import PRIVATE_SERVICES
 except ImportError:
     PRIVATE_SERVICES = {}
-
-SERVICES: dict[str, t.Type[BaseService[BaseModel]]] = {
-    "osm": OsmService,  # type: ignore[dict-item]
-    "refuges": RefugesInfoService,  # type: ignore[dict-item]
-}
 
 if PRIVATE_SERVICES:
     SERVICES.update(PRIVATE_SERVICES)  # type: ignore pyright

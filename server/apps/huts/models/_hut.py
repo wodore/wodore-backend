@@ -1,4 +1,5 @@
 from easydict import EasyDict
+from hut_services import HutSchema, HutSourceSchema
 from jinja2 import Environment
 
 from django_countries.fields import CountryField
@@ -7,7 +8,9 @@ from modeltrans.fields import TranslationField
 
 from django.conf import settings
 from django.contrib.gis.db import models
+from django.contrib.gis.geos import Point as dbPoint
 from django.contrib.postgres.indexes import GinIndex
+from django.db import DataError, IntegrityError, transaction
 from django.db.models import F, Value
 from django.db.models.functions import Concat, Lower
 from django.utils.text import slugify
@@ -16,10 +19,11 @@ from django.utils.translation import gettext_lazy as _
 
 from server.apps.contacts.models import Contact
 from server.apps.organizations.models import Organization
+from server.apps.owners.models import Owner
 
-# from server.apps.owners.models import Owner
 from ..managers import HutManager
 from ._associations import HutContactAssociation, HutOrganizationAssociation
+from ._hut_source import HutSource
 from ._hut_type import HutType
 
 
@@ -52,7 +56,10 @@ class Hut(TimeStampedModel):
         default=False, db_index=True, verbose_name=_("Public"), help_text=_("Only shown to editors if not public")
     )
     name = models.CharField(max_length=100, verbose_name=_("Name"))
+    name_i18n: str  # for typing
     description = models.TextField(max_length=2000, verbose_name="Description")
+    description_i18n: str  # for typing
+
     owner = models.ForeignKey(
         "owners.Owner",
         null=True,
@@ -73,6 +80,8 @@ class Hut(TimeStampedModel):
         verbose_name=_("Note"),
         help_text=_("Public note, might be some important information"),
     )  # TODO: maybe notes with mutlipe notes and category
+    note_i18n: str  # for typing
+
     photo = models.CharField(blank=True, default="", max_length=200, verbose_name=_("Hut photo"))
     country = CountryField()
     point = models.PointField(blank=False, verbose_name="Location")
@@ -152,6 +161,84 @@ class Hut(TimeStampedModel):
             .last()
         )
         return prev_id_dict.get("id") if prev_id_dict else last_id
+
+    @classmethod
+    def create_or_update(
+        cls, hut: HutSchema | None = None, by_source: HutSource | None = None, init: bool = False
+    ) -> "Hut | None":
+        ## create HutSchema from source
+        if hut is None and by_source is not None:
+            orgs = by_source.organization.slug
+            service = settings.SERVICES.get(orgs)
+            hut = service.convert(by_source)
+        if hut is None:
+            msg = "Either 'hut' or 'by_source' is required."
+            raise UserWarning(msg)
+
+        ## Get hut types -> TODO: cache this function
+        default_type, _created = HutType.objects.get_or_create(slug="unknown")
+        hut_types = {ht.slug: ht for ht in HutType.objects.all()}
+
+        ## Translations -> Better solution?
+        i18n_fields = {}
+        for field in ["name", "description", "notes"]:
+            model = getattr(hut, field)
+            if not model:
+                continue
+            if field == "notes":
+                model = model[0]
+            for code, value in model.model_dump(by_alias=True).items():
+                out_field = "note" if field == "notes" else field
+                i18n_fields[f"{out_field}_{code}"] = value
+        db_hut = Hut(
+            point=dbPoint(hut.location.lon_lat),
+            elevation=hut.location.ele,
+            capacity=hut.capacity.opened,
+            url=hut.url,
+            is_active=hut.is_active,
+            is_public=hut.is_public,
+            country=hut.country,
+            type=hut_types.get(str(hut.hut_type.value), default_type),
+            review_status=Hut.ReviewStatusChoices.done if init else Hut.ReviewStatusChoices.review,
+            **i18n_fields,
+        )
+        ## Owner stuff -> add to Owner
+        src_hut_owner = hut.owner
+        owner = None
+        if src_hut_owner:
+            owner_slug = slugify(src_hut_owner)[:50]
+            try:
+                owner = Owner.objects.get(slug=owner_slug)
+            except Owner.DoesNotExist:
+                note = ""
+                if len(src_hut_owner) > 60:
+                    note = src_hut_owner
+                    src_hut_owner = src_hut_owner[:60]
+                owner = Owner(slug=owner_slug, name=src_hut_owner, note_de=note)
+                ## TODO: Handle outside
+                try:
+                    owner.save()
+                except DataError as e:
+                    _err_msg = str(e).split("\n")[0]
+                    # click.secho(f" {'(owner: '+owner_slug+')':<20} E: {err_msg}", dim=True)
+                owner.refresh_from_db()
+            db_hut.owner = owner
+
+        # write to DB as one transaction
+        with transaction.atomic():
+            db_hut.save()
+            if by_source is not None:
+                new_org = HutOrganizationAssociation(
+                    hut=db_hut,
+                    organization=by_source.organization,
+                    props=by_source.source_properties,
+                    source_id=by_source.source_id,
+                )
+                new_org.save()
+                db_hut.refresh_from_db()
+                by_source.hut = db_hut
+                by_source.save()
+        return db_hut
 
     def organizations_query(self, organization: str | Organization | None = None, annotate=True):
         if isinstance(organization, Organization):

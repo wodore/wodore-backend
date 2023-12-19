@@ -4,7 +4,6 @@ from django.contrib.gis.db import models
 from django.utils.translation import gettext_lazy as _
 
 from server.apps.contacts.models import Contact
-from server.apps.huts.models import Hut
 from server.core.managers import BaseMutlilingualManager
 
 
@@ -26,10 +25,3 @@ class OwnerContactAssociation(TimeStampedModel):
         constraints = (
             models.UniqueConstraint(name="%(app_label)s_%(class)s_unique_relationships", fields=["contact", "owner"]),
         )
-
-
-class OwnerHutProxy(Hut):
-    class Meta:
-        proxy = True
-        ordering = ("owner__name_i18n",)
-        verbose_name = _("Hut Association")

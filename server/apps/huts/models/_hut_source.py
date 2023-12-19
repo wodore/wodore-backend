@@ -1,3 +1,5 @@
+import typing as t
+
 from model_utils.models import TimeStampedModel
 
 from django.contrib.gis.db import models
@@ -6,6 +8,9 @@ from django.utils.translation import gettext_lazy as _
 
 from server.apps.organizations.models import Organization
 from server.core.managers import BaseManager
+
+if t.TYPE_CHECKING:
+    from ._hut import Hut
 
 
 class _ReviewStatusChoices(models.TextChoices):
@@ -65,7 +70,9 @@ class HutSource(TimeStampedModel):
         verbose_name=_("Previous Entry"),
         help_text=_("Id to the previous object."),
     )
-    hut = models.ForeignKey("Hut", null=True, related_name="sources", on_delete=models.SET_NULL, verbose_name=_("Hut"))
+    hut: "Hut" = models.ForeignKey(
+        "Hut", null=True, related_name="sources", on_delete=models.SET_NULL, verbose_name=_("Hut")
+    )
 
     class Meta:
         verbose_name = "Hut Source"

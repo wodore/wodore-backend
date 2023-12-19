@@ -11,7 +11,8 @@ from server.apps.huts.admin import HutSourceViewInline
 from server.apps.huts.models import Hut
 from server.apps.manager.admin import ModelAdmin
 
-from ..models._associations import OwnerContactAssociation, OwnerHutProxy
+from ..models._associations import OwnerContactAssociation
+from ..models._owner_hut_proxy import OwnerHutProxy
 
 
 ## ADMIN

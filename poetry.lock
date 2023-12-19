@@ -1813,7 +1813,7 @@ xmltodict = "^0.13.0"
 type = "git"
 url = "https://github.com/wodore/hut-services.git"
 reference = "main"
-resolved_reference = "8cb99fd2e1a09f1fd73170a7f55c6e3a32eacdbd"
+resolved_reference = "d0bf396ea23114b947822fb3d3597bb9af179ff9"
 
 [[package]]
 name = "hut-services-private"
@@ -1833,7 +1833,7 @@ pydantic = "^2.5.2"
 type = "git"
 url = "ssh://git@github.com/wodore/hut-services-private.git"
 reference = "main"
-resolved_reference = "672b93ac73eb7139d4ce66a13f69d95649e64cde"
+resolved_reference = "3178ca83d929460a90ce4cd10ac6d920e99e2d2e"
 
 [[package]]
 name = "hypothesis"
@@ -3229,13 +3229,13 @@ files = [
 
 [[package]]
 name = "python-fsutil"
-version = "0.12.0"
+version = "0.13.0"
 description = "high-level file-system operations for lazy devs."
 optional = false
 python-versions = "*"
 files = [
-    {file = "python-fsutil-0.12.0.tar.gz", hash = "sha256:569366e9ab651438eb5cc7111ae9d173295eff63fa9f5e745d3976345a8d913b"},
-    {file = "python_fsutil-0.12.0-py3-none-any.whl", hash = "sha256:06064971f73a982a9abb52d1407f35dbca2d3d03c2e16ecc49409293b7e654db"},
+    {file = "python-fsutil-0.13.0.tar.gz", hash = "sha256:f40d37ba29524b1cef77bb206f1541d2d509ecf03a586709b8c2ec453804ab2e"},
+    {file = "python_fsutil-0.13.0-py3-none-any.whl", hash = "sha256:8cc999d9594da083eb59e6b4d10835ee331bde3658de48bda3202e5298a3ee59"},
 ]
 
 [[package]]
@@ -3273,13 +3273,13 @@ dev = ["coverage[toml]", "coveralls (>=3.3,<4.0)", "ruff", "twine"]
 
 [[package]]
 name = "python-semantic-release"
-version = "8.5.1"
+version = "8.5.2"
 description = "Automatic Semantic Versioning for Python projects"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "python-semantic-release-8.5.1.tar.gz", hash = "sha256:43789d3c8df6f5b959ae69350c3d44e70a51228dc56875b09111874037f2bfd8"},
-    {file = "python_semantic_release-8.5.1-py3-none-any.whl", hash = "sha256:eb96145e01a552399c13396e645de1e28c69480d7b275e72cda9caa09982f83a"},
+    {file = "python-semantic-release-8.5.2.tar.gz", hash = "sha256:ca8a9803415cd922baa0348020d683fde8e95295171c970a0296b4a9f8b349f6"},
+    {file = "python_semantic_release-8.5.2-py3-none-any.whl", hash = "sha256:49ab3d1f7be8cce57beebe46313370f68300bcb5b102cfb098bd019e9354d981"},
 ]
 
 [package.dependencies]
@@ -3296,7 +3296,7 @@ shellingham = ">=1.5.0.post1"
 tomlkit = ">=0.10,<1.0"
 
 [package.extras]
-dev = ["pre-commit", "ruff (==0.1.6)", "tox"]
+dev = ["pre-commit", "ruff (==0.1.8)", "tox"]
 docs = ["Sphinx (<=6.0.0)", "furo (>=2023.3.27)", "sphinx-autobuild (==2021.03.14)", "sphinxcontrib-apidoc (==0.3.0)"]
 mypy = ["mypy", "types-requests"]
 test = ["coverage[toml] (>=6,<8)", "pytest (>=7,<8)", "pytest-clarity (>=1.0.1)", "pytest-cov (>=4,<5)", "pytest-lazy-fixture (>=0.6.3,<0.7.0)", "pytest-mock (>=3,<4)", "pytest-pretty (>=1.2.0,<2)", "pytest-xdist (>=2,<4)", "requests-mock (>=1.10.0,<2)", "responses (==0.23.3)", "types-pytest-lazy-fixture (>=0.6.3.3)"]
