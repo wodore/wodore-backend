@@ -15,8 +15,8 @@ from asyncify import asyncify
 from easydict import EasyDict
 from rich import print as rprint
 
-from server.apps.huts.schemas.hut import HutSchema
-from server.apps.huts.schemas.hut_refuges_info import RefugesInfoFeatureCollection, HutRefugesInfo0Source
+from server.apps.huts.schemas.old.hut import HutSchema
+from server.apps.huts.schemas.old.hut_refuges_info import RefugesInfoFeatureCollection, HutRefugesInfo0Source
 
 # from server.apps.huts.schemas.point import Point
 

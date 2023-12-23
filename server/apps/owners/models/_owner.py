@@ -9,14 +9,15 @@ from django.utils.translation import gettext_lazy as _
 from server.apps.contacts.models import Contact
 from server.core.managers import BaseMutlilingualManager
 
+from ..managers import OwnerManager
 from ._associations import OwnerContactAssociation
 
 
 class Owner(TimeStampedModel):
     i18n = TranslationField(fields=("name", "note"))
-    objects = BaseMutlilingualManager()
+    objects = OwnerManager()
 
-    slug = models.SlugField(unique=True, db_index=True)
+    slug = models.SlugField(unique=True, db_index=True, blank=False)
     name = models.CharField(
         max_length=100,
         null=True,
@@ -24,8 +25,24 @@ class Owner(TimeStampedModel):
         verbose_name=_("Name"),
         help_text=_("For example 'SAC Bern', 'Naturschutzverein Hergiswil', ..."),
     )
+    name_i18n: str
     url = models.URLField(blank=True, default="", max_length=200, verbose_name=_("URL"))
-    note = models.TextField(blank=True, default="", max_length=500, verbose_name=_("Note"))
+    note = models.TextField(
+        blank=True,
+        default="",
+        max_length=2000,
+        verbose_name=_("Note"),
+        help_text=_("Public note to the owner (e.g. 'with the help of ....')"),
+    )
+    note_i18n: str
+    url = models.URLField(blank=True, default="", max_length=200, verbose_name=_("URL"))
+    comment = models.TextField(
+        blank=True,
+        default="",
+        max_length=2000,
+        verbose_name=_("Comment"),
+        help_text=_("Private comment to the owner, used for review."),
+    )
     contacts = models.ManyToManyField(
         Contact, blank=True, through=OwnerContactAssociation, related_name="owner", verbose_name=_("Contacts")
     )
@@ -37,3 +54,7 @@ class Owner(TimeStampedModel):
 
     def __str__(self) -> str:
         return self.name_i18n
+
+    @classmethod
+    def get_or_create(cls) -> "Owner":
+        super().get_or_create()

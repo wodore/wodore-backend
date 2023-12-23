@@ -1,8 +1,10 @@
 from typing import Union
 
+from ._hut import HutSchemaOptional
+
 # from ..ref import RefDatabase, RefCreate, HutRefLink, HutRefLinkBase
-from .hut_osm import HutOsm0Source
-from .hut_refuges_info import HutRefugesInfo0Source
+# from .old.hut_osm import HutOsm0Source
+# from .old.hut_refuges_info import HutRefugesInfo0Source
 
 # from .hut_gipfelbuch import HutGipfelbuch0Source, HutGipfelbuch0Convert
 # from .hut_osm import HutOsm0Source, HutOsm0Convert
@@ -10,5 +12,5 @@ from .hut_refuges_info import HutRefugesInfo0Source
 # from .hut_hrs import HutHrs0Source, HutHrs0Convert
 
 
-HutSourceTypes = Union[HutOsm0Source, HutRefugesInfo0Source]
+# HutSourceTypes = Union[HutOsm0Source, HutRefugesInfo0Source]
 # HutSourceTypes = Union[HutOsm0Source, HutSac0Source, HutGipfelbuch0Source, HutHrs0Source]

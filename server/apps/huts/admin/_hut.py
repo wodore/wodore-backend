@@ -1,8 +1,13 @@
 import textwrap
 from typing import ClassVar
 
+from django_stubs_ext import QuerySetAny
+
+from django.conf import settings
 from django.contrib import admin
-from django.db.models.functions import Lower
+from django.contrib.postgres.aggregates import JSONBAgg
+from django.db import models
+from django.db.models.functions import JSONObject, Lower
 from django.http import HttpRequest
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
@@ -11,14 +16,13 @@ from django.utils.translation import gettext_lazy as _
 
 from unfold.decorators import action, display
 
+from server.apps import organizations
 from server.apps.manager.admin import ModelAdmin
 from server.apps.translations.forms import required_i18n_fields_form_factory
 from server.core.utils import text_shorten_html
 
 from ..forms import HutAdminFieldsets
-from ..models import (
-    Hut,
-)
+from ..models import Hut, HutOrganizationAssociation
 from ._associations import (
     HutContactAssociationEditInline,
     HutOrganizationAssociationEditInline,
@@ -33,10 +37,7 @@ from ._hut_source import HutSourceViewInline
 @admin.register(Hut)
 class HutsAdmin(ModelAdmin):
     search_fields = ("name",)
-    list_select_related = (
-        "type",
-        "owner",
-    )
+    # list_select_related = ()  # ( "type", "owner")
     form = required_i18n_fields_form_factory("name")
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
     # list_select_related = ("organizations", "organizations__details")
@@ -44,7 +45,7 @@ class HutsAdmin(ModelAdmin):
     list_display = (
         "symbol_img",
         "title",
-        "location",
+        "location_coords",
         "elevation",
         "type",
         "logo_orgs",
@@ -63,7 +64,7 @@ class HutsAdmin(ModelAdmin):
         "created",
         "modified",
     )
-    list_per_page = 40
+    list_per_page = 50
 
     inlines = (
         HutContactAssociationEditInline,
@@ -72,17 +73,25 @@ class HutsAdmin(ModelAdmin):
         HutSourceViewInline,
     )
 
-    ## TODO: does not work yet
-    # def get_queryset(self, request):
-    #    qs = super().get_queryset(request)
-    #    return qs.prefetch_related(
-    #        models.Prefetch("organizations", queryset=HutOrganizationAssociation.objects.all(), to_attr="source")
-    #    )
+    def get_queryset(self, request: HttpRequest) -> QuerySetAny:
+        qs = super().get_queryset(request)
+        # prefetch_related("orgs_source", "orgs_source__organization").
+        return qs.select_related("type", "owner").annotate(
+            orgs=JSONBAgg(
+                JSONObject(
+                    logo="organizations__logo", name_i18n="organizations__name_i18n", link_i18n="orgs_source__link"
+                )
+            ),
+        )
 
     @display(
         description=_("Status"),
         ordering="status",
-        label={Hut.ReviewStatusChoices.review: "info", Hut.ReviewStatusChoices.done: "success"},
+        label={
+            Hut.ReviewStatusChoices.review: "info",
+            Hut.ReviewStatusChoices.done: "success",
+            Hut.ReviewStatusChoices.research: "warning",
+        },
     )
     def review_tag(self, obj):
         return obj.review_status
@@ -95,20 +104,23 @@ class HutsAdmin(ModelAdmin):
             owner = "-"
         return (obj.name_i18n, owner)  # self.icon_thumb(obj.type.icon_simple.url))
 
-    def location(self, obj):
-        return f"{obj.point.y:.4f}, {obj.point.x:.4f}"
+    def location_coords(self, obj):
+        return f"{obj.location.y:.4f}, {obj.location.x:.4f}"
 
     @display(description="")
     def symbol_img(self, obj):  # new
         return mark_safe(f'<img src = "{obj.type.symbol.url}" width = "38"/>')
 
     @display(description=_("Organizations"))
-    def logo_orgs(self, obj):  # new
+    def logo_orgs(self, obj: Hut) -> str:  # new
+        ic(obj.orgs)
+        SRC = settings.MEDIA_URL
         imgs = [
-            f'<a href={o.source.get(hut=obj.id).link_i18n} target="blank"><img class="inline pr-2" src="{o.logo.url}" width="28" alt="{o.name_i18n}"/></a>'
-            for o in obj.organizations.all()
+            f'<a href={o["link_i18n"]} target="blank"><img class="inline pr-2" src="{SRC}/{o["logo"]}" width="28" alt="{o["name_i18n"]}"/></a>'
+            for o in obj.orgs
         ]
 
+        # return ", ".join([str(o.organization.name + o.link_i18n) for o in obj.orgs.all()])
         return mark_safe(f'<span>{"".join(imgs)}</span>')
 
     ## ACTIONS

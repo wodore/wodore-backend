@@ -53,7 +53,7 @@ HutAdminFieldsets = [
             # "classes": ["collapse"],
             "fields": [
                 ("elevation", "country"),
-                "point",
+                "location",
             ],
         },
     ),

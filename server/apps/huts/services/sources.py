@@ -13,7 +13,7 @@ from django.core.exceptions import ObjectDoesNotExist
 # from sqlmodel.ext.asyncio.session import AsyncSession
 # from sqlalchemy.orm import selectinload
 from server.apps.huts.models import HutSource
-from server.apps.huts.schemas.status import CreateOrUpdateStatus
+from server.apps.huts.schemas.old.status import CreateOrUpdateStatus
 
 if __name__ == "__main__":  # only for testing
     root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))

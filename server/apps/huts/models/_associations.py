@@ -33,8 +33,10 @@ class HutContactAssociation(TimeStampedModel):
 
 
 class HutOrganizationAssociation(TimeStampedModel, ComputedFieldsModel):
+    # objects = BaseMutlilingualManager()
+
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="source", db_index=True)
-    hut = models.ForeignKey("Hut", on_delete=models.CASCADE, db_index=True)
+    hut = models.ForeignKey("Hut", on_delete=models.CASCADE, db_index=True, related_name="orgs_source")
     props = models.JSONField(help_text=_("Organization dependend properties."), blank=True, default=dict)
     source_id = models.CharField(max_length=40, blank=True, null=True, default="", help_text="Source id")
     # link -> see below (computed)

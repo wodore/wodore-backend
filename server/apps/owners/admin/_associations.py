@@ -22,6 +22,7 @@ class OwnerContactAssociationsAdmin(ModelAdmin):
     list_display = ("owner", "contact", "order", "is_active", "is_public")  # , "contact__is_active")
     list_filter = ("contact__is_active", "contact__is_public")  # , "owner")
     fields = ("owner", "contact", "order")
+    list_select_related = ("contact",)
 
     @display(boolean=True)
     def is_active(self, obj):
@@ -49,6 +50,7 @@ class OwnerHutAssociationsAdmin(ModelAdmin):
     autocomplete_fields = ("owner",)
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
     inlines = (HutSourceViewInline,)
+    list_select_related = ("type",)
 
     @display(description=_("Slug"))
     def slug_small(self, obj):  # new

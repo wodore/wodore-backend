@@ -7,14 +7,14 @@ from ninja.orm import create_schema
 from pydantic import TypeAdapter
 from pydantic.fields import FieldInfo
 
-S_co = TypeVar("S_co", bound=Schema)  # , covariant=True)
+TSchema = TypeVar("S_co", bound=Schema)  # , covariant=True)
 
 # this does not work
 # FieldsParam = Annotated[Fields[S_co], Query()]
 # tried https://docs.pydantic.dev/latest/concepts/types/#generics (did not work)
 
 
-class FieldsParam(Schema, Generic[S_co]):
+class FieldsParam(Schema, Generic[TSchema]):
     """Specify which fields to return when query models."""
 
     include: Any = Query(
@@ -53,7 +53,7 @@ class FieldsParam(Schema, Generic[S_co]):
         else:
             return {}
 
-    def _check_fields(self, fields: List[str]):
+    def _check_fields(self, fields: list[str]):
         """Check if all fields names are allowed, otherwise send error."""
         fields_set = set(fields)
         available_set = set(self.available_field_names)
@@ -79,13 +79,17 @@ class FieldsParam(Schema, Generic[S_co]):
         self._check_fields(fields_list)
         return fields_list
 
-    def get_include(self) -> List[str]:
+    def get_include(self) -> list[str]:
         include = self.get_valid_fields(self.include)
         exclude = self.get_valid_fields(self.exclude)
         if not include and exclude:
             include = self.available_field_names
         else:
             include += self.required_field_names
+        ## add i18n use to get translations
+        if self._db_model and hasattr(self._db_model, "i18n"):
+            i18n_fields = list(self._db_model.i18n.field.fields)
+            include += [f"{i}_i18n" for i in include if i in i18n_fields]
         return list(set(include) - set(exclude))
 
     def get_schema(self) -> Type[Schema] | None:
@@ -101,9 +105,11 @@ class FieldsParam(Schema, Generic[S_co]):
             objs = TypeAdapter(self.get_schema())  # .validate_python(list(Organization.objects.all()))
         return objs
 
-    def validate(self, _obj: Any | None = None, validator: Literal["python", "json", "strings"] = "python"):
+    def validate(
+        self, _obj: Any | None = None, validator: Literal["python", "json", "strings"] = "python"
+    ) -> list[TSchema]:
         if isinstance(_obj, list):
-            return getattr(self.type_adapter(List), f"validate_{validator}")(_obj)
+            return getattr(self.type_adapter(list), f"validate_{validator}")(_obj)
         else:
             return getattr(self.type_adapter(), f"validate_{validator}")(_obj)
 

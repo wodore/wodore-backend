@@ -18,7 +18,7 @@ if __name__ == "__main__":  # only for testing
     install(show_locals=False)
 
 # from app.models.hut import Hut
-from server.apps.huts.schemas.hut_osm import HutOsm0Source
+from server.apps.huts.schemas.old.hut_osm import HutOsm0Source
 
 
 class OsmService:

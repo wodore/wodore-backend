@@ -1,3 +1,7 @@
+# old files
+old/
+*.old
+
 # Static folders
 /media/*
 /static/*

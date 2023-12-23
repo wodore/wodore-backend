@@ -1,5 +1,8 @@
+import typing as t
+from sysconfig import is_python_build
+
 from easydict import EasyDict
-from hut_services import HutSchema, HutSourceSchema
+from hut_services import BaseService, HutSchema, HutSourceSchema
 from jinja2 import Environment
 
 from django_countries.fields import CountryField
@@ -8,16 +11,18 @@ from modeltrans.fields import TranslationField
 
 from django.conf import settings
 from django.contrib.gis.db import models
+from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point as dbPoint
+from django.contrib.gis.measure import D
 from django.contrib.postgres.indexes import GinIndex
-from django.db import DataError, IntegrityError, transaction
+from django.db import transaction
 from django.db.models import F, Value
 from django.db.models.functions import Concat, Lower
 from django.utils.text import slugify
 from django.utils.translation import get_language
 from django.utils.translation import gettext_lazy as _
 
-from server.apps.contacts.models import Contact
+from server.apps.contacts.models import Contact, ContactFunction
 from server.apps.organizations.models import Organization
 from server.apps.owners.models import Owner
 
@@ -31,6 +36,7 @@ class _ReviewStatusChoices(models.TextChoices):
     new = "new", _("new")
     review = "review", _("review")
     done = "done", _("done")
+    research = "research", _("research")
     reject = "reject", _("reject")
 
 
@@ -48,7 +54,7 @@ class Hut(TimeStampedModel):
         default=ReviewStatusChoices.review,
         verbose_name=_("Review status"),
     )
-    review_comment = models.TextField(blank=True, default="", max_length=2000, verbose_name=_("Review comment"))
+    review_comment = models.TextField(blank=True, default="", max_length=10000, verbose_name=_("Review comment"))
     is_active = models.BooleanField(
         default=True, db_index=True, verbose_name=_("Active"), help_text=_("Only shown to admin if not active")
     )
@@ -57,7 +63,7 @@ class Hut(TimeStampedModel):
     )
     name = models.CharField(max_length=100, verbose_name=_("Name"))
     name_i18n: str  # for typing
-    description = models.TextField(max_length=2000, verbose_name="Description")
+    description = models.TextField(max_length=10000, verbose_name="Description")
     description_i18n: str  # for typing
 
     owner = models.ForeignKey(
@@ -84,7 +90,7 @@ class Hut(TimeStampedModel):
 
     photo = models.CharField(blank=True, default="", max_length=200, verbose_name=_("Hut photo"))
     country = CountryField()
-    point = models.PointField(blank=False, verbose_name="Location")
+    location = models.PointField(blank=False, verbose_name="Location")
     elevation = models.DecimalField(null=True, blank=True, max_digits=5, decimal_places=1, verbose_name=_("Elevation"))
     capacity = models.PositiveSmallIntegerField(blank=True, null=True, verbose_name=_("Capacity"))
     capacity_shelter = models.PositiveSmallIntegerField(
@@ -163,26 +169,52 @@ class Hut(TimeStampedModel):
         return prev_id_dict.get("id") if prev_id_dict else last_id
 
     @classmethod
-    def create_or_update(
-        cls, hut: HutSchema | None = None, by_source: HutSource | None = None, init: bool = False
-    ) -> "Hut | None":
-        ## create HutSchema from source
-        if hut is None and by_source is not None:
-            orgs = by_source.organization.slug
-            service = settings.SERVICES.get(orgs)
-            hut = service.convert(by_source)
-        if hut is None:
-            msg = "Either 'hut' or 'by_source' is required."
-            raise UserWarning(msg)
+    def _convert_source(cls, hut_source: HutSource) -> HutSchema:
+        orgs = hut_source.organization.slug
+        service: BaseService = settings.SERVICES.get(orgs)
+        if service is None:
+            err_msg = f"No service for organization '{orgs}' found."
+            raise NotImplementedError(err_msg)
+        return service.convert(hut_source)
 
-        ## Get hut types -> TODO: cache this function
-        default_type, _created = HutType.objects.get_or_create(slug="unknown")
-        hut_types = {ht.slug: ht for ht in HutType.objects.all()}
+    def add_organization(self, hut_source, add_to_source=True):
+        new_org = HutOrganizationAssociation(
+            hut=self,
+            organization=hut_source.organization,
+            props=hut_source.source_properties,
+            source_id=hut_source.source_id,
+        )
+        new_org.save()
+        if add_to_source:
+            hut_source.hut = self
+            hut_source.save()
+
+    @classmethod
+    def create_from_source(
+        cls, hut_source: HutSource, review: bool = True, _review_status: "Hut.ReviewStatusChoices | None" = None
+    ) -> "Hut":
+        hut = cls._convert_source(hut_source)
+        return cls.create_from_schema(
+            hut_schema=hut, review=review, _hut_source=hut_source, _review_status=_review_status
+        )
+
+    @classmethod
+    def create_from_schema(
+        cls,
+        hut_schema: HutSchema,
+        review: bool = True,
+        _hut_source: HutSource | None = None,
+        _review_status: "Hut.ReviewStatusChoices | None" = None,
+    ) -> "Hut":
+        if _review_status is not None:
+            review_status = _review_status
+        else:
+            review_status = Hut.ReviewStatusChoices.review if review else Hut.ReviewStatusChoices.done
 
         ## Translations -> Better solution?
         i18n_fields = {}
         for field in ["name", "description", "notes"]:
-            model = getattr(hut, field)
+            model = getattr(hut_schema, field)
             if not model:
                 continue
             if field == "notes":
@@ -190,55 +222,245 @@ class Hut(TimeStampedModel):
             for code, value in model.model_dump(by_alias=True).items():
                 out_field = "note" if field == "notes" else field
                 i18n_fields[f"{out_field}_{code}"] = value
-        db_hut = Hut(
-            point=dbPoint(hut.location.lon_lat),
-            elevation=hut.location.ele,
-            capacity=hut.capacity.opened,
-            url=hut.url,
-            is_active=hut.is_active,
-            is_public=hut.is_public,
-            country=hut.country,
-            type=hut_types.get(str(hut.hut_type.value), default_type),
-            review_status=Hut.ReviewStatusChoices.done if init else Hut.ReviewStatusChoices.review,
+        hut_db = Hut(
+            location=dbPoint(hut_schema.location.lon_lat),
+            elevation=hut_schema.location.ele,
+            capacity=hut_schema.capacity.opened,
+            url=hut_schema.url,
+            is_active=hut_schema.is_active,
+            is_public=hut_schema.is_public,
+            country=hut_schema.country,
+            type=HutType.values[str(hut_schema.hut_type.value)],
+            review_status=review_status,
             **i18n_fields,
         )
         ## Owner stuff -> add to Owner
-        src_hut_owner = hut.owner
+        src_hut_owner = hut_schema.owner
         owner = None
         if src_hut_owner:
-            owner_slug = slugify(src_hut_owner)[:50]
-            try:
-                owner = Owner.objects.get(slug=owner_slug)
-            except Owner.DoesNotExist:
-                note = ""
-                if len(src_hut_owner) > 60:
-                    note = src_hut_owner
-                    src_hut_owner = src_hut_owner[:60]
-                owner = Owner(slug=owner_slug, name=src_hut_owner, note_de=note)
-                ## TODO: Handle outside
-                try:
-                    owner.save()
-                except DataError as e:
-                    _err_msg = str(e).split("\n")[0]
-                    # click.secho(f" {'(owner: '+owner_slug+')':<20} E: {err_msg}", dim=True)
-                owner.refresh_from_db()
-            db_hut.owner = owner
+            # try:
+            i18n_fields = {}
+            defaults = src_hut_owner.model_dump(by_alias=True)
+            for field in ["note"]:
+                model = getattr(src_hut_owner, field)
+                if not model:
+                    continue
+                for code, value in model.model_dump(by_alias=True).items():
+                    i18n_fields[f"{field}_{code}"] = value
+                if field in defaults:
+                    del defaults["note"]
+            if "contacts" in defaults:
+                del defaults["contacts"]
+            if "slug" in defaults:
+                del defaults["slug"]
+            defaults.update(i18n_fields)
+            owner, _created = Owner.objects.get_or_create(slug=src_hut_owner.slug, defaults=defaults)
+            hut_db.owner = owner
+
+        # Contact Stuff
+        # TODO check if numbers or email already exist -> update
+        src_hut_contacts = hut_schema.contacts
+        contacts: list[Contact] = []
+        for c in src_hut_contacts:
+            name = c.function.replace("_", " ").replace("-", " ") if c.function else None
+            priority = 100 if c.function == "private_contact" else 10
+            function = (
+                ContactFunction.objects.get_or_create(defaults={"name": name, "priority": priority}, slug=c.function)[0]
+                if c.function
+                else None
+            )
+            contact = Contact(
+                name=c.name,
+                email=c.email,
+                phone=c.phone,
+                mobile=c.mobile,
+                function=function,
+                url=c.url,
+                address=c.address,
+                is_active=c.is_active,
+                is_public=c.is_public,
+            )
+            contacts.append(contact)
+            # Contact is saved later in a atomic transaction
 
         # write to DB as one transaction
         with transaction.atomic():
-            db_hut.save()
-            if by_source is not None:
-                new_org = HutOrganizationAssociation(
-                    hut=db_hut,
-                    organization=by_source.organization,
-                    props=by_source.source_properties,
-                    source_id=by_source.source_id,
+            hut_db.save()
+            hut_db.refresh_from_db()
+            if _hut_source is not None:
+                hut_db.add_organization(_hut_source)
+                # new_org = HutOrganizationAssociation(
+                #    hut=hut_db,
+                #    organization=_hut_source.organization,
+                #    props=_hut_source.source_properties,
+                #    source_id=_hut_source.source_id,
+                # )
+                # new_org.save()
+                # _hut_source.hut = hut_db
+                # _hut_source.save()
+            if contacts:
+                for i, c in enumerate(contacts):
+                    c.save()
+                    c.refresh_from_db()
+                    a = HutContactAssociation(contact=c, hut=hut_db, order=i)
+                    a.save()
+        return hut_db
+
+    @classmethod
+    def update_from_source(
+        cls,
+        hut_db: "Hut",
+        hut_source: HutSource,
+        review: bool = True,
+        _review_status: "Hut.ReviewStatusChoices | None" = None,
+    ) -> "Hut":
+        hut_schema = cls._convert_source(hut_source)
+        return cls.update_from_schema(
+            hut_db=hut_db, hut_schema=hut_schema, review=review, _hut_source=hut_source, _review_status=_review_status
+        )
+
+    @classmethod
+    def update_from_schema(
+        cls,
+        hut_db: "Hut",
+        hut_schema: HutSchema,
+        review: bool = True,
+        _hut_source: HutSource | None = None,
+        _review_status: "Hut.ReviewStatusChoices | None" = None,
+    ) -> "Hut":
+        if _review_status is not None:
+            review_status = _review_status
+        else:
+            review_status = Hut.ReviewStatusChoices.review if review else None
+        updates = hut_schema.model_dump(
+            by_alias=True,
+            exclude_unset=True,
+            exclude_none=True,
+            include={"name", "note", "description", "location", "capacity", "url", "country"},
+        )
+        ### Translations -> Better solution?
+        i18n_fields = {}
+        for field in ["name", "description", "notes"]:
+            model = updates.get(field)
+            if not model:
+                continue
+            del updates[field]
+            if field == "notes":
+                model = model[0]
+            for code, value in model.items():
+                out_field = "note" if field == "notes" else field
+                i18n_fields[f"{out_field}_{code}"] = value
+        updates.update(i18n_fields)
+        if "location" in updates and hut_schema.location.ele is not None:
+            updates["elevation"] = hut_schema.location.ele
+        if "location" in updates:
+            updates["location"] = dbPoint(hut_schema.location.lon_lat)
+        if "capacity" in updates and hut_schema.capacity.opened is None:
+            del updates["capacity"]
+        if "capacity" in updates:
+            updates["capacity"] = hut_schema.capacity.opened
+        if review_status is not None:
+            updates["review_status"] = review_status
+        with transaction.atomic():
+            for f, v in updates.items():
+                setattr(hut_db, f, v)
+            hut_db.save()
+            # why does it not work with update
+            # cls.objects.filter(slug=hut_db.slug).update(**updates)
+            # check for new organization
+            if _hut_source is not None and _hut_source.organization not in hut_db.organizations.all():
+                hut_db.add_organization(_hut_source)
+        # hut_db = Hut(
+        #    location=dbPoint(hut_schema.location.lon_lat),
+        #    elevation=hut_schema.location.ele,
+        #    capacity=hut_schema.capacity.opened,
+        #    url=hut_schema.url,
+        #    is_active=hut_schema.is_active,
+        #    is_public=hut_schema.is_public,
+        #    country=hut_schema.country,
+        #    type=HutType.values[str(hut_schema.hut_type.value)],
+        #    review_status=review_status,
+        #    **i18n_fields,
+        # )
+        hut_db.refresh_from_db()
+        return hut_db
+
+    @classmethod
+    def update_or_create(
+        cls,
+        hut_schema: HutSchema | None = None,
+        hut_source: HutSource | None = None,
+        review: bool | None = None,
+        _review_status_update: "Hut.ReviewStatusChoices | None" = None,
+        _review_status_create: "Hut.ReviewStatusChoices | None" = None,
+    ) -> tuple["Hut", bool]:
+        """Create or update either from a `HutSchema` or `HutSource` model.
+
+        Args:
+            hut_schema: Hut schema object, can be used together with `hut_source`.
+            hut_source: Hut source model (from db), either `hut_source` or `hut_schema` is required.
+            review: Set status to `review`. Per default it is set to `True` if an object is created and `review` is either `True` or `None`.
+                    If object is updated the status is not changed if set to `False` or `None`.
+            _review_status_update: Force `review` status to this value if updated, `review` is ignored.
+            _review_status_create: Force `review` status to this value if created, `review` is ignored.
+
+        Returns:
+            Created or updated `Hut` model and a bool if it was created or only updated (`created`)."""
+
+        # Check if it already exist
+        location: dbPoint | None = None
+        if hut_schema is not None and hut_schema.location:
+            location = dbPoint(hut_schema.location.lon_lat)
+        elif hut_source is not None and hut_source.location:
+            location = hut_source.location  # (hut_source.location.x, hut_source.location.y)
+        hut_db = None
+        if location is not None:
+            hut_db = (
+                cls.objects.filter(location__distance_lt=(location, D(m=30)))
+                .annotate(distance=Distance("location", location))
+                .order_by("distance")
+                .first()
+            )
+        if hut_db is not None:
+            # do update
+            if hut_schema is None and hut_source is not None:
+                return (
+                    cls.update_from_source(
+                        hut_db=hut_db, hut_source=hut_source, review=bool(review), _review_status=_review_status_update
+                    ),
+                    False,
                 )
-                new_org.save()
-                db_hut.refresh_from_db()
-                by_source.hut = db_hut
-                by_source.save()
-        return db_hut
+            if hut_schema is not None:
+                return (
+                    cls.update_from_schema(
+                        hut_db=hut_db,
+                        hut_schema=hut_schema,
+                        _hut_source=hut_source,
+                        review=bool(review),
+                        _review_status=_review_status_update,
+                    ),
+                    False,
+                )
+
+        if hut_schema is None and hut_source is not None:
+            return (
+                cls.create_from_source(
+                    hut_source=hut_source, review=bool(review), _review_status=_review_status_create
+                ),
+                True,
+            )
+        if hut_schema is not None:
+            return (
+                cls.create_from_schema(
+                    hut_schema=hut_schema,
+                    _hut_source=hut_source,
+                    review=bool(review),
+                    _review_status=_review_status_create,
+                ),
+                True,
+            )
+        err_msg = "Either 'hut_schema' or 'hut_source' is required."
+        raise UserWarning(err_msg)
 
     def organizations_query(self, organization: str | Organization | None = None, annotate=True):
         if isinstance(organization, Organization):

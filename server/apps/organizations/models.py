@@ -72,8 +72,25 @@ class Organization(TimeStampedModel):
         return cls.objects.get(slug=slug)
 
     @classmethod
-    def get_fields_all(cls):
-        return [f.get_attname() for f in cls._meta.fields]
+    def get_fields_all(cls) -> list[str]:
+        return [
+            "slug",
+            "name",
+            "fullname",
+            "description",
+            "url",
+            "attribution",
+            "link_hut_pattern",
+            "logo",
+            "is_active",
+            "is_public",
+            "color_light",
+            "color_dark",
+            "config",
+            "props_schema",
+            "order",
+        ]
+        # return [f.get_attname() for f in cls._meta.fields if f.get_attname() is not "i18n"]
 
     @classmethod
     def get_fields_in(cls):

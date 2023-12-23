@@ -2,9 +2,12 @@ import textwrap
 
 from django.conf import settings
 from django.contrib import admin
+from django.db import models
 from django.db.models.functions import Lower
+from django.http import HttpRequest
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
+from django_stubs_ext import QuerySetAny
 
 from unfold import admin as unfold_admin
 from unfold.decorators import display
@@ -54,7 +57,7 @@ class OwnerAdmin(ModelAdmin):
     form = required_i18n_fields_form_factory("name")
 
     search_fields = ("name",)
-    list_display = ("name_slug", "url", "note_short")
+    list_display = ("name_slug", "url", "note_short", "show_numbers_huts")
 
     inlines = (
         _OwnerShowContactsEditInline,
@@ -68,6 +71,7 @@ class OwnerAdmin(ModelAdmin):
                     ("slug", "name_i18n"),
                     "url",
                     "note_i18n",
+                    "comment",
                 )
             },
         ),
@@ -82,6 +86,14 @@ class OwnerAdmin(ModelAdmin):
             },
         ),
     )
+
+    def get_queryset(self, request: HttpRequest) -> QuerySetAny:
+        qs = super().get_queryset(request)
+        return qs.annotate(number_huts=models.Count("huts"))
+
+    @display(description=_("Huts"), ordering="number_huts")
+    def show_numbers_huts(self, obj):  # new
+        return obj.number_huts
 
     @display(header=True, description=_("Name"), ordering=Lower("name_i18n"))
     def name_slug(self, obj):  # new

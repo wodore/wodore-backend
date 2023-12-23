@@ -18,10 +18,10 @@ from server.apps.organizations.models import Organization
 from server.core.management.base import CRUDCommand
 
 from ...models import HutSource
-from ...schemas.status import CreateOrUpdateStatus
+from ...schemas.old.status import CreateOrUpdateStatus
 from ...services.sources import HutSourceService
 
-SERVICES: dict[str, Type[BaseService[BaseModel]]] = settings.SERVICES
+# SERVICES: dict[str, Type[BaseService[BaseModel]]] = settings.SERVICES
 
 
 def add_hut_source_db(  # type: ignore[no-any-unimported]
@@ -78,10 +78,10 @@ def add_hutsources_function(
     init = kwargs.get("init", None)
     lang = kwargs.get("lang", None)
     for org in selected_orgs:
-        service_class = SERVICES.get(org, None)
+        service_class: BaseService = settings.SERVICES.get(org, None)
         if service_class is not None:
-            service = service_class()
-            obj.stdout.write(f"Get data from '{service_class.__name__}'")
+            service = service_class
+            obj.stdout.write(f"Get data from '{service.__class__.__name__}'")
             src_huts = service.get_huts_from_source(limit=limit, offset=offset, lang=lang)
             obj.stdout.write(f"Got {len(src_huts)} results back, start filling database:")
             huts = add_hut_source_db(src_huts, reference=org, init=init)
@@ -109,12 +109,12 @@ class Command(CRUDCommand[HutSource]):
             "-O",
             "--orgs",
             "--organizations",
-            help=f"Organization slug, only add this one, use 'all' to add all (possible values: {', '.join(SERVICES.keys())}).",
+            help=f"Organization slug, only add this one, use 'all' to add all (possible values: {', '.join(settings.SERVICES.keys())}).",
             type=str,
             required=True,
         )
         parser.add_argument("--lang", help="Language to use (de, en, fr, it)", default="de", type=str)
 
     def handle(self, init: bool, orgs: str, lang: str, *args: Any, **options: Any) -> None:  # type: ignore[override]
-        org_list = SERVICES.keys() if orgs.lower().strip() == "all" else [o.strip() for o in orgs.split(",")]
+        org_list = settings.SERVICES.keys() if orgs.lower().strip() == "all" else [o.strip() for o in orgs.split(",")]
         super().handle(kwargs_add={"init": init, "selected_organizations": org_list, "lang": lang}, **options)
