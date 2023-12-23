@@ -9,7 +9,8 @@ from django_countries import CountryTuple
 from server.apps.owners.models import Owner
 
 # from server.apps.translations import TranslationSchema
-from ..models import Hut, HutType
+# from ..models import Hut, HutType
+from ._hut_type import HutTypeSchema
 
 _HUT_FIELDS = (
     "slug",
@@ -24,16 +25,6 @@ _HUT_FIELDS = (
     "elevation",
     "location",
 )
-
-
-class HutTypeSchema(ModelSchema):
-    slug: str
-    name: str | None = Field(..., alias="name_i18n")
-    symbol: str | None
-
-    class Meta:
-        model = HutType
-        fields = ("slug", "name", "symbol")
 
 
 class OwnerSchema(ModelSchema):
@@ -58,11 +49,12 @@ class HutSchemaOptional(BaseModel):
     name: str | None = Field(..., alias="name_i18n")
     # description: str | None = Field(None, alias="description_i18n")
     # note: str | None = Field(None, alias="note_i18n")
-    owner: OwnerSchema | None = None
+    owner: OwnerSchema | None = Field(..., alias="hut_owner")
     review_status: str | None = None
     # review_comment: str | None = None
     is_public: bool | None = None
-    type: HutTypeSchema | None = None
+    type_open: HutTypeSchema | None = Field(None, alias="hut_type_open")
+    type_closed: HutTypeSchema | None = Field(None, alias="hut_type_closed")
     elevation: float | None = None
     location: LocationSchema | None = None
     url: str | None = None

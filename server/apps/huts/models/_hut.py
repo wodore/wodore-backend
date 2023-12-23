@@ -66,7 +66,7 @@ class Hut(TimeStampedModel):
     description = models.TextField(max_length=10000, verbose_name="Description")
     description_i18n: str  # for typing
 
-    owner = models.ForeignKey(
+    hut_owner = models.ForeignKey(
         "owners.Owner",
         null=True,
         blank=True,
@@ -75,7 +75,7 @@ class Hut(TimeStampedModel):
         verbose_name=_("Hut owner."),
         help_text=_("For example 'SAC Bern' ..."),
     )
-    contacts = models.ManyToManyField(
+    contact_set = models.ManyToManyField(
         Contact, through=HutContactAssociation, related_name="huts", verbose_name=_("Contacts")
     )
     url = models.URLField(blank=True, default="", max_length=200, verbose_name=_("URL"))
@@ -89,22 +89,35 @@ class Hut(TimeStampedModel):
     note_i18n: str  # for typing
 
     photo = models.CharField(blank=True, default="", max_length=200, verbose_name=_("Hut photo"))
-    country = CountryField()
+    country_field = CountryField()
     location = models.PointField(blank=False, verbose_name="Location")
     elevation = models.DecimalField(null=True, blank=True, max_digits=5, decimal_places=1, verbose_name=_("Elevation"))
-    capacity = models.PositiveSmallIntegerField(blank=True, null=True, verbose_name=_("Capacity"))
-    capacity_shelter = models.PositiveSmallIntegerField(
+    capacity_open = models.PositiveSmallIntegerField(blank=True, null=True, verbose_name=_("Capacity if open"))
+    capacity_closed = models.PositiveSmallIntegerField(
         blank=True,
         null=True,
-        verbose_name=_("Shelter Capacity"),
+        verbose_name=_("Capacity if closed"),
         help_text=_("Only if an additional shelter is available, e.g. during winter."),
     )
 
-    type = models.ForeignKey(
-        HutType, related_name="huts", on_delete=models.RESTRICT, verbose_name=_("Hut type"), db_index=True
+    hut_type_open = models.ForeignKey(
+        HutType,
+        related_name="hut_open_set",
+        on_delete=models.RESTRICT,
+        verbose_name=_("Hut type if open"),
+        db_index=True,
+    )
+    hut_type_closed = models.ForeignKey(
+        HutType,
+        null=True,
+        blank=True,
+        related_name="hut_closed_set",
+        on_delete=models.RESTRICT,
+        verbose_name=_("Hut type if closed"),
+        db_index=True,
     )
     # organizations = models.ManyToManyField(Organization, related_name="huts", db_table="hut_organization_association")
-    organizations = models.ManyToManyField(
+    org_set = models.ManyToManyField(
         Organization,
         through=HutOrganizationAssociation,
         verbose_name=_("Organizations"),
@@ -126,7 +139,7 @@ class Hut(TimeStampedModel):
         indexes = (GinIndex(fields=["i18n"]),)
         constraints = (
             models.CheckConstraint(
-                name="%(app_label)s_%(class)s_country_valid", check=models.Q(country__in=settings.COUNTRIES_ONLY)
+                name="%(app_label)s_%(class)s_country_valid", check=models.Q(country_field__in=settings.COUNTRIES_ONLY)
             ),
             models.CheckConstraint(
                 name="%(app_label)s_%(class)s_review_status_valid",
@@ -255,7 +268,7 @@ class Hut(TimeStampedModel):
                 del defaults["slug"]
             defaults.update(i18n_fields)
             owner, _created = Owner.objects.get_or_create(slug=src_hut_owner.slug, defaults=defaults)
-            hut_db.owner = owner
+            hut_db.hut_owner = owner
 
         # Contact Stuff
         # TODO check if numbers or email already exist -> update
@@ -368,7 +381,7 @@ class Hut(TimeStampedModel):
             # why does it not work with update
             # cls.objects.filter(slug=hut_db.slug).update(**updates)
             # check for new organization
-            if _hut_source is not None and _hut_source.organization not in hut_db.organizations.all():
+            if _hut_source is not None and _hut_source.organization not in hut_db.org_set.all():
                 hut_db.add_organization(_hut_source)
         # hut_db = Hut(
         #    location=dbPoint(hut_schema.location.lon_lat),
@@ -465,7 +478,7 @@ class Hut(TimeStampedModel):
     def organizations_query(self, organization: str | Organization | None = None, annotate=True):
         if isinstance(organization, Organization):
             organization = organization.slug
-        org_q = self.organizations
+        org_q = self.org_set
         if isinstance(organization, str):
             org_q = org_q.filter(slug=organization)
         else:

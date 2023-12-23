@@ -1,4 +1,4 @@
-from typing import Any, Generic, List, Literal, Type, TypeVar
+from typing import Any, Generic, List, Literal, Sequence, Type, TypeVar
 
 # if TYPE_CHECKING:
 from ninja import ModelSchema, Query, Schema
@@ -113,7 +113,9 @@ class FieldsParam(Schema, Generic[TSchema]):
         else:
             return getattr(self.type_adapter(), f"validate_{validator}")(_obj)
 
-    def update_default(self, include: str | list):
+    def update_default(self, include: str | Sequence[str]) -> None:
+        if not isinstance(include, str):
+            include = list(include[:])
         if self.include is None and self.exclude is None:
             if isinstance(include, list):
                 include = ",".join(include)

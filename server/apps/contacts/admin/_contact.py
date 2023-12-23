@@ -19,7 +19,7 @@ from ..models import Contact
 class _ContactHutAssociationEditInline(unfold_admin.TabularInline):
     """Contact showing huts"""
 
-    model = Hut.contacts.through
+    model = Hut.contact_set.through
     fields = ("hut",)  # hot to acces "hut__name"
     autocomplete_fields = ("hut",)
     extra = 0

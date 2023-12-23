@@ -15,6 +15,7 @@ from collections import defaultdict
 
 
 class HutType(models.Model):
+    FIELDS = ("slug", "name", "symbol", "description", "level", "symbol", "symbol_simple", "icon")
     i18n = TranslationField(fields=("name", "description"))
     objects = BaseMutlilingualManager()
 

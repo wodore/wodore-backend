@@ -35,7 +35,7 @@ class _OwnerShowHutsViewInline(unfold_admin.TabularInline):
     """Owner showing huts"""
 
     model = Hut
-    fields = ("slug", "name_i18n", "url", "type")
+    fields = ("slug", "name_i18n", "url", "hut_type_open")
     # autocomplete_fields = ("name", "slug")
     extra = 0
     can_delete = False

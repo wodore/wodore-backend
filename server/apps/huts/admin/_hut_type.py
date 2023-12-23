@@ -3,6 +3,7 @@ from django.contrib import admin
 from django.urls import reverse
 from django.db.models.functions import Lower
 from django.http import HttpRequest
+from django.db.models import F
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 from django_stubs_ext import QuerySetAny
@@ -48,12 +49,25 @@ class HutTypesAdmin(ModelAdmin):
 
     def get_queryset(self, request: HttpRequest) -> QuerySetAny:
         qs = super().get_queryset(request)
-        return qs.annotate(number_huts=models.Count("huts"))
+        return qs.annotate(
+            number_huts_open=models.Count("hut_open_set", distinct=True),
+            number_huts_closed=models.Count("hut_closed_set", distinct=True),
+        )
+
+    def _get_url_str(self, obj: QuerySetAny, closed: bool = False, klass: str = "font-semibold") -> str:
+        number = obj.number_huts_closed if closed else obj.number_huts_open
+        type_id = obj.id
+        help_text = "if closed" if closed else "if open"
+        hut_type_str = "hut_type_closed" if closed else "hut_type_open"
+        url = reverse("admin:huts_hut_changelist") + f"?{hut_type_str}_id__exact={type_id}"
+        return f'<a class="{klass}" title="{help_text}" href={url}>{number}</a>'
 
     @display(description=_("Huts"), ordering="number_huts")
-    def show_numbers_huts(self, obj):
-        url = reverse("admin:huts_hut_changelist") + f"?type__id__exact={obj.id}"
-        return mark_safe(f'<a class="font-semibold" href={url}>{obj.number_huts}</a>')
+    def show_numbers_huts(self, obj: QuerySetAny) -> str:
+        open_url = self._get_url_str(obj, closed=False)
+        # return mark_safe(f"{open_url}")
+        closed_url = self._get_url_str(obj, closed=True, klass="")
+        return mark_safe(f"{open_url} ({closed_url})")
 
     @display(header=True, description=_("Name and Description"), ordering=Lower("name_i18n"))
     def title(self, obj):

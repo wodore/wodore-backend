@@ -7,9 +7,9 @@ HutAdminFieldsets = [
         {
             "fields": [
                 ("is_active", "is_public"),
-                ("slug", "type"),
-                ("name_i18n"),
-                "owner",
+                ("slug", "name_i18n"),
+                ("hut_type_open", "hut_type_closed"),
+                "hut_owner",
                 "review_status",
                 "review_comment",
                 "url",
@@ -52,7 +52,7 @@ HutAdminFieldsets = [
         {
             # "classes": ["collapse"],
             "fields": [
-                ("elevation", "country"),
+                ("elevation", "country_field"),
                 "location",
             ],
         },
@@ -62,7 +62,7 @@ HutAdminFieldsets = [
         {
             # "classes": ["collapse"],
             "fields": [
-                ("capacity", "capacity_shelter"),
+                ("capacity_open", "capacity_closed"),
             ],
         },
     ),

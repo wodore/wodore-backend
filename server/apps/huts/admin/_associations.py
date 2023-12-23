@@ -47,7 +47,7 @@ class _HutOrganizationAssociationForm(ModelForm):
 class HutContactAssociationEditInline(unfold_admin.TabularInline):
     """Hut showing contacts"""
 
-    model = Hut.contacts.through
+    model = Hut.contact_set.through
     fields = ("contact", "order")
     autocomplete_fields = ("contact",)
     extra = 0
@@ -57,7 +57,7 @@ class HutContactAssociationEditInline(unfold_admin.TabularInline):
 class ContactHutAssociationEditInline(unfold_admin.TabularInline):
     """Contact showing huts"""
 
-    model = Hut.contacts.through
+    model = Hut.contact_set.through
     fields = ("hut",)  # hot to acces "hut__name"
     autocomplete_fields = ("hut",)
     extra = 0
@@ -75,8 +75,8 @@ class ContactOwnerAssociationEditInline(unfold_admin.TabularInline):
     """Contact showing owner"""
 
     model = Owner.contacts.through
-    fields = ("owner",)
-    autocomplete_fields = ("owner",)
+    fields = ("hut_owner",)
+    autocomplete_fields = ("hut_owner",)
     extra = 0
     verbose_name = _("Owner")
     # fk_name = "contact"
@@ -86,7 +86,7 @@ class HutOrganizationAssociationEditInline(unfold_admin.StackedInline):
     """Hut <> Organization"""
 
     form = _HutOrganizationAssociationForm
-    model = Hut.organizations.through
+    model = Hut.org_set.through
     fields = (("organization", "source_id"), "props", "schema")
     extra = 0
     classes = ("collapse",)
@@ -95,7 +95,7 @@ class HutOrganizationAssociationEditInline(unfold_admin.StackedInline):
 
 
 class HutOrganizationAssociationViewInline(unfold_admin.TabularInline):
-    model = Hut.organizations.through
+    model = Hut.org_set.through
     fields = ("organization", "source_id")
     # readonly_fields = ["organization", "source_id"]
     can_delete = False

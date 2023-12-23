@@ -40,23 +40,23 @@ class HutsAdmin(ModelAdmin):
     # list_select_related = ()  # ( "type", "owner")
     form = required_i18n_fields_form_factory("name")
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
-    # list_select_related = ("organizations", "organizations__details")
-    # list_select_related = ["organizations__source"]
+    # list_select_related = ("org_set", "org_set__details")
+    # list_select_related = ["org_set__source"]
     list_display = (
         "symbol_img",
         "title",
         "location_coords",
         "elevation",
-        "type",
+        "hut_type_open",
         "logo_orgs",
         "is_active",
         "is_public",
         "review_tag",
     )
     list_display_links = ("symbol_img", "title")
-    list_filter = ("is_active", "is_public", "type", "organizations")
+    list_filter = ("is_active", "is_public", "hut_type_open", "org_set")
     fieldsets = HutAdminFieldsets
-    autocomplete_fields = ("owner",)
+    autocomplete_fields = ("hut_owner",)
     readonly_fields = (
         "name_i18n",
         "description_i18n",
@@ -76,10 +76,12 @@ class HutsAdmin(ModelAdmin):
     def get_queryset(self, request: HttpRequest) -> QuerySetAny:
         qs = super().get_queryset(request)
         # prefetch_related("orgs_source", "orgs_source__organization").
-        return qs.select_related("type", "owner").annotate(
+        return qs.select_related("hut_type_open", "hut_owner").annotate(
             orgs=JSONBAgg(
                 JSONObject(
-                    logo="organizations__logo", name_i18n="organizations__name_i18n", link_i18n="orgs_source__link"
+                    logo="org_set__logo",
+                    name_i18n="org_set__name_i18n",
+                    link_i18n="orgs_source__link",
                 )
             ),
         )
@@ -98,18 +100,18 @@ class HutsAdmin(ModelAdmin):
 
     @display(header=True, ordering=Lower("name"))
     def title(self, obj):
-        if obj.owner:
-            owner = textwrap.shorten(obj.owner.name, width=30, placeholder="...")
+        if obj.hut_owner:
+            owner = textwrap.shorten(obj.hut_owner.name, width=30, placeholder="...")
         else:
             owner = "-"
-        return (obj.name_i18n, owner)  # self.icon_thumb(obj.type.icon_simple.url))
+        return (obj.name_i18n,)  # self.icon_thumb(obj.type.icon_simple.url))
 
     def location_coords(self, obj):
         return f"{obj.location.y:.4f}, {obj.location.x:.4f}"
 
     @display(description="")
     def symbol_img(self, obj):  # new
-        return mark_safe(f'<img src = "{obj.type.symbol.url}" width = "38"/>')
+        return mark_safe(f'<img src = "{obj.hut_type_open.symbol.url}" width = "38"/>')
 
     @display(description=_("Organizations"))
     def logo_orgs(self, obj: Hut) -> str:  # new

@@ -36,7 +36,7 @@ class OwnerContactAssociationsAdmin(ModelAdmin):
 ## ADMIN
 @admin.register(OwnerHutProxy)
 class OwnerHutAssociationsAdmin(ModelAdmin):
-    search_fields = ("owner__name_i18n",)
+    search_fields = ("hut_owner__name_i18n",)
     list_display = (
         "slug_small",
         "owner_title",
@@ -46,11 +46,11 @@ class OwnerHutAssociationsAdmin(ModelAdmin):
     )
     list_filter = ("is_active",)  # , "owner")
     readonly_fields = ("name_i18n",)
-    fields = ("name_i18n", "owner", "review_status", "review_comment")
-    autocomplete_fields = ("owner",)
+    fields = ("name_i18n", "hut_owner", "review_status", "review_comment")
+    autocomplete_fields = ("hut_owner",)
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
     inlines = (HutSourceViewInline,)
-    list_select_related = ("type",)
+    list_select_related = ("hut_type_open",)
 
     @display(description=_("Slug"))
     def slug_small(self, obj):  # new
@@ -58,16 +58,20 @@ class OwnerHutAssociationsAdmin(ModelAdmin):
 
     @display(description=_("Owner"), header=True)
     def owner_title(self, obj):  # new
-        if obj.owner:
+        if obj.hut_owner:
             return (
-                obj.owner.name_i18n,
-                mark_safe(f'<a href="{obj.owner.url}" target="_blank">{obj.owner.url}</a>'),
+                obj.hut_owner.name_i18n,
+                mark_safe(f'<a href="{obj.hut_owner.url}" target="_blank">{obj.hut_owner.url}</a>'),
             )  # , mark_safe(f'<img src = "{obj.type.symbol_simple.url}" width = "24"/>')
         return ("-", "")
 
     @display(description=_("Hut"), header=True)
     def hut_title(self, obj):  # new
-        return obj.name_i18n, obj.type.name_i18n, mark_safe(f'<img src = "{obj.type.symbol_simple.url}" width = "24"/>')
+        return (
+            obj.name_i18n,
+            obj.hut_type_open.name_i18n,
+            mark_safe(f'<img src = "{obj.hut_type_open.symbol_simple.url}" width = "24"/>'),
+        )
 
     @display(
         description=_("Status"),
