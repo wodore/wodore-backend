@@ -817,6 +817,21 @@ reference = "django5.0"
 resolved_reference = "f5e396f8c836df41ce86bd0304bbfa5411c2aa42"
 
 [[package]]
+name = "django-cors-headers"
+version = "4.3.1"
+description = "django-cors-headers is a Django application for handling the server headers required for Cross-Origin Resource Sharing (CORS)."
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "django-cors-headers-4.3.1.tar.gz", hash = "sha256:0bf65ef45e606aff1994d35503e6b677c0b26cafff6506f8fd7187f3be840207"},
+    {file = "django_cors_headers-4.3.1-py3-none-any.whl", hash = "sha256:0b1fd19297e37417fc9f835d39e45c8c642938ddba1acce0c1753d3edef04f36"},
+]
+
+[package.dependencies]
+asgiref = ">=3.6"
+Django = ">=3.2"
+
+[[package]]
 name = "django-countries"
 version = "7.5.1"
 description = "Provides a country field for Django models."
@@ -4303,4 +4318,4 @@ private = ["hut-services-private"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "0d9bdbde29f1340727df097a0f7ed81b604088d42893a615501a0b79165fa1cf"
+content-hash = "9bc0e9b6186bc52ff5f8e4fd9a802a7253f7f1e0da0357a1bdf2ec6c57945e15"

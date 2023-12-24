@@ -14,9 +14,9 @@ from .schema import OrganizationOptional
 router = Router()
 
 
-@router.get("/", response=list[OrganizationOptional], exclude_unset=True)
+@router.get("/", response=list[OrganizationOptional], exclude_unset=True, operation_id="get_organizations")
 @with_language_param("lang")
-def list_organizations(
+def get_organizations(
     request: HttpRequest,
     lang: LanguageParam,
     fields: Query[FieldsParam[OrganizationOptional]],
@@ -31,9 +31,9 @@ def list_organizations(
         return fields.validate(list(orgs))
 
 
-@router.get("/{slug}", response=OrganizationOptional, exclude_unset=True)
+@router.get("/{slug}", response=OrganizationOptional, exclude_unset=True, operation_id="get_organization")
 @with_language_param()
-def organization_details(
+def get_organization(
     request: HttpRequest, slug: str, lang: LanguageParam, fields: Query[FieldsParam[OrganizationOptional]]
 ) -> OrganizationOptional:
     fields.update_default("__all__")

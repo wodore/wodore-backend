@@ -26,11 +26,17 @@ DEBUG = True
 ALLOWED_HOSTS = [
     config("DOMAIN_NAME"),
     "localhost",
+    "localhost:9000",
     "0.0.0.0",
     "127.0.0.1",
     "[::1]",
 ]
+# CORS_ALLOW_ALL_ORIGINS = True
 
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https?://localhost:\d+$",
+    r"^localhost:\d+$",
+]
 
 # Installed apps for development only:
 

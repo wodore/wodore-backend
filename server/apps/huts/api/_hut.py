@@ -1,19 +1,21 @@
+import typing as t
 from os import wait
-from re import I
 from time import perf_counter
 from typing import List
 
 import msgspec
+from benedict import benedict
 from geojson_pydantic import Feature, FeatureCollection
 from ninja import Query, Router
 from ninja.errors import HttpError
 
+from django.conf import settings
 from django.contrib.gis.db.models.functions import AsGeoJSON
 from django.contrib.postgres.aggregates import JSONBAgg
 from django.core.serializers import serialize
 from django.db import IntegrityError
-from django.db.models import F, TextField
-from django.db.models.functions import Cast, JSONObject, Lower
+from django.db.models import F, TextField, Value
+from django.db.models.functions import Cast, Concat, JSONObject, Lower
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404
 
@@ -31,9 +33,9 @@ from ._router import router
 from .expressions import GeoJSON
 
 
-@router.get("huts", response=List[HutSchemaOptional], exclude_unset=True)
+@router.get("huts", response=List[HutSchemaOptional], exclude_unset=True, operation_id="get_huts")
 @with_language_param("lang")
-def list_huts(  # type: ignore  # noqa: PGH003
+def get_huts(  # type: ignore  # noqa: PGH003
     request: HttpRequest,
     lang: LanguageParam,
     fields: Query[FieldsParam[HutSchemaOptional]],
@@ -41,6 +43,7 @@ def list_huts(  # type: ignore  # noqa: PGH003
     limit: int | None = None,
     is_public: bool | None = None,
 ) -> list[HutSchemaOptional]:
+    """Get a list with huts."""
     huts_db = Hut.objects.select_related("hut_owner").all().filter(is_active=True)
 
     huts_db = huts_db.select_related("hut_type_open", "hut_type_closed", "hut_owner").annotate(
@@ -63,9 +66,18 @@ def list_huts(  # type: ignore  # noqa: PGH003
         # return fields.validate(list(huts_db))
 
 
-@router.get("huts.geojson", response=FeatureCollection)
+def get_json_obj(values: dict[str, t.Any], flat: bool = False) -> dict[str, JSONObject | F]:
+    if flat:
+        return {k: F(str(v)) for k, v in benedict(values).flatten(separator="_").items()}
+    new_vals = {}
+    for key, value in values.items():
+        new_vals[key] = JSONObject(**get_json_obj(value)) if isinstance(value, dict) else value
+    return new_vals
+
+
+@router.get("huts.geojson", response=FeatureCollection, operation_id="get_huts_geojson")
 @with_language_param("lang")
-def list_huts_geojson(  # type: ignore  # noqa: PGH003
+def get_huts_geojson(  # type: ignore  # noqa: PGH003
     request: HttpRequest,
     response: HttpResponse,
     lang: LanguageParam,
@@ -79,6 +91,7 @@ def list_huts_geojson(  # type: ignore  # noqa: PGH003
     embed_organizations: bool = False,
     include_elevation: bool = False,
     include_name: bool = False,
+    flat: bool = True,
 ) -> list[HutSchemaOptional]:
     # t1_start = perf_counter()
     activate(lang)
@@ -92,30 +105,47 @@ def list_huts_geojson(  # type: ignore  # noqa: PGH003
     if embed_all or include_name:
         properties.append("name")
     if embed_all or embed_type:
-        qs = qs.select_related("hut_type_open", "hut_type_closed").annotate(
-            type=JSONObject(
-                open="hut_type_open__slug",
-                closed="hut_type_closed__slug",
-            ),
+        annot = get_json_obj(
+            flat=flat,
+            values={
+                "type": {
+                    "open": {
+                        "slug": "hut_type_open__slug",
+                        "level": "hut_type_open__level",
+                    },
+                    "closed": {
+                        "slug": "hut_type_closed__slug",
+                        "level": "hut_type_closed__level",
+                    },
+                },
+            },
         )
-
-        properties.append("type")
+        qs = qs.select_related("hut_type_open", "hut_type_closed").annotate(**annot)
+        properties += list(annot.keys())
     if embed_all or embed_owner:
-        qs = qs.select_related("hut_owner").annotate(
-            owner=JSONObject(
-                name="hut_owner__name_i18n",
-                slug="hut_owner__slug",
-            )
+        annot = get_json_obj(
+            flat=flat,
+            values={
+                "owner": {
+                    "name": "hut_owner__name_i18n",
+                    "slug": "hut_owner__slug",
+                }
+            },
         )
-        properties.append("owner")
+        qs = qs.select_related("hut_owner").annotate(**annot)
+        properties += list(annot.keys())
     if embed_all or embed_capacity:
-        qs = qs.annotate(
-            capacity=JSONObject(
-                open="capacity_open",
-                closed="capacity_closed",
-            )
+        annot = get_json_obj(
+            flat=flat,
+            values={
+                "capacity": {
+                    "if_open": "capacity_open",
+                    "if_closed": "capacity_closed",
+                }
+            },
         )
-        properties.append("capacity")
+        qs = qs.annotate(**annot)
+        properties += list(annot.keys())
     if embed_all or embed_organizations:
         qs = qs.prefetch_related("org_set").annotate(
             organizations=JSONBAgg(
@@ -144,6 +174,30 @@ def list_huts_geojson(  # type: ignore  # noqa: PGH003
     # TODO: maybe get it directly as str?
     response.write(msgspec.json.encode(geojson))
     return response
+
+
+@router.get("/{slug}", response=HutSchemaOptional, exclude_unset=True, operation_id="get_hut")
+@with_language_param()
+def get_hut(
+    request: HttpRequest, slug: str, lang: LanguageParam, fields: Query[FieldsParam[HutSchemaOptional]]
+) -> HutSchemaOptional:
+    """Get a hut by its slug."""
+    huts_db = Hut.objects.select_related("hut_owner").all().filter(is_active=True, slug=slug)
+    media_url = request.build_absolute_uri(settings.MEDIA_URL)
+    huts_db = huts_db.select_related("hut_type_open", "hut_type_closed", "hut_owner").annotate(
+        orgs=JSONBAgg(
+            JSONObject(
+                logo=Concat(Value(media_url), F("org_set__logo")),
+                fullname="org_set__fullname_i18n",
+                slug="org_set__slug",
+                name="org_set__name_i18n",
+                link="orgs_source__link",
+            )
+        )
+    )
+    with override(lang):
+        return huts_db.first()
+        # return fields.validate(list(huts_db))
 
 
 # @router.post("/", response=OrganizationOptional)

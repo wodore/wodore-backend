@@ -5,6 +5,7 @@ from ninja import Field, ModelSchema
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from django_countries import CountryTuple
+from server.apps.organizations.models import Organization
 
 from server.apps.owners.models import Owner
 
@@ -38,6 +39,7 @@ class OwnerSchema(ModelSchema):
 class OrganizationDetailSchema(BaseModel):
     slug: str
     name: str
+    fullname: str
     link: str
     logo: str
 
@@ -47,6 +49,7 @@ class HutSchemaOptional(BaseModel):
     # name_i18n: str | TranslationSchema | None = None
     slug: str
     name: str | None = Field(..., alias="name_i18n")
+    description: str | None = Field(..., alias="description_i18n")
     # description: str | None = Field(None, alias="description_i18n")
     # note: str | None = Field(None, alias="note_i18n")
     owner: OwnerSchema | None = Field(..., alias="hut_owner")
@@ -59,8 +62,8 @@ class HutSchemaOptional(BaseModel):
     location: LocationSchema | None = None
     url: str | None = None
     country: CountryTuple | None = None
-    capacity: int | None = None
-    capacity_shelter: int | None = None
+    capacity_open: int | None = None
+    capacity_closed: int | None = None
     organizations: list[OrganizationDetailSchema] | None = Field(None, alias="orgs")
 
     @field_validator("country", mode="before")

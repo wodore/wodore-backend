@@ -30,9 +30,9 @@ from ..schemas import HutTypeDetailSchema
 from ._router import router
 
 
-@router.get("types/list", response=list[HutTypeDetailSchema], exclude_unset=True)
+@router.get("types/list", response=list[HutTypeDetailSchema], exclude_unset=True, operation_id="get_hut_types")
 @with_language_param("lang")
-def list_hut_types(  # type: ignore  # noqa: PGH003
+def get_hut_types(  # type: ignore  # noqa: PGH003
     request: HttpRequest,
     lang: LanguageParam,
     fields: Query[FieldsParam[HutTypeDetailSchema]],
@@ -45,9 +45,11 @@ def list_hut_types(  # type: ignore  # noqa: PGH003
         # return fields.validate(list(huts_db))
 
 
-@router.get("types/records", response=dict[str, HutTypeDetailSchema], exclude_unset=True)
+@router.get(
+    "types/records", response=dict[str, HutTypeDetailSchema], exclude_unset=True, operation_id="get_hut_type_records"
+)
 @with_language_param("lang")
-def list_hut_types_records(  # type: ignore  # noqa: PGH003
+def get_hut_type_records(  # type: ignore  # noqa: PGH003
     request: HttpRequest,
     lang: LanguageParam,
     fields: Query[FieldsParam[HutTypeDetailSchema]],

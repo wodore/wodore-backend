@@ -28,11 +28,11 @@
      showguides="true"
      inkscape:guide-bbox="true"
      inkscape:zoom="8.0000004"
-     inkscape:cx="27.749999"
-     inkscape:cy="23.312499"
-     inkscape:window-width="1874"
-     inkscape:window-height="1016"
-     inkscape:window-x="0"
+     inkscape:cx="27.874999"
+     inkscape:cy="23.374999"
+     inkscape:window-width="1920"
+     inkscape:window-height="1017"
+     inkscape:window-x="1536"
      inkscape:window-y="0"
      inkscape:window-maximized="1"
      inkscape:current-layer="layer7"
@@ -458,16 +458,6 @@
          fill="#a7696a"
          id="path1105-4"
          style="stroke-width:141.41" />
-    </g>
-    <g
-       id="g1135-0"
-       style="stroke-width:12.8"
-       transform="matrix(0.078125,0,0,0.078125,4,4)">
-      <path
-         d="m 46.367,106.401 h 15 v 15 h -15 z"
-         fill="#ffffff"
-         id="path1133-6"
-         style="stroke-width:163.84" />
     </g>
   </g>
   <g

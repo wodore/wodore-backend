@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 import typing as t
 from typing import Dict, List, Tuple, Union
 
+from corsheaders.defaults import default_headers
 from hut_services import SERVICES, BaseService, OsmService, RefugesInfoService
 from pydantic import BaseModel
 
@@ -53,6 +54,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "django_countries",
     "computedfields",  # https://github.com/netzkolchose/django-computedfields
     "django_extensions",  # https://django-extensions.readthedocs.io/
+    "corsheaders",  # https://github.com/adamchainz/django-cors-headers
     # Default django apps:
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -86,6 +88,8 @@ INSTALLED_APPS: Tuple[str, ...] = (
 MIDDLEWARE: Tuple[str, ...] = (
     # Logging:
     "server.settings.components.logging.LoggingContextVarsMiddleware",
+    # Cross-Origin Resource Sharing (CORS)
+    "corsheaders.middleware.CorsMiddleware",
     # Content Security Policy:
     "csp.middleware.CSPMiddleware",
     # Django:
@@ -104,6 +108,9 @@ MIDDLEWARE: Tuple[str, ...] = (
     # Django HTTP Referrer Policy:
     "django_http_referrer_policy.middleware.ReferrerPolicyMiddleware",
 )
+
+
+CORS_ALLOW_HEADERS = [*default_headers, "access-control-allow-origin"]
 
 ROOT_URLCONF = "server.urls"
 
