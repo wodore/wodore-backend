@@ -11,7 +11,19 @@
     symbol_simple: huts/types/symbols/simple/unknown.png
     icon: huts/types/icons/unknown.png
 - model: huts.huttype
-  pk: 1
+  pk: 2
+  fields:
+    slug: closed
+    level: 2
+    name_de: geschlossen
+    name_en: closed
+    description_de: 'hütte geschlossen und kann nicht verwendet werden (keine Notunterkunft)'
+    description_en: 'hut is closed and cannot be used (no emergency accommodation)'
+    symbol: huts/types/symbols/detailed/closed.png
+    symbol_simple: huts/types/symbols/simple/closed.png
+    icon: huts/types/icons/closed.png
+- model: huts.huttype
+  pk: 10
   fields:
     slug: campground
     level: 10
@@ -23,7 +35,7 @@
     symbol_simple: huts/types/symbols/simple/campground.png
     icon: huts/types/icons/campground.png
 - model: huts.huttype
-  pk: 2
+  pk: 20
   fields:
     slug: basic-shelter
     level: 20
@@ -35,7 +47,7 @@
     symbol_simple: huts/types/symbols/simple/basic_shelter.png
     icon: huts/types/icons/basic_shelter.png
 - model: huts.huttype
-  pk: 3
+  pk: 25
   fields:
     slug: camping
     level: 25
@@ -47,7 +59,7 @@
     symbol_simple: huts/types/symbols/simple/camping.png
     icon: huts/types/icons/camping.png
 - model: huts.huttype
-  pk: 4
+  pk: 30
   fields:
     slug: bivouac
     level: 30
@@ -59,7 +71,7 @@
     symbol_simple: huts/types/symbols/simple/bivouac.png
     icon: huts/types/icons/bivouac.png
 - model: huts.huttype
-  pk: 5
+  pk: 40
   fields:
     slug: unattended-hut
     level: 40
@@ -71,7 +83,7 @@
     symbol_simple: huts/types/symbols/simple/unattended_hut.png
     icon: huts/types/icons/unattended_hut.png
 - model: huts.huttype
-  pk: 6
+  pk: 50
   fields:
     slug: hut
     level: 50
@@ -83,7 +95,7 @@
     symbol_simple: huts/types/symbols/simple/hut.png
     icon: huts/types/icons/hut.png
 - model: huts.huttype
-  pk: 7
+  pk: 55
   fields:
     slug: alp
     level: 55
@@ -95,7 +107,7 @@
     symbol_simple: huts/types/symbols/simple/alp.png
     icon: huts/types/icons/alp.png
 - model: huts.huttype
-  pk: 8
+  pk: 70
   fields:
     slug: basic-hotel
     level: 70
@@ -107,7 +119,7 @@
     symbol_simple: huts/types/symbols/simple/basic_hotel.png
     icon: huts/types/icons/basic_hotel.png
 - model: huts.huttype
-  pk: 9
+  pk: 75
   fields:
     slug: hostel
     level: 75
@@ -117,7 +129,7 @@
     symbol_simple: huts/types/symbols/simple/hostel.png
     icon: huts/types/icons/hostel.png
 - model: huts.huttype
-  pk: 10
+  pk: 90
   fields:
     slug: hotel
     level: 90
@@ -127,7 +139,7 @@
     symbol_simple: huts/types/symbols/simple/hotel.png
     icon: huts/types/icons/hotel.png
 - model: huts.huttype
-  pk: 11 
+  pk: 80 
   fields:
     slug: special
     level: 80
@@ -139,7 +151,7 @@
     symbol_simple: huts/types/symbols/simple/special.png
     icon: huts/types/icons/special.png
 - model: huts.huttype
-  pk: 12 
+  pk: 100 
   fields:
     slug: restaurant
     level: 100

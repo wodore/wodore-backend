@@ -234,19 +234,26 @@ class Hut(TimeStampedModel):
                 model = model[0]
             for code, value in model.model_dump(by_alias=True).items():
                 out_field = "note" if field == "notes" else field
-                i18n_fields[f"{out_field}_{code}"] = value
+                if value:
+                    i18n_fields[f"{out_field}_{code}"] = value
         hut_db = Hut(
             location=dbPoint(hut_schema.location.lon_lat),
             elevation=hut_schema.location.ele,
-            capacity=hut_schema.capacity.opened,
+            capacity_open=hut_schema.capacity.opened,
+            capacity_closed=hut_schema.capacity.closed,
             url=hut_schema.url,
             is_active=hut_schema.is_active,
             is_public=hut_schema.is_public,
-            country=hut_schema.country,
-            type=HutType.values[str(hut_schema.hut_type.value)],
+            country_field=hut_schema.country,
+            hut_type_open=HutType.values[str(hut_schema.hut_type.value)],
             review_status=review_status,
             **i18n_fields,
         )
+        if hut_db.hut_type_open.slug == "hut" and hut_db.capacity_closed or 0 > 0:
+            if (hut_db.elevation or 0) < 2000:
+                hut_db.hut_type_closed = HutType.values["unattended-hut"]
+            else:
+                hut_db.hut_type_closed = HutType.values["bicouac"]
         ## Owner stuff -> add to Owner
         src_hut_owner = hut_schema.owner
         owner = None
@@ -368,10 +375,14 @@ class Hut(TimeStampedModel):
             updates["elevation"] = hut_schema.location.ele
         if "location" in updates:
             updates["location"] = dbPoint(hut_schema.location.lon_lat)
-        if "capacity" in updates and hut_schema.capacity.opened is None:
-            del updates["capacity"]
-        if "capacity" in updates:
-            updates["capacity"] = hut_schema.capacity.opened
+        if "capacity_open" in updates and hut_schema.capacity.opened is None:
+            del updates["capacity_open"]
+        if "capacity_closed" in updates and hut_schema.capacity.closed is None:
+            del updates["capacity_closed"]
+        if "capacity_open" in updates:
+            updates["capacity_open"] = hut_schema.capacity.opened
+        if "capacity_closed" in updates:
+            updates["capacity_closed"] = hut_schema.capacity.opened
         if review_status is not None:
             updates["review_status"] = review_status
         with transaction.atomic():
