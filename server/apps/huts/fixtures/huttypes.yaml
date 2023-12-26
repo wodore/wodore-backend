@@ -25,27 +25,27 @@
 - model: huts.huttype
   pk: 10
   fields:
-    slug: campground
+    slug: campgr
     level: 10
     name_de: Biwak Platz
     name_en: campground
     description_de: 'möglicher Biwak Platz, keine Infrastruktur'
     description_en: 'possible campground without infrastructure'
-    symbol: huts/types/symbols/detailed/campground.png
-    symbol_simple: huts/types/symbols/simple/campground.png
-    icon: huts/types/icons/campground.png
+    symbol: huts/types/symbols/detailed/campgr.png
+    symbol_simple: huts/types/symbols/simple/campgr.png
+    icon: huts/types/icons/campgr.png
 - model: huts.huttype
   pk: 20
   fields:
-    slug: basic-shelter
+    slug: shelter
     level: 20
     name_de: einfacher Unterstand
     name_en: basic shelter
     description_de: 'einfacher Understand ohne viel Infrastruktur'
     description_en: 'basic shelter without much infrastructure'
-    symbol: huts/types/symbols/detailed/basic_shelter.png
-    symbol_simple: huts/types/symbols/simple/basic_shelter.png
-    icon: huts/types/icons/basic_shelter.png
+    symbol: huts/types/symbols/detailed/shelter.png
+    symbol_simple: huts/types/symbols/simple/shelter.png
+    icon: huts/types/icons/shelter.png
 - model: huts.huttype
   pk: 25
   fields:
@@ -73,15 +73,15 @@
 - model: huts.huttype
   pk: 40
   fields:
-    slug: unattended-hut
+    slug: selfhut
     level: 40
     name_de: unbewartete Hütte
     name_en: unattended hut
     description_de: 'Unbewartete Hütte, oftmals gut eingereichtet'
     description_en: 'unattended hut which are usually well equipped'
-    symbol: huts/types/symbols/detailed/unattended_hut.png
-    symbol_simple: huts/types/symbols/simple/unattended_hut.png
-    icon: huts/types/icons/unattended_hut.png
+    symbol: huts/types/symbols/detailed/selfhut.png
+    symbol_simple: huts/types/symbols/simple/selfhut.png
+    icon: huts/types/icons/selfhut.png
 - model: huts.huttype
   pk: 50
   fields:
@@ -109,15 +109,15 @@
 - model: huts.huttype
   pk: 70
   fields:
-    slug: basic-hotel
+    slug: bhotel
     level: 70
     name_de: einfaches Hotel
     name_en: basic hotel
     description_de: 'Einfaches, nicht luxuriöses, günstiges Hotel, oft auch mit Massenlager'
     description_en: 'basic, non luxiouris, cheap hotel, often with tourist camp'
-    symbol: huts/types/symbols/detailed/basic_hotel.png
-    symbol_simple: huts/types/symbols/simple/basic_hotel.png
-    icon: huts/types/icons/basic_hotel.png
+    symbol: huts/types/symbols/detailed/bhotel.png
+    symbol_simple: huts/types/symbols/simple/bhotel.png
+    icon: huts/types/icons/bhotel.png
 - model: huts.huttype
   pk: 75
   fields:
@@ -153,12 +153,12 @@
 - model: huts.huttype
   pk: 100 
   fields:
-    slug: restaurant
+    slug: resta
     level: 100
     name_de: Restaurant
     name_en: restaurant
     description_de: 'Restaurant ohne Übernachtungsmöglichkeit'
     description_en: 'restaurant without overnight accommodation'
-    symbol: huts/types/symbols/detailed/restaurant.png
-    symbol_simple: huts/types/symbols/simple/restaurant.png
-    icon: huts/types/icons/restaurant.png
+    symbol: huts/types/symbols/detailed/resta.png
+    symbol_simple: huts/types/symbols/simple/resta.png
+    icon: huts/types/icons/resta.png

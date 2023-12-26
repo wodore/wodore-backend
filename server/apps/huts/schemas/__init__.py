@@ -1,6 +1,6 @@
 from typing import Union
 
-from ._hut import HutSchemaOptional
+from ._hut import HutSchemaDetails, HutSchemaOptional
 from ._hut_type import HutTypeDetailSchema, HutTypeSchema
 
 # from ..ref import RefDatabase, RefCreate, HutRefLink, HutRefLinkBase

@@ -2,6 +2,7 @@ import typing as t
 from os import wait
 from time import perf_counter
 from typing import List
+from django.urls import reverse_lazy
 
 import msgspec
 from benedict import benedict
@@ -16,7 +17,7 @@ from django.core.serializers import serialize
 from django.db import IntegrityError
 from django.db.models import F, TextField, Value
 from django.db.models.functions import Cast, Concat, JSONObject, Lower
-from django.http import HttpRequest, HttpResponse
+from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404
 
 from server.apps.api.query import FieldsParam
@@ -28,7 +29,7 @@ from server.apps.translations import (
 )
 
 from ..models import Hut
-from ..schemas import HutSchemaOptional
+from ..schemas import HutSchemaOptional, HutSchemaDetails
 from ._router import router
 from .expressions import GeoJSON
 
@@ -41,10 +42,13 @@ def get_huts(  # type: ignore  # noqa: PGH003
     fields: Query[FieldsParam[HutSchemaOptional]],
     offset: int = 0,
     limit: int | None = None,
-    is_public: bool | None = None,
-) -> list[HutSchemaOptional]:
+    # is_public: bool | None = None, # needs permission
+) -> list[Hut]:
     """Get a list with huts."""
-    huts_db = Hut.objects.select_related("hut_owner").all().filter(is_active=True)
+    activate(lang)
+    huts_db = Hut.objects.select_related("hut_owner").all().filter(is_active=True, is_public=True)
+    # if isinstance(is_public, bool):
+    #    huts_db = huts_db.filter(is_public=is_public)
 
     huts_db = huts_db.select_related("hut_type_open", "hut_type_closed", "hut_owner").annotate(
         orgs=JSONBAgg(
@@ -59,11 +63,8 @@ def get_huts(  # type: ignore  # noqa: PGH003
     )
     if limit is not None:
         huts_db = huts_db[offset : offset + limit]
-    if isinstance(is_public, bool):
-        huts_db = huts_db.filter(is_public=is_public)
-    with override(lang):
-        return huts_db
-        # return fields.validate(list(huts_db))
+    return huts_db
+    # return fields.validate(list(huts_db))
 
 
 def get_json_obj(values: dict[str, t.Any], flat: bool = False) -> dict[str, JSONObject | F]:
@@ -83,7 +84,7 @@ def get_huts_geojson(  # type: ignore  # noqa: PGH003
     lang: LanguageParam,
     offset: int = 0,
     limit: int | None = None,
-    is_public: bool | None = None,
+    # is_public: bool | None = None, # needs permission
     embed_all: bool = False,
     embed_type: bool = False,
     embed_owner: bool = False,
@@ -92,10 +93,11 @@ def get_huts_geojson(  # type: ignore  # noqa: PGH003
     include_elevation: bool = False,
     include_name: bool = False,
     flat: bool = True,
-) -> list[HutSchemaOptional]:
-    # t1_start = perf_counter()
+) -> HttpResponse:
     activate(lang)
-    qs = Hut.objects.filter(is_active=True)
+    qs = Hut.objects.filter(is_active=True, is_public=True)
+    # if isinstance(is_public, bool):
+    #     qs = qs.filter(is_public=is_public)
     properties = [
         "id",
         "slug",
@@ -161,8 +163,6 @@ def get_huts_geojson(  # type: ignore  # noqa: PGH003
         properties.append("organizations")
     if limit is not None:
         qs = qs[offset : offset + limit]
-    if isinstance(is_public, bool):
-        qs = qs.filter(is_public=is_public)
     # with override(lang):
     geojson = qs.aggregate(
         GeoJSON(
@@ -176,15 +176,14 @@ def get_huts_geojson(  # type: ignore  # noqa: PGH003
     return response
 
 
-@router.get("/{slug}", response=HutSchemaOptional, exclude_unset=True, operation_id="get_hut")
+@router.get("/{slug}", response=HutSchemaDetails, exclude_unset=True, operation_id="get_hut")
 @with_language_param()
-def get_hut(
-    request: HttpRequest, slug: str, lang: LanguageParam, fields: Query[FieldsParam[HutSchemaOptional]]
-) -> HutSchemaOptional:
+def get_hut(request: HttpRequest, slug: str, lang: LanguageParam, fields: Query[FieldsParam[HutSchemaDetails]]) -> Hut:
     """Get a hut by its slug."""
-    huts_db = Hut.objects.select_related("hut_owner").all().filter(is_active=True, slug=slug)
+    activate(lang)
+    qs = Hut.objects.select_related("hut_owner").all().filter(is_active=True, is_public=True, slug=slug)
     media_url = request.build_absolute_uri(settings.MEDIA_URL)
-    huts_db = huts_db.select_related("hut_type_open", "hut_type_closed", "hut_owner").annotate(
+    qs = qs.select_related("hut_type_open", "hut_type_closed", "hut_owner").annotate(
         orgs=JSONBAgg(
             JSONObject(
                 logo=Concat(Value(media_url), F("org_set__logo")),
@@ -195,12 +194,22 @@ def get_hut(
             )
         )
     )
-    with override(lang):
-        return huts_db.first()
-        # return fields.validate(list(huts_db))
+    # with override(lang):
+    hut_db = qs.first()
+    if hut_db is None:
+        msg = f"Could not find '{slug}'."
+        raise Http404(msg)
+    link = reverse_lazy("admin:huts_hut_change", args=[hut_db.pk])
+    hut_db.edit_link = request.build_absolute_uri(link)
+    return hut_db
+    # schema = HutSchemaDetails.model_validate(hut_db)
+    # schema.edit_link = reverse_lazy("admin:huts_hut__change", hut_db.id)
+    # return schema.model_dump()
+    ## return fields.validate(list(huts_db))
 
 
-# @router.post("/", response=OrganizationOptional)
+#
+#  @router.post("/", response=OrganizationOptional)
 # def create_organization(request, payload: OrganizationCreate):
 #    last_elem = Organization.objects.values("order").last() or {}
 #    order = last_elem.get("order", -1) + 1

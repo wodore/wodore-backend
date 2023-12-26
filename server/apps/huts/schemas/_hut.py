@@ -65,6 +65,7 @@ class HutSchemaOptional(BaseModel):
     capacity_open: int | None = None
     capacity_closed: int | None = None
     organizations: list[OrganizationDetailSchema] | None = Field(None, alias="orgs")
+    photo: str = Field("")
 
     @field_validator("country", mode="before")
     @classmethod
@@ -75,3 +76,7 @@ class HutSchemaOptional(BaseModel):
     #    model = Hut
     #    fields = _HUT_FIELDS
     #    fields_optional = (f for f in _HUT_FIELDS if f not in ("name"))  # .remove("name")
+
+
+class HutSchemaDetails(HutSchemaOptional):
+    edit_link: str | None = None

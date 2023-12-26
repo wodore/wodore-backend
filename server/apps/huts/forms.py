@@ -15,6 +15,7 @@ HutAdminFieldsets = [
                 "url",
                 "description_i18n",
                 "note_i18n",
+                "photos",
             ],
         },
     ),
@@ -63,6 +64,7 @@ HutAdminFieldsets = [
             # "classes": ["collapse"],
             "fields": [
                 ("capacity_open", "capacity_closed"),
+                "open_monthly",
             ],
         },
     ),

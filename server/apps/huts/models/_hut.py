@@ -2,7 +2,7 @@ import typing as t
 from sysconfig import is_python_build
 
 from easydict import EasyDict
-from hut_services import BaseService, HutSchema, HutSourceSchema
+from hut_services import BaseService, HutSchema, HutSourceSchema, OpenMonthlySchema
 from jinja2 import Environment
 
 from django_countries.fields import CountryField
@@ -18,18 +18,22 @@ from django.contrib.postgres.indexes import GinIndex
 from django.db import transaction
 from django.db.models import F, Value
 from django.db.models.functions import Concat, Lower
-from django.utils.text import slugify
 from django.utils.translation import get_language
 from django.utils.translation import gettext_lazy as _
+from slugify import slugify
 
 from server.apps.contacts.models import Contact, ContactFunction
 from server.apps.organizations.models import Organization
 from server.apps.owners.models import Owner
+from server.core import UpdateCreateEnum
 
 from ..managers import HutManager
 from ._associations import HutContactAssociation, HutOrganizationAssociation
 from ._hut_source import HutSource
 from ._hut_type import HutType
+
+from hut_services.core.guess import guess_slug_name
+from django_extensions.db.fields import AutoSlugField
 
 
 class _ReviewStatusChoices(models.TextChoices):
@@ -40,7 +44,25 @@ class _ReviewStatusChoices(models.TextChoices):
     reject = "reject", _("reject")
 
 
+_monthly_open_default_value = OpenMonthlySchema(url="").model_dump
+
+
 class Hut(TimeStampedModel):
+    UPDATE_SCHEMA_FIELDS = (
+        "slug",
+        "name",
+        "note",
+        "description",
+        "location",
+        "url",
+        "country_code",
+        "capacity",
+        "type",
+        "photos",
+        "hut_type",
+        "is_public",
+        "open_monthly",
+    )
     ReviewStatusChoices = _ReviewStatusChoices
     # manager
     objects: HutManager = HutManager()
@@ -88,7 +110,7 @@ class Hut(TimeStampedModel):
     )  # TODO: maybe notes with mutlipe notes and category
     note_i18n: str  # for typing
 
-    photo = models.CharField(blank=True, default="", max_length=200, verbose_name=_("Hut photo"))
+    photos = models.CharField(blank=True, default="", max_length=1000, verbose_name=_("Hut photo"))
     country_field = CountryField()
     location = models.PointField(blank=False, verbose_name="Location")
     elevation = models.DecimalField(null=True, blank=True, max_digits=5, decimal_places=1, verbose_name=_("Elevation"))
@@ -98,6 +120,13 @@ class Hut(TimeStampedModel):
         null=True,
         verbose_name=_("Capacity if closed"),
         help_text=_("Only if an additional shelter is available, e.g. during winter."),
+    )
+    open_monthly = models.JSONField(
+        default=_monthly_open_default_value,
+        verbose_name=_("Hut Open"),
+        help_text=_(
+            'Possible values: "yes", "maybe", "no" or "unknown". "url" is a link to information when it is open or closed.'
+        ),
     )
 
     hut_type_open = models.ForeignKey(
@@ -150,8 +179,21 @@ class Hut(TimeStampedModel):
     def __str__(self) -> str:
         return self.name_i18n
 
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+
+        # save original values, when model is loaded from database,
+        # in a separate attribute on the model
+        instance._orig_slug = dict(zip(field_names, values)).get("slug")  # type: ignore  # noqa: PGH003
+        return instance
+
     def save(self, *args, **kwargs):
-        self.slug = self._create_slug_name(self.name_i18n)
+        if not self.slug:
+            self.slug = self.create_unique_slug_name(self.name_i18n)
+        # if updated
+        if not self._state.adding and self.slug != self._orig_slug:  # updates # type: ignore  # noqa: PGH003
+            self.slug = self.create_unique_slug_name(self.slug)
         super().save(*args, **kwargs)
 
     def next(self) -> int | None:
@@ -183,10 +225,10 @@ class Hut(TimeStampedModel):
 
     @classmethod
     def _convert_source(cls, hut_source: HutSource) -> HutSchema:
-        orgs = hut_source.organization.slug
-        service: BaseService = settings.SERVICES.get(orgs)
+        org = hut_source.organization.slug
+        service: BaseService = settings.SERVICES.get(org)
         if service is None:
-            err_msg = f"No service for organization '{orgs}' found."
+            err_msg = f"No service for organization '{org}' found."
             raise NotImplementedError(err_msg)
         return service.convert(hut_source)
 
@@ -239,13 +281,15 @@ class Hut(TimeStampedModel):
         hut_db = Hut(
             location=dbPoint(hut_schema.location.lon_lat),
             elevation=hut_schema.location.ele,
-            capacity_open=hut_schema.capacity.opened,
-            capacity_closed=hut_schema.capacity.closed,
+            capacity_open=hut_schema.capacity.if_open,
+            capacity_closed=hut_schema.capacity.if_closed,
             url=hut_schema.url,
             is_active=hut_schema.is_active,
             is_public=hut_schema.is_public,
-            country_field=hut_schema.country,
-            hut_type_open=HutType.values[str(hut_schema.hut_type.value)],
+            country_field=hut_schema.country_code or "CH",
+            photos=hut_schema.photos[0].thumb or hut_schema.photos[0].url if hut_schema.photos else "",
+            hut_type_open=HutType.values[str(hut_schema.hut_type.if_open)],
+            hut_type_closed=HutType.values[str(hut_schema.hut_type.if_closed)],
             review_status=review_status,
             **i18n_fields,
         )
@@ -309,15 +353,6 @@ class Hut(TimeStampedModel):
             hut_db.refresh_from_db()
             if _hut_source is not None:
                 hut_db.add_organization(_hut_source)
-                # new_org = HutOrganizationAssociation(
-                #    hut=hut_db,
-                #    organization=_hut_source.organization,
-                #    props=_hut_source.source_properties,
-                #    source_id=_hut_source.source_id,
-                # )
-                # new_org.save()
-                # _hut_source.hut = hut_db
-                # _hut_source.save()
             if contacts:
                 for i, c in enumerate(contacts):
                     c.save()
@@ -332,11 +367,23 @@ class Hut(TimeStampedModel):
         hut_db: "Hut",
         hut_source: HutSource,
         review: bool = True,
+        force_overwrite: bool = False,  # overwrite exisitng entries
+        force_overwrite_include: t.Sequence[str] = [],  # set a list which field which should be overwritten
+        force_overwrite_exclude: t.Sequence[str] = [],  # ... exclude when overwritten
+        force_none: bool = False,  # force t oset value to none (overwrite is needed)
         _review_status: "Hut.ReviewStatusChoices | None" = None,
-    ) -> "Hut":
+    ) -> tuple["Hut", UpdateCreateEnum]:
         hut_schema = cls._convert_source(hut_source)
         return cls.update_from_schema(
-            hut_db=hut_db, hut_schema=hut_schema, review=review, _hut_source=hut_source, _review_status=_review_status
+            hut_db=hut_db,
+            hut_schema=hut_schema,
+            review=review,
+            force_overwrite=force_overwrite,
+            force_overwrite_include=force_overwrite_include,
+            force_overwrite_exclude=force_overwrite_exclude,
+            force_none=force_none,
+            _hut_source=hut_source,
+            _review_status=_review_status,
         )
 
     @classmethod
@@ -345,18 +392,22 @@ class Hut(TimeStampedModel):
         hut_db: "Hut",
         hut_schema: HutSchema,
         review: bool = True,
+        force_overwrite: bool = False,  # overwrite exisitng entries
+        force_overwrite_include: t.Sequence[str] = [],  # set a list which field which should be overwritten
+        force_overwrite_exclude: t.Sequence[str] = [],  # ... exclude when overwritten
+        force_none: bool = False,  # force t oset value to none (overwrite is needed)
         _hut_source: HutSource | None = None,
         _review_status: "Hut.ReviewStatusChoices | None" = None,
-    ) -> "Hut":
+    ) -> tuple["Hut", UpdateCreateEnum]:
         if _review_status is not None:
             review_status = _review_status
         else:
             review_status = Hut.ReviewStatusChoices.review if review else None
         updates = hut_schema.model_dump(
-            by_alias=True,
-            exclude_unset=True,
-            exclude_none=True,
-            include={"name", "note", "description", "location", "capacity", "url", "country"},
+            by_alias=False,
+            # exclude_unset=True,
+            # exclude_none=True,
+            include=set(cls.UPDATE_SCHEMA_FIELDS),
         )
         ### Translations -> Better solution?
         i18n_fields = {}
@@ -371,43 +422,64 @@ class Hut(TimeStampedModel):
                 out_field = "note" if field == "notes" else field
                 i18n_fields[f"{out_field}_{code}"] = value
         updates.update(i18n_fields)
+        if review_status is not None:
+            updates["review_status"] = review_status
         if "location" in updates and hut_schema.location.ele is not None:
             updates["elevation"] = hut_schema.location.ele
         if "location" in updates:
             updates["location"] = dbPoint(hut_schema.location.lon_lat)
-        if "capacity_open" in updates and hut_schema.capacity.opened is None:
-            del updates["capacity_open"]
-        if "capacity_closed" in updates and hut_schema.capacity.closed is None:
-            del updates["capacity_closed"]
-        if "capacity_open" in updates:
-            updates["capacity_open"] = hut_schema.capacity.opened
-        if "capacity_closed" in updates:
-            updates["capacity_closed"] = hut_schema.capacity.opened
-        if review_status is not None:
-            updates["review_status"] = review_status
+        # if "capacity_open" in updates and hut_schema.capacity.if_open is None:
+        #    del updates["capacity_open"]
+        # if "capacity_closed" in updates and hut_schema.capacity.if_closed is None:
+        #    del updates["capacity_closed"]
+        if "country_code" in updates:
+            updates["country_field"] = updates["country_code"] or "CH"
+            del updates["country_code"]
+        if "capacity" in updates:
+            del updates["capacity"]
+            updates["capacity_open"] = hut_schema.capacity.if_open
+            updates["capacity_closed"] = hut_schema.capacity.if_closed
+        if "photos" in updates:
+            updates["photos"] = hut_schema.photos[0].thumb or hut_schema.photos[0].url if hut_schema.photos else ""
+        if "hut_type" in updates:
+            del updates["hut_type"]
+            updates["hut_type_open"] = HutType.values[str(hut_schema.hut_type.if_open.value)]
+            updates["hut_type_closed"] = (
+                HutType.values[str(hut_schema.hut_type.if_closed.value)] if hut_schema.hut_type.if_closed else None
+            )
+        updated = UpdateCreateEnum.no_change
         with transaction.atomic():
             for f, v in updates.items():
-                setattr(hut_db, f, v)
+                # 1. Only update if no entry or forced
+                # 2. Force to set None as well
+                if (
+                    (
+                        not hasattr(hut_db, f)  # Value is still empty
+                        or (  # -> check for overwrite force ...
+                            # only overwrite without any fields specified -> overwrite all
+                            (force_overwrite and not force_overwrite_exclude and not force_overwrite_include)
+                            or (  # some fields (include or exclude) is defined (exclusive or)
+                                (force_overwrite and f in force_overwrite_include and not force_overwrite_exclude)
+                                or (
+                                    force_overwrite and f not in force_overwrite_exclude and not force_overwrite_include
+                                )
+                            )
+                        )
+                    )
+                    and (v or force_none)  # only write 'None' if foced to
+                    and getattr(hut_db, f) != v  # only update if value is not the same
+                ):
+                    # special comparision for dbPoint -> valus are always different because it is a class
+                    if isinstance(v, dbPoint) and v.tuple == getattr(hut_db, f).tuple:  # type: ingore[attr-defined]
+                        continue
+                    setattr(hut_db, f, v)
+                    updated = UpdateCreateEnum.updated
             hut_db.save()
-            # why does it not work with update
-            # cls.objects.filter(slug=hut_db.slug).update(**updates)
             # check for new organization
             if _hut_source is not None and _hut_source.organization not in hut_db.org_set.all():
                 hut_db.add_organization(_hut_source)
-        # hut_db = Hut(
-        #    location=dbPoint(hut_schema.location.lon_lat),
-        #    elevation=hut_schema.location.ele,
-        #    capacity=hut_schema.capacity.opened,
-        #    url=hut_schema.url,
-        #    is_active=hut_schema.is_active,
-        #    is_public=hut_schema.is_public,
-        #    country=hut_schema.country,
-        #    type=HutType.values[str(hut_schema.hut_type.value)],
-        #    review_status=review_status,
-        #    **i18n_fields,
-        # )
         hut_db.refresh_from_db()
-        return hut_db
+        return hut_db, updated
 
     @classmethod
     def update_or_create(
@@ -415,9 +487,13 @@ class Hut(TimeStampedModel):
         hut_schema: HutSchema | None = None,
         hut_source: HutSource | None = None,
         review: bool | None = None,
+        force_overwrite: bool = False,  # overwrite exisitng entries
+        force_overwrite_include: t.Sequence[str] = [],  # set a list which field which should be overwritten
+        force_overwrite_exclude: t.Sequence[str] = [],  # ... exclude when overwritten
+        force_none: bool = False,  # force t oset value to none (overwrite is needed)
         _review_status_update: "Hut.ReviewStatusChoices | None" = None,
         _review_status_create: "Hut.ReviewStatusChoices | None" = None,
-    ) -> tuple["Hut", bool]:
+    ) -> tuple["Hut", UpdateCreateEnum]:
         """Create or update either from a `HutSchema` or `HutSource` model.
 
         Args:
@@ -448,22 +524,27 @@ class Hut(TimeStampedModel):
         if hut_db is not None:
             # do update
             if hut_schema is None and hut_source is not None:
-                return (
-                    cls.update_from_source(
-                        hut_db=hut_db, hut_source=hut_source, review=bool(review), _review_status=_review_status_update
-                    ),
-                    False,
+                return cls.update_from_source(
+                    hut_db=hut_db,
+                    hut_source=hut_source,
+                    review=bool(review),
+                    force_overwrite=force_overwrite,
+                    force_overwrite_include=force_overwrite_include,
+                    force_overwrite_exclude=force_overwrite_exclude,
+                    force_none=force_none,
+                    _review_status=_review_status_update,
                 )
             if hut_schema is not None:
-                return (
-                    cls.update_from_schema(
-                        hut_db=hut_db,
-                        hut_schema=hut_schema,
-                        _hut_source=hut_source,
-                        review=bool(review),
-                        _review_status=_review_status_update,
-                    ),
-                    False,
+                return cls.update_from_schema(
+                    hut_db=hut_db,
+                    hut_schema=hut_schema,
+                    _hut_source=hut_source,
+                    force_overwrite=force_overwrite,
+                    force_overwrite_include=force_overwrite_include,
+                    force_overwrite_exclude=force_overwrite_exclude,
+                    force_none=force_none,
+                    review=bool(review),
+                    _review_status=_review_status_update,
                 )
 
         if hut_schema is None and hut_source is not None:
@@ -471,7 +552,7 @@ class Hut(TimeStampedModel):
                 cls.create_from_source(
                     hut_source=hut_source, review=bool(review), _review_status=_review_status_create
                 ),
-                True,
+                UpdateCreateEnum.created,
             )
         if hut_schema is not None:
             return (
@@ -481,7 +562,7 @@ class Hut(TimeStampedModel):
                     review=bool(review),
                     _review_status=_review_status_create,
                 ),
-                True,
+                UpdateCreateEnum.created,
             )
         err_msg = "Either 'hut_schema' or 'hut_source' is required."
         raise UserWarning(err_msg)
@@ -554,56 +635,13 @@ class Hut(TimeStampedModel):
             orgs.append(EasyDict(**org))
         return orgs
 
-    def _create_slug_name(self, hut_name: str, max_length: int = 25, min_length: int = 5) -> str:
-        for r in ("ä", "ae"), ("ü", "ue"), ("ö", "oe"):
-            hut_name = hut_name.lower().replace(r[0], r[1])
-        slug = slugify(hut_name)
-        if len(slug) > max_length:
-            slug = slug[:max_length]
-        slug = slug.strip(" -")
-        slug_orig = slug
-        slugs = slug.split("-")
-        slugl = []
-        for s in slugs:
-            if (
-                s
-                not in [
-                    "alp",
-                    "alpe",
-                    "alpage",
-                    "alpina",
-                    "huette",
-                    "cabanne",
-                    "cabane",
-                    "capanna",
-                    "chamana",
-                    "chamanna",
-                    "chamonna",
-                    "chalet",
-                    "casa",
-                    "capanna",
-                    "biwak",
-                    "bivouac",
-                    "bivacco",
-                    "berghotel",
-                    "chalets",
-                    "camona",
-                    "hotel",
-                    "berghuette",
-                    "berggasthaus",
-                    "berghaus",
-                    "cascina",
-                    "gite",
-                    "rifugio",
-                    "refuge",
-                    "citta",
-                    "guide",
-                ]
-                and len(s) >= min_length
-            ):
-                slugl.append(s)
-        slug = "-".join(slugl)
-        if not slug:
-            slug = slug_orig
-        slug = slug.replace("sac", "").replace("cas", "").replace("caf", "")
-        return slug.strip(" -")
+    def create_unique_slug_name(
+        self, hut_name: str, max_length: int = 25, min_length: int = 5, attempts: int = 10
+    ) -> str:
+        orig_slug = guess_slug_name(hut_name=hut_name, max_length=max_length, min_length=min_length)
+        slug = orig_slug
+        cnt = 1
+        while Hut.objects.filter(slug=slug).count() and cnt < attempts:  # slug exists
+            slug = f"{orig_slug}{cnt}"
+            cnt += 1
+        return slug

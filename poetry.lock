@@ -1208,7 +1208,7 @@ python-semantic-release = "^8.5.0"
 type = "git"
 url = "https://github.com/unfoldadmin/django-unfold.git"
 reference = "main"
-resolved_reference = "ad5069eebbdcd9853e56379968cccf32fc856f31"
+resolved_reference = "4034084266072e5dfa07370f534993258c3403ce"
 
 [[package]]
 name = "doc8"
@@ -1828,19 +1828,21 @@ develop = false
 easydict = "^1.11"
 geojson-pydantic = "^1.0.1"
 httpx = "^0.25.2"
+joblib = "^1.3.2"
 overpy = "^0.7"
 phonenumbers = "^8.13.26"
 pydantic = "^2.5.2"
 python-slugify = "^8.0.1"
 types-python-slugify = "^8.0.0.3"
 types-xmltodict = "^0.13.0.3"
+wikidata = "^0.7.0"
 xmltodict = "^0.13.0"
 
 [package.source]
 type = "git"
 url = "https://github.com/wodore/hut-services.git"
 reference = "main"
-resolved_reference = "07ee0e2fb6175bbac14581d53ade68cecddcf063"
+resolved_reference = "93b475da843cde86a1ad218edabc056a7db7de50"
 
 [[package]]
 name = "hut-services-private"
@@ -1862,7 +1864,7 @@ types-python-slugify = "^8.0.0.3"
 type = "git"
 url = "ssh://git@github.com/wodore/hut-services-private.git"
 reference = "main"
-resolved_reference = "488b0304c6f552c1e9a580f5509c21064afeacbf"
+resolved_reference = "efba064a87f1b3811bbb92c8d25a229c959cc7d8"
 
 [[package]]
 name = "hypothesis"
@@ -2070,6 +2072,17 @@ python-versions = ">=3.7"
 files = [
     {file = "jmespath-1.0.1-py3-none-any.whl", hash = "sha256:02e2e4cc71b5bcab88332eebf907519190dd9e6e82107fa7f83b1003a6252980"},
     {file = "jmespath-1.0.1.tar.gz", hash = "sha256:90261b206d6defd58fdd5e85f478bf633a2901798906be2ad389150c5c60edbe"},
+]
+
+[[package]]
+name = "joblib"
+version = "1.3.2"
+description = "Lightweight pipelining with Python functions"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "joblib-1.3.2-py3-none-any.whl", hash = "sha256:ef4331c65f239985f3f2220ecc87db222f08fd22097a3dd5698f693875f8cbb9"},
+    {file = "joblib-1.3.2.tar.gz", hash = "sha256:92f865e621e17784e7955080b6d042489e3b8e294949cc44c6eac304f59772b1"},
 ]
 
 [[package]]
@@ -4174,6 +4187,21 @@ MarkupSafe = ">=2.1.1"
 
 [package.extras]
 watchdog = ["watchdog (>=2.3)"]
+
+[[package]]
+name = "wikidata"
+version = "0.7.0"
+description = "Wikidata client library"
+optional = false
+python-versions = ">=3.4.0"
+files = [
+    {file = "Wikidata-0.7.0-py3-none-any.whl", hash = "sha256:601ce7b4133c42ca82e63b4653829c4f825eae63fe537b304a418af060c486ec"},
+    {file = "Wikidata-0.7.0.tar.gz", hash = "sha256:32ad4cc2c695435d411c83417b1eac210baa635abaf3ff38779666012daedd47"},
+]
+
+[package.extras]
+mypy = ["mypy (>=0.782)"]
+tests = ["flake8 (>=3.8.3)", "flake8-import-order-spoqa", "pytest (>=4.6.11,<4.7.0)", "pytest-flake8 (>=1.0.6,<1.1.0)"]
 
 [[package]]
 name = "win32-setctime"

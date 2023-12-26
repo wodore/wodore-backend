@@ -10,7 +10,7 @@ from django.http import HttpRequest
 LANGUAGE_CODES = [lang[0] for lang in settings.LANGUAGES]
 
 LanguageParam = t.Annotated[
-    str | None,
+    str,
     Query(
         "de",
         description=f"Select language code: {', '.join(LANGUAGE_CODES)}.",  # or _empty_ for all.",

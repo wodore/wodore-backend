@@ -20,7 +20,7 @@ from django.utils.translation import gettext_lazy as _
 from server.settings.components import BASE_DIR, config
 
 try:
-    from hut_services_private import PRIVATE_SERVICES
+    from hut_services_private import SERVICES as PRIVATE_SERVICES
 except ImportError:
     PRIVATE_SERVICES = {}
 

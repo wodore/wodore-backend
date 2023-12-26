@@ -47,7 +47,7 @@ class HutsAdmin(ModelAdmin):
         "title",
         "location_coords",
         "elevation",
-        "hut_type_open",
+        "hut_type",
         "logo_orgs",
         "is_active",
         "is_public",
@@ -106,6 +106,12 @@ class HutsAdmin(ModelAdmin):
             owner = "-"
         return (obj.name_i18n,)  # self.icon_thumb(obj.type.icon_simple.url))
 
+    @display(header=True, ordering=Lower("hut_type_open"))
+    def hut_type(self, obj):
+        opened = mark_safe(f'<span class = "text-xs">{obj.hut_type_open.slug}</span>')
+        closed = mark_safe(f'<span class = "text-xs">{obj.hut_type_closed.slug if obj.hut_type_closed else "-"}</span>')
+        return (opened, closed)
+
     def location_coords(self, obj):
         return f"{obj.location.y:.4f}, {obj.location.x:.4f}"
 
@@ -115,7 +121,6 @@ class HutsAdmin(ModelAdmin):
 
     @display(description=_("Organizations"))
     def logo_orgs(self, obj: Hut) -> str:  # new
-        ic(obj.orgs)
         SRC = settings.MEDIA_URL
         imgs = [
             f'<a href={o["link_i18n"]} target="blank"><img class="inline pr-2" src="{SRC}/{o["logo"]}" width="28" alt="{o["name_i18n"]}"/></a>'

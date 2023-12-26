@@ -1,9 +1,16 @@
 import textwrap
+from enum import Enum
 from typing import Literal
 
 from django.conf import settings
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
+
+
+class UpdateCreateEnum(Enum):
+    no_change = 0
+    created = 1
+    updated = 2
 
 
 def text_shorten_html(

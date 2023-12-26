@@ -284,11 +284,12 @@ class CRUDCommand(BaseCommand, Generic[TModel]):
         if self.use_limit_arg:
             limit = options.get("limit", None)
             if not limit:
+                default_value = self.default_limit(drop=drop, add=add, update=update)
                 if force:
-                    limit = self.default_limit(drop=drop, add=add, update=update)
+                    limit = default_value
                 else:
                     try:
-                        limit = click.prompt("Limit of entries to add (--limit)", type=int, default=10)
+                        limit = click.prompt("Limit of entries to add (--limit)", type=int, default=default_value)
                     except click.Abort:
                         print()
                         sys.exit(0)

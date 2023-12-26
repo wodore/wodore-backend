@@ -3,7 +3,8 @@ from django.conf import settings  # noqa: F401
 
 from ninja import Field, ModelSchema
 
-# from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import ConfigDict
+
 # from server.apps.translations import TranslationSchema
 from ..models import HutType
 
@@ -21,6 +22,7 @@ class HutTypeDetailSchema(ModelSchema):
 
 
 class HutTypeSchema(ModelSchema):
+    # model_config = ConfigDict(from_attributes=True)
     level: int | None = None
     slug: str
     name: str | None = Field(..., alias="name_i18n")
