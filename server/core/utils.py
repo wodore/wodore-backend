@@ -7,10 +7,13 @@ from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
 
-class UpdateCreateEnum(Enum):
-    no_change = 0
-    created = 1
-    updated = 2
+class UpdateCreateStatus(str, Enum):
+    no_change = "no change"
+    created = "created"
+    updated = "updated"
+    deleted = "deleted"
+    exists = "exists"
+    ignored = "ignored"
 
 
 def text_shorten_html(

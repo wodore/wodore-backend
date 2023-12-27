@@ -54,7 +54,7 @@ class HutsAdmin(ModelAdmin):
         "review_tag",
     )
     list_display_links = ("symbol_img", "title")
-    list_filter = ("is_active", "is_public", "hut_type_open", "org_set")
+    list_filter = ("is_active", "is_public", "review_status", "hut_type_open", "hut_type_closed", "org_set")
     fieldsets = HutAdminFieldsets
     autocomplete_fields = ("hut_owner",)
     readonly_fields = (
@@ -76,7 +76,7 @@ class HutsAdmin(ModelAdmin):
     def get_queryset(self, request: HttpRequest) -> QuerySetAny:
         qs = super().get_queryset(request)
         # prefetch_related("orgs_source", "orgs_source__organization").
-        return qs.select_related("hut_type_open", "hut_owner").annotate(
+        return qs.select_related("hut_type_open", "hut_type_closed", "hut_owner").annotate(
             orgs=JSONBAgg(
                 JSONObject(
                     logo="org_set__logo",
@@ -92,7 +92,8 @@ class HutsAdmin(ModelAdmin):
         label={
             Hut.ReviewStatusChoices.review: "info",
             Hut.ReviewStatusChoices.done: "success",
-            Hut.ReviewStatusChoices.research: "warning",
+            Hut.ReviewStatusChoices.new: "warning",  # green
+            Hut.ReviewStatusChoices.research: "danger",
         },
     )
     def review_tag(self, obj):
@@ -106,7 +107,7 @@ class HutsAdmin(ModelAdmin):
             owner = "-"
         return (obj.name_i18n,)  # self.icon_thumb(obj.type.icon_simple.url))
 
-    @display(header=True, ordering=Lower("hut_type_open"))
+    @display(header=True, description=_("Type"))
     def hut_type(self, obj):
         opened = mark_safe(f'<span class = "text-xs">{obj.hut_type_open.slug}</span>')
         closed = mark_safe(f'<span class = "text-xs">{obj.hut_type_closed.slug if obj.hut_type_closed else "-"}</span>')

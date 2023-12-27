@@ -1,24 +1,18 @@
-import contextlib
 import sys
-from os import wait
-from typing import Any, Sequence, Type, TypeAlias
+from typing import Any, Sequence
 
 import click
 from hut_services import BaseService, HutSourceSchema
-
-# from hut_services import BaseHutSourceSchema, BaseSourceProperties
-# from hut_services.core.service import BaseService
-from pydantic import BaseModel
 
 from django.conf import settings
 from django.contrib.gis.geos import Point as dbPoint
 from django.core.management.base import CommandParser
 
 from server.apps.organizations.models import Organization
+from server.core import UpdateCreateStatus
 from server.core.management.base import CRUDCommand
 
 from ...models import HutSource
-from ...schemas.old.status import CreateOrUpdateStatus
 from ...services.sources import HutSourceService
 
 # SERVICES: dict[str, Type[BaseService[BaseModel]]] = settings.SERVICES
@@ -26,39 +20,38 @@ from ...services.sources import HutSourceService
 
 def add_hut_source_db(  # type: ignore[no-any-unimported]
     huts: Sequence[HutSourceSchema],
-    reference: str,
-    # update_existing: bool = False, overwrite_existing_fields: bool=False,
-    init: bool,
+    organization: str,
     extern_slug: str | None = None,
 ) -> list[HutSource]:
-    hut_source_service = HutSourceService()
     try:
-        organization_id = Organization.get_by_slug(slug=reference).id
+        org = Organization.get_by_slug(slug=organization)
     except Organization.DoesNotExist:
-        click.secho(f"Organiztion '{reference}' does not exist, add it first.", fg="red")
+        click.secho(f"Organiztion '{organization}' does not exist, add it first.", fg="red")
         sys.exit(1)
+    init = HutSource.objects.filter(organization=org).count() == 0
     source_huts = []
     number = 0
     for hut in huts:
         number += 1
         shut = HutSource(
             source_id=hut.source_id,
-            location=dbPoint(hut.location.lon_lat),
-            organization_id=organization_id,
+            location=dbPoint(hut.location.lon_lat) if hut.location else None,
+            organization=org,
             name=hut.name,
             source_data=hut.source_data.model_dump(by_alias=True) if hut.source_data is not None else {},
             source_properties=hut.source_properties.model_dump(by_alias=True) if hut.source_properties else {},
         )
         review_status = HutSource.ReviewStatusChoices.done if init else HutSource.ReviewStatusChoices.new
-        shut, status = hut_source_service.create(shut, new_review_status=review_status)
+        shut, status = HutSource.add(shut, new_review_status=review_status)
         _hut_name = shut.name if len(shut.name) < 18 else shut.name[:15] + ".."
         _name = f"  Hut {number!s: <3} {'`'+shut.source_id+'`':<15} {_hut_name:<20} {'('+str(shut.organization)+')':<8}"
         click.echo(f"{_name: <48}", nl=False)
         status_color = {
-            CreateOrUpdateStatus.updated: "yellow",
-            CreateOrUpdateStatus.created: "green",
-            CreateOrUpdateStatus.exists: "blue",
-            CreateOrUpdateStatus.ignored: "magenta",
+            UpdateCreateStatus.updated: "yellow",
+            UpdateCreateStatus.created: "green",
+            UpdateCreateStatus.exists: "blue",
+            UpdateCreateStatus.no_change: "bright_black",
+            UpdateCreateStatus.ignored: "magenta",
         }
         click.secho(f"  ... {status:<8}", fg=status_color.get(status, "red"), nl=False)
         click.secho(f" (#{shut.id})", dim=True)
@@ -75,7 +68,6 @@ def add_hutsources_function(
     selected_orgs = kwargs.get("selected_organizations", [])
     limit = kwargs.get("limit", None)
     offset = kwargs.get("offset", None)
-    init = kwargs.get("init", None)
     lang = kwargs.get("lang", None)
     for org in selected_orgs:
         service_class: BaseService = settings.SERVICES.get(org, None)
@@ -84,7 +76,7 @@ def add_hutsources_function(
             obj.stdout.write(f"Get data from '{service.__class__.__name__}'")
             src_huts = service.get_huts_from_source(limit=limit, offset=offset, lang=lang)
             obj.stdout.write(f"Got {len(src_huts)} results back, start filling database:")
-            huts = add_hut_source_db(src_huts, reference=org, init=init)
+            huts = add_hut_source_db(src_huts, organization=org)
             obj.stdout.write(obj.style.SUCCESS(f"Successfully added {len(huts)} new huts"))
         else:
             obj.stdout.write(obj.style.WARNING(f"Selected organization '{org}' not supported."))
@@ -104,7 +96,6 @@ class Command(CRUDCommand[HutSource]):
 
     def add_arguments(self, parser: CommandParser) -> None:
         super().add_arguments(parser)
-        parser.add_argument("-i", "--init", action="store_true", help="Initial data fill")
         parser.add_argument(
             "-O",
             "--orgs",
@@ -115,6 +106,6 @@ class Command(CRUDCommand[HutSource]):
         )
         parser.add_argument("--lang", help="Language to use (de, en, fr, it)", default="de", type=str)
 
-    def handle(self, init: bool, orgs: str, lang: str, *args: Any, **options: Any) -> None:  # type: ignore[override]
+    def handle(self, orgs: str, lang: str, *args: Any, **options: Any) -> None:  # type: ignore[override]
         org_list = settings.SERVICES.keys() if orgs.lower().strip() == "all" else [o.strip() for o in orgs.split(",")]
-        super().handle(kwargs_add={"init": init, "selected_organizations": org_list, "lang": lang}, **options)
+        super().handle(kwargs_add={"selected_organizations": org_list, "lang": lang}, **options)

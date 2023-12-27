@@ -1,14 +1,18 @@
 # type: ignore  # noqa: PGH003
 # TODO: add types
 import sys
+import json
 import typing as t
 
 import click
 
+from django.core.management import call_command
 from django.db import IntegrityError
+from server.apps.organizations.models import Organization
+from server.apps.huts.models import HutType
 
+from server.core import UpdateCreateStatus
 from server.core.management import CRUDCommand
-from server.core import UpdateCreateEnum
 
 from ...models import Hut, HutSource
 
@@ -23,6 +27,7 @@ def init_huts_db(
 ) -> t.Tuple[int, int]:
     added_huts = 0
     updated_huts = 0
+    nochange_huts = 0
     failed_huts = 0
     hut_counter = 0
     fails = []
@@ -40,13 +45,14 @@ def init_huts_db(
                 force_none=force_none,
             )
             click.secho(f" {'('+db_hut.slug+')':<30}", dim=True, nl=False)
-            if created == UpdateCreateEnum.created:
+            if created == UpdateCreateStatus.created:
                 click.secho("created", fg="green")
                 added_huts += 1
-            elif created == UpdateCreateEnum.updated:
+            elif created == UpdateCreateStatus.updated:
                 updated_huts += 1
                 click.secho("updated", fg="magenta")
-            elif created == UpdateCreateEnum.no_change:
+            elif created == UpdateCreateStatus.no_change:
+                nochange_huts += 1
                 click.secho("not changed", dim=True)
             else:
                 click.secho("unknown state", fg="red")
@@ -60,45 +66,26 @@ def init_huts_db(
             click.secho(f" {'('+hut_src.organization.slug+'-'+hut_src.source_id+')':<20} E: {err_msg}", dim=True)
             failed_huts += 1
             fails.append(hut_src)
-        # try:
-        #    hut, status = await hut_service.create_or_update(
-        #        hut,
-        #        commit=commit_per_hut,
-        #        update_existing=update_existing,
-        #        overwrite_existing_fields=overwrite_existing_fields,
-        #        ref_slug=extern_slug,
-        #    )
-        #    number += 1
-        # except OperationalError as e:
-        #    fails.append(hut)
-        #    continue
-        # click.secho(f"  ... {status:<8}", fg="green", nl=False)
     if fails:
         click.secho("This huts failed:", fg="red")
     for f in fails[:8]:
         click.echo(f"- {f.name}")
     if len(fails) > 8:
         click.secho(f"- and {len(fails) - 8} more ...", fg="yellow", dim=False)
-    # click.secho(f"Done, added {added_huts} huts", fg="green")
-    return added_huts, updated_huts, failed_huts
+    return added_huts, updated_huts, nochange_huts, failed_huts
 
 
-def _expect_organization(organization: str, selected_organization: str | None, or_none=True) -> bool:
-    return (selected_organization is None and or_none) or (selected_organization or "").lower() == organization.lower()
-
-
-def add_huts_function(obj: "Command", offset, limit, init, update, force, selected_organization, **kwargs):
+def add_huts_function(obj: "Command", offset, limit, update, force, selected_organization, **kwargs):
     force_overwrite = kwargs.get("force_overwrite", False)
     force_overwrite_include = kwargs.get("force_overwrite_include", [])
     force_overwrite_exclude = kwargs.get("force_overwrite_exclude", [])
+    review = kwargs.get("review", True)
     force_none = kwargs.get("force_none", False)
     total_entries = HutSource.objects.all().count()
     if total_entries == 0:
         obj.stdout.write(obj.style.WARNING("No entries in 'huts.HutSource', run first: 'app hut_sources --add'"))
         sys.exit(1)
 
-    # if _expect_organization("osm", selected_organization, or_none=True):
-    #    parser.stdout.write("Get OSM data where 'huts.HutSource.slug == osm'.")
     if selected_organization:
         src_huts = list(
             HutSource.objects.filter(organization__slug=selected_organization).all()[offset : offset + limit]
@@ -107,9 +94,9 @@ def add_huts_function(obj: "Command", offset, limit, init, update, force, select
         src_huts = list(HutSource.objects.all()[offset : offset + limit])
     new_huts = len(src_huts)
     obj.stdout.write(obj.style.NOTICE(f"Going to fill table with {new_huts} entries and an offset of {offset}"))
-    added, updated, failed = init_huts_db(
+    added, updated, nochange, failed = init_huts_db(
         src_huts,
-        review=init,
+        review=review,
         force_overwrite=force_overwrite,
         force_overwrite_include=force_overwrite_include,
         force_overwrite_exclude=force_overwrite_exclude,
@@ -119,6 +106,8 @@ def add_huts_function(obj: "Command", offset, limit, init, update, force, select
         obj.stdout.write(obj.style.SUCCESS(f"Successfully added {added} new hut{'s' if added > 1 else ''}"))
     if updated:
         obj.stdout.write(obj.style.SUCCESS(f"Successfully updated {updated} hut{'s' if updated > 1 else ''}"))
+    if nochange:
+        obj.stdout.write(obj.style.NOTICE(f"No change for {nochange} hut{'s' if updated > 1 else ''}"))
     if failed:
         obj.stdout.write(obj.style.ERROR(f"Failed to add {failed} hut{'s' if failed > 1 else ''}"))
     # else:
@@ -139,7 +128,12 @@ class Command(CRUDCommand):
 
     def add_arguments(self, parser):
         super().add_arguments(parser)
-        parser.add_argument("-i", "--init", action="store_true", help="Initial data fill")
+        parser.add_argument(
+            "-r",
+            "--no-review",
+            action="store_true",
+            help="Do not change to review status (to 'review' if update, to 'new' if created)",
+        )
         parser.add_argument(
             "-O", "--org", "--organization", help="Organization slug, only add this one, otherwise all", type=str
         )
@@ -161,15 +155,29 @@ class Command(CRUDCommand):
             action="store_true",
             help="do overwrite existing entries with 'None' if no entry is in the new data (only together with '--overwrite', or '--include/--exclude')",
         )
+        parser.add_argument(
+            "--delete-all",
+            "--da",
+            action="store_true",
+            help="deletes everything (huts, owners, contacts), limit and offset are not used!",
+        )
+        parser.add_argument(
+            "--add-all",
+            "--aa",
+            action="store_true",
+            help="adds everything (huts, owners, contacts), limits and offset are not used!",
+        )
 
     def handle(
         self,
-        init: bool,
+        no_review: bool,
         org: str,
         overwrite: bool,
         include: str,
         exclude: str,
         set_none: bool,
+        delete_all: bool,
+        add_all: bool,
         *args,
         **options,
     ):
@@ -177,9 +185,40 @@ class Command(CRUDCommand):
         force_overwrite_exclude = [f.strip() for f in exclude.split(",") if exclude]
         if force_overwrite_exclude or force_overwrite_include:
             overwrite = True
+        finished = False
+        if delete_all:
+            force = options.get("force", False)
+            for db in ["huts", "owners", "contacts"]:
+                self.stdout.write(self.style.HTTP_INFO(f"Delete all {db}"))
+                call_command(db, drop=True, force=force)
+            finished = True
+        if add_all:
+            force = options.get("force")
+            if not force:
+                force = click.confirm("Force to add all huts?", default=True)
+            if not Organization.objects.exists():
+                self.stdout.write(self.style.HTTP_INFO("Organizations"))
+                call_command("organizations", add=True, force=force)
+            if not HutType.objects.exists():
+                self.stdout.write(self.style.HTTP_INFO("Add hut types"))
+                call_command("hut_types", add=True, force=force)
+            limit = options.get("limit", None)
+            for params in [
+                {"org": "sac", "no_review": True},
+                {"org": "wikidata", "include": "location,photos", "no_review": True},
+                {"org": "osm", "no_review": True},
+                {"org": "refuges", "no_review": False},
+            ]:
+                self.stdout.write(self.style.HTTP_INFO(f"Add {params.get('org','all')} huts with parameter:"))
+                for k, v in params.items():
+                    self.stdout.write(self.style.NOTICE(f"  {k+':':<10} '{v}'"))
+                call_command("huts", add=True, force=force, limit=limit, **params)
+            finished = True
+        if finished:
+            return
         super().handle(
             kwargs_add={
-                "init": init,
+                "review": not no_review,
                 "selected_organization": org,
                 "force_overwrite": overwrite,
                 "force_overwrite_include": [f.strip() for f in include.split(",") if include],

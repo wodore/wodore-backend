@@ -1,9 +1,20 @@
 import typing as t
+from datetime import datetime
+from os import wait
 from sysconfig import is_python_build
 
+from django_extensions.db.fields import AutoSlugField
 from easydict import EasyDict
-from hut_services import BaseService, HutSchema, HutSourceSchema, OpenMonthlySchema
+from hut_services import (
+    AnswerEnum,
+    BaseService,
+    HutSchema,
+    HutSourceSchema,
+    OpenMonthlySchema,
+)
+from hut_services.core.guess import guess_slug_name
 from jinja2 import Environment
+from slugify import slugify
 
 from django_countries.fields import CountryField
 from model_utils.models import TimeStampedModel
@@ -20,20 +31,16 @@ from django.db.models import F, Value
 from django.db.models.functions import Concat, Lower
 from django.utils.translation import get_language
 from django.utils.translation import gettext_lazy as _
-from slugify import slugify
 
 from server.apps.contacts.models import Contact, ContactFunction
 from server.apps.organizations.models import Organization
 from server.apps.owners.models import Owner
-from server.core import UpdateCreateEnum
+from server.core import UpdateCreateStatus
 
 from ..managers import HutManager
 from ._associations import HutContactAssociation, HutOrganizationAssociation
 from ._hut_source import HutSource
 from ._hut_type import HutType
-
-from hut_services.core.guess import guess_slug_name
-from django_extensions.db.fields import AutoSlugField
 
 
 class _ReviewStatusChoices(models.TextChoices):
@@ -44,7 +51,8 @@ class _ReviewStatusChoices(models.TextChoices):
     reject = "reject", _("reject")
 
 
-_monthly_open_default_value = OpenMonthlySchema(url="").model_dump
+def _monthly_open_default_value() -> dict[str, AnswerEnum]:
+    return {f"month_{m:02}": AnswerEnum["unknown"] for m in range(1, 13)}
 
 
 class Hut(TimeStampedModel):
@@ -185,7 +193,9 @@ class Hut(TimeStampedModel):
 
         # save original values, when model is loaded from database,
         # in a separate attribute on the model
-        instance._orig_slug = dict(zip(field_names, values)).get("slug")  # type: ignore  # noqa: PGH003
+        values = dict(zip(field_names, values))
+        instance._orig_slug = values.get("slug")  # type: ignore  # noqa: PGH003
+        instance._orig_review_status = values.get("review_status")  # type: ignore  # noqa: PGH003
         return instance
 
     def save(self, *args, **kwargs):
@@ -194,7 +204,27 @@ class Hut(TimeStampedModel):
         # if updated
         if not self._state.adding and self.slug != self._orig_slug:  # updates # type: ignore  # noqa: PGH003
             self.slug = self.create_unique_slug_name(self.slug)
-        super().save(*args, **kwargs)
+        to_save = []
+        if (
+            not self._state.adding
+            and self.review_status != self._orig_review_status
+            and self._orig_review_status != self.ReviewStatusChoices.reject.value
+            and self.review_status == self.ReviewStatusChoices.done.value
+        ):
+            for hs in self.sources.all():
+                if hs.review_status not in [
+                    hs.ReviewStatusChoices.failed,
+                    hs.ReviewStatusChoices.reject,
+                    hs.ReviewStatusChoices.old,
+                ]:
+                    hs.review_status = hs.ReviewStatusChoices.done
+                    to_save.append(hs)
+
+        with transaction.atomic():
+            for s in to_save:
+                # TODO: save does not work!!
+                s.save()
+            super().save(*args, **kwargs)
 
     def next(self) -> int | None:
         """Returns next hut"""
@@ -264,7 +294,7 @@ class Hut(TimeStampedModel):
         if _review_status is not None:
             review_status = _review_status
         else:
-            review_status = Hut.ReviewStatusChoices.review if review else Hut.ReviewStatusChoices.done
+            review_status = Hut.ReviewStatusChoices.new if review else Hut.ReviewStatusChoices.done
 
         ## Translations -> Better solution?
         i18n_fields = {}
@@ -278,6 +308,10 @@ class Hut(TimeStampedModel):
                 out_field = "note" if field == "notes" else field
                 if value:
                     i18n_fields[f"{out_field}_{code}"] = value
+        type_closed = (
+            HutType.values[str(hut_schema.hut_type.if_closed.value)] if hut_schema.hut_type.if_closed else None
+        )
+
         hut_db = Hut(
             location=dbPoint(hut_schema.location.lon_lat),
             elevation=hut_schema.location.ele,
@@ -288,9 +322,10 @@ class Hut(TimeStampedModel):
             is_public=hut_schema.is_public,
             country_field=hut_schema.country_code or "CH",
             photos=hut_schema.photos[0].thumb or hut_schema.photos[0].url if hut_schema.photos else "",
-            hut_type_open=HutType.values[str(hut_schema.hut_type.if_open)],
-            hut_type_closed=HutType.values[str(hut_schema.hut_type.if_closed)],
+            hut_type_open=HutType.values[str(hut_schema.hut_type.if_open.value)],
+            hut_type_closed=type_closed,
             review_status=review_status,
+            open_monthly=hut_schema.open_monthly.model_dump(),
             **i18n_fields,
         )
         if hut_db.hut_type_open.slug == "hut" and hut_db.capacity_closed or 0 > 0:
@@ -372,7 +407,7 @@ class Hut(TimeStampedModel):
         force_overwrite_exclude: t.Sequence[str] = [],  # ... exclude when overwritten
         force_none: bool = False,  # force t oset value to none (overwrite is needed)
         _review_status: "Hut.ReviewStatusChoices | None" = None,
-    ) -> tuple["Hut", UpdateCreateEnum]:
+    ) -> tuple["Hut", UpdateCreateStatus]:
         hut_schema = cls._convert_source(hut_source)
         return cls.update_from_schema(
             hut_db=hut_db,
@@ -398,7 +433,7 @@ class Hut(TimeStampedModel):
         force_none: bool = False,  # force t oset value to none (overwrite is needed)
         _hut_source: HutSource | None = None,
         _review_status: "Hut.ReviewStatusChoices | None" = None,
-    ) -> tuple["Hut", UpdateCreateEnum]:
+    ) -> tuple["Hut", UpdateCreateStatus]:
         if _review_status is not None:
             review_status = _review_status
         else:
@@ -422,8 +457,6 @@ class Hut(TimeStampedModel):
                 out_field = "note" if field == "notes" else field
                 i18n_fields[f"{out_field}_{code}"] = value
         updates.update(i18n_fields)
-        if review_status is not None:
-            updates["review_status"] = review_status
         if "location" in updates and hut_schema.location.ele is not None:
             updates["elevation"] = hut_schema.location.ele
         if "location" in updates:
@@ -447,7 +480,9 @@ class Hut(TimeStampedModel):
             updates["hut_type_closed"] = (
                 HutType.values[str(hut_schema.hut_type.if_closed.value)] if hut_schema.hut_type.if_closed else None
             )
-        updated = UpdateCreateEnum.no_change
+        updated = UpdateCreateStatus.no_change
+
+        changes = ""
         with transaction.atomic():
             for f, v in updates.items():
                 # 1. Only update if no entry or forced
@@ -469,11 +504,21 @@ class Hut(TimeStampedModel):
                     and (v or force_none)  # only write 'None' if foced to
                     and getattr(hut_db, f) != v  # only update if value is not the same
                 ):
+                    old_value = getattr(hut_db, f)
                     # special comparision for dbPoint -> valus are always different because it is a class
-                    if isinstance(v, dbPoint) and v.tuple == getattr(hut_db, f).tuple:  # type: ingore[attr-defined]
+                    if isinstance(v, dbPoint) and v.tuple == old_value.tuple:  # type: ingore[attr-defined]
                         continue
                     setattr(hut_db, f, v)
-                    updated = UpdateCreateEnum.updated
+                    sp = "'" if len(str(old_value)) < 100 and len(str(v)) < 100 else "\n---\n"
+                    changes += f"* Changed '{f}' from {sp}{old_value}{sp} to {sp}{v}{sp}\n"
+                    updated = UpdateCreateStatus.updated
+            # Update review field
+            if updated == UpdateCreateStatus.updated and hut_db.review_status not in [
+                Hut.ReviewStatusChoices.reject,
+                Hut.ReviewStatusChoices.new,
+            ]:
+                status = review_status if review_status != Hut.ReviewStatusChoices.research else None
+                hut_db.add_review_comment(title="Field changes", text=changes, status=status)
             hut_db.save()
             # check for new organization
             if _hut_source is not None and _hut_source.organization not in hut_db.org_set.all():
@@ -493,7 +538,7 @@ class Hut(TimeStampedModel):
         force_none: bool = False,  # force t oset value to none (overwrite is needed)
         _review_status_update: "Hut.ReviewStatusChoices | None" = None,
         _review_status_create: "Hut.ReviewStatusChoices | None" = None,
-    ) -> tuple["Hut", UpdateCreateEnum]:
+    ) -> tuple["Hut", UpdateCreateStatus]:
         """Create or update either from a `HutSchema` or `HutSource` model.
 
         Args:
@@ -552,7 +597,7 @@ class Hut(TimeStampedModel):
                 cls.create_from_source(
                     hut_source=hut_source, review=bool(review), _review_status=_review_status_create
                 ),
-                UpdateCreateEnum.created,
+                UpdateCreateStatus.created,
             )
         if hut_schema is not None:
             return (
@@ -562,10 +607,29 @@ class Hut(TimeStampedModel):
                     review=bool(review),
                     _review_status=_review_status_create,
                 ),
-                UpdateCreateEnum.created,
+                UpdateCreateStatus.created,
             )
         err_msg = "Either 'hut_schema' or 'hut_source' is required."
         raise UserWarning(err_msg)
+
+    def add_review_comment(
+        self,
+        title: str | None = None,
+        text: str = "",
+        status: ReviewStatusChoices | None = None,
+        append: bool = True,
+    ) -> str:
+        """Adds a review comment, if title included a date is added automatically."""
+        title_date = f"\n\n~~~ {datetime.today().strftime('%Y-%m-%d %H:%M')}\n{title}\n\n" if title is not None else ""
+        comment = self.review_comment
+        if append:
+            comment += f"{title_date}{text}"
+        else:
+            comment = f"{title_date}{text}\n\n{comment}"
+        self.review_comment = comment.strip()
+        if status is not None:
+            self.review_status = status
+        return comment
 
     def organizations_query(self, organization: str | Organization | None = None, annotate=True):
         if isinstance(organization, Organization):

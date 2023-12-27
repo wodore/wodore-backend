@@ -1197,18 +1197,14 @@ version = "0.18.1"
 description = "Modern Django admin theme for seamless interface development"
 optional = false
 python-versions = ">=3.8"
-files = []
-develop = false
+files = [
+    {file = "django_unfold-0.18.1-py3-none-any.whl", hash = "sha256:eb5edca8d83258e5491458c83ec46f3c5ae1a652740ccb6a6bf55bd6bc86fead"},
+    {file = "django_unfold-0.18.1.tar.gz", hash = "sha256:38a3a784ffec90ac8e1177ffe88ae1b15080bf9d89493b5ee648623cbe02ce54"},
+]
 
 [package.dependencies]
 django = ">=3.2"
-python-semantic-release = "^8.5.0"
-
-[package.source]
-type = "git"
-url = "https://github.com/unfoldadmin/django-unfold.git"
-reference = "main"
-resolved_reference = "4034084266072e5dfa07370f534993258c3403ce"
+python-semantic-release = ">=8.5.0,<9.0.0"
 
 [[package]]
 name = "doc8"
@@ -1842,7 +1838,7 @@ xmltodict = "^0.13.0"
 type = "git"
 url = "https://github.com/wodore/hut-services.git"
 reference = "main"
-resolved_reference = "93b475da843cde86a1ad218edabc056a7db7de50"
+resolved_reference = "8c8e34b783aae513aeb6c2c97f1d613927cd7c25"
 
 [[package]]
 name = "hut-services-private"
@@ -4346,4 +4342,4 @@ private = ["hut-services-private"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "9bc0e9b6186bc52ff5f8e4fd9a802a7253f7f1e0da0357a1bdf2ec6c57945e15"
+content-hash = "c50aa73f932d06d0f753c323bc432ce82078aae2efab53b429d293f1318ac806"
