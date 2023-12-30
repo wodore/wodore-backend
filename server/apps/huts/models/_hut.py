@@ -47,7 +47,7 @@ class _ReviewStatusChoices(models.TextChoices):
     new = "new", _("new")
     review = "review", _("review")
     done = "done", _("done")
-    research = "research", _("research")
+    work = "work", _("work")
     reject = "reject", _("reject")
 
 
@@ -517,7 +517,7 @@ class Hut(TimeStampedModel):
                 Hut.ReviewStatusChoices.reject,
                 Hut.ReviewStatusChoices.new,
             ]:
-                status = review_status if review_status != Hut.ReviewStatusChoices.research else None
+                status = review_status if review_status != Hut.ReviewStatusChoices.work else None
                 hut_db.add_review_comment(title="Field changes", text=changes, status=status)
             hut_db.save()
             # check for new organization

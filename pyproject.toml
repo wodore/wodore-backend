@@ -53,6 +53,7 @@ hut-services = {git = "https://github.com/wodore/hut-services.git", rev="main"}
 hut-services-private = {git = "ssh://git@github.com/wodore/hut-services-private.git", rev = "main", optional = true}
 dickens = "^2.1.1"
 django-cors-headers = "^4.3.1"
+psycopg = "^3.1.16"
 
 [tool.poetry.extras]
 private = ["hut-services-private"]

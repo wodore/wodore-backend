@@ -207,6 +207,7 @@ class Command(CRUDCommand):
                 {"org": "sac", "no_review": True},
                 {"org": "wikidata", "include": "location,photos", "no_review": True},
                 {"org": "osm", "no_review": True},
+                {"org": "hrs", "no_review": True},
                 {"org": "refuges", "no_review": False},
             ]:
                 self.stdout.write(self.style.HTTP_INFO(f"Add {params.get('org','all')} huts with parameter:"))

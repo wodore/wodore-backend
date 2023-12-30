@@ -93,7 +93,7 @@ class HutsAdmin(ModelAdmin):
             Hut.ReviewStatusChoices.review: "info",
             Hut.ReviewStatusChoices.done: "success",
             Hut.ReviewStatusChoices.new: "warning",  # green
-            Hut.ReviewStatusChoices.research: "danger",
+            Hut.ReviewStatusChoices.work: "danger",
         },
     )
     def review_tag(self, obj):
