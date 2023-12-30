@@ -7,12 +7,9 @@ SECURITY WARNING: don't run with debug turned on in production!
 import logging
 import socket
 
+
 from server.settings.components import config
-from server.settings.components.common import (
-    DATABASES,
-    INSTALLED_APPS,
-    MIDDLEWARE,
-)
+from server.settings.components.common import DATABASES, INSTALLED_APPS, MIDDLEWARE, DEV_DOMAIN_NAMES, DOMAIN_NAMES
 from server.settings.components.csp import (
     CSP_CONNECT_SRC,
     CSP_IMG_SRC,
@@ -24,27 +21,26 @@ from server.settings.components.csp import (
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    config("DOMAIN_NAME"),
+    *DOMAIN_NAMES,
+    *DEV_DOMAIN_NAMES,
     "localhost",
-    "localhost:9000",
-    "beta.wodore.com",
-    "wodore.com",
     "0.0.0.0",
     "127.0.0.1",
     "[::1]",
 ]
 
 CSRF_TRUSTED_ORIGINS = [
-    f"http://{config('DOMAIN_NAME')}",
-    f"https://{config('DOMAIN_NAME')}",
+    *[f"http://{d}" for d in DEV_DOMAIN_NAMES + DOMAIN_NAMES],
+    *[f"https://{d}" for d in DEV_DOMAIN_NAMES + DOMAIN_NAMES],
 ]
 # CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^https?://localhost:\d+$",
     r"^localhost:\d+$",
-    r"^https?://wodore.com",
-    r"^https?://beta.wodore.com",
+    # r"^https?://wodore.com",
+    # r"^https?://beta.wodore.com",
+    *[f"^https?://{d}" for d in DEV_DOMAIN_NAMES + DOMAIN_NAMES],
 ]
 
 # Installed apps for development only:

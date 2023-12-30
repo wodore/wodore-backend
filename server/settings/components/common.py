@@ -32,6 +32,9 @@ if PRIVATE_SERVICES:
 
 SECRET_KEY = config("DJANGO_SECRET_KEY")
 
+DOMAIN_NAMES = [d.strip() for d in config("DOMAIN_NAMES").split(",")] if config("DOMAIN_NAMES") else []
+DEV_DOMAIN_NAMES = [d.strip() for d in config("DEV_DOMAIN_NAMES").split(",")] if config("DEV_DOMAIN_NAMES") else []
+
 # Application definition:
 
 INSTALLED_APPS: Tuple[str, ...] = (

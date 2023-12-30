@@ -6,6 +6,7 @@ values are overridden.
 """
 
 from server.settings.components import config
+from server.settings.components.common import DOMAIN_NAMES
 
 # Production flags:
 # https://docs.djangoproject.com/en/4.2/howto/deployment/
@@ -14,10 +15,9 @@ DEBUG = False
 
 ALLOWED_HOSTS = [
     # TODO: check production hosts
-    config('DOMAIN_NAME'),
-
+    config("DOMAIN_NAME"),
     # We need this value for `healthcheck` to work:
-    'localhost',
+    "localhost",
 ]
 
 
@@ -27,34 +27,36 @@ ALLOWED_HOSTS = [
 # This is a hack to allow a special flag to be used with `--dry-run`
 # to test things locally.
 _COLLECTSTATIC_DRYRUN = config(
-    'DJANGO_COLLECTSTATIC_DRYRUN', cast=bool, default=False,
+    "DJANGO_COLLECTSTATIC_DRYRUN",
+    cast=bool,
+    default=False,
 )
 # Adding STATIC_ROOT to collect static files via 'collectstatic':
-STATIC_ROOT = '.static' if _COLLECTSTATIC_DRYRUN else '/var/www/django/static'
+STATIC_ROOT = ".static" if _COLLECTSTATIC_DRYRUN else "/var/www/django/static"
 
 # TODO: convert to `STORAGES`
 STATICFILES_STORAGE = (
     # This is a string, not a tuple,
     # but it does not fit into 80 characters rule.
-    'django.contrib.staticfiles.storage.ManifestStaticFilesStorage'
+    "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"
 )
 
 
 # Media files
 # https://docs.djangoproject.com/en/4.2/topics/files/
 
-MEDIA_ROOT = '/var/www/django/media'
+MEDIA_ROOT = "/var/www/django/media"
 
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
 
-_PASS = 'django.contrib.auth.password_validation'
+_PASS = "django.contrib.auth.password_validation"
 AUTH_PASSWORD_VALIDATORS = [
-    {'NAME': f'{_PASS}.UserAttributeSimilarityValidator'},
-    {'NAME': f'{_PASS}.MinimumLengthValidator'},
-    {'NAME': f'{_PASS}.CommonPasswordValidator'},
-    {'NAME': f'{_PASS}.NumericPasswordValidator'},
+    {"NAME": f"{_PASS}.UserAttributeSimilarityValidator"},
+    {"NAME": f"{_PASS}.MinimumLengthValidator"},
+    {"NAME": f"{_PASS}.CommonPasswordValidator"},
+    {"NAME": f"{_PASS}.NumericPasswordValidator"},
 ]
 
 
@@ -65,12 +67,16 @@ SECURE_HSTS_SECONDS = 31536000  # the same as Caddy has
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
 
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = True
 SECURE_REDIRECT_EXEMPT = [
     # This is required for healthcheck to work:
-    '^health/',
+    "^health/",
 ]
 
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
+
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    *[f"^https?://{d}" for d in DOMAIN_NAMES],
+]
