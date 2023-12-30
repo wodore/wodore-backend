@@ -65,7 +65,7 @@ class HutSchemaOptional(BaseModel):
     capacity_open: int | None = None
     capacity_closed: int | None = None
     organizations: list[OrganizationDetailSchema] | None = Field(None, alias="orgs")
-    photo: str = Field("")
+    photos: str = Field("")
 
     @field_validator("country", mode="before")
     @classmethod
