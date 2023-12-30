@@ -31,6 +31,11 @@ ALLOWED_HOSTS = [
     "127.0.0.1",
     "[::1]",
 ]
+
+CSRF_TRUSTED_ORIGINS = [
+    f"http://{config('DOMAIN_NAME')}",
+    f"https://{config('DOMAIN_NAME')}",
+]
 # CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOWED_ORIGIN_REGEXES = [
