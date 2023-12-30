@@ -27,6 +27,8 @@ ALLOWED_HOSTS = [
     config("DOMAIN_NAME"),
     "localhost",
     "localhost:9000",
+    "beta.wodore.com",
+    "wodore.com",
     "0.0.0.0",
     "127.0.0.1",
     "[::1]",
