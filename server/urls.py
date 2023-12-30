@@ -62,8 +62,8 @@ if settings.DEBUG:  # pragma: no cover
     import debug_toolbar
     from django.conf.urls.static import static
     from django.contrib.staticfiles.urls import staticfiles_urlpatterns
+    from django.contrib.staticfiles import handlers
 
-    print("RUN IN DEBUG")
     urlpatterns = [
         # URLs specific only to django-debug-toolbar:
         path("__debug__/", include(debug_toolbar.urls)),
@@ -72,3 +72,13 @@ if settings.DEBUG:  # pragma: no cover
         *static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT),
         *staticfiles_urlpatterns(),
     ]
+
+    # extend StaticFilesHandler to add "Access-Control-Allow-Origin" to every response
+    class CORSStaticFilesHandler(handlers.StaticFilesHandler):
+        def serve(self, request):
+            response = super().serve(request)
+            response["Access-Control-Allow-Origin"] = "*"
+            return response
+
+    # monkeypatch handlers to use our class instead of the original StaticFilesHandler
+    handlers.StaticFilesHandler = CORSStaticFilesHandler

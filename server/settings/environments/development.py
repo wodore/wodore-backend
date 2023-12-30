@@ -7,9 +7,14 @@ SECURITY WARNING: don't run with debug turned on in production!
 import logging
 import socket
 
-
 from server.settings.components import config
-from server.settings.components.common import DATABASES, INSTALLED_APPS, MIDDLEWARE, DEV_DOMAIN_NAMES, DOMAIN_NAMES
+from server.settings.components.common import (
+    DATABASES,
+    DEV_DOMAIN_NAMES,
+    DOMAIN_NAMES,
+    INSTALLED_APPS,
+    MIDDLEWARE,
+)
 from server.settings.components.csp import (
     CSP_CONNECT_SRC,
     CSP_IMG_SRC,
@@ -28,6 +33,7 @@ ALLOWED_HOSTS = [
     "127.0.0.1",
     "[::1]",
 ]
+
 
 CSRF_TRUSTED_ORIGINS = [
     *[f"http://{d}" for d in DEV_DOMAIN_NAMES + DOMAIN_NAMES],
