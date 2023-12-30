@@ -43,6 +43,8 @@ CSRF_TRUSTED_ORIGINS = [
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^https?://localhost:\d+$",
     r"^localhost:\d+$",
+    r"^https?://wodore.com",
+    r"^https?://beta.wodore.com",
 ]
 
 # Installed apps for development only:
