@@ -328,9 +328,9 @@ class Hut(TimeStampedModel):
             open_monthly=hut_schema.open_monthly.model_dump(),
             **i18n_fields,
         )
-        if hut_db.hut_type_open.slug == "hut" and hut_db.capacity_closed or 0 > 0:
-            if (hut_db.elevation or 0) < 2000:
-                hut_db.hut_type_closed = HutType.values["unattended-hut"]
+        if hut_db.hut_type_open.slug == "hut" and hut_db.capacity_closed or 0 > 0 and not type_closed:
+            if (hut_db.elevation or 0) < 3000:
+                hut_db.hut_type_closed = HutType.values["selfhut"]
             else:
                 hut_db.hut_type_closed = HutType.values["bicouac"]
         ## Owner stuff -> add to Owner
