@@ -52,7 +52,7 @@ def add_hut_source_db(  # type: ignore[no-any-unimported]
             UpdateCreateStatus.no_change: "bright_black",
             UpdateCreateStatus.ignored: "magenta",
         }
-        click.secho(f"  ... {status:<8}", fg=status_color.get(status, "red"), nl=False)
+        click.secho(f"  ... {status.value:<8}", fg=status_color.get(status, "red"), nl=False)
         click.secho(f" (#{shut.id})", dim=True)
         source_huts.append(shut)
     return source_huts
