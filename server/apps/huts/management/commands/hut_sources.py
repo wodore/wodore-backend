@@ -13,7 +13,6 @@ from server.core import UpdateCreateStatus
 from server.core.management.base import CRUDCommand
 
 from ...models import HutSource
-from ...services.sources import HutSourceService
 
 # SERVICES: dict[str, Type[BaseService[BaseModel]]] = settings.SERVICES
 
