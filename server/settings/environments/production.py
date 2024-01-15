@@ -14,8 +14,9 @@ from server.settings.components.common import DOMAIN_NAMES
 DEBUG = False
 
 ALLOWED_HOSTS = [
+    *DOMAIN_NAMES,
     # TODO: check production hosts
-    config("DOMAIN_NAME"),
+    #config("DOMAIN_NAME"),
     # We need this value for `healthcheck` to work:
     "localhost",
 ]
