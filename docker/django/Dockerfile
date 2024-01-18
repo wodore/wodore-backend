@@ -46,6 +46,7 @@ RUN apt-get update && apt-get upgrade -y \
     curl \
     gettext \
     git \
+    openssh-client \
     libpq-dev \
     wait-for-it \
     binutils \
@@ -66,13 +67,26 @@ RUN apt-get update && apt-get upgrade -y \
   && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
   && apt-get clean -y && rm -rf /var/lib/apt/lists/*
 
+#&& ssh-keyscan github.com >> ~/.ssh/known_hosts
+#RUN echo "Host remotehost\n\tStrictHostKeyChecking no\n" >> /root/.ssh/config
+
+RUN mkdir -p -m 0700 /root/.ssh #&& cat /run/secrets/ssh_id_ed25519 > /root/.ssh/id_ed25519 && chmod 600 /root/.ssh/id_25519
+RUN --mount=type=secret,id=ssh_id_ed25519,required cat /run/secrets/ssh_id_ed25519 > /root/.ssh/id_ed25519 && chmod 600 /root/.ssh/id_ed25519
+#RUN cat /run/secrets/ssh_id_ed25519 > /root/.ssh/id_ed25519 && chmod 600 /root/.ssh/id_25519
+RUN printf "Host * \n\tStrictHostKeyChecking no\n" >> /root/.ssh/config
+
+
 WORKDIR /code
+
+#RUN --mount=type=ssh bundle install
 
 RUN groupadd -g "${GID}" -r web \
   && useradd -d '/code' -g web -l -r -u "${UID}" web \
   && chown web:web -R '/code' \
   # Static and media files:
   && mkdir -p '/var/www/django/static' '/var/www/django/media' \
+  #&& mkdir -p '/var/www/django/ssh'  \
+  #&& mkdir -p '/.ssh' '/ssh' \
   && chown web:web '/var/www/django/static' '/var/www/django/media'
 
 # Copy only requirements, to cache them in docker layer
@@ -87,7 +101,7 @@ RUN --mount=type=cache,target="$POETRY_CACHE_DIR" \
   && poetry run pip install -U pip \
   && poetry install \
     $(if [ "$DJANGO_ENV" = 'production' ]; then echo '--only main'; fi) \
-    --no-interaction --no-ansi --sync
+    --no-interaction --no-ansi --sync --extras private
 
 # This is a special case. We need to run this script as an entry point:
 COPY ./docker/django/entrypoint.sh /docker-entrypoint.sh
@@ -98,6 +112,7 @@ RUN chmod +x '/docker-entrypoint.sh' \
   && sed -i 's/\r$//g' '/docker-entrypoint.sh'
 
 # Running as non-root user:
+# TODO
 USER web
 
 # We customize how our app is loaded with the custom entrypoint:
