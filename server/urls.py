@@ -36,7 +36,7 @@ urlpatterns = [
     path("admin/doc/", include(admindocs_urls)),
     path("admin/", admin.site.urls),
     # Api:
-    path("api/v1/", api_v1.urls),  # type: ignore
+    path("v1/", api_v1.urls),  # type: ignore
     # Text and xml static files:
     path(
         "robots.txt",
