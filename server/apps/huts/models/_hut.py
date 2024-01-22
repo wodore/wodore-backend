@@ -1,7 +1,5 @@
+import datetime
 import typing as t
-from datetime import datetime
-from os import wait
-from sysconfig import is_python_build
 
 from django_extensions.db.fields import AutoSlugField
 from easydict import EasyDict
@@ -10,11 +8,12 @@ from hut_services import (
     BaseService,
     HutSchema,
     HutSourceSchema,
+    HutTypeEnum,
     OpenMonthlySchema,
 )
 from hut_services.core.guess import guess_slug_name
+from hut_services.core.schema import HutBookingsSchema as HutServiceBookingSchema
 from jinja2 import Environment
-from slugify import slugify
 
 from django_countries.fields import CountryField
 from model_utils.models import TimeStampedModel
@@ -38,9 +37,12 @@ from server.apps.owners.models import Owner
 from server.core import UpdateCreateStatus
 
 from ..managers import HutManager
+from ..schemas_booking import HutBookingsSchema
 from ._associations import HutContactAssociation, HutOrganizationAssociation
 from ._hut_source import HutSource
 from ._hut_type import HutType
+
+SERVICES: dict[str, BaseService] = settings.SERVICES
 
 
 class _ReviewStatusChoices(models.TextChoices):
@@ -153,6 +155,7 @@ class Hut(TimeStampedModel):
         verbose_name=_("Hut type if closed"),
         db_index=True,
     )
+    # TODO: add reservation link to org (e.g hrs)
     # organizations = models.ManyToManyField(Organization, related_name="huts", db_table="hut_organization_association")
     org_set = models.ManyToManyField(
         Organization,
@@ -256,7 +259,7 @@ class Hut(TimeStampedModel):
     @classmethod
     def _convert_source(cls, hut_source: HutSource) -> HutSchema:
         org = hut_source.organization.slug
-        service: BaseService = settings.SERVICES.get(org)
+        service: BaseService | None = SERVICES.get(org)
         if service is None:
             err_msg = f"No service for organization '{org}' found."
             raise NotImplementedError(err_msg)
@@ -620,7 +623,9 @@ class Hut(TimeStampedModel):
         append: bool = True,
     ) -> str:
         """Adds a review comment, if title included a date is added automatically."""
-        title_date = f"\n\n~~~ {datetime.today().strftime('%Y-%m-%d %H:%M')}\n{title}\n\n" if title is not None else ""
+        title_date = (
+            f"\n\n~~~ {datetime.datetime.today().strftime('%Y-%m-%d %H:%M')}\n{title}\n\n" if title is not None else ""
+        )
         comment = self.review_comment
         if append:
             comment += f"{title_date}{text}"
@@ -630,6 +635,56 @@ class Hut(TimeStampedModel):
         if status is not None:
             self.review_status = status
         return comment
+
+    # def bookings(
+    #    self,
+    #    date: datetime.datetime | datetime.date | t.Literal["now"] | None = None,
+    #    days: int | None = None,
+    # ) -> "HutBookingsSchema | None":
+    #    source_id = self.orgs_source.source_id
+    #    source = self.org_set.get(source_id=source_id).slug
+    #    b = self.get_bookings(date=date, days=days, source_ids=[source_id], source=source)
+    #    return b[0] if b else None
+
+    @classmethod
+    def get_bookings(
+        cls,
+        date: datetime.datetime | datetime.date | t.Literal["now"] | None = None,
+        days: int | None = None,
+        source_ids: list[int] | None = None,
+        source: str | None = None,
+    ) -> list["HutBookingsSchema"]:
+        # def get_bookings() -> dict[int, HutBookingsSchema]:
+        bookings: dict[int, HutServiceBookingSchema] = {}
+        huts = []
+        for src_name, service in SERVICES.items():
+            if service.support_booking and (src_name == source or source is None):
+                bookings.update(service.get_bookings(date=date, days=days, source_ids=source_ids))
+                huts += (
+                    cls.objects.filter(orgs_source__source_id__in=bookings.keys())
+                    .prefetch_related("hut_type_open", "hut_type_closed")
+                    .annotate(
+                        source_id=F("orgs_source__source_id"),
+                        source=F("org_set__slug"),
+                        hut_type_open_slug=F("hut_type_open__slug"),
+                        hut_type_closed_slug=F("hut_type_closed__slug"),
+                    )
+                    .values(
+                        "id", "slug", "source_id", "location", "hut_type_open_slug", "hut_type_closed_slug", "source"
+                    )
+                )
+
+        for h in huts:
+            booking = bookings.get(int(h.get("source_id", -1)))
+            if booking is not None:
+                for b in booking.bookings:
+                    b.hut_type = (
+                        h["hut_type_closed_slug"]
+                        if b.unattended and h["hut_type_closed_slug"] is not None
+                        else h["hut_type_open_slug"]
+                    )
+                h.update(booking)
+        return [HutBookingsSchema(**h) for h in huts]
 
     def organizations_query(self, organization: str | Organization | None = None, annotate=True):
         if isinstance(organization, Organization):
