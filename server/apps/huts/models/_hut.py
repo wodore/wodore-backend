@@ -12,6 +12,7 @@ from hut_services import (
     OpenMonthlySchema,
 )
 from hut_services.core.guess import guess_slug_name
+from hut_services.core.schema import OccupancyStatusEnum
 from hut_services.core.schema import HutBookingsSchema as HutServiceBookingSchema
 from jinja2 import Environment
 
@@ -653,15 +654,23 @@ class Hut(TimeStampedModel):
         days: int | None = None,
         source_ids: list[int] | None = None,
         source: str | None = None,
+        hut_ids: list[int] | None = None,
+        hut_slugs: list[str] | None = None,
+        lang: str = "de",
     ) -> list["HutBookingsSchema"]:
         # def get_bookings() -> dict[int, HutBookingsSchema]:
         bookings: dict[int, HutServiceBookingSchema] = {}
         huts = []
+        obj = cls.objects
+        if hut_ids is not None:
+            obj = obj.filter(pk__in=hut_ids)
+        if hut_slugs is not None:
+            obj = obj.filter(slug__in=hut_slugs)
         for src_name, service in SERVICES.items():
             if service.support_booking and (src_name == source or source is None):
-                bookings.update(service.get_bookings(date=date, days=days, source_ids=source_ids))
+                bookings.update(service.get_bookings(date=date, days=days, source_ids=source_ids, lang=lang))
                 huts += (
-                    cls.objects.filter(orgs_source__source_id__in=bookings.keys())
+                    obj.filter(orgs_source__source_id__in=bookings.keys())
                     .prefetch_related("hut_type_open", "hut_type_closed")
                     .annotate(
                         source_id=F("orgs_source__source_id"),
@@ -679,9 +688,13 @@ class Hut(TimeStampedModel):
             if booking is not None:
                 for b in booking.bookings:
                     b.hut_type = (
-                        h["hut_type_closed_slug"]
-                        if b.unattended and h["hut_type_closed_slug"] is not None
-                        else h["hut_type_open_slug"]
+                        HutTypeEnum.unknown.value
+                        if b.places.occupancy_status == OccupancyStatusEnum.unknown
+                        else (
+                            h["hut_type_closed_slug"]
+                            if b.unattended and h["hut_type_closed_slug"] is not None
+                            else h["hut_type_open_slug"]
+                        )
                     )
                 h.update(booking)
         return [HutBookingsSchema(**h) for h in huts]

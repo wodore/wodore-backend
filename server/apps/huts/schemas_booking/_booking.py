@@ -1,6 +1,7 @@
 import datetime
 import typing as t
 
+from geojson_pydantic import Feature, FeatureCollection, Point
 from hut_services import LocationSchema
 from hut_services.core.schema import (
     BookingSchema,
@@ -38,12 +39,31 @@ class HutBookingSchema(BaseModel):
         return model
 
 
-class HutBookingsSchema(BaseModel):
+class HutBookingsProps(BaseModel):
     slug: str
-    # hut_id: int = Field(..., alias="id")
+    hut_id: int = Field(..., alias="id")
     source: str = Field(..., description="Source slug, e.g. hrs")
-    location: LocationSchema | None = None
     days: int
     link: str
     start_date: datetime.date
     bookings: t.Sequence[HutBookingSchema]
+
+
+HutBookingsFeature = Feature[Point, HutBookingsProps]
+
+
+class HutBookingsSchema(HutBookingsProps):
+    location: LocationSchema
+
+    def as_feature(self) -> HutBookingsFeature:
+        # props = self.model_dump(exclude={"location"}, by_alias=True)
+        return HutBookingsFeature(
+            id=self.hut_id,
+            type="Feature",
+            geometry=Point(type="Point", coordinates=(self.location.lat, self.location.lon)),
+            properties=self,
+        )
+
+
+class HutBookingsFeatureCollection(FeatureCollection[HutBookingsFeature]):
+    ...

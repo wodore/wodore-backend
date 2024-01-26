@@ -2,7 +2,6 @@ import typing as t
 from os import wait
 from time import perf_counter
 from typing import List
-from django.urls import reverse_lazy
 
 import msgspec
 from benedict import benedict
@@ -19,6 +18,7 @@ from django.db.models import F, TextField, Value
 from django.db.models.functions import Cast, Concat, JSONObject, Lower
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404
+from django.urls import reverse_lazy
 
 from server.apps.api.query import FieldsParam
 from server.apps.translations import (
@@ -29,7 +29,7 @@ from server.apps.translations import (
 )
 
 from ..models import Hut
-from ..schemas import HutSchemaOptional, HutSchemaDetails
+from ..schemas import HutSchemaDetails, HutSchemaOptional
 from ._router import router
 from .expressions import GeoJSON
 

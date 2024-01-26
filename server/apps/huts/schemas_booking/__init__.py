@@ -1,6 +1,10 @@
 # from typing import Union
 
-from ._booking import HutBookingsSchema
+from ._booking import (
+    HutBookingsFeature,
+    HutBookingsFeatureCollection,
+    HutBookingsSchema,
+)
 
 
 # from ..ref import RefDatabase, RefCreate, HutRefLink, HutRefLinkBase
