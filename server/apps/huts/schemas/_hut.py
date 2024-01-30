@@ -57,6 +57,8 @@ class HutSchemaOptional(BaseModel):
     review_status: str | None = None
     # review_comment: str | None = None
     is_public: bool | None = None
+    is_active: bool | None = None
+    is_modified: bool | None = None
     type_open: HutTypeSchema | None = Field(None, alias="hut_type_open")
     type_closed: HutTypeSchema | None = Field(None, alias="hut_type_closed")
     elevation: float | None = None

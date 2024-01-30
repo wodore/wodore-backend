@@ -1,4 +1,5 @@
-from typing import Any, Generic, List, Literal, Sequence, Type, TypeVar
+from enum import Enum
+from typing import Any, Generic, Literal, Sequence, Type, TypeVar
 
 # if TYPE_CHECKING:
 from ninja import ModelSchema, Query, Schema
@@ -120,3 +121,18 @@ class FieldsParam(Schema, Generic[TSchema]):
             if isinstance(include, list):
                 include = ",".join(include)
             self.include = include
+
+
+class TristateEnum(str, Enum):
+    """Tristate enum with `true`, `false` and `unset`."""
+
+    true = "true"
+    false = "false"
+    unset = "unset"
+
+    @property
+    def bool(self) -> bool | None:
+        """Returns either `None`, `True` or `False`."""
+        if self.value == "unset":
+            return None
+        return self.value == "true"

@@ -1,30 +1,23 @@
 import typing as t
-from os import wait
-from time import perf_counter
 from typing import List
 
 import msgspec
 from benedict import benedict
-from geojson_pydantic import Feature, FeatureCollection
-from ninja import Query, Router
-from ninja.errors import HttpError
+from geojson_pydantic import FeatureCollection
+from ninja import Query
 
+# from ninja.errors import HttpError
 from django.conf import settings
-from django.contrib.gis.db.models.functions import AsGeoJSON
 from django.contrib.postgres.aggregates import JSONBAgg
-from django.core.serializers import serialize
-from django.db import IntegrityError
-from django.db.models import F, TextField, Value
-from django.db.models.functions import Cast, Concat, JSONObject, Lower
+from django.db.models import F, Value
+from django.db.models.functions import Concat, JSONObject  # , Lower
 from django.http import Http404, HttpRequest, HttpResponse
-from django.shortcuts import get_object_or_404
 from django.urls import reverse_lazy
 
-from server.apps.api.query import FieldsParam
+from server.apps.api.query import FieldsParam, TristateEnum
 from server.apps.translations import (
     LanguageParam,
     activate,
-    override,
     with_language_param,
 )
 
@@ -42,14 +35,19 @@ def get_huts(  # type: ignore  # noqa: PGH003
     # fields: Query[FieldsParam[HutSchemaOptional]],
     offset: int = 0,
     limit: int | None = None,
-    is_modified: bool | None = None,
-    # is_public: bool | None = None, # needs permission
+    is_modified: TristateEnum = TristateEnum.unset,
+    is_public: TristateEnum = TristateEnum.true,  # needs permission
+    is_active: TristateEnum = TristateEnum.true,  # needs permission
 ) -> list[Hut]:
     """Get a list with huts."""
     activate(lang)
-    huts_db = Hut.objects.select_related("hut_owner").all().filter(is_active=True, is_public=True)
+    huts_db = Hut.objects.select_related("hut_owner").all()
     if isinstance(is_modified, bool):
-        huts_db = huts_db.filter(is_modified=is_modified)
+        huts_db = huts_db.filter(is_modified=is_modified.bool)
+    if isinstance(is_active, bool):
+        huts_db = huts_db.filter(is_active=is_active.bool)
+    if isinstance(is_public, bool):
+        huts_db = huts_db.filter(is_public=is_public.bool)
 
     huts_db = huts_db.select_related("hut_type_open", "hut_type_closed", "hut_owner").annotate(
         sources=JSONBAgg(
