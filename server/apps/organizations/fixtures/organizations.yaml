@@ -182,3 +182,26 @@
         #  type: string
       required: ["slug", "hut_type"]
     order: 6
+- model: organizations.organization
+  pk: 7
+  fields:
+    slug: wodore
+    is_active: true
+    is_public: false
+    name_de: Wodore
+    fullname_de: Wodore
+    description_de: ''
+    url_de: https://beta.wodore.com
+    link_hut_pattern: https://beta.wodore.com/{{lang}}/map/{{props.slug}}
+    logo: organizations/logos/wodore_icon.ico
+    color_light: '#e08020'
+    color_dark: '#874d12'
+    config: {}
+    props_schema:
+      type: object,
+      properties:
+        slug:
+          description: "hut slug by refuges.info"
+          type: string
+      required: ["slug"]
+    order: 6
