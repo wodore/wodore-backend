@@ -1843,7 +1843,7 @@ xmltodict = "^0.13.0"
 type = "git"
 url = "ssh://git@github.com/wodore/hut-services-private.git"
 reference = "main"
-resolved_reference = "d4713abfb96e505601da7677c6faffd5a48dd669"
+resolved_reference = "8a3a8928391f57e135daad34f86f13749766ef14"
 
 [[package]]
 name = "hypothesis"
