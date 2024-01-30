@@ -42,11 +42,11 @@ def get_huts(  # type: ignore  # noqa: PGH003
     """Get a list with huts."""
     activate(lang)
     huts_db = Hut.objects.select_related("hut_owner").all()
-    if isinstance(is_modified, bool):
+    if is_modified != TristateEnum.unset:
         huts_db = huts_db.filter(is_modified=is_modified.bool)
-    if isinstance(is_active, bool):
+    if is_active != TristateEnum.unset:
         huts_db = huts_db.filter(is_active=is_active.bool)
-    if isinstance(is_public, bool):
+    if is_public != TristateEnum.unset:
         huts_db = huts_db.filter(is_public=is_public.bool)
 
     huts_db = huts_db.select_related("hut_type_open", "hut_type_closed", "hut_owner").annotate(
