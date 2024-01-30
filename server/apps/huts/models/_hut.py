@@ -106,7 +106,9 @@ class Hut(TimeStampedModel):
     name_i18n: str  # for typing
     description = models.TextField(max_length=10000, verbose_name="Description")
     description_i18n: str  # for typing
-    description_attribution = models.CharField(max_length=1000, verbose_name=_("Descripion attribution"))
+    description_attribution = models.CharField(
+        blank=True, default="", max_length=1000, verbose_name=_("Descripion attribution")
+    )
 
     hut_owner = models.ForeignKey(
         "owners.Owner",
@@ -131,7 +133,9 @@ class Hut(TimeStampedModel):
     note_i18n: str  # for typing
 
     photos = models.CharField(blank=True, default="", max_length=1000, verbose_name=_("Hut photo"))
-    photos_attribution = models.CharField(max_length=1000, verbose_name=_("Hut photo attribution"))
+    photos_attribution = models.CharField(
+        blank=True, default="", max_length=1000, verbose_name=_("Hut photo attribution")
+    )
     country_field = CountryField()
     location = models.PointField(blank=False, verbose_name="Location")
     elevation = models.DecimalField(null=True, blank=True, max_digits=5, decimal_places=1, verbose_name=_("Elevation"))
