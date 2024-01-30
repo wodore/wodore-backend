@@ -180,9 +180,9 @@ class CRUDCommand(BaseCommand, Generic[TModel]):
     fixture_name: str = ""  # name for fixture under <app_label>/fixtures/<fixture_name>.yaml
 
     # drop settings
-    drop_function: None | CRUDFunction[
-        TModel
-    ] = default_drop_function  # drop_function(parser, limit, offset, force, **kwargs_add)
+    drop_function: None | CRUDFunction[TModel] = (
+        default_drop_function  # drop_function(parser, limit, offset, force, **kwargs_add)
+    )
 
     # dump settings
     dump_function: None | CRUDFunction[TModel] = dump_fixture_function
@@ -236,7 +236,7 @@ class CRUDCommand(BaseCommand, Generic[TModel]):
                 "Use '--fixture-name' in order to change the default name.",
             )
         parser.add_argument(
-            "-f", "--force", action="store_true", help="Force, e.g. overwrite exisinting data (be careful!)"
+            "-f", "--force", action="store_true", help="Force, e.g. overwrite existing data (be careful!)"
         )
         if self.add_function is not None and self.add_function.__name__ == "add_fixture_function":
             parser.add_argument("--fixture-name", help=f"Name of the fixtues (default: {self.fixture_name})")

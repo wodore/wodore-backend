@@ -1,11 +1,10 @@
 import typing as t
 
-from hut_services import LocationSchema
+from hut_services import LocationSchema, OpenMonthlySchema
 from ninja import Field, ModelSchema
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from django_countries import CountryTuple
-from server.apps.organizations.models import Organization
 
 from server.apps.owners.models import Owner
 
@@ -70,6 +69,7 @@ class HutSchemaOptional(BaseModel):
     sources: list[OrganizationDetailSchema] | None  # = Field(None, alias="orgs")
     photos: str = Field("")
     photos_attribution: str = Field("")
+    open_monthly: OpenMonthlySchema | None = None
 
     @field_validator("country", mode="before")
     @classmethod

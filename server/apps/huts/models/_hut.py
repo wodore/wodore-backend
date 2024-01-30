@@ -74,6 +74,8 @@ class Hut(TimeStampedModel):
         "photos_attribution",
         "hut_type",
         "is_public",
+        "is_active",
+        "is_modified",
         "open_monthly",
     )
     ReviewStatusChoices = _ReviewStatusChoices
@@ -354,7 +356,7 @@ class Hut(TimeStampedModel):
             hut_type_open=HutType.values[str(hut_schema.hut_type.if_open.value)],
             hut_type_closed=type_closed,
             review_status=review_status,
-            is_modified=is_modified,
+            is_modified=is_modified or hut_schema.extras.get("is_modified", False),
             open_monthly=hut_schema.open_monthly.model_dump(),
             **i18n_fields,
         )
@@ -518,7 +520,7 @@ class Hut(TimeStampedModel):
             )
         if _hut_source is not None and _hut_source.organization.slug == "hrs":
             updates["booking_ref"] = _hut_source.organization
-        if set_modified:
+        if set_modified or hut_schema.extras.get("is_modified", False):
             updates["is_modified"] = True
         updated = UpdateCreateStatus.no_change
 
