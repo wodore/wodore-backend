@@ -39,16 +39,17 @@ from .expressions import GeoJSON
 def get_huts(  # type: ignore  # noqa: PGH003
     request: HttpRequest,
     lang: LanguageParam,
-    fields: Query[FieldsParam[HutSchemaOptional]],
+    # fields: Query[FieldsParam[HutSchemaOptional]],
     offset: int = 0,
     limit: int | None = None,
+    is_modified: bool | None = None,
     # is_public: bool | None = None, # needs permission
 ) -> list[Hut]:
     """Get a list with huts."""
     activate(lang)
     huts_db = Hut.objects.select_related("hut_owner").all().filter(is_active=True, is_public=True)
-    # if isinstance(is_public, bool):
-    #    huts_db = huts_db.filter(is_public=is_public)
+    if isinstance(is_modified, bool):
+        huts_db = huts_db.filter(is_modified=is_modified)
 
     huts_db = huts_db.select_related("hut_type_open", "hut_type_closed", "hut_owner").annotate(
         sources=JSONBAgg(

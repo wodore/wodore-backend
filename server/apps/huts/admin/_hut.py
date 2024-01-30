@@ -46,15 +46,23 @@ class HutsAdmin(ModelAdmin):
         "symbol_img",
         "title",
         "location_coords",
-        "elevation",
         "hut_type",
         "logo_orgs",
-        "is_active",
         "is_public",
+        "is_modified",
+        "is_active",
         "review_tag",
     )
     list_display_links = ("symbol_img", "title")
-    list_filter = ("is_active", "is_public", "review_status", "hut_type_open", "hut_type_closed", "org_set")
+    list_filter = (
+        "is_active",
+        "is_public",
+        "is_modified",
+        "review_status",
+        "hut_type_open",
+        "hut_type_closed",
+        "org_set",
+    )
     fieldsets = HutAdminFieldsets
     autocomplete_fields = ("hut_owner",)
     readonly_fields = (
@@ -101,11 +109,11 @@ class HutsAdmin(ModelAdmin):
 
     @display(header=True, ordering=Lower("name"))
     def title(self, obj):
-        if obj.hut_owner:
-            owner = textwrap.shorten(obj.hut_owner.name, width=30, placeholder="...")
-        else:
-            owner = "-"
-        return (obj.name_i18n,)  # self.icon_thumb(obj.type.icon_simple.url))
+        # if obj.hut_owner:
+        #    owner = textwrap.shorten(obj.hut_owner.name, width=30, placeholder="...")
+        # else:
+        #    owner = "-"
+        return (obj.name_i18n, obj.slug)  # self.icon_thumb(obj.type.icon_simple.url))
 
     @display(header=True, description=_("Type"))
     def hut_type(self, obj):
@@ -113,8 +121,9 @@ class HutsAdmin(ModelAdmin):
         closed = mark_safe(f'<span class = "text-xs">{obj.hut_type_closed.slug if obj.hut_type_closed else "-"}</span>')
         return (opened, closed)
 
+    @display(header=True, description=_("Location"))
     def location_coords(self, obj):
-        return f"{obj.location.y:.4f}, {obj.location.x:.4f}"
+        return f"{obj.location.y:.3f}/{obj.location.x:.3f}", f"{obj.elevation}m" if obj.elevation else "-"
 
     @display(description="")
     def symbol_img(self, obj):  # new

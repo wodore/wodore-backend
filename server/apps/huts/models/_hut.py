@@ -414,6 +414,8 @@ class Hut(TimeStampedModel):
 
         # write to DB as one transaction
         with transaction.atomic():
+            if _hut_source is not None and _hut_source.organization.slug == "hrs":
+                hut_db.booking_ref = _hut_source.organization
             hut_db.save()
             hut_db.refresh_from_db()
             if _hut_source is not None:
@@ -514,6 +516,8 @@ class Hut(TimeStampedModel):
             updates["hut_type_closed"] = (
                 HutType.values[str(hut_schema.hut_type.if_closed.value)] if hut_schema.hut_type.if_closed else None
             )
+        if _hut_source is not None and _hut_source.organization.slug == "hrs":
+            updates["booking_ref"] = _hut_source.organization
         if set_modified:
             updates["is_modified"] = True
         updated = UpdateCreateStatus.no_change
@@ -525,7 +529,7 @@ class Hut(TimeStampedModel):
                 # 2. Force to set None as well
                 if (
                     (
-                        not hasattr(hut_db, f)  # Value is still empty
+                        getattr(hut_db, f) in ["", None]  # Value is still empty
                         or (  # -> check for overwrite force ...
                             # only overwrite without any fields specified -> overwrite all
                             (force_overwrite and not force_overwrite_exclude and not force_overwrite_include)
@@ -537,7 +541,7 @@ class Hut(TimeStampedModel):
                             )
                         )
                     )
-                    and (v or force_none)  # only write 'None' if foced to
+                    and (v not in ["", None] or force_none)  # only write 'None' if foced to
                     and getattr(hut_db, f) != v  # only update if value is not the same
                 ):
                     old_value = getattr(hut_db, f)
