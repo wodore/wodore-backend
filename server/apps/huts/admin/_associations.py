@@ -91,7 +91,7 @@ class HutOrganizationAssociationEditInline(unfold_admin.StackedInline):
     extra = 0
     classes = ("collapse",)
     formfield_overrides: ClassVar = {models.JSONField: {"widget": UnfoldJSONSuit}}
-    verbose_name = _("Edit Organization")
+    verbose_name = _("Edit Source")
 
 
 class HutOrganizationAssociationViewInline(unfold_admin.TabularInline):
@@ -101,7 +101,7 @@ class HutOrganizationAssociationViewInline(unfold_admin.TabularInline):
     can_delete = False
     extra = 0
     show_change_link = True
-    verbose_name = _("Organization")
+    verbose_name = _("Source")
 
     def has_add_permission(self, request, obj):
         return False

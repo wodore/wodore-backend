@@ -51,7 +51,7 @@ def get_huts(  # type: ignore  # noqa: PGH003
     #    huts_db = huts_db.filter(is_public=is_public)
 
     huts_db = huts_db.select_related("hut_type_open", "hut_type_closed", "hut_owner").annotate(
-        orgs=JSONBAgg(
+        sources=JSONBAgg(
             JSONObject(
                 logo="org_set__logo",
                 fullname="org_set__fullname_i18n",
@@ -89,7 +89,7 @@ def get_huts_geojson(  # type: ignore  # noqa: PGH003
     embed_type: bool = False,
     embed_owner: bool = False,
     embed_capacity: bool = False,
-    embed_organizations: bool = False,
+    embed_sources: bool = False,
     include_elevation: bool = False,
     include_name: bool = False,
     flat: bool = True,
@@ -148,9 +148,9 @@ def get_huts_geojson(  # type: ignore  # noqa: PGH003
         )
         qs = qs.annotate(**annot)
         properties += list(annot.keys())
-    if embed_all or embed_organizations:
+    if embed_all or embed_sources:
         qs = qs.prefetch_related("org_set").annotate(
-            organizations=JSONBAgg(
+            sources=JSONBAgg(
                 JSONObject(
                     # logo="org_set__logo",
                     # fullname="org_set__fullname_i18n",
@@ -160,7 +160,7 @@ def get_huts_geojson(  # type: ignore  # noqa: PGH003
                 )
             )
         )
-        properties.append("organizations")
+        properties.append("sources")
     if limit is not None:
         qs = qs[offset : offset + limit]
     # with override(lang):
@@ -184,7 +184,7 @@ def get_hut(request: HttpRequest, slug: str, lang: LanguageParam, fields: Query[
     qs = Hut.objects.select_related("hut_owner").all().filter(is_active=True, is_public=True, slug=slug)
     media_url = request.build_absolute_uri(settings.MEDIA_URL)
     qs = qs.select_related("hut_type_open", "hut_type_closed", "hut_owner").annotate(
-        orgs=JSONBAgg(
+        sources=JSONBAgg(
             JSONObject(
                 logo=Concat(Value(media_url), F("org_set__logo")),
                 fullname="org_set__fullname_i18n",

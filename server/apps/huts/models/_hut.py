@@ -12,8 +12,8 @@ from hut_services import (
     OpenMonthlySchema,
 )
 from hut_services.core.guess import guess_slug_name
-from hut_services.core.schema import OccupancyStatusEnum
 from hut_services.core.schema import HutBookingsSchema as HutServiceBookingSchema
+from hut_services.core.schema import OccupancyStatusEnum
 from jinja2 import Environment
 
 from django_countries.fields import CountryField
@@ -64,12 +64,14 @@ class Hut(TimeStampedModel):
         "name",
         "note",
         "description",
+        "description_attribution",
         "location",
         "url",
         "country_code",
         "capacity",
         "type",
         "photos",
+        "photos_attribution",
         "hut_type",
         "is_public",
         "open_monthly",
@@ -94,10 +96,17 @@ class Hut(TimeStampedModel):
     is_public = models.BooleanField(
         default=False, db_index=True, verbose_name=_("Public"), help_text=_("Only shown to editors if not public")
     )
+    is_modified = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name=_("Modifed"),
+        help_text=_("Any modification compared to the original source were done"),
+    )
     name = models.CharField(max_length=100, verbose_name=_("Name"))
     name_i18n: str  # for typing
     description = models.TextField(max_length=10000, verbose_name="Description")
     description_i18n: str  # for typing
+    description_attribution = models.CharField(max_length=1000, verbose_name=_("Descripion attribution"))
 
     hut_owner = models.ForeignKey(
         "owners.Owner",
@@ -122,6 +131,7 @@ class Hut(TimeStampedModel):
     note_i18n: str  # for typing
 
     photos = models.CharField(blank=True, default="", max_length=1000, verbose_name=_("Hut photo"))
+    photos_attribution = models.CharField(max_length=1000, verbose_name=_("Hut photo attribution"))
     country_field = CountryField()
     location = models.PointField(blank=False, verbose_name="Location")
     elevation = models.DecimalField(null=True, blank=True, max_digits=5, decimal_places=1, verbose_name=_("Elevation"))
@@ -156,12 +166,20 @@ class Hut(TimeStampedModel):
         verbose_name=_("Hut type if closed"),
         db_index=True,
     )
-    # TODO: add reservation link to org (e.g hrs)
+    booking_ref = models.ForeignKey(
+        Organization,
+        null=True,
+        blank=True,
+        related_name="hut_booking_set",
+        on_delete=models.SET_NULL,
+        verbose_name=_("Booking Rerefence"),
+        db_index=True,
+    )
     # organizations = models.ManyToManyField(Organization, related_name="huts", db_table="hut_organization_association")
     org_set = models.ManyToManyField(
         Organization,
         through=HutOrganizationAssociation,
-        verbose_name=_("Organizations"),
+        verbose_name=_("Sources"),
         help_text=_(
             "This is used to link a hut to different organizations/portals, for example 'SAC', 'Open Stree Map', 'Gipfelbuch', ..."
         ),
@@ -215,7 +233,7 @@ class Hut(TimeStampedModel):
             and self._orig_review_status != self.ReviewStatusChoices.reject.value
             and self.review_status == self.ReviewStatusChoices.done.value
         ):
-            for hs in self.sources.all():
+            for hs in self.hut_sources.all():
                 if hs.review_status not in [
                     hs.ReviewStatusChoices.failed,
                     hs.ReviewStatusChoices.reject,
@@ -292,6 +310,7 @@ class Hut(TimeStampedModel):
         cls,
         hut_schema: HutSchema,
         review: bool = True,
+        is_modified: bool = False,
         _hut_source: HutSource | None = None,
         _review_status: "Hut.ReviewStatusChoices | None" = None,
     ) -> "Hut":
@@ -317,6 +336,7 @@ class Hut(TimeStampedModel):
         )
 
         hut_db = Hut(
+            description_attribution=hut_schema.description_attribution,
             location=dbPoint(hut_schema.location.lon_lat),
             elevation=hut_schema.location.ele,
             capacity_open=hut_schema.capacity.if_open,
@@ -326,9 +346,11 @@ class Hut(TimeStampedModel):
             is_public=hut_schema.is_public,
             country_field=hut_schema.country_code or "CH",
             photos=hut_schema.photos[0].thumb or hut_schema.photos[0].url if hut_schema.photos else "",
+            photos_attribution=hut_schema.photos[0].attribution if hut_schema.photos else "",
             hut_type_open=HutType.values[str(hut_schema.hut_type.if_open.value)],
             hut_type_closed=type_closed,
             review_status=review_status,
+            is_modified=is_modified,
             open_monthly=hut_schema.open_monthly.model_dump(),
             **i18n_fields,
         )
@@ -435,6 +457,7 @@ class Hut(TimeStampedModel):
         force_overwrite_include: t.Sequence[str] = [],  # set a list which field which should be overwritten
         force_overwrite_exclude: t.Sequence[str] = [],  # ... exclude when overwritten
         force_none: bool = False,  # force t oset value to none (overwrite is needed)
+        set_modified: bool = False,
         _hut_source: HutSource | None = None,
         _review_status: "Hut.ReviewStatusChoices | None" = None,
     ) -> tuple["Hut", UpdateCreateStatus]:
@@ -450,6 +473,8 @@ class Hut(TimeStampedModel):
         )
         ### Translations -> Better solution?
         i18n_fields = {}
+        if "description" in updates:
+            updates["description_attribution"] = hut_schema.description_attribution
         for field in ["name", "description", "notes"]:
             model = updates.get(field)
             if not model:
@@ -478,12 +503,15 @@ class Hut(TimeStampedModel):
             updates["capacity_closed"] = hut_schema.capacity.if_closed
         if "photos" in updates:
             updates["photos"] = hut_schema.photos[0].thumb or hut_schema.photos[0].url if hut_schema.photos else ""
+            updates["photos_attribution"] = hut_schema.photos[0].attribution if hut_schema.photos else ""
         if "hut_type" in updates:
             del updates["hut_type"]
             updates["hut_type_open"] = HutType.values[str(hut_schema.hut_type.if_open.value)]
             updates["hut_type_closed"] = (
                 HutType.values[str(hut_schema.hut_type.if_closed.value)] if hut_schema.hut_type.if_closed else None
             )
+        if set_modified:
+            updates["is_modified"] = True
         updated = UpdateCreateStatus.no_change
 
         changes = ""

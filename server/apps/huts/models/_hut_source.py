@@ -78,7 +78,7 @@ class HutSource(TimeStampedModel):
         help_text=_("Id to the previous object."),
     )
     hut = models.ForeignKey["Hut"](
-        "Hut", null=True, blank=True, related_name="sources", on_delete=models.SET_NULL, verbose_name=_("Hut")
+        "Hut", null=True, blank=True, related_name="hut_sources", on_delete=models.SET_NULL, verbose_name=_("Hut")
     )
 
     class Meta:

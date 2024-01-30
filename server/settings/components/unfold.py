@@ -138,7 +138,7 @@ UNFOLD = {
                         "title": _("API"),
                         "badge": "v1",
                         "icon": "api",
-                        "link": "/api/v1/docs",  # todo use name # todo change unfold/helpers/app_list.html tempalte to use target=
+                        "link": "/v1/docs",  # todo use name # todo change unfold/helpers/app_list.html tempalte to use target=
                         "permission": lambda request: request.user.is_superuser,
                     },
                 ],

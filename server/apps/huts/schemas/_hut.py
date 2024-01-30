@@ -50,6 +50,7 @@ class HutSchemaOptional(BaseModel):
     slug: str
     name: str | None = Field(..., alias="name_i18n")
     description: str | None = Field(..., alias="description_i18n")
+    description_attribution: str
     # description: str | None = Field(None, alias="description_i18n")
     # note: str | None = Field(None, alias="note_i18n")
     owner: OwnerSchema | None = Field(..., alias="hut_owner")
@@ -64,8 +65,9 @@ class HutSchemaOptional(BaseModel):
     country: CountryTuple | None = None
     capacity_open: int | None = None
     capacity_closed: int | None = None
-    organizations: list[OrganizationDetailSchema] | None = Field(None, alias="orgs")
+    sources: list[OrganizationDetailSchema] | None  # = Field(None, alias="orgs")
     photos: str = Field("")
+    photos_attribution: str = Field("")
 
     @field_validator("country", mode="before")
     @classmethod

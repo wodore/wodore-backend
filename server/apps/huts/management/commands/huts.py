@@ -1,16 +1,16 @@
 # type: ignore  # noqa: PGH003
 # TODO: add types
-import sys
 import json
+import sys
 import typing as t
 
 import click
 
 from django.core.management import call_command
 from django.db import IntegrityError
-from server.apps.organizations.models import Organization
-from server.apps.huts.models import HutType
 
+from server.apps.huts.models import HutType
+from server.apps.organizations.models import Organization
 from server.core import UpdateCreateStatus
 from server.core.management import CRUDCommand
 
@@ -205,7 +205,7 @@ class Command(CRUDCommand):
             limit = options.get("limit", None)
             for params in [
                 {"org": "sac", "no_review": True},
-                {"org": "wikidata", "include": "location,photos", "no_review": True},
+                {"org": "wikidata", "include": "location,photos,photos_attribution", "no_review": True},
                 {"org": "osm", "no_review": True},
                 {"org": "hrs", "no_review": True},
                 {"org": "refuges", "no_review": False},

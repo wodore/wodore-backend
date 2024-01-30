@@ -6,16 +6,18 @@ HutAdminFieldsets = [
         _("Main Information"),
         {
             "fields": [
-                ("is_active", "is_public"),
+                ("is_public", "is_modified"),
                 ("slug", "name_i18n"),
                 ("hut_type_open", "hut_type_closed"),
                 "hut_owner",
-                "review_status",
+                ("review_status", "is_active"),
                 "review_comment",
                 "url",
                 "description_i18n",
                 "note_i18n",
                 "photos",
+                "photos_attribution",
+                "booking_ref",
             ],
         },
     ),
@@ -30,7 +32,10 @@ HutAdminFieldsets = [
     ),
     (
         f"{_('Description')} {_('Translations')}",
-        {"classes": ["collapse"], "fields": [f"description_{code}" for code in settings.LANGUAGE_CODES]},
+        {
+            "classes": ["collapse"],
+            "fields": [f"description_{code}" for code in settings.LANGUAGE_CODES] + ["description_attribution"],
+        },
     ),
     (
         f"{_('Note')} {_('Translations')}",
