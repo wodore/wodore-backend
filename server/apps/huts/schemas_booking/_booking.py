@@ -60,10 +60,9 @@ class HutBookingsSchema(HutBookingsProps):
         return HutBookingsFeature(
             id=self.hut_id,
             type="Feature",
-            geometry=Point(type="Point", coordinates=(self.location.lat, self.location.lon)),
+            geometry=Point(type="Point", coordinates=self.location.lon_lat),
             properties=self,
         )
 
 
-class HutBookingsFeatureCollection(FeatureCollection[HutBookingsFeature]):
-    ...
+class HutBookingsFeatureCollection(FeatureCollection[HutBookingsFeature]): ...
