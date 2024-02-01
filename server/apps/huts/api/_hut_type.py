@@ -1,7 +1,9 @@
 from os import wait
 from re import I
+import re
 from time import perf_counter
 from typing import List
+from django.conf import settings
 
 import msgspec
 from geojson_pydantic import Feature, FeatureCollection
@@ -30,6 +32,23 @@ from ..schemas import HutTypeDetailSchema
 from ._router import router
 
 
+def _get_hut_types(  # type: ignore  # noqa: PGH003
+    request: HttpRequest,
+    lang: LanguageParam,
+    fields: Query[FieldsParam[HutTypeDetailSchema]],
+) -> list[HutTypeDetailSchema]:
+    qs = HutType.objects.all().order_by("level", "slug")
+    fields.update_default(HutType.FIELDS)
+    media_url = request.build_absolute_uri(settings.MEDIA_URL)
+    with override(lang):
+        hts = fields.validate(list(qs))
+        for h in hts:
+            for repl in ["icon", "symbol", "symbol_simple"]:
+                if hasattr(h, repl):
+                    setattr(h, repl, getattr(h, repl).replace("/media/", media_url))
+        return hts
+
+
 @router.get("types/list", response=list[HutTypeDetailSchema], exclude_unset=True, operation_id="get_hut_types")
 @with_language_param("lang")
 def get_hut_types(  # type: ignore  # noqa: PGH003
@@ -37,12 +56,7 @@ def get_hut_types(  # type: ignore  # noqa: PGH003
     lang: LanguageParam,
     fields: Query[FieldsParam[HutTypeDetailSchema]],
 ) -> list[HutTypeDetailSchema]:
-    qs = HutType.objects.all().order_by("level", "slug")
-    fields.update_default(HutType.FIELDS)
-    with override(lang):
-        # return qs
-        return fields.validate(list(qs))
-        # return fields.validate(list(huts_db))
+    return _get_hut_types(request=request, lang=lang, fields=fields)
 
 
 @router.get(
@@ -53,11 +67,6 @@ def get_hut_type_records(  # type: ignore  # noqa: PGH003
     request: HttpRequest,
     lang: LanguageParam,
     fields: Query[FieldsParam[HutTypeDetailSchema]],
-) -> list[HutTypeDetailSchema]:
-    qs = HutType.objects.all().order_by("level", "slug")
-    fields.update_default(HutType.FIELDS)
-    with override(lang):
-        # return qs
-        hts = fields.validate(list(qs))
-        return {ht.slug: ht for ht in hts}
-        # return fields.validate(list(huts_db))
+) -> dict[str, HutTypeDetailSchema]:
+    hts = _get_hut_types(request, lang, fields)
+    return {ht.slug: ht for ht in hts}
