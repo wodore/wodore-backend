@@ -706,10 +706,15 @@ class Hut(TimeStampedModel):
             obj = obj.filter(slug__in=hut_slugs)
         for src_name, service in SERVICES.items():
             if service.support_booking and (src_name == source or source is None):
+                # source_obj = Organization.get_by_slug(src_name)
                 bookings.update(service.get_bookings(date=date, days=days, source_ids=source_ids, lang=lang))
                 huts += (
-                    obj.filter(orgs_source__source_id__in=bookings.keys())
-                    .prefetch_related("hut_type_open", "hut_type_closed")
+                    obj.prefetch_related("hut_type_open", "hut_type_closed", "booking_ref")
+                    .filter(
+                        orgs_source__organization__slug=src_name,
+                        booking_ref__slug=src_name,
+                        orgs_source__source_id__in=bookings.keys(),
+                    )
                     .annotate(
                         source_id=F("orgs_source__source_id"),
                         source=F("org_set__slug"),

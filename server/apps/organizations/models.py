@@ -68,7 +68,7 @@ class Organization(TimeStampedModel):
 
     @classmethod
     @lru_cache(50)
-    def get_by_slug(cls, slug):
+    def get_by_slug(cls, slug: str) -> "Organization":
         return cls.objects.get(slug=slug)
 
     @classmethod

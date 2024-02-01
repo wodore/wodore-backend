@@ -85,13 +85,11 @@ def add_huts_function(obj: "Command", offset, limit, update, force, selected_org
     if total_entries == 0:
         obj.stdout.write(obj.style.WARNING("No entries in 'huts.HutSource', run first: 'app hut_sources --add'"))
         sys.exit(1)
-
+    src_huts_obj = HutSource.objects.filter(is_current=True, is_active=True)
     if selected_organization:
-        src_huts = list(
-            HutSource.objects.filter(organization__slug=selected_organization).all()[offset : offset + limit]
-        )
+        src_huts = list(src_huts_obj.filter(organization__slug=selected_organization).all()[offset : offset + limit])
     else:
-        src_huts = list(HutSource.objects.all()[offset : offset + limit])
+        src_huts = list(src_huts_obj.all()[offset : offset + limit])
     new_huts = len(src_huts)
     obj.stdout.write(obj.style.NOTICE(f"Going to fill table with {new_huts} entries and an offset of {offset}"))
     added, updated, nochange, failed = init_huts_db(
