@@ -112,7 +112,10 @@ class HutSource(TimeStampedModel):
                 hut_source.source_data,
                 ignore_type_in_groups=[DeepDiff.numbers, (list, tuple)],
             )
-            if diff:  # something changed, add a new entry:
+            loc_diff = ""
+            if other_hut_src.location.distance(hut_source.location) > 0.00005:
+                loc_diff = f"Location changed from '{other_hut_src.location.tuple}' to '{hut_source.location.tuple}'"
+            if diff or loc_diff:  # something changed, add a new entry:
                 diff_comment = (
                     diff.pretty()
                     .replace("root[", "")
@@ -121,7 +124,8 @@ class HutSource(TimeStampedModel):
                     .replace("'[", "[")
                     .replace("]['", "].")
                     .replace("] ", "]' ")
-                )
+                    + f"\n{loc_diff}"
+                ).strip()
                 if other_hut_src.review_status == cls.ReviewStatusChoices.review and other_hut_src.review_comment:
                     diff_comment += (
                         f"\n\n~~~\nComments from version {other_hut_src.version}:\n\n{other_hut_src.review_comment}"
