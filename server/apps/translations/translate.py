@@ -15,7 +15,8 @@ translator = Translator(auth_key)
 # print(result.text)  # "Bonjour, le monde !"
 
 from .schema import LANGUAGE_CODES
-import argostranslate.translate
+
+# import argostranslate.translate
 
 LangType = t.Literal["de", "fr", "en", "it"]
 
@@ -32,7 +33,8 @@ LangType = t.Literal["de", "fr", "en", "it"]
 
 @file_cache(expire_in_seconds=3600 * 24 * 365)
 def _translate(text: str, source_lang: str, target_lang: str) -> str:
-    return argostranslate.translate.translate(text, from_code=source_lang, to_code=target_lang)
+    raise NotImplementedError("Translation not supported")
+    # return argostranslate.translate.translate(text, from_code=source_lang, to_code=target_lang)
     # return translator.translate_text(text, source_lang=source_lang, target_lang=target_lang).text
 
 
