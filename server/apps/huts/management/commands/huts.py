@@ -207,7 +207,7 @@ class Command(CRUDCommand):
                 {"org": "osm", "no_review": True},
                 {"org": "hrs", "no_review": True},
                 {"org": "refuges", "no_review": False},
-                {"org": "wodore", "no_review": True, "overwrite": True},
+                {"org": "wodore", "no_review": True, "overwrite": True, "set_none": True},
             ]:
                 self.stdout.write(self.style.HTTP_INFO(f"Add {params.get('org','all')} huts with parameter:"))
                 for k, v in params.items():
