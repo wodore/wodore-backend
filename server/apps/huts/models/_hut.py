@@ -326,7 +326,7 @@ class Hut(TimeStampedModel):
         else:
             review_status = Hut.ReviewStatusChoices.new if review else Hut.ReviewStatusChoices.done
 
-        hut_schema = translate_hut(hut_schema)
+        # hut_schema = translate_hut(hut_schema)
 
         ## Translations -> Better solution?
         i18n_fields = {}

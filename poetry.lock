@@ -1025,13 +1025,13 @@ Django = ">=1.11"
 
 [[package]]
 name = "django-ipware"
-version = "6.0.3"
+version = "6.0.4"
 description = "A Django application to retrieve user's IP address"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "django-ipware-6.0.3.tar.gz", hash = "sha256:0f682dd4f3afef7909bb3dd396949c355982539bd4392d4e9df0b0b31604484d"},
-    {file = "django_ipware-6.0.3-py2.py3-none-any.whl", hash = "sha256:e54b6050af037406f05327890e742f99451dce96951223dea9cdd824e95859b6"},
+    {file = "django-ipware-6.0.4.tar.gz", hash = "sha256:614d0f0a911f8a765e55b6d358b1715bb85eeb63d1ebb77447d09d645f1343e8"},
+    {file = "django_ipware-6.0.4-py2.py3-none-any.whl", hash = "sha256:09c502ee3b1f8ae08d197d5e1f4397e965d0b201c83de7b5721db1fc460e6ab6"},
 ]
 
 [package.dependencies]
@@ -1860,7 +1860,7 @@ xmltodict = "^0.13.0"
 type = "git"
 url = "ssh://git@github.com/wodore/hut-services-private.git"
 reference = "main"
-resolved_reference = "4d3cbe2423d0ba4c0347795a65d487bea22978a6"
+resolved_reference = "4cb59373ce0b0668c6f3d9b83fe694a2faf5a773"
 
 [[package]]
 name = "hypothesis"
