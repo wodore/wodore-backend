@@ -52,6 +52,7 @@ class HutsAdmin(ModelAdmin):
         "is_modified",
         "is_active",
         "review_tag",
+        "view_link",
     )
     list_display_links = ("symbol_img", "title")
     list_filter = (
@@ -127,18 +128,28 @@ class HutsAdmin(ModelAdmin):
 
     @display(description="")
     def symbol_img(self, obj):  # new
-        return mark_safe(f'<img src = "{obj.hut_type_open.symbol.url}" width = "38"/>')
+        return mark_safe(f'<img src="{obj.hut_type_open.symbol.url}" width="75px"/>')
 
     @display(description=_("Sources"))
     def logo_orgs(self, obj: Hut) -> str:  # new
         SRC = settings.MEDIA_URL
         imgs = [
-            f'<a href={o["link_i18n"]} target="blank"><img class="inline pr-2" src="{SRC}/{o["logo"]}" width="28" alt="{o["name_i18n"]}"/></a>'
+            f'<a href={o["link_i18n"]} target="blank"><img class="inline pr-2" src="{SRC}/{o["logo"]}" width="24px" alt="{o["name_i18n"]}"/></a>'
             for o in obj.orgs
         ]
 
         # return ", ".join([str(o.organization.name + o.link_i18n) for o in obj.orgs.all()])
         return mark_safe(f'<span>{"".join(imgs)}</span>')
+
+    @display(description="")
+    def view_link(self, obj: Hut) -> str:
+        url = f"{settings.FRONTEND_DOMAIN}/de/map/{obj.slug}#12/{obj.location.y}/{obj.location.x}"
+        view = f'<span><a class="text-sm" href="{url}" target="_blank"> <span class="material-symbols-outlined"> visibility </span> </a>'
+        if obj.is_public and obj.is_active:
+            return mark_safe(view)
+        elif not obj.is_public and obj.is_active:
+            return mark_safe('<span class="material-symbols-outlined"> visibility_off </span>')
+        return mark_safe('<span class="material-symbols-outlined"> disabled_visible </span>')
 
     ## ACTIONS
     actions_row = (

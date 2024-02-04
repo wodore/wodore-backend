@@ -34,6 +34,7 @@ SECRET_KEY = config("DJANGO_SECRET_KEY")
 
 DOMAIN_NAMES = [d.strip() for d in config("DOMAIN_NAMES").split(",")] if config("DOMAIN_NAMES") else []
 DEV_DOMAIN_NAMES = [d.strip() for d in config("DEV_DOMAIN_NAMES").split(",")] if config("DEV_DOMAIN_NAMES") else []
+FRONTEND_DOMAIN = config("FRONTEND_DOMAIN") if config("FRONTEND_DOMAIN") else "http://localhost:9000"
 
 # Application definition:
 
@@ -291,3 +292,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 
 
 JSONSUIT_WIDGET_THEME = "tomorrow"
+
+# Translations
+
+DEEPL_KEY = config("DEEPL_KEY")

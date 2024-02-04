@@ -15,6 +15,7 @@ from hut_services.core.guess import guess_slug_name
 from hut_services.core.schema import HutBookingsSchema as HutServiceBookingSchema
 from hut_services.core.schema import OccupancyStatusEnum
 from jinja2 import Environment
+from server.apps.translations.translate import translate_hut
 
 from django_countries.fields import CountryField
 from model_utils.models import TimeStampedModel
@@ -325,6 +326,8 @@ class Hut(TimeStampedModel):
         else:
             review_status = Hut.ReviewStatusChoices.new if review else Hut.ReviewStatusChoices.done
 
+        hut_schema = translate_hut(hut_schema)
+
         ## Translations -> Better solution?
         i18n_fields = {}
         for field in ["name", "description", "notes"]:
@@ -443,6 +446,7 @@ class Hut(TimeStampedModel):
         _review_status: "Hut.ReviewStatusChoices | None" = None,
     ) -> tuple["Hut", UpdateCreateStatus]:
         hut_schema = cls._convert_source(hut_source)
+        # hut_schema = translate_hut(hut_schema)
         return cls.update_from_schema(
             hut_db=hut_db,
             hut_schema=hut_schema,
