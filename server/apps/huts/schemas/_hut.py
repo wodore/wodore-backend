@@ -1,6 +1,6 @@
 import typing as t
 
-from hut_services import LocationSchema, OpenMonthlySchema
+from hut_services import LocationSchema, OpenMonthlySchema, TranslationSchema
 from ninja import Field, ModelSchema
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -84,3 +84,5 @@ class HutSchemaOptional(BaseModel):
 
 class HutSchemaDetails(HutSchemaOptional):
     edit_link: str | None = None
+    # desc: TranslationSchema | None = None
+    translations: t.Any | None = None

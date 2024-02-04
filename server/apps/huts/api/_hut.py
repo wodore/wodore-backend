@@ -1,5 +1,5 @@
 import typing as t
-from typing import List
+from typing import Any, List
 
 import msgspec
 from benedict import benedict
@@ -27,7 +27,7 @@ from ._router import router
 from .expressions import GeoJSON
 
 
-@router.get("huts", response=List[HutSchemaOptional], exclude_unset=True, operation_id="get_huts")
+@router.get("huts", response=list[HutSchemaDetails], exclude_unset=True, operation_id="get_huts")
 @with_language_param("lang")
 def get_huts(  # type: ignore  # noqa: PGH003
     request: HttpRequest,
@@ -38,7 +38,7 @@ def get_huts(  # type: ignore  # noqa: PGH003
     is_modified: TristateEnum = TristateEnum.unset,
     is_public: TristateEnum = TristateEnum.true,  # needs permission
     is_active: TristateEnum = TristateEnum.true,  # needs permission
-) -> list[Hut]:
+) -> Any:
     """Get a list with huts."""
     activate(lang)
     huts_db = Hut.objects.select_related("hut_owner").all()
@@ -58,7 +58,21 @@ def get_huts(  # type: ignore  # noqa: PGH003
                 name="org_set__name_i18n",
                 link="orgs_source__link",
             )
-        )
+        ),
+        translations=JSONObject(
+            description=JSONObject(
+                de="description_de",
+                en="description_en",
+                fr="description_fr",
+                it="description_it",
+            ),
+            name=JSONObject(
+                de="name_de",
+                en="name_en",
+                fr="name_fr",
+                it="name_it",
+            ),
+        ),
     )
     if limit is not None:
         huts_db = huts_db[offset : offset + limit]
@@ -191,7 +205,21 @@ def get_hut(request: HttpRequest, slug: str, lang: LanguageParam, fields: Query[
                 name="org_set__name_i18n",
                 link="orgs_source__link",
             )
-        )
+        ),
+        translations=JSONObject(
+            description=JSONObject(
+                de="description_de",
+                en="description_en",
+                fr="description_fr",
+                it="description_it",
+            ),
+            name=JSONObject(
+                de="name_de",
+                en="name_en",
+                fr="name_fr",
+                it="name_it",
+            ),
+        ),
     )
     # with override(lang):
     hut_db = qs.first()
