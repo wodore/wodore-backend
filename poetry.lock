@@ -1233,13 +1233,13 @@ typing_extensions = ">=3.6,<5"
 
 [[package]]
 name = "django-unfold"
-version = "0.20.2"
+version = "0.20.3"
 description = "Modern Django admin theme for seamless interface development"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "django_unfold-0.20.2-py3-none-any.whl", hash = "sha256:8c2add348302ae9150185cfb5daaf43c46012bcc28cd8a8b7bb7f15375a5346e"},
-    {file = "django_unfold-0.20.2.tar.gz", hash = "sha256:e5075b7b1f813c1cec287df182af8056b97becdeb62d4685e4b3c01bd27d25eb"},
+    {file = "django_unfold-0.20.3-py3-none-any.whl", hash = "sha256:8fdf39ff890883974f255c74f3fad461bd9d06b239126af8b3ce1a2ca71092aa"},
+    {file = "django_unfold-0.20.3.tar.gz", hash = "sha256:5dd21a4fca635351468f5ca640c84ff0feb4cff2c58ae77c3cf489be7003c2e0"},
 ]
 
 [package.dependencies]
@@ -1860,17 +1860,17 @@ xmltodict = "^0.13.0"
 type = "git"
 url = "ssh://git@github.com/wodore/hut-services-private.git"
 reference = "main"
-resolved_reference = "4eb5f69e7c68f7e34043fcb314467082857820c4"
+resolved_reference = "0b34ae0a7b73b56feba7f554e14d1d728f2922fa"
 
 [[package]]
 name = "hypothesis"
-version = "6.97.4"
+version = "6.97.5"
 description = "A library for property-based testing"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "hypothesis-6.97.4-py3-none-any.whl", hash = "sha256:9069fe3fb18d9b7dd218bd69ab50bbc66426819dfac7cc7168ba85034d98a4df"},
-    {file = "hypothesis-6.97.4.tar.gz", hash = "sha256:28ff724fa81ccc55f64f0f1eb06e4a75db6a195fe0857e9b3184cf4ff613a103"},
+    {file = "hypothesis-6.97.5-py3-none-any.whl", hash = "sha256:35fe2f7bf1e7a62f410d3fa9e67663ba242b48546f5a82a329ca773227a719c2"},
+    {file = "hypothesis-6.97.5.tar.gz", hash = "sha256:67b552abce4d4f434c16dc3221d0ce45cdc78a6090ae3332c5fd59c44280c13a"},
 ]
 
 [package.dependencies]
@@ -3935,13 +3935,13 @@ files = [
 
 [[package]]
 name = "types-pytz"
-version = "2023.4.0.20240130"
+version = "2024.1.0.20240203"
 description = "Typing stubs for pytz"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "types-pytz-2023.4.0.20240130.tar.gz", hash = "sha256:33676a90bf04b19f92c33eec8581136bea2f35ddd12759e579a624a006fd387a"},
-    {file = "types_pytz-2023.4.0.20240130-py3-none-any.whl", hash = "sha256:6ce76a9f8fd22bd39b01a59c35bfa2db39b60d11a2f77145e97b730de7e64fe0"},
+    {file = "types-pytz-2024.1.0.20240203.tar.gz", hash = "sha256:c93751ee20dfc6e054a0148f8f5227b9a00b79c90a4d3c9f464711a73179c89e"},
+    {file = "types_pytz-2024.1.0.20240203-py3-none-any.whl", hash = "sha256:9679eef0365db3af91ef7722c199dbb75ee5c1b67e3c4dd7bfbeb1b8a71c21a3"},
 ]
 
 [[package]]
