@@ -31,8 +31,6 @@ def discover_oidc(discovery_url: str) -> dict:
     }
 
 
-load_dotenv()
-
 ZITADEL_PROJECT = config("ZITADEL_PROJECT")
 OIDC_RP_CLIENT_ID = config("OIDC_RP_CLIENT_ID")
 OIDC_RP_CLIENT_SECRET = config("OIDC_RP_CLIENT_SECRET")

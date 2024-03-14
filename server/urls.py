@@ -14,8 +14,8 @@ from health_check import urls as health_urls
 from django.conf import settings
 from django.contrib import admin
 from django.contrib.admindocs import urls as admindocs_urls
-from django.urls import include, path
-from django.views.generic import TemplateView
+from django.urls import include, path, reverse
+from django.views.generic import RedirectView, TemplateView
 
 from .apps.api.api_v1 import api as api_v1
 from .apps.main import urls as main_urls
@@ -36,6 +36,7 @@ urlpatterns = [
     # path("grappelli/", include("grappelli.urls")),  # grappelli URLS
     # path("", include("admin_volt.urls")), # admin-volt
     path("admin/doc/", include(admindocs_urls)),
+    path("admin/login/", RedirectView.as_view(url="/oidc/authenticate?next=/admin/", permanent=False)),
     path("admin/", admin.site.urls),
     # Api:
     path("v1/", api_v1.urls),  # type: ignore

@@ -66,7 +66,6 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.gis",
-    "mozilla_django_oidc",  # Load after auth https://github.com/mozilla/mozilla-django-oidc
     # django-admin:
     # "admin_volt.apps.AdminVoltConfig",  # https://github.com/app-generator/django-admin-volt
     # "grappelli",  # https://django-grappelli.readthedocs.io/en/latest/
@@ -81,6 +80,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "django.contrib.admindocs",
     # Security:
     "axes",
+    "mozilla_django_oidc",  # Load after auth https://github.com/mozilla/mozilla-django-oidc
     # Health checks:
     # You may want to enable other checks as well,
     # see: https://github.com/KristianOellegaard/django-health-check
