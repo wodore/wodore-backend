@@ -24,6 +24,8 @@ from .apps.main.views import index
 admin.autodiscover()
 
 urlpatterns = [
+    # Auth
+    path("oidc/", include("mozilla_django_oidc.urls")),
     # Apps:
     path("main/", include(main_urls, namespace="main")),
     # Health checks:

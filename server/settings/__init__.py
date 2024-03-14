@@ -28,6 +28,7 @@ _base_settings = (
     "components/csp.py",
     "components/unfold.py",
     "components/caches.py",
+    "components/oicd.py",
     # Select the right env:
     f"environments/{_ENV}.py",
     # Optionally override some settings:

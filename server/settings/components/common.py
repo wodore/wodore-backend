@@ -66,6 +66,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.gis",
+    "mozilla_django_oidc",  # Load after auth https://github.com/mozilla/mozilla-django-oidc
     # django-admin:
     # "admin_volt.apps.AdminVoltConfig",  # https://github.com/app-generator/django-admin-volt
     # "grappelli",  # https://django-grappelli.readthedocs.io/en/latest/
@@ -107,6 +108,8 @@ MIDDLEWARE: Tuple[str, ...] = (
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # Login
+    "mozilla_django_oidc.middleware.SessionRefresh",
     # Axes:
     "axes.middleware.AxesMiddleware",
     # Django HTTP Referrer Policy:
@@ -250,6 +253,7 @@ MEDIA_ROOT = BASE_DIR.joinpath("media")
 AUTHENTICATION_BACKENDS = (
     "axes.backends.AxesBackend",
     "django.contrib.auth.backends.ModelBackend",
+    "server.core.oicd_permission.PermissionBackend",
 )
 
 PASSWORD_HASHERS = [
