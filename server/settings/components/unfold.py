@@ -12,8 +12,8 @@ from django.urls import reverse_lazy
 from django.utils.translation import gettext_lazy as _
 
 UNFOLD = {
-    "SITE_TITLE": None,
-    "SITE_HEADER": None,
+    "SITE_TITLE": "wodore.com",
+    "SITE_HEADER": "Wodore Admin",
     "SITE_URL": "/",
     # "SITE_ICON": lambda request: static("icon.svg"),  # both modes, optimise for 32px height
     # "SITE_ICON": {

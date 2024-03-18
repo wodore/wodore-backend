@@ -36,6 +36,7 @@ urlpatterns = [
     # path("grappelli/", include("grappelli.urls")),  # grappelli URLS
     # path("", include("admin_volt.urls")), # admin-volt
     path("admin/doc/", include(admindocs_urls)),
+    # admin hack, should not be needed (https://stackoverflow.com/questions/59881651/django-mozilla-django-oidc-and-admin)
     path("admin/login/", RedirectView.as_view(url="/oidc/authenticate?next=/admin/", permanent=False)),
     path("admin/", admin.site.urls),
     # Api:

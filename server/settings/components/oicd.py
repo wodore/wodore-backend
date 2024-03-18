@@ -12,6 +12,7 @@ import requests
 import os
 from server.settings.components import config
 
+
 def discover_oidc(discovery_url: str) -> dict:
     """
     Performs OpenID Connect discovery to retrieve the provider configuration.
@@ -47,6 +48,7 @@ OIDC_OP_TOKEN_ENDPOINT = discovery_info["token_endpoint"]
 OIDC_OP_USER_ENDPOINT = discovery_info["userinfo_endpoint"]
 OIDC_OP_JWKS_ENDPOINT = discovery_info["jwks_uri"]
 
-LOGIN_REDIRECT_URL = "http://localhost:8000/"
-LOGOUT_REDIRECT_URL = "http://localhost:8000/"
-LOGIN_URL = "http://localhost:8000/oidc/authenticate/"
+_main_url = config("MAIN_URL") if config("MAIN_URL") else "localhost:8000"
+LOGIN_REDIRECT_URL = f"{_main_url}/admin"
+LOGOUT_REDIRECT_URL = f"{_main_url}/admin"
+LOGIN_URL = f"{_main_url}/oidc/authenticate/"

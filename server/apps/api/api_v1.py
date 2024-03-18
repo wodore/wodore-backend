@@ -3,7 +3,9 @@ from ninja import NinjaAPI, Swagger
 from .parser import MsgSpecParser
 from .renderer import MsgSpecRenderer
 
-api = NinjaAPI(title="Wodore API", version="1.0.0", docs=Swagger(), renderer=MsgSpecRenderer(), parser=MsgSpecParser())
+api = NinjaAPI(
+    title="Wodore API", version="1.0.0", docs=Swagger(), renderer=MsgSpecRenderer(), parser=MsgSpecParser(), csrf=True
+)
 
 root_path = "server.apps"
 

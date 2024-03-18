@@ -3,6 +3,7 @@ from typing import Literal
 
 from geojson_pydantic import FeatureCollection
 from ninja import Field, Query, Schema
+from ninja.security import django_auth
 
 from django.http import HttpRequest
 
@@ -39,7 +40,7 @@ def _hut_slugs_list(slugs: str | None) -> list[str] | None:
     return hut_slugs_list
 
 
-@router.get("bookings", response=list[HutBookingsSchema], operation_id="get_hut_bookings")
+@router.get("bookings", response=list[HutBookingsSchema], operation_id="get_hut_bookings", auth=django_auth)
 @with_language_param("lang")
 def get_hut_bookings(  # type: ignore  # noqa: PGH003
     request: HttpRequest, lang: LanguageParam, queries: Query[HutBookingsQuery]
