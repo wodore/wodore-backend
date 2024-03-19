@@ -23,6 +23,11 @@ from server.settings.components.csp import (
 
 # Setting the development status:
 
+
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SECURE = False
+SOCIAL_AUTH_REDIRECT_IS_HTTPS = False
+
 DEBUG = True
 
 ALLOWED_HOSTS = [

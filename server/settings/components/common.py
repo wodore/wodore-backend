@@ -267,7 +267,12 @@ PASSWORD_HASHERS = [
 # Security
 # https://docs.djangoproject.com/en/4.2/topics/security/
 
-SESSION_COOKIE_HTTPONLY = True
+# is overwritten for dev in enviroment
+# SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SECURE = True
+SOCIAL_AUTH_REDIRECT_IS_HTTPS = True
+
+
 CSRF_COOKIE_HTTPONLY = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_BROWSER_XSS_FILTER = True
