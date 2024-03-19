@@ -15,6 +15,8 @@ UNFOLD = {
     "SITE_TITLE": "wodore.com",
     "SITE_HEADER": "Wodore Admin",
     "SITE_URL": "/",
+    "SITE_ICON": lambda request: static("main/images/favicon-32x32.png"),  # both modes, optimise for 32px height
+    # "SITE_LOGO": lambda request: static("main/images/favicon-32x32.png"),  # both modes, optimise for 32px height
     # "SITE_ICON": lambda request: static("icon.svg"),  # both modes, optimise for 32px height
     # "SITE_ICON": {
     #    "light": lambda request: static("icon-light.svg"),  # light mode
@@ -117,10 +119,11 @@ UNFOLD = {
                 "separator": True,  # Top border
                 "items": [
                     {
-                        "title": _("Users"),
-                        "icon": "person",
-                        "link": reverse_lazy("admin:auth_user_changelist"),
+                        "title": _("Zitadel Users"),
+                        "icon": "manage_accounts",
+                        "link": "https://iam.wodore.com/ui/console/users",
                         "permission": lambda request: request.user.is_superuser,
+                        "target": "_blank",
                     },
                     {
                         "title": _("Groups"),
@@ -128,18 +131,31 @@ UNFOLD = {
                         "link": reverse_lazy("admin:auth_group_changelist"),
                         "permission": lambda request: request.user.is_superuser,
                     },
+                    {
+                        "title": _("Users"),
+                        "icon": "person",
+                        "link": reverse_lazy("admin:auth_user_changelist"),
+                        "permission": lambda request: request.user.is_superuser,
+                    },
                 ],
             },
             {
-                "title": _("Help"),
+                "title": _("External Links"),
                 "separator": True,  # Top border
                 "items": [
                     {
                         "title": _("API"),
                         "badge": "v1",
                         "icon": "api",
-                        "link": "/v1/docs",  # todo use name # todo change unfold/helpers/app_list.html tempalte to use target=
+                        "link": "/v1/docs",
                         "permission": lambda request: request.user.is_superuser,
+                        "target": "_blank",
+                    },
+                    {
+                        "title": _("Frontend (wodore.com)"),
+                        "icon": "captive_portal",
+                        "link": "https://beta.wodore.com",
+                        "target": "_blank",
                     },
                 ],
             },
