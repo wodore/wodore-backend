@@ -28,6 +28,7 @@ def discover_oidc(discovery_url: str) -> dict:
         "authorization_endpoint": provider_config["authorization_endpoint"],
         "token_endpoint": provider_config["token_endpoint"],
         "userinfo_endpoint": provider_config["userinfo_endpoint"],
+        "introspection_endpoint": provider_config["introspection_endpoint"],
         "jwks_uri": provider_config["jwks_uri"],
     }
 
@@ -36,6 +37,7 @@ ZITADEL_PROJECT = config("ZITADEL_PROJECT")
 OIDC_RP_CLIENT_ID = config("OIDC_RP_CLIENT_ID")
 OIDC_RP_CLIENT_SECRET = config("OIDC_RP_CLIENT_SECRET")
 OIDC_OP_BASE_URL = config("OIDC_OP_BASE_URL")
+API_PRIVATE_KEY_FILE_PATH = config("API_PRIVATE_KEY_FILE_PATH")
 
 OIDC_RP_SIGN_ALGO = "RS256"
 OIDC_RP_SCOPES = "openid email phone profile"
@@ -47,6 +49,7 @@ OIDC_OP_AUTHORIZATION_ENDPOINT = discovery_info["authorization_endpoint"]
 OIDC_OP_TOKEN_ENDPOINT = discovery_info["token_endpoint"]
 OIDC_OP_USER_ENDPOINT = discovery_info["userinfo_endpoint"]
 OIDC_OP_JWKS_ENDPOINT = discovery_info["jwks_uri"]
+OIDC_OP_INTROSPECTION_ENDPOINT = discovery_info["introspection_endpoint"]
 
 _main_url = config("MAIN_URL") if config("MAIN_URL") else "localhost:8000"
 LOGIN_REDIRECT_URL = f"{_main_url}/admin"

@@ -7,6 +7,8 @@ from ninja.security import django_auth
 
 from django.http import HttpRequest
 
+from server.apps.api.auth import AuthBearer
+
 # from django.contrib.gis.db.models.functions import AsGeoJSON
 # from django.contrib.postgres.aggregates import JSONBAgg
 from server.apps.translations import (
@@ -40,7 +42,12 @@ def _hut_slugs_list(slugs: str | None) -> list[str] | None:
     return hut_slugs_list
 
 
-@router.get("bookings", response=list[HutBookingsSchema], operation_id="get_hut_bookings", auth=django_auth)
+@router.get(
+    "bookings",
+    response=list[HutBookingsSchema],
+    operation_id="get_hut_bookings",
+    auth=AuthBearer(roles=["perm:bookings"], groups=["root", "admin", "editor"]),
+)
 @with_language_param("lang")
 def get_hut_bookings(  # type: ignore  # noqa: PGH003
     request: HttpRequest, lang: LanguageParam, queries: Query[HutBookingsQuery]
