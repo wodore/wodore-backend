@@ -26,7 +26,7 @@ from server.settings.components.csp import (
 
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SECURE = False
-SOCIAL_AUTH_REDIRECT_IS_HTTPS = False
+SECURE_PROXY_SSL_HEADER = None
 
 DEBUG = True
 

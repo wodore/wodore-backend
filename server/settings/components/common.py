@@ -268,9 +268,8 @@ PASSWORD_HASHERS = [
 # https://docs.djangoproject.com/en/4.2/topics/security/
 
 # is overwritten for dev in enviroment
-# SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SECURE = True
-SOCIAL_AUTH_REDIRECT_IS_HTTPS = True
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 
 CSRF_COOKIE_HTTPONLY = True
