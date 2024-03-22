@@ -9,7 +9,6 @@ from authlib.oauth2.rfc7662 import IntrospectTokenValidator
 from ninja.security import HttpBearer
 
 from django.conf import settings
-from django.http import JsonResponse
 
 API_PRIVATE_KEY_FILE: dict[str, str] = {}
 
@@ -33,7 +32,6 @@ class ZitadelIntrospectTokenValidator(IntrospectTokenValidator):  # type: ignore
             API_PRIVATE_KEY_FILE["client_id"] = data["clientId"]
             API_PRIVATE_KEY_FILE["key_id"] = data["keyId"]
             API_PRIVATE_KEY_FILE["private_key"] = data["key"]
-        print(API_PRIVATE_KEY_FILE)
 
     def introspect_token(self, token_string: str) -> dict[str, Any]:
         # Create JWT for client assertion
@@ -44,11 +42,7 @@ class ZitadelIntrospectTokenValidator(IntrospectTokenValidator):  # type: ignore
             "exp": int(time.time()) + 60 * 60,  # Expires in 1 hour
             "iat": int(time.time()),
         }
-        print("Payload:")
-        print(payload)
         header = {"alg": settings.OIDC_RP_SIGN_ALGO, "kid": API_PRIVATE_KEY_FILE["key_id"]}
-        print("Header:")
-        print(header)
         jwt_token = jwt.encode(
             header,
             payload,
@@ -65,7 +59,6 @@ class ZitadelIntrospectTokenValidator(IntrospectTokenValidator):  # type: ignore
         response = requests.post(settings.OIDC_OP_INTROSPECTION_ENDPOINT, headers=headers, data=data)
         response.raise_for_status()
         token_data = response.json()
-        print(f"Token data from introspection: {token_data}")
         return token_data
 
     def match_token_scopes(self, token: dict[str, str], or_scopes: list[str] | None) -> bool:
@@ -85,8 +78,6 @@ class ZitadelIntrospectTokenValidator(IntrospectTokenValidator):  # type: ignore
             for g in token.get(f"urn:zitadel:iam:org:project:{settings.ZITADEL_PROJECT}:roles", "")
             if "group:" not in g
         ]
-        print("Roles:")
-        print(roles)
         return all(role in roles for role in and_roles)
 
     def match_token_groups(self, token: dict[str, str], or_groups: list[str] | None) -> bool:
@@ -97,8 +88,6 @@ class ZitadelIntrospectTokenValidator(IntrospectTokenValidator):  # type: ignore
             for g in token.get(f"urn:zitadel:iam:org:project:{settings.ZITADEL_PROJECT}:roles", "")
             if "group:" in g
         ]
-        print("Groups:")
-        print(groups)
         return any(group in groups for group in or_groups)
 
     def validate_token(
@@ -109,7 +98,6 @@ class ZitadelIntrospectTokenValidator(IntrospectTokenValidator):  # type: ignore
         groups: list[str] | None,
         request: Any,
     ) -> None:
-        print(f"Token: {token}\n")
         now = int(time.time())
         if not token:
             raise ValidatorError(
@@ -163,7 +151,7 @@ class ZitadelIntrospectTokenValidator(IntrospectTokenValidator):  # type: ignore
         try:
             self.validate_token(token, scopes, roles, groups, request)
         except ValidatorError as e:
-            print(f"Unauthorized: {e.error}")
+            # print(f"Unauthorized: {e.error}")
             return None
         # TODO: return user with permission and groups
         return token
