@@ -48,6 +48,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "server.apps.contacts",
     "server.apps.owners",
     "server.apps.huts",
+    "server.apps.api",
     # Extension:
     "ninja",
     "colorfield",

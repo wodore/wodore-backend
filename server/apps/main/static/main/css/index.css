@@ -1,5 +1,7 @@
 body {
   text-align: center;
+  background: rgb(255,255,255);
+  background: radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(245,245,245,1) 40%, rgba(183,183,183,1) 96%);
 }
 
 img {
@@ -7,7 +9,7 @@ img {
   height: auto;
 }
 
-.wemake-services-body {
+.wodore-body {
   height: 95vh;
   display: flex;
   flex-wrap: wrap;
@@ -16,9 +18,29 @@ img {
   align-items: center;
 }
 
-.wemake-services-logo {
-  max-width: 250px;
+.wodore-logo {
+  max-width: 350px;
   margin: 0 auto;
+}
+
+.wodore-nav {
+  position: absolute;
+  top: 0;
+  right: 0;
+  border: 0;
+  margin: 20px;
+  margin-right: 30px;
+  font-size: 17pt;
+  font-family: sans-serif;
+}
+.wodore-nav a:active,
+.wodore-nav a:visited,
+.wodore-nav a:hover,
+.wodore-nav a:link,
+.wodore-nav a {
+  color: rgb(7, 0, 50);
+  text-decoration: underline dotted;
+  text-decoration-color: rgb(0, 0, 83);
 }
 
 .github-corner img {

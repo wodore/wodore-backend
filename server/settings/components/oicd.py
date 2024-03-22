@@ -55,3 +55,8 @@ _main_url = config("MAIN_URL") if config("MAIN_URL") else "localhost:8000"
 LOGIN_REDIRECT_URL = f"{_main_url}/admin"
 LOGOUT_REDIRECT_URL = f"{_main_url}/admin"
 LOGIN_URL = f"{_main_url}/oidc/authenticate/"
+
+API_MACHINE_USERS = {
+    us[0].strip(): us[1].strip()
+    for us in [user_secret.split(":") for user_secret in config("API_MACHINE_USERS").split(",")]
+}
