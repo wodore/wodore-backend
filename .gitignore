@@ -1,6 +1,7 @@
 # old files
 old/
 *.old
+.api-key.json
 
 # Static folders
 /media/*
