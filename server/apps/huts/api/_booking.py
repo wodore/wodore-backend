@@ -57,10 +57,17 @@ def get_hut_bookings(  # type: ignore  # noqa: PGH003
         return Hut.get_bookings(hut_slugs=hut_slugs_list, days=queries.days, date=queries.date, lang=lang)
 
 
-@router.get("bookings.geojson", response=HutBookingsFeatureCollection, operation_id="get_hut_bookings_geojson")
+@router.get(
+    "bookings.geojson",
+    response=HutBookingsFeatureCollection,
+    operation_id="get_hut_bookings_geojson",
+    auth=AuthBearer(roles=["perm:bookings"], groups=["root", "admin", "editor"]),
+)
 @with_language_param("lang")
 def get_hut_bookings_geojson(  # type: ignore  # noqa: PGH003
-    request: HttpRequest, lang: LanguageParam, queries: Query[HutBookingsQuery]
+    request: HttpRequest,
+    lang: LanguageParam,
+    queries: Query[HutBookingsQuery],
 ) -> FeatureCollection:
     hut_slugs_list = _hut_slugs_list(queries.slugs)
     huts = Hut.get_bookings(hut_slugs=hut_slugs_list, days=queries.days, date=queries.date, lang=lang)
