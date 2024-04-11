@@ -13,6 +13,7 @@ class HutTypeDetailSchema(ModelSchema):
     slug: str
     name: str = Field(..., alias="name_i18n")
     description: str = Field("", alias="description_i18n")
+    # filter_on: bool = True
     # symbol: str | None
 
     class Meta:
