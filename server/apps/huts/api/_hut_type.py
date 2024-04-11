@@ -1,15 +1,15 @@
+import re
 from os import wait
 from re import I
-import re
 from time import perf_counter
 from typing import List
-from django.conf import settings
 
 import msgspec
 from geojson_pydantic import Feature, FeatureCollection
 from ninja import Query, Router
 from ninja.errors import HttpError
 
+from django.conf import settings
 from django.contrib.gis.db.models.functions import AsGeoJSON
 from django.contrib.postgres.aggregates import JSONBAgg
 from django.core.serializers import serialize

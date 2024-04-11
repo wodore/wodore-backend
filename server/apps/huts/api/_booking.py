@@ -5,6 +5,7 @@ from geojson_pydantic import FeatureCollection
 from ninja import Field, Query, Schema
 from ninja.security import django_auth
 
+from ninja.errors import HttpError
 from django.http import HttpRequest
 
 from server.apps.api.auth import AuthBearer
@@ -54,7 +55,10 @@ def get_hut_bookings(  # type: ignore  # noqa: PGH003
 ) -> list[HutBookingsSchema]:
     hut_slugs_list = _hut_slugs_list(queries.slugs)
     with override(lang):
-        return Hut.get_bookings(hut_slugs=hut_slugs_list, days=queries.days, date=queries.date, lang=lang)
+        res = Hut.get_bookings(hut_slugs=hut_slugs_list, days=queries.days, date=queries.date, lang=lang)
+        if not res:
+            raise HttpError(503, "Booking service unavailable. Please retry later.")
+        return res
 
 
 @router.get(
@@ -72,4 +76,7 @@ def get_hut_bookings_geojson(  # type: ignore  # noqa: PGH003
     hut_slugs_list = _hut_slugs_list(queries.slugs)
     huts = Hut.get_bookings(hut_slugs=hut_slugs_list, days=queries.days, date=queries.date, lang=lang)
     features = [h.as_feature() for h in huts]
-    return HutBookingsFeatureCollection(type="FeatureCollection", features=features)
+    res = HutBookingsFeatureCollection(type="FeatureCollection", features=features)
+    if not res:
+        raise HttpError(503, "Booking service unavailable. Please retry later.")
+    return res

@@ -1906,7 +1906,7 @@ xmltodict = "^0.13.0"
 type = "git"
 url = "https://github.com/wodore/hut-services.git"
 reference = "main"
-resolved_reference = "7d534f24dd0ad20b6fd1729fd2f40b19f18dde9f"
+resolved_reference = "93055df50844baceaf9c38d30917b2e729aa33ad"
 
 [[package]]
 name = "hut-services-private"
