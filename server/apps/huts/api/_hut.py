@@ -13,6 +13,8 @@ from django.db.models import F, Value
 from django.db.models.functions import Concat, JSONObject  # , Lower
 from django.http import Http404, HttpRequest, HttpResponse
 from django.urls import reverse_lazy
+from django.views.decorators.cache import cache_control
+from ninja.decorators import decorate_view
 
 from server.apps.api.query import FieldsParam, TristateEnum
 from server.apps.translations import (
@@ -91,6 +93,7 @@ def get_json_obj(values: dict[str, t.Any], flat: bool = False) -> dict[str, JSON
 
 @router.get("huts.geojson", response=FeatureCollection, operation_id="get_huts_geojson")
 @with_language_param("lang")
+@decorate_view(cache_control(max_age=3600))
 def get_huts_geojson(  # type: ignore  # noqa: PGH003
     request: HttpRequest,
     response: HttpResponse,
@@ -191,6 +194,7 @@ def get_huts_geojson(  # type: ignore  # noqa: PGH003
 
 @router.get("/{slug}", response=HutSchemaDetails, exclude_unset=True, operation_id="get_hut")
 @with_language_param()
+@decorate_view(cache_control(max_age=3600))
 def get_hut(request: HttpRequest, slug: str, lang: LanguageParam, fields: Query[FieldsParam[HutSchemaDetails]]) -> Hut:
     """Get a hut by its slug."""
     activate(lang)
