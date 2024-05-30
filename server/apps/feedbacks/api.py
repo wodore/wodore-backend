@@ -41,7 +41,7 @@ def create_feedback(request: HttpRequest, payload: FeedbackCreate, send_email: b
                 text += f'<li><a href="{url}">{url}</a></li>'
             text += "</ul>"
         text += f'<p><i>from <a href="mailto:{email}">{email}</a>.</i>'
-        text += f'<hr/><p><a href="{settings.MAIN_URL}/admin/feedbacks/feedback/{feedback.id}/change/">edit message</a><br/><small>{feedback.created}</small></p>'
+        text += f'<hr/><p><a href="{settings.MAIN_URL}/feedbacks/feedback/{feedback.id}/change/">edit message</a><br/><small>{feedback.created}</small></p>'
         recipient = [a[1] for a in settings.ADMINS]
         print(recipient)
         print(text)
