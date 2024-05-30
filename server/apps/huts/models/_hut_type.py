@@ -1,4 +1,4 @@
-from functools import lru_cache
+from collections import defaultdict
 
 from descriptors import cachedclassproperty
 
@@ -10,8 +10,6 @@ from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 
 from server.core.managers import BaseMutlilingualManager
-
-from collections import defaultdict
 
 
 class HutType(models.Model):

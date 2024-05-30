@@ -29,6 +29,7 @@ _base_settings = (
     "components/unfold.py",
     "components/caches.py",
     "components/oicd.py",
+    "components/email.py",
     # Select the right env:
     f"environments/{_ENV}.py",
     # Optionally override some settings:

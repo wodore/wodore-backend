@@ -11,3 +11,4 @@ root_path = "server.apps"
 
 api.add_router("/huts", "server.apps.huts.api.router", tags=["hut"])
 api.add_router("/organizations/", "server.apps.organizations.api.router", tags=["organization"])
+api.add_router("/feedback/", "server.apps.feedbacks.api.router", tags=["feedback"])

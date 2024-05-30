@@ -51,7 +51,7 @@ OIDC_OP_USER_ENDPOINT = discovery_info["userinfo_endpoint"]
 OIDC_OP_JWKS_ENDPOINT = discovery_info["jwks_uri"]
 OIDC_OP_INTROSPECTION_ENDPOINT = discovery_info["introspection_endpoint"]
 
-_main_url = config("MAIN_URL") if config("MAIN_URL") else "localhost:8000"
+_main_url = config("MAIN_URL") if config("MAIN_URL") else "http://localhost:8000"
 LOGIN_REDIRECT_URL = f"{_main_url}/admin"
 LOGOUT_REDIRECT_URL = f"{_main_url}/admin"
 LOGIN_URL = f"{_main_url}/oidc/authenticate/"

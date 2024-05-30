@@ -36,6 +36,8 @@ DOMAIN_NAMES = [d.strip() for d in config("DOMAIN_NAMES").split(",")] if config(
 DEV_DOMAIN_NAMES = [d.strip() for d in config("DEV_DOMAIN_NAMES").split(",")] if config("DEV_DOMAIN_NAMES") else []
 FRONTEND_DOMAIN = config("FRONTEND_DOMAIN") if config("FRONTEND_DOMAIN") else "http://localhost:9000"
 
+MAIN_URL = config("MAIN_URL") if config("MAIN_URL") else "http://localhost:8000"
+
 # Application definition:
 
 INSTALLED_APPS: Tuple[str, ...] = (
@@ -46,6 +48,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "server.apps.main",
     "server.apps.organizations",
     "server.apps.contacts",
+    "server.apps.feedbacks",
     "server.apps.owners",
     "server.apps.huts",
     "server.apps.api",
