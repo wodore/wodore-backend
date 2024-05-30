@@ -45,6 +45,7 @@ def create_feedback(request: HttpRequest, payload: FeedbackCreate, send_email: b
         recipient = [a[1] for a in settings.ADMINS]
         print(recipient)
         print(text)
+        print("Credentials:")
         print(settings.EMAIL_HOST)
         print(settings.EMAIL_HOST_PASSWORD)
         msg = EmailMessage(subject=subject, body=text, from_email=no_reply, to=recipient, reply_to=[email])
