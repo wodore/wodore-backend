@@ -3,8 +3,9 @@ from ninja import NinjaAPI, Swagger
 from .parser import MsgSpecParser
 from .renderer import MsgSpecRenderer
 
+# TODO: check csrf: https://django-ninja.dev/reference/csrf/
 api = NinjaAPI(
-    title="Wodore API", version="1.0.0", docs=Swagger(), renderer=MsgSpecRenderer(), parser=MsgSpecParser(), csrf=True
+    title="Wodore API", version="1.0.0", docs=Swagger(), renderer=MsgSpecRenderer(), parser=MsgSpecParser(), csrf=False
 )
 
 root_path = "server.apps"
