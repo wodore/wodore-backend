@@ -33,8 +33,9 @@ def create_feedback(request: HttpRequest, payload: FeedbackCreate, send_email: b
         # )
         no_reply = None  # email.replace("@", "AT") + "@wodore.com"
         urls = payload.urls
+        body = payload.message.replace("\n", "<br/>")
         text = f"<h2>{payload.subject}</h2>"
-        text += f"<p>{payload.message}</p>"
+        text += f"<p>{body}</p>"
         if urls:
             text += "<h4>URLs:</h4><ul>"
             for url in urls:
@@ -43,11 +44,6 @@ def create_feedback(request: HttpRequest, payload: FeedbackCreate, send_email: b
         text += f'<p><i>from <a href="mailto:{email}">{email}</a>.</i>'
         text += f'<hr/><p><a href="{settings.MAIN_URL}/feedbacks/feedback/{feedback.id}/change/">edit message</a><br/><small>{feedback.created}</small></p>'
         recipient = [a[1] for a in settings.ADMINS]
-        print(recipient)
-        print(text)
-        print("Credentials:")
-        print(settings.EMAIL_HOST)
-        print(settings.EMAIL_HOST_PASSWORD)
         msg = EmailMessage(subject=subject, body=text, from_email=no_reply, to=recipient, reply_to=[email])
         msg.content_subtype = "html"
         msg.send()
