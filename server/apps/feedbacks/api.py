@@ -28,9 +28,6 @@ def create_feedback(request: HttpRequest, payload: FeedbackCreate, send_email: b
     if send_email:
         email = payload.email
         subject = f"[Feedback #{feedback.id}]: {payload.subject} ({email})"
-        # no_reply = (
-        # f"{email.split('@')[0]} [NoReply] <{settings.DEFAULT_FROM_EMAIL}>"  # "no-reply@wodore.com"  # payload.email
-        # )
         no_reply = None  # email.replace("@", "AT") + "@wodore.com"
         urls = payload.urls
         body = payload.message.replace("\n", "<br/>")

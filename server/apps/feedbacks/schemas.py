@@ -8,7 +8,8 @@ class FeedbackCreate(ModelSchema):
     email: str
     subject: str
     message: str
+    get_updates: bool
 
     class Meta:
         model = Feedback
-        fields = ("email", "subject", "message")
+        fields = ("email", "subject", "message", "get_updates")

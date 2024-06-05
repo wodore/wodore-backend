@@ -24,13 +24,20 @@ class Feedback(TimeStampedModel):
     urls = models.JSONField(
         verbose_name=_("URLs"), help_text=_("Additional urls ['url1','url2',...]."), blank=True, default=list
     )
+    get_updates: bool = models.BooleanField(default=False)
     feedback_status = models.CharField(
         max_length=12,
         choices=FeedbackStatusChoices.choices,
         default=FeedbackStatusChoices.new,
         verbose_name=_("Review status"),
     )
-    feedback_comment = models.TextField(blank=True, default="", max_length=100000, verbose_name=_("Review comment"))
+    feedback_comment = models.TextField(
+        blank=True,
+        default="",
+        max_length=100000,
+        verbose_name=_("Feedback comment"),
+        help_text=_("Non public comment to the feedback."),
+    )
 
     def __str__(self) -> str:
         return self.email

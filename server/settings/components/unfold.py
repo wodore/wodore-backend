@@ -174,7 +174,7 @@ UNFOLD = {
                     {
                         "title": _("Frontend (wodore.com)"),
                         "icon": "captive_portal",
-                        "link": "https://beta.wodore.com",
+                        "link": "https://wodore.com",
                         "target": "_blank",
                     },
                 ],

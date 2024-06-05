@@ -32,6 +32,7 @@ class FeedbackAdmin(ModelAdmin):
                     "subject",
                     "message",
                     "urls",
+                    "get_updates",
                     "feedback_comment",
                 ],
             },
