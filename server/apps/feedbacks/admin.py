@@ -49,11 +49,12 @@ class FeedbackAdmin(ModelAdmin):
     ]
 
     view_on_site = True
-    list_display = ("email", "subject", "created", "status_tag")
+    list_display = ("email", "subject", "created", "get_updates", "status_tag")
     list_display_links = ("email",)
     list_filter = (
         "email",
         "feedback_status",
+        "get_updates",
         "created",
         "modified",
     )
