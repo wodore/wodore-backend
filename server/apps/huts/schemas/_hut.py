@@ -41,6 +41,10 @@ class OrganizationDetailSchema(BaseModel):
     fullname: str
     link: str
     logo: str
+    public: bool
+    active: bool
+    source_id: str
+    # order: int
 
 
 class HutSchemaOptional(BaseModel):

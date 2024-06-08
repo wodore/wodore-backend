@@ -194,7 +194,7 @@ def get_huts_geojson(  # type: ignore  # noqa: PGH003
 
 @router.get("/{slug}", response=HutSchemaDetails, exclude_unset=True, operation_id="get_hut")
 @with_language_param()
-@decorate_view(cache_control(max_age=3600))
+@decorate_view(cache_control(max_age=10))
 def get_hut(request: HttpRequest, slug: str, lang: LanguageParam, fields: Query[FieldsParam[HutSchemaDetails]]) -> Hut:
     """Get a hut by its slug."""
     activate(lang)
@@ -208,7 +208,11 @@ def get_hut(request: HttpRequest, slug: str, lang: LanguageParam, fields: Query[
                 slug="org_set__slug",
                 name="org_set__name_i18n",
                 link="orgs_source__link",
-            )
+                source_id="orgs_source__source_id",
+                public="org_set__is_public",
+                active="org_set__is_active",
+            ),
+            ordering="org_set__order",
         ),
         translations=JSONObject(
             description=JSONObject(
