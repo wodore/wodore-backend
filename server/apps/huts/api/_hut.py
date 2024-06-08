@@ -227,6 +227,7 @@ def get_hut(request: HttpRequest, slug: str, lang: LanguageParam, fields: Query[
     )
     # with override(lang):
     hut_db = qs.first()
+    ## TODO: withotu soures it has length 0 with all elements set to None
     if hut_db is None:
         msg = f"Could not find '{slug}'."
         raise Http404(msg)
