@@ -230,6 +230,8 @@ def get_hut(request: HttpRequest, slug: str, lang: LanguageParam, fields: Query[
     if hut_db is None:
         msg = f"Could not find '{slug}'."
         raise Http404(msg)
+    if len(hut_db.sources) and hut_db.sources[0]["slug"] is None:
+        hut_db.sources = []
     link = reverse_lazy("admin:huts_hut_change", args=[hut_db.pk])
     hut_db.edit_link = request.build_absolute_uri(link)
     return hut_db
