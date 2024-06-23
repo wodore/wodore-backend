@@ -132,6 +132,18 @@ UNFOLD = {
                         "link": reverse_lazy("admin:feedbacks_feedback_changelist"),
                         "permission": lambda request: request.user.has_perm("feedbacks.change_feedback"),
                     },
+                    {
+                        "title": _("Images"),
+                        "icon": "photo_library",
+                        "link": reverse_lazy("admin:images_image_changelist"),
+                        "permission": lambda request: request.user.has_perm("images.change_image"),
+                    },
+                    {
+                        "title": _("Licenses"),
+                        "icon": "copyright",
+                        "link": reverse_lazy("admin:licenses_license_changelist"),
+                        "permission": lambda request: request.user.has_perm("licenses.change_feedback"),
+                    },
                 ],
             },
             {

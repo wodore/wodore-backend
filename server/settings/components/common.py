@@ -46,7 +46,10 @@ INSTALLED_APPS: Tuple[str, ...] = (
     # my apps:
     "server.apps.manager",
     "server.apps.main",
+    "server.apps.meta_image_field",
+    "server.apps.images",
     "server.apps.organizations",
+    "server.apps.licenses",
     "server.apps.contacts",
     "server.apps.feedbacks",
     "server.apps.owners",
@@ -69,6 +72,9 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    # cloudinary_storage needs to be before django.contrib.staticfiles if used for static files as well!
+    "cloudinary_storage",  # https://pypi.org/project/django-cloudinary-storage/
+    "cloudinary",
     "django.contrib.gis",
     # django-admin:
     # "admin_volt.apps.AdminVoltConfig",  # https://github.com/app-generator/django-admin-volt
@@ -213,6 +219,13 @@ STATICFILES_FINDERS = (
     "django.contrib.staticfiles.finders.AppDirectoriesFinder",
 )
 
+CLOUDINARY_STORAGE = {
+    "CLOUD_NAME": config("CLOUDINARY_NAME"),
+    "API_KEY": config("CLOUDINARY_API_KEY"),
+    "API_SECRET": config("CLOUDINARY_API_SECRET"),
+}
+
+DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
 
 # Templates
 # https://docs.djangoproject.com/en/4.2/ref/templates/api

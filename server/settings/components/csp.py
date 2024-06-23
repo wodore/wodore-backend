@@ -16,6 +16,7 @@ CSP_SCRIPT_SRC: Tuple[str, ...] = (
     "'unsafe-inline'",
     "'unsafe-eval'",
     "https://cdn.jsdelivr.net",
+    "https://unpkg.com",
 )
 CSP_IMG_SRC: Tuple[str, ...] = ("'self'", "data:", "https:")
 CSP_FONT_SRC: Tuple[str, ...] = ("'self'", "https://fonts.googleapis.com", "https://fonts.gstatic.com")
@@ -24,6 +25,7 @@ CSP_STYLE_SRC: Tuple[str, ...] = (
     "'unsafe-inline'",
     "https://fonts.googleapis.com",
     "https://cdn.jsdelivr.net",
+    "https://unpkg.com",
 )
 CSP_DEFAULT_SRC: Tuple[str, ...] = ("'none'",)
 CSP_CONNECT_SRC: Tuple[str, ...] = ()

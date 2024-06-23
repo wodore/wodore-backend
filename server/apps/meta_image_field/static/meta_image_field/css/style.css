@@ -1,0 +1,15 @@
+.imagefocus-file-upload__image {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: auto;
+    /* margin: 0; */
+    max-width: 30rem;
+}
+
+.imagefocus-file-upload__image img {
+    display: block;
+    width: 100%;
+    height: auto;
+    margin: 0;
+}

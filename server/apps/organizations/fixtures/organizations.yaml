@@ -14,12 +14,12 @@
     url_it: https://www.alpsonline.org/guest/login?lang=it
     attribution_de: ''
     link_hut_pattern: https://www.alpsonline.org/reservation/calendar?hut_id={{id}}&lang={{lang}}
-    logo: organizations/logos/hrs_icon.ico
+    logo: organizations/logos/hrs_icon.png
     color_light: '#689751'
     color_dark: '#cbeba9'
     config: {}
     props_schema: {}
-    order: 0
+    order: 10
 - model: organizations.organization
   pk: 1
   fields:
@@ -42,7 +42,7 @@
     url_it: https://www.sac-cas.ch/it/
     attribution_de: ''
     link_hut_pattern: https://www.sac-cas.ch/{{lang}}/{{config.huts_tours.get(lang,'de')}}/{{config.portal.get(lang,'de')}}/{{id}}
-    logo: organizations/logos/sac_icon.ico
+    logo: organizations/logos/sac_icon.png
     color_light: '#008000'
     color_dark: '#008000'
     config:
@@ -57,7 +57,7 @@
         fr: portail-des-courses-du-cas
         it: portale-escursionistico-del-cas
     props_schema: {}
-    order: 1
+    order: 20
 - model: organizations.organization
   pk: 2
   fields:
@@ -81,7 +81,7 @@
           description: "gipfelbuch specific slug"
           type: string
       required: ["slug"]
-    order: 2
+    order: 30
 - model: organizations.organization
   pk: 3
   fields:
@@ -103,7 +103,7 @@
         de: hauser
         fr: maison
     props_schema: {}
-    order: 3
+    order: 40
 - model: organizations.organization
   pk: 4
   fields:
@@ -128,7 +128,7 @@
           type: string
           enum: ["node", "way", "area"]
       required: ["osm_type"]
-    order: 4
+    order: 50
 - model: organizations.organization
   pk: 5
   fields:
@@ -141,12 +141,12 @@
     url_de: https://www.wikidata.org
     attribution_de: ''
     link_hut_pattern: https://www.wikidata.org/wiki/{{id}}
-    logo: organizations/logos/wikidata_icon.ico
+    logo: organizations/logos/wikidata_icon.png
     color_light: '#009640'
     color_dark: '#009640'
     config: {}
     props_schema: {}
-    order: 5
+    order: 60
 - model: organizations.organization
   pk: 6
   fields:
@@ -181,7 +181,7 @@
         #  description: "region by refuges.info, see https://www.refuges.info/nav/352/zone/Alpes/?id_polygone_type=1"
         #  type: string
       required: ["slug", "hut_type"]
-    order: 6
+    order: 70
 - model: organizations.organization
   pk: 7
   fields:
@@ -191,9 +191,9 @@
     name_de: Wodore
     fullname_de: Wodore
     description_de: ''
-    url_de: https://beta.wodore.com
-    link_hut_pattern: https://beta.wodore.com/{{lang}}/map/{{props.slug}}
-    logo: organizations/logos/wodore_icon.ico
+    url_de: https://wodore.com
+    link_hut_pattern: https://wodore.com/huts/{{props.slug}}
+    logo: organizations/logos/wodore_icon.png
     color_light: '#e08020'
     color_dark: '#874d12'
     config: {}
@@ -204,4 +204,4 @@
           description: "hut slug by refuges.info"
           type: string
       required: ["slug"]
-    order: 6
+    order: 80

@@ -1,0 +1,92 @@
+{% extends 'admin/app_index.html' %}
+
+{% load unfold i18n static admin_urls admin_modify %}
+
+{% block breadcrumbs %}
+<div class="px-4 lg:px-12">
+    <div class="container mb-6 mx-auto -my-3 lg:mb-12">
+        <ul class="flex">
+            {% url 'admin:index' as link %}
+            {% trans 'Home' as name %}
+            {% include 'unfold/helpers/breadcrumb_item.html' with link=link name=name %}
+
+            {% url 'admin:app_list' app_label=opts.app_label as link %}
+            {% include 'unfold/helpers/breadcrumb_item.html' with link=link name=opts.app_config.verbose_name %}
+
+            {% if has_permission %}
+                {% url opts|admin_urlname:'changelist' as link %}
+                {% include 'unfold/helpers/breadcrumb_item.html' with link=link  name=opts.verbose_name_plural|capfirst %}
+            {% else %}
+                {% include 'unfold/helpers/breadcrumb_item.html' with link=True name=opts.verbose_name_plural|capfirst %}
+            {% endif %}
+
+            {% include 'unfold/helpers/breadcrumb_item.html' with link='' name=original|truncatewords:'18' %}
+
+        </ul>
+    </div>
+</div>
+{% endblock %}
+
+{% block title %}
+    {% if subtitle %}
+        {{ subtitle }} |
+    {% endif %}
+
+    {{ title }} | {{ site_title|default:_('Django site admin') }}
+{% endblock %}
+t
+{% block branding %}
+    <h1 id="site-name">
+        <a href="{% url 'admin:index' %}">
+            {{ site_header|default:_('Django administration') }}
+        </a>
+    </h1>
+{% endblock %}
+
+{% block extrahead %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/an-old-hope.css">
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/languages/json.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/languages/django.min.js"></script>
+<script>hljs.highlightAll();</script>
+{% endblock %}
+
+
+{% trans "Last 7 days" as label %}
+{% block content %}
+    {% component "unfold/components/container.html" %}
+        {% component "unfold/components/flex.html" with class="gap-8 mb-8 flex-col lg:flex-row" %}
+            {% component "unfold/components/card.html" with class="lg:w-1/3" %}
+                    <div class="flex items-center mb-4">
+                        <img src="{% get_media_prefix %}/{{ org.logo }}" class="pr-2" alt="logo" style="height:35px">
+                        <div>
+                            <strong>{{ org.name }}</strong> 
+        <a class="text-sm pl-4" href="{{edit_url}}"> <span class="material-symbols-outlined"> edit </span> </a><span>
+                        </br>
+                            <span>{{ org.fullname }}</span>
+                        </div>
+                    </div>
+                    
+                        <span class="rounded px-1 text-black text-sm" style="width:50px; background-color: {{org.color_light}}">{{ org.slug }}</span>
+                        <span class="rounded px-1 text-withe text-sm" style="width:50px; background-color: {{org.color_dark}}">{{ org.slug }}</span>
+                    <div class="text-sm mt-2"><i>{{ org.description }}</i></div>
+                    <div class="text-xs"><a href={{ org.url }} targe="_blank">{{ org.url }}</a></div>
+                    <div class="text-xs">Attribution: {{ org.attribution }}<div>
+                        <div class="py-4"></div>
+                    <div class="p-2 pb-0 outline-2 rounded mb-4 shadow-lg  bg-slate-100 dark:bg-slate-800">
+                        <h5>Linkt to Hut</h5>
+                        <pre class="m-0 p-0"> <code class="language-django rounded">{{ org.link_hut_pattern }}</code> </pre>
+                    </div>
+                    <div class="p-2 pb-0 outline-2 rounded mb-4 shadow-lg  bg-slate-100 dark:bg-slate-800">
+                        <h5>Config</h5>
+                        <pre class="m-0 p-0"> <code class="language-json rounded">{{ config_json }}</code> </pre>
+                    </div>
+                    <div class="p-2 pb-0 outline-2 rounded mb-4 shadow-lg  bg-slate-100 dark:bg-slate-800">
+                        <h5>Schema</h5>
+                        <pre> <code class="language-json">{{ props_schema_json }}</code> </pre>
+                    </div>
+                {% endcomponent %}
+        {% endcomponent %}
+    {% endcomponent %}
+
+{% endblock %}

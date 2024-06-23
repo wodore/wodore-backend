@@ -584,6 +584,24 @@ click = "*"
 test = ["pytest"]
 
 [[package]]
+name = "cloudinary"
+version = "1.40.0"
+description = "Python and Django SDK for Cloudinary"
+optional = false
+python-versions = "*"
+files = [
+    {file = "cloudinary-1.40.0.tar.gz", hash = "sha256:fe1a5309734814b481de637ab3041e8699995387df965ec0f2d8f767db7067a2"},
+]
+
+[package.dependencies]
+certifi = "*"
+six = "*"
+urllib3 = ">=1.26.5"
+
+[package.extras]
+dev = ["tox"]
+
+[[package]]
 name = "colorama"
 version = "0.4.6"
 description = "Cross-platform colored terminal text."
@@ -864,6 +882,24 @@ files = [
 django = ">=3.2"
 django-ipware = ">=3"
 setuptools = "*"
+
+[[package]]
+name = "django-cloudinary-storage"
+version = "0.3.0"
+description = "Django package that provides Cloudinary storages for both media and static files as well as management commands for removing unnecessary files."
+optional = false
+python-versions = "*"
+files = [
+    {file = "django-cloudinary-storage-0.3.0.tar.gz", hash = "sha256:debd403a5f225c9d35c4af508ff4abc7fdc262129464134b60b2feeb2c44d3e1"},
+    {file = "django_cloudinary_storage-0.3.0-py3-none-any.whl", hash = "sha256:95c855c7334141b2a485ea7eb5716de87bb6ce0d848e205debb3a3ab7bbbd49a"},
+]
+
+[package.dependencies]
+cloudinary = ">=1.4.0"
+requests = ">=2.10.0"
+
+[package.extras]
+video = ["python-magic (>=0.4.12)"]
 
 [[package]]
 name = "django-colorfield"
@@ -1971,6 +2007,24 @@ files = [
     {file = "idna-3.7-py3-none-any.whl", hash = "sha256:82fee1fc78add43492d3a1898bfa6d8a904cc97d8427f683ed8e798d07761aa0"},
     {file = "idna-3.7.tar.gz", hash = "sha256:028ff3aadf0609c1fd278d8ea3089299412a7a8b9bd005dd08b9f8285bcb5cfc"},
 ]
+
+[[package]]
+name = "imagefocus"
+version = "0.0.1-rc.4"
+description = "Django image focus field for images"
+optional = false
+python-versions = "*"
+files = []
+develop = false
+
+[package.dependencies]
+django = "*"
+
+[package.source]
+type = "git"
+url = "git@github.com:typecode/django-image-focus.git"
+reference = "develop"
+resolved_reference = "bad42b6bc701d3d299c3279f341bdbd82261fea7"
 
 [[package]]
 name = "imagesize"
@@ -4380,4 +4434,4 @@ private = ["hut-services-private"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "efe4169377692ba21955c857a0afb90772a104e1f490fe19ebdf1d5df861ecf9"
+content-hash = "e44cf8f6757e59b750805a87701f8ba8b562991478896dbf7aed48b7e81cb506"
