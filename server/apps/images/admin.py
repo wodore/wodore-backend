@@ -11,7 +11,6 @@ from django.utils.translation import gettext_lazy as _
 
 from unfold.decorators import display
 
-from server.apps.imagefocus import ImageFocusAdminMixin
 from server.apps.manager.admin import ModelAdmin
 from server.apps.translations.forms import required_i18n_fields_form_factory
 from server.core.utils import text_shorten_html
@@ -20,15 +19,32 @@ from server.core.utils import text_shorten_html
 #    from unfold.admin import ModelAdmin
 # except ModuleNotFoundError:
 #    from django.contrib.admin import ModelAdmin
-from .forms import ImageAdminFieldsets
+from .forms import ImageAdminFieldsets, ImageTagAdminFieldsets
 
 # Register your models here.
-from .models import Image
+from .models import Image, ImageTag
+
+
+@admin.register(ImageTag)
+# class OrganizationAdmin(ActiveLanguageMixin, admin.ModelAdmin[Organization]):
+class ImageTagAdmin(ModelAdmin):
+    """Admin panel example for ``BlogPost`` model."""
+
+    form = required_i18n_fields_form_factory("name")
+    fieldsets = ImageTagAdminFieldsets
+    search_fields = ("slug", "name_i18n")
+    list_display = ("slug", "name_i18n")
+    readonly_fields = (
+        "name_i18n",
+        "created",
+        "modified",
+        # "image_meta",
+    )
 
 
 @admin.register(Image)
 # class OrganizationAdmin(ActiveLanguageMixin, admin.ModelAdmin[Organization]):
-class ImageAdmin(ImageFocusAdminMixin, ModelAdmin):
+class ImageAdmin(ModelAdmin):
     """Admin panel example for ``BlogPost`` model."""
 
     form = required_i18n_fields_form_factory("caption")
@@ -40,11 +56,12 @@ class ImageAdmin(ImageFocusAdminMixin, ModelAdmin):
         "caption_short",
         "license_summary",
         "source",
+        "tag_list",
         "review_tag",
     )
     list_display_links = ("thumb",)
     search_fields = ("author", "caption_i18n")
-    list_filter = ("source_org", "license", "review_status", "uploaded_by_user", "uploaded_by_anonym")
+    list_filter = ("source_org", "license", "review_status", "tags", "uploaded_by_user", "uploaded_by_anonym")
     readonly_fields = (
         "id",
         "caption_i18n",
@@ -63,6 +80,11 @@ class ImageAdmin(ImageFocusAdminMixin, ModelAdmin):
         return mark_safe(
             f'<a href={obj.license.link_i18n} target="_blank">{obj.license.name_i18n}</a>'
         ), text_shorten_html(obj.license.fullname_i18n, textsize="xs", width=60)
+
+    @display(description="Tags", header=False)
+    def tag_list(self, obj):
+        tags = ", ".join([o.slug for o in obj.tags.all()])
+        return text_shorten_html(tags, textsize="xs", width=60)
 
     @display(description="Source", header=True)
     def source(self, obj):

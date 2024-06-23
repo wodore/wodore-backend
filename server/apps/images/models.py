@@ -25,6 +25,22 @@ class _ReviewStatusChoices(models.TextChoices):
     rejected = "rejected", _("rejected")
 
 
+class ImageTag(TimeStampedModel):
+    i18n = TranslationField(fields=("name",))
+    objects = BaseMutlilingualManager()
+
+    slug = models.SlugField(max_length=50, unique=True, verbose_name=_("Slug"), blank=False)
+    name = models.TextField(max_length=50, verbose_name=_("Name"), blank=False)
+
+    class Meta:
+        verbose_name = _("Image Tag")
+        ordering = ("slug",)
+        indexes = (GinIndex(fields=["i18n"]),)
+
+    def __str__(self) -> str:
+        return str(self.slug)
+
+
 class Image(TimeStampedModel):
     i18n = TranslationField(fields=("caption",))
     objects = BaseMutlilingualManager()
@@ -42,13 +58,8 @@ class Image(TimeStampedModel):
     license = models.ForeignKey(License, on_delete=models.CASCADE)
     author = models.CharField(max_length=255, default="", blank=True, null=True, verbose_name=_("Author"))
     caption = models.TextField(max_length=400, verbose_name=_("Caption"), blank=False)
-    tags = models.JSONField(
-        blank=True,
-        null=True,
-        verbose_name=_("Tags"),
-        help_text=_('JSON array: ["hut","winter"]'),
-        default=list({"hut"}),
-    )
+    tags = models.ManyToManyField(ImageTag, related_name="images", verbose_name=_("Tags"))
+
     granted_date = models.DateField(blank=True, null=True, verbose_name=_("Granted Date"))
     granted_by = models.CharField(
         max_length=255,
