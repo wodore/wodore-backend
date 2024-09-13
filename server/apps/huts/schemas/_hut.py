@@ -47,6 +47,55 @@ class OrganizationDetailSchema(BaseModel):
     # order: int
 
 
+class OrganizationImageSchema(BaseModel):
+    slug: str | None
+    name: str | None
+    fullname: str | None
+    link: str | None
+    logo: str | None
+    # public: bool
+    # active: bool
+    # source_id: str
+
+
+class LicenseInfoSchema(BaseModel):
+    """Important information, for example for an image"""
+
+    slug: str
+    name: str
+    fullname: str
+    description: str
+    link: str
+
+
+class ImageMetaAreaSchema(BaseModel):
+    x1: float
+    x2: float
+    y1: float
+    x2: float
+
+
+class ImageMetaSchema(BaseModel):
+    crop: ImageMetaAreaSchema | None
+    focal: ImageMetaAreaSchema | None
+    width: int | None
+    height: int | None
+
+
+class ImageInfoSchema(BaseModel):
+    image: str
+    image_url: str
+    image_meta: ImageMetaSchema
+    license: LicenseInfoSchema
+    author: str | None
+    caption: str | None
+    author_url: str | None
+    source_url: str | None
+    organization: OrganizationImageSchema | None
+    attribution: str | None = None
+    # tags: list[str]
+
+
 class HutSchemaOptional(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     # name_i18n: str | TranslationSchema | None = None
@@ -73,6 +122,7 @@ class HutSchemaOptional(BaseModel):
     sources: list[OrganizationDetailSchema] | None  # = Field(None, alias="orgs")
     photos: str = Field("")
     photos_attribution: str = Field("")
+    images: list[ImageInfoSchema] | None
     open_monthly: OpenMonthlySchema | None = None
 
     @field_validator("country", mode="before")

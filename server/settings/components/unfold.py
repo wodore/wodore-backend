@@ -260,6 +260,24 @@ UNFOLD = {
                 },
             ],
         },
+        {
+            "models": [
+                "images.image",
+                "images.imagetag",
+            ],
+            "items": [
+                {
+                    "title": _("Images"),
+                    "link": reverse_lazy("admin:images_image_changelist"),
+                    "permission": lambda request: request.user.has_perm("images.view_images"),
+                },
+                {
+                    "title": _("Image Tags"),
+                    "link": reverse_lazy("admin:images_imagetag_changelist"),
+                    "permission": lambda request: request.user.has_perm("images.view_imagetags"),
+                },
+            ],
+        },
     ],
 }
 

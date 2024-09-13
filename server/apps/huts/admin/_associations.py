@@ -54,6 +54,16 @@ class HutContactAssociationEditInline(unfold_admin.TabularInline):
     verbose_name = _("Contact")
 
 
+class HutImageAssociationEditInline(unfold_admin.TabularInline):
+    """Hut showing images"""
+
+    model = Hut.image_set.through
+    fields = ("image", "order")
+    autocomplete_fields = ("image",)
+    extra = 0
+    verbose_name = _("Image")
+
+
 class ContactHutAssociationEditInline(unfold_admin.TabularInline):
     """Contact showing huts"""
 

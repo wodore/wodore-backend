@@ -1,7 +1,7 @@
 # from typing import Union
 
 # from ._booking import HutBookingsSchema
-from ._hut import HutSchemaDetails, HutSchemaOptional
+from ._hut import HutSchemaDetails, HutSchemaOptional, ImageInfoSchema
 from ._hut_type import HutTypeDetailSchema, HutTypeSchema
 
 

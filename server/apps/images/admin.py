@@ -33,13 +33,22 @@ class ImageTagAdmin(ModelAdmin):
     form = required_i18n_fields_form_factory("name")
     fieldsets = ImageTagAdminFieldsets
     search_fields = ("slug", "name_i18n")
-    list_display = ("slug", "name_i18n")
+    list_display = ("slug", "name_i18n", "color_tag")
     readonly_fields = (
         "name_i18n",
         "created",
         "modified",
         # "image_meta",
     )
+
+    def show_color(self, value, width=32, height=16, radius=4):
+        return mark_safe(
+            f'<div style="background-color:{value};border-radius:{radius}px;min-height:{height}px;min-width:{width}px;max-height:{height}px;max-width:{width}px"></div>'
+        )
+
+    @display(description=_("Color"))
+    def color_tag(self, obj):
+        return self.show_color(obj.color)
 
 
 @admin.register(Image)
@@ -67,6 +76,8 @@ class ImageAdmin(ModelAdmin):
         "caption_i18n",
         "created",
         "modified",
+        "granted_date",
+        "uploaded_date",
         # "image_meta",
     )
 

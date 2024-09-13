@@ -15,7 +15,6 @@ from hut_services.core.guess import guess_slug_name
 from hut_services.core.schema import HutBookingsSchema as HutServiceBookingSchema
 from hut_services.core.schema import OccupancyStatusEnum
 from jinja2 import Environment
-from server.apps.translations.translate import translate_hut
 
 from django_countries.fields import CountryField
 from model_utils.models import TimeStampedModel
@@ -34,13 +33,19 @@ from django.utils.translation import get_language
 from django.utils.translation import gettext_lazy as _
 
 from server.apps.contacts.models import Contact, ContactFunction
+from server.apps.images.models import Image
 from server.apps.organizations.models import Organization
 from server.apps.owners.models import Owner
+from server.apps.translations.translate import translate_hut
 from server.core import UpdateCreateStatus
 
 from ..managers import HutManager
 from ..schemas_booking import HutBookingsSchema
-from ._associations import HutContactAssociation, HutOrganizationAssociation
+from ._associations import (
+    HutContactAssociation,
+    HutImageAssociation,
+    HutOrganizationAssociation,
+)
 from ._hut_source import HutSource
 from ._hut_type import HutType
 
@@ -138,6 +143,9 @@ class Hut(TimeStampedModel):
     photos = models.CharField(blank=True, default="", max_length=1000, verbose_name=_("Hut photo"))
     photos_attribution = models.CharField(
         blank=True, default="", max_length=1000, verbose_name=_("Hut photo attribution")
+    )
+    image_set = models.ManyToManyField(
+        Image, through=HutImageAssociation, related_name="huts", verbose_name=_("Images")
     )
     country_field = CountryField()
     location = models.PointField(blank=False, verbose_name="Location")

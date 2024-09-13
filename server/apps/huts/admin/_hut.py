@@ -24,6 +24,7 @@ from server.core.utils import text_shorten_html
 from ..forms import HutAdminFieldsets
 from ..models import Hut, HutOrganizationAssociation
 from ._associations import (
+    HutImageAssociationEditInline,
     HutContactAssociationEditInline,
     HutOrganizationAssociationEditInline,
     HutOrganizationAssociationViewInline,
@@ -76,6 +77,7 @@ class HutsAdmin(ModelAdmin):
     list_per_page = 50
 
     inlines = (
+        HutImageAssociationEditInline,
         HutContactAssociationEditInline,
         HutOrganizationAssociationViewInline,
         HutOrganizationAssociationEditInline,

@@ -12,8 +12,8 @@ ImageAdminFieldsets = [
                 ("author", "source_org"),
                 ("author_url", "source_url"),
                 "caption_i18n",
-                ("granted_by", "granted_date"),
-                ("uploaded_by_anonym", "uploaded_by_user"),
+                ("granted_by_anonym", "granted_by_user", "granted_date"),
+                ("uploaded_by_anonym", "uploaded_by_user", "uploaded_date"),
                 "tags",
             ],
         },
@@ -49,6 +49,7 @@ ImageTagAdminFieldsets = [
             "fields": [
                 "slug",
                 "name_i18n",
+                "color",
             ],
         },
     ),

@@ -14,6 +14,8 @@ from django.utils.translation import gettext_lazy as _
 from server.apps.contacts.models import Contact
 from server.apps.organizations.models import Organization
 
+from server.apps.images.models import Image
+
 
 class HutContactAssociation(TimeStampedModel):
     contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="details", db_index=True)
@@ -29,6 +31,23 @@ class HutContactAssociation(TimeStampedModel):
         app_label = "huts"
         constraints = (
             models.UniqueConstraint(name="%(app_label)s_%(class)s_unique_relationships", fields=["contact", "hut"]),
+        )
+
+
+class HutImageAssociation(TimeStampedModel):
+    image = models.ForeignKey(Image, on_delete=models.CASCADE, db_index=True, related_name="details")
+    hut = models.ForeignKey("Hut", on_delete=models.CASCADE, db_index=True)
+    order = models.PositiveSmallIntegerField(blank=True, null=True)
+
+    def __str__(self) -> str:
+        return f"{self.hut} <> {self.image}"
+
+    class Meta:
+        verbose_name = _("Image and Hut Association")
+        ordering = ("hut__name", "order")
+        app_label = "huts"
+        constraints = (
+            models.UniqueConstraint(name="%(app_label)s_%(class)s_unique_relationships", fields=["image", "hut"]),
         )
 
 

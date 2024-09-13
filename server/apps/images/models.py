@@ -1,5 +1,10 @@
 import uuid
 
+from colorfield.fields import ColorField
+
+from model_utils.fields import (
+    MonitorField,
+)
 from model_utils.models import TimeStampedModel
 from modeltrans.fields import TranslationField
 
@@ -12,6 +17,7 @@ from django.utils.translation import gettext_lazy as _
 from server.apps.licenses.models import License
 from server.apps.meta_image_field.fields import MetaImageField
 from server.apps.organizations.models import Organization
+from server.apps.utils.fields import MonitorFields
 from server.core.managers import BaseMutlilingualManager
 
 # from .forms import CustomImageField
@@ -31,6 +37,8 @@ class ImageTag(TimeStampedModel):
 
     slug = models.SlugField(max_length=50, unique=True, verbose_name=_("Slug"), blank=False)
     name = models.TextField(max_length=50, verbose_name=_("Name"), blank=False)
+
+    color = ColorField(verbose_name=_("Color"), help_text=_("color as hex number with #"), default="#4B8E43")
 
     class Meta:
         verbose_name = _("Image Tag")
@@ -60,15 +68,24 @@ class Image(TimeStampedModel):
     caption = models.TextField(max_length=400, verbose_name=_("Caption"), blank=False)
     tags = models.ManyToManyField(ImageTag, related_name="images", verbose_name=_("Tags"))
 
-    granted_date = models.DateField(blank=True, null=True, verbose_name=_("Granted Date"))
-    granted_by = models.CharField(
+    granted_date = MonitorFields(monitors=["granted_by_anonym", "granted_by_user"], verbose_name=_("Granted Date"))
+    granted_by_anonym = models.CharField(
         max_length=255,
         blank=True,
         null=True,
         default="",
-        verbose_name=_("Granted By"),
-        help_text=_("E-mail or name of the granted persion"),
+        verbose_name=_("Granted By (Anonym)"),
+        help_text=_("E-mail or name of the granted person"),
     )
+    granted_by_user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        verbose_name=_("Granted By (User)"),
+        related_name="image_granted_set",
+    )
+    uploaded_date = MonitorField(monitor="image", verbose_name=_("Uploaded Date"))
     uploaded_by_anonym = models.CharField(
         max_length=255,
         blank=True,
@@ -78,7 +95,12 @@ class Image(TimeStampedModel):
         help_text=_("E-mail or name of the anonymous uploader"),
     )
     uploaded_by_user = models.ForeignKey(
-        User, on_delete=models.SET_NULL, blank=True, null=True, verbose_name=_("Uploaded By (User)")
+        User,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        verbose_name=_("Uploaded By (User)"),
+        related_name="image_uploaded_set",
     )
     source_url = models.URLField(blank=True, max_length=500, null=True, default="", verbose_name=_("Source URL"))
     author_url = models.URLField(blank=True, max_length=500, null=True, default="", verbose_name=_("Author URL"))
@@ -105,6 +127,8 @@ class Image(TimeStampedModel):
         )
 
     def __str__(self) -> str:
+        if len(str(self.caption_i18n)) > 40:
+            return str(self.caption_i18n[:40]) + " ..."
         return str(self.caption_i18n)
 
     @classmethod
