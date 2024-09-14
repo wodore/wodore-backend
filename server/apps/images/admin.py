@@ -60,14 +60,7 @@ class ImageAdmin(ModelAdmin):
     fieldsets = ImageAdminFieldsets
     view_on_site = True
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
-    list_display = (
-        "thumb",
-        "caption_short",
-        "license_summary",
-        "source",
-        "tag_list",
-        "review_tag",
-    )
+    list_display = ("thumb", "caption_short", "license_summary", "source", "tag_list", "review_tag", "show_huts")
     list_display_links = ("thumb",)
     search_fields = ("author", "caption_i18n")
     list_filter = ("source_org", "license", "review_status", "tags", "uploaded_by_user", "uploaded_by_anonym")
@@ -142,3 +135,12 @@ class ImageAdmin(ModelAdmin):
     )
     def review_tag(self, obj):
         return obj.review_status
+
+    @display(description=_("Huts"))
+    def show_huts(self, obj):
+        huts = []
+        for hut in obj.huts.all():
+            hut_url = reverse("admin:huts_hut_change", args=[hut.pk])
+            huts.append(f'<small><a href="{hut_url}">{hut.name_i18n}</a></small>')
+        huts_str = ", ".join(huts)
+        return mark_safe(huts_str)

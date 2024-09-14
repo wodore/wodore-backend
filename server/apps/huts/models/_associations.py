@@ -36,7 +36,7 @@ class HutContactAssociation(TimeStampedModel):
 
 class HutImageAssociation(TimeStampedModel):
     image = models.ForeignKey(Image, on_delete=models.CASCADE, db_index=True, related_name="details")
-    hut = models.ForeignKey("Hut", on_delete=models.CASCADE, db_index=True)
+    hut = models.ForeignKey("Hut", on_delete=models.CASCADE, db_index=True, related_name="huts")
     order = models.PositiveSmallIntegerField(blank=True, null=True)
 
     def __str__(self) -> str:

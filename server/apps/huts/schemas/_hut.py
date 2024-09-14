@@ -64,15 +64,15 @@ class LicenseInfoSchema(BaseModel):
     slug: str
     name: str
     fullname: str
-    description: str
-    link: str
+    description: str | None
+    link: str | None
 
 
 class ImageMetaAreaSchema(BaseModel):
     x1: float
     x2: float
     y1: float
-    x2: float
+    y2: float
 
 
 class ImageMetaSchema(BaseModel):
