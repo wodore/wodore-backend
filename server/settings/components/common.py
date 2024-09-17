@@ -73,8 +73,8 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "django.contrib.messages",
     "django.contrib.staticfiles",
     # cloudinary_storage needs to be before django.contrib.staticfiles if used for static files as well!
-    "cloudinary_storage",  # https://pypi.org/project/django-cloudinary-storage/
-    "cloudinary",
+    # "cloudinary_storage",  # https://pypi.org/project/django-cloudinary-storage/
+    # "cloudinary",
     "django.contrib.gis",
     # django-admin:
     # "admin_volt.apps.AdminVoltConfig",  # https://github.com/app-generator/django-admin-volt
@@ -219,13 +219,17 @@ STATICFILES_FINDERS = (
     "django.contrib.staticfiles.finders.AppDirectoriesFinder",
 )
 
-CLOUDINARY_STORAGE = {
-    "CLOUD_NAME": config("CLOUDINARY_NAME"),
-    "API_KEY": config("CLOUDINARY_API_KEY"),
-    "API_SECRET": config("CLOUDINARY_API_SECRET"),
-}
+# https://github.com/cshum/imagor
+IMAGOR_URL = config("IMAGOR_URL")
+IMAGOR_KEY = config("IMAGOR_KEY", default=None)
 
-DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
+# CLOUDINARY_STORAGE = {
+#     "CLOUD_NAME": config("CLOUDINARY_NAME"),
+#     "API_KEY": config("CLOUDINARY_API_KEY"),
+#     "API_SECRET": config("CLOUDINARY_API_SECRET"),
+# }
+#
+# DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
 
 # Templates
 # https://docs.djangoproject.com/en/4.2/ref/templates/api

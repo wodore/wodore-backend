@@ -24,6 +24,8 @@ from .forms import ImageAdminFieldsets, ImageTagAdminFieldsets
 # Register your models here.
 from .models import Image, ImageTag
 
+from .transfomer import ImagorImage
+
 
 @admin.register(ImageTag)
 # class OrganizationAdmin(ActiveLanguageMixin, admin.ModelAdmin[Organization]):
@@ -109,16 +111,19 @@ class ImageAdmin(ModelAdmin):
 
     def thumb(self, obj):  # new
         try:
-            obj.image.url  # does not work if removed?
-            img = CloudinaryImage(obj.image.name).image(
-                radius=0,
-                border="1px_solid_rgb:000000",
-                gravity="custom",
-                width=120,
-                height=60,
-                crop="fill",
-                fetch_format="auto",
-            )
+            # obj.image.url  # does not work if removed?
+            # img = f'<img width=120 heigh=60 src="{obj.image.url}"/>'
+            img = ImagorImage(obj.image).transform(size="120x60", round_corner=(5, 5, 111827)).get_html()
+            print(img)
+            # img = CloudinaryImage(obj.image.name).image(
+            #    radius=0,
+            #    border="1px_solid_rgb:000000",
+            #    gravity="custom",
+            #    width=120,
+            #    height=60,
+            #    crop="fill",
+            #    fetch_format="auto",
+            # )
         except Exception as e:
             img = "Missing"
         return mark_safe(img)
