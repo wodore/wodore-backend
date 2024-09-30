@@ -117,6 +117,8 @@ def get_huts(  # type: ignore  # noqa: PGH003
         ),
     )
     for hut_db in huts_db:
+        if len(hut_db.sources) and hut_db.sources[0]["slug"] is None:
+            hut_db.sources = []
         if len(hut_db.images) and hut_db.images[0]["image"] is None:
             hut_db.images = []
     if limit is not None:
