@@ -35,12 +35,15 @@ class OwnerSchema(ModelSchema):
         fields = ("slug", "name", "url")
 
 
-class OrganizationDetailSchema(BaseModel):
+class OrganizationBaseSchema(BaseModel):
     slug: str
     name: str
     fullname: str
     link: str
     logo: str
+
+
+class OrganizationDetailSchema(OrganizationBaseSchema):
     public: bool
     active: bool
     source_id: str
@@ -119,7 +122,7 @@ class HutSchemaOptional(BaseModel):
     country: CountryTuple | None = None
     capacity_open: int | None = None
     capacity_closed: int | None = None
-    sources: list[OrganizationDetailSchema] | None  # = Field(None, alias="orgs")
+    sources: list[OrganizationBaseSchema] | None  # = Field(None, alias="orgs")
     photos: str = Field("")
     photos_attribution: str = Field("")
     images: list[ImageInfoSchema] | None

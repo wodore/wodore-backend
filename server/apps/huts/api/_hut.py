@@ -53,6 +53,8 @@ def get_huts(  # type: ignore  # noqa: PGH003
     if is_public != TristateEnum.unset:
         huts_db = huts_db.filter(is_public=is_public.bool)
 
+    media_url = request.build_absolute_uri(settings.MEDIA_URL)
+    iam_media_url = "https://res.cloudinary.com/wodore/image/upload/v1/"
     huts_db = huts_db.select_related("hut_type_open", "hut_type_closed", "hut_owner").annotate(
         sources=JSONBAgg(
             JSONObject(
@@ -62,6 +64,42 @@ def get_huts(  # type: ignore  # noqa: PGH003
                 name="org_set__name_i18n",
                 link="orgs_source__link",
             )
+        ),
+        images=JSONBAgg(
+            JSONObject(
+                image="image_set__image",
+                image_url=Concat(Value(iam_media_url), F("image_set__image")),
+                image_meta=JSONObject(
+                    crop="image_set__image_meta__crop",
+                    focal="image_set__image_meta__focal",
+                    width="image_set__image_meta__width",
+                    height="image_set__image_meta__height",
+                ),
+                caption="image_set__caption_i18n",
+                license=JSONObject(
+                    slug="image_set__license__slug",
+                    name="image_set__license__name_i18n",
+                    fullname="image_set__license__fullname_i18n",
+                    description="image_set__license__description_i18n",
+                    link="image_set__license__link_i18n",
+                ),
+                author="image_set__author",
+                author_url="image_set__author_url",
+                source_url="image_set__source_url",
+                organization=JSONObject(
+                    logo=Concat(Value(media_url), F("image_set__source_org__logo")),
+                    fullname="image_set__source_org__fullname_i18n",
+                    slug="image_set__source_org__slug",
+                    name="image_set__source_org__name_i18n",
+                    link="image_set__source_org__url",  # get link
+                    # source_id="orgs_source__source_id",
+                    # public="image_set__source_org__is_public",
+                    # active="image_set__source_org__is_active",
+                ),
+                attribution=Value(""),
+                # tags="image_set__tag_set",
+            ),
+            ordering="image_set__details__order",
         ),
         translations=JSONObject(
             description=JSONObject(
@@ -78,6 +116,9 @@ def get_huts(  # type: ignore  # noqa: PGH003
             ),
         ),
     )
+    for hut_db in huts_db:
+        if len(hut_db.images) and hut_db.images[0]["image"] is None:
+            hut_db.images = []
     if limit is not None:
         huts_db = huts_db[offset : offset + limit]
     return huts_db
@@ -276,6 +317,8 @@ def get_hut(request: HttpRequest, slug: str, lang: LanguageParam, fields: Query[
         raise Http404(msg)
     if len(hut_db.sources) and hut_db.sources[0]["slug"] is None:
         hut_db.sources = []
+    if len(hut_db.images) and hut_db.images[0]["image"] is None:
+        hut_db.images = []
     for img in hut_db.images:
         img_s = ImageInfoSchema(**img)
         org = img_s.organization
