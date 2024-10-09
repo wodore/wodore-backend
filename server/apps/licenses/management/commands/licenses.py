@@ -36,7 +36,7 @@ class Command(BaseCommand):
                         "no_commercial": row["no_commercial"].lower() == "true",
                         "no_modifying": row["no_modifying"].lower() == "true",
                         "share_alike": row["share_alike"].lower() == "true",
-                        "no_publication": row["no_publication"].lower() == "false",
+                        "no_publication": row["no_publication"].lower() == "true",
                     },
                 )
 

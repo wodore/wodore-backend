@@ -21,6 +21,7 @@ from ..models import (
 
 ## INLINES
 class HutSourceViewInline(unfold_admin.StackedInline):
+    tab = True
     model = HutSource
     readonly_fields = (
         "created",

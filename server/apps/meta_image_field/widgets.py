@@ -17,10 +17,10 @@ class MetaImageWidget(ClearableFileInput):
         super().__init__(default_attrs)
 
     def value_from_datadict(self, data, files, name):
-        print(f"Values FROM DICT '{name}': {data}")
-        print(f"Files FROM DICT: {files}")
+        # print(f"Values FROM DICT '{name}': {data}")
+        # print(f"Files FROM DICT: {files}")
         upload = super().value_from_datadict(data, files, name)
-        print(f"UPLOAD: {upload}")
+        # print(f"UPLOAD: {upload}")
         if not upload:
             url = data.get(f"{name}_url")
             if url:

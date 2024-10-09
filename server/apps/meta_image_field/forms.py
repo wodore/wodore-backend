@@ -10,7 +10,7 @@ class MetaImageFormField(forms.ImageField):
         self.widget = MetaImageWidget()
 
     def to_python(self, data):
-        print(f"DATA: {type(data)} - {data}")
+        # print(f"DATA: {type(data)} - {data}")
         # Add custom logic to handle both file uploads and URL-based images
         if isinstance(data, str) and data.startswith("http"):
             try:

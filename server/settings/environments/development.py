@@ -139,7 +139,7 @@ EXTRA_CHECKS = {
         # Forbid `unique_together`:
         "no-unique-together",
         # Use the indexes option instead:
-        "no-index-together",
+        # "no-index-together",
         # Each model must be registered in admin:
         "model-admin",
         # FileField/ImageField must have non empty `upload_to` argument:

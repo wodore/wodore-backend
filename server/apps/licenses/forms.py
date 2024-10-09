@@ -5,45 +5,59 @@ LicenseAdminFieldsets = [
     (
         _("Main Information"),
         {
+            "classes": ["tab"],
             "fields": [
-                "slug",
+                ("slug", "order"),
                 ("name_i18n", "fullname_i18n"),
                 "description_i18n",
                 "link_i18n",
-                "order",
+                ("created", "modified"),
             ],
         },
     ),
     (
         f"{_('Name')} {_('Translations')} *",
         {
-            "classes": ["collapse"],
+            "classes": ["collapse", "tab"],
             "fields": [
-                tuple([f"name_{code}" for code in settings.LANGUAGE_CODES]),
-                tuple([f"fullname_{code}" for code in settings.LANGUAGE_CODES]),
+                (f"name_{code}", f"fullname_{code}")
+                for code in settings.LANGUAGE_CODES
+                # tuple([f"name_{code}" for code in settings.LANGUAGE_CODES]),
+                # tuple([f"fullname_{code}" for code in settings.LANGUAGE_CODES]),
             ],
         },
     ),
     (
         f"{_('Description')} {_('Translations')}",
-        {"classes": ["collapse"], "fields": [f"description_{code}" for code in settings.LANGUAGE_CODES]},
+        {"classes": ["collapse", "tab"], "fields": [f"description_{code}" for code in settings.LANGUAGE_CODES]},
     ),
     (
         f"{_('Link')} {_('Translations')}",
         {
-            "classes": ["collapse"],
+            "classes": ["collapse", "tab"],
             "fields": [f"link_{code}" for code in settings.LANGUAGE_CODES],
         },
     ),
     (
-        _("Timestamps"),
+        _("Settings"),
         {
-            "classes": ["collapse"],
+            "classes": ["tab"],
             "fields": [
-                ("created", "modified"),
+                ("is_active", "no_publication"),
+                ("attribution_required", "share_alike"),
+                ("no_commercial", "no_modifying"),
             ],
         },
     ),
+    # (
+    #     _("Timestamps"),
+    #     {
+    #         "classes": ["collapse", "tab"],
+    #         "fields": [
+    #             ("created", "modified"),
+    #         ],
+    #     },
+    # ),
 ]
 # class OrganizationAdminForm(forms.ModelForm):
 #    class Meta:

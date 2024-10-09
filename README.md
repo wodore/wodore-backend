@@ -1,6 +1,7 @@
 # wodore
 
 
+
 ```bash
 ./manage.py migrate
 ./manage.py loaddata --app huts organizations
@@ -13,6 +14,14 @@
 ```bash
 npx tailwindcss -o server/apps/admin/static/css/styles.css --minify --watch 
 ```
+
+Update hut-service
+```bash
+# only if access to hut-services-private
+poetry update hut-serve
+poetry install -E private 
+```
+
 
 Wodore Backend
 

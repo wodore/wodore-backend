@@ -70,7 +70,7 @@ class Hut(TimeStampedModel):
         "name",
         "note",
         "description",
-        "description_attribution",
+        # "description_attribution",
         "location",
         "url",
         "country_code",
@@ -78,6 +78,7 @@ class Hut(TimeStampedModel):
         "type",
         "photos",
         "photos_attribution",
+        "images",
         "hut_type",
         "is_public",
         "is_active",
@@ -161,7 +162,7 @@ class Hut(TimeStampedModel):
         default=_monthly_open_default_value,
         verbose_name=_("Hut Open"),
         help_text=_(
-            'Possible values: "yes", "maybe", "no" or "unknown". "url" is a link to information when it is open or closed.'
+            'Possible values: "yes", "yesish", "maybe", "no", "noish" or "unknown". "url" is a link to information when it is open or closed.'
         ),
     )
 
@@ -353,7 +354,8 @@ class Hut(TimeStampedModel):
         )
 
         hut_db = Hut(
-            description_attribution=hut_schema.description_attribution,
+            # TODO desc lic
+            # description_attribution=hut_schema.description_attribution,
             location=dbPoint(hut_schema.location.lon_lat),
             elevation=hut_schema.location.ele,
             capacity_open=hut_schema.capacity.if_open,
@@ -362,8 +364,8 @@ class Hut(TimeStampedModel):
             is_active=hut_schema.is_active,
             is_public=hut_schema.is_public,
             country_field=hut_schema.country_code or "CH",
-            photos=hut_schema.photos[0].thumb or hut_schema.photos[0].url if hut_schema.photos else "",
-            photos_attribution=hut_schema.photos[0].attribution if hut_schema.photos else "",
+            # photos=hut_schema.photos[0].thumb or hut_schema.photos[0].url if hut_schema.photos else "",
+            # photos_attribution=hut_schema.photos[0].attribution if hut_schema.photos else "",
             hut_type_open=HutType.values[str(hut_schema.hut_type.if_open.value)],
             hut_type_closed=type_closed,
             review_status=review_status,
@@ -425,6 +427,8 @@ class Hut(TimeStampedModel):
             contacts.append(contact)
             # Contact is saved later in a atomic transaction
 
+        # Photos
+
         # write to DB as one transaction
         with transaction.atomic():
             if _hut_source is not None and _hut_source.organization.slug == "hrs":
@@ -433,12 +437,26 @@ class Hut(TimeStampedModel):
             hut_db.refresh_from_db()
             if _hut_source is not None:
                 hut_db.add_organization(_hut_source)
+            # TODO: order if contacts were already added
             if contacts:
                 for i, c in enumerate(contacts):
                     c.save()
                     c.refresh_from_db()
                     a = HutContactAssociation(contact=c, hut=hut_db, order=i)
                     a.save()
+            # PHOTOS
+            src_hut_photos = hut_schema.photos
+            last_img = HutImageAssociation.objects.filter(hut=hut_db).order_by("-order").first()
+            photo_order = 0 if not last_img else last_img.order + 1
+            for photo in src_hut_photos:
+                img = Image.add_image_from_schema(photo, path=f"huts/{hut_db.slug}", default_caption=hut_db.name)
+                if img:
+                    img.save()
+                    img.refresh_from_db()
+                    pa = HutImageAssociation(image=img, hut=hut_db, order=photo_order)
+                    photo_order += 1
+                    pa.save()
+                    # hut_db.image_set.add(img)
         return hut_db
 
     @classmethod
@@ -493,8 +511,8 @@ class Hut(TimeStampedModel):
         )
         ### Translations -> Better solution?
         i18n_fields = {}
-        if "description" in updates:
-            updates["description_attribution"] = hut_schema.description_attribution
+        # if "description" in updates:
+        #    updates["description_attribution"] = hut_schema.description_attribution
         for field in ["name", "description", "notes"]:
             model = updates.get(field)
             if not model:
@@ -521,9 +539,18 @@ class Hut(TimeStampedModel):
             del updates["capacity"]
             updates["capacity_open"] = hut_schema.capacity.if_open
             updates["capacity_closed"] = hut_schema.capacity.if_closed
+        # if "photos" in updates:
+        #    updates["photos"] = hut_schema.photos[0].thumb or hut_schema.photos[0].url if hut_schema.photos else ""
+        #    updates["photos_attribution"] = hut_schema.photos[0].attribution if hut_schema.photos else ""
         if "photos" in updates:
-            updates["photos"] = hut_schema.photos[0].thumb or hut_schema.photos[0].url if hut_schema.photos else ""
-            updates["photos_attribution"] = hut_schema.photos[0].attribution if hut_schema.photos else ""
+            del updates["photos"]
+            updates["images"] = []
+            for p in hut_schema.photos:
+                img = Image.add_image_from_schema(p, path=f"huts/{hut_db.slug}", default_caption=hut_db.name)
+                if img:
+                    updates["images"].append(img)
+            # updates["photos"] = hut_schema.photos[0].thumb or hut_schema.photos[0].url if hut_schema.photos else ""
+            # updates["photos_attribution"] = hut_schema.photos[0].attribution if hut_schema.photos else ""
         if "hut_type" in updates:
             del updates["hut_type"]
             updates["hut_type_open"] = HutType.values[str(hut_schema.hut_type.if_open.value)]
@@ -539,6 +566,21 @@ class Hut(TimeStampedModel):
         changes = ""
         with transaction.atomic():
             for f, v in updates.items():
+                # image create/update
+                if f == "images":  # type: ignore[attr-defined]
+                    last_img = HutImageAssociation.objects.filter(hut=hut_db).order_by("-order").first()
+                    photo_order = 0 if not last_img else (last_img.order or 0) + 1
+                    for img in v:
+                        img.save()
+                        img.refresh_from_db()
+                        pa, created = HutImageAssociation.objects.update_or_create(
+                            image=img, hut=hut_db, defaults={"order": photo_order}
+                        )
+                        # pa.save()
+                        photo_order += 1
+                        # hut_db.image_set.add(i)
+                        changes += f"* Added '{img}\n"
+                    continue
                 # 1. Only update if no entry or forced
                 # 2. Force to set None as well
                 if (
@@ -560,7 +602,7 @@ class Hut(TimeStampedModel):
                 ):
                     old_value = getattr(hut_db, f)
                     # special comparision for dbPoint -> valus are always different because it is a class
-                    if isinstance(v, dbPoint) and v.tuple == old_value.tuple:  # type: ingore[attr-defined]
+                    if isinstance(v, dbPoint) and v.tuple == old_value.tuple:  # type: ignore[attr-defined]
                         continue
                     setattr(hut_db, f, v)
                     sp = "'" if len(str(old_value)) < 100 and len(str(v)) < 100 else "\n---\n"

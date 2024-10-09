@@ -5,6 +5,7 @@ HutAdminFieldsets = [
     (
         _("Main Information"),
         {
+            "classes": ["tab"],
             "fields": [
                 ("is_public", "is_modified"),
                 ("slug", "name_i18n"),
@@ -15,6 +16,7 @@ HutAdminFieldsets = [
                 "url",
                 "description_i18n",
                 "note_i18n",
+                "location",
                 "photos",
                 "photos_attribution",
                 "booking_ref",
@@ -22,9 +24,18 @@ HutAdminFieldsets = [
         },
     ),
     (
+        _("Photos"),
+        {
+            "classes": ["tab"],
+            "fields": [
+                "hut_images",
+            ],
+        },
+    ),
+    (
         f"{_('Name')} {_('Translations')} *",
         {
-            "classes": ["collapse"],
+            "classes": ["tab"],
             "fields": [
                 tuple([f"name_{code}" for code in settings.LANGUAGE_CODES]),
             ],
@@ -33,14 +44,14 @@ HutAdminFieldsets = [
     (
         f"{_('Description')} {_('Translations')}",
         {
-            "classes": ["collapse"],
+            "classes": ["tab"],
             "fields": [f"description_{code}" for code in settings.LANGUAGE_CODES] + ["description_attribution"],
         },
     ),
     (
         f"{_('Note')} {_('Translations')}",
         {
-            "classes": ["collapse"],
+            "classes": ["tab"],
             "fields": [f"note_{code}" for code in settings.LANGUAGE_CODES],
         },
     ),
@@ -56,17 +67,16 @@ HutAdminFieldsets = [
     (
         _("Geo"),
         {
-            # "classes": ["collapse"],
+            "classes": ["tab"],
             "fields": [
                 ("elevation", "country_field"),
-                "location",
             ],
         },
     ),
     (
         _("Infrastructure"),
         {
-            # "classes": ["collapse"],
+            "classes": ["tab"],
             "fields": [
                 ("capacity_open", "capacity_closed"),
                 "open_monthly",
@@ -76,7 +86,7 @@ HutAdminFieldsets = [
     (
         _("Timestamps"),
         {
-            "classes": ["collapse"],
+            "classes": ["tab"],
             "fields": [
                 ("created", "modified"),
             ],

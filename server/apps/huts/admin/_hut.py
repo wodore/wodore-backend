@@ -10,7 +10,7 @@ from django.db import models
 from django.db.models.functions import JSONObject, Lower
 from django.http import HttpRequest
 from django.shortcuts import redirect
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
@@ -24,8 +24,8 @@ from server.core.utils import text_shorten_html
 from ..forms import HutAdminFieldsets
 from ..models import Hut, HutOrganizationAssociation
 from ._associations import (
-    HutImageAssociationEditInline,
     HutContactAssociationEditInline,
+    HutImageAssociationEditInline,
     HutOrganizationAssociationEditInline,
     HutOrganizationAssociationViewInline,
 )
@@ -45,6 +45,7 @@ class HutsAdmin(ModelAdmin):
     # list_select_related = ["org_set__source"]
     list_display = (
         "symbol_img",
+        "hut_thumb",
         "title",
         "location_coords",
         "hut_type",
@@ -55,7 +56,7 @@ class HutsAdmin(ModelAdmin):
         "review_tag",
         "view_link",
     )
-    list_display_links = ("symbol_img", "title")
+    list_display_links = ("symbol_img", "hut_thumb", "title")
     list_filter = (
         "is_active",
         "is_public",
@@ -71,6 +72,7 @@ class HutsAdmin(ModelAdmin):
         "name_i18n",
         "description_i18n",
         "note_i18n",
+        "hut_images",
         "created",
         "modified",
     )
@@ -85,7 +87,7 @@ class HutsAdmin(ModelAdmin):
     )
 
     def get_queryset(self, request: HttpRequest) -> QuerySetAny:
-        qs = super().get_queryset(request)
+        qs = super().get_queryset(request).prefetch_related("image_set")
         # prefetch_related("orgs_source", "orgs_source__organization").
         return qs.select_related("hut_type_open", "hut_type_closed", "hut_owner").annotate(
             orgs=JSONBAgg(
@@ -130,7 +132,7 @@ class HutsAdmin(ModelAdmin):
 
     @display(description="")
     def symbol_img(self, obj):  # new
-        return mark_safe(f'<img src="{obj.hut_type_open.symbol.url}" width="75px"/>')
+        return mark_safe(f'<img src="{obj.hut_type_open.symbol.url}" width="50px"/>')
 
     @display(description=_("Sources"))
     def logo_orgs(self, obj: Hut) -> str:  # new
@@ -152,6 +154,66 @@ class HutsAdmin(ModelAdmin):
         elif not obj.is_public and obj.is_active:
             return mark_safe('<span class="material-symbols-outlined"> visibility_off </span>')
         return mark_safe('<span class="material-symbols-outlined"> disabled_visible </span>')
+
+    @display(description=_("Photos"))
+    def hut_images(self, obj):  # new
+        img_html = "<div>"
+        for i, img in enumerate(obj.image_set.select_related("source_org", "license").order_by("details__order").all()):
+            print(img.image.url)
+            # img_html += mark_safe(img)
+            link = reverse("admin:images_image_change", args=[img.pk])
+            img_tag = f"""
+              <a href='{link}' target='_blank'>{img.get_image_tag(radius=10, height=120, width=200)}</a>
+            """
+            lic = f"""{img.license.name_i18n}"""
+            public_private_tag = (
+                "<b style='color:red'>Private</b>"
+                if img.license.no_publication
+                else "<i style='color:orange'>Public</i>"
+            )
+            author_source = []
+            if img.author and img.author_url:
+                author_source.append(f"<i><a href='{img.author_url}'>{img.author}</a></i>")
+            elif img.author:
+                author_source.append(f"<i>{img.author}</i>")
+            if img.source_org:
+                author_source.append(
+                    f"""
+                                    <div style='display:inline-block'>
+                                      <img style='display:inline-block' src='{img.source_org.logo.url}' width='16'>
+                                      {img.source_org.name_i18n}
+                                      </img>
+                                    </div>
+                                      """
+                )
+            # print(img.details.order)
+            img_info = f"""
+              <span class="text-xs">{public_private_tag}</span>
+              <h2><b>#{i + 1} - {img.caption_i18n}</b></h2>
+              Status: <i>{img.review_status}</i><br/>
+              {', '.join(author_source)}<br/>
+              <small>{lic}</small><br/>
+            <span><a class="text-xs" href="{img.image.url}" target='_blank'> <span class="material-symbols-outlined"> visibility </span> </a>
+            <span><a class="text-xs" href="{link}" target='_blank'> <span class="material-symbols-outlined"> edit </span> </a>
+            """
+            img_html += f"""<div style="padding:5px;">
+                              <div style='display:inline-block; padding-right:10px'>
+                                {img_tag}
+                              </div>
+                              <div style='display:inline-block'>
+                                {img_info}
+                              </div>
+                            </div>"""
+        img_html += "</div>"
+        return mark_safe(img_html)
+
+    @display(description=_("Photo"))
+    def hut_thumb(self, obj):  # new
+        # images = obj.image_set.prefetch_related("details").order_by("details__order")
+        img = obj.image_set.order_by("details__order").first()
+        if img:
+            return img.get_image_tag(radius=15, height=50, width=50)
+        return ""
 
     ## ACTIONS
     actions_row = (

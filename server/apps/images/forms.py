@@ -5,37 +5,49 @@ ImageAdminFieldsets = [
     (
         _("Main Information"),
         {
+            "classes": ["tab"],
             "fields": [
                 "review_status",
                 "image",
-                "license",
-                ("author", "source_org"),
-                ("author_url", "source_url"),
-                "caption_i18n",
-                ("granted_by_anonym", "granted_by_user", "granted_date"),
-                ("uploaded_by_anonym", "uploaded_by_user", "uploaded_date"),
+                ("caption_i18n", "license"),
                 "tags",
             ],
         },
     ),
     (
-        f"{_('Caption')} {_('Translations')}",
-        {"classes": [""], "fields": [f"caption_{code}" for code in settings.LANGUAGE_CODES]},
-    ),
-    (
-        _("Meta"),
+        f"{_('Review')}",
         {
-            "classes": [],
+            "classes": ["tab"],
             "fields": [
-                ("image_meta"),
+                "review_comment",
             ],
         },
     ),
     (
-        _("Timestamps"),
+        f"{_('Source')}",
         {
-            "classes": ["collapse"],
+            "classes": ["tab"],
             "fields": [
+                "author",
+                "author_url",
+                ("source_org", "source_ident"),
+                "source_url",
+                "source_url_raw",
+            ],
+        },
+    ),
+    (
+        f"{_('Caption')} {_('Translations')}",
+        {"classes": ["tab"], "fields": [f"caption_{code}" for code in settings.LANGUAGE_CODES]},
+    ),
+    (
+        _("Meta"),
+        {
+            "classes": ["tab"],
+            "fields": [
+                ("image_meta"),
+                ("granted_by_anonym", "granted_by_user", "granted_date"),
+                ("uploaded_by_anonym", "uploaded_by_user", "uploaded_date"),
                 ("created", "modified"),
             ],
         },

@@ -2,8 +2,14 @@
 from typing import ClassVar
 
 from cloudinary import CloudinaryImage
+from django_stubs_ext import QuerySetAny
+from django.http import HttpRequest
+
+# from tinymce.widgets import TinyMCE
+from simplemde.widgets import SimpleMDEEditor
 
 from django.contrib import admin
+from django.db import models
 from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
@@ -23,7 +29,6 @@ from .forms import ImageAdminFieldsets, ImageTagAdminFieldsets
 
 # Register your models here.
 from .models import Image, ImageTag
-
 from .transfomer import ImagorImage
 
 
@@ -63,11 +68,12 @@ class ImageAdmin(ModelAdmin):
     view_on_site = True
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
     list_display = ("thumb", "caption_short", "license_summary", "source", "tag_list", "review_tag", "show_huts")
-    list_display_links = ("thumb",)
+    list_display_links = ("thumb", "caption_short")
     search_fields = ("author", "caption_i18n")
     list_filter = ("source_org", "license", "review_status", "tags", "uploaded_by_user", "uploaded_by_anonym")
     readonly_fields = (
         "id",
+        "source_url_raw",
         "caption_i18n",
         "created",
         "modified",
@@ -80,6 +86,10 @@ class ImageAdmin(ModelAdmin):
         if not obj.uploaded_by_user:
             obj.uploaded_by_user = request.user
         super().save_model(request, obj, form, change)
+
+    def get_queryset(self, request: HttpRequest) -> QuerySetAny:
+        qs = super().get_queryset(request).prefetch_related('tags', 'huts')
+        return qs.select_related("license", "source_org")
 
     @display(description="license", header=True)
     def license_summary(self, obj):
@@ -113,8 +123,23 @@ class ImageAdmin(ModelAdmin):
         try:
             # obj.image.url  # does not work if removed?
             # img = f'<img width=120 heigh=60 src="{obj.image.url}"/>'
-            img = ImagorImage(obj.image).transform(size="120x60", round_corner=(5, 5, 111827)).get_html()
-            print(img)
+            focal = obj.image_meta.get("focal") if obj.image_meta else None
+            if focal:
+                focal_str = f"{focal.get('x1',0)}x{focal.get('y1',0)}:{focal.get('x2',1)}x{focal.get('y2',1)}"
+            else:
+                focal_str = "0x0:1x1"
+            crop_start, crop_stop = focal_str.split(":")
+            img = (
+                ImagorImage(obj.image)
+                .transform(
+                    size="100x60",
+                    focal=focal_str,
+                    crop_start=crop_start,
+                    crop_stop=crop_stop,
+                    round_corner=(10),
+                )
+                .get_html()
+            )
             # img = CloudinaryImage(obj.image.name).image(
             #    radius=0,
             #    border="1px_solid_rgb:000000",
@@ -125,6 +150,7 @@ class ImageAdmin(ModelAdmin):
             #    fetch_format="auto",
             # )
         except Exception as e:
+            print(e)
             img = "Missing"
         return mark_safe(img)
 
