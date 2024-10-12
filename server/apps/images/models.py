@@ -6,7 +6,6 @@ import time
 import uuid
 from ast import Or
 from email import header
-from django.utils.safestring import mark_safe
 from re import L
 
 import requests
@@ -24,6 +23,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.postgres.indexes import GinIndex
 from django.core.files.base import ContentFile
 from django.db import IntegrityError, models
+from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
 # from imagefocus import ImageFocusField
@@ -75,6 +75,9 @@ class Image(TimeStampedModel):
 
     image = MetaImageField(upload_to="images/", meta_field="image_meta", blank=False)
     image_meta = models.JSONField(blank=True, null=True, verbose_name=_("Image Metadata"))
+    is_active = models.BooleanField(
+        default=True, db_index=True, verbose_name=_("Active"), help_text=_("Only shown to admin if not active")
+    )
     license = models.ForeignKey(License, on_delete=models.CASCADE)
     author = models.CharField(max_length=255, default="", blank=True, null=True, verbose_name=_("Author"))
     author_url = models.URLField(blank=True, max_length=500, null=True, default="", verbose_name=_("Author URL"))
@@ -82,6 +85,7 @@ class Image(TimeStampedModel):
     tags = models.ManyToManyField(ImageTag, related_name="images", verbose_name=_("Tags"), blank=True)
     review_comment = models.TextField(verbose_name=_("Review Comment"), blank=True, default="")
 
+    capture_date = models.DateTimeField(verbose_name=_("Capture Date"), blank=True, null=True)
     granted_date = MonitorFields(monitors=["granted_by_anonym", "granted_by_user"], verbose_name=_("Granted Date"))
     granted_by_anonym = models.CharField(
         max_length=255,
@@ -206,7 +210,7 @@ class Image(TimeStampedModel):
         return ["created", "modified"]
 
     @classmethod
-    def add_image_from_schema(
+    def create_image_from_schema(
         cls,
         photo_schema: PhotoSchema,
         path: str = "",
@@ -244,7 +248,7 @@ class Image(TimeStampedModel):
                 if "-originale" in photo_schema.raw_url:
                     # fix wrong url for refuges.info images
                     photo_schema.raw_url = photo_schema.raw_url.replace("-originale", "-reduite")
-                    return cls.add_image_from_schema(photo_schema, path=path, default_caption=default_caption)
+                    return cls.create_image_from_schema(photo_schema, path=path, default_caption=default_caption)
                 logging.warning(
                     "Image not found: %s", photo_schema.source.url if photo_schema.source else photo_schema.raw_url
                 )
@@ -253,7 +257,7 @@ class Image(TimeStampedModel):
             logging.warning("Connection error: %s. Sleep for 1 min.", photo_schema.raw_url)
             time.sleep(60)
             # try again
-            return cls.add_image_from_schema(photo_schema, path=path, default_caption=default_caption)
+            return cls.create_image_from_schema(photo_schema, path=path, default_caption=default_caption)
         except:
             raise  # Re-raise the exception if it's not a 404 error
         image_content = response.content
@@ -270,7 +274,8 @@ class Image(TimeStampedModel):
             msg = f"Unsupported image type: {mime_type}"
             raise ValueError(msg)
 
-        image_file = ContentFile(image_content, name=os.path.join(path, f"{uuid.uuid4()}{extension}"))
+        image_uuid = uuid.uuid4()
+        image_file = ContentFile(image_content, name=os.path.join(path, f"{image_uuid}{extension}"))
 
         # Get the image dimensions using Pillow
         pil_image = PILImage.open(io.BytesIO(image_content))
@@ -303,6 +308,7 @@ class Image(TimeStampedModel):
             source_org = None
 
         image = cls(
+            id=image_uuid,
             review_status=img_review_status,
             image=image_file,
             # license=License.objects.get_or_create(slug=license.slug)[0],
@@ -321,9 +327,7 @@ class Image(TimeStampedModel):
             source_url_raw=photo_schema.raw_url if photo_schema.raw_url else "",
             source_ident=source_ident,
             image_meta=MetaImageSchema(width=width, height=height).model_dump(exclude_none=True),
-            # width=width,
-            # height=height,
-            # capture_date=photo_schema.capture_date,
+            capture_date=photo_schema.capture_date,
         )
 
         # Add translations

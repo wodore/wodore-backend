@@ -449,7 +449,7 @@ class Hut(TimeStampedModel):
             last_img = HutImageAssociation.objects.filter(hut=hut_db).order_by("-order").first()
             photo_order = 0 if not last_img else last_img.order + 1
             for photo in src_hut_photos:
-                img = Image.add_image_from_schema(photo, path=f"huts/{hut_db.slug}", default_caption=hut_db.name)
+                img = Image.create_image_from_schema(photo, path=f"huts/{hut_db.slug}", default_caption=hut_db.name)
                 if img:
                     img.save()
                     img.refresh_from_db()
@@ -546,7 +546,7 @@ class Hut(TimeStampedModel):
             del updates["photos"]
             updates["images"] = []
             for p in hut_schema.photos:
-                img = Image.add_image_from_schema(p, path=f"huts/{hut_db.slug}", default_caption=hut_db.name)
+                img = Image.create_image_from_schema(p, path=f"huts/{hut_db.slug}", default_caption=hut_db.name)
                 if img:
                     updates["images"].append(img)
             # updates["photos"] = hut_schema.photos[0].thumb or hut_schema.photos[0].url if hut_schema.photos else ""

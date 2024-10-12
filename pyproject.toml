@@ -63,6 +63,7 @@ django-cloudinary-storage = "^0.3.0"
 django-cleanup = "^9.0.0"
 django-tinymce = "^4.1.0"
 django-simplemde = "^0.1.4"
+typing-extensions = "^4.12.2"
 
 [tool.poetry.extras]
 private = ["hut-services-private"]

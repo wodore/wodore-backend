@@ -5,18 +5,20 @@ import msgspec
 from benedict import benedict
 from geojson_pydantic import FeatureCollection
 from ninja import Query
+from ninja.decorators import decorate_view
+from rich import print
 
 # from ninja.errors import HttpError
 from django.conf import settings
 from django.contrib.postgres.aggregates import JSONBAgg
-from django.db.models import F, Value
-from django.db.models.functions import Concat, JSONObject  # , Lower
+from django.db.models import F, OrderBy, Value
+from django.db.models.functions import Coalesce, Concat, JSONObject  # , Lower
 from django.http import Http404, HttpRequest, HttpResponse
 from django.urls import reverse_lazy
 from django.views.decorators.cache import cache_control
-from ninja.decorators import decorate_view
 
 from server.apps.api.query import FieldsParam, TristateEnum
+from server.apps.huts.schemas._hut import ImageMetaSchema
 from server.apps.translations import (
     LanguageParam,
     activate,
@@ -24,11 +26,13 @@ from server.apps.translations import (
 )
 
 from ..models import Hut
-from ..schemas import HutSchemaDetails, HutSchemaOptional, ImageInfoSchema
+from ..schemas import (
+    HutSchemaDetails,
+    ImageInfoSchema,
+    LicenseInfoSchema,
+)
 from ._router import router
 from .expressions import GeoJSON
-
-from rich import print
 
 
 @router.get("huts", response=list[HutSchemaDetails], exclude_unset=True, operation_id="get_huts")
@@ -63,6 +67,7 @@ def get_huts(  # type: ignore  # noqa: PGH003
                 slug="org_set__slug",
                 name="org_set__name_i18n",
                 link="orgs_source__link",
+                public="org_set__is_public",
             )
         ),
         images=JSONBAgg(
@@ -244,12 +249,12 @@ def get_hut(request: HttpRequest, slug: str, lang: LanguageParam, fields: Query[
     """Get a hut by its slug."""
     activate(lang)
     qs = Hut.objects.select_related("hut_owner").all().filter(is_active=True, is_public=True, slug=slug)
-    media_url = request.build_absolute_uri(settings.MEDIA_URL)
-    iam_media_url = "https://res.cloudinary.com/wodore/image/upload/v1/"
+    media_abs_url = request.build_absolute_uri(settings.MEDIA_URL)
+    # .order_by("org_set__order")
     qs = qs.select_related("hut_type_open", "hut_type_closed", "hut_owner").annotate(
         sources=JSONBAgg(
             JSONObject(
-                logo=Concat(Value(media_url), F("org_set__logo")),
+                logo=Concat(Value(media_abs_url), F("org_set__logo")),
                 fullname="org_set__fullname_i18n",
                 slug="org_set__slug",
                 name="org_set__name_i18n",
@@ -257,32 +262,41 @@ def get_hut(request: HttpRequest, slug: str, lang: LanguageParam, fields: Query[
                 source_id="orgs_source__source_id",
                 public="org_set__is_public",
                 active="org_set__is_active",
+                order="org_set__order",
             ),
-            ordering="org_set__order",
+            # ordering="org_set__order",
+            distinct=True,
         ),
         images=JSONBAgg(
             JSONObject(
                 image="image_set__image",
-                image_url=Concat(Value(iam_media_url), F("image_set__image")),
+                # image_url=Concat(Value(iam_media_url), F("image_set__image")),
                 image_meta=JSONObject(
                     crop="image_set__image_meta__crop",
                     focal="image_set__image_meta__focal",
                     width="image_set__image_meta__width",
                     height="image_set__image_meta__height",
                 ),
+                review_status="image_set__review_status",
                 caption="image_set__caption_i18n",
                 license=JSONObject(
                     slug="image_set__license__slug",
-                    name="image_set__license__name_i18n",
-                    fullname="image_set__license__fullname_i18n",
+                    is_active="image_set__license__is_active",
+                    name=Coalesce("image_set__license__name_i18n", "image_set__license__slug"),
+                    fullname=Coalesce(
+                        "image_set__license__fullname_i18n",
+                        "image_set__license__name_i18n",
+                        "image_set__license__slug",
+                    ),
                     description="image_set__license__description_i18n",
                     link="image_set__license__link_i18n",
+                    no_publication="image_set__license__no_publication",
                 ),
                 author="image_set__author",
                 author_url="image_set__author_url",
                 source_url="image_set__source_url",
                 organization=JSONObject(
-                    logo=Concat(Value(media_url), F("image_set__source_org__logo")),
+                    logo=Concat(Value(media_abs_url), F("image_set__source_org__logo")),
                     fullname="image_set__source_org__fullname_i18n",
                     slug="image_set__source_org__slug",
                     name="image_set__source_org__name_i18n",
@@ -319,9 +333,18 @@ def get_hut(request: HttpRequest, slug: str, lang: LanguageParam, fields: Query[
         raise Http404(msg)
     if len(hut_db.sources) and hut_db.sources[0]["slug"] is None:
         hut_db.sources = []
+    else:
+        # ordering should be done in DB, but somehow it does not work with 'distinct'
+        hut_db.sources = sorted(hut_db.sources, key=lambda x: x["order"])
     if len(hut_db.images) and hut_db.images[0]["image"] is None:
         hut_db.images = []
+    updated_images = []
     for img in hut_db.images:
+        from rich import print
+
+        print(img)
+        if img.get("review_status", "disabled") != "approved" or img.get("license", {}).get("no_publication", True):
+            continue
         img_s = ImageInfoSchema(**img)
         org = img_s.organization
         if org is not None and org.slug is None:
@@ -347,6 +370,16 @@ def get_hut(request: HttpRequest, slug: str, lang: LanguageParam, fields: Query[
         attribution = attribution.strip(" |")
 
         img["attribution"] = attribution
+        updated_images.append(img)
+    hut_db.images = updated_images
+    if hut_db.photos:
+        old_photo = ImageInfoSchema(
+            image=hut_db.photos,
+            image_meta=ImageMetaSchema(),
+            license=LicenseInfoSchema(slug="copyright", name="Copyright", fullname="Copyright"),
+            attribution=hut_db.photos_attribution,
+        )
+        hut_db.images = [old_photo, *hut_db.images]
     link = reverse_lazy("admin:huts_hut_change", args=[hut_db.pk])
     hut_db.edit_link = request.build_absolute_uri(link)
     return hut_db

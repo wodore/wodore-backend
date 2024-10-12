@@ -2,10 +2,21 @@ import typing as t
 
 from hut_services import LocationSchema, OpenMonthlySchema, TranslationSchema
 from ninja import Field, ModelSchema
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    computed_field,
+    field_validator,
+    model_validator,
+    root_validator,
+)
+from typing_extensions import Self
 
 from django_countries import CountryTuple
 
+from django.conf import settings
+
+from server.apps.images.transfomer import ImagorImage
 from server.apps.owners.models import Owner
 
 # from server.apps.translations import TranslationSchema
@@ -41,10 +52,11 @@ class OrganizationBaseSchema(BaseModel):
     fullname: str
     link: str
     logo: str
+    public: bool
+    source_id: str
 
 
 class OrganizationDetailSchema(OrganizationBaseSchema):
-    public: bool
     active: bool
     source_id: str
     # order: int
@@ -67,8 +79,8 @@ class LicenseInfoSchema(BaseModel):
     slug: str
     name: str
     fullname: str
-    description: str | None
-    link: str | None
+    description: str | None = None
+    link: str | None = None
 
 
 class ImageMetaAreaSchema(BaseModel):
@@ -79,24 +91,121 @@ class ImageMetaAreaSchema(BaseModel):
 
 
 class ImageMetaSchema(BaseModel):
-    crop: ImageMetaAreaSchema | None
-    focal: ImageMetaAreaSchema | None
-    width: int | None
-    height: int | None
+    crop: ImageMetaAreaSchema | None = None
+    focal: ImageMetaAreaSchema | None = None
+    width: int | None = None
+    height: int | None = None
+
+
+class TransformImageConfig(BaseModel):
+    name: str = Field(default=None, description="Name of the transformed image, per default '{width}x{height}'")
+    width: int
+    height: int
+    radius: int
+    quality: int | None = None
+    blur: float | None = None
+    use_focal: bool = True
+    crop_to_focal: bool = False
+    focal: ImageMetaAreaSchema | None = Field(
+        default=None, description="Focal point, if not supplied takes the default one"
+    )
+    crop: ImageMetaAreaSchema | None = Field(default=None, description="Crop area")
+
+    @model_validator(mode="after")
+    def set_name(self) -> Self:
+        if self.name is None:
+            self.name = f"{self.width}x{self.height}"
+        return self
 
 
 class ImageInfoSchema(BaseModel):
     image: str
-    image_url: str
+    # image_url: str
     image_meta: ImageMetaSchema
     license: LicenseInfoSchema
-    author: str | None
-    caption: str | None
-    author_url: str | None
-    source_url: str | None
-    organization: OrganizationImageSchema | None
+    author: str | None = None
+    caption: str | None = None
+    author_url: str | None = None
+    source_url: str | None = None
+    organization: OrganizationImageSchema | None = None
     attribution: str | None = None
+    _urls: t.Sequence[TransformImageConfig] | None = None
     # tags: list[str]
+
+    def get_image_configs(self) -> t.Sequence[TransformImageConfig]:
+        if self._urls is None:
+            return [
+                TransformImageConfig(name="avatar", width=180, height=180, radius=90),
+                TransformImageConfig(name="thumb", width=250, height=200, radius=0),
+                TransformImageConfig(name="preview", width=600, height=400, radius=0),
+                TransformImageConfig(name="preview-placeholder", width=300, height=200, radius=0, quality=5, blur=3),
+                TransformImageConfig(name="medium", width=1000, height=800, radius=0),
+                TransformImageConfig(name="large", width=1800, height=1200, radius=0),
+            ]
+        return self._urls
+
+    def add_image_config(
+        self,
+        name: str | None,
+        width: int | None,
+        height: int | None,
+        radius: int = 0,
+        config: TransformImageConfig | None = None,
+    ) -> t.Sequence[TransformImageConfig]:
+        if config is None:
+            assert_msg = "name, width and height must be provided if config is None"
+            assert name is not None, assert_msg
+            assert height is not None, assert_msg
+            assert width is not None, assert_msg
+            config = TransformImageConfig(name=name, width=width, height=height, radius=radius)
+        self.set_image_configs([*self.get_image_configs(), config])
+        return self.get_image_configs()
+
+    def set_image_configs(self, configs: t.Sequence[TransformImageConfig]) -> t.Sequence[TransformImageConfig]:
+        self._urls = configs
+        return self.get_image_configs()
+
+    @computed_field
+    @property
+    def urls(self) -> dict[str, str]:
+        """
+        Return the image URL with the transformations applied.
+        """
+        img_urls = {}
+        for cfg in self.get_image_configs():
+            try:
+                if cfg.focal is not None:
+                    focal = cfg.focal
+                else:
+                    focal = self.image_meta.focal if self.image_meta and cfg.use_focal else None
+                crop_start = None
+                crop_stop = None
+                focal_str = None
+                if focal:
+                    focal_str = f"{focal.x1}x{focal.y1}:{focal.x2}x{focal.y2}"
+                    if not cfg.crop_to_focal:
+                        crop_start, crop_stop = focal_str.split(":")
+                if cfg.crop is not None:
+                    crop_start, crop_stop = (f"{cfg.crop.x1}x{cfg.crop.y1}", f"{cfg.crop.x2}x{cfg.crop.y2}")
+                image_url = self.image if self.image.startswith("http") else f"{settings.MEDIA_URL}/{self.image}"
+                img = (
+                    ImagorImage(image_url)
+                    .transform(
+                        size=f"{cfg.width}x{cfg.height}",
+                        focal=focal_str,
+                        crop_start=crop_start,
+                        crop_stop=crop_stop,
+                        round_corner=cfg.radius,
+                        quality=cfg.quality,
+                        blur=cfg.blur,
+                    )
+                    .get_full_url()
+                )
+                img_urls[cfg.name] = img
+            except Exception as e:
+                print(e)
+                img = "Missing"
+        return img_urls
 
 
 class HutSchemaOptional(BaseModel):
