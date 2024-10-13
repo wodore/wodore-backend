@@ -103,7 +103,7 @@
         de: hauser
         fr: maison
     props_schema: {}
-    order: 40
+    order: 60
 - model: organizations.organization
   pk: 4
   fields:
@@ -128,7 +128,7 @@
           type: string
           enum: ["node", "way", "area"]
       required: ["osm_type"]
-    order: 50
+    order: 80
 - model: organizations.organization
   pk: 5
   fields:
@@ -146,7 +146,7 @@
     color_dark: '#009640'
     config: {}
     props_schema: {}
-    order: 60
+    order: 70
 - model: organizations.organization
   pk: 6
   fields:
@@ -181,7 +181,7 @@
         #  description: "region by refuges.info, see https://www.refuges.info/nav/352/zone/Alpes/?id_polygone_type=1"
         #  type: string
       required: ["slug", "hut_type"]
-    order: 70
+    order: 40
 - model: organizations.organization
   pk: 7
   fields:
@@ -205,3 +205,37 @@
           type: string
       required: ["slug"]
     order: 80
+- model: organizations.organization
+  pk: 8
+  fields:
+    slug: wikicommons
+    is_active: true
+    is_public: true
+    name_de: WikiCommons
+    fullname_de: Wikimedia Commons
+    description_de: ''
+    url_de: https://commons.wikimedia.org
+    link_hut_pattern: https://commons.wikimedia.org/wiki/{{id}}
+    logo: organizations/logos/wikicommons_icon.png
+    color_light: '#e08020'
+    color_dark: '#874d12'
+    config: {}
+    props_schema: {}
+    order: 60
+- model: organizations.organization
+  pk: 8
+  fields:
+    slug: camptocamp
+    is_active: true
+    is_public: true
+    name_de: Camptocamp
+    fullname_de: Camptocamp.org
+    description_de: ''
+    url_de: https://www.camptocamp.org/
+    link_hut_pattern: https://www.camptocamp.org/waypoints/{{id}}
+    logo: organizations/logos/camptocamp_icon.png
+    color_light: '#e08020'
+    color_dark: '#874d12'
+    config: {}
+    props_schema: {}
+    order: 50

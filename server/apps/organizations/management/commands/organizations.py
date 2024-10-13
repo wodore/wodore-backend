@@ -10,6 +10,7 @@ class Command(CRUDCommand):
     use_media_args = True
     model = Organization
     model_names = "organizations"
+    compare_fields = ("slug",)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

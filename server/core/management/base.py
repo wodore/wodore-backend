@@ -1,49 +1,135 @@
 import os
 import shutil
 import sys
+from json import load
 from pathlib import Path
 from typing import Any, Callable, ClassVar, Generic, Protocol, Tuple, TypeVar
+from django.core.files.base import ContentFile
 
 import click
+import yaml
+from hypothesis import target
+from rich import print
+
+from django.apps import apps
 
 from django.conf import settings
+from django.core import serializers
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandParser
-from django.db import models
+from django.core.management.commands.loaddata import Command as LoadDataCommand
+from django.db import (
+    DEFAULT_DB_ALIAS,
+    models,
+)
 from django.db.models.deletion import RestrictedError
 
 from server.core.managers import BaseManager
 
+# def add_fixture_function(obj: "CRUDCommand", force: bool, model: models.Model, **kwargs: Any) -> None:
+#     ignore_media = kwargs.get("ignore_media", False)
+#     fixture_name = getattr(obj, "fixture_name", "")
+#     obj.stdout.write(f"Load data from '{fixture_name}.yaml' fixtures")
+#     if not force and model.objects.all().count() > 0:
+#         try:
+#             force = click.confirm("Careful this might overwrite exisitng data in the database, continue?", default=True)
+#         except click.Abort:
+#             print()
+#             sys.exit(0)
+#     if force or model.objects.all().count() == 0:
+#         try:
+#             call_command("loaddata", fixture_name, app_label=obj.app_label)
+#             obj.stdout.write(obj.style.SUCCESS("Successfully loaded data"))
+#         except Exception as e:
+#             obj.stdout.write(obj.style.ERROR("Loaddata failed, fix issues and run again, error message:"))
+#             obj.stdout.write(obj.style.NOTICE(e.args[0]))
+#             sys.exit(1)
+#         if obj.media_src and not ignore_media:
+#             media_src_rel = obj.media_src.relative_to(settings.BASE_DIR)
+#             media_dst_rel = obj.media_dst.relative_to(settings.BASE_DIR)
+#             obj.stdout.write(f"Copy media files from '{media_src_rel}' to '{media_dst_rel}'")
+#             try:
+#                 shutil.copytree(obj.media_src, obj.media_dst, dirs_exist_ok=True)
+#                 obj.stdout.write(obj.style.SUCCESS("Successfully copied data"))
+#             except FileNotFoundError as e:
+#                 obj.stdout.write(obj.style.ERROR("Could not copy files, error message:"))
+#                 obj.stdout.write(obj.style.NOTICE(e.args[1]))
+#                 sys.exit(1)
+
 
 def add_fixture_function(obj: "CRUDCommand", force: bool, model: models.Model, **kwargs: Any) -> None:
     ignore_media = kwargs.get("ignore_media", False)
+    compare_fields = getattr(
+        obj,
+        "compare_fields",
+        [
+            "id",
+        ],
+    )
     fixture_name = getattr(obj, "fixture_name", "")
     obj.stdout.write(f"Load data from '{fixture_name}.yaml' fixtures")
     if not force and model.objects.all().count() > 0:
         try:
-            force = click.confirm("Careful this might overwrite exisitng data in the database, continue?", default=True)
+            force = click.confirm("Careful this might overwrite existing data in the database, continue?", default=True)
         except click.Abort:
             print()
             sys.exit(0)
     if force or model.objects.all().count() == 0:
         try:
-            call_command("loaddata", fixture_name, app_label=obj.app_label)
-            obj.stdout.write(obj.style.SUCCESS("Successfully loaded data"))
+            # fixture_file = obj.fixture_dir / f"{fixture_name}.yaml"
+            loaddata_command = LoadDataCommand()
+            loaddata_command.verbosity = 0
+            loaddata_command.app_label = obj.app_label
+            loaddata_command.using = DEFAULT_DB_ALIAS
+            loaddata_command.ignore = True
+            loaddata_command.exclude = []
+            loaddata_command.format = None
+            loaddata_command.serialization_formats = serializers.get_public_serializer_formats()
+
+            # fixture_file = loaddata_command.find_fixture_files_in_dir(fixture_name, obj.app_label)
+            fixture_files = loaddata_command.find_fixtures(fixture_name)
+            if not fixture_files:
+                obj.stdout.write(obj.style.ERROR(f"Could not find fixture '{fixture_name}' for model '{obj.model}'."))
+            fixture_file = fixture_files[0][0]  # Get the first fixture file
+            obj.stdout.write(obj.style.NOTICE(f"Fixture file: {fixture_file}"))
+            with open(fixture_file, "r") as f:
+                fixture_data = yaml.safe_load(f)
+            for item in fixture_data:
+                item_fields = item["fields"]
+                try:
+                    fixture_model = apps.get_model(*item["model"].split("."))
+                except LookupError:
+                    obj.stdout.write(
+                        obj.style.ERROR(f"Could not find model '{item['model']}' from fixture '{fixture_file}'.")
+                    )
+                    continue
+                if not ignore_media:
+                    for field in fixture_model._meta.get_fields():
+                        if field.name in item_fields and isinstance(field, (models.FileField, models.ImageField)):
+                            img_path = item_fields[field.name]
+                            file_path = os.path.realpath(
+                                os.path.join(os.path.dirname(fixture_file), "..", "media", img_path)
+                            )
+                            # obj.stdout.write(obj.style.NOTICE(f"Upload image: {file_path}"))
+                            if os.path.exists(file_path):
+                                with open(file_path, "rb") as file:
+                                    item["fields"][field.name] = ContentFile(
+                                        file.read(), name=img_path.replace(field.upload_to, "").strip("/")
+                                    )
+
+                compare_dict = {k: v for k, v in item_fields.items() if k in compare_fields and k not in ["id", "pk"]}
+                if "id" in compare_fields or "pk" in compare_fields:
+                    compare_dict["id"] = item["pk"]
+                m, created = model.objects.update_or_create(**compare_dict, defaults=item["fields"])
+                if created:
+                    obj.stdout.write(f"Created new entry '{m}' in {fixture_model._meta.db_table} db")
+                else:
+                    obj.stdout.write(f"Updated entry '{m}' in {fixture_model._meta.db_table} db")
+            obj.stdout.write("Fixture loaded successfully")
         except Exception as e:
-            obj.stdout.write(obj.style.ERROR("Loaddata failed, fix issues and run again, error message:"))
-            obj.stdout.write(obj.style.NOTICE(e.args[0]))
+            obj.stdout.write(f"Error loading fixture: {e}")
+            # obj.stdout.write(obj.style.NOTICE(e.args[1]))
             sys.exit(1)
-        if obj.media_src and not ignore_media:
-            media_src_rel = obj.media_src.relative_to(settings.BASE_DIR)
-            media_dst_rel = obj.media_dst.relative_to(settings.BASE_DIR)
-            obj.stdout.write(f"Copy media files from '{media_src_rel}' to '{media_dst_rel}'")
-            try:
-                shutil.copytree(obj.media_src, obj.media_dst, dirs_exist_ok=True)
-                obj.stdout.write(obj.style.SUCCESS("Successfully copied data"))
-            except FileNotFoundError as e:
-                obj.stdout.write(obj.style.ERROR("Could not copy files, error message:"))
-                obj.stdout.write(obj.style.NOTICE(e.args[1]))
-                sys.exit(1)
 
 
 def dump_fixture_function(obj: "CRUDCommand", force: bool, model: models.Model, **kwargs: Any) -> None:
@@ -178,6 +264,7 @@ class CRUDCommand(BaseCommand, Generic[TModel]):
     media_src: str | Path | None = None  # copy media file from this location to
     media_dst: str | Path | None = None  # this location (destination is not required an per default settins.MEDIA_ROOT)
     fixture_name: str = ""  # name for fixture under <app_label>/fixtures/<fixture_name>.yaml
+    compare_fields: list[str] = ["id"]  # compare on this fields, if it exists it is only update
 
     # drop settings
     drop_function: None | CRUDFunction[TModel] = (

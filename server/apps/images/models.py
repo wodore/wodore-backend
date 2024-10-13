@@ -4,9 +4,6 @@ import mimetypes
 import os
 import time
 import uuid
-from ast import Or
-from email import header
-from re import L
 
 import requests
 from colorfield.fields import ColorField
