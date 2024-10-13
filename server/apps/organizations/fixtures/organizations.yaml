@@ -1,18 +1,21 @@
 - model: organizations.organization
   pk: 0
   fields:
+    i18n:
+      url_en: https://www.alpsonline.org/guest/login?lang=en
+      url_fr: https://www.alpsonline.org/guest/login?lang=fr
+      url_it: https://www.alpsonline.org/guest/login?lang=it
+      description_en: Online reservation system for mountain huts.
+      description_fr: ''
+      description_it: ''
     slug: hrs
     is_active: true
     is_public: true
-    name_de: Alpsonline
-    fullname_de: Alpsonline
-    description_de: 'Online Reservations System für Hütten.'
-    description_en: 'Online reservation system for mountain huts.'
-    url_de: https://www.alpsonline.org/guest/login?lang=de_CH
-    url_en: https://www.alpsonline.org/guest/login?lang=en
-    url_fr: https://www.alpsonline.org/guest/login?lang=fr
-    url_it: https://www.alpsonline.org/guest/login?lang=it
-    attribution_de: ''
+    name: Alpsonline
+    fullname: Alpsonline
+    description: Online Reservations System für Hütten.
+    url: https://www.alpsonline.org/guest/login?lang=de_CH
+    attribution: ''
     link_hut_pattern: https://www.alpsonline.org/reservation/calendar?hut_id={{id}}&lang={{lang}}
     logo: organizations/logos/hrs_icon.png
     color_light: '#689751'
@@ -23,52 +26,54 @@
 - model: organizations.organization
   pk: 1
   fields:
+    i18n:
+      url_en: https://www.sac-cas.ch/en/
+      url_fr: https://www.sac-cas.ch/fr/
+      url_it: https://www.sac-cas.ch/it/
+      name_en: SAC
+      name_fr: CAS
+      name_it: CAS
+      fullname_en: Swiss Alpine Club
+      fullname_fr: Club Alpin Suisse
+      fullname_it: Club Alpino Svizzero
+      description_en: Leading mountaineering club in Switzerland.
     slug: sac
     is_active: true
     is_public: true
-    name_de: SAC
-    name_en: SAC
-    name_fr: CAS
-    name_it: CAS
-    fullname_de: Schweizer Alpen Club
-    fullname_en: Swiss Alpine Club
-    fullname_fr: Club Alpin Suisse
-    fullname_it: Club Alpino Svizzero
-    description_de: 'Der führende Verband für Bergsport in der Schweiz.'
-    description_en: 'Leading mountaineering club in Switzerland.'
-    url_de: https://www.sac-cas.ch/de/
-    url_en: https://www.sac-cas.ch/en/
-    url_fr: https://www.sac-cas.ch/fr/
-    url_it: https://www.sac-cas.ch/it/
-    attribution_de: ''
+    name: SAC
+    fullname: Schweizer Alpen Club
+    description: Der führende Verband für Bergsport in der Schweiz.
+    url: https://www.sac-cas.ch/de/
+    attribution: ''
     link_hut_pattern: https://www.sac-cas.ch/{{lang}}/{{config.huts_tours.get(lang,'de')}}/{{config.portal.get(lang,'de')}}/{{id}}
     logo: organizations/logos/sac_icon.png
     color_light: '#008000'
     color_dark: '#008000'
     config:
-      huts_tours:
-        en: huts-and-tours
-        de: huetten-und-touren
-        fr: cabanes-et-courses
-        it: capanne-e-escursioni
       portal:
-        en: sac-route-portal
         de: sac-tourenportal
+        en: sac-route-portal
         fr: portail-des-courses-du-cas
         it: portale-escursionistico-del-cas
+      huts_tours:
+        de: huetten-und-touren
+        en: huts-and-tours
+        fr: cabanes-et-courses
+        it: capanne-e-escursioni
     props_schema: {}
     order: 20
 - model: organizations.organization
   pk: 2
   fields:
+    i18n: {}
     slug: gipfelbuch
     is_active: true
     is_public: true
-    name_de: Gipfelbuch
-    fullname_de: Gipfelbuch
-    description_de: 'Portal für aktuelle Verhältnisse, Tourenbeschreibungen und mehr.'
-    url_de: https://www.gipfelbuch.ch
-    attribution_de: ''
+    name: Gipfelbuch
+    fullname: Gipfelbuch
+    description: Portal für aktuelle Verhältnisse, Tourenbeschreibungen und mehr.
+    url: https://www.gipfelbuch.ch
+    attribution: ''
     link_hut_pattern: https://www.gipfelbuch.ch/huetten/{{id}}-{{props.slug}}
     logo: organizations/logos/gipfelbuch_icon.png
     color_light: '#414140'
@@ -76,24 +81,26 @@
     config: {}
     props_schema:
       type: object,
+      required:
+      - slug
       properties:
         slug:
-          description: "gipfelbuch specific slug"
           type: string
-      required: ["slug"]
+          description: gipfelbuch specific slug
     order: 30
 - model: organizations.organization
   pk: 3
   fields:
+    i18n:
+      url_fr: https://naturfreunde.ch/fr/
     slug: nfs
     is_active: true
     is_public: true
-    name_de: Naturfreunde
-    fullname_de: Naturfreunde Schweiz
-    description_de: 'Organization der Naturefreunde Schweiz.'
-    url_de: https://naturfreunde.ch
-    url_fr: https://naturfreunde.ch/fr/
-    attribution_de: ''
+    name: Naturfreunde
+    fullname: Naturfreunde Schweiz
+    description: Organization der Naturefreunde Schweiz.
+    url: https://naturfreunde.ch
+    attribution: ''
     link_hut_pattern: https://naturfreunde.ch/{{config.house.get(lang,'de')}}/{{props.slug}}
     logo: organizations/logos/nfs_icon.png
     color_light: '#e5162a'
@@ -107,14 +114,19 @@
 - model: organizations.organization
   pk: 4
   fields:
+    i18n:
+      attribution_en: (C) OpenStreetMap contributors
+      description_en: ''
+      description_fr: ''
+      description_it: ''
     slug: osm
     is_active: true
     is_public: true
-    name_de: OSM
-    fullname_de: Open Street Map
-    description_de: 'Grösster Kartendienst mit frei verfügbaren Daten.'
-    url_de: https://www.openstreetmap.org
-    attribution_en: '(C) OpenStreetMap contributors'
+    name: OSM
+    fullname: Open Street Map
+    description: Grösster Kartendienst mit frei verfügbaren Daten.
+    url: https://www.openstreetmap.org
+    attribution: null
     link_hut_pattern: https://www.openstreetmap.org/{{props.osm_type}}/{{id}}
     logo: organizations/logos/osm_icon.png
     color_light: '#13325d'
@@ -122,24 +134,32 @@
     config: {}
     props_schema:
       type: object,
+      required:
+      - osm_type
       properties:
         osm_type:
-          description: "osm object type: node, way, or area"
+          enum:
+          - node
+          - way
+          - area
           type: string
-          enum: ["node", "way", "area"]
-      required: ["osm_type"]
+          description: 'osm object type: node, way, or area'
     order: 80
 - model: organizations.organization
   pk: 5
   fields:
+    i18n:
+      description_en: ''
+      description_fr: ''
+      description_it: ''
     slug: wikidata
     is_active: true
     is_public: false
-    name_de: Wikidata
-    fullname_de: Wikidata
-    description_de: 'Freie Informationen, verwendet von Wikipedia.'
-    url_de: https://www.wikidata.org
-    attribution_de: ''
+    name: Wikidata
+    fullname: Wikidata
+    description: Freie Informationen, verwendet von Wikipedia.
+    url: https://www.wikidata.org
+    attribution: ''
     link_hut_pattern: https://www.wikidata.org/wiki/{{id}}
     logo: organizations/logos/wikidata_icon.png
     color_light: '#009640'
@@ -150,48 +170,57 @@
 - model: organizations.organization
   pk: 6
   fields:
+    i18n:
+      attribution_en: (C) The refuges.info contributors
+      attribution_fr: (C) Les refuges.info contributors
+      description_en: Free shelter information for the mountains (French).
     slug: refuges
     is_active: true
     is_public: true
-    name_de: Refuges
-    fullname_de: RefugesInfo
-    description_de: 'Freie Übernachtungs informationen in den Bergen (Französisch).'
-    description_en: 'Free shelter information for the mountains (French).'
-    url_de: https://www.refuges.info/
-    attribution_fr: '(C) Les refuges.info contributors'
-    attribution_en: '(C) The refuges.info contributors'
-    #link_hut_pattern: https://www.refuges.info/point/{{id}} # enough
-    link_hut_pattern: https://www.refuges.info/point/{{id}}/{{props.hut_type}}/{{props.slug}}  ## link without massif
-    #link_hut_pattern: https://www.refuges.info/point/{{id}}/{{hut_type}}/{{massif}}/{{slug}}  ## full link, but id is enough
+    name: Refuges
+    fullname: RefugesInfo
+    description: Freie Übernachtungs informationen in den Bergen (Französisch).
+    url: https://www.refuges.info/
+    attribution: ''
+    link_hut_pattern: https://www.refuges.info/point/{{id}}/{{props.hut_type}}/{{props.slug}}
     logo: organizations/logos/refugesinfo_icon.png
     color_light: '#e08020'
     color_dark: '#874d12'
     config: {}
     props_schema:
       type: object,
+      required:
+      - slug
+      - hut_type
       properties:
         slug:
-          description: "hut slug by refuges.info"
           type: string
+          description: hut slug by refuges.info
         hut_type:
-          description: "hut type by refuges.info: cabane-non-gardee, refuge-garde, gite-d-etape or batiment-en-montagne"
+          enum:
+          - cabane-non-gardee
+          - refuge-garde
+          - gite-d-etape
+          - batiment-en-montagne
           type: string
-          enum: ["cabane-non-gardee", "refuge-garde", "gite-d-etape", "batiment-en-montagne"]
-        #massif:
-        #  description: "region by refuges.info, see https://www.refuges.info/nav/352/zone/Alpes/?id_polygone_type=1"
-        #  type: string
-      required: ["slug", "hut_type"]
+          description: 'hut type by refuges.info: cabane-non-gardee, refuge-garde,
+            gite-d-etape or batiment-en-montagne'
     order: 40
 - model: organizations.organization
   pk: 7
   fields:
+    i18n:
+      description_en: ''
+      description_fr: ''
+      description_it: ''
     slug: wodore
     is_active: true
     is_public: false
-    name_de: Wodore
-    fullname_de: Wodore
-    description_de: ''
-    url_de: https://wodore.com
+    name: Wodore
+    fullname: Wodore
+    description: ''
+    url: https://wodore.com
+    attribution: null
     link_hut_pattern: https://wodore.com/huts/{{props.slug}}
     logo: organizations/logos/wodore_icon.png
     color_light: '#e08020'
@@ -199,22 +228,36 @@
     config: {}
     props_schema:
       type: object,
+      required:
+      - slug
       properties:
         slug:
-          description: "hut slug by refuges.info"
           type: string
-      required: ["slug"]
+          description: hut slug by refuges.info
     order: 80
 - model: organizations.organization
-  pk: 8
+  pk: 9
   fields:
+    i18n:
+      name_en: WikiCommons
+      name_fr: WikiCommons
+      name_it: WikiCommons
+      fullname_en: Wikimedia Commons
+      fullname_fr: Wikimedia Commons
+      fullname_it: Wikimedia Commons
+      attribution_en: https://commons.wikimedia.org
+      attribution_fr: https://commons.wikimedia.org
+      description_en: ''
+      description_fr: ''
+      description_it: ''
     slug: wikicommons
     is_active: true
     is_public: true
-    name_de: WikiCommons
-    fullname_de: Wikimedia Commons
-    description_de: ''
-    url_de: https://commons.wikimedia.org
+    name: WikiCommons
+    fullname: Wikimedia Commons
+    description: ''
+    url: https://commons.wikimedia.org
+    attribution: https://commons.wikimedia.org
     link_hut_pattern: https://commons.wikimedia.org/wiki/{{id}}
     logo: organizations/logos/wikicommons_icon.png
     color_light: '#e08020'
@@ -223,15 +266,29 @@
     props_schema: {}
     order: 60
 - model: organizations.organization
-  pk: 8
+  pk: 25
   fields:
+    i18n:
+      url_en: https://www.camptocamp.org/
+      url_fr: https://www.camptocamp.org/
+      url_it: https://www.camptocamp.org/
+      name_en: Camptocamp
+      name_fr: Camptocamp
+      name_it: Camptocamp
+      fullname_en: Camptocamp.org
+      fullname_fr: Camptocamp.org
+      fullname_it: Camptocamp.org
+      description_en: ''
+      description_fr: ''
+      description_it: ''
     slug: camptocamp
     is_active: true
     is_public: true
-    name_de: Camptocamp
-    fullname_de: Camptocamp.org
-    description_de: ''
-    url_de: https://www.camptocamp.org/
+    name: Camptocamp
+    fullname: Camptocamp.org
+    description: ''
+    url: https://www.camptocamp.org/
+    attribution: null
     link_hut_pattern: https://www.camptocamp.org/waypoints/{{id}}
     logo: organizations/logos/camptocamp_icon.png
     color_light: '#e08020'

@@ -3,7 +3,7 @@ import shutil
 import sys
 from json import load
 from pathlib import Path
-from typing import Any, Callable, ClassVar, Generic, Protocol, Tuple, TypeVar
+from typing import Any, Callable, ClassVar, Generic, Protocol, Sequence, Tuple, TypeVar
 from django.core.files.base import ContentFile
 
 import click
@@ -25,36 +25,6 @@ from django.db import (
 from django.db.models.deletion import RestrictedError
 
 from server.core.managers import BaseManager
-
-# def add_fixture_function(obj: "CRUDCommand", force: bool, model: models.Model, **kwargs: Any) -> None:
-#     ignore_media = kwargs.get("ignore_media", False)
-#     fixture_name = getattr(obj, "fixture_name", "")
-#     obj.stdout.write(f"Load data from '{fixture_name}.yaml' fixtures")
-#     if not force and model.objects.all().count() > 0:
-#         try:
-#             force = click.confirm("Careful this might overwrite exisitng data in the database, continue?", default=True)
-#         except click.Abort:
-#             print()
-#             sys.exit(0)
-#     if force or model.objects.all().count() == 0:
-#         try:
-#             call_command("loaddata", fixture_name, app_label=obj.app_label)
-#             obj.stdout.write(obj.style.SUCCESS("Successfully loaded data"))
-#         except Exception as e:
-#             obj.stdout.write(obj.style.ERROR("Loaddata failed, fix issues and run again, error message:"))
-#             obj.stdout.write(obj.style.NOTICE(e.args[0]))
-#             sys.exit(1)
-#         if obj.media_src and not ignore_media:
-#             media_src_rel = obj.media_src.relative_to(settings.BASE_DIR)
-#             media_dst_rel = obj.media_dst.relative_to(settings.BASE_DIR)
-#             obj.stdout.write(f"Copy media files from '{media_src_rel}' to '{media_dst_rel}'")
-#             try:
-#                 shutil.copytree(obj.media_src, obj.media_dst, dirs_exist_ok=True)
-#                 obj.stdout.write(obj.style.SUCCESS("Successfully copied data"))
-#             except FileNotFoundError as e:
-#                 obj.stdout.write(obj.style.ERROR("Could not copy files, error message:"))
-#                 obj.stdout.write(obj.style.NOTICE(e.args[1]))
-#                 sys.exit(1)
 
 
 def add_fixture_function(obj: "CRUDCommand", force: bool, model: models.Model, **kwargs: Any) -> None:
@@ -161,7 +131,7 @@ def dump_fixture_function(obj: "CRUDCommand", force: bool, model: models.Model, 
         if obj.media_src:
             obj.stdout.write(
                 obj.style.WARNING(
-                    f"Make sure to manually copy any new/changed logo from '{obj.media_dst.relative_to(settings.BASE_DIR)}' to '{obj.media_src.relative_to(settings.BASE_DIR)}'"
+                    f"Make sure to manually copy any new/changed media files from '{obj.media_dst.relative_to(settings.BASE_DIR)}' to '{obj.media_src.relative_to(settings.BASE_DIR)}'"
                 )
             )
         obj.stdout.write(obj.style.SUCCESS(f"Successfully saved data to '{fixture_path_rel}'"))
@@ -264,7 +234,7 @@ class CRUDCommand(BaseCommand, Generic[TModel]):
     media_src: str | Path | None = None  # copy media file from this location to
     media_dst: str | Path | None = None  # this location (destination is not required an per default settins.MEDIA_ROOT)
     fixture_name: str = ""  # name for fixture under <app_label>/fixtures/<fixture_name>.yaml
-    compare_fields: list[str] = ["id"]  # compare on this fields, if it exists it is only update
+    compare_fields: Sequence[str] = ["id"]  # compare on this fields, if it exists it is only update
 
     # drop settings
     drop_function: None | CRUDFunction[TModel] = (
