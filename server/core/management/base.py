@@ -78,7 +78,7 @@ def add_fixture_function(obj: "CRUDCommand", force: bool, model: models.Model, *
                         if field.name in item_fields and isinstance(field, (models.FileField, models.ImageField)):
                             img_path = item_fields[field.name]
                             file_path = os.path.realpath(
-                                os.path.join(os.path.dirname(fixture_file), "..", "media", img_path)
+                                os.path.join(obj.media_src if obj.media_src is not None else "", img_path)
                             )
                             # obj.stdout.write(obj.style.NOTICE(f"Upload image: {file_path}"))
                             if os.path.exists(file_path):
@@ -86,6 +86,10 @@ def add_fixture_function(obj: "CRUDCommand", force: bool, model: models.Model, *
                                     item["fields"][field.name] = ContentFile(
                                         file.read(), name=img_path.replace(field.upload_to, "").strip("/")
                                     )
+                            else:
+                                obj.stdout.write(
+                                    obj.style.ERROR(f"Could not find file '{file_path}' from fixture '{fixture_file}'.")
+                                )
 
                 compare_dict = {k: v for k, v in item_fields.items() if k in compare_fields and k not in ["id", "pk"]}
                 if "id" in compare_fields or "pk" in compare_fields:
