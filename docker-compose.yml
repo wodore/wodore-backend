@@ -1,4 +1,3 @@
-version: '3.8'
 volumes:
   pgdata:
   django-static:
@@ -7,6 +6,7 @@ services:
   db:
     #image: "postgres:15-alpine"
     image: "postgis/postgis:16-3.4-alpine"
+    container_name: django-local-postgis
     restart: unless-stopped
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -15,6 +15,41 @@ services:
     env_file: ./config/.env
     ports:
       - "5432:5432"
+  imagor:
+    image: shumc/imagor:latest
+    container_name: django-local-imagor
+    env_file: ./config/.env
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    networks:
+      - imagor
+    volumes:
+      - ./media:/mnt/data/source/media
+      - ./media/imagor_data/storage:/mnt/data/storage
+      - ./media/imagor_data/result:/mnt/data/result
+    environment:
+      PORT: 8079
+      DEBUG: 1
+      IMAGOR_UNSAFE: 1 # unsafe URL for testing
+      IMAGOR_SECRET: ${IMAGOR_KEY}
+      IMAGOR_AUTO_WEBP: 1
+      IMAGOR_AUTO_ACIF: 1
+      IMAGOR_SIGNER_TYPE: sha256
+        #IMAGOR_SIGNER_TRUNCATE: 40
+
+      FILE_LOADER_BASE_DIR: /mnt/data/source # enable file loader by specifying base dir
+
+      FILE_STORAGE_BASE_DIR: /mnt/data/storage # enable file storage by specifying base dir
+      FILE_STORAGE_MKDIR_PERMISSION: 0755 # optional
+      FILE_STORAGE_WRITE_PERMISSION: 0666 # optional
+
+      FILE_RESULT_STORAGE_BASE_DIR: /mnt/data/result # enable file result storage by specifying base dir
+      FILE_RESULT_STORAGE_MKDIR_PERMISSION: 0755 # optional
+      FILE_RESULT_STORAGE_WRITE_PERMISSION: 0666 # optional
+      IMAGOR_RESULT_STORAGE_PATH_STYLE: size
+    ports:
+      - "8079:8079"
 
 
         #web:
@@ -66,6 +101,7 @@ services:
 networks:
   # Network for postgres, use it for services that need access to the db:
   postgresnet:
+  imagor:
   # Network for your internals, use it by default:
   webnet:
 

@@ -1,4 +1,5 @@
 import io
+from django.utils.timezone import make_aware
 import logging
 import mimetypes
 import os
@@ -31,6 +32,7 @@ from server.apps.meta_image_field.schema import MetaImageSchema
 from server.apps.organizations.models import Organization
 from server.apps.utils.fields import MonitorFields
 from server.core.managers import BaseMutlilingualManager
+import contextlib
 
 # from .forms import CustomImageField
 User = get_user_model()
@@ -231,7 +233,7 @@ class Image(TimeStampedModel):
             source_ident = photo_schema.source.ident if photo_schema.source and photo_schema.source.ident else ""
 
         if cls.objects.filter(source_ident=source_ident).exists():
-            print("Image already exists, skipping...")
+            logging.info("Image already exists, skipping...")
             return cls.objects.get(source_ident=source_ident)
 
         headers = {"User-Agent": "Wodore Backend Bot/1.0 (https://www.wodore.com)"}
@@ -245,16 +247,18 @@ class Image(TimeStampedModel):
                 if "-originale" in photo_schema.raw_url:
                     # fix wrong url for refuges.info images
                     photo_schema.raw_url = photo_schema.raw_url.replace("-originale", "-reduite")
-                    return cls.create_image_from_schema(photo_schema, path=path, default_caption=default_caption)
+                    return cls.create_image_from_schema(
+                        photo_schema, path=path, default_caption=default_caption, tags=tags
+                    )
                 logging.warning(
                     "Image not found: %s", photo_schema.source.url if photo_schema.source else photo_schema.raw_url
                 )
                 return None
         except requests.exceptions.ConnectionError:
-            logging.warning("Connection error: %s. Sleep for 1 min.", photo_schema.raw_url)
-            time.sleep(60)
+            logging.warning("Connection error: %s. Sleep for 4 min.", photo_schema.raw_url)
+            time.sleep(4 * 60)
             # try again
-            return cls.create_image_from_schema(photo_schema, path=path, default_caption=default_caption)
+            return cls.create_image_from_schema(photo_schema, path=path, default_caption=default_caption, tags=tags)
         except:
             raise  # Re-raise the exception if it's not a 404 error
         image_content = response.content
@@ -304,6 +308,15 @@ class Image(TimeStampedModel):
         else:
             source_org = None
 
+        # tags
+        tags_set = []
+        for tag in set((tags or []) + (photo_schema.tags or [])):
+            tag_obj, created = ImageTag.objects.get_or_create(slug=tag, defaults={"name_en": tag})
+            if created:
+                img_review_status = Image.ReviewStatusChoices.pending
+                review_comment += f"- Added new tag: '{tag}'\n"
+            tags_set.append(tag_obj)
+
         image = cls(
             id=image_uuid,
             review_status=img_review_status,
@@ -324,8 +337,18 @@ class Image(TimeStampedModel):
             source_url_raw=photo_schema.raw_url if photo_schema.raw_url else "",
             source_ident=source_ident,
             image_meta=MetaImageSchema(width=width, height=height).model_dump(exclude_none=True),
-            capture_date=photo_schema.capture_date,
+            capture_date=(
+                None
+                if photo_schema.capture_date is None
+                else (
+                    photo_schema.capture_date
+                    if photo_schema.capture_date.tzinfo is not None
+                    else make_aware(photo_schema.capture_date) if photo_schema.capture_date else None
+                )
+            ),
         )
+        image.save()  # this is needed to add the tags
+        image.tags.set(tags_set)
 
         # Add translations
         updated = False
@@ -361,8 +384,8 @@ class Image(TimeStampedModel):
 
         try:
             # image.save()
-            print("Image added successfully!")
+            logging.info("Image added successfully!")
             return image
         except IntegrityError as e:
-            print(f"Error adding image: {e}")
+            logging.error("Error adding image %s: %s", image.caption_de, e)
             return None

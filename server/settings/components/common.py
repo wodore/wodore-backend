@@ -199,6 +199,7 @@ LOCALE_PATHS = ("locale/",)
 USE_TZ = True
 # TIME_ZONE = 'UTC'
 TIME_ZONE = "Europe/Zurich"
+
 MODELTRANS_FALLBACK = {
     "default": (LANGUAGE_CODE,),
     "de": ("en", "fr"),

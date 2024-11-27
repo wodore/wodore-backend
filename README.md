@@ -1,14 +1,35 @@
 # wodore
 
+## First time setup
+```bash
+cp config/.env.template config/.env
+ln -s config/.env .env
+```
+
+## Start Database and Image Service
+
+This is needed once after each restart of the computer
+
+```bash
+docker compose up --build -d
+poetry install
+poetry shell
+```
+
+## Start Application
+```bash
+(.venv) app migrate
+(.venv) app runserver
+```
 
 
 ```bash
-./manage.py migrate
-./manage.py loaddata --app huts organizations
+(.venv) app migrate
+(.venv) app loaddata --app huts organizations
 ```
 
 ```bash
-./manage.py squashmigrations huts 0006 --squashed-name init
+(.venv) app squashmigrations huts 0006 --squashed-name init
 ```
 
 ```bash
@@ -18,7 +39,8 @@ npx tailwindcss -o server/apps/admin/static/css/styles.css --minify --watch
 Update hut-service
 ```bash
 # only if access to hut-services-private
-poetry update hut-serve
+poetry update hut-services
+poetry update hut-services-private
 poetry install -E private 
 ```
 
