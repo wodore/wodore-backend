@@ -2,9 +2,7 @@
 # This Dockerfile uses multi-stage build to customize DEV and PROD images:
 # https://docs.docker.com/develop/develop-images/multistage-build/
 
-################################################################################
-## PYTHON BASE
-FROM ghcr.io/osgeo/gdal:alpine-small-latest as python-base
+FROM python:3.11.5-slim-bookworm AS python-base
 
 LABEL maintainer="wodore.com"
 LABEL vendor="wodore.com"
@@ -28,58 +26,61 @@ ENV DJANGO_ENV=${DJANGO_ENV} \
   PIP_DISABLE_PIP_VERSION_CHECK=1 \
   PIP_DEFAULT_TIMEOUT=100 \
   PIP_ROOT_USER_ACTION=ignore \
+  # tini:
+  TINI_VERSION=v0.19.0 \
   # poetry:
-  POETRY_VERSION=1.8.3 \
+  POETRY_VERSION=1.8.2 \
   POETRY_NO_INTERACTION=1 \
   POETRY_VIRTUALENVS_IN_PROJECT=1 \
   POETRY_VIRTUALENVS_CREATE=1 \
   POETRY_CACHE_DIR='/var/cache/pypoetry' \
   POETRY_HOME='/usr/local'
 
-#SHELL ["/bin/bash", "-eo", "pipefail", "-c"]
+SHELL ["/bin/bash", "-eo", "pipefail", "-c"]
 
 WORKDIR /code
 
 #RUN --mount=type=ssh bundle install
 
-# RUN apk add --no-cache \
-#     bash 
-# 
+RUN groupadd -g "${GID}" -r web \
+  && useradd -d '/code' -g web -l -r -u "${UID}" web
 
 
-# System deps (we don't use exact versions because it is hard to update them,
-# pin when needed):
-# hadolint ignore=DL3008
-RUN apk update && \
-    apk upgrade && \
-    apk add --no-cache \
-    bash \
-    python3=~3.12 \
-    # add user and group
-    && addgroup -g "${GID}"  web \
-    && adduser -h '/code' -G web -D -u "${UID}" --no-create-home web
 
-################################################################################
 ## BUILDER
-FROM python-base as builder
-
-    #build-essential \
+FROM python-base as builder-base
 
 # System deps (we don't use exact versions because it is hard to update them,
 # pin when needed):
 # hadolint ignore=DL3008
-RUN apk update && \
-    apk upgrade && \
-    apk add --no-cache \
-    build-base \
+RUN apt-get update && apt-get upgrade -y \
+  && apt-get install --no-install-recommends -y \
+    bash \
+    brotli \
+    build-essential \
+    curl \
+    gettext \
     git \
     openssh-client \
     libpq-dev \
-    poetry=~${POETRY_VERSION} \
+    wait-for-it \
+    binutils \
+    libproj-dev \
+    gdal-bin \
+  # Installing `tini` utility:
+  # https://github.com/krallin/tini
+  # Get architecture to download appropriate tini release:
+  # See https://github.com/wemake-services/wemake-django-template/issues/1725
+  && dpkgArch="$(dpkg --print-architecture | awk -F- '{ print $NF }')" \
+  && curl -o /usr/local/bin/tini -sSLO "https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini-${dpkgArch}" \
+  && chmod +x /usr/local/bin/tini && tini --version \
   # Installing `poetry` package manager:
   # https://github.com/python-poetry/poetry
-  # && curl -sSL 'https://install.python-poetry.org' | python - \
-  && poetry --version
+  && curl -sSL 'https://install.python-poetry.org' | python - \
+  && poetry --version \
+  # Cleaning cache:
+  && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
+  && apt-get clean -y && rm -rf /var/lib/apt/lists/*
 
 #&& ssh-keyscan github.com >> ~/.ssh/known_hosts
 #RUN echo "Host remotehost\n\tStrictHostKeyChecking no\n" >> /root/.ssh/config
@@ -104,8 +105,8 @@ RUN chown web:web -R '/code' \
   && chown web:web '/var/www/django/static' '/var/www/django/media'
 
 # Copy only requirements, to cache them in docker layer
-COPY --chown=web:web ./poetry.lock ./pyproject.toml ./docker/django/remove_locale.sh /code/
-#COPY --chown=web:web  /code/remove_locale.sh
+COPY --chown=web:web ./poetry.lock ./pyproject.toml /code/
+COPY --chown=web:web ./docker/django/remove_locale.sh /code/remove_locale.sh
 
 # Project initialization:
 # hadolint ignore=SC2046
@@ -116,48 +117,47 @@ RUN --mount=type=cache,target="$POETRY_CACHE_DIR" \
   && poetry run pip install -U pip \
   && poetry install \
    $(if [ "$WITH_DEV" = '0' ]; then echo '--only main'; fi) \
-    --no-root --no-interaction --no-ansi --sync --extras private
-
-RUN chmod +x ./remove_locale.sh  \
+    --no-interaction --no-ansi --sync --extras private \
+  && chmod +x remove_locale.sh \
   && ./remove_locale.sh
 
-################################################################################
-## PRODUCTION
 FROM python-base as production
 
-ADD --chown=web:web https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh /usr/local/bin/wait-for-it
 # this packages are required by geodjango
 # System deps (we don't use exact versions because it is hard to update them,
 # pin when needed):
 # hadolint ignore=DL3008
-RUN apk update && \
-    apk upgrade && \
-    apk add --no-cache \
-    postgresql-client \
-    geos \
+RUN apt-get update && apt-get upgrade -y \
+  && apt-get install --no-install-recommends -y \
     brotli \
     gettext \
-    tini \
-    && chmod +x /usr/local/bin/wait-for-it
+    wait-for-it \
+    gdal-bin 
+    #libproj-dev \
 
 ENV VIRTUAL_ENV=/code/.venv \
     PATH="/code/.venv/bin:$PATH"
-COPY --from=builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
+COPY --from=builder-base ${VIRTUAL_ENV} ${VIRTUAL_ENV}
+COPY --from=builder-base "/usr/local/bin/tini" "/usr/local/bin/tini"
+
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y \
+    curl
 
 # This is a special case. We need to run this script as an entry point:
 COPY ./docker/django/entrypoint.sh /docker-entrypoint.sh
 
+# Setting up proper permissions:
+RUN chmod +x '/docker-entrypoint.sh' \
+  # Replacing line separator CRLF with LF for Windows users:
+  && sed -i 's/\r$//g' '/docker-entrypoint.sh'
 
 WORKDIR /code
 COPY --chown=web:web ./manage.py /code/
 COPY --chown=web:web server /code/server
 # TODO: collectstatic in build process and copy from there!
-#COPY --chown=web:web static /code/static 
+COPY --chown=web:web static /code/static 
 COPY --chown=web:web ${CONFIG_DIR} /code/config
-
-# Setting up proper permissions:
-RUN chmod +x '/docker-entrypoint.sh' \
-  && python manage.py collectstatic --noinput
 
 # Running as non-root user:
 # TODO

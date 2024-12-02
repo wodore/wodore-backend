@@ -19,6 +19,7 @@ django-http-referrer-policy = "^1.1"
 django-permissions-policy = "^4.14"
 django-ninja = "^1.0"
 
+whitenoise = {version = "^6.8.2", extras = ["brotli"]}
 psycopg2-binary = "^2.9"
 gunicorn = "^20.0"
 python-decouple = "^3.8"

@@ -33,20 +33,16 @@ _COLLECTSTATIC_DRYRUN = config(
     default=False,
 )
 # Adding STATIC_ROOT to collect static files via 'collectstatic':
-STATIC_ROOT = ".static" if _COLLECTSTATIC_DRYRUN else "/var/www/django/static"
+if _COLLECTSTATIC_DRYRUN 
+    STATIC_ROOT = ".static" 
 
-# TODO: convert to `STORAGES`
-STATICFILES_STORAGE = (
-    # This is a string, not a tuple,
-    # but it does not fit into 80 characters rule.
-    "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"
-)
+# STATIC_ROOT = ".static" if _COLLECTSTATIC_DRYRUN else "/var/www/django/static"
 
 
 # Media files
 # https://docs.djangoproject.com/en/4.2/topics/files/
 
-MEDIA_ROOT = "/var/www/django/media"
+# MEDIA_ROOT = "/var/www/django/media"
 
 
 # Password validation

@@ -9,13 +9,19 @@ This examples uses Django's default media
 files serving technique in development.
 """
 
+import re
+
 from health_check import urls as health_urls
 
 from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.admindocs import urls as admindocs_urls
-from django.urls import include, path, reverse
+from django.contrib.staticfiles import handlers
+from django.contrib.staticfiles.urls import staticfiles_urlpatterns
+from django.urls import include, path, re_path
 from django.views.generic import RedirectView, TemplateView
+from django.views.static import serve
 
 from .apps.api.api_v1 import api as api_v1
 from .apps.main import urls as django_admin_urls
@@ -60,29 +66,51 @@ urlpatterns = [
     # It is a good practice to have explicit index view:
     path("", index, name="index"),
 ]
+
+
 # urlpatterns += i18n_patterns(path("admin/", admin.site.urls))
+# TODO: replace with whitenoise
+def satic_urls_prod():
+    res = re_path(r"^{}(?P<path>.*)$".format(re.escape(settings.STATIC_URL.lstrip("/"))), serve)
+    return (
+        [
+            res,
+        ]
+        if res is not None
+        else []
+    )
 
-if settings.DEBUG:  # pragma: no cover
-    import debug_toolbar
-    from django.conf.urls.static import static
-    from django.contrib.staticfiles.urls import staticfiles_urlpatterns
-    from django.contrib.staticfiles import handlers
 
-    urlpatterns = [
-        # URLs specific only to django-debug-toolbar:
-        path("__debug__/", include(debug_toolbar.urls)),
-        *urlpatterns,
-        # Serving media files in development only:
-        *static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT),
-        *staticfiles_urlpatterns(),
-    ]
-
-    # extend StaticFilesHandler to add "Access-Control-Allow-Origin" to every response
-    class CORSStaticFilesHandler(handlers.StaticFilesHandler):
-        def serve(self, request):
-            response = super().serve(request)
-            response["Access-Control-Allow-Origin"] = "*"
-            return response
-
-    # monkeypatch handlers to use our class instead of the original StaticFilesHandler
-    handlers.StaticFilesHandler = CORSStaticFilesHandler
+#
+# if settings.DEBUG:  # pragma: no cover
+#    import debug_toolbar
+#
+#    urlpatterns = [
+#        # URLs specific only to django-debug-toolbar:
+#        path("__debug__/", include(debug_toolbar.urls)),
+#        *urlpatterns,
+#        # Serving media files in development only:
+#        *static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT),
+#        *staticfiles_urlpatterns(),
+#    ]
+#
+# else:
+#    urlpatterns = [
+#        *urlpatterns,
+#        # Serving media files in development only:
+#        *static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT),
+#        *satic_urls_prod(),
+#    ]
+#
+#
+## extend StaticFilesHandler to add "Access-Control-Allow-Origin" to every response
+# class CORSStaticFilesHandler(handlers.StaticFilesHandler):
+#    def serve(self, request):
+#        response = super().serve(request)
+#        response["Access-Control-Allow-Origin"] = "*"
+#        return response
+#
+#
+## monkeypatch handlers to use our class instead of the original StaticFilesHandler
+# handlers.StaticFilesHandler = CORSStaticFilesHandler
+#

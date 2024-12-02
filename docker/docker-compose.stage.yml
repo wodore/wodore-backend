@@ -25,10 +25,11 @@ services:
           - ssh_id_ed25519
         args:
           DJANGO_ENV: development
-        cache_from:
-          - "wodore-backend:dev"
-          - "wodore-backend:latest"
-          - "*"
+          WITH_DEV: 0
+        #cache_from:
+        #  - "wodore-backend:dev"
+        #  - "wodore-backend:latest"
+        #  - "*"
 
       restart: unless-stopped
       volumes:

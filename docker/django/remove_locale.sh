@@ -1,7 +1,7 @@
-#!/bin/bash
+#!/usr/bin/env sh
 
 # List of languages to keep
-LANGUAGES_TO_KEEP=("de" "fr" "it" "en" "en_GB" "en_AU")
+LANGUAGES_TO_KEEP="de fr it en en_GB en_AU"
 
 # Find all locale directories inside .venv (case-insensitive)
 LOCALE_DIRS=$(find .venv -type d -name "locale" -exec find {} -mindepth 1 -maxdepth 1 -type d \;)
@@ -12,7 +12,16 @@ for locale in $LOCALE_DIRS; do
     lang=$(basename "$locale")
 
     # Check if the language is in the keep list
-    if [[ ! " ${LANGUAGES_TO_KEEP[@]} " =~ " ${lang} " ]]; then
+    found=0
+    for keep in $LANGUAGES_TO_KEEP; do
+        if [ "$lang" = "$keep" ]; then
+            found=1
+            break
+        fi
+    done
+
+    # Delete or keep the directory
+    if [ "$found" -eq 0 ]; then
         echo "Deleting $locale..."
         rm -rf "$locale"
     else

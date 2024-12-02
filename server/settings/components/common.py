@@ -72,6 +72,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
+    "whitenoise.runserver_nostatic",  # serve also in dev mode with whitenoise
     "django.contrib.staticfiles",
     # cloudinary_storage needs to be before django.contrib.staticfiles if used for static files as well!
     # "cloudinary_storage",  # https://pypi.org/project/django-cloudinary-storage/
@@ -111,6 +112,8 @@ MIDDLEWARE: Tuple[str, ...] = (
     "csp.middleware.CSPMiddleware",
     # Django:
     "django.middleware.security.SecurityMiddleware",
+    # Whitenoise
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     # django-permissions-policy
     "django_permissions_policy.PermissionsPolicyMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -176,6 +179,15 @@ DATABASES = {
     # }
 }
 
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        # "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+    },
+}
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/

@@ -22,7 +22,11 @@ from server.settings.components.csp import (
 
 # Setting the development status:
 
-DEBUG = True
+try:
+    import debug_toolbar
+    DEBUG = True
+except ModuleNotFoundError:
+    DEBUG = False
 
 ALLOWED_HOSTS = [
     *DJANGO_TRUSTED_DOMAINS,
