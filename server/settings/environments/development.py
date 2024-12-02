@@ -11,8 +11,7 @@ from typing import Tuple
 from server.settings.components import config
 from server.settings.components.common import (
     DATABASES,
-    DEV_DOMAIN_NAMES,
-    DOMAIN_NAMES,
+    DJANGO_TRUSTED_DOMAINS,
     INSTALLED_APPS,
     MIDDLEWARE,
 )
@@ -33,8 +32,7 @@ SECURE_PROXY_SSL_HEADER = None
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    *DOMAIN_NAMES,
-    *DEV_DOMAIN_NAMES,
+    *DJANGO_TRUSTED_DOMAINS,
     "localhost",
     "0.0.0.0",
     "127.0.0.1",
@@ -43,8 +41,8 @@ ALLOWED_HOSTS = [
 
 
 CSRF_TRUSTED_ORIGINS = [
-    *[f"http://{d}" for d in DEV_DOMAIN_NAMES + DOMAIN_NAMES],
-    *[f"https://{d}" for d in DEV_DOMAIN_NAMES + DOMAIN_NAMES],
+    *[f"http://{d}" for d in DJANGO_TRUSTED_DOMAINS],
+    *[f"https://{d}" for d in DJANGO_TRUSTED_DOMAINS],
 ]
 # CORS_ALLOW_ALL_ORIGINS = True
 
@@ -53,7 +51,7 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^localhost:\d+$",
     # r"^https?://wodore.com",
     # r"^https?://beta.wodore.com",
-    *[f"^https?://{d}" for d in DEV_DOMAIN_NAMES + DOMAIN_NAMES],
+    *[f"^https?://{d}" for d in DJANGO_TRUSTED_DOMAINS],
 ]
 
 # Installed apps for development only:

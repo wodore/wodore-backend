@@ -64,6 +64,9 @@ class ImageTag(TimeStampedModel):
 
 
 class Image(TimeStampedModel):
+    # TODO:
+    # add size field
+    # add long caption or something ..
     i18n = TranslationField(fields=("caption",))
     objects = BaseMutlilingualManager()
     ReviewStatusChoices = _ReviewStatusChoices
@@ -254,9 +257,12 @@ class Image(TimeStampedModel):
                     "Image not found: %s", photo_schema.source.url if photo_schema.source else photo_schema.raw_url
                 )
                 return None
+        except requests.exceptions.ReadTimeout:
+            logging.warning("Read timeout: %s. Skipping this one.", photo_schema.raw_url)
+            return None
         except requests.exceptions.ConnectionError:
-            logging.warning("Connection error: %s. Sleep for 4 min.", photo_schema.raw_url)
-            time.sleep(4 * 60)
+            logging.warning("Connection refused: %s. Sleep for 2 min.", photo_schema.raw_url)
+            time.sleep(2 * 60)
             # try again
             return cls.create_image_from_schema(photo_schema, path=path, default_caption=default_caption, tags=tags)
         except:

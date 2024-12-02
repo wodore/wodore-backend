@@ -30,6 +30,7 @@ UNFOLD = {
     "SITE_SYMBOL": "cottage",  # symbol from icon set
     "SHOW_HISTORY": True,  # show/hide "History" button, default: True
     "SHOW_VIEW_ON_SITE": True,  # show/hide "View on site" button, default: True
+    "SHOW_LANGUAGES": True,
     "ENVIRONMENT": "server.core.utils.environment_callback",
     # "DASHBOARD_CALLBACK": "sample_app.dashboard_callback",
     # "LOGIN": {

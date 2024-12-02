@@ -41,7 +41,7 @@ class Command(BaseCommand):
         *args: Any,
         **options: Any,
     ) -> None:
-        user_secrets = settings.API_MACHINE_USERS
+        user_secrets = settings.ZITADEL_API_MACHINE_USERS
         if list_users:
             for u in user_secrets:
                 print(u)
@@ -49,7 +49,7 @@ class Command(BaseCommand):
         if user in user_secrets and user_secrets:
             client_secret = user_secrets[user]
         else:
-            self.stdout.write(self.style.ERROR(f"user '{user}' not in 'settings.oidc.API_MACHINE_USERS'."))
+            self.stdout.write(self.style.ERROR(f"user '{user}' not in 'settings.oidc.ZITADEL_API_MACHINE_USERS'."))
             return
 
         # Encode the client ID and client secret in Base64

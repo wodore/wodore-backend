@@ -32,11 +32,12 @@ if PRIVATE_SERVICES:
 
 SECRET_KEY = config("DJANGO_SECRET_KEY")
 
-DOMAIN_NAMES = [d.strip() for d in config("DOMAIN_NAMES").split(",")] if config("DOMAIN_NAMES") else []
-DEV_DOMAIN_NAMES = [d.strip() for d in config("DEV_DOMAIN_NAMES").split(",")] if config("DEV_DOMAIN_NAMES") else []
+DJANGO_TRUSTED_DOMAINS = (
+    [d.strip() for d in config("DJANGO_TRUSTED_DOMAINS").split(",")] if config("DJANGO_TRUSTED_DOMAINS") else []
+)
 FRONTEND_DOMAIN = config("FRONTEND_DOMAIN") if config("FRONTEND_DOMAIN") else "http://localhost:9000"
 
-MAIN_URL = config("MAIN_URL") if config("MAIN_URL") else "http://localhost:8000"
+DJANGO_ADMIN_URL = config("DJANGO_ADMIN_URL") if config("DJANGO_ADMIN_URL") else "http://localhost:8000"
 
 # Application definition:
 

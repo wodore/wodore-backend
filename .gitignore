@@ -2,6 +2,7 @@
 old/
 *.old
 .api-key.json
+.infisical.json
 
 # Static folders
 /media/*

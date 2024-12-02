@@ -10,6 +10,7 @@ Docs: https://github.com/mozilla/django-csp
 
 import requests
 import os
+import json
 from server.settings.components import config
 
 
@@ -37,7 +38,20 @@ ZITADEL_PROJECT = config("ZITADEL_PROJECT")
 OIDC_RP_CLIENT_ID = config("OIDC_RP_CLIENT_ID")
 OIDC_RP_CLIENT_SECRET = config("OIDC_RP_CLIENT_SECRET")
 OIDC_OP_BASE_URL = config("OIDC_OP_BASE_URL")
-API_PRIVATE_KEY_FILE_PATH = config("API_PRIVATE_KEY_FILE_PATH")
+ZITADEL_API_PRIVATE_KEY_FILE_PATH = config("ZITADEL_API_PRIVATE_KEY_FILE_PATH")
+_ZITADEL_API_PRIVATE_KEY_JSON = (
+    json.loads(str(config("ZITADEL_API_PRIVATE_KEY_JSON"))) if config("ZITADEL_API_PRIVATE_KEY_JSON", None) else {}
+)
+ZITADEL_API_PRIVATE_KEY = (
+    {
+        "client_id": _ZITADEL_API_PRIVATE_KEY_JSON["clientId"],
+        "key_id": _ZITADEL_API_PRIVATE_KEY_JSON["keyId"],
+        "private_key": _ZITADEL_API_PRIVATE_KEY_JSON["key"],
+    }
+    if _ZITADEL_API_PRIVATE_KEY_JSON
+    else {}
+)
+
 
 OIDC_RP_SIGN_ALGO = "RS256"
 OIDC_RP_SCOPES = "openid email phone profile"
@@ -51,12 +65,12 @@ OIDC_OP_USER_ENDPOINT = discovery_info["userinfo_endpoint"]
 OIDC_OP_JWKS_ENDPOINT = discovery_info["jwks_uri"]
 OIDC_OP_INTROSPECTION_ENDPOINT = discovery_info["introspection_endpoint"]
 
-_main_url = config("MAIN_URL") if config("MAIN_URL") else "http://localhost:8000"
-LOGIN_REDIRECT_URL = f"{_main_url}/admin"
-LOGOUT_REDIRECT_URL = f"{_main_url}/admin"
-LOGIN_URL = f"{_main_url}/oidc/authenticate/"
+_django_admin_url = config("DJANGO_ADMIN_URL") if config("DJANGO_ADMIN_URL") else "http://localhost:8000"
+LOGIN_REDIRECT_URL = f"{_django_admin_url}/admin"
+LOGOUT_REDIRECT_URL = f"{_django_admin_url}/admin"
+LOGIN_URL = f"{_django_admin_url}/oidc/authenticate/"
 
-API_MACHINE_USERS = {
+ZITADEL_API_MACHINE_USERS = {
     us[0].strip(): us[1].strip()
-    for us in [user_secret.split(":") for user_secret in config("API_MACHINE_USERS").split(",")]
+    for us in [user_secret.split(":") for user_secret in config("ZITADEL_API_MACHINE_USERS").split(",")]
 }

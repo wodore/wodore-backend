@@ -16,7 +16,6 @@ HutAdminFieldsets = [
                 "url",
                 "description_i18n",
                 "note_i18n",
-                "location",
                 "photos",
                 "photos_attribution",
                 "booking_ref",
@@ -69,6 +68,7 @@ HutAdminFieldsets = [
         {
             "classes": ["tab"],
             "fields": [
+                "location",
                 ("elevation", "country_field"),
             ],
         },

@@ -8,7 +8,7 @@ from server.settings.components import config
 
 from hut_services import HutSchema
 
-auth_key: str = config("DEEPL_KEY")  # type: ignore
+auth_key: str = config("DEEPL_KEY", None)  # type: ignore
 # auth_key = settings.DEEPL_KEY
 translator = Translator(auth_key)
 # result = translator.translate_text("Hello, world!", target_lang="fr")

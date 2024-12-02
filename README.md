@@ -16,6 +16,22 @@ poetry install
 poetry shell
 ```
 
+Secrets are managed with [infisical](https://infisical.com/).
+For this the `infisical` cli needs to be [installed](https://infisical.com/docs/cli/overview#installation).
+
+After the installation it needs to be initialized.
+
+
+```bash
+infisical login
+infisical init
+
+# use infisical run alias for 'app' command
+echo 'alias app="infisical run --env=dev --path /backend --silent --log-level warn -- app "' >> .venv/bin/activate
+# or export .env file into config folder (this needs to be done everytime a secret changes).
+infisical export --env dev --path /backend >> config/.env
+```
+
 ## Start Application
 ```bash
 (.venv) app migrate

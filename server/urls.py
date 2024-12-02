@@ -18,7 +18,7 @@ from django.urls import include, path, reverse
 from django.views.generic import RedirectView, TemplateView
 
 from .apps.api.api_v1 import api as api_v1
-from .apps.main import urls as main_urls
+from .apps.main import urls as django_admin_urls
 from .apps.main.views import index
 
 admin.autodiscover()
@@ -27,7 +27,7 @@ urlpatterns = [
     # Auth
     path("oidc/", include("mozilla_django_oidc.urls")),
     # Apps:
-    path("main/", include(main_urls, namespace="main")),
+    path("main/", include(django_admin_urls, namespace="main")),
     # Health checks:
     path("health/", include(health_urls)),
     # Locale:

@@ -6,7 +6,7 @@ values are overridden.
 """
 
 from server.settings.components import config
-from server.settings.components.common import DOMAIN_NAMES
+from server.settings.components.common import DJANGO_TRUSTED_DOMAINS
 
 # Production flags:
 # https://docs.djangoproject.com/en/4.2/howto/deployment/
@@ -14,9 +14,9 @@ from server.settings.components.common import DOMAIN_NAMES
 DEBUG = False
 
 ALLOWED_HOSTS = [
-    *DOMAIN_NAMES,
+    *DJANGO_TRUSTED_DOMAINS,
     # TODO: check production hosts
-    #config("DOMAIN_NAME"),
+    # config("DOMAIN_NAME"),
     # We need this value for `healthcheck` to work:
     "localhost",
 ]
@@ -79,5 +79,5 @@ SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 
 CORS_ALLOWED_ORIGIN_REGEXES = [
-    *[f"^https?://{d}" for d in DOMAIN_NAMES],
+    *[f"^https?://{d}" for d in DJANGO_TRUSTED_DOMAINS],
 ]

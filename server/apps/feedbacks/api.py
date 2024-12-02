@@ -39,8 +39,8 @@ def create_feedback(request: HttpRequest, payload: FeedbackCreate, send_email: b
                 text += f'<li><a href="{url}">{url}</a></li>'
             text += "</ul>"
         text += f'<p><i>from <a href="mailto:{email}">{email}</a>.</i>'
-        text += f'<hr/><p><a href="{settings.MAIN_URL}/feedbacks/feedback/{feedback.id}/change/">edit message</a><br/><small>{feedback.created}</small></p>'
-        recipient = [a[1] for a in settings.ADMINS]
+        text += f'<hr/><p><a href="{settings.DJANGO_ADMIN_URL}/feedbacks/feedback/{feedback.id}/change/">edit message</a><br/><small>{feedback.created}</small></p>'
+        recipient = [a[1] for a in settings.DJANGO_ADMIN_EMAILS]
         msg = EmailMessage(subject=subject, body=text, from_email=no_reply, to=recipient, reply_to=[email])
         msg.content_subtype = "html"
         msg.send()

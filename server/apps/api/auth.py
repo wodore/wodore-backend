@@ -10,7 +10,7 @@ from ninja.security import HttpBearer
 
 from django.conf import settings
 
-API_PRIVATE_KEY_FILE: dict[str, str] = {}
+# API_PRIVATE_KEY_FILE: dict[str, str] = {}
 
 
 class ValidatorError(Exception):
@@ -23,30 +23,35 @@ class ValidatorError(Exception):
 class ZitadelIntrospectTokenValidator(IntrospectTokenValidator):  # type: ignore[no-any-unimported]
     def __init__(self, *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
-        self.load_api_private_key(settings.API_PRIVATE_KEY_FILE_PATH)
+        self.__api_private_key = (
+            settings.ZITADEL_API_PRIVATE_KEY
+            if settings.ZITADEL_API_PRIVATE_KEY
+            else self._load_api_private_key_from_file(settings.ZITADEL_API_PRIVATE_KEY_FILE_PATH)
+        )
 
-    @staticmethod
-    def load_api_private_key(file_path: str) -> None:
+    def _load_api_private_key_from_file(self, file_path: str) -> dict[str, str]:
+        _key_obj = {}
         with open(file_path) as f:
             data = json.load(f)
-            API_PRIVATE_KEY_FILE["client_id"] = data["clientId"]
-            API_PRIVATE_KEY_FILE["key_id"] = data["keyId"]
-            API_PRIVATE_KEY_FILE["private_key"] = data["key"]
+            _key_obj["client_id"] = data["clientId"]
+            _key_obj["key_id"] = data["keyId"]
+            _key_obj["private_key"] = data["key"]
+        return _key_obj
 
     def introspect_token(self, token_string: str) -> dict[str, Any]:
         # Create JWT for client assertion
         payload = {
-            "iss": API_PRIVATE_KEY_FILE["client_id"],
-            "sub": API_PRIVATE_KEY_FILE["client_id"],
+            "iss": self.__api_private_key["client_id"],
+            "sub": self.__api_private_key["client_id"],
             "aud": settings.OIDC_OP_BASE_URL,
             "exp": int(time.time()) + 60 * 60,  # Expires in 1 hour
             "iat": int(time.time()),
         }
-        header = {"alg": settings.OIDC_RP_SIGN_ALGO, "kid": API_PRIVATE_KEY_FILE["key_id"]}
+        header = {"alg": settings.OIDC_RP_SIGN_ALGO, "kid": self.__api_private_key["key_id"]}
         jwt_token = jwt.encode(
             header,
             payload,
-            API_PRIVATE_KEY_FILE["private_key"],
+            self.__api_private_key["private_key"],
         )
 
         # Send introspection request

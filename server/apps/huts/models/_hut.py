@@ -583,7 +583,9 @@ class Hut(TimeStampedModel):
                         # pa.save()
                         photo_order += 1
                         # hut_db.image_set.add(i)
-                        changes += f"* Added '{img}\n"
+                        if created:
+                            updated = UpdateCreateStatus.updated
+                            changes += f"* Added '{img}\n"
                     continue
                 # 1. Only update if no entry or forced
                 # 2. Force to set None as well
