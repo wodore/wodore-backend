@@ -32,6 +32,12 @@ echo 'alias app="infisical run --env=dev --path /backend --silent --log-level wa
 infisical export --env dev --path /backend >> config/.env
 ```
 
+Get image sizes:
+
+```bash
+docker images | grep wodore-backend
+```
+
 ## Start Application
 ```bash
 (.venv) app migrate
@@ -60,6 +66,13 @@ poetry update hut-services-private
 poetry install -E private 
 ```
 
+## Docker Production Build
+
+```bash
+infisical export --env dev --path /backend >> config/.env #TODO should be removed in future
+# staging dev env (not the real production env yet), change --env to prod ...
+infisical run --env=dev --path /backend -- docker compose -f docker-compose.yml -f docker/docker-compose.stage.yml build web
+```
 
 Wodore Backend
 

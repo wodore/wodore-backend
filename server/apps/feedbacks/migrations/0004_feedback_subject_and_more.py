@@ -18,7 +18,7 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="feedback",
             constraint=models.CheckConstraint(
-                check=models.Q(("feedback_status__in", ["new", "done", "work", "reject"])),
+                condition=models.Q(("feedback_status__in", ["new", "done", "work", "reject"])),
                 name="feedbacks_feedback_feedback_status_valid",
             ),
         ),

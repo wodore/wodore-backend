@@ -88,7 +88,7 @@ class HutSource(TimeStampedModel):
         constraints = (
             models.CheckConstraint(
                 name="%(app_label)s_%(class)s_review_status_valid",
-                check=models.Q(review_status__in=_ReviewStatusChoices.values),
+                condition=models.Q(review_status__in=_ReviewStatusChoices.values),
             ),
         )
 

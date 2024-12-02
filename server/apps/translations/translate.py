@@ -1,20 +1,25 @@
-import sys
-from deepl import Translator
-from django.conf import settings
+import contextlib
 
-from hut_services.core.cache import file_cache
+with contextlib.suppress(ModuleNotFoundError):
+    from deepl import Translator
+
 import typing as t
-from server.settings.components import config
 
 from hut_services import HutSchema
+from hut_services.core.cache import file_cache
+
+from django.conf import settings
+
+from server.settings.components import config
+
+from .schema import LANGUAGE_CODES
 
 auth_key: str = config("DEEPL_KEY", None)  # type: ignore
 # auth_key = settings.DEEPL_KEY
-translator = Translator(auth_key)
+# translator = Translator(auth_key)
 # result = translator.translate_text("Hello, world!", target_lang="fr")
 # print(result.text)  # "Bonjour, le monde !"
 
-from .schema import LANGUAGE_CODES
 
 # import argostranslate.translate
 

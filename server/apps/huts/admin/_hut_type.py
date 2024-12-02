@@ -1,12 +1,16 @@
+import contextlib
+
 from django.conf import settings
 from django.contrib import admin
-from django.urls import reverse
+from django.db.models import F
 from django.db.models.functions import Lower
 from django.http import HttpRequest
-from django.db.models import F
+from django.urls import reverse
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
-from django_stubs_ext import QuerySetAny
+
+with contextlib.suppress(ModuleNotFoundError):
+    from django_stubs_ext import QuerySetAny
 from django.db import models
 
 from unfold.decorators import display
@@ -47,14 +51,14 @@ class HutTypesAdmin(ModelAdmin):
         ),
     )
 
-    def get_queryset(self, request: HttpRequest) -> QuerySetAny:
+    def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request)
         return qs.annotate(
             number_huts_open=models.Count("hut_open_set", distinct=True),
             number_huts_closed=models.Count("hut_closed_set", distinct=True),
         )
 
-    def _get_url_str(self, obj: QuerySetAny, closed: bool = False, klass: str = "font-semibold") -> str:
+    def _get_url_str(self, obj: "QuerySetAny", closed: bool = False, klass: str = "font-semibold") -> str:
         number = obj.number_huts_closed if closed else obj.number_huts_open
         type_id = obj.id
         help_text = "if closed" if closed else "if open"
@@ -63,7 +67,7 @@ class HutTypesAdmin(ModelAdmin):
         return f'<a class="{klass}" title="{help_text}" href={url}>{number}</a>'
 
     @display(description=_("Huts"), ordering="number_huts")
-    def show_numbers_huts(self, obj: QuerySetAny) -> str:
+    def show_numbers_huts(self, obj: "QuerySetAny") -> str:
         open_url = self._get_url_str(obj, closed=False)
         # return mark_safe(f"{open_url}")
         closed_url = self._get_url_str(obj, closed=True, klass="")

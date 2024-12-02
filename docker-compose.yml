@@ -12,13 +12,13 @@ services:
       - pgdata:/var/lib/postgresql/data
     networks:
       - postgresnet
-    env_file: ./config/.env
+    #env_file: ./config/.env
     ports:
       - "5432:5432"
   imagor:
     image: shumc/imagor:latest
     container_name: django-local-imagor
-    env_file: ./config/.env
+    #env_file: ./config/.env
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped

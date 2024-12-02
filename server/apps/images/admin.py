@@ -1,15 +1,16 @@
 # Models
 from typing import ClassVar
+import contextlib
 
-from cloudinary import CloudinaryImage
-from django_stubs_ext import QuerySetAny
-from django.http import HttpRequest
+# from cloudinary import CloudinaryImage
+with contextlib.suppress(ModuleNotFoundError):
+    from django_stubs_ext import QuerySetAny
 
 # from tinymce.widgets import TinyMCE
-from simplemde.widgets import SimpleMDEEditor
-
+# from simplemde.widgets import SimpleMDEEditor
 from django.contrib import admin
 from django.db import models
+from django.http import HttpRequest
 from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
@@ -87,8 +88,8 @@ class ImageAdmin(ModelAdmin):
             obj.uploaded_by_user = request.user
         super().save_model(request, obj, form, change)
 
-    def get_queryset(self, request: HttpRequest) -> QuerySetAny:
-        qs = super().get_queryset(request).prefetch_related('tags', 'huts')
+    def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
+        qs = super().get_queryset(request).prefetch_related("tags", "huts")
         return qs.select_related("license", "source_org")
 
     @display(description="license", header=True)

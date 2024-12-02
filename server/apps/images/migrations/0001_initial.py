@@ -113,7 +113,7 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="image",
             constraint=models.CheckConstraint(
-                check=models.Q(("review_status__in", ["pending", "approved", "disabled", "rejected"])),
+                condition=models.Q(("review_status__in", ["pending", "approved", "disabled", "rejected"])),
                 name="images_image_review_status_valid",
             ),
         ),

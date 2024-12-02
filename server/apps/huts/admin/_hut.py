@@ -1,7 +1,9 @@
-import textwrap
+import contextlib
 from typing import ClassVar
 
-from django_stubs_ext import QuerySetAny
+import contextlib
+with contextlib.suppress(ModuleNotFoundError):
+    from django_stubs_ext import QuerySetAny
 
 from django.conf import settings
 from django.contrib import admin
@@ -86,7 +88,7 @@ class HutsAdmin(ModelAdmin):
         HutSourceViewInline,
     )
 
-    def get_queryset(self, request: HttpRequest) -> QuerySetAny:
+    def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request).prefetch_related("image_set")
         # prefetch_related("orgs_source", "orgs_source__organization").
         return qs.select_related("hut_type_open", "hut_type_closed", "hut_owner").annotate(

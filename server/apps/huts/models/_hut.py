@@ -214,11 +214,12 @@ class Hut(TimeStampedModel):
         indexes = (GinIndex(fields=["i18n"]),)
         constraints = (
             models.CheckConstraint(
-                name="%(app_label)s_%(class)s_country_valid", check=models.Q(country_field__in=settings.COUNTRIES_ONLY)
+                name="%(app_label)s_%(class)s_country_valid",
+                condition=models.Q(country_field__in=settings.COUNTRIES_ONLY),
             ),
             models.CheckConstraint(
                 name="%(app_label)s_%(class)s_review_status_valid",
-                check=models.Q(review_status__in=_ReviewStatusChoices.values),
+                condition=models.Q(review_status__in=_ReviewStatusChoices.values),
             ),
         )
 

@@ -24,7 +24,7 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="hut",
             constraint=models.CheckConstraint(
-                check=models.Q(("country__in", ["DE", "CH", "AT", "FR", "IT"])), name="huts_hut_country_valid"
+                condition=models.Q(("country__in", ["DE", "CH", "AT", "FR", "IT"])), name="huts_hut_country_valid"
             ),
         ),
     ]

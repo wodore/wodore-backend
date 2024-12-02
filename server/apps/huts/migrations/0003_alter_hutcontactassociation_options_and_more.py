@@ -30,7 +30,8 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="hut",
             constraint=models.CheckConstraint(
-                check=models.Q(("review_status__in", ["review", "done", "reject"])), name="huts_hut_review_status_valid"
+                condition=models.Q(("review_status__in", ["review", "done", "reject"])),
+                name="huts_hut_review_status_valid",
             ),
         ),
         migrations.AddConstraint(

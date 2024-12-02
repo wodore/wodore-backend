@@ -47,6 +47,6 @@ class Feedback(TimeStampedModel):
         constraints = (
             models.CheckConstraint(
                 name="%(app_label)s_%(class)s_feedback_status_valid",
-                check=models.Q(feedback_status__in=_FeedbackStatusChoices.values),
+                condition=models.Q(feedback_status__in=_FeedbackStatusChoices.values),
             ),
         )

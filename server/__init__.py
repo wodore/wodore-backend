@@ -1,3 +1,5 @@
-from icecream import install
-
-install()
+try:
+    from icecream import install
+    install()
+except ModuleNotFoundError:
+    pass

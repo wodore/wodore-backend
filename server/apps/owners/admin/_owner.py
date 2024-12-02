@@ -1,3 +1,4 @@
+import contextlib
 import textwrap
 
 from django.conf import settings
@@ -7,7 +8,9 @@ from django.db.models.functions import Lower
 from django.http import HttpRequest
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
-from django_stubs_ext import QuerySetAny
+
+with contextlib.suppress(ModuleNotFoundError):
+    from django_stubs_ext import QuerySetAny
 
 from unfold import admin as unfold_admin
 from unfold.decorators import display
@@ -87,7 +90,7 @@ class OwnerAdmin(ModelAdmin):
         ),
     )
 
-    def get_queryset(self, request: HttpRequest) -> QuerySetAny:
+    def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request)
         return qs.annotate(number_huts=models.Count("huts"))
 

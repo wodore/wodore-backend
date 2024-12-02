@@ -46,7 +46,8 @@ class HutSourceViewInline(unfold_admin.StackedInline):
 ## ADMIN
 @admin.register(HutSource)
 # class OrganizationAdmin(ActiveLanguageMixin, admin.ModelAdmin[Organization]):
-class HutsSourceAdmin(ModelAdmin[HutSource]):
+#class HutsSourceAdmin(ModelAdmin[HutSource]):
+class HutsSourceAdmin(ModelAdmin):
     """Admin panel example for ``BlogPost`` model."""
 
     # view_on_site = True
