@@ -46,7 +46,10 @@ services:
         DJANGO_DATABASE_HOST: db
       expose:
         - 8000
+      ports:
+        - 8000:8000
       command: python -Wd manage.py runserver 0.0.0.0:8000
+      # command: gunicorn -b 0.0.0.0:8000 -w 3 --preload server.wsgi:application
       #healthcheck:
       #  # We use `$$` here because:
       #  # one `$` goes to shell,
