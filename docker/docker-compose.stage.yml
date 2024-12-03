@@ -1,8 +1,8 @@
 volumes:
   pgdata:
-  django-static:
-  django-media:
-  django-locale:
+  #django-static:
+  #django-media:
+  #django-locale:
 
 secrets:
   ssh_id_ed25519:
@@ -32,10 +32,10 @@ services:
         #  - "*"
 
       restart: unless-stopped
-      volumes:
-        - django-static:/var/www/django/static
-        - django-media:/var/www/django/media  # since in dev it is app's folder
-        - django-locale:/code/locale  # since in dev it is app's folder
+      #volumes:
+      #  - django-static:/var/www/django/static
+      #  - django-media:/var/www/django/media  # since in dev it is app's folder
+      #  - django-locale:/code/locale  # since in dev it is app's folder
       depends_on:
         - db
       networks:
@@ -48,8 +48,8 @@ services:
         - 8000
       ports:
         - 8000:8000
-      command: python -Wd manage.py runserver 0.0.0.0:8000
-      # command: gunicorn -b 0.0.0.0:8000 -w 3 --preload server.wsgi:application
+      # command: python -Wd manage.py runserver 0.0.0.0:8000
+      command: gunicorn -b 0.0.0.0:8000 -w 3 --preload server.wsgi:application
       #healthcheck:
       #  # We use `$$` here because:
       #  # one `$` goes to shell,

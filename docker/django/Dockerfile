@@ -4,7 +4,7 @@
 
 ################################################################################
 ## PYTHON BASE
-FROM ghcr.io/osgeo/gdal:alpine-small-latest as python-base
+FROM ghcr.io/osgeo/gdal:alpine-small-latest AS python-base
 
 LABEL maintainer="wodore.com"
 LABEL vendor="wodore.com"
@@ -61,7 +61,7 @@ RUN apk update && \
 
 ################################################################################
 ## BUILDER
-FROM python-base as builder
+FROM python-base AS builder
 
     #build-essential \
 
@@ -84,10 +84,13 @@ RUN apk update && \
 #&& ssh-keyscan github.com >> ~/.ssh/known_hosts
 #RUN echo "Host remotehost\n\tStrictHostKeyChecking no\n" >> /root/.ssh/config
 
-RUN mkdir -p -m 0700 /root/.ssh #&& cat /run/secrets/ssh_id_ed25519 > /root/.ssh/id_ed25519 && chmod 600 /root/.ssh/id_25519
-RUN --mount=type=secret,id=ssh_id_ed25519,required cat /run/secrets/ssh_id_ed25519 > /root/.ssh/id_ed25519 && chmod 600 /root/.ssh/id_ed25519
-#RUN cat /run/secrets/ssh_id_ed25519 > /root/.ssh/id_ed25519 && chmod 600 /root/.ssh/id_25519
-RUN printf "Host * \n\tStrictHostKeyChecking no\n" >> /root/.ssh/config
+## RUN mkdir -p -m 0700 /root/.ssh #&& cat /run/secrets/ssh_id_ed25519 > /root/.ssh/id_ed25519 && chmod 600 /root/.ssh/id_25519
+## RUN --mount=type=secret,id=ssh_id_ed25519,required cat /run/secrets/ssh_id_ed25519 > /root/.ssh/id_ed25519 && chmod 600 /root/.ssh/id_ed25519
+
+##RUN printf "Host * \n\tStrictHostKeyChecking no\n" >> /root/.ssh/config
+
+# Download public key for github.com
+RUN mkdir -p -m 0600 ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts
 
 
 WORKDIR /code
@@ -109,7 +112,7 @@ COPY --chown=web:web ./poetry.lock ./pyproject.toml ./docker/django/remove_local
 
 # Project initialization:
 # hadolint ignore=SC2046
-RUN --mount=type=cache,target="$POETRY_CACHE_DIR" \
+RUN --mount=type=cache,target="$POETRY_CACHE_DIR" --mount=type=ssh  \
   echo "$DJANGO_ENV" \
   && poetry version \
   # Install deps:
@@ -123,7 +126,7 @@ RUN chmod +x ./remove_locale.sh  \
 
 ################################################################################
 ## PRODUCTION
-FROM python-base as production
+FROM python-base AS production
 
 ADD --chown=web:web https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh /usr/local/bin/wait-for-it
 # this packages are required by geodjango
@@ -138,10 +141,15 @@ RUN apk update && \
     brotli \
     gettext \
     tini \
+    tzdata \
+    && cp /usr/share/zoneinfo/Europe/Zurich /etc/localtime \
+    && echo "Europe/Zurich" > /etc/timezone \
     && chmod +x /usr/local/bin/wait-for-it
 
 ENV VIRTUAL_ENV=/code/.venv \
-    PATH="/code/.venv/bin:$PATH"
+    PATH="/code/.venv/bin:$PATH" \
+    TZ="Europe/Zurich"
+
 COPY --from=builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
 
 # This is a special case. We need to run this script as an entry point:

@@ -33,7 +33,7 @@ _COLLECTSTATIC_DRYRUN = config(
     default=False,
 )
 # Adding STATIC_ROOT to collect static files via 'collectstatic':
-if _COLLECTSTATIC_DRYRUN 
+if _COLLECTSTATIC_DRYRUN:
     STATIC_ROOT = ".static" 
 
 # STATIC_ROOT = ".static" if _COLLECTSTATIC_DRYRUN else "/var/www/django/static"
