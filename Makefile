@@ -2,6 +2,7 @@
 WITH_DEV=0
 
 TARGET=production
+DJANGO_ENV?=development
 DOCKERFILE=./docker/django/Dockerfile
 DOCKER_TAG?=${DJANGO_ENV}
 DOCKER_IMAGE=wodore-backend:${DOCKER_TAG}
@@ -18,7 +19,6 @@ PORT?=$(DEFAULT_PORT)
 RUN_WEBSERVER=gunicorn -b 0.0.0.0:$(PORT) -w 3 --preload server.wsgi:application
 #RUN_BUILD_ARGS=--no-cache
 BUILD_ARGS?=
-DJANGO_ENV?=development
 
 # Default target
 #--secret id=ssh_id_ed25519,src=$(SSH_SECRET) 
@@ -39,10 +39,21 @@ build:
 	@docker images | head -n 1
 	@docker images | grep wodore-backend | grep ${DJANGO_ENV} | head -n 1
 
-#--ssh default \
-# TODO
+# --http-probe-apispec /v1/openapi.json 
 slim:
-	slim build --dockerfile $(DOCKERFILE)
+	mint slim --target $(DOCKER_IMAGE) \
+		--tag wodore-backend:slim \
+		--workdir "/code" \
+		--expose $(PORT) \
+		--env DJANGO_DATABASE_HOST=$(DJANGO_DATABASE_HOST) \
+		--cmd "$(RUN_WEBSERVER)" \
+		--publish-port $(PORT):$(PORT) \
+		--network wodore-backend_postgresnet \
+		--include-workdir \
+	    --http-probe-cmd "crawl:/v1/huts/huts.geojson?limit=5" \
+		--http-probe-cmd "crawl:/v1/huts/bookings.geojson" \
+		--http-probe-cmd "crawl:/" \
+		--http-probe
 
 clean:
 	docker rmi $(DOCKER_IMAGE)

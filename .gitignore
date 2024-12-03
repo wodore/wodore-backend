@@ -4,6 +4,7 @@ old/
 .api-key.json
 .infisical.json
 .zitadel-api-key
+slim.report.json
 
 # Static folders
 /media/*

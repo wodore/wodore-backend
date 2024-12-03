@@ -51,31 +51,31 @@ WORKDIR /code
 # pin when needed):
 # hadolint ignore=DL3008
 RUN apk update && \
-    apk upgrade && \
-    apk add --no-cache \
-    bash \
-    python3=~3.12 \
-    # add user and group
-    && addgroup -g "${GID}"  web \
-    && adduser -h '/code' -G web -D -u "${UID}" --no-create-home web
+  apk upgrade && \
+  apk add --no-cache \
+  bash \
+  python3=~3.12 \
+  # add user and group
+  && addgroup -g "${GID}"  web \
+  && adduser -h '/code' -G web -D -u "${UID}" --no-create-home web
 
 ################################################################################
 ## BUILDER
 FROM python-base AS builder
 
-    #build-essential \
+#build-essential \
 
 # System deps (we don't use exact versions because it is hard to update them,
 # pin when needed):
 # hadolint ignore=DL3008
 RUN apk update && \
-    apk upgrade && \
-    apk add --no-cache \
-    build-base \
-    git \
-    openssh-client \
-    libpq-dev \
-    poetry=~${POETRY_VERSION} \
+  apk upgrade && \
+  apk add --no-cache \
+  build-base \
+  git \
+  openssh-client \
+  libpq-dev \
+  poetry=~${POETRY_VERSION} \
   # Installing `poetry` package manager:
   # https://github.com/python-poetry/poetry
   # && curl -sSL 'https://install.python-poetry.org' | python - \
@@ -98,7 +98,7 @@ WORKDIR /code
 #RUN --mount=type=ssh bundle install
 
 #RUN groupadd -g "${GID}" -r web \
-  #&& useradd -d '/code' -g web -l -r -u "${UID}" web \
+#&& useradd -d '/code' -g web -l -r -u "${UID}" web \
 RUN chown web:web -R '/code' \
   # Static and media files:
   && mkdir -p '/var/www/django/static' '/var/www/django/media' \
@@ -107,8 +107,7 @@ RUN chown web:web -R '/code' \
   && chown web:web '/var/www/django/static' '/var/www/django/media'
 
 # Copy only requirements, to cache them in docker layer
-COPY --chown=web:web ./poetry.lock ./pyproject.toml ./docker/django/remove_locale.sh /code/
-#COPY --chown=web:web  /code/remove_locale.sh
+COPY --chown=web:web ./poetry.lock ./pyproject.toml ./docker/django/minify_venv.sh /code/
 
 # Project initialization:
 # hadolint ignore=SC2046
@@ -118,11 +117,10 @@ RUN --mount=type=cache,target="$POETRY_CACHE_DIR" --mount=type=ssh  \
   # Install deps:
   && poetry run pip install -U pip \
   && poetry install \
-   $(if [ "$WITH_DEV" = '0' ]; then echo '--only main'; fi) \
-    --no-root --no-interaction --no-ansi --sync --extras private
-
-RUN chmod +x ./remove_locale.sh  \
-  && ./remove_locale.sh
+  $(if [ "$WITH_DEV" = '0' ]; then echo '--only main'; fi) \
+  --no-root --no-interaction --no-ansi --sync --extras private \
+  && chmod +x ./minify_venv.sh  \
+  && ./minify_venv.sh
 
 ################################################################################
 ## PRODUCTION
@@ -134,29 +132,25 @@ ADD --chown=web:web https://raw.githubusercontent.com/vishnubob/wait-for-it/mast
 # pin when needed):
 # hadolint ignore=DL3008
 RUN apk update && \
-    apk upgrade && \
-    apk add --no-cache \
-    postgresql-client \
-    geos \
-    brotli \
-    gettext \
-    tini \
-    tzdata \
-    && cp /usr/share/zoneinfo/Europe/Zurich /etc/localtime \
-    && echo "Europe/Zurich" > /etc/timezone \
-    && chmod +x /usr/local/bin/wait-for-it
+  apk upgrade && \
+  apk add --no-cache \
+  postgresql-client \
+  geos \
+  gettext \
+  tini \
+  tzdata \
+  && cp /usr/share/zoneinfo/Europe/Zurich /etc/localtime \
+  && echo "Europe/Zurich" > /etc/timezone \
+  && chmod +x /usr/local/bin/wait-for-it
 
 ENV VIRTUAL_ENV=/code/.venv \
-    PATH="/code/.venv/bin:$PATH" \
-    TZ="Europe/Zurich"
-
-COPY --from=builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
-
-# This is a special case. We need to run this script as an entry point:
-COPY ./docker/django/entrypoint.sh /docker-entrypoint.sh
-
+  PATH="/code/.venv/bin:$PATH" \
+  TZ="Europe/Zurich"
 
 WORKDIR /code
+COPY --from=builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
+# This is a special case. We need to run this script as an entry point:
+COPY ./docker/django/entrypoint.sh /docker-entrypoint.sh
 COPY --chown=web:web ./manage.py /code/
 COPY --chown=web:web server /code/server
 # TODO: collectstatic in build process and copy from there!
@@ -176,7 +170,3 @@ USER web
 # We customize how our app is loaded with the custom entrypoint:
 ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
 
-
-# The following stage is only for production:
-# https://wemake-django-template.readthedocs.io/en/latest/pages/template/production.html
-#FROM development_build AS production_build
