@@ -2,7 +2,8 @@
 # This Dockerfile uses multi-stage build to customize DEV and PROD images:
 # https://docs.docker.com/develop/develop-images/multistage-build/
 
-FROM python:3.11.5-slim-bookworm AS python-base
+#FROM python:3.11.5-slim-bookworm AS python-base
+FROM ghcr.io/osgeo/gdal:ubuntu-small-latest AS python-base
 
 LABEL maintainer="wodore.com"
 LABEL vendor="wodore.com"
@@ -10,8 +11,8 @@ LABEL vendor="wodore.com"
 # `DJANGO_ENV` arg is used to make prod / dev builds:
 ARG DJANGO_ENV \
   # Needed for fixing permissions of files created by Docker:
-  UID=1000 \
-  GID=1000 \
+  UID=1001 \
+  GID=1001 \
   CONFIG_DIR="config" \
   WITH_DEV=0
 
@@ -66,10 +67,7 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
     git \
     openssh-client \
     libpq-dev \
-    wait-for-it \
     binutils \
-    libproj-dev \
-    gdal-bin \
   # Installing `tini` utility:
   # https://github.com/krallin/tini
   # Get architecture to download appropriate tini release:
@@ -85,47 +83,25 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
   && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
   && apt-get clean -y && rm -rf /var/lib/apt/lists/*
 
-#&& ssh-keyscan github.com >> ~/.ssh/known_hosts
-#RUN echo "Host remotehost\n\tStrictHostKeyChecking no\n" >> /root/.ssh/config
-
-#RUN mkdir -p -m 0700 /root/.ssh #&& cat /run/secrets/ssh_id_ed25519 > /root/.ssh/id_ed25519 && chmod 600 /root/.ssh/id_25519
-#RUN --mount=type=secret,id=ssh_id_ed25519,required cat /run/secrets/ssh_id_ed25519 > /root/.ssh/id_ed25519 && chmod 600 /root/.ssh/id_ed25519
-##RUN cat /run/secrets/ssh_id_ed25519 > /root/.ssh/id_ed25519 && chmod 600 /root/.ssh/id_25519
-#RUN printf "Host * \n\tStrictHostKeyChecking no\n" >> /root/.ssh/config
-
-# Download public key for github.com
-RUN mkdir -p -m 0600 ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts
 
 WORKDIR /code
 
-#RUN --mount=type=ssh bundle install
-
-#RUN groupadd -g "${GID}" -r web \
-  #&& useradd -d '/code' -g web -l -r -u "${UID}" web \
-RUN chown web:web -R '/code' \
-  # Static and media files:
-  && mkdir -p '/var/www/django/static' '/var/www/django/media' \
-  #&& mkdir -p '/var/www/django/ssh'  \
-  #&& mkdir -p '/.ssh' '/ssh' \
-  && chown web:web '/var/www/django/static' '/var/www/django/media'
-
 # Copy only requirements, to cache them in docker layer
-COPY --chown=web:web ./poetry.lock ./pyproject.toml /code/
-COPY --chown=web:web ./docker/django/minify_venv.sh /code/minify_venv.sh
+COPY --chown=web:web ./poetry.lock ./pyproject.toml ./docker/django/minify_venv.sh /code/
 
-# Project initialization:
-# hadolint ignore=SC2046
+# Download public key for github.com
 RUN --mount=type=cache,target="$POETRY_CACHE_DIR" --mount=type=ssh \
-  echo "$DJANGO_ENV" \
-  && poetry version \
+  mkdir -p -m 0600 ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts \
   # Install deps:
   && poetry run pip install -U pip \
   && poetry install \
    $(if [ "$WITH_DEV" = '0' ]; then echo '--only main'; fi) \
-    --no-interaction --no-ansi --sync --extras private \
+  --no-root --no-interaction --no-ansi --sync --extras private \
   && chmod +x minify_venv.sh \
   && ./minify_venv.sh
 
+################################################################################
+## PRODUCTION
 FROM python-base as production
 
 # this packages are required by geodjango
@@ -138,33 +114,33 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
   && apt-get update && apt-get upgrade -y \
   && apt-get install -y --no-install-recommends \
     wait-for-it \
-    gdal-bin \
-    #libproj-dev \
+    tzdata \
   # Cleaning cache:
-  && rm -rf /var/lib/apt/lists/*
-
-# curl 
+  && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
+  && apt-get clean -y && rm -rf /var/lib/apt/lists/* \
+  && cp /usr/share/zoneinfo/Europe/Zurich /etc/localtime \
+  && echo "Europe/Zurich" > /etc/timezone
 
 ENV VIRTUAL_ENV=/code/.venv \
-    PATH="/code/.venv/bin:$PATH"
+  PATH="/code/.venv/bin:$PATH" \
+  TZ="Europe/Zurich"
+
+WORKDIR /code
 COPY --from=builder-base ${VIRTUAL_ENV} ${VIRTUAL_ENV}
 COPY --from=builder-base "/usr/local/bin/tini" "/usr/local/bin/tini"
 
 
 # This is a special case. We need to run this script as an entry point:
 COPY ./docker/django/entrypoint.sh /docker-entrypoint.sh
-
-# Setting up proper permissions:
-RUN chmod +x '/docker-entrypoint.sh' \
-  # Replacing line separator CRLF with LF for Windows users:
-  && sed -i 's/\r$//g' '/docker-entrypoint.sh'
-
-WORKDIR /code
 COPY --chown=web:web ./manage.py /code/
 COPY --chown=web:web server /code/server
 # TODO: collectstatic in build process and copy from there!
-COPY --chown=web:web static /code/static 
+#COPY --chown=web:web static /code/static 
 COPY --chown=web:web ${CONFIG_DIR} /code/config
+
+# Setting up proper permissions:
+RUN chmod +x '/docker-entrypoint.sh' \
+  && python manage.py collectstatic --noinput
 
 # Running as non-root user:
 # TODO
@@ -174,8 +150,3 @@ USER web
 
 # We customize how our app is loaded with the custom entrypoint:
 ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
-
-
-# The following stage is only for production:
-# https://wemake-django-template.readthedocs.io/en/latest/pages/template/production.html
-#FROM development_build AS production_build
