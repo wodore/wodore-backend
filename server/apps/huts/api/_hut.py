@@ -251,6 +251,7 @@ def get_hut(request: HttpRequest, slug: str, lang: LanguageParam, fields: Query[
     qs = Hut.objects.select_related("hut_owner").all().filter(is_active=True, is_public=True, slug=slug)
     media_abs_url = request.build_absolute_uri(settings.MEDIA_URL)
     # .order_by("org_set__order")
+    # # TODO: too many sources, use limit for query, does not work as expected !!
     qs = qs.select_related("hut_type_open", "hut_type_closed", "hut_owner").annotate(
         sources=JSONBAgg(
             JSONObject(

@@ -53,12 +53,12 @@ class OrganizationBaseSchema(BaseModel):
     link: str
     logo: str
     public: bool
-    source_id: str
+    # source_id: str
 
 
 class OrganizationDetailSchema(OrganizationBaseSchema):
     active: bool
-    source_id: str
+    # source_id: str
     # order: int
 
 
@@ -77,8 +77,8 @@ class LicenseInfoSchema(BaseModel):
     """Important information, for example for an image"""
 
     slug: str
-    name: str
-    fullname: str
+    name: str | None
+    fullname: str | None
     description: str | None = None
     link: str | None = None
 

@@ -17,7 +17,9 @@ DOCKER_IMAGE=wodore-backend:${TAG}
 CONTAINER_NAME=wodore-api-container-${TAG}
 DOCKER_CONTEXT=.    # Build context (current directory)
 #SSH_SECRET=${HOME}/.ssh/id_ed25519
+
 RUN_CMD=infisical run --env=dev --path /backend --silent --log-level warn --
+
 DJANGO_DATABASE_HOST=django-local-postgis
 
 
@@ -26,13 +28,16 @@ RUN_WEBSERVER=gunicorn -b 0.0.0.0:$(PORT) -w $(WORKERS) --preload server.wsgi:ap
 #RUN_BUILD_ARGS=--no-cache
 BUILD_ARGS?=
 
-show:
+runserver:
+	${RUN_CMD} app runserver
+
+docker_show:
 	@docker images | head -n 1
 	@docker images | grep wodore-backend | grep "${TAG} " | head -n 1
 	@echo "------------------------------------------------------------------------------------------------------------"
 	@docker images | grep wodore-backend | head -n 10 | grep -v "${TAG} "
 
-compare:
+docker_compare:
 	@docker images | head -n 1
 	@docker images | grep wodore-backend | grep "${TAG} " | head -n 1
 	@docker images | grep wodore-backend | grep "${TAG}-slim " | head -n 1
@@ -55,7 +60,7 @@ _build:
 	rm .zitadel-api-key
 	@echo "Build finished"
 
-build: _build show
+docker_build: _build show
 
 # --http-probe-apispec /v1/openapi.json 
 _slim:
@@ -73,20 +78,20 @@ _slim:
 		--http-probe-cmd "crawl:/" \
 		--http-probe
 
-slim: _slim compare
+docker_slim: _slim compare
 	
-build_slim: _build _slim compare	
+docker_build_slim: _build _slim compare	
 
-clean:
+docker_clean:
 	docker rmi $(DOCKER_IMAGE)
 
-clean_all:
+docker_clean_all:
 	docker rmi -f $(shell docker images -q wodore-backend*); \
 	docker builder prune -af --filter "label=wodore-backend"
 
 
 # Default target: run in production mode
-run_prod:
+docker_run_prod:
 	@echo "Starting ${DOCKER_IMAGE}"
 	@echo "You can now access the server at http://localhost:$(PORT)"
 	docker run --rm --name $(CONTAINER_NAME) \
@@ -101,7 +106,7 @@ run_prod:
 
 # Debug target: run the Django development server
 # --name $(CONTAINER_NAME) 
-run:
+docker_run:
 	@echo "You can now access the server at http://localhost:$(PORT)"
 	docker run --rm \
 		-p $(PORT):$(PORT) \
