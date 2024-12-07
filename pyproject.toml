@@ -60,6 +60,7 @@ django-cleanup = "^9.0.0"
 #django-simplemde = "^0.1.4"
 rich = "^13.9.4"
 tzdata = "^2024.2"
+click = "^8.1.7"
 
 [tool.poetry.extras]
 private = ["hut-services-private"]
