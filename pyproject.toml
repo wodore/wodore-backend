@@ -61,6 +61,7 @@ django-cleanup = "^9.0.0"
 rich = "^13.9.4"
 tzdata = "^2024.2"
 click = "^8.1.7"
+pyyaml = "^6.0.2"
 
 [tool.poetry.extras]
 private = ["hut-services-private"]

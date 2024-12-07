@@ -5493,4 +5493,4 @@ private = ["hut-services-private"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "2a2abfe8bec6c251723debba0b723119d914b2c1e5c11dc12e0ac6402b64d034"
+content-hash = "4a2690c80e2951f40126a830cd9ba3521f95da203dd15d1c19ea9637da2f9539"
