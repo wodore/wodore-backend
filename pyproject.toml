@@ -21,7 +21,7 @@ django-ninja = "^1.0"
 
 whitenoise = {version = "^6.8.2", extras = ["brotli"]}
 psycopg2-binary = "^2.9"
-gunicorn = "^20.0"
+gunicorn = "^22.0"
 python-decouple = "^3.8"
 structlog = "^23.1"
 django-colorfield = "^0.8.0"
