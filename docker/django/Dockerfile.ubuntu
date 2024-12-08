@@ -5,8 +5,13 @@
 #FROM python:3.11.5-slim-bookworm AS python-base
 FROM ghcr.io/osgeo/gdal:ubuntu-small-latest AS python-base
 
-LABEL maintainer="wodore.com"
-LABEL vendor="wodore.com"
+LABEL org.opencontainers.image.name="Wodore Backend Ubuntu"
+LABEL org.opencontainers.image.authors="tb@wodore.com"
+LABEL org.opencontainers.image.url=https://wodore.com
+LABEL org.opencontainers.image.source=https://github.com/wodore/wodore-backend
+LABEL org.opencontainers.image.description="Wodore backend based on ubuntu (gdal) image"
+LABEL org.opencontainers.image.licenses=MIT
+
 
 # `DJANGO_ENV` arg is used to make prod / dev builds:
 ARG DJANGO_ENV \
@@ -49,7 +54,7 @@ RUN groupadd -g "${GID}" -r web \
 
 
 ## BUILDER
-FROM python-base as builder-base
+FROM python-base AS builder-base
 
 # System deps (we don't use exact versions because it is hard to update them,
 # pin when needed):
@@ -102,7 +107,7 @@ RUN --mount=type=cache,target="$POETRY_CACHE_DIR" --mount=type=ssh \
 
 ################################################################################
 ## PRODUCTION
-FROM python-base as production
+FROM python-base AS production
 
 # this packages are required by geodjango
 # System deps (we don't use exact versions because it is hard to update them,

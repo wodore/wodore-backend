@@ -9,6 +9,7 @@ readonly cmd="$*"
 : "${DJANGO_DATABASE_HOST:=db}"
 : "${DJANGO_DATABASE_PORT:=5432}"
 
+echo "Waiting for Postgres ${DJANGO_DATABASE_HOST}:${DJANGO_DATABASE_PORT} to be ready..."
 # We need this line to make sure that this container is started
 # after the one with postgres:
 wait-for-it \

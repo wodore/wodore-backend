@@ -31,12 +31,14 @@ SECURE_PROXY_SSL_HEADER = None
 
 try:
     import debug_toolbar
+
     DEBUG = True
 except ModuleNotFoundError:
     DEBUG = False
 
 ALLOWED_HOSTS = [
     *DJANGO_TRUSTED_DOMAINS,
+    "api.localhost",
     "localhost",
     "0.0.0.0",
     "127.0.0.1",
@@ -53,6 +55,7 @@ CSRF_TRUSTED_ORIGINS = [
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^https?://localhost:\d+$",
     r"^localhost:\d+$",
+    r"^.*\.localhost:\d+$",
     # r"^https?://wodore.com",
     # r"^https?://beta.wodore.com",
     *[f"^https?://{d}" for d in DJANGO_TRUSTED_DOMAINS],
@@ -96,7 +99,7 @@ try:  # This might fail on some OS
     INTERNAL_IPS = ["{0}.1".format(ip[: ip.rfind(".")]) for ip in socket.gethostbyname_ex(socket.gethostname())[2]]
 except OSError:  # pragma: no cover
     INTERNAL_IPS = []
-INTERNAL_IPS += ["127.0.0.1", "10.0.2.2"]
+INTERNAL_IPS += ["127.0.0.1", "0.0.0.0"]
 
 
 def _custom_show_toolbar(request) -> bool:

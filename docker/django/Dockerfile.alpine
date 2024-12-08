@@ -3,11 +3,15 @@
 # https://docs.docker.com/develop/develop-images/multistage-build/
 
 ################################################################################
-## PYTHON BASE
 FROM ghcr.io/osgeo/gdal:alpine-small-latest AS python-base
 
-LABEL maintainer="wodore.com"
-LABEL vendor="wodore.com"
+LABEL org.opencontainers.image.name="Wodore Backend Alpine"
+LABEL org.opencontainers.image.authors="tb@wodore.com"
+LABEL org.opencontainers.image.url=https://wodore.com
+LABEL org.opencontainers.image.source=https://github.com/wodore/wodore-backend
+LABEL org.opencontainers.image.description="Wodore backend based on alpine (gdal) image"
+LABEL org.opencontainers.image.licenses=MIT
+
 
 # `DJANGO_ENV` arg is used to make prod / dev builds:
 ARG DJANGO_ENV \
@@ -134,7 +138,11 @@ COPY --chown=web:web server /code/server
 COPY --chown=web:web ${CONFIG_DIR} /code/config
 
 # Setting up proper permissions:
-RUN chmod +x '/docker-entrypoint.sh' \
+#RUN --mount=type=secret,id=env,target=/code/config/.env \
+#  chmod +x '/docker-entrypoint.sh' \
+#  && python manage.py collectstatic --noinput
+RUN \
+  chmod +x '/docker-entrypoint.sh' \
   && python manage.py collectstatic --noinput
 
 # Running as non-root user:

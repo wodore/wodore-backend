@@ -30,14 +30,14 @@ if PRIVATE_SERVICES:
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
-SECRET_KEY = config("DJANGO_SECRET_KEY")
+SECRET_KEY = config("DJANGO_SECRET_KEY", "NotSet")
 
 DJANGO_TRUSTED_DOMAINS = (
-    [d.strip() for d in config("DJANGO_TRUSTED_DOMAINS").split(",")] if config("DJANGO_TRUSTED_DOMAINS") else []
+    [d.strip() for d in config("DJANGO_TRUSTED_DOMAINS").split(",")] if config("DJANGO_TRUSTED_DOMAINS", "") else []
 )
-FRONTEND_DOMAIN = config("FRONTEND_DOMAIN") if config("FRONTEND_DOMAIN") else "http://localhost:9000"
+FRONTEND_DOMAIN = config("FRONTEND_DOMAIN") if config("FRONTEND_DOMAIN", None) else "http://localhost:9000"
 
-DJANGO_ADMIN_URL = config("DJANGO_ADMIN_URL") if config("DJANGO_ADMIN_URL") else "http://localhost:8000"
+DJANGO_ADMIN_URL = config("DJANGO_ADMIN_URL") if config("DJANGO_ADMIN_URL", None) else "http://localhost:8000"
 
 # Application definition:
 
@@ -146,11 +146,11 @@ DATABASES = {
     "default": {
         # "ENGINE": "django.db.backends.postgresql",
         "ENGINE": "django.contrib.gis.db.backends.postgis",
-        "NAME": config("POSTGRES_DB"),
-        "USER": config("POSTGRES_USER"),
-        "PASSWORD": config("POSTGRES_PASSWORD"),
-        "HOST": config("DJANGO_DATABASE_HOST"),
-        "PORT": config("DJANGO_DATABASE_PORT", cast=int),
+        "NAME": config("POSTGRES_DB", ""),
+        "USER": config("POSTGRES_USER", ""),
+        "PASSWORD": config("POSTGRES_PASSWORD", ""),
+        "HOST": config("DJANGO_DATABASE_HOST", ""),
+        "PORT": config("DJANGO_DATABASE_PORT", cast=int, default=0),
         "CONN_MAX_AGE": config("CONN_MAX_AGE", cast=int, default=60),
         "OPTIONS": {
             "connect_timeout": 10,
@@ -235,8 +235,8 @@ STATICFILES_FINDERS = (
 )
 
 # https://github.com/cshum/imagor
-IMAGOR_URL = config("IMAGOR_URL")
-IMAGOR_KEY = config("IMAGOR_KEY", default=None)
+IMAGOR_URL = config("IMAGOR_URL", "")
+IMAGOR_KEY = config("IMAGOR_KEY", None)
 
 # CLOUDINARY_STORAGE = {
 #     "CLOUD_NAME": config("CLOUDINARY_NAME"),
@@ -339,4 +339,4 @@ JSONSUIT_WIDGET_THEME = "tomorrow"
 
 # Translations
 
-DEEPL_KEY = config("DEEPL_KEY")
+DEEPL_KEY = config("DEEPL_KEY", None)

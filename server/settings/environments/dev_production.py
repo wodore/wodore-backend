@@ -7,7 +7,6 @@ SECURITY WARNING: don't run with debug turned on in production!
 import logging
 import socket
 
-from server.settings.components import config
 from server.settings.components.common import (
     DATABASES,
     DJANGO_TRUSTED_DOMAINS,
@@ -24,6 +23,7 @@ from server.settings.components.csp import (
 
 try:
     import debug_toolbar
+
     DEBUG = True
 except ModuleNotFoundError:
     DEBUG = False
@@ -51,23 +51,24 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 
 # Installed apps for development only:
 
-INSTALLED_APPS += (
-    # Better debug:
-    # "debug_toolbar",
-    "nplusone.ext.django",
-    # Linting migrations:
-    # "django_migration_linter",
-    # django-test-migrations:
-    # "django_test_migrations.contrib.django_checks.AutoNames",
-    # This check might be useful in production as well,
-    # so it might be a good idea to move `django-test-migrations`
-    # to prod dependencies and use this check in the main `settings.py`.
-    # This will check that your database is configured properly,
-    # when you run `python manage.py check` before deploy.
-    "django_test_migrations.contrib.django_checks.DatabaseConfiguration",
-    # django-extra-checks:
-    # "extra_checks",
-)
+if DEBUG:
+    INSTALLED_APPS += (
+        # Better debug:
+        # "debug_toolbar",
+        "nplusone.ext.django",
+        # Linting migrations:
+        # "django_migration_linter",
+        # django-test-migrations:
+        # "django_test_migrations.contrib.django_checks.AutoNames",
+        # This check might be useful in production as well,
+        # so it might be a good idea to move `django-test-migrations`
+        # to prod dependencies and use this check in the main `settings.py`.
+        # This will check that your database is configured properly,
+        # when you run `python manage.py check` before deploy.
+        "django_test_migrations.contrib.django_checks.DatabaseConfiguration",
+        # django-extra-checks:
+        # "extra_checks",
+    )
 
 
 # Django debug toolbar:
@@ -108,7 +109,8 @@ CSP_CONNECT_SRC += ("'self'",)
 # https://github.com/jmcarp/nplusone
 
 # Should be the first in line:
-MIDDLEWARE = ("nplusone.ext.django.NPlusOneMiddleware",) + MIDDLEWARE
+if DEBUG:
+    MIDDLEWARE = ("nplusone.ext.django.NPlusOneMiddleware",) + MIDDLEWARE
 
 # Logging N+1 requests:
 # NPLUSONE_RAISE = True  # comment out if you want to allow N+1 requests

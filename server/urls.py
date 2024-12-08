@@ -9,8 +9,6 @@ This examples uses Django's default media
 files serving technique in development.
 """
 
-import re
-
 from health_check import urls as health_urls
 
 from django.conf import settings
