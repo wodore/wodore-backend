@@ -25,16 +25,16 @@ ALLOWED_HOSTS = [
 # Staticfiles
 # https://docs.djangoproject.com/en/4.2/ref/contrib/staticfiles/
 
-# This is a hack to allow a special flag to be used with `--dry-run`
-# to test things locally.
-_COLLECTSTATIC_DRYRUN = config(
-    "DJANGO_COLLECTSTATIC_DRYRUN",
-    cast=bool,
-    default=False,
-)
-# Adding STATIC_ROOT to collect static files via 'collectstatic':
-if _COLLECTSTATIC_DRYRUN:
-    STATIC_ROOT = ".static" 
+## # This is a hack to allow a special flag to be used with `--dry-run`
+## # to test things locally.
+## _COLLECTSTATIC_DRYRUN = config(
+##     "DJANGO_COLLECTSTATIC_DRYRUN",
+##     cast=bool,
+##     default=False,
+## )
+## # Adding STATIC_ROOT to collect static files via 'collectstatic':
+## if _COLLECTSTATIC_DRYRUN:
+##     STATIC_ROOT = ".static"
 
 # STATIC_ROOT = ".static" if _COLLECTSTATIC_DRYRUN else "/var/www/django/static"
 
@@ -63,9 +63,9 @@ AUTH_PASSWORD_VALIDATORS = [
 SECURE_HSTS_SECONDS = 31536000  # the same as Caddy has
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
-
+##
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-SECURE_SSL_REDIRECT = True
+## SECURE_SSL_REDIRECT = True
 SECURE_REDIRECT_EXEMPT = [
     # This is required for healthcheck to work:
     "^health/",

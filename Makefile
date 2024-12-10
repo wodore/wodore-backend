@@ -62,7 +62,7 @@ docker_compare:
 #--secret id=zitadel_api_key,src=.zitadel-api-key
 _build:
 	DOCKER_BUILDKIT=1
-	${RUN_CMD} docker buildx build --target $(TARGET) \
+	docker buildx build --target $(TARGET) \
 		--file $(DOCKERFILE) \
 		--build-arg DJANGO_ENV=$(ENV) \
 		--build-arg WITH_DEV=$(WITH_DEV) \
@@ -115,15 +115,18 @@ docker_clean_all:
 docker_run_prod:
 	@echo "Starting ${DOCKER_IMAGE}"
 	@echo "You can now access the server at http://localhost:$(PORT)"
+	@mkdir -p .tmp/py_file_cache/joblib
 	docker run --rm --name $(CONTAINER_NAME) \
 		-e DJANGO_DATABASE_HOST=$(DJANGO_DATABASE_HOST) \
 		-p $(PORT):$(PORT) \
 		--network wodore-backend_postgresnet \
+		--volume ./.tmp:/tmp/py_file_cache/joblib \
 		--memory="$(MEMORY)" \
 		--env-file <(./docker/django/get_env.sh --env prod) \
 		--cpus="$(CPUS)" \
 		$(DOCKER_IMAGE) \
 		$(RUN_WEBSERVER)
+	@rm -r .tmp
 
 
 # Debug target: run the Django development server
@@ -131,13 +134,16 @@ docker_run_prod:
 docker_run:
 	@echo "Starting ${DOCKER_IMAGE}"
 	@echo "You can now access the server at http://localhost:$(PORT)"
+	@mkdir -p .tmp/py_file_cache/joblib
 	bash -c 'docker run --rm \
 		-p $(PORT):$(PORT) \
 		-e DJANGO_DATABASE_HOST=$(DJANGO_DATABASE_HOST) \
 		--network wodore-backend_postgresnet \
+		--volume ./.tmp:/tmp/py_file_cache/joblib \
 		--env-file <(./docker/django/get_env.sh --env dev) \
 		$(DOCKER_IMAGE) \
 		python -Wd manage.py runserver 0.0.0.0:$(PORT)'
+	@rm -r .tmp
 
 docker_run_ghcr:
 	@echo "Starting ${DOCKER_IMAGE}"

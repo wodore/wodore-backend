@@ -21,12 +21,13 @@ from server.settings.components.csp import (
 
 # Setting the development status:
 
+DEBUG = True
 try:
-    import debug_toolbar
+    import nplusone  # noqa: F401
 
-    DEBUG = True
+    WITH_DEV = True
 except ModuleNotFoundError:
-    DEBUG = False
+    WITH_DEV = False
 
 ALLOWED_HOSTS = [
     *DJANGO_TRUSTED_DOMAINS,
@@ -51,7 +52,7 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 
 # Installed apps for development only:
 
-if DEBUG:
+if WITH_DEV:
     INSTALLED_APPS += (
         # Better debug:
         # "debug_toolbar",
@@ -109,7 +110,7 @@ CSP_CONNECT_SRC += ("'self'",)
 # https://github.com/jmcarp/nplusone
 
 # Should be the first in line:
-if DEBUG:
+if WITH_DEV:
     MIDDLEWARE = ("nplusone.ext.django.NPlusOneMiddleware",) + MIDDLEWARE
 
 # Logging N+1 requests:

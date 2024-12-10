@@ -1,11 +1,10 @@
-import datetime
 from typing import Literal
 
 from geojson_pydantic import FeatureCollection
 from ninja import Field, Query, Schema
+from ninja.errors import HttpError
 from ninja.security import django_auth
 
-from ninja.errors import HttpError
 from django.http import HttpRequest
 
 from server.apps.api.auth import AuthBearer

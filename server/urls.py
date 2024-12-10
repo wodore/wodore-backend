@@ -66,13 +66,16 @@ urlpatterns = [
 ]
 
 if settings.DEBUG:  # pragma: no cover
-    import debug_toolbar
+    try:
+        import debug_toolbar
 
-    urlpatterns = [
-        # URLs specific only to django-debug-toolbar:
-        path("__debug__/", include(debug_toolbar.urls)),
-        *urlpatterns,
-        # Serving media files in development only:
-        # *static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT),
-        # *staticfiles_urlpatterns(),
-    ]
+        urlpatterns = [
+            # URLs specific only to django-debug-toolbar:
+            path("__debug__/", include(debug_toolbar.urls)),
+            *urlpatterns,
+            # Serving media files in development only:
+            # *static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT),
+            # *staticfiles_urlpatterns(),
+        ]
+    except ModuleNotFoundError:
+        pass

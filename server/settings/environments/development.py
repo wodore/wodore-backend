@@ -8,7 +8,6 @@ import logging
 import socket
 from typing import Tuple
 
-from server.settings.components import config
 from server.settings.components.common import (
     DATABASES,
     DJANGO_TRUSTED_DOMAINS,
@@ -29,12 +28,13 @@ SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SECURE = False
 SECURE_PROXY_SSL_HEADER = None
 
+DEBUG = True
 try:
     import debug_toolbar
 
-    DEBUG = True
+    WITH_DEV = True
 except ModuleNotFoundError:
-    DEBUG = False
+    WITH_DEV = False
 
 ALLOWED_HOSTS = [
     *DJANGO_TRUSTED_DOMAINS,
@@ -63,7 +63,7 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 
 # Installed apps for development only:
 
-if DEBUG:
+if WITH_DEV:
     INSTALLED_APPS += (
         # Better debug:
         "debug_toolbar",
@@ -86,7 +86,7 @@ if DEBUG:
 # Django debug toolbar:
 # https://django-debug-toolbar.readthedocs.io
 
-if DEBUG:
+if WITH_DEV:
     MIDDLEWARE += (
         "debug_toolbar.middleware.DebugToolbarMiddleware",
         # https://github.com/bradmontgomery/django-querycount
@@ -122,7 +122,7 @@ CSP_CONNECT_SRC += ("'self'",)
 # https://github.com/jmcarp/nplusone
 
 # Should be the first in line:
-if DEBUG:
+if WITH_DEV:
     MIDDLEWARE = ("nplusone.ext.django.NPlusOneMiddleware",) + MIDDLEWARE
 
 # Logging N+1 requests:
