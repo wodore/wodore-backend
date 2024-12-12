@@ -44,13 +44,13 @@ NEXT_DOCKER_IMAGE_SLIM=${REPO}:${NEXT_TAG}-slim
 runserver:
 	${RUN_CMD} app runserver
 
-docker_show:
+docker-show:
 	@docker images | head -n 1
 	@docker images | grep wodore-backend | grep "${TAG} " | head -n 1
 	@echo "------------------------------------------------------------------------------------------------------------"
 	@docker images | grep wodore-backend | head -n 10 | grep -v "${TAG} "
 
-docker_compare:
+docker-compare:
 	@docker images | head -n 1
 	@docker images | grep wodore-backend | grep "${TAG} " | head -n 1
 	@docker images | grep wodore-backend | grep "${TAG}-slim " | head -n 1
@@ -76,7 +76,7 @@ _build:
 		$(DOCKER_CONTEXT)
 	@echo "Build finished"
 
-docker_build: _build docker_show
+docker-build: _build docker-show
 
 # --http-probe-apispec /v1/openapi.json 
 _slim:
@@ -99,20 +99,20 @@ _slim:
 		--http-probe-cmd "crawl:/" \
 		--http-probe'
 
-docker_slim: _slim docker_compare
+docker-slim: _slim docker-compare
 	
-docker_build_slim: _build _slim docker_compare	
+docker-build-slim: _build _slim docker-compare	
 
-docker_clean:
+docker-clean:
 	docker rmi $(DOCKER_IMAGE)
 
-docker_clean_all:
+docker-clean-all:
 	docker rmi -f $(shell docker images -q wodore-backend*); \
 	docker builder prune -af --filter "label=wodore-backend"
 
 
 # Default target: run in production mode
-docker_run_prod:
+docker-run-prod:
 	@echo "Starting ${DOCKER_IMAGE}"
 	@echo "You can now access the server at http://localhost:$(PORT)"
 	@mkdir -p .tmp/py_file_cache/joblib
@@ -131,7 +131,7 @@ docker_run_prod:
 
 # Debug target: run the Django development server
 # --name $(CONTAINER_NAME) 
-docker_run:
+docker-run:
 	@echo "Starting ${DOCKER_IMAGE}"
 	@echo "You can now access the server at http://localhost:$(PORT)"
 	@mkdir -p .tmp/py_file_cache/joblib
@@ -145,7 +145,7 @@ docker_run:
 		python -Wd manage.py runserver 0.0.0.0:$(PORT)'
 	@rm -r .tmp
 
-docker_run_ghcr:
+docker-run_ghcr:
 	@echo "Starting ${DOCKER_IMAGE}"
 	@echo "You can now access the server at http://localhost:$(PORT)"
 	bash -c 'docker run --rm \
@@ -163,30 +163,30 @@ debug_container:
 	echo "Container name: $$CONTAINER_NAME"; \
 	docker exec -it $$CONTAINER_NAME /bin/bash
 
-docker_login:
+docker-login:
 	@infisical run --env=dev --path /keys/wodore-backend --silent --log-level warn --  \
 		echo ${GITHUB_TOKEN} | docker login ghcr.io -u GITHUB_USERNAME --password-stdin
 	
-docker_push: docker_build docker_login
+docker-push: docker-build docker-login
 	docker push ${REGISTRY}/${ORGANIZATION}/${DOCKER_IMAGE}
 	docker push ${REGISTRY}/${ORGANIZATION}/${NEXT_DOCKER_IMAGE}
 
-docker_push_alpine:
-	DISTRO=alpine make docker_push
+docker-push-alpine:
+	DISTRO=alpine make docker-push
 
-docker_push_ubuntu:
-	DISTRO=ubuntu make docker_push
+docker-push-ubuntu:
+	DISTRO=ubuntu make docker-push
 	
-docker_push_slim: docker_build_slim docker_login
+docker-push-slim: docker-build-slim docker-login
 	docker push ${REGISTRY}/${ORGANIZATION}/${DOCKER_IMAGE_SLIM}
 	docker push ${REGISTRY}/${ORGANIZATION}/${NEXT_DOCKER_IMAGE_SLIM}
 
-docker_push_alpine_slim:
-	DISTRO=alpine make docker_push_slim
+docker-push-alpine-slim:
+	DISTRO=alpine make docker-push-slim
 
-docker_push_ubuntu_slim:
-	DISTRO=ubuntu make docker_push_slim
+docker-push-ubuntu-slim:
+	DISTRO=ubuntu make docker-push-slim
 
 	
 # we do not push normal ubuntu 
-docker_push_all: docker_push_alpine docker_push_alpine_slim docker_push_ubuntu_slim
+docker-push-all: docker-push-alpine docker-push-alpine-slim docker-push-ubuntu-slim
