@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "wodore"
 description = "Wodore Backend"
-version = "0.1.0"
+version = "0.1.1"
 readme = "README.md"
 authors = ["tb <tb@wodore.com>"]
 packages = [{"include"= "server"}]
