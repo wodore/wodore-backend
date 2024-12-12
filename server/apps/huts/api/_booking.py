@@ -31,7 +31,9 @@ class HutBookingsQuery(Schema):
     )
     days: int = Field(1, description="Show bookings for this many days.")
     # date: datetime.date | Literal["now"] = Field("now", description="Date to start with booking (yyyy-mm-dd or now).")
-    date: str | Literal["now"] = Field("now", description="Date to start with booking (yyyy-mm-dd or now).")
+    date: str | Literal["now", "weekend"] = Field(
+        "now", description="Date to start with bookings (yyyy-mm-dd, 'now' or 'weekend')."
+    )
 
 
 def _hut_slugs_list(slugs: str | None) -> list[str] | None:
