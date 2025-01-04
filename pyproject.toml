@@ -53,7 +53,7 @@ dependencies = [
     "click==8.*", # https://pypi.org/project/click/
     "pyyaml==6.*", # https://pypi.org/project/PyYAML/
     # https://github.com/wodore/hut-services
-    "hut-services", 
+    # "hut-services",  # added by hut-services-private
     # https://pypi.org/project/django-computedfields/ # https://github.com/TBxy/django-computedfields
     "django-computedfields",
 ]
@@ -114,9 +114,9 @@ dev = [
 ]
 
 [tool.uv.sources]
-hut-services = { git="https://github.com/wodore/hut-services", branch="feature/photos" }
+#hut-services = { git="https://github.com/wodore/hut-services.git", branch="feature/photos" }
 django-computedfields = { git="https://github.com/TBxy/django-computedfields", branch = "django5.0"} 
-hut-services-private = { git="ssh://git@github.com/wodore/hut-services-private.git" , branch = "main"} 
+hut-services-private = { git="ssh://git@github.com/wodore/hut-services-private" , branch = "main"} 
 
 [tool.black]
 line-length = 120
