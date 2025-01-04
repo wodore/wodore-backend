@@ -42,7 +42,10 @@ REGISTRY=ghcr.io
 NEXT_DOCKER_IMAGE=${REPO}:${NEXT_TAG}
 NEXT_DOCKER_IMAGE_SLIM=${REPO}:${NEXT_TAG}-slim
 runserver:
-	${RUN_CMD} app runserver
+	${RUN_CMD} ./manage.py runserver
+
+migrate:
+	${RUN_CMD} ./manage.py migrate
 
 docker-show:
 	@docker images | head -n 1
@@ -164,8 +167,9 @@ debug_container:
 	docker exec -it $$CONTAINER_NAME /bin/bash
 
 docker-login:
-	@infisical run --env=dev --path /keys/wodore-backend --silent --log-level warn --  \
-		echo ${GITHUB_TOKEN} | docker login ghcr.io -u GITHUB_USERNAME --password-stdin
+	@echo "Loggin broken"
+#@infisical run --env=dev --path /keys/wodore-backend --silent --log-level warn --  \
+#	echo ${GITHUB_TOKEN} | docker login ghcr.io -u ${GITHUB_USERNAME} --password-stdin
 	
 docker-push: docker-build docker-login
 	docker push ${REGISTRY}/${ORGANIZATION}/${DOCKER_IMAGE}
