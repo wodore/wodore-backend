@@ -87,7 +87,8 @@ def release(
         if unreleased or length == 0:
             echo("\n".join(cl))
         else:
-            echo(f"{'\n'.join(cl[:length])}\n...\n")
+            out = f"{'\n'.join(cl[:length])}" + "\n...\n"
+            echo(out)
         header("Changelog end") if dry else None
     else:
         cl = (
