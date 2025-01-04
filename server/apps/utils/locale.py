@@ -101,7 +101,7 @@ class Translations(BaseModel):
             lang = self.get_locale() if locale is None else locale
             try:
                 setattr(self, lang, value)
-            except:
+            except Exception:
                 print(ignore_errors)
                 if not ignore_errors:
                     raise ValueError(f"Cannot set '{lang}: {value}'")

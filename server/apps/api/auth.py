@@ -174,7 +174,7 @@ class ZitadelIntrospectTokenValidator(IntrospectTokenValidator):  # type: ignore
         token = self.introspect_token(token_string)
         try:
             self.validate_token(token, scopes, roles, groups, request)
-        except ValidatorError as e:
+        except ValidatorError as _:
             # print(f"Unauthorized: {e.error}")
             return None
         # TODO: return user with permission and groups

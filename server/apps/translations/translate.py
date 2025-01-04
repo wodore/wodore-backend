@@ -58,7 +58,7 @@ def translate_hut(
         if source_lang is None:
             continue
         text = getattr(field_value, source_lang)
-        translate_to = [l for l in langs if l != source_lang]
+        translate_to = [lang for lang in langs if lang != source_lang]
         for lang in translate_to:
             if not getattr(field_value, lang):
                 # if lang == "en":

@@ -1,5 +1,6 @@
 from copy import deepcopy
 from typing import Annotated, Any
+from pydantic import create_model
 
 # from django.db.models import JSONField
 from django_jsonform.models.fields import JSONField
@@ -20,8 +21,6 @@ LANGUAGE_CODES = [lang[0] for lang in settings.LANGUAGES]
 #    fr: str = ""
 #    it: str = ""
 
-
-from pydantic import create_model
 
 lang_kwargs: Any = {
     lang[0]: (str | None, Field("", description=lang[1])) for lang in settings.LANGUAGES

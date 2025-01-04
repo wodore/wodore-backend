@@ -7,6 +7,7 @@ SECURITY WARNING: don't run with debug turned on in production!
 import logging
 import socket
 from typing import Tuple
+from importlib.util import find_spec
 
 from server.settings.components.common import (
     DATABASES,
@@ -29,12 +30,14 @@ SESSION_COOKIE_SECURE = False
 SECURE_PROXY_SSL_HEADER = None
 
 DEBUG = True
-try:
-    import debug_toolbar
+# try:
+#    import debug_toolbar
+#
+#    WITH_DEV = True
+# except ModuleNotFoundError:
+#    WITH_DEV = False
 
-    WITH_DEV = True
-except ModuleNotFoundError:
-    WITH_DEV = False
+WITH_DEV = find_spec("debug_toolbar") is not None
 
 ALLOWED_HOSTS = [
     *DJANGO_TRUSTED_DOMAINS,
