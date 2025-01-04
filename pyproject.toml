@@ -174,7 +174,7 @@ exclude = ["*migrations/*.py"]
 #  "E501",   # Line too long
 #  "PT004",  # Use underscore for non-returning fixture (use usefixture instead)
 #]
-#target-version = "py38"
+target-version = "py310"
 
 [tool.ruff.lint]
 unfixable = [
