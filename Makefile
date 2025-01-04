@@ -42,10 +42,10 @@ REGISTRY=ghcr.io
 NEXT_DOCKER_IMAGE=${REPO}:${NEXT_TAG}
 NEXT_DOCKER_IMAGE_SLIM=${REPO}:${NEXT_TAG}-slim
 runserver:
-	${RUN_CMD} ./manage.py runserver
+	${RUN_CMD} app runserver
 
 migrate:
-	${RUN_CMD} ./manage.py migrate
+	${RUN_CMD} app migrate
 
 docker-show:
 	@docker images | head -n 1
