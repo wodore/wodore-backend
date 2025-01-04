@@ -1,28 +1,11 @@
-import re
-from os import wait
-from re import I
-from time import perf_counter
-from typing import List
-
-import msgspec
-from geojson_pydantic import Feature, FeatureCollection
-from ninja import Query, Router
-from ninja.errors import HttpError
+from ninja import Query
 
 from django.conf import settings
-from django.contrib.gis.db.models.functions import AsGeoJSON
-from django.contrib.postgres.aggregates import JSONBAgg
-from django.core.serializers import serialize
-from django.db import IntegrityError
-from django.db.models import F, TextField
-from django.db.models.functions import Cast, JSONObject, Lower
-from django.http import HttpRequest, HttpResponse
-from django.shortcuts import get_object_or_404
+from django.http import HttpRequest
 
 from server.apps.api.query import FieldsParam
 from server.apps.translations import (
     LanguageParam,
-    activate,
     override,
     with_language_param,
 )
@@ -49,7 +32,12 @@ def _get_hut_types(  # type: ignore  # noqa: PGH003
         return hts
 
 
-@router.get("types/list", response=list[HutTypeDetailSchema], exclude_unset=True, operation_id="get_hut_types")
+@router.get(
+    "types/list",
+    response=list[HutTypeDetailSchema],
+    exclude_unset=True,
+    operation_id="get_hut_types",
+)
 @with_language_param("lang")
 def get_hut_types(  # type: ignore  # noqa: PGH003
     request: HttpRequest,
@@ -60,7 +48,10 @@ def get_hut_types(  # type: ignore  # noqa: PGH003
 
 
 @router.get(
-    "types/records", response=dict[str, HutTypeDetailSchema], exclude_unset=True, operation_id="get_hut_type_records"
+    "types/records",
+    response=dict[str, HutTypeDetailSchema],
+    exclude_unset=True,
+    operation_id="get_hut_type_records",
 )
 @with_language_param("lang")
 def get_hut_type_records(  # type: ignore  # noqa: PGH003

@@ -1,5 +1,4 @@
 # from django.db import models
-from asyncio import constants
 from computedfields.models import ComputedFieldsModel, computed
 from jinja2 import Environment
 
@@ -12,13 +11,14 @@ from django.utils.translation import get_language
 from django.utils.translation import gettext_lazy as _
 
 from server.apps.contacts.models import Contact
-from server.apps.organizations.models import Organization
-
 from server.apps.images.models import Image
+from server.apps.organizations.models import Organization
 
 
 class HutContactAssociation(TimeStampedModel):
-    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="details", db_index=True)
+    contact = models.ForeignKey(
+        Contact, on_delete=models.CASCADE, related_name="details", db_index=True
+    )
     hut = models.ForeignKey("Hut", on_delete=models.CASCADE, db_index=True)
     order = models.PositiveSmallIntegerField(blank=True, null=True)
 
@@ -30,13 +30,20 @@ class HutContactAssociation(TimeStampedModel):
         ordering = ("contact__function__priority", "order", "hut__name")
         app_label = "huts"
         constraints = (
-            models.UniqueConstraint(name="%(app_label)s_%(class)s_unique_relationships", fields=["contact", "hut"]),
+            models.UniqueConstraint(
+                name="%(app_label)s_%(class)s_unique_relationships",
+                fields=["contact", "hut"],
+            ),
         )
 
 
 class HutImageAssociation(TimeStampedModel):
-    image = models.ForeignKey(Image, on_delete=models.CASCADE, db_index=True, related_name="details")
-    hut = models.ForeignKey("Hut", on_delete=models.CASCADE, db_index=True, related_name="huts")
+    image = models.ForeignKey(
+        Image, on_delete=models.CASCADE, db_index=True, related_name="details"
+    )
+    hut = models.ForeignKey(
+        "Hut", on_delete=models.CASCADE, db_index=True, related_name="huts"
+    )
     order = models.PositiveSmallIntegerField(blank=True, null=True)
 
     def __str__(self) -> str:
@@ -47,24 +54,36 @@ class HutImageAssociation(TimeStampedModel):
         ordering = ("hut__name", "order")
         app_label = "huts"
         constraints = (
-            models.UniqueConstraint(name="%(app_label)s_%(class)s_unique_relationships", fields=["image", "hut"]),
+            models.UniqueConstraint(
+                name="%(app_label)s_%(class)s_unique_relationships",
+                fields=["image", "hut"],
+            ),
         )
 
 
 class HutOrganizationAssociation(TimeStampedModel, ComputedFieldsModel):
     # objects = BaseMutlilingualManager()
 
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="source", db_index=True)
-    hut = models.ForeignKey("Hut", on_delete=models.CASCADE, db_index=True, related_name="orgs_source")
-    props = models.JSONField(help_text=_("Organization dependend properties."), blank=True, default=dict)
-    source_id = models.CharField(max_length=40, blank=True, null=True, default="", help_text="Source id")
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name="source", db_index=True
+    )
+    hut = models.ForeignKey(
+        "Hut", on_delete=models.CASCADE, db_index=True, related_name="orgs_source"
+    )
+    props = models.JSONField(
+        help_text=_("Organization dependend properties."), blank=True, default=dict
+    )
+    source_id = models.CharField(
+        max_length=40, blank=True, null=True, default="", help_text="Source id"
+    )
     # link -> see below (computed)
 
     class Meta:
         verbose_name = _("Hut and Organization Association")
         constraints = (
             models.UniqueConstraint(
-                name="%(app_label)s_%(class)s_unique_relationships", fields=["organization", "hut"]
+                name="%(app_label)s_%(class)s_unique_relationships",
+                fields=["organization", "hut"],
             ),
         )
 
@@ -76,9 +95,16 @@ class HutOrganizationAssociation(TimeStampedModel, ComputedFieldsModel):
     # TODO: does not work for different languages, needs one field for each ...
     @computed(
         models.CharField(
-            max_length=200, blank=True, null=True, default="", help_text=_("Link to object by this organisation")
+            max_length=200,
+            blank=True,
+            null=True,
+            default="",
+            help_text=_("Link to object by this organisation"),
         ),
-        depends=[("self", ["props", "source_id"]), ("organization", ["link_hut_pattern", "config", "slug"])],
+        depends=[
+            ("self", ["props", "source_id"]),
+            ("organization", ["link_hut_pattern", "config", "slug"]),
+        ],
     )
     def link(self):
         lang = get_language() or settings.LANGUAGE_CODE  # TODO lang replace by query

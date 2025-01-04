@@ -1,15 +1,12 @@
 import datetime
 import typing as t
 
-from django_extensions.db.fields import AutoSlugField
 from easydict import EasyDict
 from hut_services import (
     AnswerEnum,
     BaseService,
     HutSchema,
-    HutSourceSchema,
     HutTypeEnum,
-    OpenMonthlySchema,
 )
 from hut_services.core.guess import guess_slug_name
 from hut_services.core.schema import HutBookingsSchema as HutServiceBookingSchema
@@ -36,7 +33,6 @@ from server.apps.contacts.models import Contact, ContactFunction
 from server.apps.images.models import Image
 from server.apps.organizations.models import Organization
 from server.apps.owners.models import Owner
-from server.apps.translations.translate import translate_hut
 from server.core import UpdateCreateStatus
 
 from ..managers import HutManager
@@ -98,12 +94,20 @@ class Hut(TimeStampedModel):
         default=ReviewStatusChoices.review,
         verbose_name=_("Review status"),
     )
-    review_comment = models.TextField(blank=True, default="", max_length=10000, verbose_name=_("Review comment"))
+    review_comment = models.TextField(
+        blank=True, default="", max_length=10000, verbose_name=_("Review comment")
+    )
     is_active = models.BooleanField(
-        default=True, db_index=True, verbose_name=_("Active"), help_text=_("Only shown to admin if not active")
+        default=True,
+        db_index=True,
+        verbose_name=_("Active"),
+        help_text=_("Only shown to admin if not active"),
     )
     is_public = models.BooleanField(
-        default=False, db_index=True, verbose_name=_("Public"), help_text=_("Only shown to editors if not public")
+        default=False,
+        db_index=True,
+        verbose_name=_("Public"),
+        help_text=_("Only shown to editors if not public"),
     )
     is_modified = models.BooleanField(
         default=False,
@@ -116,7 +120,10 @@ class Hut(TimeStampedModel):
     description = models.TextField(max_length=10000, verbose_name="Description")
     description_i18n: str  # for typing
     description_attribution = models.CharField(
-        blank=True, default="", max_length=1000, verbose_name=_("Descripion attribution")
+        blank=True,
+        default="",
+        max_length=1000,
+        verbose_name=_("Descripion attribution"),
     )
 
     hut_owner = models.ForeignKey(
@@ -129,7 +136,10 @@ class Hut(TimeStampedModel):
         help_text=_("For example 'SAC Bern' ..."),
     )
     contact_set = models.ManyToManyField(
-        Contact, through=HutContactAssociation, related_name="huts", verbose_name=_("Contacts")
+        Contact,
+        through=HutContactAssociation,
+        related_name="huts",
+        verbose_name=_("Contacts"),
     )
     url = models.URLField(blank=True, default="", max_length=200, verbose_name=_("URL"))
     note = models.TextField(
@@ -141,17 +151,30 @@ class Hut(TimeStampedModel):
     )  # TODO: maybe notes with mutlipe notes and category
     note_i18n: str  # for typing
 
-    photos = models.CharField(blank=True, default="", max_length=1000, verbose_name=_("Hut photo"))
+    photos = models.CharField(
+        blank=True, default="", max_length=1000, verbose_name=_("Hut photo")
+    )
     photos_attribution = models.CharField(
         blank=True, default="", max_length=1000, verbose_name=_("Hut photo attribution")
     )
     image_set = models.ManyToManyField(
-        Image, through=HutImageAssociation, related_name="huts", verbose_name=_("Images")
+        Image,
+        through=HutImageAssociation,
+        related_name="huts",
+        verbose_name=_("Images"),
     )
     country_field = CountryField()
     location = models.PointField(blank=False, verbose_name="Location")
-    elevation = models.DecimalField(null=True, blank=True, max_digits=5, decimal_places=1, verbose_name=_("Elevation"))
-    capacity_open = models.PositiveSmallIntegerField(blank=True, null=True, verbose_name=_("Capacity if open"))
+    elevation = models.DecimalField(
+        null=True,
+        blank=True,
+        max_digits=5,
+        decimal_places=1,
+        verbose_name=_("Elevation"),
+    )
+    capacity_open = models.PositiveSmallIntegerField(
+        blank=True, null=True, verbose_name=_("Capacity if open")
+    )
     capacity_closed = models.PositiveSmallIntegerField(
         blank=True,
         null=True,
@@ -241,7 +264,9 @@ class Hut(TimeStampedModel):
         if not self.slug:
             self.slug = self.create_unique_slug_name(self.name_i18n)
         # if updated
-        if not self._state.adding and self.slug != self._orig_slug:  # updates # type: ignore  # noqa: PGH003
+        if (
+            not self._state.adding and self.slug != self._orig_slug
+        ):  # updates # type: ignore  # noqa: PGH003
             self.slug = self.create_unique_slug_name(self.slug)
         to_save = []
         if (
@@ -315,11 +340,17 @@ class Hut(TimeStampedModel):
 
     @classmethod
     def create_from_source(
-        cls, hut_source: HutSource, review: bool = True, _review_status: "Hut.ReviewStatusChoices | None" = None
+        cls,
+        hut_source: HutSource,
+        review: bool = True,
+        _review_status: "Hut.ReviewStatusChoices | None" = None,
     ) -> "Hut":
         hut = cls._convert_source(hut_source)
         return cls.create_from_schema(
-            hut_schema=hut, review=review, _hut_source=hut_source, _review_status=_review_status
+            hut_schema=hut,
+            review=review,
+            _hut_source=hut_source,
+            _review_status=_review_status,
         )
 
     @classmethod
@@ -334,7 +365,9 @@ class Hut(TimeStampedModel):
         if _review_status is not None:
             review_status = _review_status
         else:
-            review_status = Hut.ReviewStatusChoices.new if review else Hut.ReviewStatusChoices.done
+            review_status = (
+                Hut.ReviewStatusChoices.new if review else Hut.ReviewStatusChoices.done
+            )
 
         # hut_schema = translate_hut(hut_schema)
 
@@ -351,7 +384,9 @@ class Hut(TimeStampedModel):
                 if value:
                     i18n_fields[f"{out_field}_{code}"] = value
         type_closed = (
-            HutType.values[str(hut_schema.hut_type.if_closed.value)] if hut_schema.hut_type.if_closed else None
+            HutType.values[str(hut_schema.hut_type.if_closed.value)]
+            if hut_schema.hut_type.if_closed
+            else None
         )
 
         hut_db = Hut(
@@ -374,7 +409,9 @@ class Hut(TimeStampedModel):
             open_monthly=hut_schema.open_monthly.model_dump(),
             **i18n_fields,
         )
-        if hut_db.hut_type_open.slug == "hut" and hut_db.capacity_closed or 0 > 0 and not type_closed:
+        if (hut_db.hut_type_open.slug == "hut" and hut_db.capacity_closed) or (
+            0 > 0 and not type_closed
+        ):
             if (hut_db.elevation or 0) < 3000:
                 hut_db.hut_type_closed = HutType.values["selfhut"]
             else:
@@ -399,7 +436,9 @@ class Hut(TimeStampedModel):
             if "slug" in defaults:
                 del defaults["slug"]
             defaults.update(i18n_fields)
-            owner, _created = Owner.objects.get_or_create(slug=src_hut_owner.slug, defaults=defaults)
+            owner, _created = Owner.objects.get_or_create(
+                slug=src_hut_owner.slug, defaults=defaults
+            )
             hut_db.hut_owner = owner
 
         # Contact Stuff
@@ -407,10 +446,14 @@ class Hut(TimeStampedModel):
         src_hut_contacts = hut_schema.contacts
         contacts: list[Contact] = []
         for c in src_hut_contacts:
-            name = c.function.replace("_", " ").replace("-", " ") if c.function else None
+            name = (
+                c.function.replace("_", " ").replace("-", " ") if c.function else None
+            )
             priority = 100 if c.function == "private_contact" else 10
             function = (
-                ContactFunction.objects.get_or_create(defaults={"name": name, "priority": priority}, slug=c.function)[0]
+                ContactFunction.objects.get_or_create(
+                    defaults={"name": name, "priority": priority}, slug=c.function
+                )[0]
                 if c.function
                 else None
             )
@@ -447,11 +490,18 @@ class Hut(TimeStampedModel):
                     a.save()
             # PHOTOS
             src_hut_photos = hut_schema.photos
-            last_img = HutImageAssociation.objects.filter(hut=hut_db).order_by("-order").first()
+            last_img = (
+                HutImageAssociation.objects.filter(hut=hut_db)
+                .order_by("-order")
+                .first()
+            )
             photo_order = 0 if not last_img else last_img.order + 1
             for photo in src_hut_photos:
                 img = Image.create_image_from_schema(
-                    photo, path=f"huts/{hut_db.slug}", default_caption=hut_db.name, tags=["hut"]
+                    photo,
+                    path=f"huts/{hut_db.slug}",
+                    default_caption=hut_db.name,
+                    tags=["hut"],
                 )
                 if img:
                     img.save()
@@ -469,7 +519,9 @@ class Hut(TimeStampedModel):
         hut_source: HutSource,
         review: bool = True,
         force_overwrite: bool = False,  # overwrite exisitng entries
-        force_overwrite_include: t.Sequence[str] = [],  # set a list which field which should be overwritten
+        force_overwrite_include: t.Sequence[
+            str
+        ] = [],  # set a list which field which should be overwritten
         force_overwrite_exclude: t.Sequence[str] = [],  # ... exclude when overwritten
         force_none: bool = False,  # force t oset value to none (overwrite is needed)
         _review_status: "Hut.ReviewStatusChoices | None" = None,
@@ -495,7 +547,9 @@ class Hut(TimeStampedModel):
         hut_schema: HutSchema,
         review: bool = True,
         force_overwrite: bool = False,  # overwrite exisitng entries
-        force_overwrite_include: t.Sequence[str] = [],  # set a list which field which should be overwritten
+        force_overwrite_include: t.Sequence[
+            str
+        ] = [],  # set a list which field which should be overwritten
         force_overwrite_exclude: t.Sequence[str] = [],  # ... exclude when overwritten
         force_none: bool = False,  # force t oset value to none (overwrite is needed)
         set_modified: bool = False,
@@ -550,7 +604,10 @@ class Hut(TimeStampedModel):
             updates["images"] = []
             for p in hut_schema.photos:
                 img = Image.create_image_from_schema(
-                    p, path=f"huts/{hut_db.slug}", default_caption=hut_db.name, tags=["hut"]
+                    p,
+                    path=f"huts/{hut_db.slug}",
+                    default_caption=hut_db.name,
+                    tags=["hut"],
                 )
                 if img:
                     updates["images"].append(img)
@@ -558,9 +615,13 @@ class Hut(TimeStampedModel):
             # updates["photos_attribution"] = hut_schema.photos[0].attribution if hut_schema.photos else ""
         if "hut_type" in updates:
             del updates["hut_type"]
-            updates["hut_type_open"] = HutType.values[str(hut_schema.hut_type.if_open.value)]
+            updates["hut_type_open"] = HutType.values[
+                str(hut_schema.hut_type.if_open.value)
+            ]
             updates["hut_type_closed"] = (
-                HutType.values[str(hut_schema.hut_type.if_closed.value)] if hut_schema.hut_type.if_closed else None
+                HutType.values[str(hut_schema.hut_type.if_closed.value)]
+                if hut_schema.hut_type.if_closed
+                else None
             )
         if _hut_source is not None and _hut_source.organization.slug == "hrs":
             updates["booking_ref"] = _hut_source.organization
@@ -573,7 +634,11 @@ class Hut(TimeStampedModel):
             for f, v in updates.items():
                 # image create/update
                 if f == "images":  # type: ignore[attr-defined]
-                    last_img = HutImageAssociation.objects.filter(hut=hut_db).order_by("-order").first()
+                    last_img = (
+                        HutImageAssociation.objects.filter(hut=hut_db)
+                        .order_by("-order")
+                        .first()
+                    )
                     photo_order = 0 if not last_img else (last_img.order or 0) + 1
                     for img in v:
                         img.save()
@@ -595,16 +660,28 @@ class Hut(TimeStampedModel):
                         getattr(hut_db, f) in ["", None]  # Value is still empty
                         or (  # -> check for overwrite force ...
                             # only overwrite without any fields specified -> overwrite all
-                            (force_overwrite and not force_overwrite_exclude and not force_overwrite_include)
+                            (
+                                force_overwrite
+                                and not force_overwrite_exclude
+                                and not force_overwrite_include
+                            )
                             or (  # some fields (include or exclude) is defined (exclusive or)
-                                (force_overwrite and f in force_overwrite_include and not force_overwrite_exclude)
+                                (
+                                    force_overwrite
+                                    and f in force_overwrite_include
+                                    and not force_overwrite_exclude
+                                )
                                 or (
-                                    force_overwrite and f not in force_overwrite_exclude and not force_overwrite_include
+                                    force_overwrite
+                                    and f not in force_overwrite_exclude
+                                    and not force_overwrite_include
                                 )
                             )
                         )
                     )
-                    and (v not in ["", None] or force_none)  # only write 'None' if foced to
+                    and (
+                        v not in ["", None] or force_none
+                    )  # only write 'None' if foced to
                     and getattr(hut_db, f) != v  # only update if value is not the same
                 ):
                     old_value = getattr(hut_db, f)
@@ -612,19 +689,34 @@ class Hut(TimeStampedModel):
                     if isinstance(v, dbPoint) and v.tuple == old_value.tuple:  # type: ignore[attr-defined]
                         continue
                     setattr(hut_db, f, v)
-                    sp = "'" if len(str(old_value)) < 100 and len(str(v)) < 100 else "\n---\n"
-                    changes += f"* Changed '{f}' from {sp}{old_value}{sp} to {sp}{v}{sp}\n"
+                    sp = (
+                        "'"
+                        if len(str(old_value)) < 100 and len(str(v)) < 100
+                        else "\n---\n"
+                    )
+                    changes += (
+                        f"* Changed '{f}' from {sp}{old_value}{sp} to {sp}{v}{sp}\n"
+                    )
                     updated = UpdateCreateStatus.updated
             # Update review field
             if updated == UpdateCreateStatus.updated and hut_db.review_status not in [
                 Hut.ReviewStatusChoices.reject,
                 Hut.ReviewStatusChoices.new,
             ]:
-                status = review_status if review_status != Hut.ReviewStatusChoices.work else None
-                hut_db.add_review_comment(title="Field changes", text=changes, status=status)
+                status = (
+                    review_status
+                    if review_status != Hut.ReviewStatusChoices.work
+                    else None
+                )
+                hut_db.add_review_comment(
+                    title="Field changes", text=changes, status=status
+                )
             hut_db.save()
             # check for new organization
-            if _hut_source is not None and _hut_source.organization not in hut_db.org_set.all():
+            if (
+                _hut_source is not None
+                and _hut_source.organization not in hut_db.org_set.all()
+            ):
                 hut_db.add_organization(_hut_source)
         hut_db.refresh_from_db()
         return hut_db, updated
@@ -636,7 +728,9 @@ class Hut(TimeStampedModel):
         hut_source: HutSource | None = None,
         review: bool | None = None,
         force_overwrite: bool = False,  # overwrite exisitng entries
-        force_overwrite_include: t.Sequence[str] = [],  # set a list which field which should be overwritten
+        force_overwrite_include: t.Sequence[
+            str
+        ] = [],  # set a list which field which should be overwritten
         force_overwrite_exclude: t.Sequence[str] = [],  # ... exclude when overwritten
         force_none: bool = False,  # force t oset value to none (overwrite is needed)
         _review_status_update: "Hut.ReviewStatusChoices | None" = None,
@@ -660,7 +754,9 @@ class Hut(TimeStampedModel):
         if hut_schema is not None and hut_schema.location:
             location = dbPoint(hut_schema.location.lon_lat)
         elif hut_source is not None and hut_source.location:
-            location = hut_source.location  # (hut_source.location.x, hut_source.location.y)
+            location = (
+                hut_source.location
+            )  # (hut_source.location.x, hut_source.location.y)
         hut_db = None
         if location is not None:
             hut_db = (
@@ -698,7 +794,9 @@ class Hut(TimeStampedModel):
         if hut_schema is None and hut_source is not None:
             return (
                 cls.create_from_source(
-                    hut_source=hut_source, review=bool(review), _review_status=_review_status_create
+                    hut_source=hut_source,
+                    review=bool(review),
+                    _review_status=_review_status_create,
                 ),
                 UpdateCreateStatus.created,
             )
@@ -724,7 +822,9 @@ class Hut(TimeStampedModel):
     ) -> str:
         """Adds a review comment, if title included a date is added automatically."""
         title_date = (
-            f"\n\n~~~ {datetime.datetime.today().strftime('%Y-%m-%d %H:%M')}\n{title}\n\n" if title is not None else ""
+            f"\n\n~~~ {datetime.datetime.today().strftime('%Y-%m-%d %H:%M')}\n{title}\n\n"
+            if title is not None
+            else ""
         )
         comment = self.review_comment
         if append:
@@ -768,9 +868,15 @@ class Hut(TimeStampedModel):
         for src_name, service in SERVICES.items():
             if service.support_booking and (src_name == source or source is None):
                 # source_obj = Organization.get_by_slug(src_name)
-                bookings.update(service.get_bookings(date=date, days=days, source_ids=source_ids, lang=lang))
+                bookings.update(
+                    service.get_bookings(
+                        date=date, days=days, source_ids=source_ids, lang=lang
+                    )
+                )
                 huts += (
-                    obj.prefetch_related("hut_type_open", "hut_type_closed", "booking_ref")
+                    obj.prefetch_related(
+                        "hut_type_open", "hut_type_closed", "booking_ref"
+                    )
                     .filter(
                         orgs_source__organization__slug=src_name,
                         booking_ref__slug=src_name,
@@ -783,7 +889,13 @@ class Hut(TimeStampedModel):
                         hut_type_closed_slug=F("hut_type_closed__slug"),
                     )
                     .values(
-                        "id", "slug", "source_id", "location", "hut_type_open_slug", "hut_type_closed_slug", "source"
+                        "id",
+                        "slug",
+                        "source_id",
+                        "location",
+                        "hut_type_open_slug",
+                        "hut_type_closed_slug",
+                        "source",
                     )
                 )
 
@@ -803,7 +915,9 @@ class Hut(TimeStampedModel):
                 h.update(booking)
         return [HutBookingsSchema(**h) for h in huts]
 
-    def organizations_query(self, organization: str | Organization | None = None, annotate=True):
+    def organizations_query(
+        self, organization: str | Organization | None = None, annotate=True
+    ):
         if isinstance(organization, Organization):
             organization = organization.slug
         org_q = self.org_set
@@ -813,7 +927,11 @@ class Hut(TimeStampedModel):
             org_q = org_q.all()
         if annotate:
             org_q = org_q.annotate(
-                logo_url=Concat(Value(settings.MEDIA_URL), F("logo"), output_field=models.CharField()),
+                logo_url=Concat(
+                    Value(settings.MEDIA_URL),
+                    F("logo"),
+                    output_field=models.CharField(),
+                ),
                 props=F("details__props"),
                 source_id=F("details__source_id"),
             )
@@ -854,14 +972,23 @@ class Hut(TimeStampedModel):
         ### with annotation -- at the moment many queries
         org_q = self.organizations_query(organization=organization)
         organizations = org_q.values(
-            "name_i18n", "fullname_i18n", "config", "link_hut_pattern", "url_i18n", "logo_url", "props", "source_id"
+            "name_i18n",
+            "fullname_i18n",
+            "config",
+            "link_hut_pattern",
+            "url_i18n",
+            "logo_url",
+            "props",
+            "source_id",
         )
 
         for org in organizations:
             lang = get_language() or settings.LANGUAGE_CODE
             link_pattern = org.get("link_hut_pattern", "")
             _tmpl = Environment().from_string(link_pattern)
-            org["link"] = _tmpl.render(lang=lang, slug=self.slug, id=org.get("source_id"), **org)
+            org["link"] = _tmpl.render(
+                lang=lang, slug=self.slug, id=org.get("source_id"), **org
+            )
             # link = _tmpl.render(lang=lang, config=config, slug=self.slug, id=source_id, props=props)
             org["logo"] = org["logo_url"]
             org["name"] = org["name_i18n"]
@@ -872,9 +999,15 @@ class Hut(TimeStampedModel):
         return orgs
 
     def create_unique_slug_name(
-        self, hut_name: str, max_length: int = 25, min_length: int = 5, attempts: int = 10
+        self,
+        hut_name: str,
+        max_length: int = 25,
+        min_length: int = 5,
+        attempts: int = 10,
     ) -> str:
-        orig_slug = guess_slug_name(hut_name=hut_name, max_length=max_length, min_length=min_length)
+        orig_slug = guess_slug_name(
+            hut_name=hut_name, max_length=max_length, min_length=min_length
+        )
         slug = orig_slug
         cnt = 1
         while Hut.objects.filter(slug=slug).count() and cnt < attempts:  # slug exists

@@ -29,7 +29,10 @@ LicenseAdminFieldsets = [
     ),
     (
         f"{_('Description')} {_('Translations')}",
-        {"classes": ["collapse", "tab"], "fields": [f"description_{code}" for code in settings.LANGUAGE_CODES]},
+        {
+            "classes": ["collapse", "tab"],
+            "fields": [f"description_{code}" for code in settings.LANGUAGE_CODES],
+        },
     ),
     (
         f"{_('Link')} {_('Translations')}",

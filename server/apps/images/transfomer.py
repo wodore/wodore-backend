@@ -1,7 +1,6 @@
 import base64
 import hashlib
 import hmac
-import os
 from typing import Literal, Optional
 from urllib.parse import quote
 
@@ -65,7 +64,10 @@ class ImagorImage:
 
     @classmethod
     def sign_path(
-        cls, path: str, key: str | None = None, algorithmus: Literal["sha1", "sha256", "sha512"] = "sha256"
+        cls,
+        path: str,
+        key: str | None = None,
+        algorithmus: Literal["sha1", "sha256", "sha512"] = "sha256",
     ) -> str:
         """
         Generate a HMAC-SHA256 signature for the path and return it in Base64.
@@ -79,7 +81,11 @@ class ImagorImage:
         imagor_key = key or settings.IMAGOR_KEY
         # print(f"IMAGOR KEY: {key}")
         # hmac_digest = hmac.new(IMAGOR_SECRET.encode("utf-8"), path.encode("utf-8"), hashlib.sha256).digest()
-        hmac_digest = hmac.new(imagor_key.encode("utf-8"), path.encode("utf-8"), getattr(hashlib, algorithmus)).digest()
+        hmac_digest = hmac.new(
+            imagor_key.encode("utf-8"),
+            path.encode("utf-8"),
+            getattr(hashlib, algorithmus),
+        ).digest()
         return base64.urlsafe_b64encode(hmac_digest).decode("utf-8")  # .rstrip("=")
         # return signature.replace("+", "-").replace("/", "_")
 
@@ -219,7 +225,9 @@ class ImagorImage:
 
 
 if __name__ == "__main__":
-    test_path = "500x500/top/raw.githubusercontent.com/cshum/imagor/master/testdata/gopher.png"
+    test_path = (
+        "500x500/top/raw.githubusercontent.com/cshum/imagor/master/testdata/gopher.png"
+    )
     signed = ImagorImage.sign_path(test_path, key="mysecret", algorithmus="sha1")
     expected = "cST4Ko5_FqwT3BDn-Wf4gO3RFSk="
     print(f"Signed:   {signed}")

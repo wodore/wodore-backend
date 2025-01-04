@@ -8,12 +8,10 @@ For the full list of settings and their config, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
-import typing as t
 from typing import Dict, List, Tuple, Union
 
 from corsheaders.defaults import default_headers
-from hut_services import SERVICES, BaseService, OsmService, RefugesInfoService
-from pydantic import BaseModel
+from hut_services import SERVICES
 
 from django.utils.translation import gettext_lazy as _
 
@@ -33,11 +31,21 @@ if PRIVATE_SERVICES:
 SECRET_KEY = config("DJANGO_SECRET_KEY", "NotSet")
 
 DJANGO_TRUSTED_DOMAINS = (
-    [d.strip() for d in config("DJANGO_TRUSTED_DOMAINS").split(",")] if config("DJANGO_TRUSTED_DOMAINS", "") else []
+    [d.strip() for d in config("DJANGO_TRUSTED_DOMAINS").split(",")]
+    if config("DJANGO_TRUSTED_DOMAINS", "")
+    else []
 )
-FRONTEND_DOMAIN = config("FRONTEND_DOMAIN") if config("FRONTEND_DOMAIN", None) else "http://localhost:9000"
+FRONTEND_DOMAIN = (
+    config("FRONTEND_DOMAIN")
+    if config("FRONTEND_DOMAIN", None)
+    else "http://localhost:9000"
+)
 
-DJANGO_ADMIN_URL = config("DJANGO_ADMIN_URL") if config("DJANGO_ADMIN_URL", None) else "http://localhost:8000"
+DJANGO_ADMIN_URL = (
+    config("DJANGO_ADMIN_URL")
+    if config("DJANGO_ADMIN_URL", None)
+    else "http://localhost:8000"
+)
 
 # Application definition:
 

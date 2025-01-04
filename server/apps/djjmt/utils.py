@@ -29,13 +29,17 @@ def get_language():
     return _LANG
 
 
-def with_language_param(_param: str = "lang") -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def with_language_param(
+    _param: str = "lang",
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Returns object with the correct language, the paramter 'lang: LanguageParam' is still needed."""
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
         def wrapper(request: HttpRequest, *args: Any, **kwargs: Any) -> Any:
-            assert _param in kwargs, f"Function paramter '{_param}: LanguageParam' is missing! "
+            assert (
+                _param in kwargs
+            ), f"Function paramter '{_param}: LanguageParam' is missing! "
             lang = kwargs.get(_param)
             with override(lang):
                 return func(request, *args, **kwargs)

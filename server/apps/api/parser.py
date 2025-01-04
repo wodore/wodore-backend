@@ -22,4 +22,6 @@ class MsgSpecParser(Parser):
     "msgspec json decoder"
 
     def parse_body(self, request: HttpRequest) -> DictStrAny:
-        return cast(DictStrAny, msgspec.json.decode(request.body, dec_hook=decoder_hook))
+        return cast(
+            DictStrAny, msgspec.json.decode(request.body, dec_hook=decoder_hook)
+        )

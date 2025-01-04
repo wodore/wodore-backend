@@ -47,8 +47,8 @@ WORKDIR /code
 #RUN --mount=type=ssh bundle install
 
 # RUN apk add --no-cache \
-#     bash 
-# 
+#     bash
+#
 
 
 # System deps (we don't use exact versions because it is hard to update them,
@@ -134,7 +134,7 @@ COPY ./docker/django/entrypoint.sh /docker-entrypoint.sh
 COPY --chown=web:web ./manage.py /code/
 COPY --chown=web:web server /code/server
 # TODO: collectstatic in build process and copy from there!
-#COPY --chown=web:web static /code/static 
+#COPY --chown=web:web static /code/static
 COPY --chown=web:web ${CONFIG_DIR} /code/config
 
 # Setting up proper permissions:
@@ -153,4 +153,3 @@ USER web
 
 # We customize how our app is loaded with the custom entrypoint:
 ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
-

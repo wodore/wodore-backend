@@ -8,10 +8,17 @@ def required_i18n_fields_form_factory(*fields):
     class TransForm(ModelForm):
         def clean(self):
             for field in fields:
-                translations = [self.cleaned_data.get(f"{field}_{code}", None) for code in settings.LANGUAGE_CODES]
+                translations = [
+                    self.cleaned_data.get(f"{field}_{code}", None)
+                    for code in settings.LANGUAGE_CODES
+                ]
                 if not any(translations):
                     raise ValidationError(
-                        mark_safe(_(f"At least one <i>{field}</i> field under <b>Translations</b> is required."))
+                        mark_safe(
+                            _(
+                                f"At least one <i>{field}</i> field under <b>Translations</b> is required."
+                            )
+                        )
                     )
 
             return self.cleaned_data

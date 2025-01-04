@@ -5,11 +5,18 @@ from .renderer import MsgSpecRenderer
 
 # TODO: check csrf: https://django-ninja.dev/reference/csrf/
 api = NinjaAPI(
-    title="Wodore API", version="1.0.0", docs=Swagger(), renderer=MsgSpecRenderer(), parser=MsgSpecParser(), csrf=False
+    title="Wodore API",
+    version="1.0.0",
+    docs=Swagger(),
+    renderer=MsgSpecRenderer(),
+    parser=MsgSpecParser(),
+    csrf=False,
 )
 
 root_path = "server.apps"
 
 api.add_router("/huts", "server.apps.huts.api.router", tags=["hut"])
-api.add_router("/organizations/", "server.apps.organizations.api.router", tags=["organization"])
+api.add_router(
+    "/organizations/", "server.apps.organizations.api.router", tags=["organization"]
+)
 api.add_router("/feedback/", "server.apps.feedbacks.api.router", tags=["feedback"])

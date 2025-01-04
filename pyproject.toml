@@ -111,12 +111,25 @@ dev = [
     "pydot==3.*", # https://pypi.org/project/pydot/
     "werkzeug==3.*", # https://pypi.org/project/werkzeug/
     "locust==2.*", # https://pypi.org/project/locust/
+    "invoke==2.*", # https://pypi.org/project/invoke/
+    "environs==11.*", # https://pypi.org/project/environs/
+    "humanize==4.*", # https://pypi.org/project/humanize/
+    "python-on-whales==0.*", # https://pypi.org/project/python-on-whales/
+    "git-cliff==2.*", # https://pypi.org/project/git-cliff/
+    "pre-commit==4.*", # https://pypi.org/project/pre-commit/
 ]
 
 [tool.uv.sources]
 #hut-services = { git="https://github.com/wodore/hut-services.git", branch="feature/photos" }
-django-computedfields = { git="https://github.com/TBxy/django-computedfields", branch = "django5.0"} 
-hut-services-private = { git="ssh://git@github.com/wodore/hut-services-private" , branch = "main"} 
+django-computedfields = { git="https://github.com/TBxy/django-computedfields", branch = "django5.0"}
+hut-services-private = { git="ssh://git@github.com/wodore/hut-services-private" , branch = "main"}
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = ""
+testpaths = [
+    "tests",
+]
 
 [tool.black]
 line-length = 120
@@ -132,6 +145,48 @@ single-line-exclusions = ["os", "json", "sys"]
 "django" = ["django"]
 "unfold" = ["unfold"]
 "server" = ["server"]
+
+
+[tool.ruff]
+exclude = ["*migrations/*.py"]
+#select = [
+#  "E", "F", "W", # flake8
+#  "B",           # flake8-bugbear
+#  "I",           # isort
+#  #"ARG",         # flake8-unused-arguments
+#  "C4",          # flake8-comprehensions
+#  "EM",          # flake8-errmsg
+#  "ICN",         # flake8-import-conventions
+#  "ISC",         # flake8-implicit-str-concat
+#  "G",           # flake8-logging-format
+#  "PGH",         # pygrep-hooks
+#  "PIE",         # flake8-pie
+#  "PL",          # pylint
+#  "PT",          # flake8-pytest-style
+#  "RET",         # flake8-return
+#  "RUF",         # Ruff-specific
+#  "SIM",         # flake8-simplify
+#  "UP",          # pyupgrade
+#  "YTT",         # flake8-2020
+#  "EXE",         # flake8-executable
+#]
+#extend-ignore = [
+#  "PLR",    # Design related pylint codes
+#  "E501",   # Line too long
+#  "PT004",  # Use underscore for non-returning fixture (use usefixture instead)
+#]
+target-version = "py310"
+
+[tool.ruff.lint]
+unfixable = [
+  "T20",  # Removes print statements
+  "F841", # Removes unused variables
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+#isort.required-imports = ["from __future__ import annotations"]
 
 [tool.coverage.report]
 exclude_lines = [
@@ -156,45 +211,17 @@ source = [
     ".tox/*/lib/python*/site-packages/pytest_store",
 ]
 
-[tool.ruff]
-exclude = ["*migrations/*.py"]
-select = [
-  "E", "F", "W", # flake8
-  "B",           # flake8-bugbear
-  "I",           # isort
-  #"ARG",         # flake8-unused-arguments
-  "C4",          # flake8-comprehensions
-  "EM",          # flake8-errmsg
-  "ICN",         # flake8-import-conventions
-  "ISC",         # flake8-implicit-str-concat
-  "G",           # flake8-logging-format
-  "PGH",         # pygrep-hooks
-  "PIE",         # flake8-pie
-  "PL",          # pylint
-  "PT",          # flake8-pytest-style
-  "RET",         # flake8-return
-  "RUF",         # Ruff-specific
-  "SIM",         # flake8-simplify
-  "UP",          # pyupgrade
-  "YTT",         # flake8-2020
-  "EXE",         # flake8-executable
-]
-extend-ignore = [
-  "PLR",    # Design related pylint codes
-  "E501",   # Line too long
-  "PT004",  # Use underscore for non-returning fixture (use usefixture instead)
-]
-target-version = "py38"
-
-unfixable = [
-  "T20",  # Removes print statements
-  "F841", # Removes unused variables
-]
-
-[tool.ruff.per-file-ignores]
-"__init__.py" = ["F401"]
-
-#isort.required-imports = ["from __future__ import annotations"]
+[tool.deptry.per_rule_ignores]
+DEP004 = [
+  "toml",
+  "rich",
+  "invoke",
+  "environs",
+  "humanize",
+  "python_on_whales",
+  "mkdocs_gen_files",
+] # only in dev
+DEP003 = ["server"] # transitive dependencies
 
 
 [tool.mypy]

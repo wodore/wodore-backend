@@ -7,8 +7,13 @@ class MetaImageWidget(ClearableFileInput):
     template_name = "meta_image_field/meta_image_widget.html"
 
     class Media:
-        css: ClassVar[dict] = {"all": ("meta_image_field/css/jcrop.css", "meta_image_field/css/style.css")}
-        js: ClassVar[tuple] = ("meta_image_field/js/jcrop.js", "meta_image_field/js/meta_image_widget.js")
+        css: ClassVar[dict] = {
+            "all": ("meta_image_field/css/jcrop.css", "meta_image_field/css/style.css")
+        }
+        js: ClassVar[tuple] = (
+            "meta_image_field/js/jcrop.js",
+            "meta_image_field/js/meta_image_widget.js",
+        )
 
     def __init__(self, attrs=None):
         default_attrs = {"class": "meta-image-input"}

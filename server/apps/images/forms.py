@@ -38,7 +38,10 @@ ImageAdminFieldsets = [
     ),
     (
         f"{_('Caption')} {_('Translations')}",
-        {"classes": ["tab"], "fields": [f"caption_{code}" for code in settings.LANGUAGE_CODES]},
+        {
+            "classes": ["tab"],
+            "fields": [f"caption_{code}" for code in settings.LANGUAGE_CODES],
+        },
     ),
     (
         _("Meta"),
@@ -68,7 +71,10 @@ ImageTagAdminFieldsets = [
     ),
     (
         f"{_('Name')} {_('Translations')}",
-        {"classes": [""], "fields": [f"name_{code}" for code in settings.LANGUAGE_CODES]},
+        {
+            "classes": [""],
+            "fields": [f"name_{code}" for code in settings.LANGUAGE_CODES],
+        },
     ),
     (
         _("Timestamps"),

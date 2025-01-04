@@ -1,6 +1,5 @@
 from typing import ClassVar
 
-from django import forms
 from django.contrib import admin
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
@@ -19,7 +18,13 @@ from ..models._owner_hut_proxy import OwnerHutProxy
 @admin.register(OwnerContactAssociation)
 class OwnerContactAssociationsAdmin(ModelAdmin):
     search_fields = ("owner__name_i18n",)
-    list_display = ("owner", "contact", "order", "is_active", "is_public")  # , "contact__is_active")
+    list_display = (
+        "owner",
+        "contact",
+        "order",
+        "is_active",
+        "is_public",
+    )  # , "contact__is_active")
     list_filter = ("contact__is_active", "contact__is_public")  # , "owner")
     fields = ("owner", "contact", "order")
     list_select_related = ("contact",)
@@ -61,7 +66,9 @@ class OwnerHutAssociationsAdmin(ModelAdmin):
         if obj.hut_owner:
             return (
                 obj.hut_owner.name_i18n,
-                mark_safe(f'<a href="{obj.hut_owner.url}" target="_blank">{obj.hut_owner.url}</a>'),
+                mark_safe(
+                    f'<a href="{obj.hut_owner.url}" target="_blank">{obj.hut_owner.url}</a>'
+                ),
             )  # , mark_safe(f'<img src = "{obj.type.symbol_simple.url}" width = "24"/>')
         return ("-", "")
 
@@ -70,13 +77,18 @@ class OwnerHutAssociationsAdmin(ModelAdmin):
         return (
             obj.name_i18n,
             obj.hut_type_open.name_i18n,
-            mark_safe(f'<img src = "{obj.hut_type_open.symbol_simple.url}" width = "24"/>'),
+            mark_safe(
+                f'<img src = "{obj.hut_type_open.symbol_simple.url}" width = "24"/>'
+            ),
         )
 
     @display(
         description=_("Status"),
         ordering="status",
-        label={Hut.ReviewStatusChoices.review: "info", Hut.ReviewStatusChoices.done: "success"},
+        label={
+            Hut.ReviewStatusChoices.review: "info",
+            Hut.ReviewStatusChoices.done: "success",
+        },
     )
     def review_tag(self, obj):
         return obj.review_status

@@ -42,7 +42,14 @@ class ContactAdmin(ModelAdmin):
     """Contact Admin"""
 
     search_fields = ("name", "email", "function__name_i18n")
-    list_display = ("name_email", "function", "mobile_or_phone", "address_fmt", "is_active", "is_public")
+    list_display = (
+        "name_email",
+        "function",
+        "mobile_or_phone",
+        "address_fmt",
+        "is_active",
+        "is_public",
+    )
     list_filter = ("function", "is_active", "is_public")
     readonly_fields = ("note_i18n",)
     fieldsets = (

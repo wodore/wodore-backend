@@ -1,14 +1,12 @@
 import contextlib
 from typing import ClassVar
 
-import contextlib
 with contextlib.suppress(ModuleNotFoundError):
     from django_stubs_ext import QuerySetAny
 
 from django.conf import settings
 from django.contrib import admin
 from django.contrib.postgres.aggregates import JSONBAgg
-from django.db import models
 from django.db.models.functions import JSONObject, Lower
 from django.http import HttpRequest
 from django.shortcuts import redirect
@@ -18,13 +16,11 @@ from django.utils.translation import gettext_lazy as _
 
 from unfold.decorators import action, display
 
-from server.apps import organizations
 from server.apps.manager.admin import ModelAdmin
 from server.apps.translations.forms import required_i18n_fields_form_factory
-from server.core.utils import text_shorten_html
 
 from ..forms import HutAdminFieldsets
-from ..models import Hut, HutOrganizationAssociation
+from ..models import Hut
 from ._associations import (
     HutContactAssociationEditInline,
     HutImageAssociationEditInline,
@@ -91,7 +87,9 @@ class HutsAdmin(ModelAdmin):
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request).prefetch_related("image_set")
         # prefetch_related("orgs_source", "orgs_source__organization").
-        return qs.select_related("hut_type_open", "hut_type_closed", "hut_owner").annotate(
+        return qs.select_related(
+            "hut_type_open", "hut_type_closed", "hut_owner"
+        ).annotate(
             orgs=JSONBAgg(
                 JSONObject(
                     logo="org_set__logo",
@@ -125,12 +123,17 @@ class HutsAdmin(ModelAdmin):
     @display(header=True, description=_("Type"))
     def hut_type(self, obj):
         opened = mark_safe(f'<span class = "text-xs">{obj.hut_type_open.slug}</span>')
-        closed = mark_safe(f'<span class = "text-xs">{obj.hut_type_closed.slug if obj.hut_type_closed else "-"}</span>')
+        closed = mark_safe(
+            f'<span class = "text-xs">{obj.hut_type_closed.slug if obj.hut_type_closed else "-"}</span>'
+        )
         return (opened, closed)
 
     @display(header=True, description=_("Location"))
     def location_coords(self, obj):
-        return f"{obj.location.y:.3f}/{obj.location.x:.3f}", f"{obj.elevation}m" if obj.elevation else "-"
+        return (
+            f"{obj.location.y:.3f}/{obj.location.x:.3f}",
+            f"{obj.elevation}m" if obj.elevation else "-",
+        )
 
     @display(description="")
     def symbol_img(self, obj):  # new
@@ -153,14 +156,22 @@ class HutsAdmin(ModelAdmin):
         view = f'<span><a class="text-sm" href="{url}" target="_blank"> <span class="material-symbols-outlined"> visibility </span> </a>'
         if obj.is_public and obj.is_active:
             return mark_safe(view)
-        elif not obj.is_public and obj.is_active:
-            return mark_safe('<span class="material-symbols-outlined"> visibility_off </span>')
-        return mark_safe('<span class="material-symbols-outlined"> disabled_visible </span>')
+        if not obj.is_public and obj.is_active:
+            return mark_safe(
+                '<span class="material-symbols-outlined"> visibility_off </span>'
+            )
+        return mark_safe(
+            '<span class="material-symbols-outlined"> disabled_visible </span>'
+        )
 
     @display(description=_("Photos"))
     def hut_images(self, obj):  # new
         img_html = "<div>"
-        for i, img in enumerate(obj.image_set.select_related("source_org", "license").order_by("details__order").all()):
+        for i, img in enumerate(
+            obj.image_set.select_related("source_org", "license")
+            .order_by("details__order")
+            .all()
+        ):
             print(img.image.url)
             # img_html += mark_safe(img)
             link = reverse("admin:images_image_change", args=[img.pk])
@@ -175,7 +186,9 @@ class HutsAdmin(ModelAdmin):
             )
             author_source = []
             if img.author and img.author_url:
-                author_source.append(f"<i><a href='{img.author_url}'>{img.author}</a></i>")
+                author_source.append(
+                    f"<i><a href='{img.author_url}'>{img.author}</a></i>"
+                )
             elif img.author:
                 author_source.append(f"<i>{img.author}</i>")
             if img.source_org:
@@ -230,29 +243,42 @@ class HutsAdmin(ModelAdmin):
     @action(description=_("Next"), permissions=["view"])
     def action_detail_next(self, request: HttpRequest, object_id: int):  # obj: Hut):
         obj = Hut.objects.get(id=object_id)
-        return redirect(reverse_lazy("admin:huts_hut_change", args=(obj.next() or object_id,)))
+        return redirect(
+            reverse_lazy("admin:huts_hut_change", args=(obj.next() or object_id,))
+        )
 
     @action(description=_("Previous"), permissions=["view"])
     def action_detail_prev(self, request: HttpRequest, object_id: int):  # obj: Hut):
         obj = Hut.objects.get(id=object_id)
-        return redirect(reverse_lazy("admin:huts_hut_change", args=(obj.prev() or object_id,)))
+        return redirect(
+            reverse_lazy("admin:huts_hut_change", args=(obj.prev() or object_id,))
+        )
 
     @action(description=_(mark_safe("set to <b>done</b>")), permissions=["change"])
-    def action_row_set_review_to_done(self, request: HttpRequest, object_id: int):  # obj: Hut):
+    def action_row_set_review_to_done(
+        self, request: HttpRequest, object_id: int
+    ):  # obj: Hut):
         obj = Hut.objects.get(id=object_id)
         obj.review_status = Hut.ReviewStatusChoices.done
         obj.save()
         return redirect(request.META.get("HTTP_REFERER"))
 
     @action(description=_(mark_safe("set to <b>review</b>")), permissions=["change"])
-    def action_row_set_review_to_review(self, request: HttpRequest, object_id: int):  # obj: Hut):
+    def action_row_set_review_to_review(
+        self, request: HttpRequest, object_id: int
+    ):  # obj: Hut):
         obj = Hut.objects.get(id=object_id)
         obj.review_status = Hut.ReviewStatusChoices.review
         obj.save()
         return redirect(request.META.get("HTTP_REFERER"))
 
-    @action(description=_(mark_safe("set to <b>reject</b> (inactive)")), permissions=["delete"])
-    def action_row_set_inactive(self, request: HttpRequest, object_id: int):  # obj: Hut):
+    @action(
+        description=_(mark_safe("set to <b>reject</b> (inactive)")),
+        permissions=["delete"],
+    )
+    def action_row_set_inactive(
+        self, request: HttpRequest, object_id: int
+    ):  # obj: Hut):
         obj = Hut.objects.get(id=object_id)
         obj.review_status = Hut.ReviewStatusChoices.reject
         obj.is_active = False

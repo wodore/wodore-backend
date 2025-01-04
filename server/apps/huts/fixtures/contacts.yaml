@@ -3,12 +3,12 @@
   fields:
     name: Hans Blatter
     email: tb@wodore.com
-    phone: ''
-    mobile: ''
+    phone: ""
+    mobile: ""
     function: 1
-    url: ''
-    address: ''
-    note: ''
+    url: ""
+    address: ""
+    note: ""
     is_active: true
     is_public: true
 - model: huts.contact
@@ -16,11 +16,11 @@
   fields:
     name: Sepp Blatter
     email: tb@wodore.com
-    phone: ''
-    mobile: ''
+    phone: ""
+    mobile: ""
     function: 1
-    url: ''
-    address: ''
-    note: ''
+    url: ""
+    address: ""
+    note: ""
     is_active: true
     is_public: true

@@ -143,7 +143,7 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
   # Cleaning cache:
   && rm -rf /var/lib/apt/lists/*
 
-# curl 
+# curl
 
 ENV VIRTUAL_ENV=/code/.venv \
     PATH="/code/.venv/bin:$PATH"
@@ -163,7 +163,7 @@ WORKDIR /code
 COPY --chown=web:web ./manage.py /code/
 COPY --chown=web:web server /code/server
 # TODO: collectstatic in build process and copy from there!
-COPY --chown=web:web static /code/static 
+COPY --chown=web:web static /code/static
 COPY --chown=web:web ${CONFIG_DIR} /code/config
 
 # Running as non-root user:

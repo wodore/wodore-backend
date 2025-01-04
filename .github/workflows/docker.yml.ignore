@@ -1,0 +1,109 @@
+name: Build Docker
+
+# Configures this workflow to run every time a change is pushed to the branch called `release`.
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      custom_tag:
+        description: "Tag name"
+        required: true
+        default: "feature"
+  repository_dispatch:
+    types: [new-tag-created]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push-image:
+    runs-on: ubuntu-latest
+    # Sets the permissions granted to the `GITHUB_TOKEN` for the actions in this job.
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine version
+        id: determine-version
+        run: |
+          if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
+            VERSION=${{ github.event.client_payload.version }}
+            LATEST="latest"
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION=${{ github.ref_name }}
+            LATEST="latest"
+          else
+            VERSION=""
+            LATEST=""
+          fi
+
+          MAJOR=$(echo $VERSION | cut -d. -f1)
+          MINOR=$(echo $VERSION | cut -d. -f1-2)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "VERSION_MINOR=$MINOR" >> $GITHUB_ENV
+          echo "VERSION_MAJOR=$MAJOR" >> $GITHUB_ENV
+          echo "LATEST=$LATEST" >> $GITHUB_ENV
+
+      # This step uses [docker/metadata-action](https://github.com/docker/metadata-action#about)
+      # to extract tags and labels that will be applied to the specified image.
+      # The `id` "meta" allows the output of this step to be referenced in a subsequent step.
+      # The `images` value provides the base name for the tags and labels.
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # Add 'edge' tag for main and develop branches
+            type=edge,pattern=main
+            type=edge,pattern=develop
+            # Use a custom tag if manually dispatched
+            type=raw,value=${{ github.event.inputs.custom_tag || '' }}
+
+            # Use the semantic version if provided explicitly
+            type=raw,value=${{ env.VERSION }}
+            type=raw,value=${{ env.VERSION_MINOR }}
+            type=raw,value=${{ env.VERSION_MAJOR }}
+            type=raw,value=${{ env.LATEST }}
+            ## Semantic version tags
+            #type=semver,pattern={{version}}
+            #type=semver,pattern={{major}}.{{minor}}
+            #type=semver,pattern={{major}}
+
+      # This step uses the `docker/build-push-action` action to build the image, based on your repository's `Dockerfile`.
+      # If the build succeeds, it pushes the image to GitHub Packages.
+      # It uses the `tags` and `labels` parameters to tag and label the image with the output from the "meta" step.
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      ## not included at the moment
+      ## # This step generates an artifact attestation for the image, which is an unforgeable statement about where and how it was built.
+      ## # It increases supply chain security for people who consume the image.
+      ## - name: Generate artifact attestation
+      ##   uses: actions/attest-build-provenance@v2
+      ##   with:
+      ##     subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}
+      ##     subject-digest: ${{ steps.push.outputs.digest }}
+      ##     push-to-registry: false

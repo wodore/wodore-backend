@@ -60,13 +60,13 @@ t
                     <div class="flex items-center mb-4">
                         <img src="{% get_media_prefix %}/{{ org.logo }}" class="pr-2" alt="logo" style="height:35px">
                         <div>
-                            <strong>{{ org.name }}</strong> 
+                            <strong>{{ org.name }}</strong>
         <a class="text-sm pl-4" href="{{edit_url}}"> <span class="material-symbols-outlined"> edit </span> </a><span>
                         </br>
                             <span>{{ org.fullname }}</span>
                         </div>
                     </div>
-                    
+
                         <span class="rounded px-1 text-black text-sm" style="width:50px; background-color: {{org.color_light}}">{{ org.slug }}</span>
                         <span class="rounded px-1 text-withe text-sm" style="width:50px; background-color: {{org.color_dark}}">{{ org.slug }}</span>
                     <div class="text-sm mt-2"><i>{{ org.description }}</i></div>

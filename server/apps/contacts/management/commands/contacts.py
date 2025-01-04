@@ -26,7 +26,9 @@ def add_contact_function(parser, limit, **kwargs):
         )
         contact.save()
         parser.stdout.write(f"  - {contact}")
-    parser.stdout.write(parser.style.SUCCESS(f"Successfully added {limit} new contacts"))
+    parser.stdout.write(
+        parser.style.SUCCESS(f"Successfully added {limit} new contacts")
+    )
 
 
 class Command(CRUDCommand):

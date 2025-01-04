@@ -7,8 +7,12 @@ from ninja.orm import create_schema
 
 # @abc
 class FieldsSchema(Schema):
-    include: str | None = Query(None, description="Comma separated list, allowed value:")  # {', '.join(fields)}")
-    exclude: str | None = Query(None, description="Comma separated list, only used if 'include' is not set.")
+    include: str | None = Query(
+        None, description="Comma separated list, allowed value:"
+    )  # {', '.join(fields)}")
+    exclude: str | None = Query(
+        None, description="Comma separated list, only used if 'include' is not set."
+    )
     # ",".join(exclude_default), description="Comma separated list, only used if 'include' is not set."
     # )
     allowed_fields: List = Field(None, include_in_schema=False)
@@ -21,7 +25,10 @@ class FieldsSchema(Schema):
         if fields is not None and self.allowed_fields:
             for field in fields:
                 if field not in self.allowed_fields:
-                    raise HttpError(400, f"'{field}' is not a valid field name! Possible names: {self.allowed_fields}")
+                    raise HttpError(
+                        400,
+                        f"'{field}' is not a valid field name! Possible names: {self.allowed_fields}",
+                    )
 
     def get_include(self) -> List[str]:
         if self.include is not None:
@@ -30,7 +37,9 @@ class FieldsSchema(Schema):
         else:
             _include = self._model.get_fields_all() if self._model else []
             if self.exclude is None:
-                self.exclude = ",".join(self._model.get_fields_exclude() if self._model else [])
+                self.exclude = ",".join(
+                    self._model.get_fields_exclude() if self._model else []
+                )
             if self.exclude:
                 _exclude = [f.strip() for f in self.exclude.split(",") if f.strip()]
                 _include = list(set(_include) - set(_exclude))
@@ -47,9 +56,13 @@ def fields_query(Model) -> FieldsSchema:  # fields:List, exclude_default=[]):
     """Returns a query which can be used to include and exclude fields"""
 
     class Fields(FieldsSchema):
-        include: str | None = Query(None, description=f"Comma separated list, allowed value: {', '.join(fields)}")
+        include: str | None = Query(
+            None,
+            description=f"Comma separated list, allowed value: {', '.join(fields)}",
+        )
         exclude: str | None = Query(
-            ",".join(exclude_default), description="Comma separated list, only used if 'include' is not set."
+            ",".join(exclude_default),
+            description="Comma separated list, only used if 'include' is not set.",
         )
         allowed_fields: List = Field(fields, include_in_schema=False)
         _model = Model

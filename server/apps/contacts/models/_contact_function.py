@@ -27,7 +27,9 @@ class ContactFunction(TimeStampedModel):
         upload_to="contacts/function/symbol",
         default="contacts/function/symbol/default.png",
         verbose_name=_("Symbol"),
-        help_text=_("Contact function symbol, should be square and good visible if small."),
+        help_text=_(
+            "Contact function symbol, should be square and good visible if small."
+        ),
     )
     priority = models.PositiveSmallIntegerField(
         default=0,

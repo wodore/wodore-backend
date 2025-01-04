@@ -1,14 +1,12 @@
 import contextlib
 
 with contextlib.suppress(ModuleNotFoundError):
-    from deepl import Translator
+    pass
 
 import typing as t
 
 from hut_services import HutSchema
 from hut_services.core.cache import file_cache
-
-from django.conf import settings
 
 from server.settings.components import config
 
@@ -45,7 +43,9 @@ def _translate(text: str, source_lang: str, target_lang: str) -> str:
 
 # TODO notes, which is a list
 def translate_hut(
-    hut: HutSchema, source_lang: LangType | None = None, fields: t.Sequence[str] = ["description"]
+    hut: HutSchema,
+    source_lang: LangType | None = None,
+    fields: t.Sequence[str] = ["description"],
 ) -> HutSchema:
     for field in fields:
         field_value = getattr(hut, field)
@@ -58,7 +58,7 @@ def translate_hut(
         if source_lang is None:
             continue
         text = getattr(field_value, source_lang)
-        translate_to = [l for l in langs if l != source_lang]
+        translate_to = [lang for lang in langs if lang != source_lang]
         for lang in translate_to:
             if not getattr(field_value, lang):
                 # if lang == "en":
@@ -66,5 +66,9 @@ def translate_hut(
                 # else:
                 #    target_lang = lang.upper()
                 target_lang = lang
-                setattr(getattr(hut, field), lang, _translate(text, source_lang=source_lang, target_lang=target_lang))
+                setattr(
+                    getattr(hut, field),
+                    lang,
+                    _translate(text, source_lang=source_lang, target_lang=target_lang),
+                )
     return hut

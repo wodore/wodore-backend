@@ -22,7 +22,10 @@ class Feedback(TimeStampedModel):
     subject: str = models.CharField(max_length=200, blank=True, null=True, default="")
     message: str = models.TextField(max_length=10000, blank=True, null=True, default="")
     urls = models.JSONField(
-        verbose_name=_("URLs"), help_text=_("Additional urls ['url1','url2',...]."), blank=True, default=list
+        verbose_name=_("URLs"),
+        help_text=_("Additional urls ['url1','url2',...]."),
+        blank=True,
+        default=list,
     )
     get_updates: bool = models.BooleanField(default=False)
     feedback_status = models.CharField(

@@ -4,7 +4,7 @@ from model_utils.models import TimeStampedModel
 from modeltrans.fields import TranslationField
 
 from django.contrib.postgres.indexes import GinIndex
-from django.core.validators import RegexValidator, validate_slug
+from django.core.validators import RegexValidator
 from django.db import models
 from django.utils.regex_helper import _lazy_re_compile
 from django.utils.translation import gettext_lazy as _
@@ -15,7 +15,9 @@ slug_re = _lazy_re_compile(r"^[-a-zA-Z0-9_\.]+\Z")
 validate_lic_slug = RegexValidator(
     slug_re,
     # Translators: "letters" means latin letters: a-z and A-Z.
-    _("Enter a valid “slug” consisting of letters, numbers, underscores, dots or hyphens."),
+    _(
+        "Enter a valid “slug” consisting of letters, numbers, underscores, dots or hyphens."
+    ),
     "invalid",
 )
 
@@ -25,13 +27,21 @@ class License(TimeStampedModel):
     objects = BaseMutlilingualManager()
 
     slug = models.SlugField(unique=True, validators=[validate_lic_slug])
-    name = models.CharField(max_length=40, default="", blank=True, null=True, verbose_name=_("Shortname"))
-    fullname = models.CharField(max_length=100, default="", blank=True, null=True, verbose_name=_("Fullname"))
-    description = models.TextField(default="", blank=True, null=True, help_text=_("Description"))
+    name = models.CharField(
+        max_length=40, default="", blank=True, null=True, verbose_name=_("Shortname")
+    )
+    fullname = models.CharField(
+        max_length=100, default="", blank=True, null=True, verbose_name=_("Fullname")
+    )
+    description = models.TextField(
+        default="", blank=True, null=True, help_text=_("Description")
+    )
     link = models.URLField(blank=True, max_length=300, null=True)
 
     is_active = models.BooleanField(default=False)
-    order = models.PositiveSmallIntegerField(unique=False, default=0, verbose_name=_("Order"))
+    order = models.PositiveSmallIntegerField(
+        unique=False, default=0, verbose_name=_("Order")
+    )
     # license permissions
     attribution_required = models.BooleanField(default=True)
     no_commercial = models.BooleanField(default=True)

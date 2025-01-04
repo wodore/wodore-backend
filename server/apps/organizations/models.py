@@ -20,19 +20,37 @@ class Organization(TimeStampedModel):
     External organizations, like SAC.
     """
 
-    i18n = TranslationField(fields=("name", "fullname", "description", "attribution", "url"))
+    i18n = TranslationField(
+        fields=("name", "fullname", "description", "attribution", "url")
+    )
     objects = BaseMutlilingualManager()
 
     slug = models.SlugField(unique=True, verbose_name=_("Slug"), db_index=True)
-    is_active = models.BooleanField(default=True, db_index=True, verbose_name=_("Active"))
-    is_public = models.BooleanField(default=False, db_index=True, verbose_name=_("Public"))
-    name = models.CharField(max_length=100, default="", blank=True, null=True, verbose_name=_("Shortname"))
-    fullname = models.CharField(max_length=100, default="", blank=True, null=True, verbose_name=_("Fullname"))
-    description = models.TextField(default="", blank=True, null=True, help_text=_("Description"))
-    url = models.URLField(
-        blank=True, max_length=300, null=True, verbose_name=_("URL"), help_text=_("URL to organization's homepage")
+    is_active = models.BooleanField(
+        default=True, db_index=True, verbose_name=_("Active")
     )
-    attribution = models.CharField(max_length=400, default="", blank=True, null=True, verbose_name=_("Attribution"))
+    is_public = models.BooleanField(
+        default=False, db_index=True, verbose_name=_("Public")
+    )
+    name = models.CharField(
+        max_length=100, default="", blank=True, null=True, verbose_name=_("Shortname")
+    )
+    fullname = models.CharField(
+        max_length=100, default="", blank=True, null=True, verbose_name=_("Fullname")
+    )
+    description = models.TextField(
+        default="", blank=True, null=True, help_text=_("Description")
+    )
+    url = models.URLField(
+        blank=True,
+        max_length=300,
+        null=True,
+        verbose_name=_("URL"),
+        help_text=_("URL to organization's homepage"),
+    )
+    attribution = models.CharField(
+        max_length=400, default="", blank=True, null=True, verbose_name=_("Attribution")
+    )
     link_hut_pattern = models.CharField(
         blank=True,
         max_length=300,
@@ -49,14 +67,24 @@ class Organization(TimeStampedModel):
         help_text=_("Organiztion logo as image"),
     )
     color_light = ColorField(
-        verbose_name=_("Light Color"), help_text=_("light theme color as hex number with #"), default="#4B8E43"
+        verbose_name=_("Light Color"),
+        help_text=_("light theme color as hex number with #"),
+        default="#4B8E43",
     )
     color_dark = ColorField(
-        verbose_name=_("Dark Color"), help_text=_("dark theme color as hex number with #"), default="#61B958"
+        verbose_name=_("Dark Color"),
+        help_text=_("dark theme color as hex number with #"),
+        default="#61B958",
     )
-    config = models.JSONField(default=dict, blank=True, verbose_name=_("Configuration dictonary"))
-    props_schema = models.JSONField(default=dict, blank=True, help_text=_("Property schema"))
-    order = models.PositiveSmallIntegerField(unique=False, default=0, verbose_name=_("Order"))
+    config = models.JSONField(
+        default=dict, blank=True, verbose_name=_("Configuration dictonary")
+    )
+    props_schema = models.JSONField(
+        default=dict, blank=True, help_text=_("Property schema")
+    )
+    order = models.PositiveSmallIntegerField(
+        unique=False, default=0, verbose_name=_("Order")
+    )
 
     class Meta:
         verbose_name = _("Organization")
@@ -110,7 +138,9 @@ class Organization(TimeStampedModel):
 
     @classmethod
     def get_next_order_number(cls):
-        highest_order = Organization.objects.all().order_by("-order").values("order").first()
+        highest_order = (
+            Organization.objects.all().order_by("-order").values("order").first()
+        )
         if highest_order is None:
             return 0
         return highest_order.get("order", 0) + 1

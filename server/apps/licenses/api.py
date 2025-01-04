@@ -14,7 +14,9 @@ from .schema import LicenseOptional
 router = Router()
 
 
-@router.get("/", response=list[LicenseOptional], exclude_unset=True, operation_id="get_licenses")
+@router.get(
+    "/", response=list[LicenseOptional], exclude_unset=True, operation_id="get_licenses"
+)
 @with_language_param("lang")
 def get_licenses(
     request: HttpRequest,
@@ -31,10 +33,15 @@ def get_licenses(
         return fields.validate(list(orgs))
 
 
-@router.get("/{slug}", response=LicenseOptional, exclude_unset=True, operation_id="get_license")
+@router.get(
+    "/{slug}", response=LicenseOptional, exclude_unset=True, operation_id="get_license"
+)
 @with_language_param()
 def get_license(
-    request: HttpRequest, slug: str, lang: LanguageParam, fields: Query[FieldsParam[LicenseOptional]]
+    request: HttpRequest,
+    slug: str,
+    lang: LanguageParam,
+    fields: Query[FieldsParam[LicenseOptional]],
 ) -> LicenseOptional:
     fields.update_default("__all__")
     with override(lang):

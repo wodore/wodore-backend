@@ -1,5 +1,6 @@
 from copy import deepcopy
 from typing import Annotated, Any
+from pydantic import create_model
 
 # from django.db.models import JSONField
 from django_jsonform.models.fields import JSONField
@@ -21,10 +22,12 @@ LANGUAGE_CODES = [lang[0] for lang in settings.LANGUAGES]
 #    it: str = ""
 
 
-from pydantic import create_model
-
-lang_kwargs: Any = {lang[0]: (str | None, Field("", description=lang[1])) for lang in settings.LANGUAGES}
-TranslationSchema = create_model("TranslationSchema", **lang_kwargs, __doc__="Translations")
+lang_kwargs: Any = {
+    lang[0]: (str | None, Field("", description=lang[1])) for lang in settings.LANGUAGES
+}
+TranslationSchema = create_model(
+    "TranslationSchema", **lang_kwargs, __doc__="Translations"
+)
 
 
 class TranslationJSONField(JSONField):
@@ -101,7 +104,7 @@ class TranslationJSONFieldDescriptor:
         val = data.get(lang, None)
         if val is None or val.lower() == "__none__":
             return ""
-        elif not val:
+        if not val:
             lang = normalise_language_code(settings.LANGUAGE_CODE)
             val = data.get(lang, None)
             if val.lower() != "__none__":

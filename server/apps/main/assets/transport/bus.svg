@@ -25,26 +25,26 @@
 	<g>
 		<path style="fill:none;stroke:#000000;stroke-width:15;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;" d="&#10;&#9;&#9;&#9;M341.23,97.85h20.62c66.28,0,120,53.73,120,120v52.57"/>
 		<path style="fill:none;stroke:#000000;stroke-width:15;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;" d="&#10;&#9;&#9;&#9;M30.09,328.85v-171c0-33.13,26.86-60,60-60h216.14"/>
-		
+
 			<line style="fill:none;stroke:#000000;stroke-width:15;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;" x1="481.85" y1="301.76" x2="481.85" y2="328.85"/>
-		
+
 			<line style="fill:none;stroke:#000000;stroke-width:15;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;" x1="332.57" y1="376.44" x2="180.02" y2="376.44"/>
-		
+
 			<line style="fill:none;stroke:#000000;stroke-width:15;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;" x1="339.69" y1="331.26" x2="173" y2="331.26"/>
 		<path style="fill:none;stroke:#000000;stroke-width:15;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;" d="&#10;&#9;&#9;&#9;M428.25,331.26h53.6c12.478,0,22.59,10.113,22.59,22.59c0,12.48-10.11,22.59-22.59,22.59h-46.48"/>
 		<path style="fill:none;stroke:#000000;stroke-width:15;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;" d="&#10;&#9;&#9;&#9;M75.92,376.44H30.09c-12.486,0-22.59-10.104-22.59-22.59c0-12.47,10.11-22.59,22.59-22.59h52.85"/>
-		
+
 			<circle style="fill:none;stroke:#000000;stroke-width:15;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;" cx="127.97" cy="361.382" r="52.706"/>
 		<path style="fill:none;stroke:#000000;stroke-width:15;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;" d="&#10;&#9;&#9;&#9;M381.89,414.04c0.69,0.04,1.38,0.05,2.08,0.05c29.11,0,52.71-23.6,52.71-52.71c0-29.11-23.6-52.7-52.71-52.7&#10;&#9;&#9;&#9;c-29.11,0-52.71,23.59-52.71,52.7c0,15.8,6.95,29.97,17.96,39.63"/>
-		
+
 			<circle style="fill:none;stroke:#000000;stroke-width:15;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;" cx="383.97" cy="361.382" r="22.588"/>
-		
+
 			<circle style="fill:none;stroke:#000000;stroke-width:15;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;" cx="127.97" cy="361.382" r="22.588"/>
 		<path style="fill:none;stroke:#000000;stroke-width:15;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;" d="&#10;&#9;&#9;&#9;M135.558,218.323H90.264c-8.284,0-15-6.716-15-15v-45.294c0-8.284,6.716-15,15-15h45.294c8.284,0,15,6.716,15,15v45.294&#10;&#9;&#9;&#9;C150.558,211.608,143.843,218.323,135.558,218.323z"/>
 		<path style="fill:none;stroke:#000000;stroke-width:15;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;" d="&#10;&#9;&#9;&#9;M240.97,218.323h-45.294c-8.284,0-15-6.716-15-15v-45.294c0-8.284,6.716-15,15-15h45.294c8.284,0,15,6.716,15,15v45.294&#10;&#9;&#9;&#9;C255.97,211.608,249.254,218.323,240.97,218.323z"/>
 		<path style="fill:none;stroke:#000000;stroke-width:15;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;" d="&#10;&#9;&#9;&#9;M346.382,218.323h-45.294c-8.284,0-15-6.716-15-15v-45.294c0-8.284,6.716-15,15-15h45.294c8.284,0,15,6.716,15,15v45.294&#10;&#9;&#9;&#9;C361.382,211.608,354.666,218.323,346.382,218.323z"/>
 		<path style="fill:none;stroke:#000000;stroke-width:15;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;" d="&#10;&#9;&#9;&#9;M130.91,248.44h170.24c8.31,0,15.06,6.74,15.06,15.06c0,8.317-6.743,15.06-15.06,15.06H33.09"/>
-		
+
 			<line style="fill:none;stroke:#000000;stroke-width:15;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;" x1="95.91" y1="248.44" x2="33.09" y2="248.44"/>
 		<path style="fill:none;stroke:#000000;stroke-width:15;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;" d="&#10;&#9;&#9;&#9;M391.5,103.553v92.36c0,24.85,20.15,45,45,45h43.35"/>
 		<path style="fill:none;stroke:#000000;stroke-width:15;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;" d="&#10;&#9;&#9;&#9;M489.382,301.147h-15.059c-8.317,0-15.059-6.742-15.059-15.059c0-8.317,6.742-15.059,15.059-15.059h15.059&#10;&#9;&#9;&#9;c8.317,0,15.059,6.742,15.059,15.059C504.441,294.405,497.699,301.147,489.382,301.147z"/>

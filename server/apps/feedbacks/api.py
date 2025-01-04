@@ -1,10 +1,7 @@
-import email
-from re import sub
-
-from ninja import Query, Router
+from ninja import Router
 
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import EmailMessage
 
 # from ninja.errors import HttpError
 from django.http import HttpRequest
@@ -13,13 +10,14 @@ from server.apps.api.schemas import ResponseSchema
 
 from .models import Feedback
 from .schemas import FeedbackCreate
-from django.core.mail import EmailMessage
 
 router = Router()
 
 
 @router.post("/", response=ResponseSchema)
-def create_feedback(request: HttpRequest, payload: FeedbackCreate, send_email: bool = True) -> ResponseSchema:
+def create_feedback(
+    request: HttpRequest, payload: FeedbackCreate, send_email: bool = True
+) -> ResponseSchema:
     if payload.urls is None:
         payload.urls = []
     if not payload.subject:
@@ -41,7 +39,13 @@ def create_feedback(request: HttpRequest, payload: FeedbackCreate, send_email: b
         text += f'<p><i>from <a href="mailto:{email}">{email}</a>.</i>'
         text += f'<hr/><p><a href="{settings.DJANGO_ADMIN_URL}/feedbacks/feedback/{feedback.id}/change/">edit message</a><br/><small>{feedback.created}</small></p>'
         recipient = [a[1] for a in settings.DJANGO_ADMIN_EMAILS]
-        msg = EmailMessage(subject=subject, body=text, from_email=no_reply, to=recipient, reply_to=[email])
+        msg = EmailMessage(
+            subject=subject,
+            body=text,
+            from_email=no_reply,
+            to=recipient,
+            reply_to=[email],
+        )
         msg.content_subtype = "html"
         msg.send()
     return ResponseSchema(message="Thank you for the feedback", id=feedback.id)

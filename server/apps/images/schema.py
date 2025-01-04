@@ -1,7 +1,5 @@
 from ninja import Field, ModelSchema
 
-from server.apps.translations import TranslationSchema
-
 from .models import Image
 
 
@@ -29,7 +27,9 @@ class ImageOptional(ModelSchema):
     class Meta:
         model = Image
         fields = Image.get_fields_all()
-        fields_optional = (f for f in Image.get_fields_all() if f not in ("config", "props_schema"))  # .remove("name")
+        fields_optional = (
+            f for f in Image.get_fields_all() if f not in ("config", "props_schema")
+        )  # .remove("name")
 
 
 class OrganizationCreate(ModelSchema):

@@ -29,7 +29,10 @@ OrganizationAdminFieldsets = [
     ),
     (
         f"{_('Description')} {_('Translations')}",
-        {"classes": ["collapse"], "fields": [f"description_{code}" for code in settings.LANGUAGE_CODES]},
+        {
+            "classes": ["collapse"],
+            "fields": [f"description_{code}" for code in settings.LANGUAGE_CODES],
+        },
     ),
     (
         f"{_('URL')} {_('Translations')}",
@@ -40,7 +43,10 @@ OrganizationAdminFieldsets = [
     ),
     (
         f"{_('Attribution')} {_('Translations')}",
-        {"classes": ["collapse"], "fields": [f"attribution_{code}" for code in settings.LANGUAGE_CODES]},
+        {
+            "classes": ["collapse"],
+            "fields": [f"attribution_{code}" for code in settings.LANGUAGE_CODES],
+        },
     ),
     (
         _("Colors"),

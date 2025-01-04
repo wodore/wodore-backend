@@ -1,6 +1,6 @@
 # Models
-from typing import ClassVar
 import contextlib
+from typing import ClassVar
 
 # from cloudinary import CloudinaryImage
 with contextlib.suppress(ModuleNotFoundError):
@@ -9,10 +9,8 @@ with contextlib.suppress(ModuleNotFoundError):
 # from tinymce.widgets import TinyMCE
 # from simplemde.widgets import SimpleMDEEditor
 from django.contrib import admin
-from django.db import models
 from django.http import HttpRequest
-from django.urls import path, reverse
-from django.utils.html import format_html
+from django.urls import reverse
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
@@ -68,10 +66,25 @@ class ImageAdmin(ModelAdmin):
     fieldsets = ImageAdminFieldsets
     view_on_site = True
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
-    list_display = ("thumb", "caption_short", "license_summary", "source", "tag_list", "review_tag", "show_huts")
+    list_display = (
+        "thumb",
+        "caption_short",
+        "license_summary",
+        "source",
+        "tag_list",
+        "review_tag",
+        "show_huts",
+    )
     list_display_links = ("thumb", "caption_short")
     search_fields = ("author", "caption_i18n")
-    list_filter = ("source_org", "license", "review_status", "tags", "uploaded_by_user", "uploaded_by_anonym")
+    list_filter = (
+        "source_org",
+        "license",
+        "review_status",
+        "tags",
+        "uploaded_by_user",
+        "uploaded_by_anonym",
+    )
     readonly_fields = (
         "id",
         "source_url_raw",
@@ -109,7 +122,9 @@ class ImageAdmin(ModelAdmin):
         if obj.author:
             src.append(obj.author)
         if obj.source_org:
-            src.append(f'<i><a href={obj.source_org.url} target="_blank">{obj.source_org.name_i18n}</a></i>')
+            src.append(
+                f'<i><a href={obj.source_org.url} target="_blank">{obj.source_org.name_i18n}</a></i>'
+            )
         if obj.source_url:
             link = f'<a href={obj.source_url} target="_blank">{text_shorten_html(obj.source_url, textsize="sm", width=40)}</a>'
         else:
@@ -118,7 +133,9 @@ class ImageAdmin(ModelAdmin):
 
     @display(description="Caption")
     def caption_short(self, obj):
-        return text_shorten_html(obj.caption_i18n, textsize="xs", width=60, on_word=True)
+        return text_shorten_html(
+            obj.caption_i18n, textsize="xs", width=60, on_word=True
+        )
 
     def thumb(self, obj):  # new
         try:

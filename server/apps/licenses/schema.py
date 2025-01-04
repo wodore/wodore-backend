@@ -1,7 +1,5 @@
 from ninja import Field, ModelSchema
 
-from server.apps.translations import TranslationSchema
-
 from .models import License
 
 

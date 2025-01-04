@@ -140,7 +140,7 @@ COPY ./docker/django/entrypoint.sh /docker-entrypoint.sh
 COPY --chown=web:web ./manage.py /code/
 COPY --chown=web:web server /code/server
 # TODO: collectstatic in build process and copy from there!
-#COPY --chown=web:web static /code/static 
+#COPY --chown=web:web static /code/static
 COPY --chown=web:web ${CONFIG_DIR} /code/config
 
 # Setting up proper permissions:

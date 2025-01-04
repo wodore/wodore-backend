@@ -25,7 +25,9 @@ def add_hut_source_db(  # type: ignore[no-any-unimported]
     try:
         org = Organization.get_by_slug(slug=organization)
     except Organization.DoesNotExist:
-        click.secho(f"Organiztion '{organization}' does not exist, add it first.", fg="red")
+        click.secho(
+            f"Organiztion '{organization}' does not exist, add it first.", fg="red"
+        )
         sys.exit(1)
     init = HutSource.objects.filter(organization=org).count() == 0
     source_huts = []
@@ -44,10 +46,18 @@ def add_hut_source_db(  # type: ignore[no-any-unimported]
             location=dbPoint(hut.location.lon_lat) if hut.location else None,
             organization=org,
             name=hut.name,
-            source_data=hut.source_data.model_dump(by_alias=True) if hut.source_data is not None else {},
-            source_properties=hut.source_properties.model_dump(by_alias=True) if hut.source_properties else {},
+            source_data=hut.source_data.model_dump(by_alias=True)
+            if hut.source_data is not None
+            else {},
+            source_properties=hut.source_properties.model_dump(by_alias=True)
+            if hut.source_properties
+            else {},
         )
-        review_status = HutSource.ReviewStatusChoices.done if init else HutSource.ReviewStatusChoices.new
+        review_status = (
+            HutSource.ReviewStatusChoices.done
+            if init
+            else HutSource.ReviewStatusChoices.new
+        )
         shut, status = HutSource.add(shut, new_review_status=review_status)
         _hut_name = shut.name if len(shut.name) < 18 else shut.name[:15] + ".."
         _name = f"  Hut {number!s: <3} {'`'+shut.source_id+'`':<15} {_hut_name:<20} {'('+str(shut.organization)+')':<8}"
@@ -60,12 +70,16 @@ def add_hut_source_db(  # type: ignore[no-any-unimported]
             UpdateCreateStatus.ignored: "magenta",
         }
         counter[status] += 1
-        click.secho(f"  ... {status.value:<8}", fg=status_color.get(status, "red"), nl=False)
+        click.secho(
+            f"  ... {status.value:<8}", fg=status_color.get(status, "red"), nl=False
+        )
         click.secho(f" (#{shut.id})", dim=True)
         source_huts.append(shut)
     added = counter[UpdateCreateStatus.created]
     updated = counter[UpdateCreateStatus.updated]
-    nochange = counter[UpdateCreateStatus.exists] + counter[UpdateCreateStatus.no_change]
+    nochange = (
+        counter[UpdateCreateStatus.exists] + counter[UpdateCreateStatus.no_change]
+    )
     failed = counter[UpdateCreateStatus.ignored]
     return added, updated, nochange, failed
 
@@ -77,31 +91,51 @@ def add_hutsources_function(
     **kwargs: Any,
 ) -> None:
     selected_orgs = kwargs.get("selected_organizations", [])
-    limit = kwargs.get("limit", None)
-    offset = kwargs.get("offset", None)
-    lang = kwargs.get("lang", None)
+    limit = kwargs.get("limit")
+    offset = kwargs.get("offset")
+    lang = kwargs.get("lang")
     for org in selected_orgs:
         service_class: BaseService = settings.SERVICES.get(org, None)
         if service_class is not None:
             service = service_class
             obj.stdout.write(f"Get data from '{service.__class__.__name__}'")
-            src_huts = service.get_huts_from_source(limit=limit, offset=offset, lang=lang)
-            obj.stdout.write(f"Got {len(src_huts)} results back, start filling database:")
-            added, updated, nochange, failed = add_hut_source_db(src_huts, organization=org)
+            src_huts = service.get_huts_from_source(
+                limit=limit, offset=offset, lang=lang
+            )
+            obj.stdout.write(
+                f"Got {len(src_huts)} results back, start filling database:"
+            )
+            added, updated, nochange, failed = add_hut_source_db(
+                src_huts, organization=org
+            )
             if added:
                 obj.stdout.write(
-                    obj.style.SUCCESS(f"Successfully added {added} new hut source{'s' if added > 1 else ''}")
+                    obj.style.SUCCESS(
+                        f"Successfully added {added} new hut source{'s' if added > 1 else ''}"
+                    )
                 )
             if updated:
                 obj.stdout.write(
-                    obj.style.SUCCESS(f"Successfully updated {updated} hut source{'s' if updated > 1 else ''}")
+                    obj.style.SUCCESS(
+                        f"Successfully updated {updated} hut source{'s' if updated > 1 else ''}"
+                    )
                 )
             if nochange:
-                obj.stdout.write(obj.style.NOTICE(f"No change for {nochange} hut source{'s' if updated > 1 else ''}"))
+                obj.stdout.write(
+                    obj.style.NOTICE(
+                        f"No change for {nochange} hut source{'s' if updated > 1 else ''}"
+                    )
+                )
             if failed:
-                obj.stdout.write(obj.style.ERROR(f"Failed to add {failed} hut source{'s' if failed > 1 else ''}"))
+                obj.stdout.write(
+                    obj.style.ERROR(
+                        f"Failed to add {failed} hut source{'s' if failed > 1 else ''}"
+                    )
+                )
         else:
-            obj.stdout.write(obj.style.WARNING(f"Selected organization '{org}' not supported."))
+            obj.stdout.write(
+                obj.style.WARNING(f"Selected organization '{org}' not supported.")
+            )
 
 
 class Command(CRUDCommand[HutSource]):
@@ -126,8 +160,16 @@ class Command(CRUDCommand[HutSource]):
             type=str,
             required=True,
         )
-        parser.add_argument("--lang", help="Language to use (de, en, fr, it)", default="de", type=str)
+        parser.add_argument(
+            "--lang", help="Language to use (de, en, fr, it)", default="de", type=str
+        )
 
     def handle(self, orgs: str, lang: str, *args: Any, **options: Any) -> None:  # type: ignore[override]
-        org_list = settings.SERVICES.keys() if orgs.lower().strip() == "all" else [o.strip() for o in orgs.split(",")]
-        super().handle(kwargs_add={"selected_organizations": org_list, "lang": lang}, **options)
+        org_list = (
+            settings.SERVICES.keys()
+            if orgs.lower().strip() == "all"
+            else [o.strip() for o in orgs.split(",")]
+        )
+        super().handle(
+            kwargs_add={"selected_organizations": org_list, "lang": lang}, **options
+        )

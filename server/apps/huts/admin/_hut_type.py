@@ -2,7 +2,6 @@ import contextlib
 
 from django.conf import settings
 from django.contrib import admin
-from django.db.models import F
 from django.db.models.functions import Lower
 from django.http import HttpRequest
 from django.urls import reverse
@@ -28,7 +27,14 @@ from ..models import (
 class HutTypesAdmin(ModelAdmin):
     form = required_i18n_fields_form_factory("name")
     search_fields = ("name",)
-    list_display = ("title", "symbol_img", "icon_img", "comfort", "slug", "show_numbers_huts")
+    list_display = (
+        "title",
+        "symbol_img",
+        "icon_img",
+        "comfort",
+        "slug",
+        "show_numbers_huts",
+    )
     readonly_fields = ("name_i18n", "description_i18n")
     fieldsets = (
         (
@@ -58,12 +64,17 @@ class HutTypesAdmin(ModelAdmin):
             number_huts_closed=models.Count("hut_closed_set", distinct=True),
         )
 
-    def _get_url_str(self, obj: "QuerySetAny", closed: bool = False, klass: str = "font-semibold") -> str:
+    def _get_url_str(
+        self, obj: "QuerySetAny", closed: bool = False, klass: str = "font-semibold"
+    ) -> str:
         number = obj.number_huts_closed if closed else obj.number_huts_open
         type_id = obj.id
         help_text = "if closed" if closed else "if open"
         hut_type_str = "hut_type_closed" if closed else "hut_type_open"
-        url = reverse("admin:huts_hut_changelist") + f"?{hut_type_str}_id__exact={type_id}"
+        url = (
+            reverse("admin:huts_hut_changelist")
+            + f"?{hut_type_str}_id__exact={type_id}"
+        )
         return f'<a class="{klass}" title="{help_text}" href={url}>{number}</a>'
 
     @display(description=_("Huts"), ordering="number_huts")
@@ -73,7 +84,9 @@ class HutTypesAdmin(ModelAdmin):
         closed_url = self._get_url_str(obj, closed=True, klass="")
         return mark_safe(f"{open_url} ({closed_url})")
 
-    @display(header=True, description=_("Name and Description"), ordering=Lower("name_i18n"))
+    @display(
+        header=True, description=_("Name and Description"), ordering=Lower("name_i18n")
+    )
     def title(self, obj):
         return (obj.name_i18n, obj.description_i18n, self.avatar(obj.symbol_simple.url))
 

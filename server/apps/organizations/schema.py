@@ -1,7 +1,5 @@
 from ninja import Field, ModelSchema
 
-from server.apps.translations import TranslationSchema
-
 from .models import Organization
 
 
@@ -33,7 +31,9 @@ class OrganizationOptional(ModelSchema):
         model = Organization
         fields = Organization.get_fields_all()
         fields_optional = (
-            f for f in Organization.get_fields_all() if f not in ("config", "props_schema")
+            f
+            for f in Organization.get_fields_all()
+            if f not in ("config", "props_schema")
         )  # .remove("name")
 
 

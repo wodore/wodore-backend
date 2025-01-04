@@ -35,7 +35,8 @@ services:
       IMAGOR_SECRET: ${IMAGOR_KEY}
       IMAGOR_AUTO_WEBP: 1
       IMAGOR_AUTO_ACIF: 1
-      IMAGOR_SIGNER_TYPE: sha256
+      IMAGOR_SIGNER_TYPE:
+        sha256
         #IMAGOR_SIGNER_TRUNCATE: 40
 
       FILE_LOADER_BASE_DIR: /mnt/data/source # enable file loader by specifying base dir
@@ -50,7 +51,6 @@ services:
       IMAGOR_RESULT_STORAGE_PATH_STYLE: size
     ports:
       - "8079:8079"
-
 
         #web:
         #  <<: &web
@@ -104,4 +104,3 @@ networks:
   imagor:
   # Network for your internals, use it by default:
   webnet:
-
