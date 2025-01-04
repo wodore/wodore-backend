@@ -12,8 +12,8 @@ This is needed once after each restart of the computer
 
 ```bash
 docker compose up --build -d
-poetry install
-poetry shell
+uv sync
+source .venv/bin/activate
 ```
 
 Secrets are managed with [infisical](https://infisical.com/).
@@ -60,10 +60,9 @@ npx tailwindcss -o server/apps/admin/static/css/styles.css --minify --watch
 
 Update hut-service
 ```bash
-# only if access to hut-services-private
-poetry update hut-services
-poetry update hut-services-private
-poetry install -E private 
+# this is not supported at the moment, update is done with the private package
+# uv sync --upgrade-package hut-services 
+uv sync --upgrade-package hut-services-private
 ```
 
 ## Docker Production Build
@@ -87,7 +86,7 @@ This project was generated with [`wemake-django-template`](https://github.com/we
 
 You will need:
 
-- `python3.9` (see `pyproject.toml` for full version)
+- `python3.10` (see `pyproject.toml` for full version)
 - `postgresql` with version `13`
 - `docker` with [version at least](https://docs.docker.com/compose/compose-file/#compose-and-docker-compatibility-matrix) `18.02`
 
@@ -97,7 +96,7 @@ You will need:
 When developing locally, we use:
 
 - [`editorconfig`](http://editorconfig.org/) plugin (**required**)
-- [`poetry`](https://github.com/python-poetry/poetry) (**required**)
+- [`uv`](https://github.com/astral-sh/uv) (**required**)
 - [`pyenv`](https://github.com/pyenv/pyenv)
 - `pycharm 2017+` or `vscode`
 

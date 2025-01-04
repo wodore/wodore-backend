@@ -44,6 +44,9 @@ NEXT_DOCKER_IMAGE_SLIM=${REPO}:${NEXT_TAG}-slim
 runserver:
 	${RUN_CMD} app runserver
 
+migrate:
+	${RUN_CMD} app migrate
+
 docker-show:
 	@docker images | head -n 1
 	@docker images | grep wodore-backend | grep "${TAG} " | head -n 1
@@ -164,8 +167,9 @@ debug_container:
 	docker exec -it $$CONTAINER_NAME /bin/bash
 
 docker-login:
-	@infisical run --env=dev --path /keys/wodore-backend --silent --log-level warn --  \
-		echo ${GITHUB_TOKEN} | docker login ghcr.io -u GITHUB_USERNAME --password-stdin
+	@echo "Loggin broken"
+#@infisical run --env=dev --path /keys/wodore-backend --silent --log-level warn --  \
+#	echo ${GITHUB_TOKEN} | docker login ghcr.io -u ${GITHUB_USERNAME} --password-stdin
 	
 docker-push: docker-build docker-login
 	docker push ${REGISTRY}/${ORGANIZATION}/${DOCKER_IMAGE}
