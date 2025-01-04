@@ -110,7 +110,7 @@ def build(
     header("Run docker build job")
     image = dc.buildx.build(context_path=".", tags=tags, pull=True)
     success(
-        f"Successfully built the container '{image.id.split(":")[1][:12]}' with a size of [blue]{humanize.naturalsize(image.size)}[/] {humanize.naturaltime(image.created)}."
+        f"Successfully built the container '{image.id.split(':')[1][:12]}' with a size of [blue]{humanize.naturalsize(image.size)}[/] {humanize.naturaltime(image.created)}."
     )
     if push:
         header("Push to registry")
