@@ -116,6 +116,7 @@ dev = [
     "humanize==4.*", # https://pypi.org/project/humanize/
     "python-on-whales==0.*", # https://pypi.org/project/python-on-whales/
     "git-cliff==2.*", # https://pypi.org/project/git-cliff/
+    "pre-commit==4.*", # https://pypi.org/project/pre-commit/
 ]
 
 [tool.uv.sources]
