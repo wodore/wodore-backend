@@ -1,15 +1,12 @@
 from django.contrib import admin
 
 # Models
-from django.urls import path, reverse
-from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
 from unfold.decorators import display
 
 from server.apps.manager.admin import ModelAdmin
 from server.apps.translations.forms import required_i18n_fields_form_factory
-from server.core.utils import text_shorten_html
 
 # try:
 #    from unfold.admin import ModelAdmin

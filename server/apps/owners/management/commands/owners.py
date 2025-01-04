@@ -28,7 +28,9 @@ def add_owner_function(parser, limit, **kwargs):
             owner.save()
             added += 1
         except IntegrityError as e:
-            parser.stdout.write(parser.style.WARNING(f"Could not add '{owner}' to the database due to:"))
+            parser.stdout.write(
+                parser.style.WARNING(f"Could not add '{owner}' to the database due to:")
+            )
             parser.stdout.write(parser.style.NOTICE(e.args[0].strip()))
         parser.stdout.write(f"  - {owner}")
     parser.stdout.write(parser.style.SUCCESS(f"Successfully added {added} new owners"))

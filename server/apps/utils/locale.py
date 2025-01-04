@@ -81,7 +81,9 @@ class Translations(BaseModel):
         fallback: Optional[bool] = None,
     ) -> str:
         lang = self.get_locale() if locale is None else locale
-        default_lang = self.get_fallback_locale() if default_locale is None else default_locale
+        default_lang = (
+            self.get_fallback_locale() if default_locale is None else default_locale
+        )
         fallback = self.__fallback if fallback is None else fallback and default_lang
         out = getattr(self, lang)
         if not out and fallback:
@@ -104,7 +106,7 @@ class Translations(BaseModel):
                 if not ignore_errors:
                     raise ValueError(f"Cannot set '{lang}: {value}'")
             return value
-        elif isinstance(value, Translations):
+        if isinstance(value, Translations):
             value = value.dict()
         if isinstance(value, dict):
             for lang, value in value.items():
@@ -140,7 +142,7 @@ class Translations(BaseModel):
     def get_fallback_locale(self) -> LOCALES:
         if self.__fallback_locale is not None:
             return self.__fallback_locale
-        elif self.__fallback_locale_factory is not None:
+        if self.__fallback_locale_factory is not None:
             return self.__fallback_locale_factory()
         return get_fallback_locale()
 
@@ -209,7 +211,9 @@ class TranslationModel(BaseModel):
             # super().__setattr__(key, val)
             orig = None
         if orig and getattr(orig, "translated_field", None):
-            getattr(self, orig.field).set(val, locale=orig.locale, ignore_errors=orig.ignore_errors)
+            getattr(self, orig.field).set(
+                val, locale=orig.locale, ignore_errors=orig.ignore_errors
+            )
         else:
             super().__setattr__(key, val)
 
@@ -217,11 +221,9 @@ class TranslationModel(BaseModel):
         # try:
         if hasattr(super(), "__getattr__"):
             return super().__getattr__(key)
-        else:
-            if key[0] == "_":
-                return super().__getattr__(key)
-            else:
-                return None
+        if key[0] == "_":
+            return super().__getattr__(key)
+        return None
         # except:
         # raise
 
@@ -239,10 +241,11 @@ class TranslationModel(BaseModel):
             # orig = Undefined
         if getattr(orig, "translated_field", None):
             return getattr(self, orig.field).get(
-                locale=orig.locale, default_locale=orig.default_locale, fallback=orig.fallback
+                locale=orig.locale,
+                default_locale=orig.default_locale,
+                fallback=orig.fallback,
             )
-        else:
-            return orig
+        return orig
 
     # class Config:
     #    validate_assignment = True

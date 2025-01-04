@@ -14,7 +14,12 @@ from .schema import OrganizationOptional
 router = Router()
 
 
-@router.get("/", response=list[OrganizationOptional], exclude_unset=True, operation_id="get_organizations")
+@router.get(
+    "/",
+    response=list[OrganizationOptional],
+    exclude_unset=True,
+    operation_id="get_organizations",
+)
 @with_language_param("lang")
 def get_organizations(
     request: HttpRequest,
@@ -31,14 +36,24 @@ def get_organizations(
         return fields.validate(list(orgs))
 
 
-@router.get("/{slug}", response=OrganizationOptional, exclude_unset=True, operation_id="get_organization")
+@router.get(
+    "/{slug}",
+    response=OrganizationOptional,
+    exclude_unset=True,
+    operation_id="get_organization",
+)
 @with_language_param()
 def get_organization(
-    request: HttpRequest, slug: str, lang: LanguageParam, fields: Query[FieldsParam[OrganizationOptional]]
+    request: HttpRequest,
+    slug: str,
+    lang: LanguageParam,
+    fields: Query[FieldsParam[OrganizationOptional]],
 ) -> OrganizationOptional:
     fields.update_default("__all__")
     with override(lang):
-        return fields.validate(get_object_or_404(Organization, slug=slug, is_active=True))
+        return fields.validate(
+            get_object_or_404(Organization, slug=slug, is_active=True)
+        )
 
 
 # @router.post("/", response=OrganizationOptional)

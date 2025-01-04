@@ -31,9 +31,22 @@ def guess_hut_type(
         return False
 
     name = name.lower()
-    _hut_names = [r"huette", r"h[iü]tt[ae]", r"camona", r"capanna", r"cabane", r"huisli"]
+    _hut_names = [
+        r"huette",
+        r"h[iü]tt[ae]",
+        r"camona",
+        r"capanna",
+        r"cabane",
+        r"huisli",
+    ]
     _bivi_names = [r"r[ie]fug[ei]", r"biwak", r"bivouac", r"bivacco"]
-    _basic_hotel_names = [r"berghotel", r"berggasthaus", r"auberge", r"gasthaus", r"berghaus"]
+    _basic_hotel_names = [
+        r"berghotel",
+        r"berggasthaus",
+        r"auberge",
+        r"gasthaus",
+        r"berghaus",
+    ]
     _camping_names = [r"camping", r"zelt"]
     _hotel_names = [r"h[oô]tel"]
     _hostel_names = [r"hostel", r"jugendherberg"]

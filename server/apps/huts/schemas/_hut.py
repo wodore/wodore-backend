@@ -1,6 +1,6 @@
 import typing as t
 
-from hut_services import LocationSchema, OpenMonthlySchema, TranslationSchema
+from hut_services import LocationSchema, OpenMonthlySchema
 from ninja import Field, ModelSchema
 from pydantic import (
     BaseModel,
@@ -8,7 +8,6 @@ from pydantic import (
     computed_field,
     field_validator,
     model_validator,
-    root_validator,
 )
 from typing_extensions import Self
 
@@ -98,7 +97,10 @@ class ImageMetaSchema(BaseModel):
 
 
 class TransformImageConfig(BaseModel):
-    name: str = Field(default=None, description="Name of the transformed image, per default '{width}x{height}'")
+    name: str = Field(
+        default=None,
+        description="Name of the transformed image, per default '{width}x{height}'",
+    )
     width: int
     height: int
     radius: int
@@ -138,7 +140,14 @@ class ImageInfoSchema(BaseModel):
                 TransformImageConfig(name="avatar", width=180, height=180, radius=90),
                 TransformImageConfig(name="thumb", width=250, height=200, radius=0),
                 TransformImageConfig(name="preview", width=600, height=400, radius=0),
-                TransformImageConfig(name="preview-placeholder", width=300, height=200, radius=0, quality=5, blur=3),
+                TransformImageConfig(
+                    name="preview-placeholder",
+                    width=300,
+                    height=200,
+                    radius=0,
+                    quality=5,
+                    blur=3,
+                ),
                 TransformImageConfig(name="medium", width=1000, height=800, radius=0),
                 TransformImageConfig(name="large", width=1800, height=1200, radius=0),
             ]
@@ -157,11 +166,15 @@ class ImageInfoSchema(BaseModel):
             assert name is not None, assert_msg
             assert height is not None, assert_msg
             assert width is not None, assert_msg
-            config = TransformImageConfig(name=name, width=width, height=height, radius=radius)
+            config = TransformImageConfig(
+                name=name, width=width, height=height, radius=radius
+            )
         self.set_image_configs([*self.get_image_configs(), config])
         return self.get_image_configs()
 
-    def set_image_configs(self, configs: t.Sequence[TransformImageConfig]) -> t.Sequence[TransformImageConfig]:
+    def set_image_configs(
+        self, configs: t.Sequence[TransformImageConfig]
+    ) -> t.Sequence[TransformImageConfig]:
         self._urls = configs
         return self.get_image_configs()
 
@@ -177,7 +190,11 @@ class ImageInfoSchema(BaseModel):
                 if cfg.focal is not None:
                     focal = cfg.focal
                 else:
-                    focal = self.image_meta.focal if self.image_meta and cfg.use_focal else None
+                    focal = (
+                        self.image_meta.focal
+                        if self.image_meta and cfg.use_focal
+                        else None
+                    )
                 crop_start = None
                 crop_stop = None
                 focal_str = None
@@ -186,8 +203,15 @@ class ImageInfoSchema(BaseModel):
                     if not cfg.crop_to_focal:
                         crop_start, crop_stop = focal_str.split(":")
                 if cfg.crop is not None:
-                    crop_start, crop_stop = (f"{cfg.crop.x1}x{cfg.crop.y1}", f"{cfg.crop.x2}x{cfg.crop.y2}")
-                image_url = self.image if self.image.startswith("http") else f"{settings.MEDIA_URL}/{self.image}"
+                    crop_start, crop_stop = (
+                        f"{cfg.crop.x1}x{cfg.crop.y1}",
+                        f"{cfg.crop.x2}x{cfg.crop.y2}",
+                    )
+                image_url = (
+                    self.image
+                    if self.image.startswith("http")
+                    else f"{settings.MEDIA_URL}/{self.image}"
+                )
                 img = (
                     ImagorImage(image_url)
                     .transform(

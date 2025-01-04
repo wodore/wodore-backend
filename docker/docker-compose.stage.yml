@@ -75,4 +75,3 @@ networks:
   imagor:
   # Network for your internals, use it by default:
   webnet:
-

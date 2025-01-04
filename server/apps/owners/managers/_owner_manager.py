@@ -1,4 +1,3 @@
-import typing as t
 from collections.abc import MutableMapping
 from typing import Any
 
@@ -10,7 +9,9 @@ from server.core.managers import BaseManager
 
 
 class OwnerManager(MultilingualManager, BaseManager):
-    def get_or_create(self, defaults: MutableMapping[str, Any] | None = None, **kwargs: Any) -> tuple[Any, bool]:
+    def get_or_create(
+        self, defaults: MutableMapping[str, Any] | None = None, **kwargs: Any
+    ) -> tuple[Any, bool]:
         """A convenience method for looking up an object with the given kwargs, creating one if necessary.
 
         Args:
@@ -45,7 +46,9 @@ class OwnerManager(MultilingualManager, BaseManager):
         if name is None and slug is not None:
             name = slug.capitalize()
 
-        slug = defaults.get("slug", slug)  # get slug from default and reduce it if needed
+        slug = defaults.get(
+            "slug", slug
+        )  # get slug from default and reduce it if needed
         if slug is not None and len(slug) > 50:
             comment += f"\nSlug reduced from '{slug}'."
             slug = slugify(" ".join(slug.split("-")), max_length=50, word_boundary=True)

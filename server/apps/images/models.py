@@ -1,5 +1,4 @@
 import io
-from django.utils.timezone import make_aware
 import logging
 import mimetypes
 import os
@@ -22,6 +21,7 @@ from django.contrib.postgres.indexes import GinIndex
 from django.core.files.base import ContentFile
 from django.db import IntegrityError, models
 from django.utils.safestring import mark_safe
+from django.utils.timezone import make_aware
 from django.utils.translation import gettext_lazy as _
 
 # from imagefocus import ImageFocusField
@@ -32,7 +32,6 @@ from server.apps.meta_image_field.schema import MetaImageSchema
 from server.apps.organizations.models import Organization
 from server.apps.utils.fields import MonitorFields
 from server.core.managers import BaseMutlilingualManager
-import contextlib
 
 # from .forms import CustomImageField
 User = get_user_model()
@@ -49,10 +48,16 @@ class ImageTag(TimeStampedModel):
     i18n = TranslationField(fields=("name",))
     objects = BaseMutlilingualManager()
 
-    slug = models.SlugField(max_length=50, unique=True, verbose_name=_("Slug"), blank=False)
+    slug = models.SlugField(
+        max_length=50, unique=True, verbose_name=_("Slug"), blank=False
+    )
     name = models.TextField(max_length=50, verbose_name=_("Name"), blank=False)
 
-    color = ColorField(verbose_name=_("Color"), help_text=_("color as hex number with #"), default="#4B8E43")
+    color = ColorField(
+        verbose_name=_("Color"),
+        help_text=_("color as hex number with #"),
+        default="#4B8E43",
+    )
 
     class Meta:
         verbose_name = _("Image Tag")
@@ -76,19 +81,37 @@ class Image(TimeStampedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     image = MetaImageField(upload_to="images/", meta_field="image_meta", blank=False)
-    image_meta = models.JSONField(blank=True, null=True, verbose_name=_("Image Metadata"))
+    image_meta = models.JSONField(
+        blank=True, null=True, verbose_name=_("Image Metadata")
+    )
     is_active = models.BooleanField(
-        default=True, db_index=True, verbose_name=_("Active"), help_text=_("Only shown to admin if not active")
+        default=True,
+        db_index=True,
+        verbose_name=_("Active"),
+        help_text=_("Only shown to admin if not active"),
     )
     license = models.ForeignKey(License, on_delete=models.CASCADE)
-    author = models.CharField(max_length=255, default="", blank=True, null=True, verbose_name=_("Author"))
-    author_url = models.URLField(blank=True, max_length=500, null=True, default="", verbose_name=_("Author URL"))
+    author = models.CharField(
+        max_length=255, default="", blank=True, null=True, verbose_name=_("Author")
+    )
+    author_url = models.URLField(
+        blank=True, max_length=500, null=True, default="", verbose_name=_("Author URL")
+    )
     caption = models.TextField(max_length=400, verbose_name=_("Caption"), blank=False)
-    tags = models.ManyToManyField(ImageTag, related_name="images", verbose_name=_("Tags"), blank=True)
-    review_comment = models.TextField(verbose_name=_("Review Comment"), blank=True, default="")
+    tags = models.ManyToManyField(
+        ImageTag, related_name="images", verbose_name=_("Tags"), blank=True
+    )
+    review_comment = models.TextField(
+        verbose_name=_("Review Comment"), blank=True, default=""
+    )
 
-    capture_date = models.DateTimeField(verbose_name=_("Capture Date"), blank=True, null=True)
-    granted_date = MonitorFields(monitors=["granted_by_anonym", "granted_by_user"], verbose_name=_("Granted Date"))
+    capture_date = models.DateTimeField(
+        verbose_name=_("Capture Date"), blank=True, null=True
+    )
+    granted_date = MonitorFields(
+        monitors=["granted_by_anonym", "granted_by_user"],
+        verbose_name=_("Granted Date"),
+    )
     granted_by_anonym = models.CharField(
         max_length=255,
         blank=True,
@@ -122,15 +145,29 @@ class Image(TimeStampedModel):
         verbose_name=_("Uploaded By (User)"),
         related_name="image_uploaded_set",
     )
-    source_url = models.URLField(blank=True, max_length=500, null=True, default="", verbose_name=_("Source URL"))
+    source_url = models.URLField(
+        blank=True, max_length=500, null=True, default="", verbose_name=_("Source URL")
+    )
     source_url_raw = models.URLField(
-        blank=True, max_length=500, null=True, default="", verbose_name=_("Source URL to raw image")
+        blank=True,
+        max_length=500,
+        null=True,
+        default="",
+        verbose_name=_("Source URL to raw image"),
     )
     source_ident = models.CharField(
-        max_length=512, default="", blank=True, null=True, verbose_name=_("Source Identification")
+        max_length=512,
+        default="",
+        blank=True,
+        null=True,
+        verbose_name=_("Source Identification"),
     )
     source_org = models.ForeignKey(
-        Organization, on_delete=models.SET_NULL, blank=True, null=True, verbose_name=_("Source Organization")
+        Organization,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        verbose_name=_("Source Organization"),
     )
 
     review_status = models.CharField(
@@ -233,7 +270,11 @@ class Image(TimeStampedModel):
             if source_org_slug == "refuges.info":
                 source_org_slug = "refuges"
         else:
-            source_ident = photo_schema.source.ident if photo_schema.source and photo_schema.source.ident else ""
+            source_ident = (
+                photo_schema.source.ident
+                if photo_schema.source and photo_schema.source.ident
+                else ""
+            )
 
         if cls.objects.filter(source_ident=source_ident).exists():
             logging.info("Image already exists, skipping...")
@@ -249,22 +290,36 @@ class Image(TimeStampedModel):
             if e.response.status_code == 404:
                 if "-originale" in photo_schema.raw_url:
                     # fix wrong url for refuges.info images
-                    photo_schema.raw_url = photo_schema.raw_url.replace("-originale", "-reduite")
+                    photo_schema.raw_url = photo_schema.raw_url.replace(
+                        "-originale", "-reduite"
+                    )
                     return cls.create_image_from_schema(
-                        photo_schema, path=path, default_caption=default_caption, tags=tags
+                        photo_schema,
+                        path=path,
+                        default_caption=default_caption,
+                        tags=tags,
                     )
                 logging.warning(
-                    "Image not found: %s", photo_schema.source.url if photo_schema.source else photo_schema.raw_url
+                    "Image not found: %s",
+                    photo_schema.source.url
+                    if photo_schema.source
+                    else photo_schema.raw_url,
                 )
                 return None
         except requests.exceptions.ReadTimeout:
-            logging.warning("Read timeout: %s. Skipping this one.", photo_schema.raw_url)
+            logging.warning(
+                "Read timeout: %s. Skipping this one.", photo_schema.raw_url
+            )
             return None
         except requests.exceptions.ConnectionError:
-            logging.warning("Connection refused: %s. Sleep for 2 min.", photo_schema.raw_url)
+            logging.warning(
+                "Connection refused: %s. Sleep for 2 min.", photo_schema.raw_url
+            )
             time.sleep(2 * 60)
             # try again
-            return cls.create_image_from_schema(photo_schema, path=path, default_caption=default_caption, tags=tags)
+            return cls.create_image_from_schema(
+                photo_schema, path=path, default_caption=default_caption, tags=tags
+            )
         except:
             raise  # Re-raise the exception if it's not a 404 error
         image_content = response.content
@@ -282,7 +337,9 @@ class Image(TimeStampedModel):
             raise ValueError(msg)
 
         image_uuid = uuid.uuid4()
-        image_file = ContentFile(image_content, name=os.path.join(path, f"{image_uuid}{extension}"))
+        image_file = ContentFile(
+            image_content, name=os.path.join(path, f"{image_uuid}{extension}")
+        )
 
         # Get the image dimensions using Pillow
         pil_image = PILImage.open(io.BytesIO(image_content))
@@ -306,7 +363,8 @@ class Image(TimeStampedModel):
         if source_org_slug:
             source_org_slug = source_org_slug[:50]
             source_org = Organization.objects.get_or_create(
-                slug=source_org_slug, defaults={"name_en": photo_schema.source.name[:100]}
+                slug=source_org_slug,
+                defaults={"name_en": photo_schema.source.name[:100]},
             )[0]
             if not Organization.objects.filter(slug=source_org_slug).exists():
                 img_review_status = Image.ReviewStatusChoices.pending
@@ -317,7 +375,9 @@ class Image(TimeStampedModel):
         # tags
         tags_set = []
         for tag in set((tags or []) + (photo_schema.tags or [])):
-            tag_obj, created = ImageTag.objects.get_or_create(slug=tag, defaults={"name_en": tag})
+            tag_obj, created = ImageTag.objects.get_or_create(
+                slug=tag, defaults={"name_en": tag}
+            )
             if created:
                 img_review_status = Image.ReviewStatusChoices.pending
                 review_comment += f"- Added new tag: '{tag}'\n"
@@ -330,26 +390,36 @@ class Image(TimeStampedModel):
             # license=License.objects.get_or_create(slug=license.slug)[0],
             license=License.objects.get_or_create(
                 slug=lic_slug,
-                defaults={"name_en": license.name, "fullname_en": license.name, "link_en": license.url},
+                defaults={
+                    "name_en": license.name,
+                    "fullname_en": license.name,
+                    "link_en": license.url,
+                },
             )[0],
             source_org=source_org,
             author=photo_schema.author.name if photo_schema.author else "",
             author_url=(
-                photo_schema.author.url.replace("&action=edit", "").replace("&redlink=1", "")
+                photo_schema.author.url.replace("&action=edit", "").replace(
+                    "&redlink=1", ""
+                )
                 if photo_schema.author and photo_schema.author.url
                 else ""
             ),
             source_url=photo_schema.source.url if photo_schema.source else "",
             source_url_raw=photo_schema.raw_url if photo_schema.raw_url else "",
             source_ident=source_ident,
-            image_meta=MetaImageSchema(width=width, height=height).model_dump(exclude_none=True),
+            image_meta=MetaImageSchema(width=width, height=height).model_dump(
+                exclude_none=True
+            ),
             capture_date=(
                 None
                 if photo_schema.capture_date is None
                 else (
                     photo_schema.capture_date
                     if photo_schema.capture_date.tzinfo is not None
-                    else make_aware(photo_schema.capture_date) if photo_schema.capture_date else None
+                    else make_aware(photo_schema.capture_date)
+                    if photo_schema.capture_date
+                    else None
                 )
             ),
         )

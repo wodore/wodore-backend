@@ -24,7 +24,8 @@ class FieldsParam(Schema, Generic[TSchema]):
         # example="__all__",
     )
     exclude: Any = Query(
-        None, description="Comma separated list with field names, if set it uses all fields except the excluded ones."
+        None,
+        description="Comma separated list with field names, if set it uses all fields except the excluded ones.",
     )
 
     @property
@@ -45,14 +46,15 @@ class FieldsParam(Schema, Generic[TSchema]):
 
     @property
     def required_field_names(self) -> list[str]:
-        return [name for name, info in self._available_fields.items() if info.is_required()]
+        return [
+            name for name, info in self._available_fields.items() if info.is_required()
+        ]
 
     @property
     def _available_fields(self) -> dict[str, FieldInfo]:
         if self._schema is not None:
             return self._schema.model_fields
-        else:
-            return {}
+        return {}
 
     def _check_fields(self, fields: list[str]):
         """Check if all fields names are allowed, otherwise send error."""
@@ -101,18 +103,23 @@ class FieldsParam(Schema, Generic[TSchema]):
     def type_adapter(self, _type: Any | None = None):
         """Returns a pydantic TypeAdapter object."""
         if _type is not None:
-            objs = TypeAdapter(_type[self.get_schema()])  # .validate_python(list(Organization.objects.all()))
+            objs = TypeAdapter(
+                _type[self.get_schema()]
+            )  # .validate_python(list(Organization.objects.all()))
         else:
-            objs = TypeAdapter(self.get_schema())  # .validate_python(list(Organization.objects.all()))
+            objs = TypeAdapter(
+                self.get_schema()
+            )  # .validate_python(list(Organization.objects.all()))
         return objs
 
     def validate(
-        self, _obj: Any | None = None, validator: Literal["python", "json", "strings"] = "python"
+        self,
+        _obj: Any | None = None,
+        validator: Literal["python", "json", "strings"] = "python",
     ) -> list[TSchema]:
         if isinstance(_obj, list):
             return getattr(self.type_adapter(list), f"validate_{validator}")(_obj)
-        else:
-            return getattr(self.type_adapter(), f"validate_{validator}")(_obj)
+        return getattr(self.type_adapter(), f"validate_{validator}")(_obj)
 
     def update_default(self, include: str | Sequence[str]) -> None:
         if not isinstance(include, str):

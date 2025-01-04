@@ -13,7 +13,12 @@ class UnfoldJSONSuit(JSONSuit):
         textarea = super(JSONSuit, self).render(name, value, attrs)
         return render_to_string(
             "jsonsuit/widget.html",
-            {"name": name, "value": value, "textarea": textarea, "view_class": " ".join(BASE_INPUT_CLASSES)},
+            {
+                "name": name,
+                "value": value,
+                "textarea": textarea,
+                "view_class": " ".join(BASE_INPUT_CLASSES),
+            },
         )
 
 
@@ -24,5 +29,10 @@ class UnfoldReadonlyJSONSuit(ReadonlyJSONSuit):
         attrs.update({"class": "hidden " + klass})
         return render_to_string(
             "jsonsuit/readonly_widget.html",
-            {"name": name, "value": value, "attrs": attrs, "view_class": " ".join(BASE_INPUT_CLASSES)},
+            {
+                "name": name,
+                "value": value,
+                "attrs": attrs,
+                "view_class": " ".join(BASE_INPUT_CLASSES),
+            },
         )

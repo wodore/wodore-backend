@@ -55,13 +55,13 @@ docker images | grep wodore-backend
 ```
 
 ```bash
-npx tailwindcss -o server/apps/admin/static/css/styles.css --minify --watch 
+npx tailwindcss -o server/apps/admin/static/css/styles.css --minify --watch
 ```
 
 Update hut-service
 ```bash
 # this is not supported at the moment, update is done with the private package
-# uv sync --upgrade-package hut-services 
+# uv sync --upgrade-package hut-services
 uv sync --upgrade-package hut-services-private
 ```
 

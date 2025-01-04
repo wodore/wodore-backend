@@ -1,8 +1,9 @@
-from rich import print as rprint
-import sys
-from environs import Env
 import inspect
 import shutil
+import sys
+
+from environs import Env
+from rich import print as rprint
 
 env = Env()
 env.read_env()  # read .env file, if it exists

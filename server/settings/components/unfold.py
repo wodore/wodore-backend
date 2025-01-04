@@ -15,7 +15,9 @@ UNFOLD = {
     "SITE_TITLE": "wodore.com",
     "SITE_HEADER": "Wodore Admin",
     "SITE_URL": "/",
-    "SITE_ICON": lambda request: static("main/images/favicon-32x32.png"),  # both modes, optimise for 32px height
+    "SITE_ICON": lambda request: static(
+        "main/images/favicon-32x32.png"
+    ),  # both modes, optimise for 32px height
     # "SITE_LOGO": lambda request: static("main/images/favicon-32x32.png"),  # both modes, optimise for 32px height
     # "SITE_ICON": lambda request: static("icon.svg"),  # both modes, optimise for 32px height
     # "SITE_ICON": {
@@ -101,25 +103,35 @@ UNFOLD = {
                         "title": _("Huts"),
                         "icon": "house",
                         "link": reverse_lazy("admin:huts_hut_changelist"),
-                        "permission": lambda request: request.user.has_perm("huts.view_hut"),
+                        "permission": lambda request: request.user.has_perm(
+                            "huts.view_hut"
+                        ),
                     },
                     {
                         "title": _("Owners"),
                         "icon": "location_away",
                         "link": reverse_lazy("admin:owners_owner_changelist"),
-                        "permission": lambda request: request.user.has_perm("owners.view_owner"),
+                        "permission": lambda request: request.user.has_perm(
+                            "owners.view_owner"
+                        ),
                     },
                     {
                         "title": _("Organizations"),
                         "icon": "corporate_fare",
-                        "link": reverse_lazy("admin:organizations_organization_changelist"),
-                        "permission": lambda request: request.user.has_perm("organizations.view_organization"),
+                        "link": reverse_lazy(
+                            "admin:organizations_organization_changelist"
+                        ),
+                        "permission": lambda request: request.user.has_perm(
+                            "organizations.view_organization"
+                        ),
                     },
                     {
                         "title": _("Contacts"),
                         "icon": "contacts",
                         "link": reverse_lazy("admin:contacts_contact_changelist"),
-                        "permission": lambda request: request.user.has_perm("contacts.change_contact"),
+                        "permission": lambda request: request.user.has_perm(
+                            "contacts.change_contact"
+                        ),
                     },
                 ],
             },
@@ -131,19 +143,25 @@ UNFOLD = {
                         "title": _("Feedbacks"),
                         "icon": "feedback",
                         "link": reverse_lazy("admin:feedbacks_feedback_changelist"),
-                        "permission": lambda request: request.user.has_perm("feedbacks.change_feedback"),
+                        "permission": lambda request: request.user.has_perm(
+                            "feedbacks.change_feedback"
+                        ),
                     },
                     {
                         "title": _("Images"),
                         "icon": "photo_library",
                         "link": reverse_lazy("admin:images_image_changelist"),
-                        "permission": lambda request: request.user.has_perm("images.change_image"),
+                        "permission": lambda request: request.user.has_perm(
+                            "images.change_image"
+                        ),
                     },
                     {
                         "title": _("Licenses"),
                         "icon": "copyright",
                         "link": reverse_lazy("admin:licenses_license_changelist"),
-                        "permission": lambda request: request.user.has_perm("licenses.change_feedback"),
+                        "permission": lambda request: request.user.has_perm(
+                            "licenses.change_feedback"
+                        ),
                     },
                 ],
             },
@@ -205,17 +223,23 @@ UNFOLD = {
                 {
                     "title": _("Huts"),
                     "link": reverse_lazy("admin:huts_hut_changelist"),
-                    "permission": lambda request: request.user.has_perm("huts.view_hut"),
+                    "permission": lambda request: request.user.has_perm(
+                        "huts.view_hut"
+                    ),
                 },
                 {
                     "title": _("Types"),
                     "link": reverse_lazy("admin:huts_huttype_changelist"),
-                    "permission": lambda request: request.user.has_perm("huts.view_huttype"),
+                    "permission": lambda request: request.user.has_perm(
+                        "huts.view_huttype"
+                    ),
                 },
                 {
                     "title": _("Sources"),
                     "link": reverse_lazy("admin:huts_hutsource_changelist"),
-                    "permission": lambda request: request.user.has_perm("huts.view_hutsource"),
+                    "permission": lambda request: request.user.has_perm(
+                        "huts.view_hutsource"
+                    ),
                 },
             ],
         },
@@ -228,12 +252,16 @@ UNFOLD = {
                 {
                     "title": _("Contacts"),
                     "link": reverse_lazy("admin:contacts_contact_changelist"),
-                    "permission": lambda request: request.user.has_perm("contacts.view_contacts"),
+                    "permission": lambda request: request.user.has_perm(
+                        "contacts.view_contacts"
+                    ),
                 },
                 {
                     "title": _("Contact Functions"),
                     "link": reverse_lazy("admin:contacts_contactfunction_changelist"),
-                    "permission": lambda request: request.user.has_perm("contacts.view_contactfunctions"),
+                    "permission": lambda request: request.user.has_perm(
+                        "contacts.view_contactfunctions"
+                    ),
                 },
             ],
         },
@@ -247,17 +275,25 @@ UNFOLD = {
                 {
                     "title": _("Owners"),
                     "link": reverse_lazy("admin:owners_owner_changelist"),
-                    "permission": lambda request: request.user.has_perm("owners.view_owner"),
+                    "permission": lambda request: request.user.has_perm(
+                        "owners.view_owner"
+                    ),
                 },
                 {
                     "title": _("with Contacts"),
-                    "link": reverse_lazy("admin:owners_ownercontactassociation_changelist"),
-                    "permission": lambda request: request.user.has_perm("owners.view_ownercontactassociation"),
+                    "link": reverse_lazy(
+                        "admin:owners_ownercontactassociation_changelist"
+                    ),
+                    "permission": lambda request: request.user.has_perm(
+                        "owners.view_ownercontactassociation"
+                    ),
                 },
                 {
                     "title": _("with Huts"),
                     "link": reverse_lazy("admin:owners_ownerhutproxy_changelist"),
-                    "permission": lambda request: request.user.has_perm("owners.view_ownerhutproxy"),
+                    "permission": lambda request: request.user.has_perm(
+                        "owners.view_ownerhutproxy"
+                    ),
                 },
             ],
         },
@@ -270,12 +306,16 @@ UNFOLD = {
                 {
                     "title": _("Images"),
                     "link": reverse_lazy("admin:images_image_changelist"),
-                    "permission": lambda request: request.user.has_perm("images.view_images"),
+                    "permission": lambda request: request.user.has_perm(
+                        "images.view_images"
+                    ),
                 },
                 {
                     "title": _("Image Tags"),
                     "link": reverse_lazy("admin:images_imagetag_changelist"),
-                    "permission": lambda request: request.user.has_perm("images.view_imagetags"),
+                    "permission": lambda request: request.user.has_perm(
+                        "images.view_imagetags"
+                    ),
                 },
             ],
         },

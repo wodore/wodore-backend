@@ -1,6 +1,6 @@
-import time
-from locust import HttpUser, task, between
 import random
+
+from locust import HttpUser, between, task
 
 
 def get_lang() -> str:
@@ -37,7 +37,15 @@ class QuickstartUser(HttpUser):
     def get_hut_types_records(self):
         lang = get_lang()
         path = "/v1/huts/types/records"
-        fields = ["slug", "name", "description", "symbol", "level", "symbol_simple", "icon"]
+        fields = [
+            "slug",
+            "name",
+            "description",
+            "symbol",
+            "level",
+            "symbol_simple",
+            "icon",
+        ]
         include = get_includes(fields)
         url = f"{path}?lang={lang}&include={include}"
         self.client.get(url, name=path)

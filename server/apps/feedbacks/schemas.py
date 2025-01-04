@@ -1,4 +1,4 @@
-from ninja import ModelSchema, Field
+from ninja import Field, ModelSchema
 
 from .models import Feedback
 

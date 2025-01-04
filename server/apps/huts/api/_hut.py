@@ -1,5 +1,5 @@
 import typing as t
-from typing import Any, List
+from typing import Any
 
 import msgspec
 from benedict import benedict
@@ -11,7 +11,7 @@ from rich import print
 # from ninja.errors import HttpError
 from django.conf import settings
 from django.contrib.postgres.aggregates import JSONBAgg
-from django.db.models import F, OrderBy, Value
+from django.db.models import F, Value
 from django.db.models.functions import Coalesce, Concat, JSONObject  # , Lower
 from django.http import Http404, HttpRequest, HttpResponse
 from django.urls import reverse_lazy
@@ -35,7 +35,9 @@ from ._router import router
 from .expressions import GeoJSON
 
 
-@router.get("huts", response=list[HutSchemaDetails], exclude_unset=True, operation_id="get_huts")
+@router.get(
+    "huts", response=list[HutSchemaDetails], exclude_unset=True, operation_id="get_huts"
+)
 @with_language_param("lang")
 def get_huts(  # type: ignore  # noqa: PGH003
     request: HttpRequest,
@@ -59,7 +61,9 @@ def get_huts(  # type: ignore  # noqa: PGH003
 
     media_url = request.build_absolute_uri(settings.MEDIA_URL)
     iam_media_url = "https://res.cloudinary.com/wodore/image/upload/v1/"
-    huts_db = huts_db.select_related("hut_type_open", "hut_type_closed", "hut_owner").annotate(
+    huts_db = huts_db.select_related(
+        "hut_type_open", "hut_type_closed", "hut_owner"
+    ).annotate(
         sources=JSONBAgg(
             JSONObject(
                 logo="org_set__logo",
@@ -132,12 +136,18 @@ def get_huts(  # type: ignore  # noqa: PGH003
     # return fields.validate(list(huts_db))
 
 
-def get_json_obj(values: dict[str, t.Any], flat: bool = False) -> dict[str, JSONObject | F]:
+def get_json_obj(
+    values: dict[str, t.Any], flat: bool = False
+) -> dict[str, JSONObject | F]:
     if flat:
-        return {k: F(str(v)) for k, v in benedict(values).flatten(separator="_").items()}
+        return {
+            k: F(str(v)) for k, v in benedict(values).flatten(separator="_").items()
+        }
     new_vals = {}
     for key, value in values.items():
-        new_vals[key] = JSONObject(**get_json_obj(value)) if isinstance(value, dict) else value
+        new_vals[key] = (
+            JSONObject(**get_json_obj(value)) if isinstance(value, dict) else value
+        )
     return new_vals
 
 
@@ -242,13 +252,24 @@ def get_huts_geojson(  # type: ignore  # noqa: PGH003
     return response
 
 
-@router.get("/{slug}", response=HutSchemaDetails, exclude_unset=True, operation_id="get_hut")
+@router.get(
+    "/{slug}", response=HutSchemaDetails, exclude_unset=True, operation_id="get_hut"
+)
 @with_language_param()
 @decorate_view(cache_control(max_age=10))
-def get_hut(request: HttpRequest, slug: str, lang: LanguageParam, fields: Query[FieldsParam[HutSchemaDetails]]) -> Hut:
+def get_hut(
+    request: HttpRequest,
+    slug: str,
+    lang: LanguageParam,
+    fields: Query[FieldsParam[HutSchemaDetails]],
+) -> Hut:
     """Get a hut by its slug."""
     activate(lang)
-    qs = Hut.objects.select_related("hut_owner").all().filter(is_active=True, is_public=True, slug=slug)
+    qs = (
+        Hut.objects.select_related("hut_owner")
+        .all()
+        .filter(is_active=True, is_public=True, slug=slug)
+    )
     media_abs_url = request.build_absolute_uri(settings.MEDIA_URL)
     # .order_by("org_set__order")
     # # TODO: too many sources, use limit for query, does not work as expected !!
@@ -283,7 +304,9 @@ def get_hut(request: HttpRequest, slug: str, lang: LanguageParam, fields: Query[
                 license=JSONObject(
                     slug="image_set__license__slug",
                     is_active="image_set__license__is_active",
-                    name=Coalesce("image_set__license__name_i18n", "image_set__license__slug"),
+                    name=Coalesce(
+                        "image_set__license__name_i18n", "image_set__license__slug"
+                    ),
                     fullname=Coalesce(
                         "image_set__license__fullname_i18n",
                         "image_set__license__name_i18n",
@@ -341,10 +364,10 @@ def get_hut(request: HttpRequest, slug: str, lang: LanguageParam, fields: Query[
         hut_db.images = []
     updated_images = []
     for img in hut_db.images:
-        from rich import print
-
         print(img)
-        if img.get("review_status", "disabled") != "approved" or img.get("license", {}).get("no_publication", True):
+        if img.get("review_status", "disabled") != "approved" or img.get(
+            "license", {}
+        ).get("no_publication", True):
             continue
         img_s = ImageInfoSchema(**img)
         org = img_s.organization
@@ -355,7 +378,9 @@ def get_hut(request: HttpRequest, slug: str, lang: LanguageParam, fields: Query[
         if img_s.license:
             attribution = f"&copy; {img_s.license.name}"
             if img_s.license.link:
-                attribution = f"&copy; <a href='{img_s.license.link}'>{img_s.license.name}</a>"
+                attribution = (
+                    f"&copy; <a href='{img_s.license.link}'>{img_s.license.name}</a>"
+                )
         if img_s.author:
             if img_s.author_url:
                 attribution += f" | <a href='{img_s.author_url}'>{img_s.author}</a>"
@@ -377,7 +402,9 @@ def get_hut(request: HttpRequest, slug: str, lang: LanguageParam, fields: Query[
         old_photo = ImageInfoSchema(
             image=hut_db.photos,
             image_meta=ImageMetaSchema(),
-            license=LicenseInfoSchema(slug="copyright", name="Copyright", fullname="Copyright"),
+            license=LicenseInfoSchema(
+                slug="copyright", name="Copyright", fullname="Copyright"
+            ),
             attribution=hut_db.photos_attribution,
         )
         hut_db.images = [old_photo, *hut_db.images]

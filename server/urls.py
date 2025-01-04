@@ -12,14 +12,10 @@ files serving technique in development.
 from health_check import urls as health_urls
 
 from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.admindocs import urls as admindocs_urls
-from django.contrib.staticfiles import handlers
-from django.contrib.staticfiles.urls import staticfiles_urlpatterns
-from django.urls import include, path, re_path
+from django.urls import include, path
 from django.views.generic import RedirectView, TemplateView
-from django.views.static import serve
 
 from .apps.api.api_v1 import api as api_v1
 from .apps.main import urls as django_admin_urls
@@ -41,7 +37,10 @@ urlpatterns = [
     # path("", include("admin_volt.urls")), # admin-volt
     path("admin/doc/", include(admindocs_urls)),
     # admin hack, should not be needed (https://stackoverflow.com/questions/59881651/django-mozilla-django-oidc-and-admin)
-    path("admin/login/", RedirectView.as_view(url="/oidc/authenticate?next=/admin/", permanent=False)),
+    path(
+        "admin/login/",
+        RedirectView.as_view(url="/oidc/authenticate?next=/admin/", permanent=False),
+    ),
     path("admin/", admin.site.urls),
     # Api:
     path("v1/", api_v1.urls),  # type: ignore

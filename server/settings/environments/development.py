@@ -96,7 +96,10 @@ if WITH_DEV:
 
 # https://django-debug-toolbar.readthedocs.io/en/stable/installation.html#configure-internal-ips
 try:  # This might fail on some OS
-    INTERNAL_IPS = ["{0}.1".format(ip[: ip.rfind(".")]) for ip in socket.gethostbyname_ex(socket.gethostname())[2]]
+    INTERNAL_IPS = [
+        "{0}.1".format(ip[: ip.rfind(".")])
+        for ip in socket.gethostbyname_ex(socket.gethostname())[2]
+    ]
 except OSError:  # pragma: no cover
     INTERNAL_IPS = []
 INTERNAL_IPS += ["127.0.0.1", "0.0.0.0"]
@@ -123,7 +126,7 @@ CSP_CONNECT_SRC += ("'self'",)
 
 # Should be the first in line:
 if WITH_DEV:
-    MIDDLEWARE = ("nplusone.ext.django.NPlusOneMiddleware",) + MIDDLEWARE
+    MIDDLEWARE = ("nplusone.ext.django.NPlusOneMiddleware", *MIDDLEWARE)
 
 # Logging N+1 requests:
 # NPLUSONE_RAISE = True  # comment out if you want to allow N+1 requests
@@ -138,7 +141,9 @@ NPLUSONE_WHITELIST = [
 # https://github.com/wemake-services/django-test-migrations
 
 # Set of badly named migrations to ignore:
-DTM_IGNORED_MIGRATIONS = frozenset((("axes", "*"), ("computedfields", "0003_auto_20200713_2212")))
+DTM_IGNORED_MIGRATIONS = frozenset(
+    (("axes", "*"), ("computedfields", "0003_auto_20200713_2212"))
+)
 
 
 # django-extra-checks

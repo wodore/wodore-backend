@@ -1,6 +1,8 @@
-from django import forms
 from urllib import request
+
+from django import forms
 from django.core.files.base import ContentFile
+
 from .widgets import MetaImageWidget
 
 

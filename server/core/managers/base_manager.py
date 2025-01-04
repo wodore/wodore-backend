@@ -1,9 +1,12 @@
-from django.db import models
 from modeltrans.manager import MultilingualManager
+
+from django.db import models
 
 
 class BaseQuerySet(models.QuerySet):
-    def drop(self, limit: int | None = None, offset: int | None = 0, **kwargs) -> tuple[int, dict[str, int]]:
+    def drop(
+        self, limit: int | None = None, offset: int | None = 0, **kwargs
+    ) -> tuple[int, dict[str, int]]:
         """Drops data from database table, same as delete but let you five a limit and offset argument."""
         offset = offset or 0
         qs = self
@@ -25,7 +28,9 @@ class BaseManager(models.Manager):
     def get_queryset(self):
         return BaseQuerySet(self.model, using=self._db)  # Important!
 
-    def drop(self, limit: int | None = None, offset: int | None = 0, **kwargs) -> tuple[int, dict[str, int]]:
+    def drop(
+        self, limit: int | None = None, offset: int | None = 0, **kwargs
+    ) -> tuple[int, dict[str, int]]:
         """Drops data from database table, same as delete but let you five a limit and offset argument."""
         return self.get_queryset().drop(limit=limit, offset=offset, **kwargs)
 

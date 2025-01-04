@@ -19,17 +19,25 @@ LanguageParam = t.Annotated[
     ),
 ]
 
-lang_kwargs: t.Any = {lang[0]: (str | None, Field("", description=lang[1])) for lang in settings.LANGUAGES}
-TranslationSchema = create_model("TranslationSchema", **lang_kwargs, __doc__="Translations")
+lang_kwargs: t.Any = {
+    lang[0]: (str | None, Field("", description=lang[1])) for lang in settings.LANGUAGES
+}
+TranslationSchema = create_model(
+    "TranslationSchema", **lang_kwargs, __doc__="Translations"
+)
 
 
-def with_language_param(_param: str = "lang") -> t.Callable[[t.Callable[..., t.Any]], t.Callable[..., t.Any]]:
+def with_language_param(
+    _param: str = "lang",
+) -> t.Callable[[t.Callable[..., t.Any]], t.Callable[..., t.Any]]:
     """Returns object with the correct language, the paramter 'lang: LanguageParam' is still needed."""
 
     def decorator(func: t.Callable[..., t.Any]) -> t.Callable[..., t.Any]:
         @wraps(func)
         def wrapper(request: HttpRequest, *args: t.Any, **kwargs: t.Any) -> t.Any:
-            assert _param in kwargs, f"Function paramter '{_param}: LanguageParam' is missing! "
+            assert (
+                _param in kwargs
+            ), f"Function paramter '{_param}: LanguageParam' is missing! "
             # lang = kwargs.get(_param)
             # with override(lang):
             return func(request, *args, **kwargs)

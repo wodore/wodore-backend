@@ -1,10 +1,11 @@
 from http import HTTPStatus
 
 import pytest
+
 from django.test import Client
 
 
-@pytest.mark.django_db()
+@pytest.mark.django_db
 @pytest.mark.skip("Setup DB correct first")
 def test_health_check(client: Client) -> None:
     """This test ensures that health check is accessible."""

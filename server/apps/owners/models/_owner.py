@@ -7,7 +7,6 @@ from django.db.models.functions import Lower
 from django.utils.translation import gettext_lazy as _
 
 from server.apps.contacts.models import Contact
-from server.core.managers import BaseMutlilingualManager
 
 from ..managers import OwnerManager
 from ._associations import OwnerContactAssociation
@@ -44,7 +43,11 @@ class Owner(TimeStampedModel):
         help_text=_("Private comment to the owner, used for review."),
     )
     contacts = models.ManyToManyField(
-        Contact, blank=True, through=OwnerContactAssociation, related_name="owner", verbose_name=_("Contacts")
+        Contact,
+        blank=True,
+        through=OwnerContactAssociation,
+        related_name="owner",
+        verbose_name=_("Contacts"),
     )
 
     class Meta:

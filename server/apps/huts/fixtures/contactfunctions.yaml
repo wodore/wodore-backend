@@ -3,21 +3,21 @@
   fields:
     slug: warden
     name_de: Huettenwart
-    icon: ''
+    icon: ""
     priority: 10
 - model: huts.contactfunction
   pk: 2
   fields:
     slug: helper
     name_de: Huettenhilfe
-    icon: ''
+    icon: ""
     priority: 40
 - model: huts.contactfunction
   pk: 3
   fields:
     slug: famer
     name_de: Bauer
-    icon: ''
+    icon: ""
     priority: 15
 - model: huts.contactfunction
   pk: 4
@@ -37,4 +37,3 @@
     slug: sectionchief
     name_de: Sektionschef
     priority: 60
-

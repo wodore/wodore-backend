@@ -16,7 +16,9 @@ class MonitorFields(models.DateTimeField):
         kwargs.setdefault("null", True)
         monitors = kwargs.pop("monitors", None)
         if not monitors:
-            raise TypeError('%s requires a "monitors" argument' % self.__class__.__name__)
+            raise TypeError(
+                '%s requires a "monitors" argument' % self.__class__.__name__
+            )
         self.monitors = monitors
         super().__init__(*args, **kwargs)
 
@@ -36,7 +38,11 @@ class MonitorFields(models.DateTimeField):
             if m in instance.get_deferred_fields():
                 # Fix related to issue #241 to avoid recursive error on double monitors fields
                 continue
-            setattr(instance, attrname, self.get_monitored_value(monitor=m, instance=instance))
+            setattr(
+                instance,
+                attrname,
+                self.get_monitored_value(monitor=m, instance=instance),
+            )
 
     def pre_save(self, model_instance, add):
         value = now()

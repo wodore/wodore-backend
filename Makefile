@@ -58,9 +58,9 @@ docker-compare:
 	@docker images | grep wodore-backend | grep "${TAG} " | head -n 1
 	@docker images | grep wodore-backend | grep "${TAG}-slim " | head -n 1
 	@echo "------------------------------------------------------------------------------------------------------------"
-	@docker images | grep wodore-backend | grep -v "${TAG} " | grep -v "${TAG}-slim " | head -n 10 
+	@docker images | grep wodore-backend | grep -v "${TAG} " | grep -v "${TAG}-slim " | head -n 10
 # Default target
-#--secret id=ssh_id_ed25519,src=$(SSH_SECRET) 
+#--secret id=ssh_id_ed25519,src=$(SSH_SECRET)
 #--secret id=env,src=.env.docker \
 #--secret id=zitadel_api_key,src=.zitadel-api-key
 _build:
@@ -81,7 +81,7 @@ _build:
 
 docker-build: _build docker-show
 
-# --http-probe-apispec /v1/openapi.json 
+# --http-probe-apispec /v1/openapi.json
 _slim:
 	bash -c 'mint slim --target $(DOCKER_IMAGE) \
 		--tag "$(DOCKER_IMAGE_SLIM)" \
@@ -103,8 +103,8 @@ _slim:
 		--http-probe'
 
 docker-slim: _slim docker-compare
-	
-docker-build-slim: _build _slim docker-compare	
+
+docker-build-slim: _build _slim docker-compare
 
 docker-clean:
 	docker rmi $(DOCKER_IMAGE)
@@ -133,7 +133,7 @@ docker-run-prod:
 
 
 # Debug target: run the Django development server
-# --name $(CONTAINER_NAME) 
+# --name $(CONTAINER_NAME)
 docker-run:
 	@echo "Starting ${DOCKER_IMAGE}"
 	@echo "You can now access the server at http://localhost:$(PORT)"
@@ -170,7 +170,7 @@ docker-login:
 	@echo "Loggin broken"
 #@infisical run --env=dev --path /keys/wodore-backend --silent --log-level warn --  \
 #	echo ${GITHUB_TOKEN} | docker login ghcr.io -u ${GITHUB_USERNAME} --password-stdin
-	
+
 docker-push: docker-build docker-login
 	docker push ${REGISTRY}/${ORGANIZATION}/${DOCKER_IMAGE}
 	docker push ${REGISTRY}/${ORGANIZATION}/${NEXT_DOCKER_IMAGE}
@@ -180,7 +180,7 @@ docker-push-alpine:
 
 docker-push-ubuntu:
 	DISTRO=ubuntu make docker-push
-	
+
 docker-push-slim: docker-build-slim docker-login
 	docker push ${REGISTRY}/${ORGANIZATION}/${DOCKER_IMAGE_SLIM}
 	docker push ${REGISTRY}/${ORGANIZATION}/${NEXT_DOCKER_IMAGE_SLIM}
@@ -191,6 +191,6 @@ docker-push-alpine-slim:
 docker-push-ubuntu-slim:
 	DISTRO=ubuntu make docker-push-slim
 
-	
-# we do not push normal ubuntu 
+
+# we do not push normal ubuntu
 docker-push-all: docker-push-alpine docker-push-alpine-slim docker-push-ubuntu-slim

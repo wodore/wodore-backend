@@ -1,7 +1,18 @@
-from tasks import info, error, success, warning, echo, env, task, header, Ctx, EnvError  # noqa: F401
 import humanize
-
 from python_on_whales import DockerClient
+
+from tasks import (
+    Ctx,
+    EnvError,
+    echo,
+    env,
+    error,
+    header,
+    info,
+    success,
+    task,
+    warning,
+)
 
 dc = DockerClient(debug=True)
 

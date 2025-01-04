@@ -1,7 +1,6 @@
 from typing import final
 
 import pytest
-
 from hypothesis import given
 from hypothesis.extra import django
 

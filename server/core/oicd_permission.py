@@ -6,18 +6,25 @@ from django.contrib.auth.models import Group, User
 
 
 class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimported]
-
     def get_username(self, claims: dict) -> str | None:
         return claims.get("sub")
 
     def get_groups(self, claims: dict) -> list[str]:
-        permClaim = "urn:zitadel:iam:org:project:" + self.get_settings("ZITADEL_PROJECT") + ":roles"
+        permClaim = (
+            "urn:zitadel:iam:org:project:"
+            + self.get_settings("ZITADEL_PROJECT")
+            + ":roles"
+        )
         if permClaim in claims:
             return [k.replace("group:", "") for k in claims[permClaim] if "group:" in k]
         return ["user"]
 
     def get_permissions(self, claims: dict) -> list[str]:
-        permClaim = "urn:zitadel:iam:org:project:" + self.get_settings("ZITADEL_PROJECT") + ":roles"
+        permClaim = (
+            "urn:zitadel:iam:org:project:"
+            + self.get_settings("ZITADEL_PROJECT")
+            + ":roles"
+        )
         if permClaim in claims:
             # return [k.replace("perm:", "") for k in claims[permClaim] if "perm:" in k]
             return [k for k in claims[permClaim] if "perm:" in k]

@@ -8,7 +8,7 @@ class Geo(models.Model):
    name = models.CharField(max_length=32)
    code = models.CharField(max_length=32)
    geom = models.MultiPolygonField(srid=4326, geography=True)
-   
+
 ...
 from expressions import GeoJSON
 >>> geojson = Geo.objects.filter(**kwargs).aggregate(GeoJSON(geom_field='geom', fields=['name', 'code']))['geojson']
@@ -22,7 +22,7 @@ from django.db.models import Func, JSONField
 from django.db.models.expressions import F, Value
 from django.db.models.functions import Cast
 
-__all__ = ["AsGeoJSON", "JsonBuildObject", "Simplify", "GeoJSON"]
+__all__ = ["AsGeoJSON", "GeoJSON", "JsonBuildObject", "Simplify"]
 
 
 class JsonBuildObject(Func):
@@ -40,7 +40,9 @@ class GeoJSON(JsonBuildObject):
     contains_aggregate = True
     output_field = JSONField()
 
-    def __init__(self, geom_field, fields=[], simplify=True, precision=0.0025, decimals=3):
+    def __init__(
+        self, geom_field, fields=[], simplify=True, precision=0.0025, decimals=3
+    ):
         expressions = [Value("type"), Value("FeatureCollection"), Value("features")]
 
         geometry = F(geom_field)

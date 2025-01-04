@@ -1,7 +1,12 @@
 body {
   text-align: center;
-  background: rgb(255,255,255);
-  background: radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(245,245,245,1) 40%, rgba(183,183,183,1) 96%);
+  background: rgb(255, 255, 255);
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 1) 0%,
+    rgba(245, 245, 245, 1) 40%,
+    rgba(183, 183, 183, 1) 96%
+  );
 }
 
 img {
@@ -50,12 +55,12 @@ img {
   border: 0;
 }
 
-body:after{
+body:after {
   content: "beta";
   position: fixed;
   width: 80px;
   height: 25px;
-  background: #EE8E4A;
+  background: #ee8e4a;
   top: 7px;
   left: -20px;
   text-align: center;
@@ -65,5 +70,5 @@ body:after{
   font-weight: bold;
   color: #fff;
   line-height: 27px;
-  transform:rotate(-45deg);
+  transform: rotate(-45deg);
 }

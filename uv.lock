@@ -3500,7 +3500,7 @@ dev = [
     { name = "flake8-django", specifier = "==1.*" },
     { name = "flake8-logging-format", specifier = "==2024.*" },
     { name = "flake8-pytest-style", specifier = "==2.*" },
-    { name = "git-cliff", specifier = ">=2.7.0" },
+    { name = "git-cliff", specifier = "==2.*" },
     { name = "humanize", specifier = "==4.*" },
     { name = "hypothesis", specifier = "==6.*" },
     { name = "icecream", specifier = "==2.*" },

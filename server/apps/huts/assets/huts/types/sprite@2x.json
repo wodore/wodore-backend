@@ -1,1 +1,261 @@
-{"detailed/alp":{"height":96,"pixelRatio":2,"width":96,"x":0,"y":0},"detailed/alt/basic-hotel-alt1":{"height":96,"pixelRatio":2,"width":96,"x":0,"y":96},"detailed/alt/hut-alt1":{"height":96,"pixelRatio":2,"width":96,"x":0,"y":192},"detailed/alt/unattended-hut-alt1":{"height":96,"pixelRatio":2,"width":96,"x":0,"y":288},"detailed/bhotel":{"height":96,"pixelRatio":2,"width":96,"x":0,"y":384},"detailed/bivouac":{"height":96,"pixelRatio":2,"width":96,"x":96,"y":0},"detailed/campgr":{"height":96,"pixelRatio":2,"width":96,"x":96,"y":96},"detailed/camping":{"height":96,"pixelRatio":2,"width":96,"x":96,"y":192},"detailed/closed":{"height":96,"pixelRatio":2,"width":96,"x":96,"y":288},"detailed/hostel":{"height":96,"pixelRatio":2,"width":96,"x":96,"y":384},"detailed/hotel":{"height":96,"pixelRatio":2,"width":96,"x":192,"y":0},"detailed/hut":{"height":96,"pixelRatio":2,"width":96,"x":192,"y":96},"detailed/resta":{"height":96,"pixelRatio":2,"width":96,"x":192,"y":192},"detailed/selfhut":{"height":96,"pixelRatio":2,"width":96,"x":192,"y":288},"detailed/shelter":{"height":96,"pixelRatio":2,"width":96,"x":192,"y":384},"detailed/special":{"height":96,"pixelRatio":2,"width":96,"x":288,"y":0},"detailed/unknown":{"height":96,"pixelRatio":2,"width":96,"x":288,"y":96},"occupation_empty":{"height":96,"pixelRatio":2,"width":96,"x":288,"y":192},"occupation_full":{"height":96,"pixelRatio":2,"width":96,"x":288,"y":288},"occupation_high":{"height":96,"pixelRatio":2,"width":96,"x":288,"y":384},"occupation_low":{"height":96,"pixelRatio":2,"width":96,"x":384,"y":0},"occupation_medium":{"height":96,"pixelRatio":2,"width":96,"x":384,"y":96},"occupation_unknown":{"height":96,"pixelRatio":2,"width":96,"x":384,"y":192},"simple/alp":{"height":96,"pixelRatio":2,"width":96,"x":384,"y":288},"simple/bhotel":{"height":96,"pixelRatio":2,"width":96,"x":384,"y":384},"simple/bivouac":{"height":96,"pixelRatio":2,"width":96,"x":480,"y":0},"simple/campgr":{"height":96,"pixelRatio":2,"width":96,"x":480,"y":96},"simple/camping":{"height":96,"pixelRatio":2,"width":96,"x":480,"y":192},"simple/closed":{"height":96,"pixelRatio":2,"width":96,"x":480,"y":288},"simple/hostel":{"height":96,"pixelRatio":2,"width":96,"x":480,"y":384},"simple/hotel":{"height":96,"pixelRatio":2,"width":96,"x":576,"y":0},"simple/hut":{"height":96,"pixelRatio":2,"width":96,"x":672,"y":0},"simple/resta":{"height":96,"pixelRatio":2,"width":96,"x":768,"y":0},"simple/selfhut":{"height":96,"pixelRatio":2,"width":96,"x":864,"y":0},"simple/shelter":{"height":96,"pixelRatio":2,"width":96,"x":576,"y":96},"simple/special":{"height":96,"pixelRatio":2,"width":96,"x":576,"y":192},"simple/unknown":{"height":96,"pixelRatio":2,"width":96,"x":576,"y":288}}
+{
+  "detailed/alp": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 0,
+    "y": 0
+  },
+  "detailed/alt/basic-hotel-alt1": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 0,
+    "y": 96
+  },
+  "detailed/alt/hut-alt1": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 0,
+    "y": 192
+  },
+  "detailed/alt/unattended-hut-alt1": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 0,
+    "y": 288
+  },
+  "detailed/bhotel": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 0,
+    "y": 384
+  },
+  "detailed/bivouac": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 96,
+    "y": 0
+  },
+  "detailed/campgr": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 96,
+    "y": 96
+  },
+  "detailed/camping": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 96,
+    "y": 192
+  },
+  "detailed/closed": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 96,
+    "y": 288
+  },
+  "detailed/hostel": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 96,
+    "y": 384
+  },
+  "detailed/hotel": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 192,
+    "y": 0
+  },
+  "detailed/hut": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 192,
+    "y": 96
+  },
+  "detailed/resta": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 192,
+    "y": 192
+  },
+  "detailed/selfhut": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 192,
+    "y": 288
+  },
+  "detailed/shelter": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 192,
+    "y": 384
+  },
+  "detailed/special": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 288,
+    "y": 0
+  },
+  "detailed/unknown": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 288,
+    "y": 96
+  },
+  "occupation_empty": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 288,
+    "y": 192
+  },
+  "occupation_full": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 288,
+    "y": 288
+  },
+  "occupation_high": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 288,
+    "y": 384
+  },
+  "occupation_low": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 384,
+    "y": 0
+  },
+  "occupation_medium": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 384,
+    "y": 96
+  },
+  "occupation_unknown": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 384,
+    "y": 192
+  },
+  "simple/alp": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 384,
+    "y": 288
+  },
+  "simple/bhotel": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 384,
+    "y": 384
+  },
+  "simple/bivouac": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 480,
+    "y": 0
+  },
+  "simple/campgr": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 480,
+    "y": 96
+  },
+  "simple/camping": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 480,
+    "y": 192
+  },
+  "simple/closed": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 480,
+    "y": 288
+  },
+  "simple/hostel": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 480,
+    "y": 384
+  },
+  "simple/hotel": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 576,
+    "y": 0
+  },
+  "simple/hut": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 672,
+    "y": 0
+  },
+  "simple/resta": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 768,
+    "y": 0
+  },
+  "simple/selfhut": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 864,
+    "y": 0
+  },
+  "simple/shelter": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 576,
+    "y": 96
+  },
+  "simple/special": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 576,
+    "y": 192
+  },
+  "simple/unknown": {
+    "height": 96,
+    "pixelRatio": 2,
+    "width": 96,
+    "x": 576,
+    "y": 288
+  }
+}

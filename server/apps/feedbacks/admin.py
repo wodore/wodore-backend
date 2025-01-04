@@ -1,17 +1,14 @@
 from typing import ClassVar
+
 from django.contrib import admin
 
 # Models
-from django.urls import path, reverse
-from django.utils.html import format_html
-from django.utils.safestring import mark_safe
+# from server.core.utils import text_shorten_html
+from django.utils.translation import gettext_lazy as _
 
 from unfold.decorators import display
 
 from server.apps.manager.admin import ModelAdmin
-
-# from server.core.utils import text_shorten_html
-from django.utils.translation import gettext_lazy as _
 
 # Register your models here.
 from .models import Feedback

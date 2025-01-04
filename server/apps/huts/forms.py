@@ -44,7 +44,8 @@ HutAdminFieldsets = [
         f"{_('Description')} {_('Translations')}",
         {
             "classes": ["tab"],
-            "fields": [f"description_{code}" for code in settings.LANGUAGE_CODES] + ["description_attribution"],
+            "fields": [f"description_{code}" for code in settings.LANGUAGE_CODES]
+            + ["description_attribution"],
         },
     ),
     (

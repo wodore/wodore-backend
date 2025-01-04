@@ -3,21 +3,21 @@
   fields:
     slug: warden
     name_de: Hüttenwart
-    symbol: ''
+    symbol: ""
     priority: 10
 - model: contacts.contactfunction
   pk: 2
   fields:
     slug: helper
     name_de: Hüttenhilfe
-    symbol: ''
+    symbol: ""
     priority: 40
 - model: contacts.contactfunction
   pk: 3
   fields:
     slug: famer
     name_de: Bauer
-    symbol: ''
+    symbol: ""
     priority: 15
 - model: contacts.contactfunction
   pk: 4
@@ -37,4 +37,3 @@
     slug: sectionchief
     name_de: Sektionschef
     priority: 60
-

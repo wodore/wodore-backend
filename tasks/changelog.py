@@ -1,9 +1,19 @@
-from tasks import info, error, success, warning, echo, env, task, header, Ctx, EnvError  # noqa: F401
-
 import re
 import sys
-
 from typing import Literal
+
+from tasks import (  # noqa: F401
+    Ctx,
+    EnvError,
+    echo,
+    env,
+    error,
+    header,
+    info,
+    success,
+    task,
+    warning,
+)
 
 
 @task(
@@ -36,7 +46,7 @@ def changelog(
         input_file = "CHANGELOG.md"
 
         try:
-            with open(input_file, "r") as file:
+            with open(input_file) as file:
                 lines = file.readlines()
         except FileNotFoundError:
             error(f"File {input_file} not found.")

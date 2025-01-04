@@ -26,7 +26,9 @@ class ZitadelIntrospectTokenValidator(IntrospectTokenValidator):  # type: ignore
         self.__api_private_key = (
             settings.ZITADEL_API_PRIVATE_KEY
             if settings.ZITADEL_API_PRIVATE_KEY
-            else self._load_api_private_key_from_file(settings.ZITADEL_API_PRIVATE_KEY_FILE_PATH)
+            else self._load_api_private_key_from_file(
+                settings.ZITADEL_API_PRIVATE_KEY_FILE_PATH
+            )
         )
 
     def _load_api_private_key_from_file(self, file_path: str) -> dict[str, str]:
@@ -47,7 +49,10 @@ class ZitadelIntrospectTokenValidator(IntrospectTokenValidator):  # type: ignore
             "exp": int(time.time()) + 60 * 60,  # Expires in 1 hour
             "iat": int(time.time()),
         }
-        header = {"alg": settings.OIDC_RP_SIGN_ALGO, "kid": self.__api_private_key["key_id"]}
+        header = {
+            "alg": settings.OIDC_RP_SIGN_ALGO,
+            "kid": self.__api_private_key["key_id"],
+        }
         jwt_token = jwt.encode(
             header,
             payload,
@@ -61,12 +66,16 @@ class ZitadelIntrospectTokenValidator(IntrospectTokenValidator):  # type: ignore
             "client_assertion": jwt_token,
             "token": token_string,
         }
-        response = requests.post(settings.OIDC_OP_INTROSPECTION_ENDPOINT, headers=headers, data=data)
+        response = requests.post(
+            settings.OIDC_OP_INTROSPECTION_ENDPOINT, headers=headers, data=data
+        )
         response.raise_for_status()
         token_data = response.json()
         return token_data
 
-    def match_token_scopes(self, token: dict[str, str], or_scopes: list[str] | None) -> bool:
+    def match_token_scopes(
+        self, token: dict[str, str], or_scopes: list[str] | None
+    ) -> bool:
         if or_scopes is None:
             return True
         scopes = token.get("scope", "").split()
@@ -75,22 +84,30 @@ class ZitadelIntrospectTokenValidator(IntrospectTokenValidator):  # type: ignore
                 return True
         return False
 
-    def match_token_and_roles(self, token: dict[str, str], and_roles: list[str] | None) -> bool:
+    def match_token_and_roles(
+        self, token: dict[str, str], and_roles: list[str] | None
+    ) -> bool:
         if and_roles is None:
             return True
         roles = [
             g
-            for g in token.get(f"urn:zitadel:iam:org:project:{settings.ZITADEL_PROJECT}:roles", "")
+            for g in token.get(
+                f"urn:zitadel:iam:org:project:{settings.ZITADEL_PROJECT}:roles", ""
+            )
             if "group:" not in g
         ]
         return all(role in roles for role in and_roles)
 
-    def match_token_groups(self, token: dict[str, str], or_groups: list[str] | None) -> bool:
+    def match_token_groups(
+        self, token: dict[str, str], or_groups: list[str] | None
+    ) -> bool:
         if or_groups is None:
             return True
         groups = [
             g.replace("group:", "")
-            for g in token.get(f"urn:zitadel:iam:org:project:{settings.ZITADEL_PROJECT}:roles", "")
+            for g in token.get(
+                f"urn:zitadel:iam:org:project:{settings.ZITADEL_PROJECT}:roles", ""
+            )
             if "group:" in g
         ]
         return any(group in groups for group in or_groups)
@@ -127,7 +144,9 @@ class ZitadelIntrospectTokenValidator(IntrospectTokenValidator):  # type: ignore
                 },
                 401,
             )
-        if not self.match_token_and_roles(token, roles) and not self.match_token_groups(token, groups):
+        if not self.match_token_and_roles(token, roles) and not self.match_token_groups(
+            token, groups
+        ):
             raise ValidatorError(
                 {
                     "code": "insufficient_permission",
@@ -183,5 +202,9 @@ class AuthBearer(HttpBearer):
 
     def authenticate(self, request: Any, token: str) -> dict[str, Any] | None:
         return self.validator(
-            token_string=token, scopes=self.scopes, roles=self.roles, groups=self.groups, request=request
+            token_string=token,
+            scopes=self.scopes,
+            roles=self.roles,
+            groups=self.groups,
+            request=request,
         )

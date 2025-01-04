@@ -30,7 +30,15 @@ class OrganizationAdmin(ModelAdmin):
     form = required_i18n_fields_form_factory("name", "fullname")
     fieldsets = OrganizationAdminFieldsets
     view_on_site = True
-    list_display = ("organization", "url_link", "light", "dark", "is_public", "order_small", "detail")
+    list_display = (
+        "organization",
+        "url_link",
+        "light",
+        "dark",
+        "is_public",
+        "order_small",
+        "detail",
+    )
     list_display_links = ("organization",)
     search_fields = ("slug", "name_i18n", "fullname_i18n")
     readonly_fields = (
@@ -58,9 +66,7 @@ class OrganizationAdmin(ModelAdmin):
     @display(description="")
     def detail(self, obj: Organization) -> str:
         url = reverse("admin:organizations_organization_detail", args=[obj.pk])
-        view = (
-            f'<span><a class="text-sm" href="{url}"> <span class="material-symbols-outlined"> visibility </span> </a>'
-        )
+        view = f'<span><a class="text-sm" href="{url}"> <span class="material-symbols-outlined"> visibility </span> </a>'
         url = reverse("admin:organizations_organization_change", args=[obj.pk])
         edit = f'<a class="text-sm" href="{url}"> <span class="material-symbols-outlined"> edit </span> </a><span>'
         return format_html(view + edit)
@@ -96,7 +102,9 @@ class OrganizationAdmin(ModelAdmin):
         icon = '<span class="material-symbols-outlined" style="font-size:x-small">open_in_new</span>'
         return mark_safe(
             f'<a class="text-sm" target="_blank" href="{obj.url_i18n}"/>{obj.url_i18n} {icon}</a>'
-        ), text_shorten_html(obj.link_hut_pattern, textsize="xs", width=60, on_word=False)
+        ), text_shorten_html(
+            obj.link_hut_pattern, textsize="xs", width=60, on_word=False
+        )
 
     def logo_thumb(self, obj):  # new
         return mark_safe(f'<img src = "{obj.logo.url}" width = "20"/>')

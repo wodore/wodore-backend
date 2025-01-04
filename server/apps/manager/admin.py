@@ -71,7 +71,9 @@ registry_dict = registry.copy()
 for model, admin_model_object in registry_dict.items():
     if model in models_to_reregister:
         original_class = admin_model_object.__class__
-        new_class = type(f"{original_class.__name__}Unfold", (ModelAdmin, original_class), {})
+        new_class = type(
+            f"{original_class.__name__}Unfold", (ModelAdmin, original_class), {}
+        )
         new_registry_items[model] = new_class
 
 for model, admin_model in new_registry_items.items():

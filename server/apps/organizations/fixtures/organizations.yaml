@@ -6,8 +6,8 @@
       url_fr: https://www.alpsonline.org/guest/login?lang=fr
       url_it: https://www.alpsonline.org/guest/login?lang=it
       description_en: Online reservation system for mountain huts.
-      description_fr: ''
-      description_it: ''
+      description_fr: ""
+      description_it: ""
     slug: hrs
     is_active: true
     is_public: true
@@ -15,11 +15,11 @@
     fullname: Alpsonline
     description: Online Reservations System für Hütten.
     url: https://www.alpsonline.org/guest/login?lang=de_CH
-    attribution: ''
+    attribution: ""
     link_hut_pattern: https://www.alpsonline.org/reservation/calendar?hut_id={{id}}&lang={{lang}}
     logo: organizations/logos/hrs_icon.png
-    color_light: '#689751'
-    color_dark: '#cbeba9'
+    color_light: "#689751"
+    color_dark: "#cbeba9"
     config: {}
     props_schema: {}
     order: 10
@@ -44,11 +44,11 @@
     fullname: Schweizer Alpen Club
     description: Der führende Verband für Bergsport in der Schweiz.
     url: https://www.sac-cas.ch/de/
-    attribution: ''
+    attribution: ""
     link_hut_pattern: https://www.sac-cas.ch/{{lang}}/{{config.huts_tours.get(lang,'de')}}/{{config.portal.get(lang,'de')}}/{{id}}
     logo: organizations/logos/sac_icon.png
-    color_light: '#008000'
-    color_dark: '#008000'
+    color_light: "#008000"
+    color_dark: "#008000"
     config:
       portal:
         de: sac-tourenportal
@@ -73,16 +73,16 @@
     fullname: Gipfelbuch
     description: Portal für aktuelle Verhältnisse, Tourenbeschreibungen und mehr.
     url: https://www.gipfelbuch.ch
-    attribution: ''
+    attribution: ""
     link_hut_pattern: https://www.gipfelbuch.ch/huetten/{{id}}-{{props.slug}}
     logo: organizations/logos/gipfelbuch_icon.png
-    color_light: '#414140'
-    color_dark: '#9d9d9c'
+    color_light: "#414140"
+    color_dark: "#9d9d9c"
     config: {}
     props_schema:
       type: object,
       required:
-      - slug
+        - slug
       properties:
         slug:
           type: string
@@ -100,11 +100,11 @@
     fullname: Naturfreunde Schweiz
     description: Organization der Naturefreunde Schweiz.
     url: https://naturfreunde.ch
-    attribution: ''
+    attribution: ""
     link_hut_pattern: https://naturfreunde.ch/{{config.house.get(lang,'de')}}/{{props.slug}}
     logo: organizations/logos/nfs_icon.png
-    color_light: '#e5162a'
-    color_dark: '#e5162a'
+    color_light: "#e5162a"
+    color_dark: "#e5162a"
     config:
       house:
         de: hauser
@@ -116,9 +116,9 @@
   fields:
     i18n:
       attribution_en: (C) OpenStreetMap contributors
-      description_en: ''
-      description_fr: ''
-      description_it: ''
+      description_en: ""
+      description_fr: ""
+      description_it: ""
     slug: osm
     is_active: true
     is_public: true
@@ -129,29 +129,29 @@
     attribution: null
     link_hut_pattern: https://www.openstreetmap.org/{{props.osm_type}}/{{id}}
     logo: organizations/logos/osm_icon.png
-    color_light: '#13325d'
-    color_dark: '#13325d'
+    color_light: "#13325d"
+    color_dark: "#13325d"
     config: {}
     props_schema:
       type: object,
       required:
-      - osm_type
+        - osm_type
       properties:
         osm_type:
           enum:
-          - node
-          - way
-          - area
+            - node
+            - way
+            - area
           type: string
-          description: 'osm object type: node, way, or area'
+          description: "osm object type: node, way, or area"
     order: 80
 - model: organizations.organization
   pk: 5
   fields:
     i18n:
-      description_en: ''
-      description_fr: ''
-      description_it: ''
+      description_en: ""
+      description_fr: ""
+      description_it: ""
     slug: wikidata
     is_active: true
     is_public: false
@@ -159,11 +159,11 @@
     fullname: Wikidata
     description: Freie Informationen, verwendet von Wikipedia.
     url: https://www.wikidata.org
-    attribution: ''
+    attribution: ""
     link_hut_pattern: https://www.wikidata.org/wiki/{{id}}
     logo: organizations/logos/wikidata_icon.png
-    color_light: '#009640'
-    color_dark: '#009640'
+    color_light: "#009640"
+    color_dark: "#009640"
     config: {}
     props_schema: {}
     order: 70
@@ -181,55 +181,56 @@
     fullname: RefugesInfo
     description: Freie Übernachtungs informationen in den Bergen (Französisch).
     url: https://www.refuges.info/
-    attribution: ''
+    attribution: ""
     link_hut_pattern: https://www.refuges.info/point/{{id}}/{{props.hut_type}}/{{props.slug}}
     logo: organizations/logos/refugesinfo_icon.png
-    color_light: '#e08020'
-    color_dark: '#874d12'
+    color_light: "#e08020"
+    color_dark: "#874d12"
     config: {}
     props_schema:
       type: object,
       required:
-      - slug
-      - hut_type
+        - slug
+        - hut_type
       properties:
         slug:
           type: string
           description: hut slug by refuges.info
         hut_type:
           enum:
-          - cabane-non-gardee
-          - refuge-garde
-          - gite-d-etape
-          - batiment-en-montagne
+            - cabane-non-gardee
+            - refuge-garde
+            - gite-d-etape
+            - batiment-en-montagne
           type: string
-          description: 'hut type by refuges.info: cabane-non-gardee, refuge-garde,
-            gite-d-etape or batiment-en-montagne'
+          description:
+            "hut type by refuges.info: cabane-non-gardee, refuge-garde,
+            gite-d-etape or batiment-en-montagne"
     order: 40
 - model: organizations.organization
   pk: 7
   fields:
     i18n:
-      description_en: ''
-      description_fr: ''
-      description_it: ''
+      description_en: ""
+      description_fr: ""
+      description_it: ""
     slug: wodore
     is_active: true
     is_public: false
     name: Wodore
     fullname: Wodore
-    description: ''
+    description: ""
     url: https://wodore.com
     attribution: null
     link_hut_pattern: https://wodore.com/huts/{{props.slug}}
     logo: organizations/logos/wodore_icon.png
-    color_light: '#e08020'
-    color_dark: '#874d12'
+    color_light: "#e08020"
+    color_dark: "#874d12"
     config: {}
     props_schema:
       type: object,
       required:
-      - slug
+        - slug
       properties:
         slug:
           type: string
@@ -247,21 +248,21 @@
       fullname_it: Wikimedia Commons
       attribution_en: https://commons.wikimedia.org
       attribution_fr: https://commons.wikimedia.org
-      description_en: ''
-      description_fr: ''
-      description_it: ''
+      description_en: ""
+      description_fr: ""
+      description_it: ""
     slug: wikicommons
     is_active: true
     is_public: true
     name: WikiCommons
     fullname: Wikimedia Commons
-    description: ''
+    description: ""
     url: https://commons.wikimedia.org
     attribution: https://commons.wikimedia.org
     link_hut_pattern: https://commons.wikimedia.org/wiki/{{id}}
     logo: organizations/logos/wikicommons_icon.png
-    color_light: '#e08020'
-    color_dark: '#874d12'
+    color_light: "#e08020"
+    color_dark: "#874d12"
     config: {}
     props_schema: {}
     order: 60
@@ -278,21 +279,21 @@
       fullname_en: Camptocamp.org
       fullname_fr: Camptocamp.org
       fullname_it: Camptocamp.org
-      description_en: ''
-      description_fr: ''
-      description_it: ''
+      description_en: ""
+      description_fr: ""
+      description_it: ""
     slug: camptocamp
     is_active: true
     is_public: true
     name: Camptocamp
     fullname: Camptocamp.org
-    description: ''
+    description: ""
     url: https://www.camptocamp.org/
     attribution: null
     link_hut_pattern: https://www.camptocamp.org/waypoints/{{id}}
     logo: organizations/logos/camptocamp_icon.png
-    color_light: '#e08020'
-    color_dark: '#874d12'
+    color_light: "#e08020"
+    color_dark: "#874d12"
     config: {}
     props_schema: {}
     order: 50

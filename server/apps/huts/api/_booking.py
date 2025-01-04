@@ -3,7 +3,6 @@ from typing import Literal
 from geojson_pydantic import FeatureCollection
 from ninja import Field, Query, Schema
 from ninja.errors import HttpError
-from ninja.security import django_auth
 
 from django.http import HttpRequest
 
@@ -27,12 +26,15 @@ from ._router import router
 
 class HutBookingsQuery(Schema):
     slugs: str | None = Field(
-        None, title="Slugs", description="Comma separated list with slugs to use, per default all."
+        None,
+        title="Slugs",
+        description="Comma separated list with slugs to use, per default all.",
     )
     days: int = Field(1, description="Show bookings for this many days.")
     # date: datetime.date | Literal["now"] = Field("now", description="Date to start with booking (yyyy-mm-dd or now).")
     date: str | Literal["now", "weekend"] = Field(
-        "now", description="Date to start with bookings (yyyy-mm-dd, 'now' or 'weekend')."
+        "now",
+        description="Date to start with bookings (yyyy-mm-dd, 'now' or 'weekend').",
     )
 
 
@@ -56,7 +58,9 @@ def get_hut_bookings(  # type: ignore  # noqa: PGH003
 ) -> list[HutBookingsSchema]:
     hut_slugs_list = _hut_slugs_list(queries.slugs)
     with override(lang):
-        res = Hut.get_bookings(hut_slugs=hut_slugs_list, days=queries.days, date=queries.date, lang=lang)
+        res = Hut.get_bookings(
+            hut_slugs=hut_slugs_list, days=queries.days, date=queries.date, lang=lang
+        )
         if not res:
             raise HttpError(503, "Booking service unavailable. Please retry later.")
         return res
@@ -75,7 +79,9 @@ def get_hut_bookings_geojson(  # type: ignore  # noqa: PGH003
     queries: Query[HutBookingsQuery],
 ) -> FeatureCollection:
     hut_slugs_list = _hut_slugs_list(queries.slugs)
-    huts = Hut.get_bookings(hut_slugs=hut_slugs_list, days=queries.days, date=queries.date, lang=lang)
+    huts = Hut.get_bookings(
+        hut_slugs=hut_slugs_list, days=queries.days, date=queries.date, lang=lang
+    )
     features = [h.as_feature() for h in huts]
     res = HutBookingsFeatureCollection(type="FeatureCollection", features=features)
     if not res:

@@ -31,13 +31,21 @@ class HutSourceViewInline(unfold_admin.StackedInline):
         "name",
     )  # , "source_data"] # TODO formated json
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
-    fields = (("organization", "source_id"), ("review_status"), ("review_comment"), "source_data", "is_active")
+    fields = (
+        ("organization", "source_id"),
+        ("review_status"),
+        ("review_comment"),
+        "source_data",
+        "is_active",
+    )
     extra = 0
     max_num = 20
     show_change_link = True
     can_delete = False
     classes = ("collapse",)
-    formfield_overrides: ClassVar = {models.JSONField: {"widget": UnfoldReadonlyJSONSuit}}
+    formfield_overrides: ClassVar = {
+        models.JSONField: {"widget": UnfoldReadonlyJSONSuit}
+    }
 
     def has_add_permission(self, request, obj):
         return False
@@ -46,14 +54,28 @@ class HutSourceViewInline(unfold_admin.StackedInline):
 ## ADMIN
 @admin.register(HutSource)
 # class OrganizationAdmin(ActiveLanguageMixin, admin.ModelAdmin[Organization]):
-#class HutsSourceAdmin(ModelAdmin[HutSource]):
+# class HutsSourceAdmin(ModelAdmin[HutSource]):
 class HutsSourceAdmin(ModelAdmin):
     """Admin panel example for ``BlogPost`` model."""
 
     # view_on_site = True
     # list_select_related = True
-    list_display = ("name", "organization", "review_comment_short", "is_active", "is_current", "version", "review_tag")
-    list_filter = ("organization", "review_status", "is_active", "is_current", "version")
+    list_display = (
+        "name",
+        "organization",
+        "review_comment_short",
+        "is_active",
+        "is_current",
+        "version",
+        "review_tag",
+    )
+    list_filter = (
+        "organization",
+        "review_status",
+        "is_active",
+        "is_current",
+        "version",
+    )
     list_display_links = ("name",)
     search_fields = ("name",)
     sortable_by = ("name", "organization")
@@ -96,7 +118,9 @@ class HutsSourceAdmin(ModelAdmin):
         if obj is not None:
             form.base_fields["previous_object"].queryset = (
                 # HutSource.objects.select_related("organization")
-                HutSource.objects.filter(source_id=obj.source_id, version__lt=obj.version).order_by("-version")
+                HutSource.objects.filter(
+                    source_id=obj.source_id, version__lt=obj.version
+                ).order_by("-version")
             )
         return form
 
@@ -111,21 +135,30 @@ class HutsSourceAdmin(ModelAdmin):
     # actions_submit_line = ["submit_line_action_activate"]
 
     @action(description=_(mark_safe("set to <b>done</b>")), permissions=["change"])
-    def action_row_set_review_to_done(self, request: HttpRequest, object_id: int):  # obj: HutSource):
+    def action_row_set_review_to_done(
+        self, request: HttpRequest, object_id: int
+    ):  # obj: HutSource):
         obj = HutSource.objects.get(id=object_id)
         obj.review_status = HutSource.ReviewStatusChoices.done
         obj.save()
         return redirect(request.META.get("HTTP_REFERER"))
 
     @action(description=_(mark_safe("set to <b>review</b>")), permissions=["change"])
-    def action_row_set_review_to_review(self, request: HttpRequest, object_id: int):  # obj: HutSource):
+    def action_row_set_review_to_review(
+        self, request: HttpRequest, object_id: int
+    ):  # obj: HutSource):
         obj = HutSource.objects.get(id=object_id)
         obj.review_status = HutSource.ReviewStatusChoices.review
         obj.save()
         return redirect(request.META.get("HTTP_REFERER"))
 
-    @action(description=_(mark_safe("set to <b>reject</b> (inactive)")), permissions=["delete"])
-    def action_row_set_inactive(self, request: HttpRequest, object_id: int):  # obj: HutSource):
+    @action(
+        description=_(mark_safe("set to <b>reject</b> (inactive)")),
+        permissions=["delete"],
+    )
+    def action_row_set_inactive(
+        self, request: HttpRequest, object_id: int
+    ):  # obj: HutSource):
         obj = HutSource.objects.get(id=object_id)
         obj.review_status = HutSource.ReviewStatusChoices.reject
         obj.is_active = False
@@ -133,7 +166,9 @@ class HutsSourceAdmin(ModelAdmin):
         return redirect(request.META.get("HTTP_REFERER"))
 
     @action(description=_(mark_safe("<b>delete</b> entry")), permissions=["delete"])
-    def action_row_delete(self, request: HttpRequest, object_id: int):  # obj: HutSource):
+    def action_row_delete(
+        self, request: HttpRequest, object_id: int
+    ):  # obj: HutSource):
         obj = HutSource.objects.get(id=object_id)
         obj.delete()
         return redirect(request.META.get("HTTP_REFERER"))

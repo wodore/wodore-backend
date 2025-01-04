@@ -26,10 +26,22 @@ class Command(BaseCommand):
         self.requires_system_checks = []  # type: ignore pyright
 
     def add_arguments(self, parser: CommandParser) -> None:
-        parser.add_argument("-t", "--token-url", help="Token endpoint", default=settings.OIDC_OP_TOKEN_ENDPOINT)
-        parser.add_argument("-p", "--project-id", help="Zitadel project ID", default=settings.ZITADEL_PROJECT)
+        parser.add_argument(
+            "-t",
+            "--token-url",
+            help="Token endpoint",
+            default=settings.OIDC_OP_TOKEN_ENDPOINT,
+        )
+        parser.add_argument(
+            "-p",
+            "--project-id",
+            help="Zitadel project ID",
+            default=settings.ZITADEL_PROJECT,
+        )
         parser.add_argument("-u", "--user", help="Zitadel user", default="api-tester")
-        parser.add_argument("-l", "--list-users", help="List available users", action="store_true")
+        parser.add_argument(
+            "-l", "--list-users", help="List available users", action="store_true"
+        )
 
     def handle(
         self,
@@ -49,7 +61,11 @@ class Command(BaseCommand):
         if user in user_secrets and user_secrets:
             client_secret = user_secrets[user]
         else:
-            self.stdout.write(self.style.ERROR(f"user '{user}' not in 'settings.oidc.ZITADEL_API_MACHINE_USERS'."))
+            self.stdout.write(
+                self.style.ERROR(
+                    f"user '{user}' not in 'settings.oidc.ZITADEL_API_MACHINE_USERS'."
+                )
+            )
             return
 
         # Encode the client ID and client secret in Base64
@@ -74,7 +90,9 @@ class Command(BaseCommand):
             access_token = resp["access_token"]
             token_type = resp["token_type"].lower()
             expires_in = resp["expires_in"]
-            expires_date = datetime.datetime.now() + datetime.timedelta(seconds=expires_in)
+            expires_date = datetime.datetime.now() + datetime.timedelta(
+                seconds=expires_in
+            )
             if verbosity > 1:
                 self.stdout.write(self.style.NOTICE("Server response:"))
                 self.stdout.write(self.style.HTTP_INFO(resp))
@@ -88,4 +106,6 @@ class Command(BaseCommand):
             else:
                 print(access_token)
         else:
-            self.stdout.write(self.style.ERROR(f"error: {response.status_code} - {response.text}"))
+            self.stdout.write(
+                self.style.ERROR(f"error: {response.status_code} - {response.text}")
+            )

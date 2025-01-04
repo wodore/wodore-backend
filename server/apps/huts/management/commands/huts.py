@@ -1,6 +1,5 @@
 # type: ignore  # noqa: PGH003
 # TODO: add types
-import json
 import sys
 import typing as t
 
@@ -21,7 +20,9 @@ def init_huts_db(
     hut_sources: list[HutSource],
     review: bool = False,
     force_overwrite: bool = False,  # overwrite exisitng entries
-    force_overwrite_include: t.Sequence[str] = [],  # set a list which field which should be overwritten
+    force_overwrite_include: t.Sequence[
+        str
+    ] = [],  # set a list which field which should be overwritten
     force_overwrite_exclude: t.Sequence[str] = [],  #  ... exclude
     force_none: bool = False,  # force t oset value to none (overwrite is needed)
 ) -> t.Tuple[int, int]:
@@ -58,12 +59,18 @@ def init_huts_db(
                 click.secho("unknown state", fg="red")
         except IntegrityError as e:
             err_msg = str(e).split("\n")[0]
-            click.secho(f" {'('+hut_src.organization.slug+'-'+hut_src.source_id+')':<20} E: {err_msg}", dim=True)
+            click.secho(
+                f" {'('+hut_src.organization.slug+'-'+hut_src.source_id+')':<20} E: {err_msg}",
+                dim=True,
+            )
             failed_huts += 1
             fails.append(hut_src)
         except NotImplementedError as e:
             err_msg = str(e).split("\n")[0]
-            click.secho(f" {'('+hut_src.organization.slug+'-'+hut_src.source_id+')':<20} E: {err_msg}", dim=True)
+            click.secho(
+                f" {'('+hut_src.organization.slug+'-'+hut_src.source_id+')':<20} E: {err_msg}",
+                dim=True,
+            )
             failed_huts += 1
             fails.append(hut_src)
     if fails:
@@ -75,7 +82,9 @@ def init_huts_db(
     return added_huts, updated_huts, nochange_huts, failed_huts
 
 
-def add_huts_function(obj: "Command", offset, limit, update, force, selected_organization, **kwargs):
+def add_huts_function(
+    obj: "Command", offset, limit, update, force, selected_organization, **kwargs
+):
     force_overwrite = kwargs.get("force_overwrite", False)
     force_overwrite_include = kwargs.get("force_overwrite_include", [])
     force_overwrite_exclude = kwargs.get("force_overwrite_exclude", [])
@@ -83,15 +92,27 @@ def add_huts_function(obj: "Command", offset, limit, update, force, selected_org
     force_none = kwargs.get("force_none", False)
     total_entries = HutSource.objects.all().count()
     if total_entries == 0:
-        obj.stdout.write(obj.style.WARNING("No entries in 'huts.HutSource', run first: 'app hut_sources --add'"))
+        obj.stdout.write(
+            obj.style.WARNING(
+                "No entries in 'huts.HutSource', run first: 'app hut_sources --add'"
+            )
+        )
         sys.exit(1)
     src_huts_obj = HutSource.objects.filter(is_current=True, is_active=True)
     if selected_organization:
-        src_huts = list(src_huts_obj.filter(organization__slug=selected_organization).all()[offset : offset + limit])
+        src_huts = list(
+            src_huts_obj.filter(organization__slug=selected_organization).all()[
+                offset : offset + limit
+            ]
+        )
     else:
         src_huts = list(src_huts_obj.all()[offset : offset + limit])
     new_huts = len(src_huts)
-    obj.stdout.write(obj.style.NOTICE(f"Going to fill table with {new_huts} entries and an offset of {offset}"))
+    obj.stdout.write(
+        obj.style.NOTICE(
+            f"Going to fill table with {new_huts} entries and an offset of {offset}"
+        )
+    )
     added, updated, nochange, failed = init_huts_db(
         src_huts,
         review=review,
@@ -101,13 +122,27 @@ def add_huts_function(obj: "Command", offset, limit, update, force, selected_org
         force_none=force_none,
     )  # , update_existing=update_existing, overwrite_existing_fields=overwrite_existing_fields)
     if added:
-        obj.stdout.write(obj.style.SUCCESS(f"Successfully added {added} new hut{'s' if added > 1 else ''}"))
+        obj.stdout.write(
+            obj.style.SUCCESS(
+                f"Successfully added {added} new hut{'s' if added > 1 else ''}"
+            )
+        )
     if updated:
-        obj.stdout.write(obj.style.SUCCESS(f"Successfully updated {updated} hut{'s' if updated > 1 else ''}"))
+        obj.stdout.write(
+            obj.style.SUCCESS(
+                f"Successfully updated {updated} hut{'s' if updated > 1 else ''}"
+            )
+        )
     if nochange:
-        obj.stdout.write(obj.style.NOTICE(f"No change for {nochange} hut{'s' if updated > 1 else ''}"))
+        obj.stdout.write(
+            obj.style.NOTICE(
+                f"No change for {nochange} hut{'s' if updated > 1 else ''}"
+            )
+        )
     if failed:
-        obj.stdout.write(obj.style.ERROR(f"Failed to add {failed} hut{'s' if failed > 1 else ''}"))
+        obj.stdout.write(
+            obj.style.ERROR(f"Failed to add {failed} hut{'s' if failed > 1 else ''}")
+        )
     # else:
     #    parser.stdout.write(parser.style.WARNING(f"Selected organization '{selected_organization}' not supported."))
 
@@ -133,9 +168,15 @@ class Command(CRUDCommand):
             help="Do not change to review status (to 'review' if update, to 'new' if created)",
         )
         parser.add_argument(
-            "-O", "--org", "--organization", help="Organization slug, only add this one, otherwise all", type=str
+            "-O",
+            "--org",
+            "--organization",
+            help="Organization slug, only add this one, otherwise all",
+            type=str,
         )
-        parser.add_argument("-w", "--overwrite", action="store_true", help="Overwrite existing entries")
+        parser.add_argument(
+            "-w", "--overwrite", action="store_true", help="Overwrite existing entries"
+        )
         parser.add_argument(
             "-n",
             "--include",
@@ -200,16 +241,29 @@ class Command(CRUDCommand):
             if not HutType.objects.exists():
                 self.stdout.write(self.style.HTTP_INFO("Add hut types"))
                 call_command("hut_types", add=True, force=force)
-            limit = options.get("limit", None)
+            limit = options.get("limit")
             for params in [
                 {"org": "sac", "no_review": True},
-                {"org": "wikidata", "include": "location,photos,photos_attribution", "no_review": True},
+                {
+                    "org": "wikidata",
+                    "include": "location,photos,photos_attribution",
+                    "no_review": True,
+                },
                 {"org": "osm", "no_review": True},
                 {"org": "hrs", "no_review": True},
                 {"org": "refuges", "no_review": False},
-                {"org": "wodore", "no_review": True, "overwrite": True, "set_none": True},
+                {
+                    "org": "wodore",
+                    "no_review": True,
+                    "overwrite": True,
+                    "set_none": True,
+                },
             ]:
-                self.stdout.write(self.style.HTTP_INFO(f"Add {params.get('org','all')} huts with parameter:"))
+                self.stdout.write(
+                    self.style.HTTP_INFO(
+                        f"Add {params.get('org','all')} huts with parameter:"
+                    )
+                )
                 for k, v in params.items():
                     self.stdout.write(self.style.NOTICE(f"  {k+':':<10} '{v}'"))
                 call_command("huts", add=True, force=force, limit=limit, **params)
@@ -221,8 +275,12 @@ class Command(CRUDCommand):
                 "review": not no_review,
                 "selected_organization": org,
                 "force_overwrite": overwrite,
-                "force_overwrite_include": [f.strip() for f in include.split(",") if include],
-                "force_overwrite_exclude": [f.strip() for f in exclude.split(",") if exclude],
+                "force_overwrite_include": [
+                    f.strip() for f in include.split(",") if include
+                ],
+                "force_overwrite_exclude": [
+                    f.strip() for f in exclude.split(",") if exclude
+                ],
                 "force_none": set_none,
             },
             **options,
