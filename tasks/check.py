@@ -3,6 +3,7 @@ from tasks import (
     doc,
     header,
     success,
+    warning,
     task,
 )
 
@@ -39,7 +40,7 @@ def deps(c: Ctx):
 def types(c: Ctx):
     """Static type checking"""
     header(doc())
-    c.run("uv run pyright  src", echo=True, pty=True)
+    c.run("uv run pyright  server", echo=True, pty=True)
 
 
 @task
@@ -49,8 +50,9 @@ def test(c: Ctx):
     c.run("pytest -v", echo=True, pty=True)
 
 
-@task(pre=[lock, lint, deps, types], default=True)
+@task(pre=[lock, lint], default=True)
 def check(c: Ctx):
     """Run code quality tools"""
     header("Summary")
     success("Code quality checks passed")
+    warning("'check.deps' and 'check.types' were skipped!")

@@ -123,6 +123,13 @@ dev = [
 django-computedfields = { git="https://github.com/TBxy/django-computedfields", branch = "django5.0"}
 hut-services-private = { git="ssh://git@github.com/wodore/hut-services-private" , branch = "main"}
 
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = ""
+testpaths = [
+    "tests",
+]
+
 [tool.black]
 line-length = 120
 target-version = ["py38", "py39", "py310", "py311", "py312"]
