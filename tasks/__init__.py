@@ -20,6 +20,7 @@ def help(c: Ctx):
 
 ns = Collection(
     project.install,
+    project.update,
     project.release,
     project.version,
     project.update_venv,
