@@ -10,6 +10,7 @@ on:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    secrets: inherit
     steps:
       - name: Check out
         uses: actions/checkout@v4
@@ -19,7 +20,6 @@ jobs:
 
       - name: Set up the environment
         uses: ./.github/actions/setup-venv
-        secrets: inherit
 
       - name: Run checks
         run: uv run inv check
