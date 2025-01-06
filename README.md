@@ -58,11 +58,16 @@ docker images | grep wodore-backend
 npx tailwindcss -o server/apps/admin/static/css/styles.css --minify --watch
 ```
 
-Update hut-service
+### Update packages
+```bash
+uv sync --extra private -U
+```
+
+#### Update hut-service
 ```bash
 # this is not supported at the moment, update is done with the private package
 # uv sync --upgrade-package hut-services
-uv sync --upgrade-package hut-services-private
+uv sync --upgrade-package hut-services-private --extra private
 ```
 
 ## Docker Production Build

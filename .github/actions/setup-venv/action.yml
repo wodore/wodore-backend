@@ -23,7 +23,11 @@ runs:
       with:
         python-version-file: ".python-version"
 
+    ## https://github.com/actions/setup-python/issues/104#issuecomment-1382185522
+    #- name: Setup token for Python installation
+    #  run: git config --global url."https://${{ secrets.MY_USERNAME }}:${{ secrets.MY_TOKEN }}@github.com".insteadOf ssh://git@github.com # replace with whatever authentication method you're currently using
+
     - name: Install the project
       #run: uv sync --all-extras --dev
-      run: uv sync --dev
+      run: uv run inv install
       shell: bash
