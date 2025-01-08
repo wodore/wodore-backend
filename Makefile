@@ -8,8 +8,8 @@ ENV?=development
 REPO=wodore-backend
 
 PKG_VERSION=$(shell grep '^version =' pyproject.toml | sed -E "s/version = \"([^\"]+)\"/\1/")
-TAG?=v$(PKG_VERSION)-$(DISTRO)
-NEXT_TAG?=next-$(DISTRO)
+TAG?=$(PKG_VERSION)-$(DISTRO)
+NEXT_TAG?=edge-$(DISTRO)
 
 # limit memory and cpu during prod run
 MEMORY?=512m
@@ -138,6 +138,7 @@ docker-run:
 	@echo "Starting ${DOCKER_IMAGE}"
 	@echo "You can now access the server at http://localhost:$(PORT)"
 	@mkdir -p .tmp/py_file_cache/joblib
+	@chmod -R 0777 .tmp
 	bash -c 'docker run --rm \
 		-p $(PORT):$(PORT) \
 		-e DJANGO_DATABASE_HOST=$(DJANGO_DATABASE_HOST) \
