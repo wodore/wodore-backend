@@ -405,6 +405,9 @@ def run(
 
 
 @task
-def publish(c: Ctx, no_version_tag: bool = False):
+def publish(
+    c: Ctx, version_tag: bool = False, distro: Literal["alpine", "ubuntu"] = "ubuntu"
+):
     """Publish to docker registry"""
-    buildx(c, push=True, version_tag=not no_version_tag)
+    buildx(c, distro=distro, version_tag=version_tag)
+    slim(c, push=True, version_tag=version_tag, distro=distro)
