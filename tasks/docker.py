@@ -128,6 +128,7 @@ class DotEnv(object):
 
 
 @task(
+    default=True,
     name="build",
     help={
         "distro": "Distro name: alpine, ubuntu or all",
@@ -404,7 +405,13 @@ def run(
         info(f"Run 'docker stop {container.name}' to stop the container again")
 
 
-@task
+@task(
+    # aliases = ["pub"],
+    help={
+        "distro": "Distro name: alpine, ubuntu or all (default: ubuntu)",
+        "version_tag": "Include tags with version",
+    }
+)
 def publish(
     c: Ctx, version_tag: bool = False, distro: Literal["alpine", "ubuntu"] = "ubuntu"
 ):
