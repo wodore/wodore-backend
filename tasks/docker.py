@@ -94,14 +94,14 @@ def get_tags(
     push_tags = []
     if extra_tags:
         tags.extend([t.strip() for t in extra_tags.split(",")])
+    if suffix:
+        tags = [f"{t}-{suffix.strip('-')}" for t in tags]
     if registry_tag:
         registry = registry or from_pyproject(c, "tool.docker.registry")
         info(f"Registry:        '{registry}'")
         for t in tags:
             push_tags.append(f"{registry}/{t}")
         tags.extend(push_tags)
-    if suffix:
-        tags = [f"{t}-{suffix.strip('-')}" for t in tags]
     info("Tags:")
     for tag in tags:
         info(f"  - '{tag}'")
@@ -191,7 +191,7 @@ def buildx(
         try:
             image = dc.buildx.build(
                 context_path=".",
-                tags=tags + push_tags,
+                tags=tags,
                 pull=True,
                 labels=labels,
                 file=dockerfile,
@@ -287,7 +287,7 @@ def slim(
             package_name=package_name,
             registry=registry,
         )
-        tag_args = [f'--tag "{tag}"' for tag in tags + push_tags]
+        tag_args = [f'--tag "{tag}"' for tag in tags]
         cmd = [
             "mint slim",
             f"--target {docker_image}",
