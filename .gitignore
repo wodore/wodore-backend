@@ -1,6 +1,7 @@
 # old files
 old/
 *.old
+.joblib_tmp/
 .api-key.json
 .infisical.json
 .zitadel-api-key
