@@ -16,8 +16,9 @@ LABEL org.opencontainers.image.licenses=MIT
 # `DJANGO_ENV` arg is used to make prod / dev builds:
 ARG DJANGO_ENV \
   # Needed for fixing permissions of files created by Docker:
-  UID=1000 \
-  GID=1000 \
+  UID=1001 \
+  GID=1001 \
+  PYTHON_VERSION=3.12 \
   CONFIG_DIR="config" \
   WITH_DEV=0
 
@@ -26,19 +27,7 @@ ENV DJANGO_ENV=${DJANGO_ENV} \
   PYTHONFAULTHANDLER=1 \
   PYTHONUNBUFFERED=1 \
   PYTHONHASHSEED=random \
-  PYTHONDONTWRITEBYTECODE=1 \
-  # pip:
-  PIP_NO_CACHE_DIR=1 \
-  PIP_DISABLE_PIP_VERSION_CHECK=1 \
-  PIP_DEFAULT_TIMEOUT=100 \
-  PIP_ROOT_USER_ACTION=ignore \
-  # poetry:
-  POETRY_VERSION=1.8.4 \
-  POETRY_NO_INTERACTION=1 \
-  POETRY_VIRTUALENVS_IN_PROJECT=1 \
-  POETRY_VIRTUALENVS_CREATE=1 \
-  POETRY_CACHE_DIR='/var/cache/pypoetry' \
-  POETRY_HOME='/usr/local'
+  PYTHONDONTWRITEBYTECODE=1
 
 #SHELL ["/bin/bash", "-eo", "pipefail", "-c"]
 
@@ -54,14 +43,16 @@ WORKDIR /code
 # System deps (we don't use exact versions because it is hard to update them,
 # pin when needed):
 # hadolint ignore=DL3008
-RUN apk update && \
-  apk upgrade && \
-  apk add --no-cache \
+RUN <<EOF
+apk update
+apk upgrade
+apk add --no-cache \
   bash \
-  python3=~3.12 \
-  # add user and group
-  && addgroup -g "${GID}"  web \
-  && adduser -h '/code' -G web -D -u "${UID}" --no-create-home web
+  python3=~$PYTHON_VERSION
+# add user and group
+addgroup -g "${GID}"  web
+adduser -h '/code' -G web -D -u "${UID}" --no-create-home web
+EOF
 
 ################################################################################
 ## BUILDER
@@ -72,35 +63,59 @@ FROM python-base AS builder
 # System deps (we don't use exact versions because it is hard to update them,
 # pin when needed):
 # hadolint ignore=DL3008
-RUN apk update && \
-  apk upgrade && \
-  apk add --no-cache \
+RUN <<EOF
+apk update
+apk upgrade
+apk add --no-cache \
   build-base \
   git \
   openssh-client \
   libpq-dev \
-  poetry=~${POETRY_VERSION} \
-  # Installing `poetry` package manager:
-  # https://github.com/python-poetry/poetry
-  # && curl -sSL 'https://install.python-poetry.org' | python - \
-  && poetry --version
+  gcc  \
+  python3-dev=~$PYTHON_VERSION \
+  musl-dev  \
+  linux-headers \
+  cargo \
+  cargo-auditable \
+	libgit2-dev
+  #poetry=~${POETRY_VERSION} \
+# Installing `poetry` package manager:
+# https://github.com/python-poetry/poetry
+# && curl -sSL 'https://install.python-poetry.org' | python - \
+#poetry --version
+EOF
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# - Silence uv complaining about not being able to use hard links,
+# - tell uv to byte-compile packages for faster application startups,
+# - prevent uv from accidentally downloading isolated Python builds,
+# - pick a Python (use `/usr/bin/python3.12` on uv 0.5.0 and later),
+# - and finally declare `/app` as the target for `uv sync`.
+ENV UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1 \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_PYTHON_PREFERENCE=only-system \
+    UV_CACHE_DIR='/var/cache/uv-cache/' \
+    UV_PYTHON=python$PYTHON_VERSION
+    #UV_PROJECT_ENVIRONMENT=/app
 
 WORKDIR /code
 
 # Copy only requirements, to cache them in docker layer
-COPY --chown=web:web ./poetry.lock ./pyproject.toml ./docker/django/minify_venv.sh /code/
+COPY --chown=web:web ./uv.lock ./pyproject.toml ./docker/django/minify_venv.sh /code/
 
 # Download public key for github.com
-RUN --mount=type=cache,target="$POETRY_CACHE_DIR" --mount=type=ssh  \
-  mkdir -p -m 0600 ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts \
-  # Install deps:
-  && poetry run pip install -U pip \
-  && poetry install \
-      $(if [ "$WITH_DEV" = '0' ]; then echo '--only main'; fi) \
-      --no-root --no-interaction --no-ansi --sync --extras private \
-  && chmod +x ./minify_venv.sh  \
-  && ./minify_venv.sh
+RUN --mount=type=cache,target="$UV_CACHE_DIR" --mount=type=ssh <<EOF
+mkdir -p -m 0600 ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts
+# Install deps:
+#poetry run pip install -U pip
+uv sync \
+  $(if [ "$WITH_DEV" = "0" ]; then echo '--no-dev'; fi) \
+  --no-install-project --locked --extra private
+chmod +x ./minify_venv.sh
+./minify_venv.sh
+EOF
 
 ################################################################################
 ## PRODUCTION
@@ -111,17 +126,19 @@ ADD --chown=web:web https://raw.githubusercontent.com/vishnubob/wait-for-it/mast
 # System deps (we don't use exact versions because it is hard to update them,
 # pin when needed):
 # hadolint ignore=DL3008
-RUN apk update && \
-  apk upgrade && \
-  apk add --no-cache \
+RUN <<EOF
+apk update
+apk upgrade
+apk add --no-cache \
   postgresql-client \
   geos \
   gettext \
   tini \
-  tzdata \
-  && cp /usr/share/zoneinfo/Europe/Zurich /etc/localtime \
-  && echo "Europe/Zurich" > /etc/timezone \
-  && chmod +x /usr/local/bin/wait-for-it
+  tzdata
+cp /usr/share/zoneinfo/Europe/Zurich /etc/localtime
+echo "Europe/Zurich" > /etc/timezone
+chmod +x /usr/local/bin/wait-for-it
+EOF
 
 ENV VIRTUAL_ENV=/code/.venv \
   PATH="/code/.venv/bin:$PATH" \
@@ -141,9 +158,10 @@ COPY --chown=web:web ${CONFIG_DIR} /code/config
 #RUN --mount=type=secret,id=env,target=/code/config/.env \
 #  chmod +x '/docker-entrypoint.sh' \
 #  && python manage.py collectstatic --noinput
-RUN \
-  chmod +x '/docker-entrypoint.sh' \
-  && python manage.py collectstatic --noinput
+RUN <<EOF
+chmod +x '/docker-entrypoint.sh'
+python manage.py collectstatic --noinput
+EOF
 
 # Running as non-root user:
 # TODO

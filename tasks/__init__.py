@@ -28,6 +28,7 @@ ns = Collection(
     tests,
     check,
     docker,
+    docker.publish,
     changelog.changelog,
     help,
 )

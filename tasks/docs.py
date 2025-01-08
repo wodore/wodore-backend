@@ -19,7 +19,7 @@ def serve(c: Ctx, port: int = 8000):
     c.run(f"mkdocs serve --dev-addr {dev_addr}", echo=True, pty=True)
 
 
-@task
+@task(default=True)
 def build(c: Ctx):
     """Build docu."""
     c.run("mkdocs build", echo=True, pty=True)

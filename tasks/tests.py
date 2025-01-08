@@ -6,7 +6,7 @@ from tasks import (
 )
 
 
-@task
+@task(default=True)
 def run(c: Ctx):
     """Run tests"""
     header(doc())
