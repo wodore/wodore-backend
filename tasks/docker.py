@@ -191,7 +191,7 @@ def buildx(
         try:
             image = dc.buildx.build(
                 context_path=".",
-                tags=tags,
+                tags=tags + push_tags,
                 pull=True,
                 labels=labels,
                 file=dockerfile,
@@ -204,13 +204,13 @@ def buildx(
             f"Successfully built the container '{image.id.split(':')[1][:12]}' with a size of [blue]{humanize.naturalsize(image.size)}[/] {humanize.naturaltime(image.created)}."
         )
         if push:
-            registry, _ = push_tags[0].split(":")
+            pkg_registry, _ = push_tags[0].split(":")
             header("Push to registry")
-            info(f"Push to '{registry}/{package_name}' with tags:")
+            info(f"Push to '{pkg_registry}' with tags:")
             for tag in push_tags:
                 info(f"  - '{tag}'")
             dc.push(push_tags)
-            success(f"Pushed to 'https://{registry}/{package_name}'.")
+            success(f"Pushed to 'https://{pkg_registry}'.")
         docker_ls.append(tags[0])
     for i, ls in enumerate(docker_ls):
         out = c.run(f"docker images {ls}", hide=True).stdout.split("\n")
@@ -310,7 +310,14 @@ def slim(
             header("Run docker slim job")
             echo(" \\\n  ".join(cmd))
             c.run(" ".join(cmd))
-
+        if push:
+            pkg_registry, _ = push_tags[0].split(":")
+            header("Push to registry")
+            info(f"Push to '{pkg_registry}' with tags:")
+            for tag in push_tags:
+                info(f"  - '{tag}'")
+            dc.push(push_tags)
+            success(f"Pushed to 'https://{pkg_registry}'.")
         docker_ls.append(tags[0])
     for i, ls in enumerate(docker_ls):
         fat_id = ls.replace("-slim", "")
