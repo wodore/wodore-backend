@@ -204,6 +204,7 @@ def buildx(
             f"Successfully built the container '{image.id.split(':')[1][:12]}' with a size of [blue]{humanize.naturalsize(image.size)}[/] {humanize.naturaltime(image.created)}."
         )
         if push:
+            registry, _ = push_tags[0].split(":")
             header("Push to registry")
             info(f"Push to '{registry}/{package_name}' with tags:")
             for tag in push_tags:
