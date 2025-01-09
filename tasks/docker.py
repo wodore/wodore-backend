@@ -127,7 +127,25 @@ class DotEnv(object):
         os.remove(self.path)
 
 
-@task()
+def get_distros(
+    distro: Literal["alpine", "ubuntu", "all"] = "alpine",
+) -> list[Literal["alpine", "ubuntu"]]:
+    if distro not in ["alpine", "ubuntu", "all"]:
+        error("Supported distros: 'alpine', 'ubuntu', or 'all'")
+    if distro == "all":
+        distros = ["alpine", "ubuntu"]
+    else:
+        distros = [distro]
+    return distros
+
+
+@task(
+    help={
+        "distro": "Distro name: alpine, ubuntu or all",
+        "tag": "tag used (without repo and distor, e.g. edge or 0.2.3)",
+        "slim": "include slim builds",
+    }
+)
 def show(
     c: Ctx,
     distro: Literal["alpine", "ubuntu", "all"] = "alpine",
@@ -135,12 +153,7 @@ def show(
     slim: bool = False,
 ):
     """Show docker image information"""
-    if distro not in ["alpine", "ubuntu", "all"]:
-        error("Supported distros: 'alpine', 'ubuntu', or 'all'")
-    if distro == "all":
-        distros = ["alpine", "ubuntu"]
-    else:
-        distros = [distro]
+    distros = get_distros(distro)
     package_name = from_pyproject(c, "project.name")
     docker_ls = [f"{package_name}:{tag}-{d}" for d in distros]
     if slim:
@@ -196,12 +209,7 @@ def buildx(
     rebuild: bool = False,
 ):
     """Build and pulish docker image"""
-    if distro not in ["alpine", "ubuntu", "all"]:
-        error("Supported distros: 'alpine', 'ubuntu', or 'all'")
-    if distro == "all":
-        distros = ["alpine", "ubuntu"]
-    else:
-        distros = [distro]
+    distros = get_distros(distro)
     github_user = github_user if github_user else env.str("DOCKER_GITHUB_USER", "")
     github_token = github_token if github_token else env.str("DOCKER_GITHUB_TOKEN", "")
     if not github_token:
@@ -317,12 +325,7 @@ def slim(
             registry=registry,
             force=force,
         )
-    if distro not in ["alpine", "ubuntu", "all"]:
-        error("Supported distros: 'alpine', 'ubuntu', or 'all'")
-    if distro == "all":
-        distros = ["alpine", "ubuntu"]
-    else:
-        distros = [distro]
+    distros = get_distros(distro)
     run_webserver = RUN_WEBSERVER_DEV.format(port=port, workers=2)
     docker_ls = []
     for dist in distros:
