@@ -73,6 +73,19 @@ uv sync --upgrade-package hut-services-private --extra private
 ## Docker Production Build
 
 ```bash
+infisical export --env dev --path /keys/wodore-backend >> .env
+# this env variables are needed:
+# READ_GITHUB_USER
+# READ_GITHUB_TOKEN # with read access
+inv docker.build --distro alpine|ubuntu
+inv docker.slim --distro alpine|ubuntu # create a slim version
+inv docker.run --distro alpine|ubuntu [--slim]
+```
+
+
+**Deprecated:**
+
+```bash
 infisical export --env dev --path /backend >> config/.env #TODO should be removed in future
 # staging dev env (not the real production env yet), change --env to prod ...
 infisical run --env=dev --path /backend -- docker compose -f docker-compose.yml -f docker/docker-compose.stage.yml build web

@@ -28,7 +28,6 @@ ENV DJANGO_ENV=${DJANGO_ENV} \
   PYTHONUNBUFFERED=1 \
   PYTHONHASHSEED=random \
   PYTHONDONTWRITEBYTECODE=1 \
-  # tini:
   TINI_VERSION=v0.19.0
 
 SHELL ["/bin/bash", "-eo", "pipefail", "-c"]
@@ -100,13 +99,21 @@ WORKDIR /code
 COPY --chown=web:web ./uv.lock ./pyproject.toml ./docker/django/minify_venv.sh /code/
 
 # Download public key for github.com
-RUN --mount=type=cache,target="$UV_CACHE_DIR" --mount=type=ssh <<EOF
-mkdir -p -m 0600 ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts
+RUN --mount=type=cache,target="$UV_CACHE_DIR" \
+    --mount=type=secret,id=READ_GITHUB_TOKEN,env=READ_GITHUB_TOKEN \
+    --mount=type=secret,id=READ_GITHUB_USER,env=READ_GITHUB_USER <<EOF
+if [ "$READ_GITHUB_TOKEN" != "" ]; then
+  git config --global url."https://${READ_GITHUB_USER}:${READ_GITHUB_TOKEN}@github.com".insteadOf ssh://git@github.com
+  extra_arg="--extra private"
+  echo "!! install with PRIVATE packages !!"
+else
+  extra_arg=""
+  echo "!! install with PUBLIC packages !!"
+fi
 # Install deps:
-#poetry run pip install -U pip
 uv sync \
   $(if [ "$WITH_DEV" = "0" ]; then echo '--no-dev'; fi) \
-  --no-install-project --locked --extra private
+  --no-install-project --locked ${extra_arg}
 chmod +x ./minify_venv.sh
 ./minify_venv.sh
 EOF

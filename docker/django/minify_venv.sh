@@ -40,3 +40,7 @@ echo "Remove Brotli"
 find .venv -type d -name "Brotli*" -print0 | xargs rm -r
 find .venv -name "brotli*" -print0 | xargs rm -r
 find .venv -name "_brotli*" -print0 | xargs rm -r
+
+#echo "Remove Py"
+#find .venv/lib -type f -name "*.py" -exec rm -f {} +
+#find .venv/lib64 -type f -name "*.py" -exec rm -f {} +

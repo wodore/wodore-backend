@@ -36,7 +36,7 @@ def login(c: Ctx, token: str | None = None):
 
     It uses the GITHUB_TOKEN environment variable to login."""
     try:
-        token = token or env.str("GITHUB_TOKEN")
+        token = token or env.str("DOCKER_GITHUB_TOKEN")
     except EnvError:
         token = input("Github package token: ")
     cmd = "docker login ghcr.io -u GITHUB_USERNAME -p $GITHUB_TOKEN"
@@ -127,6 +127,48 @@ class DotEnv(object):
         os.remove(self.path)
 
 
+def get_distros(
+    distro: Literal["alpine", "ubuntu", "all"] = "alpine",
+) -> list[Literal["alpine", "ubuntu"]]:
+    if distro not in ["alpine", "ubuntu", "all"]:
+        error("Supported distros: 'alpine', 'ubuntu', or 'all'")
+    if distro == "all":
+        distros = ["alpine", "ubuntu"]
+    else:
+        distros = [distro]
+    return distros
+
+
+@task(
+    help={
+        "distro": "Distro name: alpine, ubuntu or all",
+        "tag": "tag used (without repo and distor, e.g. edge or 0.2.3)",
+        "slim": "include slim builds",
+    }
+)
+def show(
+    c: Ctx,
+    distro: Literal["alpine", "ubuntu", "all"] = "alpine",
+    tag: str = "edge",
+    slim: bool = False,
+):
+    """Show docker image information"""
+    distros = get_distros(distro)
+    package_name = from_pyproject(c, "project.name")
+    docker_ls = [f"{package_name}:{tag}-{d}" for d in distros]
+    if slim:
+        docker_ls += [f"{package_name}:{tag}-{d}-slim" for d in distros]
+    filters = [f"--filter reference={ls}" for ls in docker_ls]
+    out = (
+        c.run(f"docker images {' '.join(filters)}", hide=True)
+        .stdout.strip()
+        .split("\n")
+    )
+    echo(f"[b]{out[0]}[/]")
+    for line in out[1:]:
+        echo(f"[green]{line}[/]") if "-slim" in line else echo(f"[blue]{line}[/]")
+
+
 @task(
     default=True,
     name="build",
@@ -140,8 +182,10 @@ class DotEnv(object):
         "registry_tag": "Include tags with the registry (is set to true if '--push' is set)",
         "suffix": "Suffix to be added to a tag (e.g. 'dev')",
         "with_dev": "Build with dev dependencies",
-        "env": "Django environment: development, production, prod_development",
+        "django_env": "Django environment: development, production, prod_development",
         "registry": "Registry name, can be set in pyproject.toml tool.docker.registry",
+        "plain": "Plain progressbar",
+        "rebuild": "Force rebuild",
     },
 )
 def buildx(
@@ -155,17 +199,24 @@ def buildx(
     registry_tag: bool = False,
     suffix: str | None = None,
     with_dev: bool = False,
-    env: Literal["development", "production", "prod_development"] = "development",
+    django_env: Literal[
+        "development", "production", "prod_development"
+    ] = "development",
     registry: str | None = None,
+    github_user: str | None = None,
+    github_token: str | None = None,
+    plain: bool = False,
+    rebuild: bool = False,
 ):
     """Build and pulish docker image"""
-    if distro not in ["alpine", "ubuntu", "all"]:
-        error("Supported distros: 'alpine', 'ubuntu', or 'all'")
-    if distro == "all":
-        distros = ["alpine", "ubuntu"]
-    else:
-        distros = [distro]
-    docker_ls = []
+    distros = get_distros(distro)
+    github_user = github_user if github_user else env.str("DOCKER_GITHUB_USER", "")
+    github_token = github_token if github_token else env.str("DOCKER_GITHUB_TOKEN", "")
+    if not github_token:
+        warning(
+            "No github token found in env var 'READ_GITHUB_TOKEN' or '--github-token' parameter."
+        )
+        warning("Private repos are not installed.")
     for dist in distros:
         check_dirty_files(c, force=force)
         suffix_ = dist if suffix is None else suffix
@@ -185,7 +236,20 @@ def buildx(
         )
         header("Run docker build job")
         dockerfile = f"./docker/django/Dockerfile.{dist}"
-        build_args = {"DJANGO_ENV": env, "WITH_DEV": "1" if with_dev else "0"}
+        build_args = {
+            "DJANGO_ENV": django_env,
+            "WITH_DEV": "1" if with_dev else "0",
+        }
+        secrets = []
+        if github_token:
+            if not github_user:
+                error(
+                    "Github user must be set if github token is set (READ_GITHUB_USER or --github-user)"
+                )
+            os.environ["READ_GITHUB_TOKEN"] = github_token
+            os.environ["READ_GITHUB_USER"] = github_user
+            secrets.append("id=READ_GITHUB_TOKEN")
+            secrets.append("id=READ_GITHUB_USER")
         labels = {
             "org.opencontainers.image.description": f"Wodore backend based on {dist} (gdal) image"
         }
@@ -196,8 +260,11 @@ def buildx(
                 pull=True,
                 labels=labels,
                 file=dockerfile,
-                ssh="default",
+                # ssh="default",
                 build_args=build_args,
+                progress="plain" if plain else "auto",
+                secrets=secrets,
+                cache=not rebuild,
             )
         except Exception as e:
             error(f"Failed to build the container.\n{e}")
@@ -212,11 +279,7 @@ def buildx(
                 info(f"  - '{tag}'")
             dc.push(push_tags)
             success(f"Pushed to 'https://{pkg_registry}'.")
-        docker_ls.append(tags[0])
-    for i, ls in enumerate(docker_ls):
-        out = c.run(f"docker images {ls}", hide=True).stdout.split("\n")
-        echo(f"[b]{out[0]}[/]") if i == 0 else None
-        echo(f"[blue]{out[1]}[/]") if len(out) > 1 else echo("ls missing")
+    show(c, distro=distro, tag=tags[0].split(":")[1].split("-")[0])
 
 
 @task(
@@ -262,12 +325,7 @@ def slim(
             registry=registry,
             force=force,
         )
-    if distro not in ["alpine", "ubuntu", "all"]:
-        error("Supported distros: 'alpine', 'ubuntu', or 'all'")
-    if distro == "all":
-        distros = ["alpine", "ubuntu"]
-    else:
-        distros = [distro]
+    distros = get_distros(distro)
     run_webserver = RUN_WEBSERVER_DEV.format(port=port, workers=2)
     docker_ls = []
     for dist in distros:
@@ -320,16 +378,7 @@ def slim(
             dc.push(push_tags)
             success(f"Pushed to 'https://{pkg_registry}'.")
         docker_ls.append(tags[0])
-    for i, ls in enumerate(docker_ls):
-        fat_id = ls.replace("-slim", "")
-        _, fat_tag = fat_id.split(":")
-        out_fat = c.run(f"docker images {fat_id}", hide=True).stdout.split("\n")
-        out = c.run(f"docker images {ls}", hide=True).stdout.split("\n")
-        echo(f"[b]{out[0]}[/]") if i == 0 else None
-        echo(f"[dim]{out_fat[1].replace(fat_tag, fat_tag + '     ')}[/]") if len(
-            out_fat
-        ) > 1 else echo("ls missing")
-        echo(f"[blue]{out[1]}[/]") if len(out) > 1 else echo("ls missing")
+    show(c, distro=distro, tag=tags[0].split(":")[1].split("-")[0], slim=True)
 
 
 @task(
