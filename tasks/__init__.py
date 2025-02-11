@@ -10,6 +10,7 @@ import tasks.docker as docker
 import tasks.docs as docs
 import tasks.project as project
 import tasks.tests as tests
+import tasks.app as app
 
 
 @task
@@ -19,6 +20,8 @@ def help(c: Ctx):
 
 
 ns = Collection(
+    app,
+    app.run,
     project.install,
     project.update,
     project.release,
