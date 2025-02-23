@@ -3,7 +3,7 @@
   <a href="https://wodore.com"><img src="https://avatars.githubusercontent.com/u/12153020?s=200&v=4" alt="Wodore Backend" width="80" /></a>
 </p>
 <p align="center">
-    <em>Wodore.com backend implementation</em>
+    <em><a href="https://wodore.com">Wodore.com</a> backend implementation</em>
 </p>
 <p align="center">
     <b><a href="https://api.wodore.com/">api.wodore.com</a></b>
