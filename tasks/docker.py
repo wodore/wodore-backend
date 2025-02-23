@@ -173,17 +173,17 @@ def show(
     default=True,
     name="build",
     help={
-        "distro": "Distro name: alpine, ubuntu or all",
+        "distro": "Distro name: alpine*, ubuntu or all",
         "extra_tags": "Comma separted list of additional tags",
         "version_tag": "Include tags with version",
         "force": "Force build even with dirty git",
         "no_edge_tag": "Do not include 'edge' tag",
-        "push": "Push to registry (defined in 'pyproject.toml')",
+        "push": "Push to registry (defined in 'pyproject.toml' or with --registry)",
         "registry_tag": "Include tags with the registry (is set to true if '--push' is set)",
         "suffix": "Suffix to be added to a tag (e.g. 'dev')",
         "with_dev": "Build with dev dependencies",
         "django_env": "Django environment: development, production, prod_development",
-        "registry": "Registry name, can be set in pyproject.toml tool.docker.registry",
+        "registry": "Registry name, can be set in the 'pyproject.toml#tool.docker.registry' section",
         "plain": "Plain progressbar",
         "rebuild": "Force rebuild",
     },
@@ -208,7 +208,7 @@ def buildx(
     plain: bool = False,
     rebuild: bool = False,
 ):
-    """Build and pulish docker image"""
+    """Build and pulish (with --push) docker image"""
     distros = get_distros(distro)
     github_user = github_user if github_user else env.str("DOCKER_GITHUB_USER", "")
     github_token = github_token if github_token else env.str("DOCKER_GITHUB_TOKEN", "")

@@ -1,7 +1,7 @@
 .. _linters:
 
 Linters
-=======
+======
 
 This project uses several linters to make coding style consistent.
 All configuration is stored inside ``setup.cfg``.

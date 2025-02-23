@@ -42,7 +42,7 @@ REGISTRY=ghcr.io
 NEXT_DOCKER_IMAGE=${REPO}:${NEXT_TAG}
 NEXT_DOCKER_IMAGE_SLIM=${REPO}:${NEXT_TAG}-slim
 runserver:
-	${RUN_CMD} app runserver
+	${RUN_CMD} app runserver 8093
 
 migrate:
 	${RUN_CMD} app migrate

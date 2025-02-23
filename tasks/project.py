@@ -110,7 +110,7 @@ def release(
             .stdout.strip()
             .split("\n")
         )
-        c.run(f"bump2version --new-version {new_version} patch")
+        c.run(f"bump2version --allow-dirty --new-version {new_version} patch")
 
         # only prepend new tag -- this way it is possible to edit it.
         # cl = c.run(f"git-cliff --bump {'--prepend CHANGELOG.md' if dry else '-o'}", hide=True).stdout.strip().split("\n")
