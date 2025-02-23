@@ -126,13 +126,13 @@ uv sync --upgrade-package hut-services-private --extra private
 ## Docker Production Build
 
 ```bash
-infisical export --env dev --path /keys/wodore-backend >> .env
+# infisical export --env dev --path /keys/wodore-backend >> .env
 # this env variables are needed:
 # READ_GITHUB_USER
 # READ_GITHUB_TOKEN # with read access
-inv docker.build --distro alpine|ubuntu
-inv docker.slim --distro alpine|ubuntu # create a slim version
-inv docker.run --distro alpine|ubuntu [--slim]
+(.venv) inv docker.build --distro alpine|ubuntu
+(.venv) inv docker.slim --distro alpine|ubuntu # create a slim version
+(.venv) inv docker.run --distro alpine|ubuntu [--slim]
 ```
 
 
