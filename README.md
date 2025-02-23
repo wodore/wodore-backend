@@ -1,6 +1,6 @@
 <h3 align="center"><b>Wodore Backend</b></h3>
 <p align="center">
-  <a href="https://wodore.com"><img src="https://avatars.githubusercontent.com/u/12153020?s=200&v=4" alt="Wodore Backend" width="80" /></a>
+  <a href="https://wodore.com"><img src="https://avatars.githubusercontent.com/u/12153020?s=200&v=4" alt="Wodore Backend" width="60" /></a>
 </p>
 <p align="center">
     <em>Wodore.com backend implementation</em>
@@ -10,7 +10,7 @@
     | <b><a href="https://github.com/wodore/wodore-backend/pkgs/container/wodore-backend">Docker Images</a></b>
 </p>
 
---
+----
 
 ## First time setup
 ```bash
