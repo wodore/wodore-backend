@@ -3,30 +3,49 @@
   <a href="https://wodore.com"><img src="https://avatars.githubusercontent.com/u/12153020?s=200&v=4" alt="Wodore Backend" width="60" /></a>
 </p>
 <p align="center">
-    <em><a href="https://wodore.com">Wodore.com</a> backend implementation</em>
+    <em>Wodore.com backend implementation</em>
 </p>
 <p align="center">
-    <b><a href="https://api.wodore.com/">api.wodore.com</a></b>
-    | <b><a href="https://github.com/wodore/wodore-backend/pkgs/container/wodore-backend">Docker Images</a></b>
+    <b><a href="https://wodore.com">wodore.com</a></b>
+    | <b><a href="https://api.wodore.com/">api.wodore.com</a></b>
+    | <b><a href="https://github.com/wodore/wodore-backend/pkgs/container/wodore-backend">docker images</a></b>
 </p>
 
 ----
 
-## First time setup
+## Development
+
+### Initial setup
+
+This is only needed if the repository is cloned.
+
 ```bash
-cp config/.env.template config/.env
-ln -s config/.env .env
+# install needed python packages
+make init
+source .venv/bin/activate
 ```
 
-## Start Database and Image Service
+### Setup
+
+Activate the virtual environment and install the needed python packages:
+
+```bash
+source .venv/bin/activate
+(.venv) inv install
+(.venv) inv help # see all commands
+```
+
+### Start Database and Image Service
 
 This is needed once after each restart of the computer
 
 ```bash
 docker compose up --build -d
-uv sync
-source .venv/bin/activate
 ```
+
+This starts postgress and imagor which are needed to run the backend locally.
+
+### Secrets
 
 Secrets are managed with [infisical](https://infisical.com/).
 For this the `infisical` cli needs to be [installed](https://infisical.com/docs/cli/overview#installation).
@@ -42,12 +61,15 @@ infisical init
 echo 'alias app="infisical run --env=dev --path /backend --silent --log-level warn -- app "' >> .venv/bin/activate
 # or export .env file into config folder (this needs to be done everytime a secret changes).
 infisical export --env dev --path /backend >> config/.env
+ln -s config/.env .env
 ```
 
-Get image sizes:
+Alternatively you can update the `.env` file manually:
 
 ```bash
-docker images | grep wodore-backend
+cp config/.env.template config/.env
+ln -s config/.env .env
+# edit .env
 ```
 
 ## Start Application
@@ -56,6 +78,25 @@ docker images | grep wodore-backend
 (.venv) app runserver
 ```
 
+## Load Data
+
+Copy hut information from sources, this saves huts information from
+different sources (e.g. refuges.info, wikidata, open stree map) into the
+local database
+```bash
+# add huts from all sources
+(.venv) app hut_sources --add --orgs all
+# add huts from refuges
+(.venv) app hut_sources --add --orgs refuges
+```
+Add huts from the previously added sources.
+If a hut has multiple sources ther are combined as good as possible.
+
+```bash
+(.venv) app huts --add-all
+```
+
+## Helpful Commands
 
 ```bash
 (.venv) app migrate
