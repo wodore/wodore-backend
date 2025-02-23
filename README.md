@@ -1,4 +1,16 @@
-# wodore
+<h3 align="center"><b>Wodore Backend</b></h3>
+<p align="center">
+  <a href="https://wodore.com"><img src="https://avatars.githubusercontent.com/u/12153020?s=200&v=4" alt="Wodore Backend" width="80" /></a>
+</p>
+<p align="center">
+    <em>Wodore.com backend implementation</em>
+</p>
+<p align="center">
+    <b><a href="https://api.wodore.com/">api.wodore.com</a></b>
+    | <b><a href="https://github.com/wodore/wodore-backend/pkgs/container/wodore-backend">Docker Images</a></b>
+</p>
+
+--
 
 ## First time setup
 ```bash
@@ -91,34 +103,10 @@ infisical export --env dev --path /backend >> config/.env #TODO should be remove
 infisical run --env=dev --path /backend -- docker compose -f docker-compose.yml -f docker/docker-compose.stage.yml build web
 ```
 
-Wodore Backend
-
-This project was generated with [`wemake-django-template`](https://github.com/wemake-services/wemake-django-template). Current template version is: [351114a377e47417817c4c27a1362e708cf7ed59](https://github.com/wemake-services/wemake-django-template/tree/351114a377e47417817c4c27a1362e708cf7ed59). See what is [updated](https://github.com/wemake-services/wemake-django-template/compare/351114a377e47417817c4c27a1362e708cf7ed59...master) since then.
-
-
-[![wemake.services](https://img.shields.io/badge/%20-wemake.services-green.svg?label=%20&logo=data%3Aimage%2Fpng%3Bbase64%2CiVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAABGdBTUEAALGPC%2FxhBQAAAAFzUkdCAK7OHOkAAAAbUExURQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP%2F%2F%2F5TvxDIAAAAIdFJOUwAjRA8xXANAL%2Bv0SAAAADNJREFUGNNjYCAIOJjRBdBFWMkVQeGzcHAwksJnAPPZGOGAASzPzAEHEGVsLExQwE7YswCb7AFZSF3bbAAAAABJRU5ErkJggg%3D%3D)](https://wemake-services.github.io)
-[![wemake-python-styleguide](https://img.shields.io/badge/style-wemake-000000.svg)](https://github.com/wemake-services/wemake-python-styleguide)
-
-
 ## Prerequisites
 
 You will need:
 
-- `python3.10` (see `pyproject.toml` for full version)
+- `python3.12` (see `pyproject.toml` for full version)
 - `postgresql` with version `13`
 - `docker` with [version at least](https://docs.docker.com/compose/compose-file/#compose-and-docker-compatibility-matrix) `18.02`
-
-
-## Development
-
-When developing locally, we use:
-
-- [`editorconfig`](http://editorconfig.org/) plugin (**required**)
-- [`uv`](https://github.com/astral-sh/uv) (**required**)
-- [`pyenv`](https://github.com/pyenv/pyenv)
-- `pycharm 2017+` or `vscode`
-
-
-## Documentation
-
-Full documentation is available here: [`docs/`](docs).
