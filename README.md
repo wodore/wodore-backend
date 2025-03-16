@@ -72,6 +72,7 @@ Or set up manually:
 # Create and edit env files manually
 cp config/.env.template config/.env
 ln -s config/.env .env
+# edit .env
 ```
 
 **TIP:** Add `-i/--infisical` to `inv` commands (e.g., `run`, `docker-compose`) to use infisical directly.
