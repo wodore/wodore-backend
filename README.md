@@ -187,8 +187,8 @@ Build and run Docker images (default is alpine image):
 # Run the container
 (.venv) inv docker.run [--distro alpine|ubuntu] [--slim]
 
-# Publish the container
-(.venv) inv docker.publish [--distro alpine|ubuntu] [--slim]
+# Publish the container (use -v to include version tags as well, otherwise only 'edge' is pushed)
+(.venv) inv docker.publish [--distro alpine|ubuntu] [--slim] [-v/--version-tag]
 ```
 
 **NOTE:** These commands are deprecated:
