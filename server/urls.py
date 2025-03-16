@@ -15,6 +15,7 @@ from django.conf import settings
 from django.contrib import admin
 from django.contrib.admindocs import urls as admindocs_urls
 from django.urls import include, path
+from django.conf.urls.static import static
 from django.views.generic import RedirectView, TemplateView
 
 from .apps.api.api_v1 import api as api_v1
@@ -23,6 +24,7 @@ from .apps.main.views import index
 
 admin.autodiscover()
 
+# Define base URL patterns
 urlpatterns = [
     # Auth
     path("oidc/", include("mozilla_django_oidc.urls")),
@@ -73,8 +75,8 @@ if settings.DEBUG:  # pragma: no cover
             path("__debug__/", include(debug_toolbar.urls)),
             *urlpatterns,
             # Serving media files in development only:
-            # *static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT),
-            # *staticfiles_urlpatterns(),
+            *static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT),
+            *static(settings.STATIC_URL, document_root=settings.STATIC_ROOT),
         ]
     except ModuleNotFoundError:
         pass

@@ -41,6 +41,7 @@ UNFOLD = {
     # },
     "STYLES": [
         lambda request: static("/css/styles.css"),
+        lambda request: static("/css/dj_map.css"),
     ],
     # "SCRIPTS": [
     #    lambda request: static("js/script.js"),

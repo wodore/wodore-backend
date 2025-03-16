@@ -374,7 +374,7 @@ class Image(TimeStampedModel):
 
         # tags
         tags_set = []
-        for tag in set((tags or []) + (photo_schema.tags or [])):
+        for tag in set((tags or []) + (list(photo_schema.tags or []) or [])):
             tag_obj, created = ImageTag.objects.get_or_create(
                 slug=tag, defaults={"name_en": tag}
             )
