@@ -184,9 +184,9 @@ class Hut(TimeStampedModel):
     open_monthly = models.JSONField(
         default=_monthly_open_default_value,
         verbose_name=_("Hut Open"),
-        help_text=_(
-            'Possible values: "yes", "yesish", "maybe", "no", "noish" or "unknown". "url" is a link to information when it is open or closed.'
-        ),
+        # help_text=_(
+        #    'Possible values: "yes", "yesish", "maybe", "no", "noish" or "unknown". "url" is a link to information when it is open or closed.'
+        # ),
     )
 
     hut_type_open = models.ForeignKey(

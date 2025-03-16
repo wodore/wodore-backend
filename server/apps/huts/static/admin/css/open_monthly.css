@@ -1,0 +1,148 @@
+.open-monthly-widget {
+  margin-bottom: 10px;
+  overflow: hidden;
+  max-width: 720px;
+  min-width: 300px;
+  width: 100%;
+  margin-top: 10px;
+  padding-top: 8px;
+}
+
+.open-monthly-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+
+.open-monthly-table th,
+.open-monthly-table td {
+  padding: 0.5rem;
+  text-align: center;
+  /*border-bottom: 1px solid rgb(var(--color-base-300));*/
+  width: 1fr;
+  transition: background-color 0.2s ease;
+}
+
+.open-monthly-table th {
+  /*background-color: rgb(var(--color-base-500) / 0.1);*/
+  color: rgb(var(--color-primary-100));
+  font-weight: 500;
+  text-align: center;
+}
+
+.open-monthly-table th:first-child,
+.open-monthly-table td:first-child {
+  text-align: left;
+  font-weight: 700;
+}
+
+.open-monthly-table tbody tr {
+  transition: background-color 0.3s ease;
+}
+
+.open-monthly-table tbody tr:nth-child(odd) {
+  background-color: rgb(var(--color-base-500) / 0.1);
+}
+
+.open-monthly-table tbody tr:hover {
+  background-color: rgb(var(--color-base-400) / 0.3);
+}
+.open-monthly-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/*.open-monthly-table tbody tr:nth-child(even) {
+    background-color: rgb(var(--color-base-500) / 0.1);
+}*/
+
+/* Radio button container */
+.radio-container {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+/* Radio button styles */
+.unfold-radio {
+  --radio-size: 1.25rem;
+  width: var(--radio-size);
+  height: var(--radio-size);
+  border-width: 2px;
+  transition: all 0.2s ease;
+}
+
+.unfold-radio:checked {
+  border-color: rgb(var(--color-primary-300));
+  background-color: rgb(var(--color-primary-500) / var(--tw-bg-opacity, 1));
+}
+
+.unfold-radio:checked::after {
+  background-color: rgb(var(--color-primary-700));
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 50%;
+}
+
+.unfold-radio:hover {
+  border-color: rgb(var(--color-primary-400));
+}
+
+.unfold-radio:checked:hover {
+  border-color: rgb(var(--color-primary-600));
+}
+
+/* URL input styles */
+.unfold-input {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid rgb(var(--color-base-300));
+  border-radius: 0.5rem;
+  background-color: rgb(var(--color-base-900));
+  color: rgb(var(--color-base-100));
+  transition: all 0.2s ease;
+  font-size: 0.875rem;
+  line-height: 1.25;
+  font-weight: 500;
+  margin-bottom: 1rem;
+}
+
+.unfold-input:focus {
+  border-color: rgb(var(--color-primary-500));
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(var(--color-primary-100));
+}
+
+.unfold-input::placeholder {
+  color: rgb(var(--color-base-400));
+}
+
+/* Dark mode support */
+/*@media (prefers-color-scheme: dark) {
+    .open-monthly-widget {
+        border-color: rgb(var(--color-base-500));
+    }
+
+    .open-monthly-table th {
+        background-color: rgb(var(--color-base-700));
+        border-color: rgb(var(--color-base-500));
+    }
+
+    .open-monthly-table th,
+    .open-monthly-table td {
+        border-bottom-color: rgb(var(--color-base-500));
+    }
+
+    .unfold-input {
+        background-color: rgb(var(--color-base-700));
+        border-color: rgb(var(--color-base-500));
+    }
+
+    .unfold-input:focus {
+        border-color: rgb(var(--color-primary-500));
+        box-shadow: 0 0 0 2px rgb(var(--color-primary-900));
+    }
+}
+*/

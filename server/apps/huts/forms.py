@@ -1,5 +1,8 @@
+from django import forms
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
+
+from .models import Hut
 
 HutAdminFieldsets = [
     (
@@ -166,3 +169,81 @@ HutAdminFieldsets = [
 #        self.instance.customer_full_name = self.cleaned_data["first_name"] + " " \
 #                                            + self.cleaned_data["last_name"]
 #        return super().save(commit)
+
+
+CHOICES = [
+    ("yes", "Yes"),
+    ("yesish", "Yesish"),
+    ("maybe", "Maybe"),
+    ("no", "No"),
+    ("noish", "Noish"),
+    ("unknown", "Unknown"),
+]
+
+
+class MonthlyOpenAdminForm(forms.ModelForm):
+    url = forms.CharField(required=False, label="URL")
+
+    # Radio fields for each month
+    month_01 = forms.ChoiceField(
+        choices=CHOICES, widget=forms.RadioSelect, label="January"
+    )
+    month_02 = forms.ChoiceField(
+        choices=CHOICES, widget=forms.RadioSelect, label="February"
+    )
+    month_03 = forms.ChoiceField(
+        choices=CHOICES, widget=forms.RadioSelect, label="March"
+    )
+    month_04 = forms.ChoiceField(
+        choices=CHOICES, widget=forms.RadioSelect, label="April"
+    )
+    month_05 = forms.ChoiceField(choices=CHOICES, widget=forms.RadioSelect, label="May")
+    month_06 = forms.ChoiceField(
+        choices=CHOICES, widget=forms.RadioSelect, label="June"
+    )
+    month_07 = forms.ChoiceField(
+        choices=CHOICES, widget=forms.RadioSelect, label="July"
+    )
+    month_08 = forms.ChoiceField(
+        choices=CHOICES, widget=forms.RadioSelect, label="August"
+    )
+    month_09 = forms.ChoiceField(
+        choices=CHOICES, widget=forms.RadioSelect, label="September"
+    )
+    month_10 = forms.ChoiceField(
+        choices=CHOICES, widget=forms.RadioSelect, label="October"
+    )
+    month_11 = forms.ChoiceField(
+        choices=CHOICES, widget=forms.RadioSelect, label="November"
+    )
+    month_12 = forms.ChoiceField(
+        choices=CHOICES, widget=forms.RadioSelect, label="December"
+    )
+
+    class Meta:
+        model = Hut
+        fields = []  # Exclude 'open_monthly' from default form fields
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        instance = kwargs.get("instance")
+        if instance and instance.open_monthly:
+            self.fields["url"].initial = instance.open_monthly.get("url", "")
+            for i in range(1, 13):
+                month_key = f"month_{i:02d}"
+                self.fields[month_key].initial = instance.open_monthly.get(
+                    month_key, "unknown"
+                )
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.open_monthly = {
+            "url": self.cleaned_data["url"],
+        }
+        for i in range(1, 13):
+            month_key = f"month_{i:02d}"
+            instance.open_monthly[month_key] = self.cleaned_data[month_key]
+
+        if commit:
+            instance.save()
+        return instance
