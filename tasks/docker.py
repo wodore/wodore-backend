@@ -461,13 +461,16 @@ def run(
     help={
         "distro": "Distro name: alpine, ubuntu or all (default: ubuntu)",
         "version_tag": "Include tags with version",
+        "slim": "Include slim version as well",
     }
 )
 def publish(
     c: Ctx,
     version_tag: bool = False,
     distro: Literal["alpine", "ubuntu"] = DEFAULT_DISTRO,
+    slim: bool = False,
 ):
     """Publish to docker registry"""
-    buildx(c, distro=distro, version_tag=version_tag)
-    slim(c, push=True, version_tag=version_tag, distro=distro)
+    buildx(c, distro=distro, version_tag=version_tag, push=True)
+    if slim:
+        slim(c, push=True, version_tag=version_tag, distro=distro)
