@@ -75,6 +75,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "computedfields",  # https://github.com/netzkolchose/django-computedfields
     "django_extensions",  # https://django-extensions.readthedocs.io/
     "corsheaders",  # https://github.com/adamchainz/django-cors-headers
+    "leaflet",  # https://django-leaflet.readthedocs.io/en/latest/index.html
     # Default django apps:
     "django.contrib.auth",
     "django.contrib.contenttypes",

@@ -1,5 +1,4 @@
 volumes:
-  pgdata:
   django-static:
 
 services:
@@ -9,16 +8,18 @@ services:
     container_name: django-local-postgis
     restart: unless-stopped
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - ./.volumes/pgdata:/var/lib/postgresql/data
     networks:
       - postgresnet
-    #env_file: ./config/.env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-wodore}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wodore}
+      POSTGRES_DB: ${POSTGRES_DB:-wodore}
     ports:
       - "5432:5432"
   imagor:
     image: shumc/imagor:latest
     container_name: django-local-imagor
-    #env_file: ./config/.env
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
@@ -32,7 +33,7 @@ services:
       PORT: 8079
       DEBUG: 1
       IMAGOR_UNSAFE: 1 # unsafe URL for testing
-      IMAGOR_SECRET: ${IMAGOR_KEY}
+      IMAGOR_SECRET: ${IMAGOR_KEY:-my_key}
       IMAGOR_AUTO_WEBP: 1
       IMAGOR_AUTO_ACIF: 1
       IMAGOR_SIGNER_TYPE:

@@ -6,8 +6,8 @@ SECURITY WARNING: don't run with debug turned on in production!
 
 import logging
 import socket
-from typing import Tuple
 from importlib.util import find_spec
+from typing import Tuple
 
 from server.settings.components.common import (
     DATABASES,

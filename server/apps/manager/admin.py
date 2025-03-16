@@ -19,7 +19,7 @@ class ModelAdmin(GISModelAdmin, UnfoldModelAdmin):
     # Display submit button in filters
     list_filter_submit = False
     formfield_overrides = {models.JSONField: {"widget": UnfoldJSONSuit}}
-    # gis_widget_kwargs = {"default_zoom": 7}
+    # gis_widget_kwargs = {"width": 600, "height": 400}
 
     def get_form(self, request, obj=None, change=False, **kwargs):
         form = super().get_form(request, obj, change, **kwargs)

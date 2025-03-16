@@ -4,6 +4,7 @@ from typing import ClassVar
 with contextlib.suppress(ModuleNotFoundError):
     from django_stubs_ext import QuerySetAny
 
+
 from django.conf import settings
 from django.contrib import admin
 from django.contrib.postgres.aggregates import JSONBAgg
