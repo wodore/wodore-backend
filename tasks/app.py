@@ -24,7 +24,7 @@ def app(c: Ctx, infisical: bool = False, cmd: str = ""):
         cmd_ += "infisical run --env=dev --path /backend --silent --log-level warn -- "
     cmd_ += f"app {cmd}"
     info(f"Run '{cmd_}'")
-    c.run(cmd_)
+    c.run(cmd_, pty=True)
 
 
 @task(
@@ -40,4 +40,4 @@ def run(c: Ctx, port: str = "8093", infisical: bool = False):
         cmd += "infisical run --env=dev --path /backend --silent --log-level warn -- "
     cmd += f"app runserver {port}"
     info(f"Run '{cmd}'")
-    c.run(cmd)
+    c.run(cmd, pty=True)

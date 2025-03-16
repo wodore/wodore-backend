@@ -4,13 +4,13 @@ from invoke.collection import Collection
 from invoke.context import Context as Ctx
 from invoke.tasks import task
 
+import tasks.app as app
 import tasks.changelog as changelog
 import tasks.check as check
 import tasks.docker as docker
 import tasks.docs as docs
 import tasks.project as project
 import tasks.tests as tests
-import tasks.app as app
 
 
 @task
@@ -27,6 +27,7 @@ ns = Collection(
     project.release,
     project.version,
     project.update_venv,
+    project.docker_compose,
     docs,
     tests,
     check,

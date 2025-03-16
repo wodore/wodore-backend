@@ -16,14 +16,42 @@ from tasks import (  # noqa: F401
 )
 
 
-@task
-def update_venv(c: Ctx, dry: bool = False):
+@task(
+    help={
+        "infisical": "Use infisical to run it (secret manager)",
+        "cmd": "Docker compose command (default: up)",
+    },
+)
+def docker_compose(c: Ctx, infisical: bool = False, cmd: str = "up"):
+    """Run any app command with --cmd. E.g. 'inv app.app -i --cmd migrate'"""
+    cmd_ = ""
+    if infisical:
+        cmd_ += "infisical run --env=dev --path /backend --silent --log-level warn -- "
+    cmd_ += f"docker compose {cmd}"
+    info(f"Run '{cmd_}'")
+    c.run(cmd_)
+
+
+@task(
+    help={
+        "dry": "Only show what would be done",
+        "infisical": "Use infisical to run it (secret manager)",
+    }
+)
+def update_venv(c: Ctx, dry: bool = False, infisical: bool = False):
     """Updated venv activate script with custom commands"""
     commands = [
         "# CUSTOM COMMAND",
         "source <(inv --print-completion-script bash)",
         "complete -F _complete_invoke -o default invoke inv t",
     ]
+    if infisical:
+        commands.extend(
+            ["# App function with infisical", 'app() { inv app.app -i --cmd "$*"; }']
+        )
+    commands.append("# Required for bash to work properly")
+    commands.append("hash -r 2>/dev/null")
+
     activate_script = ".venv/bin/activate"
     c.run(f"sed -i '/# CUSTOM COMMAND/,$d' {activate_script}") if not dry else None
     for cmd in commands:
@@ -39,16 +67,25 @@ def update_venv(c: Ctx, dry: bool = False):
     help={
         "venv_update": "Updates venv activate script (runs per default)",
         "no_private": "Install no private packages (e.g. hut-service-private)",
+        "infisical": "Use infisical to run it (secret manager)",
     }
 )
-def install(c: Ctx, venv_update: bool = True, no_private: bool = False):
-    """Install the virtual environment and install the pre-commit hooks"""
+def install(
+    c: Ctx, venv_update: bool = True, no_private: bool = False, infisical: bool = False
+):
+    """Install the virtual environment, pre-commit hooks, and create necessary directories (.volumes/pgdata, media/imagor_data)"""
     echo("🚀 Creating virtual environment using uv")
     args = "--extra private" if not no_private else ""
     c.run(f"uv sync {args}")
     c.run("uv run pre-commit install")
+
+    # Create necessary directories
+    echo("📁 Creating necessary directories")
+    c.run("mkdir -p .volumes/pgdata")
+    c.run("mkdir -p media/imagor_data/{storage,result}")
+
     if venv_update:
-        update_venv(c)
+        update_venv(c, infisical=infisical)
     success("Installation done, your are ready to go ...")
 
 
