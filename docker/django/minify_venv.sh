@@ -33,13 +33,13 @@ done
 echo "Locale cleanup complete."
 
 echo "Remove pip"
-find .venv -type d -name "pip" -print0 | xargs rm -r
-find .venv -type d -name "pip*" -print0 | xargs rm -r
+find .venv -type d -name "pip" -print0 | xargs rm -fr
+find .venv -type d -name "pip*" -print0 | xargs rm -fr
 
 echo "Remove Brotli"
-find .venv -type d -name "Brotli*" -print0 | xargs rm -r
-find .venv -name "brotli*" -print0 | xargs rm -r
-find .venv -name "_brotli*" -print0 | xargs rm -r
+find .venv -type d -name "Brotli*" -print0 | xargs rm -fr
+find .venv -name "brotli*" -print0 | xargs rm -fr
+find .venv -name "_brotli*" -print0 | xargs rm -fr
 
 #echo "Remove Py"
 #find .venv/lib -type f -name "*.py" -exec rm -f {} +
