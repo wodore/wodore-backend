@@ -5,11 +5,11 @@ from django.utils.translation import gettext_lazy as _
 
 CHOICES = [
     ("yes", _("Yes")),
-    ("yesish", _("Yesish")),
+    ("yesish", f"({_('Yes')})"),
     ("maybe", _("Maybe")),
+    ("noish", f"({_('No')})"),
     ("no", _("No")),
-    ("noish", _("Noish")),
-    ("unknown", _("?")),
+    ("unknown", "?"),
 ]
 
 MONTHS = [
