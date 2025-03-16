@@ -1,8 +1,9 @@
 import os
-from pathlib import Path
 import tempfile
 import time
+from pathlib import Path
 from typing import Literal
+
 import humanize
 from python_on_whales import DockerClient
 
@@ -22,6 +23,7 @@ from tasks import (
 dc = DockerClient(debug=True)
 
 DJANGO_DATABASE_HOST = "django-local-postgis"
+DEFAULT_DISTRO = "alpine"
 
 RUN_WEBSERVER_PROD = (
     "gunicorn -b 0.0.0.0:{port} -w {workers} --preload server.wsgi:application"
@@ -128,7 +130,7 @@ class DotEnv(object):
 
 
 def get_distros(
-    distro: Literal["alpine", "ubuntu", "all"] = "alpine",
+    distro: Literal["alpine", "ubuntu", "all"] = DEFAULT_DISTRO,
 ) -> list[Literal["alpine", "ubuntu"]]:
     if distro not in ["alpine", "ubuntu", "all"]:
         error("Supported distros: 'alpine', 'ubuntu', or 'all'")
@@ -190,7 +192,7 @@ def show(
 )
 def buildx(
     c: Ctx,
-    distro: Literal["alpine", "ubuntu", "all"] = "alpine",
+    distro: Literal["alpine", "ubuntu", "all"] = DEFAULT_DISTRO,
     extra_tags: str | None = None,
     version_tag: bool = False,
     force: bool = False,
@@ -300,7 +302,7 @@ def buildx(
 )
 def slim(
     c: Ctx,
-    distro: Literal["alpine", "ubuntu"] = "alpine",
+    distro: Literal["alpine", "ubuntu"] = DEFAULT_DISTRO,
     extra_tags: str | None = None,
     version_tag: bool = False,
     no_edge_tag: bool = False,
@@ -394,7 +396,7 @@ def slim(
 )
 def run(
     c: Ctx,
-    distro: Literal["alpine", "ubuntu"] = "alpine",
+    distro: Literal["alpine", "ubuntu"] = DEFAULT_DISTRO,
     tag: str = "edge",
     slim: bool = False,
     gunicorn: bool = False,
@@ -462,7 +464,9 @@ def run(
     }
 )
 def publish(
-    c: Ctx, version_tag: bool = False, distro: Literal["alpine", "ubuntu"] = "ubuntu"
+    c: Ctx,
+    version_tag: bool = False,
+    distro: Literal["alpine", "ubuntu"] = DEFAULT_DISTRO,
 ):
     """Publish to docker registry"""
     buildx(c, distro=distro, version_tag=version_tag)

@@ -170,22 +170,25 @@ uv sync --upgrade-package hut-services-private --extra private
 
 ## Docker Production Build
 
-Set required environment variables:
+Set required environment variables (or add it to the `.env` file):
 ```bash
 READ_GITHUB_USER=<username>
 READ_GITHUB_TOKEN=<token>  # Must have read access
 ```
 
-Build and run Docker images:
+Build and run Docker images (default is alpine image):
 ```bash
 # Build main image
-(.venv) inv docker.build --distro alpine|ubuntu
+(.venv) inv docker.build [--distro alpine|ubuntu]
 
 # Create slim version (optional)
-(.venv) inv docker.slim --distro alpine|ubuntu
+(.venv) inv docker.slim [--distro alpine|ubuntu]
 
 # Run the container
-(.venv) inv docker.run --distro alpine|ubuntu [--slim]
+(.venv) inv docker.run [--distro alpine|ubuntu] [--slim]
+
+# Publish the container
+(.venv) inv docker.publish [--distro alpine|ubuntu] [--slim]
 ```
 
 **NOTE:** These commands are deprecated:
