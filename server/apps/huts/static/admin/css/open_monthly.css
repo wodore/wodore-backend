@@ -26,7 +26,7 @@
 
 .open-monthly-table th {
   /*background-color: rgb(var(--color-base-500) / 0.1);*/
-  color: rgb(var(--color-primary-100));
+  /*color: rgb(var(--color-base-900));*/
   font-weight: 500;
   text-align: center;
 }

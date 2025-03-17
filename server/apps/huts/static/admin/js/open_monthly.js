@@ -47,3 +47,25 @@ function uncheckSelectAll(widgetName) {
     selectAllRadio.dataset.previousValue = undefined;
   }
 }
+
+function resetMonthlyWidget(widgetName) {
+  const radios = document.querySelectorAll(`input[name^="${widgetName}_"]`);
+  const selectAllRadio = document.querySelector(
+    `input[name="${widgetName}_select_all"]`,
+  );
+
+  // Reset all month radio buttons to their initial values
+  radios.forEach((radio) => {
+    if (radio.name !== `${widgetName}_select_all`) {
+      const initialValue = radio.dataset.initialValue;
+      radio.checked = radio.value === initialValue;
+      radio.dataset.previousValue = undefined;
+    }
+  });
+
+  // Uncheck select all radio
+  if (selectAllRadio) {
+    selectAllRadio.checked = false;
+    selectAllRadio.dataset.previousValue = undefined;
+  }
+}
