@@ -22,6 +22,7 @@ from server.apps.translations.forms import required_i18n_fields_form_factory
 
 from ..forms import HutAdminFieldsets
 from ..models import Hut
+from ..widgets import OpenMonthlyWidget
 from ._associations import (
     HutContactAssociationEditInline,
     HutImageAssociationEditInline,
@@ -84,6 +85,12 @@ class HutsAdmin(ModelAdmin):
         HutOrganizationAssociationEditInline,
         HutSourceViewInline,
     )
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        """Only apply the custom widget to the `open_monthly` field, not all JSONFields."""
+        if db_field.name == "open_monthly":
+            kwargs["widget"] = OpenMonthlyWidget()
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
 
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request).prefetch_related("image_set")

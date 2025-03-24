@@ -7,8 +7,8 @@
    viewBox="0 0 48 48"
    version="1.1"
    id="svg55"
-   inkscape:version="1.1.2 (0a00cf5339, 2022-02-04)"
-   sodipodi:docname="-1.svg"
+   inkscape:version="1.4 (e7c3feb100, 2024-10-09)"
+   sodipodi:docname="occupation_unknown.svg"
    shape-rendering="crispEdges"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -29,13 +29,13 @@
      inkscape:guide-bbox="true"
      inkscape:zoom="11.313709"
      inkscape:cx="41.10058"
-     inkscape:cy="21.699338"
-     inkscape:window-width="1874"
-     inkscape:window-height="1016"
+     inkscape:cy="21.655144"
+     inkscape:window-width="2240"
+     inkscape:window-height="1363"
      inkscape:window-x="0"
      inkscape:window-y="0"
      inkscape:window-maximized="1"
-     inkscape:current-layer="layer1"
+     inkscape:current-layer="g4250"
      guidecolor="#a375ff"
      guideopacity="0.49803922"
      inkscape:lockguides="true"
@@ -45,7 +45,9 @@
      inkscape:bbox-nodes="true"
      inkscape:snap-bbox-edge-midpoints="true"
      inkscape:snap-bbox-midpoints="true"
-     guidetolerance="10000">
+     guidetolerance="10000"
+     inkscape:showpageshadow="2"
+     inkscape:deskcolor="#d1d1d1">
     <sodipodi:guide
        position="44,24"
        orientation="1,0"
@@ -101,7 +103,12 @@
        id="grid929"
        empspacing="4"
        empcolor="#0000e8"
-       empopacity="0.23921569" />
+       empopacity="0.23921569"
+       originx="0"
+       originy="0"
+       spacingy="1"
+       spacingx="1"
+       units="px" />
   </sodipodi:namedview>
   <defs
      id="defs52" />
@@ -143,7 +150,7 @@
          cy="94.471924"
          cx="1018.2518"
          id="day3-back"
-         style="color:#000000;clip-rule:nonzero;display:inline;overflow:visible;visibility:visible;opacity:1;isolation:auto;mix-blend-mode:normal;color-interpolation:sRGB;color-interpolation-filters:linearRGB;solid-color:#000000;solid-opacity:1;fill:#cccccc;fill-opacity:1;fill-rule:nonzero;stroke:#b3b3b3;stroke-width:1.29737;stroke-linecap:round;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;color-rendering:auto;image-rendering:auto;shape-rendering:auto;text-rendering:auto;enable-background:accumulate" />
+         style="color:#000000;clip-rule:nonzero;display:inline;overflow:visible;visibility:visible;opacity:1;isolation:auto;mix-blend-mode:normal;color-interpolation:sRGB;color-interpolation-filters:linearRGB;solid-color:#000000;solid-opacity:1;fill:#d4d4d4;fill-opacity:1;fill-rule:nonzero;stroke:#b3b3b3;stroke-width:1.29737;stroke-linecap:round;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;color-rendering:auto;image-rendering:auto;shape-rendering:auto;text-rendering:auto;enable-background:accumulate" />
       <path
          inkscape:connector-curvature="0"
          id="path4219"
