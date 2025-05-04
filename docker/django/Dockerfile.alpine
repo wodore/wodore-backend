@@ -161,6 +161,9 @@ COPY --chown=web:web ${CONFIG_DIR} /code/config
 #  chmod +x '/docker-entrypoint.sh' \
 #  && python manage.py collectstatic --noinput
 RUN <<EOF
+mkdir -p /tmp/py_file_cache
+touch /tmp/py_file_cache/.gitignore
+chown -R web:web /tmp/py_file_cache
 chmod +x '/docker-entrypoint.sh'
 python manage.py collectstatic --noinput
 EOF
