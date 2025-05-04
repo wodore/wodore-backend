@@ -163,10 +163,13 @@ npx tailwindcss -o server/apps/admin/static/css/styles.css --minify --watch
 
 Update all packages:
 ```bash
-uv sync --extra private -U
+inv update # OR
+inv update --no-private # do not update private packages
 
 # Update hut-service (private package only)
 uv sync --upgrade-package hut-services-private --extra private
+
+# uv lock
 ```
 
 ## Docker Production Build

@@ -95,6 +95,7 @@ def update(c: Ctx, no_private: bool = False):
     echo("🚀 Update python packages using uv")
     args = "--extra private" if not no_private else ""
     c.run(f"uv sync -U {args}", echo=True)
+    c.run("uv lock", echo=True)
 
 
 @task(
