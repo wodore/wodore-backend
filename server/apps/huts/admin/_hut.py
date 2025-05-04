@@ -160,7 +160,7 @@ class HutsAdmin(ModelAdmin):
 
     @display(description="")
     def view_link(self, obj: Hut) -> str:
-        url = f"{settings.FRONTEND_DOMAIN}/hut/{obj.slug}#12/{obj.location.y}/{obj.location.x}"
+        url = f"{settings.FRONTEND_DOMAIN}/hut/{obj.slug}#p=13/{obj.location.y}/{obj.location.x}"
         view = f'<span><a class="text-sm" href="{url}" target="_blank"> <span class="material-symbols-outlined"> visibility </span> </a>'
         if obj.is_public and obj.is_active:
             return mark_safe(view)
