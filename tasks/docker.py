@@ -143,14 +143,14 @@ def get_distros(
 
 @task(
     help={
-        "distro": "Distro name: alpine, ubuntu or all",
-        "tag": "tag used (without repo and distor, e.g. edge or 0.2.3)",
+        "distro": f"Distro name: alpine, ubuntu or all (default: {DEFAULT_DISTRO})",
+        "tag": "tag used (without repo and distro, e.g. edge or 0.2.3)",
         "slim": "include slim builds",
     }
 )
 def show(
     c: Ctx,
-    distro: Literal["alpine", "ubuntu", "all"] = "alpine",
+    distro: Literal["alpine", "ubuntu", "all"] = DEFAULT_DISTRO,
     tag: str = "edge",
     slim: bool = False,
 ):
@@ -175,7 +175,7 @@ def show(
     default=True,
     name="build",
     help={
-        "distro": "Distro name: alpine*, ubuntu or all",
+        "distro": f"Distro name: alpine, ubuntu or all (default: {DEFAULT_DISTRO})",
         "extra_tags": "Comma separted list of additional tags",
         "version_tag": "Include tags with version",
         "force": "Force build even with dirty git",
@@ -287,7 +287,7 @@ def buildx(
 @task(
     help={
         "build": "Build container first (run 'docker.build')",
-        "distro": "Distro name: alpine, ubuntu or all",
+        "distro": f"Distro name: alpine, ubuntu or all (default: {DEFAULT_DISTRO})",
         "extra_tags": "Comma separted list of additional tags",
         "version_tag": "Include tags with version",
         "no_edge_tag": "Do not include 'edge' tag",
@@ -385,7 +385,7 @@ def slim(
 
 @task(
     help={
-        "distro": "Distro name: alpine, ubuntu or all",
+        "distro": f"Distro name: alpine, ubuntu or all (default: {DEFAULT_DISTRO})",
         "tag": "Tag which should be run (default: edge) (without '-slim', use --slim option)",
         "slim": "Use slim version",
         "gunicorn": "Run gunicorn instead of development server",
@@ -459,7 +459,7 @@ def run(
 @task(
     # aliases = ["pub"],
     help={
-        "distro": "Distro name: alpine, ubuntu or all (default: ubuntu)",
+        "distro": f"Distro name: alpine, ubuntu or all (default: {DEFAULT_DISTRO})",
         "version_tag": "Include tags with version",
         "slim": "Include slim version as well",
     }
