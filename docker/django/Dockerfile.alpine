@@ -58,8 +58,6 @@ EOF
 ## BUILDER
 FROM python-base AS builder
 
-#build-essential \
-
 # System deps (we don't use exact versions because it is hard to update them,
 # pin when needed):
 # hadolint ignore=DL3008
@@ -78,14 +76,9 @@ apk add --no-cache \
   cargo \
   cargo-auditable \
 	libgit2-dev
-  #poetry=~${POETRY_VERSION} \
-# Installing `poetry` package manager:
-# https://github.com/python-poetry/poetry
-# && curl -sSL 'https://install.python-poetry.org' | python - \
-#poetry --version
 EOF
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.7.2 /uv /usr/local/bin/uv
 
 # - Silence uv complaining about not being able to use hard links,
 # - tell uv to byte-compile packages for faster application startups,
@@ -115,7 +108,7 @@ if [ "$READ_GITHUB_TOKEN" != "" ]; then
   echo "!! install with PRIVATE packages !!"
 else
   extra_arg=""
-  echo "!! install with PUBLIC packages !!"
+  echo "!! install with PUBLIC packages only !!"
 fi
 # Install deps:
 #poetry run pip install -U pip
