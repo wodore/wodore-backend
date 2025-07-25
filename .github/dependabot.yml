@@ -1,8 +1,26 @@
 version: 2
 updates:
-  - package-ecosystem: "npm"
-    directory: "/"
+  - package-ecosystem: "pip"
+    directory: "/" # Adjust if your pyproject.toml is in a subfolder
     schedule:
       interval: "weekly"
+    allow:
+      - dependency-type: "all"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+
+  # Ignore all JavaScript package updates
+  - package-ecosystem: "npm"
+    directory: "/" # Adjust if you have a frontend subfolder
+    schedule:
+      interval: "monthly"
+    ignore:
+      - dependency-name: "*"
+
+  - package-ecosystem: "yarn"
+    directory: "/" # Adjust if needed
+    schedule:
+      interval: "monthly"
     ignore:
       - dependency-name: "*"
