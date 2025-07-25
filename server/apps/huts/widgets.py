@@ -44,7 +44,6 @@ class OpenMonthlyWidget(forms.Widget):
             except json.JSONDecodeError:
                 value = {}
         data = value or {}
-        print("DATA context:", json.dumps(data, indent=2))
 
         context["widget"] = {
             "name": name,
