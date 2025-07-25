@@ -156,7 +156,7 @@ Common database commands:
 
 Watch and compile Tailwind CSS:
 ```bash
-npx tailwindcss -o server/apps/admin/static/css/styles.css --minify --watch
+npx tailwindcss -i styles.css -o server/apps/admin/static/css/styles.css --minify --watch
 ```
 
 ### Package Updates
