@@ -24,12 +24,14 @@ def discover_oidc(discovery_url: str) -> dict | None:
         response = requests.get(discovery_url)
     except requests.exceptions.ConnectionError:
         logging.warning(
-            "Failed to retrieve provider configuration for '%s'.", discovery_url
+            "Failed to retrieve provider configuration for '%s' (ConnectionError).",
+            discovery_url,
         )
         return None
     if response.status_code != 200:
         logging.warning(
-            "Failed to retrieve provider configuration for '%s'.", discovery_url
+            "Failed to retrieve provider configuration for '%s' (Status code: %s).",
+            discovery_url,
         )
         return None
         # raise ValueError("Failed to retrieve provider configuration.")
