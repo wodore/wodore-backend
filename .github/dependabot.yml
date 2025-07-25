@@ -1,25 +1,25 @@
 version: 2
 updates:
-  - package-ecosystem: "pip"
-    directory: "/" # Adjust if your pyproject.toml is in a subfolder
+  # ✅ Python dependencies managed by uv
+  - package-ecosystem: "uv"
+    directory: "/" # Adjust if pyproject.toml is in a subdir
     schedule:
       interval: "weekly"
-    allow:
-      - dependency-type: "all"
     commit-message:
       prefix: "deps"
       include: "scope"
 
-  # Ignore all JavaScript package updates
+  # 🚫 Ignore all JavaScript dependencies (npm, yarn)
   - package-ecosystem: "npm"
-    directory: "/" # Adjust if you have a frontend subfolder
+    directory: "/" # Adjust if package.json is in a subdir like /frontend
     schedule:
       interval: "monthly"
     ignore:
       - dependency-name: "*"
 
-  - package-ecosystem: "yarn"
-    directory: "/" # Adjust if needed
+  # 🚫 Ignore bun if used
+  - package-ecosystem: "bun"
+    directory: "/"
     schedule:
       interval: "monthly"
     ignore:
