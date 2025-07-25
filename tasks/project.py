@@ -90,11 +90,20 @@ def install(
 
 
 @task(help={"no_private": "Install no private packages (e.g. hut-service-private)"})
-def update(c: Ctx, no_private: bool = False):
+@task(
+    help={
+        "package": "Update only this package (e.g. wodore-backend or hut-services-private)"
+    }
+)
+def update(c: Ctx, no_private: bool = False, package: str = ""):
     """Update python packages."""
     echo("🚀 Update python packages using uv")
     args = "--extra private" if not no_private else ""
-    c.run(f"uv sync -U {args}", echo=True)
+    if package:
+        args += f" --upgrade-package {package}"
+    else:
+        args += " --upgrade"
+    c.run(f"uv sync {args}", echo=True)
     c.run("uv lock", echo=True)
 
 
