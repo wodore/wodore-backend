@@ -1,6 +1,6 @@
 [project]
 name = "wodore-backend"
-version = "0.1.7"
+version = "0.1.8"
 description = "Wodore Backend"
 readme = "README.md"
 authors = [{ email = "tb@wodore.com" }]
