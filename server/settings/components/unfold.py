@@ -30,6 +30,20 @@ UNFOLD = {
     #    "dark": lambda request: static("logo-dark.svg"),  # dark mode
     # },
     "SITE_SYMBOL": "cottage",  # symbol from icon set
+    "SITE_FAVICONS": [
+        {
+            "rel": "icon",
+            "sizes": "16x16",
+            "type": "image/png",
+            "href": lambda request: static("main/images/favicon-16x16.png"),
+        },
+        {
+            "rel": "icon",
+            "sizes": "32x32",
+            "type": "image/png",
+            "href": lambda request: static("main/images/favicon-32x32.png"),
+        },
+    ],
     "SHOW_HISTORY": True,  # show/hide "History" button, default: True
     "SHOW_VIEW_ON_SITE": True,  # show/hide "View on site" button, default: True
     "SHOW_LANGUAGES": True,
