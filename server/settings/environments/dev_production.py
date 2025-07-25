@@ -18,6 +18,7 @@ from server.settings.components.csp import (
     CSP_IMG_SRC,
     CSP_SCRIPT_SRC,
 )
+from server.settings.components.oicd import discovery_info
 
 # Setting the development status:
 
@@ -81,6 +82,9 @@ MIDDLEWARE += (
     # Prints how many queries were executed, useful for the APIs.
     # "querycount.middleware.QueryCountMiddleware",
 )
+
+if discovery_info:  # use only if setup correct
+    MIDDLEWARE += ("mozilla_django_oidc.middleware.SessionRefresh",)
 
 # https://django-debug-toolbar.readthedocs.io/en/stable/installation.html#configure-internal-ips
 try:  # This might fail on some OS

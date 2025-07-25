@@ -19,6 +19,7 @@ from server.settings.components.csp import (
     CSP_CONNECT_SRC,
     CSP_SCRIPT_SRC,
 )
+from server.settings.components.oicd import discovery_info
 
 CSP_IMG_SRC: Tuple[str, ...] = ("'self'", "data:", "https:", "http:")
 
@@ -96,6 +97,9 @@ if WITH_DEV:
         # Prints how many queries were executed, useful for the APIs.
         "querycount.middleware.QueryCountMiddleware",
     )
+
+if discovery_info:  # use only if setup correct
+    MIDDLEWARE += ("mozilla_django_oidc.middleware.SessionRefresh",)
 
 # https://django-debug-toolbar.readthedocs.io/en/stable/installation.html#configure-internal-ips
 try:  # This might fail on some OS

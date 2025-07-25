@@ -100,11 +100,14 @@ rm -rf .volumes/pgdata/*  # Be careful!
 Start the application using the app alias (recommended):
 ```bash
 (.venv) app migrate
-(.venv) app runserver
+(.venv) app run -p 8000 # -i # with infisical
 ```
 
 Or use invoke with infisical:
 ```bash
+(.venv) app migrate -i
+(.venv) app run -p 8000 -i
+(.venv) # or written out
 (.venv) inv app.app -i --cmd "migrate"
 (.venv) inv app.app -i --cmd "runserver"
 ```
@@ -163,13 +166,24 @@ npx tailwindcss -i styles.css -o server/apps/manager/static/css/styles.css --min
 
 Update all packages:
 ```bash
-inv update # OR
-inv update --no-private # do not update private packages
+(.venv) inv update # OR
+(.venv) inv update --no-private # do not update private packages (this removes the private packages)
 
 # Update hut-service (private package only)
-uv sync --upgrade-package hut-services-private --extra private
+(.venv) inv update -p hut-services-private
+(.venv) # uv sync --upgrade-package hut-services-private --extra private
+(.venv) # uv lock
+```
 
-# uv lock
+### Changes
+
+After changes the version in `pyproject.toml` needs to be updated and the `wodore-backend` package updated and the docker image published:
+
+```bash
+(.venv) vim pyproject.toml
+(.venv) inv update -p wodore-backend
+(.venv) # uv sync --upgrade-package wodore-backend --extra private
+(.venv) inv docker.build --push # --version-tag
 ```
 
 ## Docker Production Build
@@ -183,7 +197,7 @@ READ_GITHUB_TOKEN=<token>  # Must have read access
 Build and run Docker images (default is alpine image):
 ```bash
 # Build main image
-(.venv) inv docker.build [--distro alpine|ubuntu]
+(.venv) inv docker.build [--distro alpine|ubuntu] [-p/--push] [-v/--version-tag]
 
 # Create slim version (optional)
 (.venv) inv docker.slim [--distro alpine|ubuntu]

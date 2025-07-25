@@ -134,7 +134,7 @@ MIDDLEWARE: Tuple[str, ...] = (
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     # Login
-    "mozilla_django_oidc.middleware.SessionRefresh",
+    # "mozilla_django_oidc.middleware.SessionRefresh", # added in the environment files
     # Axes:
     "axes.middleware.AxesMiddleware",
     # Django HTTP Referrer Policy:
