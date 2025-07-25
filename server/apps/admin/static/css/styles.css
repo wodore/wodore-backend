@@ -514,7 +514,7 @@
   .flex-none {
     flex: none;
   }
-  .flex-grow {
+  .grow {
     flex-grow: 1;
   }
   .border-separate {
@@ -948,11 +948,11 @@
     .dark\:bg-slate-800 {
       background-color: var(--color-slate-800);
     }
-    .dark\:bg-white\/\[\.02\] {
+    .dark\:bg-white\/2 {
       background-color: #ffffff05;
     }
     @supports (color: color-mix(in lab, red, red)) {
-      .dark\:bg-white\/\[\.02\] {
+      .dark\:bg-white\/2 {
         background-color: color-mix(
           in oklab,
           var(--color-white) 2%,
