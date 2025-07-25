@@ -29,7 +29,7 @@ dependencies = [
   "django-cors-headers==4.*", # https://pypi.org/project/django-cors-headers/
   "django-extensions==3.*", # https://pypi.org/project/django-extensions/
   #"django-unfold==0.43.*",            # https://pypi.org/project/django-unfold/
-  "django-unfold==0.51.*", # https://pypi.org/project/django-unfold/
+  "django-unfold==0.63.*", # https://pypi.org/project/django-unfold/
   "msgspec==0.19.*", # https://pypi.org/project/msgspec/
   "python-benedict==0.34.*", # https://pypi.org/project/python-benedict/
   "asyncify==0.10.*", # https://pypi.org/project/asyncify/
