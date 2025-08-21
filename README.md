@@ -186,6 +186,11 @@ After changes the version in `pyproject.toml` needs to be updated and the `wodor
 (.venv) inv docker.build --push # --version-tag
 ```
 
+### Release
+
+For a release run `inv release`.
+Merge this change into the `main` branch, the github action will create a tag and a release.
+
 ## Docker Production Build
 
 Set required environment variables (or add it to the `.env` file):
