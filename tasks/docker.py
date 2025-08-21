@@ -83,6 +83,7 @@ def get_tags(
     extra_tags: str | None = None,
     package_name: str | None = None,
     registry: str | None = None,
+    no_sha_tag: bool = False,
 ) -> tuple[list[str], list[str]]:
     tag_names = [] if no_edge_tag else ["edge"]
     if version_tag:
@@ -91,6 +92,10 @@ def get_tags(
         tag_names.extend(["latest", f"{major}", f"{major}.{minor}", package_version])
         info(f"Package version: '{package_version}'")
 
+    if not no_sha_tag:
+        git_short_hash = c.run("git rev-parse --short HEAD", hide=True).stdout.strip()
+        tag_names += [f"sha-{git_short_hash}"]
+        info(f"Git hash:        '{git_short_hash}'")
     package_name = package_name or from_pyproject(c, "project.name")
     tags = [f"{package_name}:{name}" for name in tag_names]
     push_tags = []
@@ -188,6 +193,7 @@ def show(
         "registry": "Registry name, can be set in the 'pyproject.toml#tool.docker.registry' section",
         "plain": "Plain progressbar",
         "rebuild": "Force rebuild",
+        "no_sha_tag": "Do not include git hash (sha) tag",
     },
 )
 def buildx(
@@ -209,6 +215,7 @@ def buildx(
     github_token: str | None = None,
     plain: bool = False,
     rebuild: bool = False,
+    no_sha_tag: bool = False,
 ):
     """Build and pulish (with --push) docker image"""
     distros = get_distros(distro)
@@ -235,6 +242,7 @@ def buildx(
             extra_tags=extra_tags,
             package_name=package_name,
             registry=registry,
+            no_sha_tag=no_sha_tag,
         )
         header("Run docker build job")
         dockerfile = f"./docker/django/Dockerfile.{dist}"
@@ -298,6 +306,7 @@ def buildx(
         "tag_fat": "Tag used for the fat image (default: edge)",
         "force": "Force build even with dirty git",
         "registry": "Registry name, can be set in pyproject.toml tool.docker.registry",
+        "no_sha_tag": "Do not include git hash (sha) tag",
     }
 )
 def slim(
@@ -314,6 +323,7 @@ def slim(
     registry: str | None = None,
     force: bool = False,
     build: bool = False,
+    no_sha_tag: bool = False,
 ):
     """Slim and publish docker image"""
     if build:
@@ -347,6 +357,7 @@ def slim(
             extra_tags=extra_tags,
             package_name=package_name,
             registry=registry,
+            no_sha_tag=no_sha_tag,
         )
         tag_args = [f'--tag "{tag}"' for tag in tags]
         cmd = [
