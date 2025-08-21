@@ -21,6 +21,8 @@ jobs:
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+      - name: Setup token for Python installation
+        run: git config --global url."https://${{ secrets.MY_USERNAME }}:${{ secrets.MY_TOKEN }}@github.com".insteadOf ssh://git@github.com # replace with whatever authentication method you're currently using
       - name: Set up the environment
         uses: ./.github/actions/setup-venv
       - run: echo "cache_id=$(date --utc '+%V')" >> $GITHUB_ENV
