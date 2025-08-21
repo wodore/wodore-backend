@@ -13,6 +13,10 @@ on:
         description: "Tag name"
         required: true
         default: "feature"
+      distro:
+        description: "Distro name: alpine (default) or ubuntu"
+        required: true
+        default: "alpine"
   repository_dispatch:
     types: [new-tag-created]
 
@@ -105,7 +109,7 @@ jobs:
         uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
         with:
           context: .
-          file: docker/django/Dockerfile.alpine
+          file: docker/django/Dockerfile.${{ github.event.inputs.distro || 'alpine' }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
