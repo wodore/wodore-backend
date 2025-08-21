@@ -75,7 +75,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "computedfields",  # https://github.com/netzkolchose/django-computedfields
     "django_extensions",  # https://django-extensions.readthedocs.io/
     "corsheaders",  # https://github.com/adamchainz/django-cors-headers
-    "leaflet",  # https://django-leaflet.readthedocs.io/en/latest/index.html
+    # "leaflet",  # https://django-leaflet.readthedocs.io/en/latest/index.html
     # Default django apps:
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -103,6 +103,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     # Security:
     "axes",
     "mozilla_django_oidc",  # Load after auth https://github.com/mozilla/mozilla-django-oidc
+    "csp",
     # Health checks:
     # You may want to enable other checks as well,
     # see: https://github.com/KristianOellegaard/django-health-check
