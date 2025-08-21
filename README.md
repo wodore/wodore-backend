@@ -194,6 +194,8 @@ READ_GITHUB_USER=<username>
 READ_GITHUB_TOKEN=<token>  # Must have read access
 ```
 
+(run `infisical export --env dev --path /keys/wodore-backend` to export the secrets)
+
 Build and run Docker images (default is alpine image):
 ```bash
 # Build main image
