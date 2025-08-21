@@ -24,6 +24,7 @@ runs:
         python-version-file: ".python-version"
 
     ## https://github.com/actions/setup-python/issues/104#issuecomment-1382185522
+    # does not work here, add to workflow
     #- name: Setup token for Python installation
     #  run: git config --global url."https://${{ secrets.MY_USERNAME }}:${{ secrets.MY_TOKEN }}@github.com".insteadOf ssh://git@github.com # replace with whatever authentication method you're currently using
 
