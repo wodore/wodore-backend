@@ -13,11 +13,7 @@ from server.settings.components.common import (
     INSTALLED_APPS,
     MIDDLEWARE,
 )
-from server.settings.components.csp import (
-    CSP_CONNECT_SRC,
-    CSP_IMG_SRC,
-    CSP_SCRIPT_SRC,
-)
+from server.settings.components.csp import CONTENT_SECURITY_POLICY
 from server.settings.components.oicd import discovery_info
 
 # Setting the development status:
@@ -108,9 +104,9 @@ DEBUG_TOOLBAR_CONFIG = {
 
 # This will make debug toolbar to work with django-csp,
 # since `ddt` loads some scripts from `ajax.googleapis.com`:
-CSP_SCRIPT_SRC += ("ajax.googleapis.com",)
-CSP_IMG_SRC += ("data:",)
-CSP_CONNECT_SRC += ("'self'",)
+CONTENT_SECURITY_POLICY["DIRECTIVES"]["script-src"] += ("ajax.googleapis.com",)
+CONTENT_SECURITY_POLICY["DIRECTIVES"]["connect-src"] += ("'self'",)
+CONTENT_SECURITY_POLICY["DIRECTIVES"]["img-src"] += ("http:",)
 
 
 # nplusone

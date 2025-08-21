@@ -9,8 +9,8 @@ requires-python = "<4.0,>=3.10"
 dependencies = [
   "Django[argon2]==5.*", # https://pypi.org/project/Django/
   "django-split-settings==1.*", # https://pypi.org/project/django-split-settings/
-  "django-axes==7.*", # https://pypi.org/project/django-axes/
-  "django-csp==3.*", # https://pypi.org/project/django-csp/
+  "django-axes==8.*", # https://pypi.org/project/django-axes/
+  "django-csp==4.*", # https://pypi.org/project/django-csp/
   "django-health-check==3.*", # https://pypi.org/project/django-health-check/
   "django-http-referrer-policy==1.*", # https://pypi.org/project/django-http-referrer-policy/
   "django-permissions-policy==4.*", # https://pypi.org/project/django-permissions-policy/
@@ -19,20 +19,20 @@ dependencies = [
   "psycopg2-binary==2.*", # https://pypi.org/project/psycopg2-binary/
   "gunicorn==23.*", # https://pypi.org/project/gunicorn/
   "python-decouple==3.*", # https://pypi.org/project/python-decouple/
-  "structlog==24.*", # https://pypi.org/project/structlog/
-  "django-colorfield==0.11.*", # https://pypi.org/project/django-colorfield/
-  "pillow==10.*", # https://pypi.org/project/Pillow/
+  "structlog==25.*", # https://pypi.org/project/structlog/
+  "django-colorfield==0.14.*", # https://pypi.org/project/django-colorfield/
+  "pillow==11.*", # https://pypi.org/project/Pillow/
   "django-model-utils==5.*", # https://pypi.org/project/django-model-utils/
   "django-jsoneditor==0.2.*", # https://pypi.org/project/django-jsoneditor/
   "django-modeltrans==0.8.*", # https://pypi.org/project/django-modeltrans/
   "django-jsonform==2.*", # https://pypi.org/project/django-jsonform/
   "django-cors-headers==4.*", # https://pypi.org/project/django-cors-headers/
-  "django-extensions==3.*", # https://pypi.org/project/django-extensions/
+  "django-extensions==4.*", # https://pypi.org/project/django-extensions/
   #"django-unfold==0.43.*",            # https://pypi.org/project/django-unfold/
-  "django-unfold==0.63.*", # https://pypi.org/project/django-unfold/
+  "django-unfold==0.64.*", # https://pypi.org/project/django-unfold/
   "msgspec==0.19.*", # https://pypi.org/project/msgspec/
   "python-benedict==0.34.*", # https://pypi.org/project/python-benedict/
-  "asyncify==0.10.*", # https://pypi.org/project/asyncify/
+  "asyncify==0.11.*", # https://pypi.org/project/asyncify/
   "geojson-pydantic==1.*", # https://pypi.org/project/geojson-pydantic/
   "deepdiff==8.*", # https://pypi.org/project/deepdiff/
   "django-countries==7.*", # https://pypi.org/project/django-countries/
@@ -47,14 +47,13 @@ dependencies = [
   "authlib==1.*", # https://pypi.org/project/authlib/
   "load-dotenv==0.1.*", # https://pypi.org/project/load-dotenv/
   "django-cleanup==9.*", # https://pypi.org/project/django-cleanup/
-  "rich==13.*", # https://pypi.org/project/rich/
-  "tzdata>=2024.0", # https://pypi.org/project/tzdata/
+  "rich==14.*", # https://pypi.org/project/rich/
+  "tzdata>=2025.2", # https://pypi.org/project/tzdata/
   "click==8.*", # https://pypi.org/project/click/
   "pyyaml==6.*", # https://pypi.org/project/PyYAML/
   "hut-services==0.*", # https://github.com/wodore/hut-services
   # https://pypi.org/project/django-computedfields/ # https://github.com/TBxy/django-computedfields
   "django-computedfields",
-  "django-leaflet>=0.31.0",
 ]
 
 
