@@ -116,6 +116,15 @@ dev = [
   "git-cliff==2.*", # https://pypi.org/project/git-cliff/
   "pre-commit==4.*", # https://pypi.org/project/pre-commit/
   "bump2version>=1.0.1", # https://pypi.org/project/bump2version/
+  "mkdocs-autoapi>=0.3.2",
+  "mkdocs-click>=0.8.1",
+  "mkdocs-gen-files>=0.5.0",
+  "mkdocs-literate-nav>=0.6.1",
+  "mkdocs-material>=9.5.49",
+  "mkdocs-open-in-new-tab>=1.0.8",
+  "mkdocs-section-index>=0.3.9",
+  "mkdocstrings[python]>=0.27.0",
+  "termynal>=0.12.2"
 ]
 
 [tool.uv.sources]
