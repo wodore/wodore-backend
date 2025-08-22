@@ -5,8 +5,8 @@ repo_url: https://github.com/wodore/wodore-backend
 repo_name: wodore/wodore-backend
 
 nav:
-  - "Home": index.md
-  #- "Getting Started": docu.md
+  - "Getting Started": index.md
+  - "API": api.md
   - Packages: packages.md
   #- API Reference:
   #    - server: reference/
@@ -85,8 +85,10 @@ theme:
 # Plugins
 plugins:
   #  - blog
+  - neoteroi.mkdocsoad:
+      use_pymdownx: true
   - open-in-new-tab:
-      add_icon: true
+      add_icon: false
   - search:
       separator: '[\s\u200b\-_,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
   #- gen-files:
@@ -189,3 +191,4 @@ watch:
   - server
 extra_css:
   - css/custom.css
+  - css/neoteroi-api-mkdocs-plugin-v1.1.3.css

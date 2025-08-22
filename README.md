@@ -1,27 +1,45 @@
 <h3 align="center"><b>Wodore Backend</b></h3>
 <p align="center">
-  <a href="https://wodore.com"><img src="https://wodore.com/icons/icon-192x192.png?v=3" alt="Wodore Backend" width="60" /></a>
+  <a href="https://wodo.re"><img src="https://wodore.com/icons/icon-192x192.png?v=3" alt="Wodore Backend" width="100" /></a>
 </p>
 <p align="center">
-    <em>Wodore.com backend implementation</em>
+    <em><b><a href="https://wodo.re" style="color: inherit; text-decoration: none;">wodo.re</a></b> backend implementation</em>
 </p>
 <p align="center">
-    <b><a href="https://wodore.com">wodore.com</a></b>
-    | <b><a href="https://api.wodore.com/">api.wodore.com</a></b>
-    | <b><a href="https://github.com/wodore/wodore-backend/pkgs/container/wodore-backend">docker images</a></b>
-    | <b><a href="https://wodore.github.io/wodore-backend/">docu</a></b>
-</p>
+    <b><a href="https://wodo.re">wodo.re</a></b>
+    &#9679; <b><a href="https://api.wodore.com/">api.wodore.com</a></b> </br>
+    <small><a href="https://github.com/wodore/wodore-backend/pkgs/container/wodore-backend">docker images</a>
+    &ndash; <a href="https://wodore.github.io/wodore-backend/">documentation</a></small>
+</p><p>&nbsp;</p>
 
-----
+
+## Used Stack
+
+#### Production
+* [Django](https://www.djangoproject.com/) with [django ninja](https://django-ninja.dev/) for the API and [unfold admin](https://unfoldadmin.com/)
+* [PostgreSQL](https://www.postgresql.org/) with [PostGIS](https://postgis.net/) for the database
+* [Imagor](https://github.com/cshum/imagor) for image serving and processing
+* [Zitadel](https://zitadel.com/) for authentication and user management _(optional)_
+
+#### Dev Tools
+* [uv](https://docs.astral.sh/uv/) for package management
+* [infisical](https://infisical.com/) for secrets management _(optional)_
+
 
 ## Development
 
 ### Initial Setup
 
+Check [Prerequisites](#prerequisites) for required tools.
+
 When first cloning the repository:
 ```bash
 # Install Python packages and set up virtualenv
 make init
+# or
+uv sync
+uv run invoke install
+# afterwards activate the virtual environment
 source .venv/bin/activate
 ```
 
@@ -231,10 +249,11 @@ infisical run --env=dev --path /backend -- \
 ## Prerequisites
 
 Required development tools:
-- `python3.12` (see `pyproject.toml`)
-- `postgresql13`
-- `docker` with `docker compose`
-- `infisical` ([installation guide](https://infisical.com/docs/cli/overview#installation))
-- `poetry` ([installation guide](https://python-poetry.org/docs/#installation))
-- `node` and `npm` for Tailwind CSS
-- `make` (optional)
+
+* `python3.12` (see `pyproject.toml`)
+* `postgresql13`
+* `docker` with `docker compose`
+* `infisical` ([installation guide](https://infisical.com/docs/cli/overview#installation)) (optional)
+* `uv` ([installation guide](https://docs.astral.sh/uv/getting-started/installation/))
+* `node` and `npm` for Tailwind CSS
+* `make` (optional)

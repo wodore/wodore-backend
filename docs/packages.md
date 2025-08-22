@@ -4,7 +4,11 @@
 
 - `latest`: latest stable version
 - `major`, `major.minor` and `major.minor.rev` tags
+- `sha-HASH`: git hash of the commit used for the build
 - `edge`: unstable development version
+
+Each tag is suffixed with the used distro (e.g. `alpine` or `ubuntu`).
+Per default only `alpine` is generated.
 
 
 === "Docker Compose"
