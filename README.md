@@ -1,18 +1,17 @@
 <h3 align="center"><b>Wodore Backend</b></h3>
 <p align="center">
-  <a href="https://wodore.com"><img src="https://wodore.com/icons/icon-192x192.png?v=3" alt="Wodore Backend" width="60" /></a>
+  <a href="https://wodo.re"><img src="https://wodore.com/icons/icon-192x192.png?v=3" alt="Wodore Backend" width="100" /></a>
 </p>
 <p align="center">
-    <em>Wodore.com backend implementation</em>
+    <em><b><a href="https://wodo.re">wodo.re</a></b> backend implementation</em>
 </p>
 <p align="center">
-    <b><a href="https://wodore.com">wodore.com</a></b>
-    | <b><a href="https://api.wodore.com/">api.wodore.com</a></b>
-    | <b><a href="https://github.com/wodore/wodore-backend/pkgs/container/wodore-backend">docker images</a></b>
-    | <b><a href="https://wodore.github.io/wodore-backend/">docu</a></b>
-</p>
+    <b><a href="https://wodo.re">wodo.re</a></b>
+    &#9679; <b><a href="https://api.wodore.com/">api.wodore.com</a></b> </br>
+    <small><a href="https://github.com/wodore/wodore-backend/pkgs/container/wodore-backend">docker images</a>
+    &ndash; <a href="https://wodore.github.io/wodore-backend/">documentation</a></small>
+</p><p>&nbsp;</p>
 
-----
 
 ## Used Stack
 
