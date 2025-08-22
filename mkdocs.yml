@@ -5,7 +5,7 @@ repo_url: https://github.com/wodore/wodore-backend
 repo_name: wodore/wodore-backend
 
 nav:
-  - "Getting Started": docu.md
+  - "Getting Started": index.md
   - "API": api.md
   - Packages: packages.md
   #- API Reference:
