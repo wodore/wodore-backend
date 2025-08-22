@@ -19,7 +19,7 @@ extra:
     - icon: fontawesome/brands/docker
       link: https://ghcr.io/wodore/wodore-backend
     - icon: fontawesome/solid/house-chimney-crack
-      link: https://wodore.com
+      link: https://wodo.re
 
 theme:
   name: material
