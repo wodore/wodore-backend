@@ -3,7 +3,7 @@
   <a href="https://wodo.re"><img src="https://wodore.com/icons/icon-192x192.png?v=3" alt="Wodore Backend" width="100" /></a>
 </p>
 <p align="center">
-    <em><b><a href="https://wodo.re">wodo.re</a></b> backend implementation</em>
+    <em><b><a href="https://wodo.re" style="color: inherit; text-decoration: none;">wodo.re</a></b> backend implementation</em>
 </p>
 <p align="center">
     <b><a href="https://wodo.re">wodo.re</a></b>
