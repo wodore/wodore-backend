@@ -11,7 +11,7 @@
         <link rel="canonical" href="https://api.wodore.com/packages/">
       
       
-        <link rel="prev" href="..">
+        <link rel="prev" href="../api/">
       
       
         <link rel="next" href="../changelog/">
@@ -52,7 +52,7 @@
     
       <link rel="stylesheet" href="../css/custom.css">
     
-      <link rel="stylesheet" href="../css/open_in_new_tab.css">
+      <link rel="stylesheet" href="../css/neoteroi-api-mkdocs-plugin-v1.1.3.css">
     
       <link rel="stylesheet" href="../termynal.css">
     
@@ -239,13 +239,32 @@
   
   
     <li class="md-tabs__item">
-      <a href=".." class="md-tabs__link">
+      <a href="../docu/" class="md-tabs__link">
         
   
   
     
   
-  Home
+  Getting Started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../api/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  API
 
       </a>
     </li>
@@ -351,12 +370,34 @@
   
   
     <li class="md-nav__item">
-      <a href=".." class="md-nav__link">
+      <a href="../docu/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Home
+    Getting Started
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    API
     
   </span>
   
@@ -483,8 +524,11 @@
 <ul>
 <li><code>latest</code>: latest stable version</li>
 <li><code>major</code>, <code>major.minor</code> and <code>major.minor.rev</code> tags</li>
+<li><code>sha-HASH</code>: git hash of the commit used for the build</li>
 <li><code>edge</code>: unstable development version</li>
 </ul>
+<p>Each tag is suffixed with the used distro (e.g. <code>alpine</code> or <code>ubuntu</code>).
+Per default only <code>alpine</code> is generated.</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="docker-compose" name="__tabbed_1" type="radio" /><input id="docker_1" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="docker-compose">Docker Compose</label><label for="docker_1">Docker</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
