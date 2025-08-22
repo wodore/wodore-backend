@@ -14,14 +14,33 @@
 
 ----
 
+## Used Stack
+
+#### Production
+* [Django](https://www.djangoproject.com/) with [django ninja](https://django-ninja.dev/) for the API and [unfold admin](https://unfoldadmin.com/)
+* [PostgreSQL](https://www.postgresql.org/) with [PostGIS](https://postgis.net/) for the database
+* [Imagor](https://github.com/cshum/imagor) for image serving and processing
+* [Zitadel](https://zitadel.com/) for authentication and user management _(optional)_
+
+#### Dev Tools
+* [uv](https://docs.astral.sh/uv/) for package management
+* [infisical](https://infisical.com/) for secrets management _(optional)_
+
+
 ## Development
 
 ### Initial Setup
+
+Check [Prerequisites](#prerequisites) for required tools.
 
 When first cloning the repository:
 ```bash
 # Install Python packages and set up virtualenv
 make init
+# or
+uv sync
+uv run invoke install
+# afterwards activate the virtual environment
 source .venv/bin/activate
 ```
 
@@ -231,10 +250,11 @@ infisical run --env=dev --path /backend -- \
 ## Prerequisites
 
 Required development tools:
-- `python3.12` (see `pyproject.toml`)
-- `postgresql13`
-- `docker` with `docker compose`
-- `infisical` ([installation guide](https://infisical.com/docs/cli/overview#installation))
-- `poetry` ([installation guide](https://python-poetry.org/docs/#installation))
-- `node` and `npm` for Tailwind CSS
-- `make` (optional)
+
+* `python3.12` (see `pyproject.toml`)
+* `postgresql13`
+* `docker` with `docker compose`
+* `infisical` ([installation guide](https://infisical.com/docs/cli/overview#installation)) (optional)
+* `uv` ([installation guide](https://docs.astral.sh/uv/getting-started/installation/))
+* `node` and `npm` for Tailwind CSS
+* `make` (optional)
