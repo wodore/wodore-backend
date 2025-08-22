@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
+         <loc>https://api.wodore.com/</loc>
+         <lastmod>2025-08-22</lastmod>
+    </url>
+    <url>
          <loc>https://api.wodore.com/api/</loc>
          <lastmod>2025-08-22</lastmod>
     </url>
     <url>
          <loc>https://api.wodore.com/changelog/</loc>
-         <lastmod>2025-08-22</lastmod>
-    </url>
-    <url>
-         <loc>https://api.wodore.com/docu/</loc>
          <lastmod>2025-08-22</lastmod>
     </url>
     <url>
