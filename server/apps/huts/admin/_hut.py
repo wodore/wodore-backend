@@ -17,6 +17,7 @@ from django.utils.translation import gettext_lazy as _
 
 from unfold.decorators import action, display
 
+from server.apps.images.transfomer import ImagorImage
 from server.apps.manager.admin import ModelAdmin
 from server.apps.translations.forms import required_i18n_fields_form_factory
 
@@ -232,7 +233,13 @@ class HutsAdmin(ModelAdmin):
 
     @display(description=_("Photo"))
     def hut_thumb(self, obj):  # new
-        # images = obj.image_set.prefetch_related("details").order_by("details__order")
+        if obj.photos:  # old style, show if available
+            return (
+                ImagorImage(obj.photos)
+                .transform(round_corner=(15), size="50x50")
+                .get_html()
+            )
+
         img = obj.image_set.order_by("details__order").first()
         if img:
             return img.get_image_tag(radius=15, height=50, width=50)
