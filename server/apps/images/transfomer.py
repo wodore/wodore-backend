@@ -2,7 +2,9 @@ import base64
 import hashlib
 import hmac
 from typing import Literal, Optional
-from urllib.parse import quote
+from urllib.parse import quote as url_quote
+
+import requests
 
 from django.conf import settings
 from django.db.models.fields.files import ImageFieldFile
@@ -68,6 +70,7 @@ class ImagorImage:
         path: str,
         key: str | None = None,
         algorithmus: Literal["sha1", "sha256", "sha512"] = "sha256",
+        quote: Literal["auto", "yes", "no"] = "auto",
     ) -> str:
         """
         Generate a HMAC-SHA256 signature for the path and return it in Base64.
@@ -79,22 +82,28 @@ class ImagorImage:
             str: The signed path.
         """
         imagor_key = key or settings.IMAGOR_KEY
+        safe_path = cls.url_quote(path, quote)
         # print(f"IMAGOR KEY: {key}")
         # hmac_digest = hmac.new(IMAGOR_SECRET.encode("utf-8"), path.encode("utf-8"), hashlib.sha256).digest()
         hmac_digest = hmac.new(
             imagor_key.encode("utf-8"),
-            path.encode("utf-8"),
+            safe_path.encode("utf-8"),
             getattr(hashlib, algorithmus),
         ).digest()
-        return base64.urlsafe_b64encode(hmac_digest).decode("utf-8")  # .rstrip("=")
-        # return signature.replace("+", "-").replace("/", "_")
+        return base64.urlsafe_b64encode(hmac_digest).decode("utf-8")
 
-    # function signPath(path: string, secret: string) {
-    #   return hmacSHA256(path, secret)
-    #     .toString(Base64)
-    #     .replace(/\+/g, '-')
-    #     .replace(/\//g, '_');
-    # }
+    @classmethod
+    def url_quote(
+        cls, path: str, quote: Literal["auto", "yes", "no"] = "auto", safe=""
+    ) -> str:
+        if quote == "auto":
+            if path.startswith("https://") or path.startswith("http://"):
+                quote = "yes"
+            else:
+                quote = "no"
+        safe_path = url_quote(path, safe=safe) if quote == "yes" else path
+        return safe_path
+
     def _build_path(
         self,
         size: str,
@@ -158,7 +167,7 @@ class ImagorImage:
             filters.append(f"round_corner({','.join([str(r) for r in rc])})")
         if filters:
             path.append(f"filters:{':'.join(filters)}")
-        path.append(f"{quote(self.image_url.strip('/'))}")
+        path.append(f"{url_quote(self.image_url.strip('/'))}")
         path = [p for p in path if p]
         return "/".join(path).strip("/")
 
@@ -217,6 +226,17 @@ class ImagorImage:
         # Generate URL signature if unsafe is False
         signature = "unsafe"
         if not unsafe:
+            if path.startswith("https://commons.wikimedia.org"):
+                # this is needed because redirect do not work with imagor, return correct redirected image
+                resp = requests.head(
+                    path,
+                    allow_redirects=True,
+                    headers={
+                        "User-Agent": "wodore-backend/1.0 (contact: info@wodo.re)"
+                    },
+                )  # follows redirect
+                path = resp.url
+            path = self.url_quote(path, quote="auto")
             signature = self.sign_path(path)
 
         # Full URL
@@ -225,13 +245,48 @@ class ImagorImage:
 
 
 if __name__ == "__main__":
-    test_path = (
-        "500x500/top/raw.githubusercontent.com/cshum/imagor/master/testdata/gopher.png"
-    )
-    signed = ImagorImage.sign_path(test_path, key="mysecret", algorithmus="sha1")
-    expected = "cST4Ko5_FqwT3BDn-Wf4gO3RFSk="
-    print(f"Signed:   {signed}")
-    print(f"Expected: {expected}")
-    assert signed == expected
+    test_paths = [
+        (
+            "500x500/top/raw.githubusercontent.com/cshum/imagor/master/testdata/gopher.png",
+            "cST4Ko5_FqwT3BDn-Wf4gO3RFSk=",
+            "O9OXzhvQEZkxzMnOJ5BxH15RlS4=",
+        ),
+        (
+            "https://static.suissealpine.sac-cas.ch/1537881166_827257329Mb.jpg",
+            "zcyZsckdhXe1X0Kf5z-d09ZEdSg=",
+            "DQxwyxRnYHqfaKxUBjIlvhPESj0=",
+        ),
+        (
+            "https://commons.wikimedia.org/w/index.php?title=Special:Redirect/file/File%3ALoetschepasshuette.JPG&width=400",
+            "X2AFmX2Ldm_-D-aIl6RqmQfZx9E=",
+            "hiCdH20z8Kc-EZN9ZFOLPmCmvyo=",
+        ),
+    ]
+    for test_path, expected_unsafe, expected_safe in test_paths:
+        if test_path.startswith("https://commons.wikimedia.org"):
+            print(f"Get redirect address for: '{test_path}'")
+            resp = requests.head(
+                test_path,
+                allow_redirects=True,
+                headers={"User-Agent": "wodore-backend/1.0 (contact: info@wodore.com)"},
+            )  # follows redirect
+            test_path = resp.url
+
+        signed_url_unsafe = ImagorImage.sign_path(
+            test_path, key="mysecret", algorithmus="sha1", quote=False
+        )
+        print(f"Path: {test_path}")
+        print("   with unsafe (unescaped) URL:")
+        print(f"     Signed:   {signed_url_unsafe}")
+        print(f"     Expected: {expected_unsafe}")
+        assert signed_url_unsafe == expected_unsafe
+        signed_url_safe = ImagorImage.sign_path(
+            test_path, key="mysecret", algorithmus="sha1", quote=True
+        )
+        safe_path = url_quote(test_path, safe="")
+        print(f"   with safe (escaped) URL: '{safe_path}'")
+        print(f"     Signed:   {signed_url_safe}")
+        print(f"     Expected: {expected_safe}")
+        assert signed_url_safe == expected_safe
     # console.log(sign('500x500/top/raw.githubusercontent.com/cshum/imagor/master/testdata/gopher.png', 'mysecret'))
     # // cST4Ko5_FqwT3BDn-Wf4gO3RFSk=/500x500/top/raw.githubusercontent.com/cshum/imagor/master/testdata/gopher.png

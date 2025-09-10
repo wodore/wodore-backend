@@ -12,7 +12,7 @@ from django.urls import reverse_lazy
 from django.utils.translation import gettext_lazy as _
 
 UNFOLD = {
-    "SITE_TITLE": "wodore.com",
+    "SITE_TITLE": "wodo.re",
     "SITE_HEADER": "Wodore Admin",
     "SITE_URL": "/",
     "SITE_ICON": lambda request: static(
@@ -218,9 +218,9 @@ UNFOLD = {
                         "target": "_blank",
                     },
                     {
-                        "title": _("Frontend (wodore.com)"),
+                        "title": _("Frontend (wodo.re)"),
                         "icon": "captive_portal",
-                        "link": "https://wodore.com",
+                        "link": "https://wodo.re",
                         "target": "_blank",
                     },
                 ],
