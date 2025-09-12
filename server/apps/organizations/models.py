@@ -1,6 +1,7 @@
 from functools import lru_cache
 
 from colorfield.fields import ColorField
+from django_cleanup import cleanup
 
 from model_utils.models import TimeStampedModel
 from modeltrans.fields import TranslationField
@@ -15,6 +16,7 @@ from django.utils.translation import gettext_lazy as _
 from server.core.managers import BaseMutlilingualManager
 
 
+@cleanup.ignore
 class Organization(TimeStampedModel):
     """
     External organizations, like SAC.
