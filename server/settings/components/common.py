@@ -8,6 +8,13 @@ For the full list of settings and their config, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
+import os
+
+# Set the environment variables - fix boto3 issue when uploading file
+# https://stackoverflow.com/questions/79375793/s3uploadfailederror-due-to-missingcontentlength-when-calling-putobject-in-mlflow
+os.environ["AWS_REQUEST_CHECKSUM_CALCULATION"] = "when_required"
+os.environ["AWS_RESPONSE_CHECKSUM_VALIDATION"] = "when_required"
+
 from typing import Dict, List, Tuple, Union
 
 from corsheaders.defaults import default_headers
@@ -155,7 +162,6 @@ WSGI_APPLICATION = "server.wsgi.application"
 
 DATABASES = {
     "default": {
-        # "ENGINE": "django.db.backends.postgresql",
         "ENGINE": "django.contrib.gis.db.backends.postgis",
         "NAME": config("POSTGRES_DB", ""),
         "USER": config("POSTGRES_USER", ""),
@@ -168,31 +174,34 @@ DATABASES = {
             "options": "-c statement_timeout=15000ms",
         },
     },
-    # "default": {
-    #     "ENGINE": "django.db.backends.mysql",
-    #     "NAME": config("POSTGRES_DB"),
-    #     "USER": config("POSTGRES_USER"),
-    #     "PASSWORD": config("POSTGRES_PASSWORD"),
-    #     "HOST": config("DJANGO_DATABASE_HOST"),
-    #     "PORT": config("DJANGO_DATABASE_PORT", cast=int),
-    #     # "CONN_MAX_AGE": config("CONN_MAX_AGE", cast=int, default=60),
-    #     "OPTIONS": {
-    #         # "init_command": "SET GLOBAL MAX_EXECUTION_TIME = 3600",
-    #         "connect_timeout": 10,
-    #         # "max_statement_time": 10,
-    #         # "options": "-c statement_timeout=15000ms",
-    #         # "options": "-c max_execution_time=15000ms",
-    #     },
-    # },
-    # "default": {
-    #    "ENGINE": "django.db.backends.sqlite3",
-    #    "NAME": BASE_DIR / "db.sqlite3",
-    # }
 }
+
+DEFAULT_FILE_STORAGE = "django.core.files.storage.FileSystemStorage"
+if config("AWS_ACCESS_KEY_ID", ""):
+    DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
+    # AWS_S3_CUSTOM_DOMAIN = config("AWS_S3_CUSTOM_DOMAIN")
+    AWS_S3_ENDPOINT_URL = (
+        config("AWS_S3_ENDPOINT_URL")
+        if config("AWS_S3_ENDPOINT_URL", "")
+        else f"https://{config('AWS_S3_CUSTOM_DOMAIN')}"
+    )
+    AWS_ACCESS_KEY_ID = config("AWS_ACCESS_KEY_ID")
+    AWS_SECRET_ACCESS_KEY = config("AWS_SECRET_ACCESS_KEY")
+    AWS_STORAGE_BUCKET_NAME = config("AWS_STORAGE_BUCKET_NAME")
+    AWS_S3_ADDRESSING_STYLE = "path"
+    AWS_S3_REGION_NAME = config("AWS_S3_REGION_NAME")
+    AWS_S3_SECURE_URLS = True
+    AWS_S3_USE_SSL = True
+    AWS_QUERYSTRING_AUTH = False
+    AWS_S3_FILE_OVERWRITE = False  # Overwrite files with same name
+    AWS_DEFAULT_ACL = "public-read"  # Recommended with rclone proxy
+    AWS_QUERYSTRING_EXPIRE = 3600 * 24 * 7  # max 7 days
+    AWS_S3_SIGNATURE_VERSION = "s3v4"
+
 
 STORAGES = {
     "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
+        "BACKEND": DEFAULT_FILE_STORAGE,
     },
     "staticfiles": {
         # "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
@@ -248,15 +257,6 @@ STATICFILES_FINDERS = (
 # https://github.com/cshum/imagor
 IMAGOR_URL = config("IMAGOR_URL", "")
 IMAGOR_KEY = config("IMAGOR_KEY", None)
-
-# CLOUDINARY_STORAGE = {
-#     "CLOUD_NAME": config("CLOUDINARY_NAME"),
-#     "API_KEY": config("CLOUDINARY_API_KEY"),
-#     "API_SECRET": config("CLOUDINARY_API_SECRET"),
-# }
-#
-# DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
-
 # Templates
 # https://docs.djangoproject.com/en/4.2/ref/templates/api
 
