@@ -162,7 +162,6 @@ WSGI_APPLICATION = "server.wsgi.application"
 
 DATABASES = {
     "default": {
-        # "ENGINE": "django.db.backends.postgresql",
         "ENGINE": "django.contrib.gis.db.backends.postgis",
         "NAME": config("POSTGRES_DB", ""),
         "USER": config("POSTGRES_USER", ""),
@@ -175,35 +174,8 @@ DATABASES = {
             "options": "-c statement_timeout=15000ms",
         },
     },
-    # "default": {
-    #     "ENGINE": "django.db.backends.mysql",
-    #     "NAME": config("POSTGRES_DB"),
-    #     "USER": config("POSTGRES_USER"),
-    #     "PASSWORD": config("POSTGRES_PASSWORD"),
-    #     "HOST": config("DJANGO_DATABASE_HOST"),
-    #     "PORT": config("DJANGO_DATABASE_PORT", cast=int),
-    #     # "CONN_MAX_AGE": config("CONN_MAX_AGE", cast=int, default=60),
-    #     "OPTIONS": {
-    #         # "init_command": "SET GLOBAL MAX_EXECUTION_TIME = 3600",
-    #         "connect_timeout": 10,
-    #         # "max_statement_time": 10,
-    #         # "options": "-c statement_timeout=15000ms",
-    #         # "options": "-c max_execution_time=15000ms",
-    #     },
-    # },
-    # "default": {
-    #    "ENGINE": "django.db.backends.sqlite3",
-    #    "NAME": BASE_DIR / "db.sqlite3",
-    # }
 }
 
-# CLOUDINARY_STORAGE = {
-#     "CLOUD_NAME": config("CLOUDINARY_NAME"),
-#     "API_KEY": config("CLOUDINARY_API_KEY"),
-#     "API_SECRET": config("CLOUDINARY_API_SECRET"),
-# }
-#
-# DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
 DEFAULT_FILE_STORAGE = "django.core.files.storage.FileSystemStorage"
 if config("AWS_ACCESS_KEY_ID", ""):
     DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
@@ -225,14 +197,6 @@ if config("AWS_ACCESS_KEY_ID", ""):
     AWS_DEFAULT_ACL = "public-read"  # Recommended with rclone proxy
     AWS_QUERYSTRING_EXPIRE = 3600 * 24 * 7  # max 7 days
     AWS_S3_SIGNATURE_VERSION = "s3v4"
-
-# if config("KDRIVE_ID", None):
-#    print("Using kDrive storage")
-#    DEFAULT_FILE_STORAGE = "server.core.storages.kdrive.KDriveStorage"
-#    KDRIVE_ID = config("KDRIVE_ID")
-#    KDRIVE_ROOT_PATH = config("KDRIVE_ROOT_PATH", "/django-media")
-#    KDRIVE_API_TOKEN = config("KDRIVE_API_TOKEN")
-#    KDRIVE_USE_PUBLIC_URLS = True
 
 
 STORAGES = {
