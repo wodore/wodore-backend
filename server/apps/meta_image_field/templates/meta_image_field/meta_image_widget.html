@@ -1,16 +1,16 @@
 {% load i18n %}
 <div class="imagefocus-file-upload">
     <div class="imagefocus-file-upload__image bg-gray-50 border flex items-center justify-center mb-4 min-h-32 p-1 rounded-md w-48 dark:bg-white/2 dark:border-gray-700">
-        <img src="{% if widget.is_initial %}{{ widget.value.url }}{% else %}""{% endif %}" alt="{% trans 'Image preview' %}" class="block rounded" id="image-preview" />
+        {% if widget.is_initial and widget.value and widget.value.url %}
+            <img src="{{ widget.value.url }}" alt="{% trans 'Image preview' %}" class="block rounded" id="image-preview" />
+        {% endif %}
     </div>
 
-    <!-- remove focal area -->
     <div class="border flex items-center overflow-hidden rounded-md shadow-sm text-sm max-w-2xl dark:border-gray-700">
         {% if widget.is_initial and not widget.required and False %}
             <div class="bg-gray-50 border-r flex flex-none items-center self-stretch px-3 dark:bg-white/2 dark:border-gray-700 dark:text-gray-400">
                 <label for="{{ widget.checkbox_id }}" class="flex items-center">
                     <input type="checkbox"{% if widget.class %} class="{{ widget.class }}"{% endif %} name="{{ widget.checkbox_name }}" id="{{ widget.checkbox_id }}" />
-
                     <span class="ml-2 text-gray-500 dark:text-gray-400">
                         {{ widget.clear_checkbox_label }}
                     </span>
@@ -18,23 +18,38 @@
             </div>
         {% endif %}
 
-        <input type="text" value="{% if widget.value %}{{ widget.value.name }} ({{ widget.value.width}}x{{ widget.value.height}}){% else %}{% trans 'Choose file to upload' %}{% endif %}" class="bg-white grow font-medium px-3 py-2 text-ellipsis dark:bg-gray-900 {% if widget.value %}text-gray-500 dark:text-gray-400{% else %}text-gray-300 dark:text-gray-400{% endif %}">
+        <input type="text"
+               value="{% if widget.value and widget.value.name %}{{ widget.value.name }}{% if widget.value.width and widget.value.height %} ({{ widget.value.width }}x{{ widget.value.height }}){% endif %}{% else %}{% trans 'Choose file to upload' %}{% endif %}"
+               class="bg-white grow font-medium px-3 py-2 text-ellipsis dark:bg-gray-900 {% if widget.value %}text-gray-500 dark:text-gray-400{% else %}text-gray-300 dark:text-gray-400{% endif %}"
+               readonly>
 
         <div class="flex flex-none items-center leading-none self-stretch">
-            <input id="{{ widget.name }}" type="{{ widget.type }}" name="{{ widget.name }}" class="hidden meta-image-input" {% include "django/forms/widgets/attrs.html" %} />
+            <input id="{{ widget.name }}"
+                   type="{{ widget.type }}"
+                   name="{{ widget.name }}"
+                   class="hidden meta-image-input"
+                   {% include "django/forms/widgets/attrs.html" %} />
 
-            <a>
-                <span class="material-symbols-outlined cursor-pointer text-gray-400 px-1 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200 imagefocus-file-remove-area">cancel_presentation</span>
+            <a class="imagefocus-file-remove-area">
+                <span class="material-symbols-outlined cursor-pointer text-gray-400 px-1 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200">cancel_presentation</span>
             </a>
-            <a href="{{ widget.value.url }}" target="_blank">
-                <span class="material-symbols-outlined cursor-pointer text-gray-400 px-1 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200">visibility</span>
-            </a>
+
+            {% if widget.is_initial and widget.value and widget.value.url %}
+                <a href="{{ widget.value.url }}" target="_blank" class="flex items-center">
+                    <span class="material-symbols-outlined cursor-pointer text-gray-400 px-1 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200">visibility</span>
+                </a>
+            {% endif %}
+
             <label for="{{ widget.name }}" class="cursor-pointer text-gray-400 pr-3 pl-1 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200">
                 <span class="material-symbols-outlined">file_upload</span>
             </label>
         </div>
     </div>
     <div class="border flex items-center overflow-hidden rounded-md shadow-sm text-sm max-w-2xl dark:border-gray-700">
-        <input type="url"  name="{{ widget.name }}_url" id="url_upload" class="bg-white grow font-medium px-3 py-2 text-ellipsis dark:bg-gray-900 text-gray-300 dark:text-gray-400 meta-image-input" placeholder="Upload from URL">
+        <input type="url"
+               name="{{ widget.name }}_url"
+               id="url_upload"
+               class="bg-white grow font-medium px-3 py-2 text-ellipsis dark:bg-gray-900 text-gray-300 dark:text-gray-400 meta-image-input"
+               placeholder="{% trans 'Upload from URL' %}">
     </div>
 </div>

@@ -1,6 +1,7 @@
 from collections import defaultdict
 
 from descriptors import cachedclassproperty
+from django_cleanup import cleanup
 
 from modeltrans.fields import TranslationField
 
@@ -12,6 +13,7 @@ from django.utils.translation import gettext_lazy as _
 from server.core.managers import BaseMutlilingualManager
 
 
+@cleanup.ignore
 class HutType(models.Model):
     FIELDS = (
         "slug",
@@ -46,13 +48,13 @@ class HutType(models.Model):
     )
     symbol = models.ImageField(
         max_length=300,
-        upload_to="huts_type/icons",
+        upload_to="huts_type/symbols/detailed",
         default="huts/types/symbols/detailed/unknown.png",
         help_text="Normal icon",
     )
     symbol_simple = models.ImageField(
         max_length=300,
-        upload_to="huts_type/icons",
+        upload_to="huts_type/symbols/simple",
         default="huts/types/symbols/simple/unknown.png",
         help_text="Simple icon",
     )

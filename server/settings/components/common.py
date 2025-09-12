@@ -8,6 +8,13 @@ For the full list of settings and their config, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
+import os
+
+# Set the environment variables - fix boto3 issue when uploading file
+# https://stackoverflow.com/questions/79375793/s3uploadfailederror-due-to-missingcontentlength-when-calling-putobject-in-mlflow
+os.environ["AWS_REQUEST_CHECKSUM_CALCULATION"] = "when_required"
+os.environ["AWS_RESPONSE_CHECKSUM_VALIDATION"] = "when_required"
+
 from typing import Dict, List, Tuple, Union
 
 from corsheaders.defaults import default_headers
@@ -190,9 +197,47 @@ DATABASES = {
     # }
 }
 
+# CLOUDINARY_STORAGE = {
+#     "CLOUD_NAME": config("CLOUDINARY_NAME"),
+#     "API_KEY": config("CLOUDINARY_API_KEY"),
+#     "API_SECRET": config("CLOUDINARY_API_SECRET"),
+# }
+#
+# DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
+DEFAULT_FILE_STORAGE = "django.core.files.storage.FileSystemStorage"
+if config("AWS_ACCESS_KEY_ID", ""):
+    DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
+    # AWS_S3_CUSTOM_DOMAIN = config("AWS_S3_CUSTOM_DOMAIN")
+    AWS_S3_ENDPOINT_URL = (
+        config("AWS_S3_ENDPOINT_URL")
+        if config("AWS_S3_ENDPOINT_URL", "")
+        else f"https://{config('AWS_S3_CUSTOM_DOMAIN')}"
+    )
+    AWS_ACCESS_KEY_ID = config("AWS_ACCESS_KEY_ID")
+    AWS_SECRET_ACCESS_KEY = config("AWS_SECRET_ACCESS_KEY")
+    AWS_STORAGE_BUCKET_NAME = config("AWS_STORAGE_BUCKET_NAME")
+    AWS_S3_ADDRESSING_STYLE = "path"
+    AWS_S3_REGION_NAME = config("AWS_S3_REGION_NAME")
+    AWS_S3_SECURE_URLS = True
+    AWS_S3_USE_SSL = True
+    AWS_QUERYSTRING_AUTH = False
+    AWS_S3_FILE_OVERWRITE = False  # Overwrite files with same name
+    AWS_DEFAULT_ACL = "public-read"  # Recommended with rclone proxy
+    AWS_QUERYSTRING_EXPIRE = 3600 * 24 * 7  # max 7 days
+    AWS_S3_SIGNATURE_VERSION = "s3v4"
+
+# if config("KDRIVE_ID", None):
+#    print("Using kDrive storage")
+#    DEFAULT_FILE_STORAGE = "server.core.storages.kdrive.KDriveStorage"
+#    KDRIVE_ID = config("KDRIVE_ID")
+#    KDRIVE_ROOT_PATH = config("KDRIVE_ROOT_PATH", "/django-media")
+#    KDRIVE_API_TOKEN = config("KDRIVE_API_TOKEN")
+#    KDRIVE_USE_PUBLIC_URLS = True
+
+
 STORAGES = {
     "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
+        "BACKEND": DEFAULT_FILE_STORAGE,
     },
     "staticfiles": {
         # "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
@@ -248,15 +293,6 @@ STATICFILES_FINDERS = (
 # https://github.com/cshum/imagor
 IMAGOR_URL = config("IMAGOR_URL", "")
 IMAGOR_KEY = config("IMAGOR_KEY", None)
-
-# CLOUDINARY_STORAGE = {
-#     "CLOUD_NAME": config("CLOUDINARY_NAME"),
-#     "API_KEY": config("CLOUDINARY_API_KEY"),
-#     "API_SECRET": config("CLOUDINARY_API_SECRET"),
-# }
-#
-# DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
-
 # Templates
 # https://docs.djangoproject.com/en/4.2/ref/templates/api
 
