@@ -856,48 +856,68 @@ class Hut(TimeStampedModel):
         hut_ids: list[int] | None = None,
         hut_slugs: list[str] | None = None,
         lang: str = "de",
+        request_interval: float | None = None,
     ) -> list["HutBookingsSchema"]:
-        # def get_bookings() -> dict[int, HutBookingsSchema]:
         bookings: dict[int, HutServiceBookingSchema] = {}
         huts = []
-        obj = cls.objects
+
+        # Build base queryset with prefetch to avoid N+1 queries
+        obj = cls.objects.prefetch_related(
+            "hut_type_open", "hut_type_closed", "booking_ref"
+        )
         if hut_ids is not None:
             obj = obj.filter(pk__in=hut_ids)
         if hut_slugs is not None:
             obj = obj.filter(slug__in=hut_slugs)
         for src_name, service in SERVICES.items():
             if service.support_booking and (src_name == source or source is None):
-                # source_obj = Organization.get_by_slug(src_name)
-                bookings.update(
-                    service.get_bookings(
-                        date=date, days=days, source_ids=source_ids, lang=lang
+                # Get source_ids for this specific service
+                service_source_ids = source_ids
+                if service_source_ids is None:
+                    service_source_ids = list(
+                        obj.filter(orgs_source__organization__slug=src_name)
+                        .values_list("orgs_source__source_id", flat=True)
+                        .distinct()
                     )
+
+                # Skip if no source_ids for this service
+                if not service_source_ids:
+                    continue
+
+                # Fetch bookings from service
+                service_bookings = service.get_bookings(
+                    date=date,
+                    days=days,
+                    source_ids=service_source_ids,
+                    lang=lang,
+                    request_interval=request_interval,
                 )
-                huts += (
-                    obj.prefetch_related(
-                        "hut_type_open", "hut_type_closed", "booking_ref"
+                bookings.update(service_bookings)
+
+                # Only query huts if we got bookings back
+                if service_bookings:
+                    huts += list(
+                        obj.filter(
+                            orgs_source__organization__slug=src_name,
+                            booking_ref__slug=src_name,
+                            orgs_source__source_id__in=service_bookings.keys(),
+                        )
+                        .annotate(
+                            source_id=F("orgs_source__source_id"),
+                            source=Value(src_name),
+                            hut_type_open_slug=F("hut_type_open__slug"),
+                            hut_type_closed_slug=F("hut_type_closed__slug"),
+                        )
+                        .values(
+                            "id",
+                            "slug",
+                            "source_id",
+                            "location",
+                            "hut_type_open_slug",
+                            "hut_type_closed_slug",
+                            "source",
+                        )
                     )
-                    .filter(
-                        orgs_source__organization__slug=src_name,
-                        booking_ref__slug=src_name,
-                        orgs_source__source_id__in=bookings.keys(),
-                    )
-                    .annotate(
-                        source_id=F("orgs_source__source_id"),
-                        source=F("org_set__slug"),
-                        hut_type_open_slug=F("hut_type_open__slug"),
-                        hut_type_closed_slug=F("hut_type_closed__slug"),
-                    )
-                    .values(
-                        "id",
-                        "slug",
-                        "source_id",
-                        "location",
-                        "hut_type_open_slug",
-                        "hut_type_closed_slug",
-                        "source",
-                    )
-                )
 
         for h in huts:
             booking = bookings.get(int(h.get("source_id", -1)))

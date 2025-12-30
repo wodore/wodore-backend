@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 from typing import Any, Dict
 
@@ -33,11 +34,25 @@ class ZitadelIntrospectTokenValidator(IntrospectTokenValidator):  # type: ignore
 
     def _load_api_private_key_from_file(self, file_path: str) -> dict[str, str]:
         _key_obj = {}
-        with open(file_path) as f:
-            data = json.load(f)
-            _key_obj["client_id"] = data["clientId"]
-            _key_obj["key_id"] = data["keyId"]
-            _key_obj["private_key"] = data["key"]
+        try:
+            with open(file_path) as f:
+                data = json.load(f)
+                _key_obj["client_id"] = data["clientId"]
+                _key_obj["key_id"] = data["keyId"]
+                _key_obj["private_key"] = data["key"]
+        except FileNotFoundError:
+            if settings.DEBUG:
+                logging.warning(
+                    "ZITADEL_API_PRIVATE_KEY or _FILE_PATH not found. authentication does not work!!"
+                )
+                _key_obj["client_id"] = None
+                _key_obj["key_id"] = None
+                _key_obj["private_key"] = None
+            else:
+                raise Exception(
+                    "ZITADEL_API_PRIVATE_KEY or _FILE_PATH not found. Authentication cannot be configured."
+                )
+
         return _key_obj
 
     def introspect_token(self, token_string: str) -> dict[str, Any]:
