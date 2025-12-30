@@ -36,6 +36,11 @@ class HutBookingsQuery(Schema):
         "now",
         description="Date to start with bookings (yyyy-mm-dd, 'now' or 'weekend').",
     )
+    request_interval: float | None = Field(
+        None,
+        title="Request interval",
+        description="Time in seconds to wait between requests to the booking service for each hut. If not set uses recommanded default value.",
+    )
 
 
 def _hut_slugs_list(slugs: str | None) -> list[str] | None:
@@ -59,7 +64,11 @@ def get_hut_bookings(  # type: ignore  # noqa: PGH003
     hut_slugs_list = _hut_slugs_list(queries.slugs)
     with override(lang):
         res = Hut.get_bookings(
-            hut_slugs=hut_slugs_list, days=queries.days, date=queries.date, lang=lang
+            hut_slugs=hut_slugs_list,
+            days=queries.days,
+            date=queries.date,
+            lang=lang,
+            request_interval=queries.request_interval,
         )
         if not res:
             raise HttpError(503, "Booking service unavailable. Please retry later.")

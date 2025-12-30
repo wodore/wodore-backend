@@ -10,7 +10,7 @@ api = NinjaAPI(
     docs=Swagger(),
     renderer=MsgSpecRenderer(),
     parser=MsgSpecParser(),
-    csrf=False,
+    # csrf=False,
 )
 
 root_path = "server.apps"
