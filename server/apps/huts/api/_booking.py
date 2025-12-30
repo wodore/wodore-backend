@@ -68,7 +68,8 @@ def get_hut_bookings(  # type: ignore  # noqa: PGH003
             days=queries.days,
             date=queries.date,
             lang=lang,
-            request_interval=queries.request_interval,
+            request_interval=queries.request_interval
+            or 0.03,  # TODO: remove default value again
         )
         if not res:
             raise HttpError(503, "Booking service unavailable. Please retry later.")

@@ -6,7 +6,7 @@ repo_name: wodore/wodore-backend
 
 nav:
   - "Getting Started": index.md
-  - "Information": infos.md
+  - "Links": infos.md
   - "API": api.md
   - Packages: packages.md
   #- API Reference:
