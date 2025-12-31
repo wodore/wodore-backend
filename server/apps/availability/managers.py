@@ -36,14 +36,11 @@ class HutAvailabilityManager(BaseManager):
         high_threshold = now - datetime.timedelta(minutes=high_priority_minutes)
         medium_threshold = now - datetime.timedelta(minutes=medium_priority_minutes)
         low_threshold = now - datetime.timedelta(minutes=low_priority_minutes)
-        inactive_threshold = now - datetime.timedelta(minutes=inactive_priority_minutes)
 
         next_14_days = now.date() + datetime.timedelta(days=14)
 
         # Exclude closed huts (free == 0 and total == 0) from active priority
-        active_huts = self.exclude(free=0, total=0).filter(
-            hut__availability_is_active=True
-        )
+        active_huts = self.exclude(free=0, total=0)
 
         # High priority: Active, full or high occupancy (>75%) in next 14 days
         high_priority = active_huts.filter(
@@ -66,26 +63,15 @@ class HutAvailabilityManager(BaseManager):
         # Low priority: Active, low occupancy (<=25%) in next 14 days
         # Include closed huts here
         low_priority = self.filter(
-            hut__availability_is_active=True,
             availability_date__gte=now.date(),
             availability_date__lte=next_14_days,
             last_checked__lt=low_threshold,
             occupancy_percent__lte=25.0,
         )
 
-        # Inactive priority: Inactive huts (check weekly)
-        inactive_priority = self.filter(
-            hut__availability_is_active=False,
-            availability_date__gte=now.date(),
-            availability_date__lte=next_14_days,
-            last_checked__lt=inactive_threshold,
-        )
-
         # Combine and return distinct huts
         # Note: We get distinct hut IDs to avoid fetching same hut multiple times
-        return (
-            high_priority | medium_priority | low_priority | inactive_priority
-        ).distinct()
+        return (high_priority | medium_priority | low_priority).distinct()
 
     def for_date_range(
         self,
@@ -171,7 +157,6 @@ class HutAvailabilityManager(BaseManager):
         huts_needing_recheck = Hut.objects.filter(
             id__in=status_needing_check,
             booking_ref__isnull=False,
-            availability_is_active=True,
         )
 
         # 3. Get new huts with booking_ref that have never been checked

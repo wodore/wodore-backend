@@ -272,6 +272,7 @@ UNFOLD = {
             "models": [
                 "availability.hutavailability",
                 "availability.hutavailabilityhistory",
+                "availability.availabilitystatus",
             ],
             "items": [
                 {
@@ -290,6 +291,15 @@ UNFOLD = {
                     ),
                     "permission": lambda request: request.user.has_perm(
                         "availability.view_hutavailabilityhistory"
+                    ),
+                },
+                {
+                    "title": _("Status"),
+                    "link": reverse_lazy(
+                        "admin:availability_availabilitystatus_changelist"
+                    ),
+                    "permission": lambda request: request.user.has_perm(
+                        "availability.view_availabilitystatus"
                     ),
                 },
             ],

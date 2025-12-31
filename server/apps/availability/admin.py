@@ -16,7 +16,7 @@ from unfold.decorators import display
 
 from server.apps.manager.admin import ModelAdmin
 
-from .models import HutAvailability, HutAvailabilityHistory
+from .models import AvailabilityStatus, HutAvailability, HutAvailabilityHistory
 
 
 class AvailabilityDateFilter(SimpleListFilter):
@@ -153,6 +153,100 @@ class HutAvailabilityHistoryInline(admin.TabularInline):
             else:
                 return f"{seconds / 86400:.1f} days"
         return "-"
+
+
+@admin.register(AvailabilityStatus)
+class AvailabilityStatusAdmin(ModelAdmin):
+    """Admin for Availability Status tracking"""
+
+    list_display = (
+        "hut_header",
+        "has_data_display",
+        "consecutive_failures_display",
+        "failing_since",
+        "last_checked",
+        "last_success",
+    )
+    list_display_links = ("hut_header",)
+    list_filter = (
+        "has_data",
+        "consecutive_failures",
+    )
+    search_fields = ("hut__name", "hut__slug")
+    readonly_fields = (
+        "hut",
+        "last_checked",
+        "last_success",
+        "has_data",
+        "consecutive_failures",
+        "failing_since",
+        "created",
+        "modified",
+    )
+    list_per_page = 100
+
+    fieldsets = (
+        (
+            _("Hut"),
+            {"fields": ("hut",)},
+        ),
+        (
+            _("Status"),
+            {
+                "fields": (
+                    "has_data",
+                    "consecutive_failures",
+                    "failing_since",
+                )
+            },
+        ),
+        (
+            _("Timestamps"),
+            {
+                "fields": (
+                    "last_checked",
+                    "last_success",
+                    "created",
+                    "modified",
+                )
+            },
+        ),
+    )
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet:
+        """Optimize queryset with select_related"""
+        qs = super().get_queryset(request)
+        return qs.select_related("hut")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    @display(header=True, description=_("Hut"), ordering=Lower("hut__name"))
+    def hut_header(self, obj):
+        """Display hut name and slug as header with link"""
+        return (obj.hut.name, obj.hut.slug)
+
+    @display(description=_("Has Data"), ordering="has_data", boolean=True)
+    def has_data_display(self, obj):
+        """Display has_data field with custom label"""
+        return obj.has_data
+
+    @display(description=_("Failures"), ordering="consecutive_failures")
+    def consecutive_failures_display(self, obj):
+        """Display consecutive_failures field with custom label"""
+        return obj.consecutive_failures
+
+    @display(description=_("Failing Since"))
+    def failing_since(self, obj):
+        """Calculate and display when the hut started failing (if currently failing)"""
+        if obj.consecutive_failures == 0:
+            return "-"
+        elif not obj.last_success:
+            return _("always")
+        return obj.last_success
 
 
 class HutAvailabilityViewInline(admin.TabularInline):
@@ -358,7 +452,7 @@ class HutAvailabilityAdmin(ModelAdmin):
 class HutAvailabilityHistoryAdmin(ModelAdmin):
     list_display = (
         "status_icon",
-        "hut",
+        "hut_header",
         "availability_date",
         "places_display",
         "occupancy_progress",
@@ -432,6 +526,11 @@ class HutAvailabilityHistoryAdmin(ModelAdmin):
         """Optimize queryset with select_related"""
         qs = super().get_queryset(request)
         return qs.select_related("hut", "availability", "hut_type")
+
+    @display(header=True, description=_("Hut"), ordering=Lower("hut__name"))
+    def hut_header(self, obj):
+        """Display hut name and slug as header with link"""
+        return (obj.hut.name, obj.hut.slug)
 
     def has_add_permission(self, request):
         return False

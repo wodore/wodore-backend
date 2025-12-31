@@ -11,13 +11,12 @@ Usage:
 import click
 
 from django.core.management.base import BaseCommand
-from django.db import transaction
 from django.utils import timezone
 
-from server.apps.huts.models import Hut, HutType
-from server.apps.organizations.models import Organization
+from server.apps.huts.models import Hut
 
-from ...models import AvailabilityStatus, HutAvailability, HutAvailabilityHistory
+from ...models import HutAvailability
+from ...services import AvailabilityService
 
 
 class Command(BaseCommand):
@@ -112,147 +111,41 @@ class Command(BaseCommand):
         start_time = timezone.now()
 
         for hut in huts_to_update:
-            try:
-                stats["huts_processed"] += 1
-                click.echo(
-                    f"{stats['huts_processed']:3d}. Processing: {hut.name} ({hut.slug})...",
-                    nl=False,
-                )
+            stats["huts_processed"] += 1
+            click.echo(
+                f"{stats['huts_processed']:3d}. Processing: {hut.name} ({hut.slug})...",
+                nl=False,
+            )
 
-                # Use the existing Hut.get_bookings method
-                try:
-                    bookings_data = Hut.get_bookings(
-                        hut_slugs=[hut.slug],
-                        date="now",
-                        days=days,
-                        request_interval=request_interval,
-                    )
-                except Exception as booking_error:
-                    click.secho(
-                        f" Error fetching bookings: {str(booking_error)}", fg="red"
-                    )
-                    stats["huts_failed"] += 1
-                    # Mark failure in AvailabilityStatus
-                    status, _ = AvailabilityStatus.objects.get_or_create(hut=hut)
-                    status.mark_failure()
-                    continue
+            if dry_run:
+                click.secho(" Would update availability", fg="cyan")
+                continue
 
-                if not bookings_data:
-                    click.secho(" No booking data returned (empty result)", fg="yellow")
-                    stats["huts_failed"] += 1
-                    # Mark failure in AvailabilityStatus (empty data)
-                    status, _ = AvailabilityStatus.objects.get_or_create(hut=hut)
-                    status.mark_failure()
-                    continue
+            # Use the service to update availability
+            result = AvailabilityService.update_hut_availability(
+                hut=hut,
+                days=days,
+                request_interval=request_interval,
+            )
 
-                hut_booking = bookings_data[0]
-                source_org = Organization.objects.get(slug=hut_booking.source)
-                # Use hut_id as source_id (the ID in the booking system)
-                source_hut_id = str(hut_booking.hut_id)
-
-                if dry_run:
-                    click.secho(
-                        f" Would process {len(hut_booking.bookings)} dates",
-                        fg="cyan",
-                    )
-                    continue
-
-                # Process each booking date
-                created_count = 0
-                updated_count = 0
-                history_count = 0
-
-                for booking in hut_booking.bookings:
-                    # Extract all fields from HutBookingSchema
-                    reservation_status = (
-                        booking.reservation_status.value
-                        if hasattr(booking.reservation_status, "value")
-                        else str(booking.reservation_status)
-                    )
-                    occupancy_status = (
-                        booking.occupancy_status.value
-                        if hasattr(booking.occupancy_status, "value")
-                        else str(booking.occupancy_status)
-                    )
-
-                    # Get hut_type FK object
-                    hut_type_obj = None
-                    if booking.hut_type:
-                        hut_type_obj = HutType.values.get(booking.hut_type)
-
-                    now = timezone.now()
-
-                    # Get or create with atomic transaction
-                    with transaction.atomic():
-                        availability, created = HutAvailability.objects.get_or_create(
-                            hut=hut,
-                            availability_date=booking.date,
-                            defaults={
-                                "source_organization": source_org,
-                                "source_id": source_hut_id,
-                                "free": booking.free,
-                                "total": booking.total,
-                                "occupancy_percent": booking.occupancy_percent,
-                                "occupancy_steps": booking.occupancy_steps,
-                                "occupancy_status": occupancy_status,
-                                "reservation_status": reservation_status,
-                                "link": booking.link or "",
-                                "hut_type": hut_type_obj,
-                                "first_checked": now,
-                                "last_checked": now,
-                            },
-                        )
-
-                        if created:
-                            created_count += 1
-                            # Create initial history entry (minimal fields only)
-                            HutAvailabilityHistory.objects.create(
-                                availability=availability,
-                                hut=hut,
-                                availability_date=booking.date,
-                                free=booking.free,
-                                total=booking.total,
-                                occupancy_percent=booking.occupancy_percent,
-                                occupancy_status=occupancy_status,
-                                reservation_status=reservation_status,
-                                hut_type=hut_type_obj,
-                                first_checked=now,
-                                last_checked=now,
-                            )
-                            history_count += 1
-                        else:
-                            # Check if data changed
-                            changed, history = availability.update_availability(
-                                free=booking.free,
-                                total=booking.total,
-                                occupancy_percent=booking.occupancy_percent,
-                                occupancy_steps=booking.occupancy_steps,
-                                occupancy_status=occupancy_status,
-                                reservation_status=reservation_status,
-                                link=booking.link or "",
-                                hut_type=hut_type_obj,
-                            )
-                            if changed:
-                                updated_count += 1
-                                if history:
-                                    history_count += 1
-
-                stats["records_created"] += created_count
-                stats["records_updated"] += updated_count
-                stats["history_entries"] += history_count
-
-                # Mark success in AvailabilityStatus
-                status, _ = AvailabilityStatus.objects.get_or_create(hut=hut)
-                status.mark_success()
+            if result.success:
+                stats["records_created"] += result.records_created
+                stats["records_updated"] += result.records_updated
+                stats["history_entries"] += result.history_entries
 
                 click.secho(
-                    f" ✓ {created_count} created, {updated_count} updated, {history_count} history",
+                    f" ✓ {result.records_created} created, {result.records_updated} updated, {result.history_entries} history",
                     fg="green",
                 )
-
-            except Exception as e:
+            else:
                 stats["huts_failed"] += 1
-                click.secho(f" ✗ Failed: {str(e)}", fg="red")
+                # Determine color based on error type
+                color = (
+                    "yellow"
+                    if "empty result" in (result.error_message or "")
+                    else "red"
+                )
+                click.secho(f" {result.error_message}", fg=color)
 
         end_time = timezone.now()
         duration = (end_time - start_time).total_seconds()

@@ -195,12 +195,18 @@ class HutAvailability(TimeStampedModel):
         return f"{self.hut.name} - {self.availability_date} ({self.free}/{self.total})"
 
     def has_changed(
-        self, free: int, total: int, hut_type: HutType | None = None
+        self,
+        free: int,
+        total: int,
+        hut_type: HutType | None = None,
+        reservation_status: str | None = None,
     ) -> bool:
         """Check if availability data has changed"""
         changed = self.free != free or self.total != total
         if hut_type is not None:
             changed = changed or self.hut_type != hut_type
+        if reservation_status is not None:
+            changed = changed or self.reservation_status != reservation_status
         return changed
 
     def record_change(
@@ -251,7 +257,7 @@ class HutAvailability(TimeStampedModel):
         Returns (changed, history_entry).
         """
         now = timezone.now()
-        changed = self.has_changed(free, total, hut_type)
+        changed = self.has_changed(free, total, hut_type, reservation_status)
         history = None
 
         if changed:
