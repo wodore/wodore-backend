@@ -6,7 +6,7 @@ from benedict import benedict
 from geojson_pydantic import FeatureCollection
 from ninja import Query
 from ninja.decorators import decorate_view
-from rich import print
+# from rich import print
 
 # from ninja.errors import HttpError
 from django.conf import settings
@@ -364,7 +364,7 @@ def get_hut(
         hut_db.images = []
     updated_images = []
     for img in hut_db.images:
-        print(img)
+        # print(img)
         if img.get("review_status", "disabled") != "approved" or img.get(
             "license", {}
         ).get("no_publication", True):
