@@ -24,8 +24,7 @@ services:
       - no-new-privileges:true
     restart: unless-stopped
     pull_policy: always
-    networks:
-      - imagor
+    network_mode: host
     volumes:
       - ./media:/mnt/data/source/media
       - ./media/imagor_data/storage:/mnt/data/storage
@@ -43,6 +42,8 @@ services:
 
       FILE_LOADER_BASE_DIR: /mnt/data/source # enable file loader by specifying base dir
 
+      #HTTP_LOADER_ALLOWED_SOURCES: 127.0.0.1,localhost # enable HTTP loader for local URLs
+
       FILE_STORAGE_BASE_DIR: /mnt/data/storage # enable file storage by specifying base dir
       FILE_STORAGE_MKDIR_PERMISSION: 0755 # optional
       FILE_STORAGE_WRITE_PERMISSION: 0666 # optional
@@ -50,9 +51,8 @@ services:
       FILE_RESULT_STORAGE_BASE_DIR: /mnt/data/result # enable file result storage by specifying base dir
       FILE_RESULT_STORAGE_MKDIR_PERMISSION: 0755 # optional
       FILE_RESULT_STORAGE_WRITE_PERMISSION: 0666 # optional
-      IMAGOR_RESULT_STORAGE_PATH_STYLE: size
-    ports:
-      - "8079:8079"
+      IMAGOR_RESULT_STORAGE_PATH_STYLE:
+        size
 
         #web:
         #  <<: &web
