@@ -70,6 +70,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "server.apps.feedbacks",
     "server.apps.owners",
     "server.apps.huts",
+    "server.apps.availability",
     "server.apps.api",
     # Extension:
     "ninja",

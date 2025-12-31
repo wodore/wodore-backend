@@ -103,6 +103,14 @@ class Hut(TimeStampedModel):
         verbose_name=_("Active"),
         help_text=_("Only shown to admin if not active"),
     )
+    availability_is_active = models.BooleanField(
+        default=True,
+        db_index=True,
+        verbose_name=_("Availability Tracking Active"),
+        help_text=_(
+            "Inactive huts have availability checked weekly instead of based on occupancy"
+        ),
+    )
     is_public = models.BooleanField(
         default=False,
         db_index=True,

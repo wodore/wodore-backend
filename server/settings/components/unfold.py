@@ -123,6 +123,16 @@ UNFOLD = {
                         ),
                     },
                     {
+                        "title": _("Availability"),
+                        "icon": "event_available",
+                        "link": reverse_lazy(
+                            "admin:availability_hutavailability_changelist"
+                        ),
+                        "permission": lambda request: request.user.has_perm(
+                            "availability.view_hutavailability"
+                        ),
+                    },
+                    {
                         "title": _("Owners"),
                         "icon": "location_away",
                         "link": reverse_lazy("admin:owners_owner_changelist"),
@@ -254,6 +264,32 @@ UNFOLD = {
                     "link": reverse_lazy("admin:huts_hutsource_changelist"),
                     "permission": lambda request: request.user.has_perm(
                         "huts.view_hutsource"
+                    ),
+                },
+            ],
+        },
+        {
+            "models": [
+                "availability.hutavailability",
+                "availability.hutavailabilityhistory",
+            ],
+            "items": [
+                {
+                    "title": _("Availability"),
+                    "link": reverse_lazy(
+                        "admin:availability_hutavailability_changelist"
+                    ),
+                    "permission": lambda request: request.user.has_perm(
+                        "availability.view_hutavailability"
+                    ),
+                },
+                {
+                    "title": _("History"),
+                    "link": reverse_lazy(
+                        "admin:availability_hutavailabilityhistory_changelist"
+                    ),
+                    "permission": lambda request: request.user.has_perm(
+                        "availability.view_hutavailabilityhistory"
                     ),
                 },
             ],
