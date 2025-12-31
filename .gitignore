@@ -8,8 +8,10 @@ old/
 slim.report.json
 .env.*
 
+
 # Static folders
 /media/*
+/media_local/*
 /static/*
 
 node_modules
