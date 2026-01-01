@@ -32,6 +32,12 @@ from ._associations import (
 )
 from ._hut_source import HutSourceViewInline
 
+# Import availability inline
+try:
+    from server.apps.availability.admin import HutAvailabilityViewInline
+except ImportError:
+    HutAvailabilityViewInline = None
+
 ## INLINES
 
 
@@ -79,13 +85,18 @@ class HutsAdmin(ModelAdmin):
     )
     list_per_page = 50
 
-    inlines = (
-        HutImageAssociationEditInline,
-        HutContactAssociationEditInline,
-        HutOrganizationAssociationViewInline,
-        HutOrganizationAssociationEditInline,
-        HutSourceViewInline,
-    )
+    def get_inlines(self, request, obj):
+        """Dynamically add availability inline if app is installed"""
+        inlines = [
+            HutImageAssociationEditInline,
+            HutContactAssociationEditInline,
+            HutOrganizationAssociationViewInline,
+            HutOrganizationAssociationEditInline,
+            HutSourceViewInline,
+        ]
+        if HutAvailabilityViewInline is not None:
+            inlines.append(HutAvailabilityViewInline)
+        return inlines
 
     def formfield_for_dbfield(self, db_field, request, **kwargs):
         """Only apply the custom widget to the `open_monthly` field, not all JSONFields."""

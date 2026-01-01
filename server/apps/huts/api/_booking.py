@@ -6,7 +6,6 @@ from ninja.errors import HttpError
 
 from django.http import HttpRequest
 
-from server.apps.api.auth import AuthBearer
 
 # from django.contrib.gis.db.models.functions import AsGeoJSON
 # from django.contrib.postgres.aggregates import JSONBAgg
@@ -55,7 +54,7 @@ def _hut_slugs_list(slugs: str | None) -> list[str] | None:
     "bookings",
     response=list[HutBookingsSchema],
     operation_id="get_hut_bookings",
-    auth=AuthBearer(roles=["perm:bookings"], groups=["root", "admin", "editor"]),
+    # auth=AuthBearer(roles=["perm:bookings"], groups=["root", "admin", "editor"]),
 )
 @with_language_param("lang")
 def get_hut_bookings(  # type: ignore  # noqa: PGH003
@@ -68,8 +67,7 @@ def get_hut_bookings(  # type: ignore  # noqa: PGH003
             days=queries.days,
             date=queries.date,
             lang=lang,
-            request_interval=queries.request_interval
-            or 0.03,  # TODO: remove default value again
+            request_interval=queries.request_interval,
         )
         if not res:
             raise HttpError(503, "Booking service unavailable. Please retry later.")

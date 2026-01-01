@@ -42,7 +42,7 @@ class HutSourceViewInline(unfold_admin.StackedInline):
     max_num = 20
     show_change_link = True
     can_delete = False
-    classes = ("collapse",)
+    # classes = ("collapse",)  # Commented out to keep tab expanded by default
     formfield_overrides: ClassVar = {
         models.JSONField: {"widget": UnfoldReadonlyJSONSuit}
     }

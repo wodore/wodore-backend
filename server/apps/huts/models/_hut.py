@@ -6,11 +6,8 @@ from hut_services import (
     AnswerEnum,
     BaseService,
     HutSchema,
-    HutTypeEnum,
 )
 from hut_services.core.guess import guess_slug_name
-from hut_services.core.schema import HutBookingsSchema as HutServiceBookingSchema
-from hut_services.core.schema import OccupancyStatusEnum
 from jinja2 import Environment
 
 from django_countries.fields import CountryField
@@ -849,7 +846,7 @@ class Hut(TimeStampedModel):
     @classmethod
     def get_bookings(
         cls,
-        date: datetime.datetime | datetime.date | t.Literal["now"] | None = None,
+        date: datetime.datetime | datetime.date | str | None = None,
         days: int | None = None,
         source_ids: list[int] | None = None,
         source: str | None = None,
@@ -858,82 +855,116 @@ class Hut(TimeStampedModel):
         lang: str = "de",
         request_interval: float | None = None,
     ) -> list["HutBookingsSchema"]:
-        bookings: dict[int, HutServiceBookingSchema] = {}
-        huts = []
+        """
+        Fetch availability data from the database.
 
-        # Build base queryset with prefetch to avoid N+1 queries
-        obj = cls.objects.prefetch_related(
-            "hut_type_open", "hut_type_closed", "booking_ref"
+        Args:
+            date: Start date for bookings. Can be datetime, date, string date,
+                  or special values "now"/"weekend". Supports formats:
+                  dd.mm.yyyy, dd.mm.yy, yyyy-mm-dd, yy-mm-dd, yyyy/mm/dd, yy/mm/dd
+            days: Number of days to fetch
+            source_ids: Filter by source IDs
+            source: Filter by source organization slug
+            hut_ids: Filter by hut IDs
+            hut_slugs: Filter by hut slugs
+            lang: Language code (kept for API compatibility)
+            request_interval: Kept for API compatibility (not used for DB queries)
+
+        Returns:
+            List of HutBookingsSchema objects with availability data
+
+        Note: The request_interval parameter is kept for API compatibility but is not used
+        since we're fetching from the database instead of external services.
+        """
+        from server.apps.availability.models import HutAvailability
+        from server.apps.availability.utils import parse_availability_date
+        from collections import defaultdict
+
+        # Parse date parameter using utility function
+        start_datetime = parse_availability_date(date)
+        start_date = start_datetime.date()
+
+        # Calculate end date
+        if days is None:
+            days = 1
+        end_date = start_date + datetime.timedelta(days=days)
+
+        # Build queryset for HutAvailability
+        availability_qs = HutAvailability.objects.filter(
+            availability_date__gte=start_date,
+            availability_date__lt=end_date,
+        ).select_related(
+            "hut",
+            "source_organization",
+            "hut_type",
         )
+
+        # Apply filters
         if hut_ids is not None:
-            obj = obj.filter(pk__in=hut_ids)
+            availability_qs = availability_qs.filter(hut_id__in=hut_ids)
         if hut_slugs is not None:
-            obj = obj.filter(slug__in=hut_slugs)
-        for src_name, service in SERVICES.items():
-            if service.support_booking and (src_name == source or source is None):
-                # Get source_ids for this specific service
-                service_source_ids = source_ids
-                if service_source_ids is None:
-                    service_source_ids = list(
-                        obj.filter(orgs_source__organization__slug=src_name)
-                        .values_list("orgs_source__source_id", flat=True)
-                        .distinct()
-                    )
+            availability_qs = availability_qs.filter(hut__slug__in=hut_slugs)
+        if source is not None:
+            availability_qs = availability_qs.filter(source_organization__slug=source)
+        if source_ids is not None:
+            availability_qs = availability_qs.filter(source_id__in=source_ids)
 
-                # Skip if no source_ids for this service
-                if not service_source_ids:
-                    continue
+        # Group availability data by hut
+        hut_bookings_map = defaultdict(list)
+        hut_data_map = {}
 
-                # Fetch bookings from service
-                service_bookings = service.get_bookings(
-                    date=date,
-                    days=days,
-                    source_ids=service_source_ids,
-                    lang=lang,
-                    request_interval=request_interval,
-                )
-                bookings.update(service_bookings)
+        for avail in availability_qs.order_by("hut_id", "availability_date"):
+            hut_id = avail.hut_id
 
-                # Only query huts if we got bookings back
-                if service_bookings:
-                    huts += list(
-                        obj.filter(
-                            orgs_source__organization__slug=src_name,
-                            booking_ref__slug=src_name,
-                            orgs_source__source_id__in=service_bookings.keys(),
-                        )
-                        .annotate(
-                            source_id=F("orgs_source__source_id"),
-                            source=Value(src_name),
-                            hut_type_open_slug=F("hut_type_open__slug"),
-                            hut_type_closed_slug=F("hut_type_closed__slug"),
-                        )
-                        .values(
-                            "id",
-                            "slug",
-                            "source_id",
-                            "location",
-                            "hut_type_open_slug",
-                            "hut_type_closed_slug",
-                            "source",
-                        )
-                    )
+            # Store hut data (only once per hut)
+            if hut_id not in hut_data_map:
+                hut_data_map[hut_id] = {
+                    "id": avail.hut.id,
+                    "slug": avail.hut.slug,
+                    "location": avail.hut.location,
+                    "source_id": avail.source_id,
+                    "source": avail.source_organization.slug,
+                }
 
-        for h in huts:
-            booking = bookings.get(int(h.get("source_id", -1)))
-            if booking is not None:
-                for b in booking.bookings:
-                    b.hut_type = (
-                        HutTypeEnum.unknown.value
-                        if b.places.occupancy_status == OccupancyStatusEnum.unknown
-                        else (
-                            h["hut_type_closed_slug"]
-                            if b.unattended and h["hut_type_closed_slug"] is not None
-                            else h["hut_type_open_slug"]
-                        )
-                    )
-                h.update(booking)
-        return [HutBookingsSchema(**h) for h in huts]
+            # Add booking entry
+            from ..schemas_booking import HutBookingSchema, HutBookingsSchema
+
+            booking = HutBookingSchema(
+                link=avail.link,
+                date=avail.availability_date,
+                reservation_status=avail.reservation_status,
+                free=avail.free,
+                total=avail.total,
+                occupancy_percent=avail.occupancy_percent,
+                occupancy_steps=avail.occupancy_steps,
+                occupancy_status=avail.occupancy_status,
+                hut_type=avail.hut_type.slug if avail.hut_type else "unknown",
+            )
+            hut_bookings_map[hut_id].append(booking)
+
+        # Build result list
+        results = []
+        for hut_id, bookings_list in hut_bookings_map.items():
+            hut_info = hut_data_map[hut_id]
+
+            # Determine link (use first booking's link or empty)
+            link = bookings_list[0].link if bookings_list else ""
+
+            # Build HutBookingsSchema
+            # Note: hut_id field has alias="id", so we pass id= instead of hut_id=
+            hut_bookings = HutBookingsSchema(
+                id=hut_info["id"],
+                slug=hut_info["slug"],
+                source=hut_info["source"],
+                days=days,
+                link=link,
+                start_date=start_date,
+                bookings=bookings_list,
+                location=hut_info["location"],
+            )
+            results.append(hut_bookings)
+
+        return results
 
     def organizations_query(
         self, organization: str | Organization | None = None, annotate=True
