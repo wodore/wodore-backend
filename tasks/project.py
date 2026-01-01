@@ -164,6 +164,8 @@ def release(
     if new_tag:
         success(f"Bumped to version '{new_version}' (tag '{new_tag}').")
         info("Please check the entries in 'CHANGELOG.md' and update it accordingly.")
+        info("Run 'inv update' in order to update the lock file.")
+        info("Run 'git commit -am \"Release version {new_version}\"'.")
         if add_tag and not dry:
             c.run(f"git tag -f '{new_tag}'")
             c.run(f"git push origin '{new_tag}'")
