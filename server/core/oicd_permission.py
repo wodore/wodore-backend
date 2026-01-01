@@ -1,3 +1,6 @@
+from urllib.parse import urlparse
+
+import requests
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 
 # from django.contrib import admin
@@ -6,6 +9,44 @@ from django.contrib.auth.models import Group, User
 
 
 class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimported]
+    def _prepare_request_with_custom_host(self, url: str, **kwargs):
+        """
+        Modify URL and headers if OIDC_ISSUER_INTERNAL_URL is configured.
+        This allows using an internal service URL while preserving the public hostname in the Host header.
+
+        Use case: When OIDC provider requires a specific Host header (e.g., in local/dev Kubernetes clusters
+        where DNS resolution needs to be overridden).
+        """
+        internal_url = self.get_settings("OIDC_ISSUER_INTERNAL_URL", "")
+
+        if internal_url:
+            parsed_original = urlparse(url)
+            parsed_internal = urlparse(internal_url)
+
+            # Replace scheme and netloc with internal URL, keep path
+            modified_url = url.replace(
+                f"{parsed_original.scheme}://{parsed_original.netloc}",
+                f"{parsed_internal.scheme}://{parsed_internal.netloc}",
+            )
+
+            # Add Host header with original hostname
+            headers = kwargs.setdefault("headers", {})
+            headers["Host"] = parsed_original.netloc
+
+            return modified_url, kwargs
+
+        return url, kwargs
+
+    def get(self, url, **kwargs):
+        """Override to support custom internal OIDC URL with Host header"""
+        url, kwargs = self._prepare_request_with_custom_host(url, **kwargs)
+        return requests.get(url, **kwargs)
+
+    def post(self, url, **kwargs):
+        """Override to support custom internal OIDC URL with Host header"""
+        url, kwargs = self._prepare_request_with_custom_host(url, **kwargs)
+        return requests.post(url, **kwargs)
+
     def get_username(self, claims: dict) -> str | None:
         return claims.get("sub")
 
