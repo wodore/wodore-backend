@@ -112,8 +112,9 @@ python manage.py update_availability --days 365 --request-interval 0.1
 - `--all` - Force update all huts with booking references
 - `--dry-run` - Preview without making changes
 - `--days <n>` - Number of days to fetch (default: 365)
-- `--request-interval <seconds>` - Time between requests (default: 0.1)
+- `--request-interval <seconds>` - Time between requests to external API per hut (default: 0.1)
 - `--profile` - Enable profiling to identify performance bottlenecks
+- `--no-progress` - Disable progress bar and print results line-by-line (useful for cron jobs)
 
 **Default Behavior (no arguments):**
 
@@ -130,11 +131,38 @@ This ensures both regular updates of existing data and discovery of new huts.
 
 **Process:**
 
-1. Fetches booking data using `Hut.get_bookings()`
+The command uses **batched fetching** to reduce memory usage and improve fault tolerance:
+
+1. **Batch 1**: Fetch 30 huts from external API → Save to database
+2. **Batch 2**: Fetch next 30 huts → Save to database
+3. Continue until all huts are processed
+
+For each hut:
+1. Fetches booking data from external API with `cached=False` (real-time data)
 2. Extracts all fields from `HutBookingSchema`
 3. Creates or updates `HutAvailability` records
 4. Records changes to `HutAvailabilityHistory` with timestamps
 5. Updates `last_checked` on unchanged records
+
+**Batch Processing Benefits:**
+- Lower memory usage (only hold one batch at a time)
+- Better fault tolerance (partial progress saved if later batches fail)
+- Reduced load on external servers (requests spread over time)
+- Faster time-to-first-result (start saving data after first batch)
+
+**Progress Display:**
+- **With progress bar** (default): Shows real-time progress with batch info
+  ```
+  ✓ Fetching from external API... ████████░░ 30/153 • 00:15 Batch 1/6
+  ✓ Saving to database...        ████████░░ 30/153 • 00:03 Batch 1/6
+  ```
+- **With `--no-progress`**: Prints each hut as it's processed (useful for cron jobs)
+  ```
+  [1/153] Batch 1/6 - Fetching Cabane de Susanfe CAS (susanfe)...
+  [1/153] Batch 1/6 - Saving Cabane de Susanfe CAS (susanfe)...
+  [2/153] Batch 1/6 - Fetching Capanna Campo Tencia CAS (campo-tencia)...
+  ...
+  ```
 
 ## Data Flow
 
@@ -222,11 +250,12 @@ The availability service has been extensively optimized for high-performance bul
 
 ### Database Optimizations
 
-**1. Batch Processing**
+**1. Batched External Fetching & Database Processing**
 
-- Processes multiple huts in a single database transaction (default: 20 huts per batch)
-- Reduces transaction overhead and improves throughput
-- Configurable via `batch_size` parameter
+- Fetches and processes huts in batches of 30 (default: `batch_size=30`)
+- Each batch: Fetch from API → Save to DB → Move to next batch
+- Sequential processing prevents memory issues and reduces external server load
+- Configurable via `batch_size` parameter in service
 
 **2. Bulk Operations**
 
@@ -250,13 +279,14 @@ The availability service has been extensively optimized for high-performance bul
 
 - No row-level locks during updates for better concurrency
 - Atomic transactions provide sufficient consistency
-- Allows parallel processing if needed in future
+- Each batch processed in a single transaction
 
 ### External API Optimizations
 
-- **Single API call** - All huts fetched in one external service call
-- **Rate limiting** - `request_interval` controls spacing between individual hut requests
-- **Progress tracking** - Real-time progress bar using `rich` library shows fetch and DB progress
+- **Batched fetching** - Fetches 30 huts per batch from external API with `cached=False`
+- **Real-time data** - Disables cache to ensure batched fetching works correctly
+- **Rate limiting** - `request_interval` controls spacing between individual hut requests (default: 0.1s)
+- **Progress tracking** - Real-time progress bar using `rich` library shows fetch and DB progress with batch info
 
 ### Performance Metrics
 
@@ -278,12 +308,12 @@ python manage.py update_availability --all --profile
 ### Current Architecture
 
 ```python
-# Batch fetch and process with optimized database operations
+# Batched fetch and process with optimized database operations
 batch_result = AvailabilityService.update_huts_availability(
     huts=huts_list,
     days=365,
     request_interval=0.1,
-    batch_size=20,  # Huts per transaction
+    batch_size=30,  # Huts per batch (fetch + DB transaction)
     update_history_last_checked=True,  # Enable duration tracking
     fetch_progress_callback=fetch_callback,
     process_progress_callback=process_callback,
@@ -292,10 +322,12 @@ batch_result = AvailabilityService.update_huts_availability(
 
 The service automatically:
 
-1. Fetches all huts from external API
-2. Groups huts into batches of 20
-3. Processes each batch in optimized transaction
-4. Updates availability and history records efficiently
+1. **Splits huts into batches of 30**
+2. **For each batch:**
+   - Fetches booking data from external API (with `cached=False` for real-time data)
+   - Processes and saves all data in a single optimized database transaction
+   - Updates availability and history records efficiently
+3. **Moves to next batch** - Sequential processing ensures low memory usage and fault tolerance
 
 ## Future Enhancements
 
