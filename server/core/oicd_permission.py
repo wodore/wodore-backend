@@ -46,13 +46,11 @@ class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimp
         from base64 import urlsafe_b64decode
 
         url, kwargs = self._prepare_request_with_custom_host(self.OIDC_OP_JWKS_ENDPOINT)
-        response_jwks = requests.get(
-            url,
-            verify=self.get_settings("OIDC_VERIFY_SSL", True),
-            timeout=self.get_settings("OIDC_TIMEOUT", None),
-            proxies=self.get_settings("OIDC_PROXY", None),
-            **kwargs,
-        )
+        kwargs["verify"] = self.get_settings("OIDC_VERIFY_SSL", True)
+        kwargs["timeout"] = self.get_settings("OIDC_TIMEOUT", None)
+        kwargs["proxies"] = self.get_settings("OIDC_PROXY", None)
+
+        response_jwks = requests.get(url, **kwargs)
         response_jwks.raise_for_status()
         jwks = response_jwks.json()
 
@@ -80,17 +78,13 @@ class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimp
         url, kwargs = self._prepare_request_with_custom_host(
             self.OIDC_OP_TOKEN_ENDPOINT
         )
+        kwargs["data"] = payload
+        kwargs["auth"] = auth
+        kwargs["verify"] = self.get_settings("OIDC_VERIFY_SSL", True)
+        kwargs["timeout"] = self.get_settings("OIDC_TIMEOUT", None)
+        kwargs["proxies"] = self.get_settings("OIDC_PROXY", None)
 
-        response = requests.post(
-            url,
-            data=payload,
-            auth=auth,
-            verify=self.get_settings("OIDC_VERIFY_SSL", True),
-            timeout=self.get_settings("OIDC_TIMEOUT", None),
-            proxies=self.get_settings("OIDC_PROXY", None),
-            **kwargs,
-        )
-
+        response = requests.post(url, **kwargs)
         response.raise_for_status()
         return response.json()
 
@@ -98,15 +92,15 @@ class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimp
         """Override to add Host header support for userinfo endpoint"""
         url, kwargs = self._prepare_request_with_custom_host(self.OIDC_OP_USER_ENDPOINT)
 
-        user_response = requests.get(
-            url,
-            headers={"Authorization": f"Bearer {access_token}"},
-            verify=self.get_settings("OIDC_VERIFY_SSL", True),
-            timeout=self.get_settings("OIDC_TIMEOUT", None),
-            proxies=self.get_settings("OIDC_PROXY", None),
-            **kwargs,
-        )
+        # Merge Authorization header with any existing headers from _prepare_request_with_custom_host
+        headers = kwargs.setdefault("headers", {})
+        headers["Authorization"] = f"Bearer {access_token}"
 
+        kwargs["verify"] = self.get_settings("OIDC_VERIFY_SSL", True)
+        kwargs["timeout"] = self.get_settings("OIDC_TIMEOUT", None)
+        kwargs["proxies"] = self.get_settings("OIDC_PROXY", None)
+
+        user_response = requests.get(url, **kwargs)
         user_response.raise_for_status()
         return user_response.json()
 
