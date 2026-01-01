@@ -121,6 +121,7 @@ if discovery_info:
         if config("DJANGO_ADMIN_URL", None)
         else "http://localhost:8000"
     )
+    # Redirect to /admin after successful login
     LOGIN_REDIRECT_URL = f"{_django_admin_url}/admin"
     LOGOUT_REDIRECT_URL = f"{_django_admin_url}/admin"
     LOGIN_URL = f"{_django_admin_url}/oidc/authenticate/"

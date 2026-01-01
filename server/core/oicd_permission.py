@@ -9,7 +9,7 @@ from django.contrib.auth.models import Group, User
 
 
 class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimported]
-    def _prepare_request_with_custom_host(self, url: str, **kwargs):
+    def _prepare_request_with_custom_host(self, url: str, request_kwargs: dict = None):
         """
         Modify URL and headers if OIDC_ISSUER_INTERNAL_URL is configured.
         This allows using an internal service URL while preserving the public hostname in the Host header.
@@ -17,6 +17,9 @@ class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimp
         Use case: When OIDC provider requires a specific Host header (e.g., in local/dev Kubernetes clusters
         where DNS resolution needs to be overridden).
         """
+        if request_kwargs is None:
+            request_kwargs = {}
+
         internal_url = self.get_settings("OIDC_ISSUER_INTERNAL_URL", "")
 
         if internal_url:
@@ -30,18 +33,19 @@ class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimp
             )
 
             # Add Host header with original hostname
-            headers = kwargs.setdefault("headers", {})
+            headers = request_kwargs.setdefault("headers", {})
             headers["Host"] = parsed_original.netloc
 
-            return modified_url, kwargs
+            return modified_url, request_kwargs
 
-        return url, kwargs
+        return url, request_kwargs
 
     def retrieve_matching_jwk(self, token):
         """Override to add Host header support for JWKS endpoint"""
-        url, kwargs = self._prepare_request_with_custom_host(
-            self.OIDC_OP_JWKS_ENDPOINT, {}
-        )
+        import json
+        from base64 import urlsafe_b64decode
+
+        url, kwargs = self._prepare_request_with_custom_host(self.OIDC_OP_JWKS_ENDPOINT)
         response_jwks = requests.get(
             url,
             verify=self.get_settings("OIDC_VERIFY_SSL", True),
@@ -52,14 +56,20 @@ class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimp
         response_jwks.raise_for_status()
         jwks = response_jwks.json()
 
-        # Find the matching key from the JWKS
-        key = None
-        for jwk in jwks.get("keys", []):
-            if jwk.get("kid") == token.get("kid"):
-                key = jwk
-                break
+        # Decode the JWT header to get the key ID
+        # JWT format: header.payload.signature (each base64url encoded)
+        header_segment = token.split(b".")[0]
+        # Add padding if needed for base64 decoding
+        padding = b"=" * (4 - (len(header_segment) % 4))
+        header_data = urlsafe_b64decode(header_segment + padding)
+        header = json.loads(header_data)
 
-        return key
+        # Find and return the matching key dict from the JWKS
+        for jwk in jwks.get("keys", []):
+            if jwk.get("kid") == header.get("kid"):
+                return jwk
+
+        return None
 
     def get_token(self, payload):
         """Override to add Host header support for token endpoint"""
@@ -68,7 +78,7 @@ class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimp
             auth = (self.OIDC_RP_CLIENT_ID, self.OIDC_RP_CLIENT_SECRET)
 
         url, kwargs = self._prepare_request_with_custom_host(
-            self.OIDC_OP_TOKEN_ENDPOINT, {}
+            self.OIDC_OP_TOKEN_ENDPOINT
         )
 
         response = requests.post(
@@ -86,9 +96,7 @@ class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimp
 
     def get_userinfo(self, access_token, id_token, payload):
         """Override to add Host header support for userinfo endpoint"""
-        url, kwargs = self._prepare_request_with_custom_host(
-            self.OIDC_OP_USER_ENDPOINT, {}
-        )
+        url, kwargs = self._prepare_request_with_custom_host(self.OIDC_OP_USER_ENDPOINT)
 
         user_response = requests.get(
             url,
