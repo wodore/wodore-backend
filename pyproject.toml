@@ -132,9 +132,9 @@ dev = [
 [tool.uv.sources]
 django-computedfields = { git = "https://github.com/TBxy/django-computedfields", branch = "django5.0" }
 hut-services-private = { git = "ssh://git@github.com/wodore/hut-services-private", branch = "main" }
-#hut-services-private = { path = "/home/tobias/git/wodore/hut-services-private", editable = true }
-# hut-services = { path = "/home/tobias/git/wodore/hut-services", editable = true } # local DEV
+# hut-services-private = { path = "/home/tobias/git/wodore/hut-services-private", editable = true }
 hut-services = { git = "ssh://git@github.com/wodore/hut-services", branch = "main" }
+# hut-services = { path = "/home/tobias/git/wodore/hut-services", editable = true } # local DEV
 
 [tool.pytest.ini_options]
 minversion = "7.0"

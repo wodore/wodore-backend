@@ -70,6 +70,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "server.apps.feedbacks",
     "server.apps.owners",
     "server.apps.huts",
+    "server.apps.availability",
     "server.apps.api",
     # Extension:
     "ninja",
@@ -317,6 +318,12 @@ PASSWORD_HASHERS = [
 # is overwritten for dev in enviroment
 SESSION_COOKIE_SECURE = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Session settings
+# https://docs.djangoproject.com/en/4.2/ref/settings/#sessions
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 7  # 7 days (in seconds)
+SESSION_SAVE_EVERY_REQUEST = True  # Extend session on every request
+SESSION_COOKIE_HTTPONLY = True  # Prevent JavaScript access to session cookie
 
 
 CSRF_COOKIE_HTTPONLY = True

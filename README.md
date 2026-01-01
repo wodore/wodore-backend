@@ -12,19 +12,19 @@
     &ndash; <a href="https://wodore.github.io/wodore-backend/">documentation</a></small>
 </p><p>&nbsp;</p>
 
-
 ## Used Stack
 
 #### Production
-* [Django](https://www.djangoproject.com/) with [django ninja](https://django-ninja.dev/) for the API and [unfold admin](https://unfoldadmin.com/)
-* [PostgreSQL](https://www.postgresql.org/) with [PostGIS](https://postgis.net/) for the database
-* [Imagor](https://github.com/cshum/imagor) for image serving and processing
-* [Zitadel](https://zitadel.com/) for authentication and user management _(optional)_
+
+- [Django](https://www.djangoproject.com/) with [django ninja](https://django-ninja.dev/) for the API and [unfold admin](https://unfoldadmin.com/)
+- [PostgreSQL](https://www.postgresql.org/) with [PostGIS](https://postgis.net/) for the database
+- [Imagor](https://github.com/cshum/imagor) for image serving and processing
+- [Zitadel](https://zitadel.com/) for authentication and user management _(optional)_
 
 #### Dev Tools
-* [uv](https://docs.astral.sh/uv/) for package management
-* [infisical](https://infisical.com/) for secrets management _(optional)_
 
+- [uv](https://docs.astral.sh/uv/) for package management
+- [infisical](https://infisical.com/) for secrets management _(optional)_
 
 ## Development
 
@@ -33,6 +33,7 @@
 Check [Prerequisites](#prerequisites) for required tools.
 
 When first cloning the repository:
+
 ```bash
 # Install Python packages and set up virtualenv
 make init
@@ -46,6 +47,7 @@ source .venv/bin/activate
 ### Setup
 
 Activate the virtual environment and install packages:
+
 ```bash
 source .venv/bin/activate
 
@@ -67,12 +69,14 @@ source deactivate; source .venv/bin/activate
 ### Secrets
 
 Secrets are managed with [infisical](https://infisical.com/). Install the CLI tool following the [installation guide](https://infisical.com/docs/cli/overview#installation) and initialize it:
+
 ```bash
 infisical login
 infisical init
 ```
 
 Set up secrets using infisical (recommended):
+
 ```bash
 (.venv) inv install --infisical
 source .venv/bin/activate
@@ -80,6 +84,7 @@ source .venv/bin/activate
 ```
 
 Or use local env files:
+
 ```bash
 # Export secrets to config/.env (update when secrets change)
 infisical export --env dev --path /backend >> config/.env
@@ -87,6 +92,7 @@ ln -s config/.env .env
 ```
 
 Or set up manually:
+
 ```bash
 # Create and edit env files manually
 cp config/.env.template config/.env
@@ -99,6 +105,7 @@ ln -s config/.env .env
 ### Start Database and Image Service
 
 Start PostgreSQL and Imagor services after each system restart:
+
 ```bash
 # With infisical (recommended)
 (.venv) inv docker-compose -c "up -d" -i
@@ -108,21 +115,23 @@ Start PostgreSQL and Imagor services after each system restart:
 ```
 
 **NOTE:** PostgreSQL data is stored in `.volumes/pgdata/` (development only). To reset the database:
+
 ```bash
 rm -rf .volumes/pgdata/*  # Be careful!
 (.venv) inv docker-compose -c "up -d"
 ```
 
-
 ## Start Application
 
 Start the application using the app alias (recommended):
+
 ```bash
 (.venv) app migrate
 (.venv) app run -p 8000 # -i # with infisical
 ```
 
 Or use invoke with infisical:
+
 ```bash
 (.venv) app migrate -i
 (.venv) app run -p 8000 -i
@@ -132,12 +141,14 @@ Or use invoke with infisical:
 ```
 
 Or use local env files (requires `.env` and `config/.env`):
+
 ```bash
 (.venv) inv app.app --cmd "migrate"
 (.venv) inv app.app --cmd "runserver"
 ```
 
 **NOTE:** The `app` command expands to if infisical is used:
+
 ```bash
 infisical run --env=dev --path /backend --silent --log-level warn -- app <command>
 ```
@@ -147,6 +158,7 @@ infisical run --env=dev --path /backend --silent --log-level warn -- app <comman
 Copy hut information from sources, this saves huts information from
 different sources (e.g. refuges.info, wikidata, open stree map) into the
 local database
+
 ```bash
 # Add all available sources
 (.venv) app hut_sources --add --orgs all
@@ -154,6 +166,7 @@ local database
 # Add specific source (e.g. refuges)
 (.venv) app hut_sources --add --orgs refuges
 ```
+
 Add huts from the previously added sources.
 If a hut has multiple sources they are combined as good as possible.
 
@@ -165,6 +178,7 @@ If a hut has multiple sources they are combined as good as possible.
 ## Helpful Commands
 
 Common database commands:
+
 ```bash
 # Apply migrations
 (.venv) app migrate
@@ -177,6 +191,7 @@ Common database commands:
 ```
 
 Watch and compile Tailwind CSS:
+
 ```bash
 npx tailwindcss -i styles.css -o server/apps/manager/static/css/styles.css --minify --watch
 ```
@@ -184,6 +199,7 @@ npx tailwindcss -i styles.css -o server/apps/manager/static/css/styles.css --min
 ### Package Updates
 
 Update all packages:
+
 ```bash
 (.venv) inv update # OR
 (.venv) inv update --no-private # do not update private packages (this removes the private packages)
@@ -213,6 +229,7 @@ Merge this change into the `main` branch, the github action will create a tag an
 ## Docker Production Build
 
 Set required environment variables (or add it to the `.env` file):
+
 ```bash
 READ_GITHUB_USER=<username>
 READ_GITHUB_TOKEN=<token>  # Must have read access
@@ -221,6 +238,7 @@ READ_GITHUB_TOKEN=<token>  # Must have read access
 (run `infisical export --env dev --path /keys/wodore-backend` to export the secrets)
 
 Build and run Docker images (default is alpine image):
+
 ```bash
 # Build main image
 (.venv) inv docker.build [--distro alpine|ubuntu] [-p/--push] [-v/--version-tag]
@@ -236,6 +254,7 @@ Build and run Docker images (default is alpine image):
 ```
 
 **NOTE:** These commands are deprecated:
+
 ```bash
 # Export secrets (will be removed)
 infisical export --env dev --path /backend >> config/.env
@@ -250,10 +269,14 @@ infisical run --env=dev --path /backend -- \
 
 Required development tools:
 
-* `python3.12` (see `pyproject.toml`)
-* `postgresql13`
-* `docker` with `docker compose`
-* `infisical` ([installation guide](https://infisical.com/docs/cli/overview#installation)) (optional)
-* `uv` ([installation guide](https://docs.astral.sh/uv/getting-started/installation/))
-* `node` and `npm` for Tailwind CSS
-* `make` (optional)
+- `python3.12` (see `pyproject.toml`)
+- `postgresql13`
+- `docker` with `docker compose`
+- `infisical` ([installation guide](https://infisical.com/docs/cli/overview#installation)) (optional)
+- `uv` ([installation guide](https://docs.astral.sh/uv/getting-started/installation/))
+- `node` and `npm` for Tailwind CSS
+- `make` (optional)
+
+## TODOs
+
+See [TODOS.md](TODOS.md) for future improvements and refactoring ideas.

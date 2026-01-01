@@ -108,7 +108,7 @@ class HutOrganizationAssociationEditInline(unfold_admin.StackedInline):
     model = Hut.org_set.through
     fields = (("organization", "source_id"), "props", "schema")
     extra = 0
-    classes = ("collapse",)
+    # classes = ("collapse",)  # Commented out to keep tab expanded by default
     formfield_overrides: ClassVar = {models.JSONField: {"widget": UnfoldJSONSuit}}
     verbose_name = _("Edit Source")
 
