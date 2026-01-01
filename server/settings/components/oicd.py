@@ -10,18 +10,39 @@ Docs: https://github.com/mozilla/django-csp
 
 import json
 import logging
+from urllib.parse import urlparse
 
 import requests
 
 from server.settings.components import config
 
 
-def discover_oidc(discovery_url: str) -> dict | None:
+def discover_oidc(discovery_url: str, internal_url: str = "") -> dict | None:
     """
     Performs OpenID Connect discovery to retrieve the provider configuration.
+
+    Args:
+        discovery_url: The public OIDC discovery URL
+        internal_url: Optional internal URL to use instead (e.g., for k8s service)
     """
+    headers = {}
+    actual_url = discovery_url
+
+    if internal_url:
+        parsed_original = urlparse(discovery_url)
+        parsed_internal = urlparse(internal_url)
+
+        # Replace scheme and netloc with internal URL, keep path
+        actual_url = discovery_url.replace(
+            f"{parsed_original.scheme}://{parsed_original.netloc}",
+            f"{parsed_internal.scheme}://{parsed_internal.netloc}",
+        )
+
+        # Add Host header with original hostname
+        headers["Host"] = parsed_original.netloc
+
     try:
-        response = requests.get(discovery_url)
+        response = requests.get(actual_url, headers=headers)
     except requests.exceptions.ConnectionError as e:
         logging.warning(
             "Failed to retrieve provider configuration for '%s': '%s'.",
@@ -73,8 +94,11 @@ OIDC_RP_SIGN_ALGO = "RS256"
 OIDC_RP_SCOPES = "openid email phone profile"
 OIDC_OP_DISCOVERY_ENDPOINT = OIDC_OP_BASE_URL + "/.well-known/openid-configuration"
 
+# Optional internal URL for OIDC requests (e.g., k8s service URL)
+OIDC_ISSUER_INTERNAL_URL = config("OIDC_ISSUER_INTERNAL_URL", "")
+
 # Discover OpenID Connect endpoints
-discovery_info = discover_oidc(OIDC_OP_DISCOVERY_ENDPOINT)
+discovery_info = discover_oidc(OIDC_OP_DISCOVERY_ENDPOINT, OIDC_ISSUER_INTERNAL_URL)
 if discovery_info:
     OIDC_OP_AUTHORIZATION_ENDPOINT = discovery_info["authorization_endpoint"]
     OIDC_OP_TOKEN_ENDPOINT = discovery_info["token_endpoint"]
