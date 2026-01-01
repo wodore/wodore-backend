@@ -37,15 +37,70 @@ class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimp
 
         return url, kwargs
 
-    def get(self, url, **kwargs):
-        """Override to support custom internal OIDC URL with Host header"""
-        url, kwargs = self._prepare_request_with_custom_host(url, **kwargs)
-        return requests.get(url, **kwargs)
+    def retrieve_matching_jwk(self, token):
+        """Override to add Host header support for JWKS endpoint"""
+        url, kwargs = self._prepare_request_with_custom_host(
+            self.OIDC_OP_JWKS_ENDPOINT, {}
+        )
+        response_jwks = requests.get(
+            url,
+            verify=self.get_settings("OIDC_VERIFY_SSL", True),
+            timeout=self.get_settings("OIDC_TIMEOUT", None),
+            proxies=self.get_settings("OIDC_PROXY", None),
+            **kwargs,
+        )
+        response_jwks.raise_for_status()
+        jwks = response_jwks.json()
 
-    def post(self, url, **kwargs):
-        """Override to support custom internal OIDC URL with Host header"""
-        url, kwargs = self._prepare_request_with_custom_host(url, **kwargs)
-        return requests.post(url, **kwargs)
+        # Find the matching key from the JWKS
+        key = None
+        for jwk in jwks.get("keys", []):
+            if jwk.get("kid") == token.get("kid"):
+                key = jwk
+                break
+
+        return key
+
+    def get_token(self, payload):
+        """Override to add Host header support for token endpoint"""
+        auth = None
+        if self.get_settings("OIDC_TOKEN_USE_BASIC_AUTH", False):
+            auth = (self.OIDC_RP_CLIENT_ID, self.OIDC_RP_CLIENT_SECRET)
+
+        url, kwargs = self._prepare_request_with_custom_host(
+            self.OIDC_OP_TOKEN_ENDPOINT, {}
+        )
+
+        response = requests.post(
+            url,
+            data=payload,
+            auth=auth,
+            verify=self.get_settings("OIDC_VERIFY_SSL", True),
+            timeout=self.get_settings("OIDC_TIMEOUT", None),
+            proxies=self.get_settings("OIDC_PROXY", None),
+            **kwargs,
+        )
+
+        response.raise_for_status()
+        return response.json()
+
+    def get_userinfo(self, access_token, id_token, payload):
+        """Override to add Host header support for userinfo endpoint"""
+        url, kwargs = self._prepare_request_with_custom_host(
+            self.OIDC_OP_USER_ENDPOINT, {}
+        )
+
+        user_response = requests.get(
+            url,
+            headers={"Authorization": f"Bearer {access_token}"},
+            verify=self.get_settings("OIDC_VERIFY_SSL", True),
+            timeout=self.get_settings("OIDC_TIMEOUT", None),
+            proxies=self.get_settings("OIDC_PROXY", None),
+            **kwargs,
+        )
+
+        user_response.raise_for_status()
+        return user_response.json()
 
     def get_username(self, claims: dict) -> str | None:
         return claims.get("sub")

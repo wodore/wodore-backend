@@ -97,6 +97,16 @@ OIDC_OP_DISCOVERY_ENDPOINT = OIDC_OP_BASE_URL + "/.well-known/openid-configurati
 # Optional internal URL for OIDC requests (e.g., k8s service URL)
 OIDC_ISSUER_INTERNAL_URL = config("OIDC_ISSUER_INTERNAL_URL", "")
 
+# OIDC session renewal settings
+# https://mozilla-django-oidc.readthedocs.io/en/stable/settings.html#oidc-renew-id-token-expiry-seconds
+# Time before ID token expiration to trigger renewal (default: 15 minutes = 900 seconds)
+# Set to 1 day to reduce frequent re-authentication
+OIDC_RENEW_ID_TOKEN_EXPIRY_SECONDS = 60 * 60 * 24  # 24 hours
+
+# Whether to store access token and refresh token in session (default: True)
+OIDC_STORE_ACCESS_TOKEN = True
+OIDC_STORE_ID_TOKEN = True
+
 # Discover OpenID Connect endpoints
 discovery_info = discover_oidc(OIDC_OP_DISCOVERY_ENDPOINT, OIDC_ISSUER_INTERNAL_URL)
 if discovery_info:
