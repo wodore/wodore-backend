@@ -123,7 +123,9 @@ if discovery_info:
     )
     # Redirect to /admin after successful login
     LOGIN_REDIRECT_URL = f"{_django_admin_url}/admin"
-    LOGOUT_REDIRECT_URL = f"{_django_admin_url}/admin"
+    LOGOUT_REDIRECT_URL = (
+        f"{_django_admin_url}/"  # Does not work, still goes to login page again
+    )
     LOGIN_URL = f"{_django_admin_url}/oidc/authenticate/"
 
     ZITADEL_API_MACHINE_USERS = {
