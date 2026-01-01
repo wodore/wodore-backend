@@ -1894,7 +1894,7 @@ dependencies = [
 [[package]]
 name = "hut-services-private"
 version = "0.2.0"
-source = { editable = "../hut-services-private" }
+source = { git = "ssh://git@github.com/wodore/hut-services-private?branch=main#2448502d9dbb8469aa18c2e5bfda3ba822043294" }
 dependencies = [
     { name = "httpx" },
     { name = "hut-services" },
@@ -1904,27 +1904,17 @@ dependencies = [
     { name = "types-python-slugify" },
 ]
 
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.25.2,<0.26.0" },
-    { name = "hut-services", specifier = ">=0.1.0,<0.2.0" },
-    { name = "pydantic", specifier = ">=2.5.2,<3.0.0" },
-    { name = "python-slugify", specifier = ">=8.0.1,<9.0.0" },
-    { name = "types-beautifulsoup4", specifier = ">=4.12.0.7,<5.0.0.0" },
-    { name = "types-python-slugify", specifier = ">=8.0.0.3,<9.0.0.0" },
-]
-
 [[package]]
 name = "hypothesis"
-version = "6.148.8"
+version = "6.148.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
     { name = "sortedcontainers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/25/b3/e098d91195f121602bb3e4d00276cf1da0035df53e9deeb18115467d6da9/hypothesis-6.148.8.tar.gz", hash = "sha256:fa6b2ae029bc02f9d2d6c2257b0cbf2dc3782362457d2027a038ad7f4209c385", size = 471333, upload-time = "2025-12-23T01:46:25.052Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b4/1b/de4a349fe5942e500c3f6b0e61e09347d9fefab9e1ac7048c909080a31a0/hypothesis-6.148.9.tar.gz", hash = "sha256:6ec0696ed2fff8c514d61b6f1ca2cd1cb00c948ffd18cab1877c941c0ddb2839", size = 471562, upload-time = "2026-01-01T04:52:54.005Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/61/95/0742f59910074262e98d9f3bb0f7fb7a6b4bfb7e70b6d203eeb5625a6452/hypothesis-6.148.8-py3-none-any.whl", hash = "sha256:c1842f47f974d74661b3779a26032f8b91bc1eb30d84741714d3712d7f43e85e", size = 538280, upload-time = "2025-12-23T01:46:22.555Z" },
+    { url = "https://files.pythonhosted.org/packages/ac/65/c7fbad05a0ace913b60342d36d1b871edc861f81ab98f60a298a781144a5/hypothesis-6.148.9-py3-none-any.whl", hash = "sha256:c514fcca90eded0e6b56d4df4bc41db935cb4635a9fe3ec9be21d09243ca983b", size = 538490, upload-time = "2026-01-01T04:52:51.353Z" },
 ]
 
 [[package]]
@@ -4569,7 +4559,7 @@ requires-dist = [
     { name = "geojson-pydantic", specifier = "==1.*" },
     { name = "gunicorn", specifier = "==23.*" },
     { name = "hut-services", git = "ssh://git@github.com/wodore/hut-services?branch=main" },
-    { name = "hut-services-private", marker = "extra == 'private'", editable = "../hut-services-private" },
+    { name = "hut-services-private", marker = "extra == 'private'", git = "ssh://git@github.com/wodore/hut-services-private?branch=main" },
     { name = "jinja2", specifier = "==3.*" },
     { name = "load-dotenv", specifier = "==0.1.*" },
     { name = "mozilla-django-oidc", specifier = "==4.*" },
