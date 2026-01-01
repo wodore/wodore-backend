@@ -1,6 +1,7 @@
 # from typing import Union
 
 from ._booking import (
+    HutBookingSchema,
     HutBookingsFeature,
     HutBookingsFeatureCollection,
     HutBookingsSchema,

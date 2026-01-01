@@ -1894,7 +1894,7 @@ dependencies = [
 [[package]]
 name = "hut-services-private"
 version = "0.2.0"
-source = { git = "ssh://git@github.com/wodore/hut-services-private?branch=main#7c68d1c9ebd619347a5c4d95567b1ac078c93402" }
+source = { editable = "../hut-services-private" }
 dependencies = [
     { name = "httpx" },
     { name = "hut-services" },
@@ -1902,6 +1902,16 @@ dependencies = [
     { name = "python-slugify" },
     { name = "types-beautifulsoup4" },
     { name = "types-python-slugify" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.25.2,<0.26.0" },
+    { name = "hut-services", specifier = ">=0.1.0,<0.2.0" },
+    { name = "pydantic", specifier = ">=2.5.2,<3.0.0" },
+    { name = "python-slugify", specifier = ">=8.0.1,<9.0.0" },
+    { name = "types-beautifulsoup4", specifier = ">=4.12.0.7,<5.0.0.0" },
+    { name = "types-python-slugify", specifier = ">=8.0.0.3,<9.0.0.0" },
 ]
 
 [[package]]
@@ -4559,7 +4569,7 @@ requires-dist = [
     { name = "geojson-pydantic", specifier = "==1.*" },
     { name = "gunicorn", specifier = "==23.*" },
     { name = "hut-services", git = "ssh://git@github.com/wodore/hut-services?branch=main" },
-    { name = "hut-services-private", marker = "extra == 'private'", git = "ssh://git@github.com/wodore/hut-services-private?branch=main" },
+    { name = "hut-services-private", marker = "extra == 'private'", editable = "../hut-services-private" },
     { name = "jinja2", specifier = "==3.*" },
     { name = "load-dotenv", specifier = "==0.1.*" },
     { name = "mozilla-django-oidc", specifier = "==4.*" },

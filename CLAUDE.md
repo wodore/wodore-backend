@@ -4,6 +4,24 @@ Quick reference for Claude when working on wodore-backend.
 
 **Note**: This file should be updated whenever important development information, patterns, or infrastructure details are discovered during work on the project.
 
+## Related Projects
+
+The Wodore ecosystem consists of multiple repositories:
+
+- **Backend** (this repository): `wodore-backend/`
+- **Frontend**: `../wodore-frontend-quasar/` - Quasar/Vue.js frontend application
+- **Hut Services (Public)**: `../hut-services/` - Public library for hut information schemas and base services
+- **Hut Services (Private)**: `../hut-services-private/` - Private implementations for external booking services (HRS, SAC, etc.)
+
+All paths are relative to the repository root (`wodore-backend/`).
+
+**Important:**
+
+- **Always check `pyproject.toml` (around lines 134-137)** to see how packages are installed:
+  - **Editable mode** (`editable = true`, local `path`): Changes are immediately active, no reinstall needed
+  - **Git mode** (`git = "..."`): Changes to local copy won't affect backend until switched to editable mode
+- After changing dependencies in `pyproject.toml`, run: `inv update` (not `uv sync` directly)
+
 ## Essential Commands
 
 Use `app` command with activated virtualenv (sets environment with infisical):

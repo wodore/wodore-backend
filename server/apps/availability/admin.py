@@ -298,7 +298,7 @@ class HutAvailabilityViewInline(admin.TabularInline):
     def has_add_permission(self, request: HttpRequest, obj=None) -> bool:
         return False
 
-    @display(description=_("Places"))
+    @display(description=_("Free/Total"))
     def places_display(self, obj):
         return f"{obj.free}/{obj.total}"
 
@@ -405,7 +405,7 @@ class HutAvailabilityAdmin(ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser
 
-    @display(description=_("Places"))
+    @display(description=_("Free/Total"))
     def places_display(self, obj):
         return f"{obj.free}/{obj.total}"
 
@@ -538,7 +538,7 @@ class HutAvailabilityHistoryAdmin(ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser
 
-    @display(description=_("Places"))
+    @display(description=_("Free/Total"))
     def places_display(self, obj):
         return f"{obj.free}/{obj.total}"
 

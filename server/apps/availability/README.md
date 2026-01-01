@@ -113,6 +113,7 @@ python manage.py update_availability --days 365 --request-interval 0.1
 - `--dry-run` - Preview without making changes
 - `--days <n>` - Number of days to fetch (default: 365)
 - `--request-interval <seconds>` - Time between requests (default: 0.1)
+- `--profile` - Enable profiling to identify performance bottlenecks
 
 **Default Behavior (no arguments):**
 
@@ -215,10 +216,124 @@ spec:
             command: ["python", "manage.py", "update_availability"]
 ```
 
+## Performance Optimizations
+
+The availability service has been extensively optimized for high-performance bulk updates:
+
+### Database Optimizations
+
+**1. Batch Processing**
+
+- Processes multiple huts in a single database transaction (default: 20 huts per batch)
+- Reduces transaction overhead and improves throughput
+- Configurable via `batch_size` parameter
+
+**2. Bulk Operations**
+
+- Uses Django's `bulk_create()` and `bulk_update()` for all database writes
+- Single query creates/updates hundreds of records instead of N individual queries
+- Significantly faster than individual `.save()` calls
+
+**3. Query Optimization**
+
+- Uses `select_related('hut', 'source_organization', 'hut_type')` to eliminate N+1 queries
+- Pre-fetches all foreign key relationships in single query
+- Critical performance improvement: reduces 50k+ queries to 1 query per batch
+
+**4. Efficient History Updates**
+
+- Updates `history.last_checked` using optimized raw SQL with PostgreSQL's `DISTINCT ON`
+- Single query updates thousands of history records efficiently
+- Custom SQL necessary as Django ORM doesn't support `DISTINCT ON` efficiently
+
+**5. Minimal Locking**
+
+- No row-level locks during updates for better concurrency
+- Atomic transactions provide sufficient consistency
+- Allows parallel processing if needed in future
+
+### External API Optimizations
+
+- **Single API call** - All huts fetched in one external service call
+- **Rate limiting** - `request_interval` controls spacing between individual hut requests
+- **Progress tracking** - Real-time progress bar using `rich` library shows fetch and DB progress
+
+### Performance Metrics
+
+**Typical performance for 150 huts with 365 days each (~55k records):**
+
+- External API fetch: ~75-80 seconds (limited by rate limiting)
+- Database processing: ~95-100 seconds
+  - Bulk updates: ~50 seconds
+  - History updates: ~45 seconds
+- **Total: ~180 seconds** (~1.2 seconds per hut)
+
+**Profiling:**
+Use `--profile` flag to identify performance bottlenecks:
+
+```bash
+python manage.py update_availability --all --profile
+```
+
+### Current Architecture
+
+```python
+# Batch fetch and process with optimized database operations
+batch_result = AvailabilityService.update_huts_availability(
+    huts=huts_list,
+    days=365,
+    request_interval=0.1,
+    batch_size=20,  # Huts per transaction
+    update_history_last_checked=True,  # Enable duration tracking
+    fetch_progress_callback=fetch_callback,
+    process_progress_callback=process_callback,
+)
+```
+
+The service automatically:
+
+1. Fetches all huts from external API
+2. Groups huts into batches of 20
+3. Processes each batch in optimized transaction
+4. Updates availability and history records efficiently
+
 ## Future Enhancements
 
-- Implement priority-based filtering in management command
+### Generator-based External Fetching
+
+**Current limitation:** All huts are fetched and returned as a complete list before processing begins. For very large batches, this can cause memory issues and delays the start of database updates.
+
+**Proposed improvement:** Refactor `hut-services-private` to use a generator pattern:
+
+```python
+# Future: Generator yields results as they're fetched
+for hut_result in service.get_bookings_generator(
+    hut_slugs=slugs,
+    request_interval=0.1
+):
+    # Process and store each hut immediately
+    process_hut_bookings(hut_result)
+    progress_callback()
+```
+
+**Benefits:**
+
+- **Streaming processing** - Start storing data while still fetching remaining huts
+- **Lower memory usage** - Don't hold all results in memory at once
+- **Better progress granularity** - Progress updates happen as each hut is fetched
+- **Request interval stays in external service** - Rate limiting remains where it belongs
+
+**Implementation notes:**
+
+- Modify `hut-services-private` to yield `HutBookingsSchema` objects one at a time
+- Rate limiting (`request_interval`) stays in the external service between yields
+- Progress callback gets called after each yield in the availability service
+- Maintains clean separation of concerns (external fetching vs. database storage)
+
+### Other Enhancements
+
 - Add API endpoints (Django Ninja) for querying availability
 - Add trend analysis endpoints
 - Implement async task queue (Celery) for large batch updates
+- Add parallel service calls when multiple external services are available
 - Add data retention policies for old history entries
