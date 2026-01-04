@@ -54,6 +54,9 @@ def _hut_slugs_list(slugs: str | None) -> list[str] | None:
     "bookings",
     response=list[HutBookingsSchema],
     operation_id="get_hut_bookings",
+    deprecated=True,
+    summary="Get hut bookings (deprecated)",
+    description="**DEPRECATED**: Use `/huts/availability.geojson` instead. This endpoint will be removed in a future version.",
     # auth=AuthBearer(roles=["perm:bookings"], groups=["root", "admin", "editor"]),
 )
 @with_language_param("lang")
@@ -78,6 +81,9 @@ def get_hut_bookings(  # type: ignore  # noqa: PGH003
     "bookings.geojson",
     response=HutBookingsFeatureCollection,
     operation_id="get_hut_bookings_geojson",
+    deprecated=True,
+    summary="Get hut bookings as GeoJSON (deprecated)",
+    description="**DEPRECATED**: Use `/huts/availability.geojson` instead. This endpoint will be removed in a future version.",
     # auth=AuthBearer(roles=["perm:bookings"], groups=["root", "admin", "editor"]),
 )
 @with_language_param("lang")
