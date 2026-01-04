@@ -503,7 +503,7 @@ class AvailabilityService:
                     )
                     continue
 
-                source_hut_id = str(hut_booking.hut_id)
+                source_hut_id = str(hut_booking.source_id)
                 created_count = 0
                 updated_count = 0
 
@@ -715,7 +715,7 @@ class AvailabilityService:
         Uses bulk operations for better performance.
         """
         source_org = Organization.objects.get(slug=hut_booking.source)
-        source_hut_id = str(hut_booking.hut_id)
+        source_hut_id = str(hut_booking.source_id)
 
         created_count = 0
         updated_count = 0

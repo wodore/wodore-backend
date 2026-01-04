@@ -42,6 +42,9 @@ class HutBookingSchema(BaseModel):
 class HutBookingsProps(BaseModel):
     slug: str
     hut_id: int = Field(..., alias="id")
+    source_id: str = Field(
+        ..., description="External source organization's ID for this hut"
+    )
     source: str = Field(..., description="Source slug, e.g. hrs")
     days: int
     link: str

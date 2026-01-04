@@ -339,7 +339,7 @@ class HutAvailabilityAdmin(ModelAdmin):
         "source_display",
         "last_checked",
     )
-    list_display_links = ("hut_header",)
+    list_display_links = ("status_icon", "hut_header")
     list_filter = (
         AvailabilityDateFilter,
         "occupancy_status",
@@ -437,14 +437,35 @@ class HutAvailabilityAdmin(ModelAdmin):
 
     @display(description=_("Source"))
     def source_display(self, obj):
-        """Display source organization with logo"""
-        if obj.source_organization and obj.source_organization.logo:
-            return mark_safe(
-                f'<div style="display: flex; align-items: center; gap: 6px;">'
-                f'<img src="{settings.MEDIA_URL}{obj.source_organization.logo}" alt="{obj.source_organization.name}" style="width: 20px; height: 20px;" />'
-                f'<span style="font-size: 10px;">{obj.source_id}</span>'
-                f"</div>"
+        """Display source organization with logo and clickable source_id link"""
+        if obj.source_organization:
+            org_url = reverse(
+                "admin:organizations_organization_change",
+                args=[obj.source_organization.id],
             )
+
+            # Link the source_id to the external hut page if available
+            if obj.link:
+                source_id_html = f'<a href="{obj.link}" target="_blank" title="View on {obj.source_organization.name}" style="font-size: 10px;">{obj.source_id}</a>'
+            else:
+                source_id_html = (
+                    f'<span style="font-size: 10px;">{obj.source_id}</span>'
+                )
+
+            if obj.source_organization.logo:
+                return mark_safe(
+                    f'<div style="display: flex; align-items: center; gap: 6px;">'
+                    f'<a href="{org_url}"><img src="{settings.MEDIA_URL}{obj.source_organization.logo}" alt="{obj.source_organization.name}" style="width: 20px; height: 20px;" /></a>'
+                    f"{source_id_html}"
+                    f"</div>"
+                )
+            else:
+                return mark_safe(
+                    f'<div style="display: flex; align-items: center; gap: 6px;">'
+                    f'<a href="{org_url}" style="font-size: 11px;">{obj.source_organization.name}</a>'
+                    f"({source_id_html})"
+                    f"</div>"
+                )
         return obj.source_id if obj.source_id else "-"
 
 
@@ -461,6 +482,7 @@ class HutAvailabilityHistoryAdmin(ModelAdmin):
         "last_checked",
         "duration_display",
     )
+    list_display_links = ("status_icon", "hut_header")
     list_filter = (
         "occupancy_status",
         "hut_type",
