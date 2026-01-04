@@ -71,8 +71,10 @@ def get_huts(  # type: ignore  # noqa: PGH003
                 slug="org_set__slug",
                 name="org_set__name_i18n",
                 link="orgs_source__link",
+                source_id="orgs_source__source_id",
                 public="org_set__is_public",
-            )
+            ),
+            distinct=True,
         ),
         images=JSONBAgg(
             JSONObject(
@@ -225,7 +227,7 @@ def get_huts_geojson(  # type: ignore  # noqa: PGH003
         qs = qs.annotate(**annot)
         properties += list(annot.keys())
     if embed_all or embed_sources:
-        qs = qs.prefetch_related("org_set").annotate(
+        qs = qs.annotate(
             sources=JSONBAgg(
                 JSONObject(
                     # logo="org_set__logo",
@@ -233,7 +235,9 @@ def get_huts_geojson(  # type: ignore  # noqa: PGH003
                     slug="org_set__slug",
                     # name="org_set__name_i18n",
                     link="orgs_source__link",
-                )
+                    source_id="orgs_source__source_id",
+                ),
+                distinct=True,
             )
         )
         properties.append("sources")
