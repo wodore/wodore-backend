@@ -955,6 +955,7 @@ class Hut(TimeStampedModel):
             hut_bookings = HutBookingsSchema(
                 id=hut_info["id"],
                 slug=hut_info["slug"],
+                source_id=hut_info["source_id"],
                 source=hut_info["source"],
                 days=days,
                 link=link,
