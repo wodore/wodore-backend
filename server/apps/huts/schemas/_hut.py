@@ -52,13 +52,12 @@ class OrganizationBaseSchema(BaseModel):
     link: str
     logo: str
     public: bool
-    # source_id: str
+    source_id: str
 
 
 class OrganizationDetailSchema(OrganizationBaseSchema):
     active: bool
-    # source_id: str
-    # order: int
+    order: int
 
 
 class OrganizationImageSchema(BaseModel):
