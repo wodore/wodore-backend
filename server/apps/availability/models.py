@@ -104,7 +104,7 @@ class HutAvailability(TimeStampedModel):
         db_index=False,  # Index defined in Meta.indexes
     )
     source_id = models.CharField(
-        max_length=20,
+        max_length=50,
         verbose_name=_("Source ID"),
         help_text=_("Hut ID in the source organization's system"),
     )

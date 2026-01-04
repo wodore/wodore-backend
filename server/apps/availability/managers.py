@@ -17,61 +17,93 @@ class HutAvailabilityManager(BaseManager):
 
     def needing_update(
         self,
-        high_priority_minutes: int = 30,
-        medium_priority_minutes: int = 180,  # 3 hours
-        low_priority_minutes: int = 1440,  # 24 hours
-        inactive_priority_minutes: int = 10080,  # 7 days
+        high_priority_minutes: int | None = None,
+        medium_priority_minutes: int | None = None,
+        low_priority_minutes: int | None = None,
+        inactive_priority_minutes: int | None = None,
+        next_days: int | None = None,
     ) -> models.QuerySet:
         """
         Return huts that need updating based on priority rules.
 
-        Priority levels:
-        - High: Active, full/nearly-full dates in next 14 days (check every 30 min)
-        - Medium: Active, moderate occupancy in next 14 days (check every 3 hours)
-        - Low: Active, mostly empty availability (check daily)
-        - Inactive: Inactive huts (check weekly)
-        - Never checked: Always include new huts
+        Priority levels based on occupancy_status:
+        - High: 'high' and 'full' status (check every 30 min default)
+        - Medium: 'medium' status (check every 3 hours default)
+        - Low: 'low' and 'empty' status (check daily default)
+        - Inactive: 'unknown' status (check weekly default)
+
+        Args:
+            high_priority_minutes: Minutes between checks for high/full occupancy (default from settings)
+            medium_priority_minutes: Minutes between checks for medium occupancy (default from settings)
+            low_priority_minutes: Minutes between checks for low/empty occupancy (default from settings)
+            inactive_priority_minutes: Minutes between checks for unknown status (default from settings)
+            next_days: Number of days in the future to consider (default from settings)
+
+        Returns:
+            QuerySet of HutAvailability records needing updates
         """
+        from django.conf import settings
+
+        # Get defaults from settings
+        settings_dict = getattr(settings, "AVAILABILITY_UPDATE_SETTINGS", {})
+        if high_priority_minutes is None:
+            high_priority_minutes = settings_dict.get("HIGH_PRIORITY_MINUTES", 30)
+        if medium_priority_minutes is None:
+            medium_priority_minutes = settings_dict.get("MEDIUM_PRIORITY_MINUTES", 180)
+        if low_priority_minutes is None:
+            low_priority_minutes = settings_dict.get("LOW_PRIORITY_MINUTES", 1440)
+        if inactive_priority_minutes is None:
+            inactive_priority_minutes = settings_dict.get(
+                "INACTIVE_PRIORITY_MINUTES", 10080
+            )
+        if next_days is None:
+            next_days = settings_dict.get("NEXT_DAYS", 14)
+
         now = timezone.now()
         high_threshold = now - datetime.timedelta(minutes=high_priority_minutes)
         medium_threshold = now - datetime.timedelta(minutes=medium_priority_minutes)
         low_threshold = now - datetime.timedelta(minutes=low_priority_minutes)
+        inactive_threshold = now - datetime.timedelta(minutes=inactive_priority_minutes)
 
-        next_14_days = now.date() + datetime.timedelta(days=14)
+        end_date = now.date() + datetime.timedelta(days=next_days)
 
-        # Exclude closed huts (free == 0 and total == 0) from active priority
-        active_huts = self.exclude(free=0, total=0)
-
-        # High priority: Active, full or high occupancy (>75%) in next 14 days
-        high_priority = active_huts.filter(
+        # High priority: 'high' and 'full' occupancy status
+        high_priority = self.filter(
             availability_date__gte=now.date(),
-            availability_date__lte=next_14_days,
+            availability_date__lte=end_date,
             last_checked__lt=high_threshold,
-            occupancy_percent__gt=75.0,  # >75% occupied
+            occupancy_status__in=["high", "full"],
         )
 
-        # Medium priority: Active, medium occupancy (25-75%) in next 14 days
-        # Exclude empty huts
-        medium_priority = active_huts.filter(
+        # Medium priority: 'medium' occupancy status
+        medium_priority = self.filter(
             availability_date__gte=now.date(),
-            availability_date__lte=next_14_days,
+            availability_date__lte=end_date,
             last_checked__lt=medium_threshold,
-            occupancy_percent__gt=25.0,
-            occupancy_percent__lte=75.0,
-        ).exclude(free=models.F("total"))  # Exclude empty
+            occupancy_status="medium",
+        )
 
-        # Low priority: Active, low occupancy (<=25%) in next 14 days
-        # Include closed huts here
+        # Low priority: 'low' and 'empty' occupancy status
         low_priority = self.filter(
             availability_date__gte=now.date(),
-            availability_date__lte=next_14_days,
+            availability_date__lte=end_date,
             last_checked__lt=low_threshold,
-            occupancy_percent__lte=25.0,
+            occupancy_status__in=["low", "empty"],
+        )
+
+        # Inactive priority: 'unknown' occupancy status
+        inactive_priority = self.filter(
+            availability_date__gte=now.date(),
+            availability_date__lte=end_date,
+            last_checked__lt=inactive_threshold,
+            occupancy_status="unknown",
         )
 
         # Combine and return distinct huts
         # Note: We get distinct hut IDs to avoid fetching same hut multiple times
-        return (high_priority | medium_priority | low_priority).distinct()
+        return (
+            high_priority | medium_priority | low_priority | inactive_priority
+        ).distinct()
 
     def for_date_range(
         self,
@@ -114,10 +146,11 @@ class HutAvailabilityManager(BaseManager):
 
     def get_huts_needing_update(
         self,
-        high_priority_minutes: int = 30,
-        medium_priority_minutes: int = 180,
-        low_priority_minutes: int = 1440,
-        inactive_priority_minutes: int = 10080,  # 7 days
+        high_priority_minutes: int | None = None,
+        medium_priority_minutes: int | None = None,
+        low_priority_minutes: int | None = None,
+        inactive_priority_minutes: int | None = None,
+        next_days: int | None = None,
     ) -> models.QuerySet:
         """
         Get distinct Hut objects that need updating.
@@ -127,6 +160,13 @@ class HutAvailabilityManager(BaseManager):
         2. Have AvailabilityStatus and need rechecking (even if they returned empty before)
         3. Have booking_ref but have never been checked (no AvailabilityStatus yet)
 
+        Args:
+            high_priority_minutes: Minutes between checks for high/full occupancy (default from settings)
+            medium_priority_minutes: Minutes between checks for medium occupancy (default from settings)
+            low_priority_minutes: Minutes between checks for low/empty occupancy (default from settings)
+            inactive_priority_minutes: Minutes between checks for unknown status (default from settings)
+            next_days: Number of days in the future to consider (default from settings)
+
         This ensures:
         - Regular updates of huts with data
         - Periodic rechecking of huts that previously had no data
@@ -135,6 +175,14 @@ class HutAvailabilityManager(BaseManager):
         # Import here to avoid circular dependency
         from server.apps.huts.models import Hut
         from .models import AvailabilityStatus
+        from django.conf import settings
+
+        # Get defaults from settings if not provided
+        settings_dict = getattr(settings, "AVAILABILITY_UPDATE_SETTINGS", {})
+        if inactive_priority_minutes is None:
+            inactive_priority_minutes = settings_dict.get(
+                "INACTIVE_PRIORITY_MINUTES", 10080
+            )
 
         now = timezone.now()
 
@@ -144,6 +192,7 @@ class HutAvailabilityManager(BaseManager):
             medium_priority_minutes=medium_priority_minutes,
             low_priority_minutes=low_priority_minutes,
             inactive_priority_minutes=inactive_priority_minutes,
+            next_days=next_days,
         )
         existing_hut_ids = needing_update.values_list("hut_id", flat=True).distinct()
         huts_with_data = Hut.objects.filter(id__in=existing_hut_ids)

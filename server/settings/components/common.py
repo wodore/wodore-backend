@@ -359,3 +359,25 @@ JSONSUIT_WIDGET_THEME = "tomorrow"
 # Translations
 
 DEEPL_KEY = config("DEEPL_KEY", None)
+
+
+# Availability Tracking Settings
+# Configuration for hut availability update priorities and intervals
+
+AVAILABILITY_UPDATE_SETTINGS = {
+    # Time intervals (in minutes) for different priority levels
+    "HIGH_PRIORITY_MINUTES": config(
+        "AVAILABILITY_HIGH_PRIORITY_MINUTES", cast=int, default=30
+    ),
+    "MEDIUM_PRIORITY_MINUTES": config(
+        "AVAILABILITY_MEDIUM_PRIORITY_MINUTES", cast=int, default=180
+    ),  # 3 hours
+    "LOW_PRIORITY_MINUTES": config(
+        "AVAILABILITY_LOW_PRIORITY_MINUTES", cast=int, default=1440
+    ),  # 24 hours
+    "INACTIVE_PRIORITY_MINUTES": config(
+        "AVAILABILITY_INACTIVE_PRIORITY_MINUTES", cast=int, default=10080
+    ),  # 7 days
+    # Date range for priority-based selection (days)
+    "NEXT_DAYS": config("AVAILABILITY_NEXT_DAYS", cast=int, default=14),
+}
