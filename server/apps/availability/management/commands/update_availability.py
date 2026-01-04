@@ -73,6 +73,32 @@ class Command(BaseCommand):
             action="store_true",
             help="Disable progress bar and print results as they complete (useful for cron jobs)",
         )
+        # Priority configuration
+        parser.add_argument(
+            "--high-priority-minutes",
+            type=int,
+            help="Minutes between checks for high/full occupancy (default from settings)",
+        )
+        parser.add_argument(
+            "--medium-priority-minutes",
+            type=int,
+            help="Minutes between checks for medium occupancy (default from settings)",
+        )
+        parser.add_argument(
+            "--low-priority-minutes",
+            type=int,
+            help="Minutes between checks for low/empty occupancy (default from settings)",
+        )
+        parser.add_argument(
+            "--inactive-priority-minutes",
+            type=int,
+            help="Minutes between checks for unknown status (default from settings)",
+        )
+        parser.add_argument(
+            "--next-days",
+            type=int,
+            help="Number of days in the future to consider for priority selection (default from settings)",
+        )
 
     def handle(self, *args, **options):
         profile_enabled = options.get("profile")
@@ -124,6 +150,13 @@ class Command(BaseCommand):
         request_interval = options.get("request_interval")
         no_progress = options.get("no_progress")
 
+        # Priority parameters
+        high_priority_minutes = options.get("high_priority_minutes")
+        medium_priority_minutes = options.get("medium_priority_minutes")
+        low_priority_minutes = options.get("low_priority_minutes")
+        inactive_priority_minutes = options.get("inactive_priority_minutes")
+        next_days = options.get("next_days")
+
         click.secho("\n=== Hut Availability Update ===\n", fg="cyan", bold=True)
 
         # Determine which huts to update
@@ -145,7 +178,13 @@ class Command(BaseCommand):
         else:
             # Default: Use priority-based selection + new huts
             click.echo("Using priority-based selection (includes new huts)")
-            huts = HutAvailability.objects.get_huts_needing_update()
+            huts = HutAvailability.objects.get_huts_needing_update(
+                high_priority_minutes=high_priority_minutes,
+                medium_priority_minutes=medium_priority_minutes,
+                low_priority_minutes=low_priority_minutes,
+                inactive_priority_minutes=inactive_priority_minutes,
+                next_days=next_days,
+            )
             hut_count = huts.count()
             click.echo(f"Found {hut_count} hut(s) needing updates")
 

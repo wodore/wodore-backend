@@ -12,6 +12,8 @@ from typing import NamedTuple
 from django.conf import settings
 from django.db import transaction
 from django.db.models import F, Value
+from django.db.models.functions import Cast
+from django.db.models import CharField
 from django.utils import timezone
 
 from server.apps.huts.models import Hut, HutType
@@ -99,6 +101,8 @@ class AvailabilityService:
         for src_name, service in SERVICES.items():
             if service.support_booking:
                 # Get source_ids for this specific service
+                # Note: source_id is stored as CharField, so we get strings
+                # The external service may return int keys, so we handle both
                 service_source_ids = list(
                     obj.filter(orgs_source__organization__slug=src_name)
                     .values_list("orgs_source__source_id", flat=True)
@@ -131,7 +135,9 @@ class AvailabilityService:
                             orgs_source__source_id__in=service_bookings.keys(),
                         )
                         .annotate(
-                            source_id=F("orgs_source__source_id"),
+                            # Cast source_id to string to ensure it's always a string type
+                            # (CharField in model, but Django may return various types)
+                            source_id=Cast(F("orgs_source__source_id"), CharField()),
                             source=Value(src_name),
                             hut_type_open_slug=F("hut_type_open__slug"),
                             hut_type_closed_slug=F("hut_type_closed__slug"),
@@ -152,7 +158,17 @@ class AvailabilityService:
                     )
 
         for h in huts:
-            booking = bookings.get(int(h.get("source_id", -1)))
+            # source_id from DB is a string (CharField), but external service may use int keys
+            # Try both string and int lookup for compatibility
+            source_id_str = h.get("source_id")
+            booking = bookings.get(source_id_str)  # Try string key first
+            if booking is None and source_id_str:
+                # Try converting to int if string lookup failed
+                try:
+                    booking = bookings.get(int(source_id_str))
+                except (ValueError, TypeError):
+                    pass
+
             if booking is not None:
                 for b in booking.bookings:
                     # Determine hut_type based on booking capacity
@@ -193,6 +209,9 @@ class AvailabilityService:
                         )
 
                 h.update(booking)
+                # Ensure source_id is always a string (may come as int from DB)
+                if "source_id" in h and h["source_id"] is not None:
+                    h["source_id"] = str(h["source_id"])
         return [HutBookingsSchema(**h) for h in huts]
 
     @staticmethod
@@ -503,7 +522,7 @@ class AvailabilityService:
                     )
                     continue
 
-                source_hut_id = str(hut_booking.hut_id)
+                source_hut_id = str(hut_booking.source_id)
                 created_count = 0
                 updated_count = 0
 
@@ -715,7 +734,7 @@ class AvailabilityService:
         Uses bulk operations for better performance.
         """
         source_org = Organization.objects.get(slug=hut_booking.source)
-        source_hut_id = str(hut_booking.hut_id)
+        source_hut_id = str(hut_booking.source_id)
 
         created_count = 0
         updated_count = 0
