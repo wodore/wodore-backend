@@ -2,7 +2,7 @@
 from computedfields.models import ComputedFieldsModel, computed
 from jinja2 import Environment
 
-from model_utils.models import TimeStampedModel
+from server.core.models import TimeStampedModel
 from modeltrans.manager import MultilingualManager
 
 from django.conf import settings

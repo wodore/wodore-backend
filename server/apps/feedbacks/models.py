@@ -1,6 +1,6 @@
 # Create your models here.
 
-from model_utils.models import TimeStampedModel
+from server.core.models import TimeStampedModel
 
 from django.db import models
 from django.utils.translation import gettext_lazy as _

@@ -3,7 +3,7 @@ from functools import lru_cache
 from colorfield.fields import ColorField
 from django_cleanup import cleanup
 
-from model_utils.models import TimeStampedModel
+from server.core.models import TimeStampedModel
 from modeltrans.fields import TranslationField
 
 from django.contrib.postgres.indexes import GinIndex
