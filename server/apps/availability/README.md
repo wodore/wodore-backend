@@ -329,6 +329,122 @@ The service automatically:
    - Updates availability and history records efficiently
 3. **Moves to next batch** - Sequential processing ensures low memory usage and fault tolerance
 
+## API Endpoints
+
+The app provides RESTful API endpoints for querying availability data:
+
+### GeoJSON Map View
+
+**Endpoint:** `GET /v1/huts/availability/{date}.geojson`
+
+Returns availability data as GeoJSON FeatureCollection for map visualization.
+
+**Path Parameters:**
+- `date` - ISO date (2026-01-15), 'now', 'today', or 'weekend'
+
+**Query Parameters:**
+- `slugs` - Comma-separated list of hut slugs to filter (optional)
+- `days` - Number of days from start date (default: 1)
+- `offset` - Pagination offset (default: 0)
+- `limit` - Pagination limit (optional)
+
+**Examples:**
+```bash
+GET /v1/huts/availability/now.geojson
+GET /v1/huts/availability/today.geojson?days=7&limit=10
+GET /v1/huts/availability/2026-01-15.geojson?slugs=aarbiwak,almageller
+GET /v1/huts/availability/weekend.geojson
+```
+
+**Response Schema:** `HutAvailabilityFeatureCollection`
+
+### Current Availability (Single Hut)
+
+**Endpoint:** `GET /v1/huts/{slug}/availability/{date}`
+
+Returns detailed current availability data for a specific hut with metadata.
+
+**Path Parameters:**
+- `slug` - Hut slug identifier
+- `date` - ISO date (2026-01-15), 'now', 'today', or 'weekend'
+
+**Query Parameters:**
+- `days` - Number of days from start date (default: 1)
+
+**Examples:**
+```bash
+GET /v1/huts/aarbiwak/availability/now
+GET /v1/huts/aarbiwak/availability/2026-01-15?days=7
+GET /v1/huts/aarbiwak/availability/weekend?days=3
+```
+
+**Response Schema:** `CurrentAvailabilitySchema`
+
+**Includes:**
+- Hut metadata (slug, id, source_id, source)
+- `source_link` - External link to hut page on source organization's website
+- Availability data with:
+  - `link` - Booking link for each specific date
+  - `first_checked` - When availability was first recorded
+  - `last_checked` - When availability was last checked
+  - All occupancy and reservation data
+
+**Use Case:** Display detailed availability with booking links and freshness indicators.
+
+### Availability Trend/History
+
+**Endpoint:** `GET /v1/huts/{slug}/availability/{date}/trend`
+
+Returns historical availability changes for a specific hut and date.
+
+**Path Parameters:**
+- `slug` - Hut slug identifier
+- `date` - Target date - ISO date (2026-01-15), 'now', 'today', or 'weekend'
+
+**Query Parameters:**
+- `limit` - How many days back to show history (default: 7)
+
+**Examples:**
+```bash
+GET /v1/huts/aarbiwak/availability/2026-01-15/trend?limit=30
+GET /v1/huts/aarbiwak/availability/weekend/trend
+```
+
+**Response Schema:** `AvailabilityTrendSchema`
+
+**Includes:**
+- Historical changes ordered by `first_checked` (newest first)
+- For each change:
+  - `first_checked` - When this state was first observed
+  - `last_checked` - When this state was last confirmed
+  - `duration_seconds` - How long this state lasted
+  - All occupancy and reservation data
+
+**Use Case:** Show how availability for a future date evolved over time as people made/cancelled bookings.
+
+### API Features
+
+- **RESTful design** - Date as resource identifier in path
+- **Caching** - HTTP cache headers (10 min for map, 5 min for single hut)
+- **Validation** - Full Pydantic schema validation
+- **OpenAPI** - Auto-generated documentation at `/v1/openapi.json`
+- **Language support** - `lang` parameter (de, en, fr, it)
+
+### Date Format Support
+
+All endpoints accept these date formats:
+- **Special keywords:** `now`, `today`, `weekend`
+- **ISO dates:** `2026-01-15`, `26-01-15`
+- **European format:** `15.01.2026`, `15.01.26`
+- **Slash format:** `2026/01/15`, `26/01/15`
+
+### Deprecated Endpoints
+
+The following endpoints are deprecated and will be removed in a future version:
+
+- `GET /v1/huts/bookings` → Use `/v1/huts/availability/{date}.geojson`
+- `GET /v1/huts/bookings.geojson` → Use `/v1/huts/availability/{date}.geojson`
+
 ## Future Enhancements
 
 ### Generator-based External Fetching

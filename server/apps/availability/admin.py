@@ -90,10 +90,15 @@ def get_occupancy_icon_html(occupancy_status: str, show_text: bool = True) -> st
         )
 
 
-def get_occupancy_progress_bar(occupancy_percent: float) -> str:
+def get_occupancy_progress_bar(occupancy_percent: float, active: bool = True) -> str:
     """Get HTML for occupancy progress bar matching SVG icon colors"""
     # Colors from occupation SVG icons
-    if occupancy_percent >= 75:
+    percent_text = f"{occupancy_percent:.0f}%"
+    if not active:
+        color = "#333333"
+        percent_text = "?"
+        occupancy_percent = 0
+    elif occupancy_percent >= 75:
         color = "#d32f2f"  # full - red
     elif occupancy_percent >= 50:
         color = "#ffa726"  # high - orange
@@ -101,8 +106,6 @@ def get_occupancy_progress_bar(occupancy_percent: float) -> str:
         color = "#99cc33"  # medium - yellow-green
     else:
         color = "#33ff33"  # low/empty - green
-
-    percent_text = f"{occupancy_percent:.0f}%"
 
     return format_html(
         '<div style="display: flex; align-items: center; gap: 8px; min-width: 120px; padding: 2px 0;">'
@@ -304,7 +307,11 @@ class HutAvailabilityViewInline(admin.TabularInline):
 
     @display(description=_("Occupancy"), label=True)
     def occupancy_progress(self, obj):
-        return mark_safe(get_occupancy_progress_bar(obj.occupancy_percent))
+        return mark_safe(
+            get_occupancy_progress_bar(
+                obj.occupancy_percent, active=obj.occupancy_status != "unknown"
+            )
+        )
 
     @display(description="")
     def status_icon(self, obj):
@@ -411,7 +418,11 @@ class HutAvailabilityAdmin(ModelAdmin):
 
     @display(description=_("Occupancy"), label=True)
     def occupancy_progress(self, obj):
-        return mark_safe(get_occupancy_progress_bar(obj.occupancy_percent))
+        return mark_safe(
+            get_occupancy_progress_bar(
+                obj.occupancy_percent, active=obj.occupancy_status != "unknown"
+            )
+        )
 
     @display(description="")
     def status_icon(self, obj):
@@ -566,7 +577,11 @@ class HutAvailabilityHistoryAdmin(ModelAdmin):
 
     @display(description=_("Occupancy"), label=True)
     def occupancy_progress(self, obj):
-        return mark_safe(get_occupancy_progress_bar(obj.occupancy_percent))
+        return mark_safe(
+            get_occupancy_progress_bar(
+                obj.occupancy_percent, active=obj.occupancy_status != "unknown"
+            )
+        )
 
     @display(description="")
     def status_icon(self, obj):
