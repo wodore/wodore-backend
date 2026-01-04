@@ -11,7 +11,7 @@ from hut_services.core.guess import guess_slug_name
 from jinja2 import Environment
 
 from django_countries.fields import CountryField
-from model_utils.models import TimeStampedModel
+from server.core.models import TimeStampedModel
 from modeltrans.fields import TranslationField
 
 from django.conf import settings

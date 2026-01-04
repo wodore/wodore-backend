@@ -2,7 +2,7 @@ import typing as t
 
 from deepdiff import DeepDiff
 
-from model_utils.models import TimeStampedModel
+from server.core.models import TimeStampedModel
 
 from django.contrib.gis.db import models
 from django.core.exceptions import ObjectDoesNotExist

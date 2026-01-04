@@ -58,7 +58,7 @@ DJANGO_ADMIN_URL = (
 
 INSTALLED_APPS: Tuple[str, ...] = (
     # my server core:
-    "server.core",
+    "server.core.apps.CoreConfig",
     # my apps:
     "server.apps.manager",
     "server.apps.main",
@@ -73,6 +73,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "server.apps.availability",
     "server.apps.api",
     # Extension:
+    "pgtrigger",  # https://django-pgtrigger.readthedocs.io/
     "ninja",
     "colorfield",
     "jsoneditor",

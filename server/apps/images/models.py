@@ -13,7 +13,7 @@ from PIL import Image as PILImage
 from model_utils.fields import (
     MonitorField,
 )
-from model_utils.models import TimeStampedModel
+from server.core.models import TimeStampedModel
 from modeltrans.fields import TranslationField
 
 from django.contrib.auth import get_user_model

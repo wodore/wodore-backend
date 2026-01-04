@@ -3,7 +3,7 @@
 # from djjmt.fields import TranslationJSONField
 # from jinja2 import Environment
 #
-# from model_utils.models import TimeStampedModel
+# from server.core.models import TimeStampedModel
 # from modeltrans.fields import TranslationField
 # from modeltrans.manager import MultilingualManager
 #

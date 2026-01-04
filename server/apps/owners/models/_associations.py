@@ -1,4 +1,4 @@
-from model_utils.models import TimeStampedModel
+from server.core.models import TimeStampedModel
 
 from django.contrib.gis.db import models
 from django.utils.translation import gettext_lazy as _
