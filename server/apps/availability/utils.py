@@ -18,7 +18,7 @@ def parse_availability_date(
         date: Can be:
             - datetime.date: Will be converted to midnight UTC
             - datetime.datetime: Will be normalized to midnight UTC
-            - str: Special values ("now", "weekend") or parseable date strings
+            - str: Special values ("now", "today", "weekend") or parseable date strings
             - None: Defaults to today at midnight UTC
 
     Returns:
@@ -29,6 +29,9 @@ def parse_availability_date(
 
     Examples:
         >>> parse_availability_date("now")
+        datetime.datetime(2026, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)
+
+        >>> parse_availability_date("today")
         datetime.datetime(2026, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)
 
         >>> parse_availability_date("01.06.2026")
@@ -53,7 +56,7 @@ def parse_availability_date(
         start_datetime = datetime.datetime(
             dt.year, dt.month, dt.day, tzinfo=datetime.timezone.utc
         )
-    elif isinstance(date, str) and date.lower() == "now":
+    elif isinstance(date, str) and date.lower() in ("now", "today"):
         now = datetime.datetime.now(datetime.timezone.utc)
         # Normalize to midnight of today for date comparison
         start_datetime = datetime.datetime(
@@ -98,7 +101,7 @@ def parse_availability_date(
             msg = (
                 f"Unsupported date format: {date}. "
                 "Supported formats: dd.mm.yyyy, dd.mm.yy, yyyy-mm-dd, yy-mm-dd, "
-                "yyyy/mm/dd, yy/mm/dd, 'now', 'weekend'"
+                "yyyy/mm/dd, yy/mm/dd, 'now', 'today', 'weekend'"
             )
             raise ValueError(msg)
 

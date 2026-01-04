@@ -8,7 +8,9 @@ for improved performance compared to Python-based serialization.
 import datetime
 
 import msgspec
+from ninja import Field, Path, Query, Schema
 from ninja.decorators import decorate_view
+from ninja.errors import HttpError
 
 from django.contrib.postgres.aggregates import JSONBAgg
 from django.db.models import F, Max, Value
@@ -27,6 +29,74 @@ from .schemas import (
 from .utils import parse_availability_date
 
 
+# Path schemas
+class DatePathParam(Schema):
+    """Path parameter for date."""
+
+    date: str = Field(
+        ...,
+        description="Start date. Accepts ISO dates (2026-01-15, 26-01-15), European format (15.01.2026), or keywords: 'now', 'today', 'weekend'.",
+    )
+
+
+class DatePathParamTrend(Schema):
+    """Path parameter for trend endpoint."""
+
+    date: str = Field(
+        ...,
+        description="Target date to analyze. Accepts ISO dates (2026-01-15, 26-01-15), European format (15.01.2026), or keywords: 'now', 'today', 'weekend'.",
+    )
+
+
+# Query schemas
+class AvailabilityGeoJSONQuery(Schema):
+    """Query parameters for GeoJSON availability endpoint."""
+
+    slugs: str | None = Field(
+        None,
+        title="Hut Slugs",
+        description="Comma-separated list of hut slugs to filter (e.g., 'aarbiwak,almageller'). If not set, returns all huts.",
+    )
+    days: int = Field(
+        1,
+        description="Number of days to fetch from start date.",
+        ge=1,
+        le=365,
+    )
+    offset: int = Field(
+        0,
+        description="Pagination offset for results.",
+        ge=0,
+    )
+    limit: int | None = Field(
+        None,
+        description="Maximum number of huts to return. If not set, returns all matching huts.",
+        ge=1,
+    )
+
+
+class CurrentAvailabilityQuery(Schema):
+    """Query parameters for current availability endpoint."""
+
+    days: int = Field(
+        1,
+        description="Number of days to fetch from start date.",
+        ge=1,
+        le=365,
+    )
+
+
+class AvailabilityTrendQuery(Schema):
+    """Query parameters for availability trend endpoint."""
+
+    limit: int = Field(
+        7,
+        description="How many days back to show history from the target date.",
+        ge=1,
+        le=365,
+    )
+
+
 # Import huts router to register endpoints there
 # Import at function level to avoid circular imports
 def _get_huts_router():
@@ -36,7 +106,7 @@ def _get_huts_router():
 
 
 @_get_huts_router().get(
-    "availability.geojson",
+    "availability/{date}.geojson",
     operation_id="get_hut_availability_geojson",
     response=HutAvailabilityFeatureCollection,
 )
@@ -45,36 +115,28 @@ def _get_huts_router():
 def get_hut_availability_geojson(
     request: HttpRequest,
     response: HttpResponse,
+    path: Path[DatePathParam],
     lang: LanguageParam,
-    slugs: str | None = None,
-    days: int = 1,
-    date: str = "now",
-    offset: int = 0,
-    limit: int | None = None,
+    queries: Query[AvailabilityGeoJSONQuery],
 ) -> HttpResponse:
-    """
-    Get availability data as GeoJSON FeatureCollection using PostgreSQL's native GeoJSON generation.
-
-    Returns a GeoJSON FeatureCollection where each feature represents a hut with its availability
-    data for the specified date range.
-    """
+    """Get availability data as GeoJSON FeatureCollection for map visualization."""
     activate(lang)
 
     # Parse date parameter
-    start_datetime = parse_availability_date(date)
+    start_datetime = parse_availability_date(path.date)
     start_date = start_datetime.date()
 
     # Build base queryset - group by hut to get all dates for each hut
     qs = HutAvailability.objects.filter(
         availability_date__gte=start_date,
-        availability_date__lt=start_date + datetime.timedelta(days=days),
+        availability_date__lt=start_date + datetime.timedelta(days=queries.days),
         hut__is_active=True,
         hut__is_public=True,
     ).select_related("hut", "source_organization", "hut_type")
 
     # Apply slug filter if provided
-    if slugs:
-        hut_slugs_list = [s.strip().lower() for s in slugs.split(",")]
+    if queries.slugs:
+        hut_slugs_list = [s.strip().lower() for s in queries.slugs.split(",")]
         qs = qs.filter(hut__slug__in=hut_slugs_list)
 
     # Group availability records by hut and aggregate data
@@ -87,7 +149,7 @@ def get_hut_availability_geojson(
         source=Max(F("source_organization__slug")),
         location=Max(F("hut__location")),
         # Metadata
-        days=Value(days),
+        days=Value(queries.days),
         start_date=Value(start_date.isoformat()),
         # Aggregate availability data as JSON array
         data=JSONBAgg(
@@ -106,10 +168,10 @@ def get_hut_availability_geojson(
     )
 
     # Apply pagination
-    if limit is not None:
-        qs = qs[offset : offset + limit]
-    elif offset > 0:
-        qs = qs[offset:]
+    if queries.limit is not None:
+        qs = qs[queries.offset : queries.offset + queries.limit]
+    elif queries.offset > 0:
+        qs = qs[queries.offset :]
 
     # Build GeoJSON properties - field names match schema exactly (no post-processing needed)
     properties = [
@@ -142,7 +204,7 @@ def get_hut_availability_geojson(
 
 
 @_get_huts_router().get(
-    "{slug}/availability/current",
+    "{slug}/availability/{date}",
     operation_id="get_hut_availability_current",
     response=CurrentAvailabilitySchema,
 )
@@ -151,17 +213,12 @@ def get_hut_availability_geojson(
 def get_hut_availability_current(
     request: HttpRequest,
     slug: str,
+    path: Path[DatePathParam],
     lang: LanguageParam,
-    days: int = 1,
-    date: str = "now",
+    queries: Query[CurrentAvailabilityQuery],
 ) -> CurrentAvailabilitySchema:
-    """
-    Get current availability data for a specific hut with detailed metadata.
-
-    Includes booking links and tracking timestamps for each day.
-    """
+    """Get current availability data for a specific hut with detailed metadata and booking links."""
     from server.apps.huts.models import Hut
-    from ninja.errors import HttpError
 
     activate(lang)
 
@@ -172,7 +229,7 @@ def get_hut_availability_current(
         raise HttpError(404, f"Hut with slug '{slug}' not found")
 
     # Parse date parameter
-    start_datetime = parse_availability_date(date)
+    start_datetime = parse_availability_date(path.date)
     start_date = start_datetime.date()
 
     # Query availability data
@@ -180,7 +237,7 @@ def get_hut_availability_current(
         HutAvailability.objects.filter(
             hut=hut,
             availability_date__gte=start_date,
-            availability_date__lt=start_date + datetime.timedelta(days=days),
+            availability_date__lt=start_date + datetime.timedelta(days=queries.days),
         )
         .select_related("source_organization", "hut_type")
         .order_by("availability_date")
@@ -191,6 +248,17 @@ def get_hut_availability_current(
 
     # Get source info from first availability record
     first_avail = availabilities[0]
+
+    # Get the external link to the source hut page from the HutOrganizationAssociation
+    from server.apps.huts.models import HutOrganizationAssociation
+
+    hut_org_association = HutOrganizationAssociation.objects.filter(
+        hut=hut,
+        organization=first_avail.source_organization,
+        source_id=first_avail.source_id,
+    ).first()
+
+    source_link = hut_org_association.link if hut_org_association else ""
 
     # Build response
     data = [
@@ -215,14 +283,15 @@ def get_hut_availability_current(
         id=hut.id,
         source_id=first_avail.source_id,
         source=first_avail.source_organization.slug,
-        days=days,
+        source_link=source_link,
+        days=queries.days,
         start_date=start_date,
         data=data,
     )
 
 
 @_get_huts_router().get(
-    "{slug}/availability/trend",
+    "{slug}/availability/{date}/trend",
     operation_id="get_hut_availability_trend",
     response=AvailabilityTrendSchema,
 )
@@ -231,18 +300,12 @@ def get_hut_availability_current(
 def get_hut_availability_trend(
     request: HttpRequest,
     slug: str,
+    path: Path[DatePathParamTrend],
     lang: LanguageParam,
-    date: str = "now",
-    limit: int = 7,
+    queries: Query[AvailabilityTrendQuery],
 ) -> AvailabilityTrendSchema:
-    """
-    Get historical availability trend data for a specific hut and date.
-
-    Shows how availability has changed over time for a specific target date,
-    going back 'limit' days from the target date.
-    """
+    """Get historical availability trend data showing how availability changed over time for a specific date."""
     from server.apps.huts.models import Hut
-    from ninja.errors import HttpError
 
     activate(lang)
 
@@ -253,11 +316,11 @@ def get_hut_availability_trend(
         raise HttpError(404, f"Hut with slug '{slug}' not found")
 
     # Parse target date
-    target_datetime = parse_availability_date(date)
+    target_datetime = parse_availability_date(path.date)
     target_date = target_datetime.date()
 
     # Calculate period
-    period_start = target_date - datetime.timedelta(days=limit)
+    period_start = target_date - datetime.timedelta(days=queries.limit)
     period_end = target_date
 
     # Query history data
