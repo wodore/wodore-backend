@@ -147,7 +147,9 @@ def get_hut_availability_geojson(
         id=F("hut_id"),  # Expose hut_id as 'id' to match schema
         source_id=Max(F("source_id")),
         source=Max(F("source_organization__slug")),
-        location=Max(F("hut__location")),
+        location=F(
+            "hut__location"
+        ),  # No Max() needed - geometry is same for all records
         # Metadata
         days=Value(queries.days),
         start_date=Value(start_date.isoformat()),
@@ -319,9 +321,9 @@ def get_hut_availability_trend(
     target_datetime = parse_availability_date(path.date)
     target_date = target_datetime.date()
 
-    # Calculate period
-    period_start = target_date - datetime.timedelta(days=queries.limit)
-    period_end = target_date
+    # Calculate period (use datetime objects for timezone-aware comparisons)
+    period_start = target_datetime - datetime.timedelta(days=queries.limit)
+    period_end = target_datetime
 
     # Query history data
     # Get all history records for this hut/date where the record was observed during our period
