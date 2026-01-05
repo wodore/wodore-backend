@@ -157,8 +157,10 @@ jobs:
             type=raw,value=${{ env.VERSION_MAJOR }},enable=${{ env.VERSION_TAG }}
             type=raw,value=${{ env.LATEST }},enable=${{ env.VERSION_TAG }}
 
-            # SHA tag (always included unless custom tag is used and not "hash")
-            type=sha,enable=${{ env.USE_CUSTOM_TAG != 'true' }}
+            # Timestamp + SHA tag format: YYYYMMDD-HHMM-sha-<short-sha>
+            # Example: 20250105-1430-sha-d58d485
+            # (always included unless custom tag is used and not "hash")
+            type=raw,value={{date 'YYYYMMDDTHHmm'}}-sha-{{sha}},enable=${{ env.USE_CUSTOM_TAG != 'true' }}
             ## Semantic version tags
             #type=semver,pattern={{version}}
             #type=semver,pattern={{major}}.{{minor}}
