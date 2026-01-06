@@ -6,6 +6,9 @@ inputs:
     required: false
     description: "The python version to use"
     default: "3.12"
+  github-token:
+    required: false
+    description: "GitHub token for caching uv binary"
 
 runs:
   using: "composite"
@@ -17,6 +20,7 @@ runs:
         version: "0.9.22"
         enable-cache: true
         cache-dependency-glob: "uv.lock"
+        github-token: ${{ inputs.github-token }}
 
     - name: "Set up Python"
       uses: actions/setup-python@v5
