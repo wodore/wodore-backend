@@ -8,13 +8,42 @@ from ninja.orm import create_schema
 
 from server.settings.components.common import BUILD_TIMESTAMP, GIT_HASH
 
-# Get package version
-try:
-    from importlib.metadata import version as get_version
 
-    PACKAGE_VERSION = get_version("wodore-backend")
-except Exception:
-    PACKAGE_VERSION = "unknown"
+# Get package version
+def _get_package_version() -> str:
+    """Get package version from pyproject.toml or package metadata."""
+    # First try reading directly from pyproject.toml (works in Docker)
+    try:
+        try:
+            import tomllib
+        except ImportError:
+            # Python < 3.11
+            import tomli as tomllib  # type: ignore
+
+        from pathlib import Path
+
+        pyproject_path = Path(__file__).parents[3] / "pyproject.toml"
+        if pyproject_path.exists():
+            with open(pyproject_path, "rb") as f:
+                data = tomllib.load(f)
+                version = data.get("project", {}).get("version")
+                if version:
+                    return version
+    except Exception:
+        pass
+
+    # Fallback: try importlib.metadata (works if package is installed)
+    try:
+        from importlib.metadata import version as get_version
+
+        return get_version("wodore-backend")
+    except Exception:
+        pass
+
+    return "unknown"
+
+
+PACKAGE_VERSION = _get_package_version()
 
 # Get environment
 DJANGO_ENV = environ.get("DJANGO_ENV", "development")
