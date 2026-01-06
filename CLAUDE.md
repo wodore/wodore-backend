@@ -114,6 +114,15 @@ POSTGRES_DB: wodore
 
 **Note**: Use `docker compose` (not `docker-compose`) for all commands.
 
+## Environment Variables
+
+### Production/Docker Deployment
+
+- **GIT_HASH**: Set this environment variable in production/docker to include git version in ETags for cache busting
+  - Example: `GIT_HASH=$(git rev-parse --short HEAD)`
+  - If not set, the backend will try to get it from git command (dev only)
+  - Falls back to "unknown" if git is unavailable
+
 ## Common Patterns
 
 ### Models

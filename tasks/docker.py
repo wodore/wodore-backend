@@ -246,10 +246,13 @@ def buildx(
         )
         header("Run docker build job")
         dockerfile = f"./docker/django/Dockerfile.{dist}"
+        git_short_hash = c.run("git rev-parse --short HEAD", hide=True).stdout.strip()
         build_args = {
             "DJANGO_ENV": django_env,
             "WITH_DEV": "1" if with_dev else "0",
+            "GIT_HASH": git_short_hash,
         }
+        info(f"Git hash:        '{git_short_hash}'")
         secrets = []
         if github_token:
             if not github_user:

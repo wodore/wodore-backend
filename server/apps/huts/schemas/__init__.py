@@ -3,6 +3,7 @@
 # from ._booking import HutBookingsSchema
 from ._hut import (
     HutSchemaDetails,
+    HutSchemaList,
     HutSchemaOptional,
     ImageInfoSchema,
     LicenseInfoSchema,

@@ -9,6 +9,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
 import os
+import subprocess
 
 # Set the environment variables - fix boto3 issue when uploading file
 # https://stackoverflow.com/questions/79375793/s3uploadfailederror-due-to-missingcontentlength-when-calling-putobject-in-mlflow
@@ -36,6 +37,34 @@ if PRIVATE_SERVICES:
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 SECRET_KEY = config("DJANGO_SECRET_KEY", "NotSet")
+
+
+# Git version/hash for cache busting and version tracking
+def _get_git_hash() -> str:
+    """Get git hash from env var or git command (dev mode only)."""
+    # First try environment variable (for production/docker)
+    git_hash = config("GIT_HASH", default=None)
+    if git_hash:
+        return git_hash
+
+    # In development, try to get from git if available
+    # This requires DEBUG to be set, but we check if we're likely in dev mode
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=BASE_DIR,
+            capture_output=True,
+            text=True,
+            timeout=1,
+            check=True,
+        )
+        return result.stdout.strip()
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        # Git not available or not a git repo
+        return "unknown"
+
+
+GIT_HASH = _get_git_hash()
 
 DJANGO_TRUSTED_DOMAINS = (
     [d.strip() for d in config("DJANGO_TRUSTED_DOMAINS").split(",")]

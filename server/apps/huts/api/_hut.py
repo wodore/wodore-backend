@@ -26,6 +26,7 @@ from server.apps.translations import (
 from ..models import Hut
 from ..schemas import (
     HutSchemaDetails,
+    HutSchemaList,
     ImageInfoSchema,
     LicenseInfoSchema,
 )
@@ -35,13 +36,17 @@ from .etag_utils import (
     check_if_modified_since,
     generate_etag,
     get_last_modified_http_date,
+    get_last_modified_timestamp,
     set_cache_headers,
 )
 from .expressions import GeoJSON
 
 
 @router.get(
-    "huts", response=list[HutSchemaDetails], exclude_unset=True, operation_id="get_huts"
+    "huts",
+    response=list[HutSchemaList],
+    exclude_unset=True,
+    operation_id="get_huts",
 )
 @with_language_param("lang")
 def get_huts(  # type: ignore  # noqa: PGH003
@@ -122,6 +127,7 @@ def get_huts(  # type: ignore  # noqa: PGH003
             When(availability_source_ref__isnull=False, then=Value(True)),
             default=Value(False),
         ),
+        availability_source_ref__slug=F("availability_source_ref__slug"),
         sources=JSONBAgg(
             JSONObject(
                 logo="org_set__logo",
@@ -305,7 +311,8 @@ def get_huts_geojson(  # type: ignore  # noqa: PGH003
             has_availability=Case(
                 When(availability_source_ref__isnull=False, then=Value(True)),
                 default=Value(False),
-            )
+            ),
+            availability_source_ref__slug=F("availability_source_ref__slug"),
         )
         has_availability_annotated = True
 
@@ -474,6 +481,7 @@ def get_hut(
             When(availability_source_ref__isnull=False, then=Value(True)),
             default=Value(False),
         ),
+        availability_source_ref__slug=F("availability_source_ref__slug"),
         sources=JSONBAgg(
             JSONObject(
                 logo=Concat(Value(media_abs_url), F("org_set__logo")),
@@ -610,6 +618,20 @@ def get_hut(
         hut_db.images = [old_photo, *hut_db.images]
     link = reverse_lazy("admin:huts_hut_change", args=[hut_db.pk])
     hut_db.edit_link = request.build_absolute_uri(link)
+
+    # Get modified timestamp from ETag calculation (checks all related tables)
+    modified_timestamp = get_last_modified_timestamp(
+        include_huts=True,
+        include_organizations=True,
+        include_owners=True,
+        include_images=True,
+        include_availability=False,
+        hut_queryset=qs,
+    )
+    # Convert timestamp to datetime for the schema
+    from datetime import datetime, timezone
+
+    hut_db.modified = datetime.fromtimestamp(modified_timestamp, tz=timezone.utc)
 
     # Set cache headers
     set_cache_headers(response, etag, last_modified, max_age=15)

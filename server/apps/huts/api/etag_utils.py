@@ -7,6 +7,7 @@ Generates ETags based on the last modified timestamp across all relevant tables.
 import hashlib
 from typing import Any
 
+from django.conf import settings
 from django.db.models import Max, QuerySet
 from django.http import HttpRequest, HttpResponse
 from django.utils.http import http_date, parse_http_date_safe
@@ -111,6 +112,10 @@ def generate_etag(
 
     # Create hash input
     hash_parts = [str(timestamp)]
+
+    # Include git hash for cache invalidation on code changes
+    hash_parts.append(settings.GIT_HASH)
+
     if additional_keys:
         hash_parts.extend(additional_keys)
 
