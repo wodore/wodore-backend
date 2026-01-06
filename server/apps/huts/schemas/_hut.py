@@ -260,6 +260,7 @@ class HutSchemaOptional(BaseModel):
     images: list[ImageInfoSchema] | None
     open_monthly: OpenMonthlySchema | None = None
     has_availability: bool | None = None
+    availability_source: str | None = Field(None, alias="availability_source_ref__slug")
 
     @field_validator("country", mode="before")
     @classmethod

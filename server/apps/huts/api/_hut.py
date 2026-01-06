@@ -5,17 +5,15 @@ import msgspec
 from benedict import benedict
 from geojson_pydantic import FeatureCollection
 from ninja import Query
-from ninja.decorators import decorate_view
 # from rich import print
 
 # from ninja.errors import HttpError
 from django.conf import settings
 from django.contrib.postgres.aggregates import JSONBAgg
-from django.db.models import Exists, F, OuterRef, Value
+from django.db.models import Case, F, Value, When
 from django.db.models.functions import Coalesce, Concat, JSONObject  # , Lower
 from django.http import Http404, HttpRequest, HttpResponse
 from django.urls import reverse_lazy
-from django.views.decorators.cache import cache_control
 
 from server.apps.api.query import FieldsParam, TristateEnum
 from server.apps.huts.schemas._hut import ImageMetaSchema
@@ -25,8 +23,6 @@ from server.apps.translations import (
     with_language_param,
 )
 
-from server.apps.availability.models import AvailabilityStatus
-
 from ..models import Hut
 from ..schemas import (
     HutSchemaDetails,
@@ -34,6 +30,13 @@ from ..schemas import (
     LicenseInfoSchema,
 )
 from ._router import router
+from .etag_utils import (
+    check_etag_match,
+    check_if_modified_since,
+    generate_etag,
+    get_last_modified_http_date,
+    set_cache_headers,
+)
 from .expressions import GeoJSON
 
 
@@ -43,6 +46,7 @@ from .expressions import GeoJSON
 @with_language_param("lang")
 def get_huts(  # type: ignore  # noqa: PGH003
     request: HttpRequest,
+    response: HttpResponse,
     lang: LanguageParam,
     # fields: Query[FieldsParam[HutSchemaOptional]],
     offset: int = 0,
@@ -55,6 +59,45 @@ def get_huts(  # type: ignore  # noqa: PGH003
     """Get a list with huts."""
     activate(lang)
     huts_db = Hut.objects.select_related("hut_owner").all()
+
+    # Generate ETag before filtering to get proper queryset for cache key
+    additional_keys = [
+        str(offset),
+        str(limit),
+        str(is_modified.value),
+        str(is_public.value),
+        str(is_active.value),
+        str(has_availability.value),
+        lang,
+    ]
+
+    etag = generate_etag(
+        include_huts=True,
+        include_organizations=True,  # sources are always included
+        include_owners=True,  # owner is always included
+        include_images=True,  # images are always included
+        include_availability=False,  # availability_source_ref is part of Hut model, no need to check separately
+        hut_queryset=huts_db,
+        additional_keys=additional_keys,
+    )
+
+    last_modified = get_last_modified_http_date(
+        include_huts=True,
+        include_organizations=True,
+        include_owners=True,
+        include_images=True,
+        include_availability=False,  # availability_source_ref is part of Hut model, no need to check separately
+        hut_queryset=huts_db,
+    )
+
+    # Check if client has cached version
+    if check_etag_match(request, etag) or not check_if_modified_since(
+        request, last_modified
+    ):
+        # Return 304 Not Modified
+        response.status_code = 304
+        set_cache_headers(response, etag, last_modified, max_age=60)
+        return response
     if is_modified != TristateEnum.unset:
         huts_db = huts_db.filter(is_modified=is_modified.bool)
     if is_active != TristateEnum.unset:
@@ -62,21 +105,22 @@ def get_huts(  # type: ignore  # noqa: PGH003
     if is_public != TristateEnum.unset:
         huts_db = huts_db.filter(is_public=is_public.bool)
     if has_availability != TristateEnum.unset:
-        huts_db = huts_db.filter(
-            Exists(
-                AvailabilityStatus.objects.filter(
-                    hut=OuterRef("pk"), has_data=has_availability.bool
-                )
-            )
-        )
+        if has_availability.bool:
+            # Filter for huts that have an availability source
+            huts_db = huts_db.filter(availability_source_ref__isnull=False)
+        else:
+            # Filter for huts without an availability source
+            huts_db = huts_db.filter(availability_source_ref__isnull=True)
 
     media_url = request.build_absolute_uri(settings.MEDIA_URL)
     iam_media_url = "https://res.cloudinary.com/wodore/image/upload/v1/"
     huts_db = huts_db.select_related(
-        "hut_type_open", "hut_type_closed", "hut_owner"
+        "hut_type_open", "hut_type_closed", "hut_owner", "availability_source_ref"
     ).annotate(
-        has_availability=Exists(
-            AvailabilityStatus.objects.filter(hut=OuterRef("pk"), has_data=True)
+        # has_availability is True if availability_source_ref is set (hut has an availability source)
+        has_availability=Case(
+            When(availability_source_ref__isnull=False, then=Value(True)),
+            default=Value(False),
         ),
         sources=JSONBAgg(
             JSONObject(
@@ -148,6 +192,10 @@ def get_huts(  # type: ignore  # noqa: PGH003
             hut_db.images = []
     if limit is not None:
         huts_db = huts_db[offset : offset + limit]
+
+    # Set cache headers
+    set_cache_headers(response, etag, last_modified, max_age=60)
+
     return huts_db
     # return fields.validate(list(huts_db))
 
@@ -169,13 +217,13 @@ def get_json_obj(
 
 @router.get("huts.geojson", response=FeatureCollection, operation_id="get_huts_geojson")
 @with_language_param("lang")
-@decorate_view(cache_control(max_age=3600))
 def get_huts_geojson(  # type: ignore  # noqa: PGH003
     request: HttpRequest,
     response: HttpResponse,
     lang: LanguageParam,
     offset: int = 0,
     limit: int | None = None,
+    has_availability: TristateEnum = TristateEnum.unset,
     # is_public: bool | None = None, # needs permission
     embed_all: bool = False,
     embed_type: bool = False,
@@ -184,21 +232,106 @@ def get_huts_geojson(  # type: ignore  # noqa: PGH003
     embed_sources: bool = False,
     include_elevation: bool = False,
     include_name: bool = False,
+    include_has_availability: bool = False,
     flat: bool = True,
 ) -> HttpResponse:
     activate(lang)
     qs = Hut.objects.filter(is_active=True, is_public=True)
+
+    # Determine which tables are involved based on embed parameters
+    include_organizations_in_etag = embed_all or embed_sources or embed_owner
+    include_owners_in_etag = embed_all or embed_owner
+    # Note: has_availability uses availability_source_ref which is part of Hut model,
+    # so no separate availability table check needed
+
+    # Generate ETag and Last-Modified based on involved tables
+    # Include query parameters in ETag to ensure different queries get different ETags
+    additional_keys = [
+        str(offset),
+        str(limit),
+        str(has_availability.value),
+        str(embed_all),
+        str(embed_type),
+        str(embed_owner),
+        str(embed_capacity),
+        str(embed_sources),
+        str(include_elevation),
+        str(include_name),
+        str(include_has_availability),
+        str(flat),
+        lang,
+    ]
+
+    etag = generate_etag(
+        include_huts=True,
+        include_organizations=include_organizations_in_etag,
+        include_owners=include_owners_in_etag,
+        include_images=False,  # Images not included in geojson
+        include_availability=False,  # availability_source_ref is part of Hut model
+        hut_queryset=qs,
+        additional_keys=additional_keys,
+    )
+
+    last_modified = get_last_modified_http_date(
+        include_huts=True,
+        include_organizations=include_organizations_in_etag,
+        include_owners=include_owners_in_etag,
+        include_images=False,
+        include_availability=False,  # availability_source_ref is part of Hut model
+        hut_queryset=qs,
+    )
+
+    # Check if client has cached version
+    if check_etag_match(request, etag) or not check_if_modified_since(
+        request, last_modified
+    ):
+        # Return 304 Not Modified
+        response.status_code = 304
+        response["ETag"] = etag
+        response["Last-Modified"] = last_modified
+        return response
     # if isinstance(is_public, bool):
     #     qs = qs.filter(is_public=is_public)
+
+    # Track if has_availability annotation was added to avoid duplicate subqueries
+    has_availability_annotated = False
+
+    # Add annotation first if needed for filtering or inclusion
+    if has_availability != TristateEnum.unset or embed_all or include_has_availability:
+        # Select availability_source_ref to avoid extra query
+        qs = qs.select_related("availability_source_ref")
+        qs = qs.annotate(
+            # has_availability is True if availability_source_ref is set (hut has an availability source)
+            has_availability=Case(
+                When(availability_source_ref__isnull=False, then=Value(True)),
+                default=Value(False),
+            )
+        )
+        has_availability_annotated = True
+
+        # Apply filter if specified
+        if has_availability != TristateEnum.unset:
+            if has_availability.bool:
+                qs = qs.filter(availability_source_ref__isnull=False)
+            else:
+                qs = qs.filter(availability_source_ref__isnull=True)
+
     properties = [
         "id",
         "slug",
     ]
+
+    # Collect all select_related fields first, then apply once
+    select_related_fields = []
+
     if embed_all or include_elevation:
         properties.append("elevation")
     if embed_all or include_name:
         properties.append("name")
+    if has_availability_annotated:
+        properties.append("has_availability")
     if embed_all or embed_type:
+        select_related_fields.extend(["hut_type_open", "hut_type_closed"])
         annot = get_json_obj(
             flat=flat,
             values={
@@ -214,9 +347,10 @@ def get_huts_geojson(  # type: ignore  # noqa: PGH003
                 },
             },
         )
-        qs = qs.select_related("hut_type_open", "hut_type_closed").annotate(**annot)
+        qs = qs.annotate(**annot)
         properties += list(annot.keys())
     if embed_all or embed_owner:
+        select_related_fields.append("hut_owner")
         annot = get_json_obj(
             flat=flat,
             values={
@@ -226,8 +360,12 @@ def get_huts_geojson(  # type: ignore  # noqa: PGH003
                 }
             },
         )
-        qs = qs.select_related("hut_owner").annotate(**annot)
+        qs = qs.annotate(**annot)
         properties += list(annot.keys())
+
+    # Apply all select_related in one call for efficiency
+    if select_related_fields:
+        qs = qs.select_related(*select_related_fields)
     if embed_all or embed_capacity:
         annot = get_json_obj(
             flat=flat,
@@ -267,6 +405,12 @@ def get_huts_geojson(  # type: ignore  # noqa: PGH003
     )["geojson"]
     # TODO: maybe get it directly as str?
     response.write(msgspec.json.encode(geojson))
+
+    # Set cache headers (ETag, Last-Modified, Cache-Control)
+    # With ETags, we can cache aggressively (1 year) - clients will still get fresh data
+    # via 304 Not Modified responses when ETags match on every request
+    set_cache_headers(response, etag, last_modified, max_age=60)
+
     return response
 
 
@@ -274,9 +418,9 @@ def get_huts_geojson(  # type: ignore  # noqa: PGH003
     "/{slug}", response=HutSchemaDetails, exclude_unset=True, operation_id="get_hut"
 )
 @with_language_param()
-@decorate_view(cache_control(max_age=10))
 def get_hut(
     request: HttpRequest,
+    response: HttpResponse,
     slug: str,
     lang: LanguageParam,
     fields: Query[FieldsParam[HutSchemaDetails]],
@@ -288,12 +432,47 @@ def get_hut(
         .all()
         .filter(is_active=True, is_public=True, slug=slug)
     )
+
+    # Generate ETag for this specific hut
+    additional_keys = [slug, lang]
+
+    etag = generate_etag(
+        include_huts=True,
+        include_organizations=True,  # sources are always included
+        include_owners=True,  # owner is always included
+        include_images=True,  # images are always included
+        include_availability=False,  # availability_source_ref is part of Hut model, no need to check separately
+        hut_queryset=qs,
+        additional_keys=additional_keys,
+    )
+
+    last_modified = get_last_modified_http_date(
+        include_huts=True,
+        include_organizations=True,
+        include_owners=True,
+        include_images=True,
+        include_availability=False,  # availability_source_ref is part of Hut model, no need to check separately
+        hut_queryset=qs,
+    )
+
+    # Check if client has cached version
+    if check_etag_match(request, etag) or not check_if_modified_since(
+        request, last_modified
+    ):
+        # Return 304 Not Modified
+        response.status_code = 304
+        set_cache_headers(response, etag, last_modified, max_age=15)
+        return response
     media_abs_url = request.build_absolute_uri(settings.MEDIA_URL)
     # .order_by("org_set__order")
     # # TODO: too many sources, use limit for query, does not work as expected !!
-    qs = qs.select_related("hut_type_open", "hut_type_closed", "hut_owner").annotate(
-        has_availability=Exists(
-            AvailabilityStatus.objects.filter(hut=OuterRef("pk"), has_data=True)
+    qs = qs.select_related(
+        "hut_type_open", "hut_type_closed", "hut_owner", "availability_source_ref"
+    ).annotate(
+        # has_availability is True if availability_source_ref is set (hut has an availability source)
+        has_availability=Case(
+            When(availability_source_ref__isnull=False, then=Value(True)),
+            default=Value(False),
         ),
         sources=JSONBAgg(
             JSONObject(
@@ -431,6 +610,10 @@ def get_hut(
         hut_db.images = [old_photo, *hut_db.images]
     link = reverse_lazy("admin:huts_hut_change", args=[hut_db.pk])
     hut_db.edit_link = request.build_absolute_uri(link)
+
+    # Set cache headers
+    set_cache_headers(response, etag, last_modified, max_age=15)
+
     return hut_db
     # schema = HutSchemaDetails.model_validate(hut_db)
     # schema.edit_link = reverse_lazy("admin:huts_hut__change", hut_db.id)
