@@ -7,6 +7,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.11] - 2026-01-06
+
+#### 🚀 Features
+- Add search endpoint ([#60](https://github.com/wodore/wodore-backend/pull/60))
+- Add staging environment with staging email backend. ([#59](https://github.com/wodore/wodore-backend/pull/59))
+- Add `version` endpoint ([#55](https://github.com/wodore/wodore-backend/pull/55))
+- Add `has_availablity`, `modified`, and `created` field to hut details. Add etags for hut endpoints. ([#54](https://github.com/wodore/wodore-backend/pull/54))
+- Improve `get_hut_geosjon`: optimize db query ([#49](https://github.com/wodore/wodore-backend/pull/49))
+- Add new `huts/availability.geojson` endpoint with improved performance ([#46](https://github.com/wodore/wodore-backend/pull/46))
+- Add parameter env variables for update_availability script ([#45](https://github.com/wodore/wodore-backend/pull/45))
+
+#### 🐛 Fixes
+- Copy pyproject.toml in Dockerfile to have the correct version. ([#57](https://github.com/wodore/wodore-backend/pull/57))
+- Fix availability query issues ([#51](https://github.com/wodore/wodore-backend/pull/51))
+- Include source_id for hut details ([#48](https://github.com/wodore/wodore-backend/pull/48))
+- Improve 'modified' field with postgres native trigger. Add django-pgtrigger. ([#44](https://github.com/wodore/wodore-backend/pull/44))
+
+#### 🏭 Refactor
+- Improve availability endpoints. Use date in path. ([#47](https://github.com/wodore/wodore-backend/pull/47))
+
+#### 🌀 Others
+- Speed up quality workflow ([#53](https://github.com/wodore/wodore-backend/pull/53))
+- Add timestamp to hash tag (sortable) ([#52](https://github.com/wodore/wodore-backend/pull/52))
+- Improve docker build pipeline ([#50](https://github.com/wodore/wodore-backend/pull/50))
+
+[0.1.11]: https://github.com/wodore/wodore-backend/compare/v0.1.10..v0.1.11
+
 ## [0.1.10] - 2026-01-01
 
 #### 🏗️ Breaking changes
