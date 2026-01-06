@@ -1,8 +1,50 @@
+from datetime import datetime
+from os import environ
 from typing import List
 
-from ninja import Field, Query, Schema
+from ninja import Field, Query, Router, Schema
 from ninja.errors import HttpError
 from ninja.orm import create_schema
+
+from server.settings.components.common import BUILD_TIMESTAMP, GIT_HASH
+
+# Get package version
+try:
+    from importlib.metadata import version as get_version
+
+    PACKAGE_VERSION = get_version("wodore-backend")
+except Exception:
+    PACKAGE_VERSION = "unknown"
+
+# Get environment
+DJANGO_ENV = environ.get("DJANGO_ENV", "development")
+
+router = Router()
+
+
+class VersionSchema(Schema):
+    hash: str = Field(..., description="Git commit hash", example="abc123e")
+    version: str = Field(..., description="Sematic version", example="1.2.0")
+    timestamp: datetime = Field(
+        ...,
+        description="Build timestamp",
+    )
+    environment: str = Field(
+        ...,
+        description="Current environment (development, production)",
+        example="production",
+    )
+
+
+@router.get("/version", response=VersionSchema, tags=["utils"])
+def get_version(request):
+    """Get version information including git hash, package version, build timestamp, and environment."""
+    return {
+        "hash": GIT_HASH,
+        "version": PACKAGE_VERSION,
+        "timestamp": datetime.fromisoformat(BUILD_TIMESTAMP),
+        "environment": DJANGO_ENV,
+    }
 
 
 # @abc

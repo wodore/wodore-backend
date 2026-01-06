@@ -6,6 +6,12 @@ set -o pipefail
 
 readonly cmd="$*"
 
+# Load build timestamp if available
+if [ -f /code/.build_timestamp ]; then
+  # shellcheck disable=SC1091
+  source /code/.build_timestamp
+fi
+
 : "${DJANGO_DATABASE_HOST:=db}"
 : "${DJANGO_DATABASE_PORT:=5432}"
 
