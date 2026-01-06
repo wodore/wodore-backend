@@ -121,6 +121,32 @@ rm -rf .volumes/pgdata/*  # Be careful!
 (.venv) inv docker-compose -c "up -d"
 ```
 
+### Required PostgreSQL Extensions
+
+The application requires the following PostgreSQL extensions for full functionality:
+
+- **`postgis`** - Geographic objects and spatial queries (already included in PostGIS image)
+- **`pg_trgm`** - Trigram similarity for fuzzy search and typo tolerance
+- **`unaccent`** - Accent-insensitive text search (optional but recommended)
+
+These extensions are installed automatically via Django migrations when you run `app migrate`. If you need to install them manually (e.g., on a production database):
+
+```bash
+# Development (Docker)
+docker compose exec db psql -U wodore -d wodore -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+docker compose exec db psql -U wodore -d wodore -c "CREATE EXTENSION IF NOT EXISTS unaccent;"
+
+# Production/Kubernetes
+kubectl exec wd-backend-postgres-1 -- psql -U postgres -d wodore -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+kubectl exec wd-backend-postgres-1 -- psql -U postgres -d wodore -c "CREATE EXTENSION IF NOT EXISTS unaccent;"
+
+# Or via any PostgreSQL client
+psql -U wodore -d wodore -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+psql -U wodore -d wodore -c "CREATE EXTENSION IF NOT EXISTS unaccent;"
+```
+
+**Note:** Most managed PostgreSQL services (AWS RDS, Google Cloud SQL, Azure Database) allow these extensions without superuser privileges. If you encounter permission errors, contact your database administrator.
+
 ## Start Application
 
 Start the application using the app alias (recommended):

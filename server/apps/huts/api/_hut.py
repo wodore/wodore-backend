@@ -5,6 +5,7 @@ import msgspec
 from benedict import benedict
 from geojson_pydantic import FeatureCollection
 from ninja import Query
+from ninja.decorators import decorate_view
 # from rich import print
 
 # from ninja.errors import HttpError
@@ -14,8 +15,12 @@ from django.db.models import Case, F, Value, When
 from django.db.models.functions import Coalesce, Concat, JSONObject  # , Lower
 from django.http import Http404, HttpRequest, HttpResponse
 from django.urls import reverse_lazy
+from django.views.decorators.cache import cache_control
 
 from server.apps.api.query import FieldsParam, TristateEnum
+from enum import Enum
+
+
 from server.apps.huts.schemas._hut import ImageMetaSchema
 from server.apps.translations import (
     LanguageParam,
@@ -27,6 +32,7 @@ from ..models import Hut
 from ..schemas import (
     HutSchemaDetails,
     HutSchemaList,
+    HutSearchResultSchema,
     ImageInfoSchema,
     LicenseInfoSchema,
 )
@@ -40,6 +46,168 @@ from .etag_utils import (
     set_cache_headers,
 )
 from .expressions import GeoJSON
+
+
+class IncludeModeEnum(str, Enum):
+    """Include mode enum for search endpoint - controls level of detail."""
+
+    no = "no"
+    slug = "slug"
+    all = "all"
+
+
+# Search endpoint
+@router.get(
+    "search",
+    response=list[HutSearchResultSchema],
+    exclude_unset=True,
+    operation_id="search_huts",
+)
+@decorate_view(cache_control(max_age=60))
+@with_language_param("lang")
+def search_huts(
+    request: HttpRequest,
+    response: HttpResponse,
+    lang: LanguageParam,
+    q: str = Query(
+        ...,
+        description="Search query string to match against hut names in all languages",
+        example="rotond",
+    ),
+    offset: int = Query(0, description="Number of results to skip for pagination"),
+    limit: int | None = Query(15, description="Maximum number of results to return"),
+    threshold: float = Query(
+        0.1,
+        description="Minimum similarity score (0.0-1.0). Lower values return more results but with lower relevance. Recommended: 0.1 for fuzzy matching, 0.3 for stricter matching.",
+    ),
+    include_hut_type: IncludeModeEnum = Query(
+        IncludeModeEnum.no,
+        description="Include hut type information: 'no' excludes field, 'slug' returns type slugs only, 'all' returns full type details with icons",
+    ),
+    include_sources: IncludeModeEnum = Query(
+        IncludeModeEnum.no,
+        description="Include data sources: 'no' excludes field, 'slug' returns source slugs only, 'all' returns full source details with logos",
+    ),
+    include_avatar: bool = Query(
+        True,
+        description="Include avatar/primary photo URL in results",
+    ),
+) -> Any:
+    """Search for huts using fuzzy text search across all language fields."""
+    activate(lang)
+
+    # Use the search manager method
+    qs = Hut.objects.search(
+        query=q,
+        language=lang,
+        threshold=threshold,
+        is_active=True,
+        is_public=True,
+    )
+
+    # Build annotations based on include parameters
+    if include_hut_type != "no":
+        qs = qs.select_related("hut_type_open", "hut_type_closed")
+
+    # Add source annotations based on include_sources parameter
+    if include_sources == "slug":
+        qs = qs.annotate(organization_slugs=JSONBAgg(F("org_set__slug"), distinct=True))
+    elif include_sources == "all":
+        qs = qs.annotate(
+            sources_data=JSONBAgg(
+                JSONObject(
+                    slug="org_set__slug",
+                    name="org_set__name_i18n",
+                    fullname="org_set__fullname_i18n",
+                    link="orgs_source__link",
+                    logo="org_set__logo",
+                    public="org_set__is_public",
+                    source_id="orgs_source__source_id",
+                ),
+                distinct=True,
+            )
+        )
+
+    # Apply limit and offset
+    if limit is not None:
+        qs = qs[offset : offset + limit]
+
+    # Build simplified response
+    results = []
+    # Always calculate media_url for images (icons, logos, avatar)
+    media_url = settings.MEDIA_URL
+    if not media_url.startswith("http"):
+        media_url = request.build_absolute_uri(media_url)
+
+    for hut in qs:
+        result = {
+            "name": hut.name_i18n,
+            "slug": hut.slug,
+            "capacity": {
+                "open": hut.capacity_open,
+                "closed": hut.capacity_closed,
+            },
+            "location": hut.location,
+            "elevation": hut.elevation,
+            "score": hut.combined_score,
+        }
+
+        # Include hut_type based on parameter (only add field if not 'no')
+        if include_hut_type == "slug":
+            result["hut_type"] = {
+                "open": hut.hut_type_open.slug if hut.hut_type_open else None,
+                "closed": hut.hut_type_closed.slug if hut.hut_type_closed else None,
+            }
+        elif include_hut_type == "all":
+            result["hut_type"] = {
+                "open": {
+                    "slug": hut.hut_type_open.slug,
+                    "name": hut.hut_type_open.name_i18n,
+                    "icon": f"{media_url}{hut.hut_type_open.icon}"
+                    if hut.hut_type_open.icon
+                    else None,
+                }
+                if hut.hut_type_open
+                else None,
+                "closed": {
+                    "slug": hut.hut_type_closed.slug,
+                    "name": hut.hut_type_closed.name_i18n,
+                    "icon": f"{media_url}{hut.hut_type_closed.icon}"
+                    if hut.hut_type_closed.icon
+                    else None,
+                }
+                if hut.hut_type_closed
+                else None,
+            }
+        # Note: when include_hut_type == "no", we don't add the field at all
+
+        # Include sources based on parameter (only add field if not 'no')
+        if include_sources == "slug":
+            org_slugs = [
+                slug for slug in (hut.organization_slugs or []) if slug is not None
+            ]
+            result["sources"] = org_slugs
+        elif include_sources == "all":
+            sources = []
+            for src in hut.sources_data or []:
+                if src.get("slug") is not None:
+                    # Add full URL to logo
+                    if src.get("logo"):
+                        src["logo"] = f"{media_url}{src['logo']}"
+                    sources.append(src)
+            result["sources"] = sources
+        # Note: when include_sources == "no", we don't add the field at all
+
+        # Include avatar if requested (only add field if True)
+        if include_avatar:
+            if hut.photos:
+                result["avatar"] = f"{media_url}{hut.photos}"
+            else:
+                result["avatar"] = None
+
+        results.append(result)
+
+    return results
 
 
 @router.get(
@@ -131,7 +299,7 @@ def get_huts(  # type: ignore  # noqa: PGH003
         availability_source_ref__slug=F("availability_source_ref__slug"),
         sources=JSONBAgg(
             JSONObject(
-                logo="org_set__logo",
+                logo=Concat(Value(media_url), F("org_set__logo")),
                 fullname="org_set__fullname_i18n",
                 slug="org_set__slug",
                 name="org_set__name_i18n",

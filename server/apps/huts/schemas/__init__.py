@@ -5,6 +5,7 @@ from ._hut import (
     HutSchemaDetails,
     HutSchemaList,
     HutSchemaOptional,
+    HutSearchResultSchema,
     ImageInfoSchema,
     LicenseInfoSchema,
 )

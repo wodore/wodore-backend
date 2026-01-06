@@ -288,3 +288,35 @@ class HutSchemaDetails(HutSchemaOptional):
     translations: t.Any | None = None
     created: datetime | None = None
     modified: datetime | None = None
+
+
+class HutTypeSimpleSchema(BaseModel):
+    """Simplified hut type schema for search results."""
+
+    open: str | None = None
+    closed: str | None = None
+
+
+class CapacitySimpleSchema(BaseModel):
+    """Simplified capacity schema for search results."""
+
+    open: int | None = None
+    closed: int | None = None
+
+
+class HutSearchResultSchema(BaseModel):
+    """Simplified schema for hut search results - optimized for fast autocomplete."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    slug: str
+    hut_type: t.Any = None  # Can be None, HutTypeSimpleSchema, or full HutTypeSchema
+    capacity: CapacitySimpleSchema
+    location: LocationSchema
+    elevation: float | None = None
+    avatar: str | None = None  # Full URL to avatar image
+    score: float  # Search relevance score
+    sources: t.Any = (
+        None  # Can be None, list[str] (slugs), or list[OrganizationBaseSchema]
+    )
