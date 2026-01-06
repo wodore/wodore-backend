@@ -165,6 +165,9 @@ COPY --chown=web:web ${CONFIG_DIR} /code/config
 RUN <<EOF
 chmod +x '/docker-entrypoint.sh'
 python manage.py collectstatic --noinput
+# Generate build timestamp automatically during build
+printf 'export BUILD_TIMESTAMP=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%S.%6NZ)" > /code/.build_timestamp
+chmod 644 /code/.build_timestamp
 EOF
 
 # Running as non-root user:

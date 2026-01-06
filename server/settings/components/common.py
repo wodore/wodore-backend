@@ -66,6 +66,23 @@ def _get_git_hash() -> str:
 
 GIT_HASH = _get_git_hash()
 
+
+# Build timestamp for version tracking
+def _get_build_timestamp() -> str:
+    """Get build timestamp from env var or current time."""
+    from datetime import datetime
+
+    # First try environment variable (for production/docker)
+    build_timestamp = config("BUILD_TIMESTAMP", default=None)
+    if build_timestamp:
+        return build_timestamp
+
+    # In development, use current timestamp
+    return datetime.now().isoformat()
+
+
+BUILD_TIMESTAMP = _get_build_timestamp()
+
 DJANGO_TRUSTED_DOMAINS = (
     [d.strip() for d in config("DJANGO_TRUSTED_DOMAINS").split(",")]
     if config("DJANGO_TRUSTED_DOMAINS", "")

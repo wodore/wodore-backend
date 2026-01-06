@@ -169,6 +169,10 @@ COPY --chown=web:web server /code/server
 COPY --chown=web:web static /code/static
 COPY --chown=web:web ${CONFIG_DIR} /code/config
 
+# Generate build timestamp automatically during build
+RUN printf 'export BUILD_TIMESTAMP=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%S.%6NZ)" > /code/.build_timestamp \
+  && chmod 644 /code/.build_timestamp
+
 # Running as non-root user:
 # TODO
 USER web

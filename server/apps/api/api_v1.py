@@ -19,3 +19,4 @@ api.add_router(
     "/organizations/", "server.apps.organizations.api.router", tags=["organization"]
 )
 api.add_router("/feedback/", "server.apps.feedbacks.api.router", tags=["feedback"])
+api.add_router("/", "server.apps.utils.api.router", tags=["utils"])
