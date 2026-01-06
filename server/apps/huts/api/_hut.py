@@ -11,7 +11,7 @@ from ninja.decorators import decorate_view
 # from ninja.errors import HttpError
 from django.conf import settings
 from django.contrib.postgres.aggregates import JSONBAgg
-from django.db.models import F, Value
+from django.db.models import Exists, F, OuterRef, Value
 from django.db.models.functions import Coalesce, Concat, JSONObject  # , Lower
 from django.http import Http404, HttpRequest, HttpResponse
 from django.urls import reverse_lazy
@@ -24,6 +24,8 @@ from server.apps.translations import (
     activate,
     with_language_param,
 )
+
+from server.apps.availability.models import AvailabilityStatus
 
 from ..models import Hut
 from ..schemas import (
@@ -48,6 +50,7 @@ def get_huts(  # type: ignore  # noqa: PGH003
     is_modified: TristateEnum = TristateEnum.unset,
     is_public: TristateEnum = TristateEnum.true,  # needs permission
     is_active: TristateEnum = TristateEnum.true,  # needs permission
+    has_availability: TristateEnum = TristateEnum.unset,
 ) -> Any:
     """Get a list with huts."""
     activate(lang)
@@ -58,12 +61,23 @@ def get_huts(  # type: ignore  # noqa: PGH003
         huts_db = huts_db.filter(is_active=is_active.bool)
     if is_public != TristateEnum.unset:
         huts_db = huts_db.filter(is_public=is_public.bool)
+    if has_availability != TristateEnum.unset:
+        huts_db = huts_db.filter(
+            Exists(
+                AvailabilityStatus.objects.filter(
+                    hut=OuterRef("pk"), has_data=has_availability.bool
+                )
+            )
+        )
 
     media_url = request.build_absolute_uri(settings.MEDIA_URL)
     iam_media_url = "https://res.cloudinary.com/wodore/image/upload/v1/"
     huts_db = huts_db.select_related(
         "hut_type_open", "hut_type_closed", "hut_owner"
     ).annotate(
+        has_availability=Exists(
+            AvailabilityStatus.objects.filter(hut=OuterRef("pk"), has_data=True)
+        ),
         sources=JSONBAgg(
             JSONObject(
                 logo="org_set__logo",
@@ -278,6 +292,9 @@ def get_hut(
     # .order_by("org_set__order")
     # # TODO: too many sources, use limit for query, does not work as expected !!
     qs = qs.select_related("hut_type_open", "hut_type_closed", "hut_owner").annotate(
+        has_availability=Exists(
+            AvailabilityStatus.objects.filter(hut=OuterRef("pk"), has_data=True)
+        ),
         sources=JSONBAgg(
             JSONObject(
                 logo=Concat(Value(media_abs_url), F("org_set__logo")),

@@ -259,6 +259,7 @@ class HutSchemaOptional(BaseModel):
     photos_attribution: str = Field("")
     images: list[ImageInfoSchema] | None
     open_monthly: OpenMonthlySchema | None = None
+    has_availability: bool | None = None
 
     @field_validator("country", mode="before")
     @classmethod
