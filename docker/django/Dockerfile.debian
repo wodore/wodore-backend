@@ -57,22 +57,22 @@ FROM python-base as builder-base
 # pin when needed):
 # hadolint ignore=DL3008
 RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
-    --mount=target=/var/cache/apt,type=cache,sharing=locked \
+  --mount=target=/var/cache/apt,type=cache,sharing=locked \
   rm -f /etc/apt/apt.conf.d/docker-clean \
   && apt-get update && apt-get upgrade -y \
   && apt-get install -y --no-install-recommends \
-    bash \
-    brotli \
-    build-essential \
-    curl \
-    gettext \
-    git \
-    openssh-client \
-    libpq-dev \
-    wait-for-it \
-    binutils \
-    libproj-dev \
-    gdal-bin \
+  bash \
+  brotli \
+  build-essential \
+  curl \
+  gettext \
+  git \
+  openssh-client \
+  libpq-dev \
+  wait-for-it \
+  binutils \
+  libproj-dev \
+  gdal-bin \
   # Installing `tini` utility:
   # https://github.com/krallin/tini
   # Get architecture to download appropriate tini release:
@@ -104,7 +104,7 @@ WORKDIR /code
 #RUN --mount=type=ssh bundle install
 
 #RUN groupadd -g "${GID}" -r web \
-  #&& useradd -d '/code' -g web -l -r -u "${UID}" web \
+#&& useradd -d '/code' -g web -l -r -u "${UID}" web \
 RUN chown web:web -R '/code' \
   # Static and media files:
   && mkdir -p '/var/www/django/static' '/var/www/django/media' \
@@ -124,8 +124,8 @@ RUN --mount=type=cache,target="$POETRY_CACHE_DIR" --mount=type=ssh \
   # Install deps:
   && poetry run pip install -U pip \
   && poetry install \
-   $(if [ "$WITH_DEV" = '0' ]; then echo '--only main'; fi) \
-    --no-interaction --no-ansi --sync --extras private \
+  $(if [ "$WITH_DEV" = '0' ]; then echo '--only main'; fi) \
+  --no-interaction --no-ansi --sync --extras private \
   && chmod +x minify_venv.sh \
   && ./minify_venv.sh
 
@@ -136,20 +136,20 @@ FROM python-base as production
 # pin when needed):
 # hadolint ignore=DL3008
 RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
-    --mount=target=/var/cache/apt,type=cache,sharing=locked \
+  --mount=target=/var/cache/apt,type=cache,sharing=locked \
   rm -f /etc/apt/apt.conf.d/docker-clean \
   && apt-get update && apt-get upgrade -y \
   && apt-get install -y --no-install-recommends \
-    wait-for-it \
-    gdal-bin \
-    #libproj-dev \
+  wait-for-it \
+  gdal-bin \
+  #libproj-dev \
   # Cleaning cache:
   && rm -rf /var/lib/apt/lists/*
 
 # curl
 
 ENV VIRTUAL_ENV=/code/.venv \
-    PATH="/code/.venv/bin:$PATH"
+  PATH="/code/.venv/bin:$PATH"
 COPY --from=builder-base ${VIRTUAL_ENV} ${VIRTUAL_ENV}
 COPY --from=builder-base "/usr/local/bin/tini" "/usr/local/bin/tini"
 
@@ -163,6 +163,7 @@ RUN chmod +x '/docker-entrypoint.sh' \
   && sed -i 's/\r$//g' '/docker-entrypoint.sh'
 
 WORKDIR /code
+COPY --chown=web:web ./pyproject.toml /code/
 COPY --chown=web:web ./manage.py /code/
 COPY --chown=web:web server /code/server
 # TODO: collectstatic in build process and copy from there!

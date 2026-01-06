@@ -53,7 +53,7 @@ FROM python-base AS builder-base
 # pin when needed):
 # hadolint ignore=DL3008
 RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
-    --mount=target=/var/cache/apt,type=cache,sharing=locked <<EOF
+  --mount=target=/var/cache/apt,type=cache,sharing=locked <<EOF
 rm -f /etc/apt/apt.conf.d/docker-clean
 apt-get update && apt-get upgrade -y
 apt-get install -y --no-install-recommends \
@@ -88,12 +88,12 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # - pick a Python (use `/usr/bin/python3.12` on uv 0.5.0 and later),
 # - and finally declare `/app` as the target for `uv sync`.
 ENV UV_LINK_MODE=copy \
-    UV_COMPILE_BYTECODE=1 \
-    UV_PYTHON_DOWNLOADS=never \
-    UV_PYTHON_PREFERENCE=only-system \
-    UV_CACHE_DIR='/var/cache/uv-cache/' \
-    UV_PYTHON=python$PYTHON_VERSION
-    #UV_PROJECT_ENVIRONMENT=/app
+  UV_COMPILE_BYTECODE=1 \
+  UV_PYTHON_DOWNLOADS=never \
+  UV_PYTHON_PREFERENCE=only-system \
+  UV_CACHE_DIR='/var/cache/uv-cache/' \
+  UV_PYTHON=python$PYTHON_VERSION
+#UV_PROJECT_ENVIRONMENT=/app
 
 
 WORKDIR /code
@@ -103,8 +103,8 @@ COPY --chown=web:web ./uv.lock ./pyproject.toml ./docker/django/minify_venv.sh /
 
 # Download public key for github.com
 RUN --mount=type=cache,target="$UV_CACHE_DIR" \
-    --mount=type=secret,id=READ_GITHUB_TOKEN,env=READ_GITHUB_TOKEN \
-    --mount=type=secret,id=READ_GITHUB_USER,env=READ_GITHUB_USER <<EOF
+  --mount=type=secret,id=READ_GITHUB_TOKEN,env=READ_GITHUB_TOKEN \
+  --mount=type=secret,id=READ_GITHUB_USER,env=READ_GITHUB_USER <<EOF
 if [ "$READ_GITHUB_TOKEN" != "" ]; then
   git config --global url."https://${READ_GITHUB_USER}:${READ_GITHUB_TOKEN}@github.com".insteadOf ssh://git@github.com
   extra_arg="--extra private"
@@ -131,7 +131,7 @@ FROM python-base AS production
 # pin when needed):
 # hadolint ignore=DL3008
 RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
-    --mount=target=/var/cache/apt,type=cache,sharing=locked <<EOF
+  --mount=target=/var/cache/apt,type=cache,sharing=locked <<EOF
 rm -f /etc/apt/apt.conf.d/docker-clean
 apt-get update && apt-get upgrade -y
 apt-get install -y --no-install-recommends \
@@ -155,6 +155,7 @@ COPY --from=builder-base "/usr/local/bin/tini" "/usr/local/bin/tini"
 
 # This is a special case. We need to run this script as an entry point:
 COPY ./docker/django/entrypoint.sh /docker-entrypoint.sh
+COPY --chown=web:web ./pyproject.toml /code/
 COPY --chown=web:web ./manage.py /code/
 COPY --chown=web:web server /code/server
 # TODO: collectstatic in build process and copy from there!
