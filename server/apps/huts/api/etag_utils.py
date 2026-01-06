@@ -77,18 +77,7 @@ def get_last_modified_timestamp(
         if avail_modified:
             timestamps.append(avail_modified.timestamp())
 
-    max_timestamp = max(timestamps) if timestamps else 0.0
-
-    # Debug output
-    print(f"[DEBUG Timestamp] timestamps: {timestamps}")
-    print(f"[DEBUG Timestamp] max: {max_timestamp}")
-    from datetime import datetime, timezone
-
-    print(
-        f"[DEBUG Timestamp] max datetime: {datetime.fromtimestamp(max_timestamp, tz=timezone.utc)}"
-    )
-
-    return max_timestamp
+    return max(timestamps) if timestamps else 0.0
 
 
 def generate_etag(
@@ -132,13 +121,6 @@ def generate_etag(
 
     hash_input = "-".join(hash_parts)
     etag_hash = hashlib.md5(hash_input.encode()).hexdigest()
-
-    # Debug output
-    print(f"[DEBUG ETag] timestamp: {timestamp}")
-    print(f"[DEBUG ETag] git_hash: {settings.GIT_HASH}")
-    print(f"[DEBUG ETag] additional_keys: {additional_keys}")
-    print(f"[DEBUG ETag] hash_input: {hash_input}")
-    print(f"[DEBUG ETag] etag: {etag_hash}")
 
     return f'"{etag_hash}"'
 

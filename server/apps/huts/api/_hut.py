@@ -96,7 +96,8 @@ def get_huts(  # type: ignore  # noqa: PGH003
     )
 
     # Check if client has cached version
-    if check_etag_match(request, etag) or not check_if_modified_since(
+    # Both ETag must match AND resource must not be modified for 304 response
+    if check_etag_match(request, etag) and not check_if_modified_since(
         request, last_modified
     ):
         # Return 304 Not Modified
@@ -288,7 +289,8 @@ def get_huts_geojson(  # type: ignore  # noqa: PGH003
     )
 
     # Check if client has cached version
-    if check_etag_match(request, etag) or not check_if_modified_since(
+    # Both ETag must match AND resource must not be modified for 304 response
+    if check_etag_match(request, etag) and not check_if_modified_since(
         request, last_modified
     ):
         # Return 304 Not Modified
@@ -463,7 +465,8 @@ def get_hut(
     )
 
     # Check if client has cached version
-    if check_etag_match(request, etag) or not check_if_modified_since(
+    # Both ETag must match AND resource must not be modified for 304 response
+    if check_etag_match(request, etag) and not check_if_modified_since(
         request, last_modified
     ):
         # Return 304 Not Modified
