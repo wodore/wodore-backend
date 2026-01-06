@@ -170,6 +170,8 @@ INSTALLED_APPS: Tuple[str, ...] = (
 )
 
 MIDDLEWARE: Tuple[str, ...] = (
+    # Environment identification header:
+    "server.middleware.headers.EnvironmentHeadersMiddleware",
     # Logging:
     "server.settings.components.logging.LoggingContextVarsMiddleware",
     # Cross-Origin Resource Sharing (CORS)

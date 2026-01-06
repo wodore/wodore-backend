@@ -11,6 +11,8 @@ from server.settings.components.oicd import discovery_info
 # Production flags:
 # https://docs.djangoproject.com/en/4.2/howto/deployment/
 
+ENVIRONMENT = "production"
+
 DEBUG = False
 
 ALLOWED_HOSTS = [
@@ -26,26 +28,6 @@ if discovery_info:  # use only if setup correct
 
 # Staticfiles
 # https://docs.djangoproject.com/en/4.2/ref/contrib/staticfiles/
-
-## # This is a hack to allow a special flag to be used with `--dry-run`
-## # to test things locally.
-## _COLLECTSTATIC_DRYRUN = config(
-##     "DJANGO_COLLECTSTATIC_DRYRUN",
-##     cast=bool,
-##     default=False,
-## )
-## # Adding STATIC_ROOT to collect static files via 'collectstatic':
-## if _COLLECTSTATIC_DRYRUN:
-##     STATIC_ROOT = ".static"
-
-# STATIC_ROOT = ".static" if _COLLECTSTATIC_DRYRUN else "/var/www/django/static"
-
-
-# Media files
-# https://docs.djangoproject.com/en/4.2/topics/files/
-
-# MEDIA_ROOT = "/var/www/django/media"
-
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators

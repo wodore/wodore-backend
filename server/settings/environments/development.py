@@ -19,6 +19,7 @@ from server.settings.components.oicd import discovery_info
 
 # Setting the development status:
 
+ENVIRONMENT = "development"
 
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SECURE = False
@@ -37,6 +38,7 @@ WITH_DEV = find_spec("debug_toolbar") is not None
 ALLOWED_HOSTS = [
     *DJANGO_TRUSTED_DOMAINS,
     "api.localhost",
+    "hub.localhost",
     "localhost",
     "0.0.0.0",
     "127.0.0.1",
@@ -54,8 +56,6 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^https?://localhost:\d+$",
     r"^localhost:\d+$",
     r"^.*\.localhost:\d+$",
-    # r"^https?://wodore.com",
-    # r"^https?://beta.wodore.com",
     *[f"^https?://{d}" for d in DJANGO_TRUSTED_DOMAINS],
 ]
 
