@@ -44,7 +44,7 @@ runs:
 
     - name: Setup pre-commit and directories
       run: |
-        uv run pre-commit install
+        uv run --no-project pre-commit install
         mkdir -p .volumes/pgdata
         mkdir -p media/imagor_data/{storage,result}
       shell: bash
