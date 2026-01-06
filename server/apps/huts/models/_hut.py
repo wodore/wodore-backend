@@ -237,6 +237,9 @@ class Hut(TimeStampedModel):
         ordering = (Lower("name_i18n"),)
         indexes = (
             GinIndex(fields=["i18n"]),
+            GinIndex(
+                fields=["name"], name="hut_name_gin_idx", opclasses=["gin_trgm_ops"]
+            ),
             # Composite index for most common query pattern in API endpoints
             models.Index(
                 fields=["is_active", "is_public"], name="hut_active_public_idx"

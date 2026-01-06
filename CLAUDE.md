@@ -142,6 +142,64 @@ POSTGRES_DB: wodore
 - Inherit from `server.core.managers.BaseManager`
 - Define custom querysets for complex queries
 
+### API Endpoints (Django Ninja)
+
+**Documentation Style:**
+
+- **Function docstring**: Keep it simple, usually one line describing what the endpoint does
+- **Parameters**: Use `Query()` from `ninja` to add detailed descriptions for each parameter
+- **Examples**: Only add examples if helpful (not for simple integers, bools, or obvious values). Use `example="value"` (singular), not `examples=[...]`
+- **Response**: Set `exclude_unset=True` on the router decorator to exclude fields that are not set (avoids null fields in response)
+
+**Example:**
+
+```python
+from ninja import Query
+
+@router.get(
+    "search",
+    response=list[HutSearchResultSchema],
+    exclude_unset=True,  # Don't include fields that are not set
+    operation_id="search_huts",
+)
+def search_huts(
+    request: HttpRequest,
+    response: HttpResponse,
+    q: str = Query(
+        ...,
+        description="Search query string to match against hut names",
+        example="Rotondo"
+    ),
+    limit: int | None = Query(
+        15,
+        description="Maximum number of results to return"
+        # No example needed - it's obvious what an integer limit is
+    ),
+    threshold: float = Query(
+        0.1,
+        description="Minimum similarity score (0.0-1.0). Lower values return more results but with lower relevance. Recommended: 0.1 for fuzzy matching, 0.3 for stricter matching.",
+        example=0.3
+    ),
+    include_sources: IncludeModeEnum = Query(
+        IncludeModeEnum.no,
+        description="Include data sources: 'no' excludes field, 'slug' returns source slugs only, 'all' returns full source details"
+        # No example needed - enum values are self-explanatory in Swagger UI
+    ),
+) -> Any:
+    """Search for huts using fuzzy text search across all language fields."""
+    # Implementation...
+```
+
+**Key Points:**
+
+- Use `Query(...)` for required parameters with description (NOT `Field()` - that's for Pydantic schemas)
+- Use `Query(default_value, description=...)` for optional parameters
+- Add `example="value"` only when it helps clarify usage (e.g., for search strings, special formats, or non-obvious numeric values)
+- Skip examples for obvious types like simple integers, booleans, or enums (Swagger UI shows these well)
+- `exclude_unset=True` works by not adding fields to the response dict when they shouldn't be included
+- Don't set fields to `None` if you want them excluded - simply don't add them to the result dict
+- Add detailed descriptions explaining what values mean, especially for numeric thresholds or enum options
+
 ## Current Work: Availability Tracking
 
 The `availbility` app tracks hut booking availability:
