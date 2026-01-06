@@ -38,8 +38,28 @@ def environment_callback(request):
     """
     Callback has to return a list of two values represeting text value and the color
     type of the label displayed in top right corner.
+
+    Returns:
+        - Production: ["Live", "warning"] or ["Live [debug]", "warning"] if DEBUG
+        - Staging: ["Staging", "info"] or ["Staging [debug]", "info"] if DEBUG
+        - Development: ["Dev", "info"] or ["Dev [debug]", "info"] if DEBUG
     """
+    environment = getattr(settings, "ENVIRONMENT", None)
+
+    # Determine environment label and color
+    if environment == "production":
+        label = _("Live")
+        color = "warning"
+    elif environment == "staging":
+        label = _("Staging")
+        color = "info"
+    else:
+        # Default to development
+        label = _("Dev")
+        color = "info"
+
+    # Append [debug] if DEBUG is enabled
     if settings.DEBUG:
-        return ["Dev", "info"]  # info, danger, warning, success
-    # icon = '<span class="material-symbols-outlined"> cell_tower </span>'
-    return [mark_safe(f"{_('Live')}"), "warning"]  # info, danger, warning, success
+        label = f"{label} [debug]"
+
+    return [mark_safe(str(label)), color]
