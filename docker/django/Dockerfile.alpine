@@ -153,6 +153,7 @@ WORKDIR /code
 COPY --from=builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
 # This is a special case. We need to run this script as an entry point:
 COPY ./docker/django/entrypoint.sh /docker-entrypoint.sh
+COPY --chown=web:web ./pyproject.toml /code/
 COPY --chown=web:web ./manage.py /code/
 COPY --chown=web:web server /code/server
 # TODO: collectstatic in build process and copy from there!
