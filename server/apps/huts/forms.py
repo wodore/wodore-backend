@@ -21,7 +21,7 @@ HutAdminFieldsets = [
                 "note_i18n",
                 "photos",
                 "photos_attribution",
-                "booking_ref",
+                "availability_source_ref",
             ],
         },
     ),

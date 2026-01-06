@@ -20,14 +20,17 @@ ARG DJANGO_ENV \
   GID=1001 \
   PYTHON_VERSION=3.12 \
   CONFIG_DIR="config" \
-  WITH_DEV=0
+  WITH_DEV=0 \
+  GIT_HASH
 
 ENV DJANGO_ENV=${DJANGO_ENV} \
   # python:
   PYTHONFAULTHANDLER=1 \
   PYTHONUNBUFFERED=1 \
   PYTHONHASHSEED=random \
-  PYTHONDONTWRITEBYTECODE=1
+  PYTHONDONTWRITEBYTECODE=1 \
+  # Git hash for cache busting:
+  GIT_HASH=${GIT_HASH}
 
 #SHELL ["/bin/bash", "-eo", "pipefail", "-c"]
 

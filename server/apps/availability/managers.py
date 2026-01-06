@@ -158,7 +158,7 @@ class HutAvailabilityManager(BaseManager):
         Returns huts that either:
         1. Have availability data and need updates based on priority
         2. Have AvailabilityStatus and need rechecking (even if they returned empty before)
-        3. Have booking_ref but have never been checked (no AvailabilityStatus yet)
+        3. Have availability_source_ref but have never been checked (no AvailabilityStatus yet)
 
         Args:
             high_priority_minutes: Minutes between checks for high/full occupancy (default from settings)
@@ -205,11 +205,11 @@ class HutAvailabilityManager(BaseManager):
         ).values_list("hut_id", flat=True)
         huts_needing_recheck = Hut.objects.filter(
             id__in=status_needing_check,
-            booking_ref__isnull=False,
+            availability_source_ref__isnull=False,
         )
 
-        # 3. Get new huts with booking_ref that have never been checked
-        all_bookable_huts = Hut.objects.filter(booking_ref__isnull=False)
+        # 3. Get new huts with availability_source_ref that have never been checked
+        all_bookable_huts = Hut.objects.filter(availability_source_ref__isnull=False)
         checked_hut_ids = AvailabilityStatus.objects.values_list("hut_id", flat=True)
         new_huts = all_bookable_huts.exclude(id__in=checked_hut_ids)
 

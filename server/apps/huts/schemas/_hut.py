@@ -1,4 +1,5 @@
 import typing as t
+from datetime import datetime
 
 from hut_services import LocationSchema, OpenMonthlySchema
 from ninja import Field, ModelSchema
@@ -259,6 +260,8 @@ class HutSchemaOptional(BaseModel):
     photos_attribution: str = Field("")
     images: list[ImageInfoSchema] | None
     open_monthly: OpenMonthlySchema | None = None
+    has_availability: bool | None = None
+    availability_source: str | None = Field(None, alias="availability_source_ref__slug")
 
     @field_validator("country", mode="before")
     @classmethod
@@ -271,7 +274,17 @@ class HutSchemaOptional(BaseModel):
     #    fields_optional = (f for f in _HUT_FIELDS if f not in ("name"))  # .remove("name")
 
 
+class HutSchemaList(HutSchemaOptional):
+    """Schema for hut list endpoints (without created/modified timestamps)."""
+
+    pass
+
+
 class HutSchemaDetails(HutSchemaOptional):
+    """Schema for single hut detail endpoint (with all details including timestamps)."""
+
     edit_link: str | None = None
     # desc: TranslationSchema | None = None
     translations: t.Any | None = None
+    created: datetime | None = None
+    modified: datetime | None = None

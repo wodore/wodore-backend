@@ -13,7 +13,8 @@ ARG DJANGO_ENV \
   UID=1000 \
   GID=1000 \
   CONFIG_DIR="config" \
-  WITH_DEV=0
+  WITH_DEV=0 \
+  GIT_HASH
 
 ENV DJANGO_ENV=${DJANGO_ENV} \
   # python:
@@ -34,7 +35,9 @@ ENV DJANGO_ENV=${DJANGO_ENV} \
   POETRY_VIRTUALENVS_IN_PROJECT=1 \
   POETRY_VIRTUALENVS_CREATE=1 \
   POETRY_CACHE_DIR='/var/cache/pypoetry' \
-  POETRY_HOME='/usr/local'
+  POETRY_HOME='/usr/local' \
+  # Git hash for cache busting:
+  GIT_HASH=${GIT_HASH}
 
 SHELL ["/bin/bash", "-eo", "pipefail", "-c"]
 

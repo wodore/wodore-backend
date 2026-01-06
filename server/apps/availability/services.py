@@ -90,7 +90,7 @@ class AvailabilityService:
 
         # Build base queryset with prefetch to avoid N+1 queries
         obj = Hut.objects.prefetch_related(
-            "hut_type_open", "hut_type_closed", "booking_ref"
+            "hut_type_open", "hut_type_closed", "availability_source_ref"
         )
         obj = obj.filter(slug__in=hut_slugs)
 
@@ -131,7 +131,7 @@ class AvailabilityService:
                     huts += list(
                         obj.filter(
                             orgs_source__organization__slug=src_name,
-                            booking_ref__slug=src_name,
+                            availability_source_ref__slug=src_name,
                             orgs_source__source_id__in=service_bookings.keys(),
                         )
                         .annotate(

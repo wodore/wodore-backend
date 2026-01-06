@@ -16,6 +16,7 @@ from modeltrans.fields import TranslationField
 
 from django.conf import settings
 from django.contrib.gis.db import models
+from django.contrib.gis.db.models import Index as GISIndex
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point as dbPoint
 from django.contrib.gis.measure import D
@@ -202,13 +203,16 @@ class Hut(TimeStampedModel):
         verbose_name=_("Hut type if closed"),
         db_index=True,
     )
-    booking_ref = models.ForeignKey(
+    availability_source_ref = models.ForeignKey(
         Organization,
         null=True,
         blank=True,
-        related_name="hut_booking_set",
+        related_name="hut_availability_source_set",
         on_delete=models.SET_NULL,
-        verbose_name=_("Booking Rerefence"),
+        verbose_name=_("Availability Source Reference"),
+        help_text=_(
+            "Organization providing online booking/availability data for this hut"
+        ),
         db_index=True,
     )
     # organizations = models.ManyToManyField(Organization, related_name="huts", db_table="hut_organization_association")
@@ -231,7 +235,15 @@ class Hut(TimeStampedModel):
     class Meta:
         verbose_name = _("Hut")
         ordering = (Lower("name_i18n"),)
-        indexes = (GinIndex(fields=["i18n"]),)
+        indexes = (
+            GinIndex(fields=["i18n"]),
+            # Composite index for most common query pattern in API endpoints
+            models.Index(
+                fields=["is_active", "is_public"], name="hut_active_public_idx"
+            ),
+            # Spatial index for location-based queries (GIST index)
+            GISIndex(fields=["location"], name="hut_location_gist_idx"),
+        )
         constraints = (
             models.CheckConstraint(
                 name="%(app_label)s_%(class)s_country_valid",
@@ -473,7 +485,7 @@ class Hut(TimeStampedModel):
         # write to DB as one transaction
         with transaction.atomic():
             if _hut_source is not None and _hut_source.organization.slug == "hrs":
-                hut_db.booking_ref = _hut_source.organization
+                hut_db.availability_source_ref = _hut_source.organization
             hut_db.save()
             hut_db.refresh_from_db()
             if _hut_source is not None:
@@ -621,7 +633,7 @@ class Hut(TimeStampedModel):
                 else None
             )
         if _hut_source is not None and _hut_source.organization.slug == "hrs":
-            updates["booking_ref"] = _hut_source.organization
+            updates["availability_source_ref"] = _hut_source.organization
         if set_modified or hut_schema.extras.get("is_modified", False):
             updates["is_modified"] = True
         updated = UpdateCreateStatus.no_change

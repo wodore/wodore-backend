@@ -173,8 +173,8 @@ class Command(BaseCommand):
                 return
             click.echo(f"Updating hut ID: {hut_id}")
         elif update_all:
-            huts = Hut.objects.filter(booking_ref__isnull=False)
-            click.echo(f"Updating all {huts.count()} huts with booking references")
+            huts = Hut.objects.filter(availability_source_ref__isnull=False)
+            click.echo(f"Updating all {huts.count()} huts with availability sources")
         else:
             # Default: Use priority-based selection + new huts
             click.echo("Using priority-based selection (includes new huts)")
