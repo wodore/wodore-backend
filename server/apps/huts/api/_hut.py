@@ -166,6 +166,12 @@ def search_huts(
                     "icon": f"{media_url}{hut.hut_type_open.icon}"
                     if hut.hut_type_open.icon
                     else None,
+                    "symbol": f"{media_url}{hut.hut_type_open.symbol}"
+                    if hut.hut_type_open.symbol
+                    else None,
+                    "symbol_simple": f"{media_url}{hut.hut_type_open.symbol_simple}"
+                    if hut.hut_type_open.symbol_simple
+                    else None,
                 }
                 if hut.hut_type_open
                 else None,
@@ -174,6 +180,12 @@ def search_huts(
                     "name": hut.hut_type_closed.name_i18n,
                     "icon": f"{media_url}{hut.hut_type_closed.icon}"
                     if hut.hut_type_closed.icon
+                    else None,
+                    "symbol": f"{media_url}{hut.hut_type_closed.symbol}"
+                    if hut.hut_type_closed.symbol
+                    else None,
+                    "symbol_simple": f"{media_url}{hut.hut_type_closed.symbol_simple}"
+                    if hut.hut_type_closed.symbol_simple
                     else None,
                 }
                 if hut.hut_type_closed
