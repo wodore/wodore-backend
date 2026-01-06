@@ -28,7 +28,23 @@ runs:
     #- name: Setup token for Python installation
     #  run: git config --global url."https://${{ secrets.MY_USERNAME }}:${{ secrets.MY_TOKEN }}@github.com".insteadOf ssh://git@github.com # replace with whatever authentication method you're currently using
 
-    - name: Install the project
-      #run: uv sync --all-extras --dev
-      run: uv run inv install
+    - name: Cache virtual environment
+      id: cache-venv
+      uses: actions/cache@v4
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+        restore-keys: |
+          venv-${{ runner.os }}-
+
+    - name: Install Python dependencies
+      if: steps.cache-venv.outputs.cache-hit != 'true'
+      run: uv sync --extra private
+      shell: bash
+
+    - name: Setup pre-commit and directories
+      run: |
+        uv run pre-commit install
+        mkdir -p .volumes/pgdata
+        mkdir -p media/imagor_data/{storage,result}
       shell: bash
