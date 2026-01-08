@@ -115,6 +115,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "server.apps.contacts",
     "server.apps.feedbacks",
     "server.apps.owners",
+    "server.apps.categories",
     "server.apps.huts",
     "server.apps.availability",
     "server.apps.external_geonames",

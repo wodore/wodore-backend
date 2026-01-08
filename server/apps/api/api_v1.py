@@ -18,5 +18,6 @@ api.add_router("/huts", "server.apps.huts.api.router", tags=["hut"])
 api.add_router(
     "/organizations/", "server.apps.organizations.api.router", tags=["organization"]
 )
+api.add_router("/categories/", "server.apps.categories.api.router", tags=["category"])
 api.add_router("/feedback/", "server.apps.feedbacks.api.router", tags=["feedback"])
 api.add_router("/", "server.apps.utils.api.router", tags=["utils"])
