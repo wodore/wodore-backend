@@ -33,10 +33,10 @@ dependencies = [
   "django-unfold==0.75.*",     # https://pypi.org/project/django-unfold/
   "msgspec==0.20.*",           # https://pypi.org/project/msgspec/
   "python-benedict==0.35.*",   # https://pypi.org/project/python-benedict/
-  "asyncify==0.11.*",          # https://pypi.org/project/asyncify/
+  "asyncify==0.11.*",          # https://pypi.org/project/asyncify/ # 0.12 needs python > 3.11
   "geojson-pydantic==1.*",     # https://pypi.org/project/geojson-pydantic/
   "deepdiff==8.*",             # https://pypi.org/project/deepdiff/
-  "django-countries==7.*",     # https://pypi.org/project/django-countries/
+  "django-countries==8.*",     # https://pypi.org/project/django-countries/
   "unidecode==1.*",            # https://pypi.org/project/unidecode/
   "django-jsonsuit==0.5.*",    # https://pypi.org/project/django-jsonsuit/
   "jinja2==3.*",               # https://pypi.org/project/Jinja2/
@@ -44,12 +44,12 @@ dependencies = [
   "xmltodict>=0.13.0,<0.14.0", # https://pypi.org/project/xmltodict/
   "dickens==2.*",              # https://pypi.org/project/dickens/
   "psycopg==3.*",              # https://pypi.org/project/psycopg/
-  "mozilla-django-oidc==4.*",  # https://pypi.org/project/mozilla-django-oidc/
+  "mozilla-django-oidc==5.*",  # https://pypi.org/project/mozilla-django-oidc/
   "authlib==1.*",              # https://pypi.org/project/authlib/
   "load-dotenv==0.1.*",        # https://pypi.org/project/load-dotenv/
   "django-cleanup==9.*",       # https://pypi.org/project/django-cleanup/
   "rich==14.*",                # https://pypi.org/project/rich/
-  "tzdata>=2025.2",            # https://pypi.org/project/tzdata/
+  "tzdata>=2025.3",            # https://pypi.org/project/tzdata/
   "click==8.*",                # https://pypi.org/project/click/
   "pyyaml==6.*",               # https://pypi.org/project/PyYAML/
   #"hut-services==0.*", # https://github.com/wodore/hut-services
