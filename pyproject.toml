@@ -25,12 +25,12 @@ dependencies = [
   "pillow==11.*",              # https://pypi.org/project/Pillow/
   "django-model-utils==5.*",   # https://pypi.org/project/django-model-utils/
   "django-jsoneditor==0.2.*",  # https://pypi.org/project/django-jsoneditor/
-  "django-modeltrans==0.8.*",  # https://pypi.org/project/django-modeltrans/
+  "django-modeltrans==0.9.*",  # https://pypi.org/project/django-modeltrans/
   "django-jsonform==2.*",      # https://pypi.org/project/django-jsonform/
   "django-cors-headers==4.*",  # https://pypi.org/project/django-cors-headers/
   "django-extensions==4.*",    # https://pypi.org/project/django-extensions/
   #"django-unfold==0.43.*",            # https://pypi.org/project/django-unfold/
-  "django-unfold==0.64.*",     # https://pypi.org/project/django-unfold/
+  "django-unfold==0.75.*",     # https://pypi.org/project/django-unfold/
   "msgspec==0.19.*",           # https://pypi.org/project/msgspec/
   "python-benedict==0.34.*",   # https://pypi.org/project/python-benedict/
   "asyncify==0.11.*",          # https://pypi.org/project/asyncify/

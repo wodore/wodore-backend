@@ -1130,12 +1130,12 @@ wheels = [
 
 [[package]]
 name = "django-modeltrans"
-version = "0.8.0"
+version = "0.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "django" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/90/47/d9990a9cc413305a20bc030296a1b44e012d0d607d8bdb32a2344ec14185/django-modeltrans-0.8.0.tar.gz", hash = "sha256:c0bc2c6a430d8102826d182db776a4feb5549ceb51b30b07d0ed1fa1af7a18a6", size = 46102, upload-time = "2024-07-02T09:03:21.04Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9f/44/013ef5155a781283c24c71ce404232a4f82d77540edaaf952be8d778d6e9/django-modeltrans-0.9.0.tar.gz", hash = "sha256:6c6f22ceb2f82d1f6f23cb9e45dcf3622d4f14787794558f81e432b2e7a2c56d", size = 46317, upload-time = "2025-10-13T14:42:16.264Z" }
 
 [[package]]
 name = "django-ninja"
@@ -1250,14 +1250,14 @@ wheels = [
 
 [[package]]
 name = "django-unfold"
-version = "0.64.2"
+version = "0.75.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "django" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/36/e1/83920569ec2edf34966f0fb69ba117b594077804add3d75c22e8b9f7d20e/django_unfold-0.64.2.tar.gz", hash = "sha256:f90805e5ebb9af671554fd392af4b81bfdbdedc28b6cd64f1d8c2ae5e14a2d36", size = 1070311, upload-time = "2025-08-12T09:42:52.332Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5c/d3/042b5a20c9078efeafb5830be32fdc2c7e258ce1fa011ec4e96f45550fe9/django_unfold-0.75.0.tar.gz", hash = "sha256:5b55e5f9a72ba8a2b038317ea0ab4ff183098ac4db294913115d0362a62e14af", size = 1102853, upload-time = "2026-01-02T09:35:04.834Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c3/4a/48b3471f73146caa7ddccf8fd7486d65576f0a6af3d4cd8366f14255cb48/django_unfold-0.64.2-py3-none-any.whl", hash = "sha256:433aaddd071bce0e0c1886c69a41a69f7ab4d30d9dce80ab79f6f2d7ba4c380a", size = 1178278, upload-time = "2025-08-12T09:42:51.069Z" },
+    { url = "https://files.pythonhosted.org/packages/35/02/fa76a4579eeba7ae85daec9b6553a4af62a3e6bc43e993a344e420ad8363/django_unfold-0.75.0-py3-none-any.whl", hash = "sha256:1fa6d1ca4ffea27a3fe10a71a0fce348d41c211c1c307bef2e8c6a02ff41f8f3", size = 1218603, upload-time = "2026-01-02T09:35:03.312Z" },
 ]
 
 [[package]]
@@ -4553,13 +4553,13 @@ requires-dist = [
     { name = "django-jsonform", specifier = "==2.*" },
     { name = "django-jsonsuit", specifier = "==0.5.*" },
     { name = "django-model-utils", specifier = "==5.*" },
-    { name = "django-modeltrans", specifier = "==0.8.*" },
+    { name = "django-modeltrans", specifier = "==0.9.*" },
     { name = "django-ninja", specifier = "==1.5.1" },
     { name = "django-permissions-policy", specifier = "==4.*" },
     { name = "django-pgtrigger", specifier = ">=4.17.0" },
     { name = "django-split-settings", specifier = "==1.*" },
     { name = "django-storages", extras = ["s3"], specifier = ">=1.14.6" },
-    { name = "django-unfold", specifier = "==0.64.*" },
+    { name = "django-unfold", specifier = "==0.75.*" },
     { name = "easydict", specifier = "==1.*" },
     { name = "geojson-pydantic", specifier = "==1.*" },
     { name = "gunicorn", specifier = "==23.*" },
