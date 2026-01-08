@@ -31,8 +31,8 @@ dependencies = [
   "django-extensions==4.*",    # https://pypi.org/project/django-extensions/
   #"django-unfold==0.43.*",            # https://pypi.org/project/django-unfold/
   "django-unfold==0.75.*",     # https://pypi.org/project/django-unfold/
-  "msgspec==0.19.*",           # https://pypi.org/project/msgspec/
-  "python-benedict==0.34.*",   # https://pypi.org/project/python-benedict/
+  "msgspec==0.20.*",           # https://pypi.org/project/msgspec/
+  "python-benedict==0.35.*",   # https://pypi.org/project/python-benedict/
   "asyncify==0.11.*",          # https://pypi.org/project/asyncify/
   "geojson-pydantic==1.*",     # https://pypi.org/project/geojson-pydantic/
   "deepdiff==8.*",             # https://pypi.org/project/deepdiff/
