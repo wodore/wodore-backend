@@ -162,7 +162,7 @@ class Hut(TimeStampedModel):
         verbose_name=_("Images"),
     )
     country_field = CountryField()
-    location = models.PointField(blank=False, verbose_name="Location")
+    location = models.PointField(blank=False, verbose_name=_("Location"))
     elevation = models.DecimalField(
         null=True,
         blank=True,

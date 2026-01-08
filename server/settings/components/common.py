@@ -117,6 +117,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "server.apps.owners",
     "server.apps.huts",
     "server.apps.availability",
+    "server.apps.external_geonames",
     "server.apps.api",
     # Extension:
     "pgtrigger",  # https://django-pgtrigger.readthedocs.io/

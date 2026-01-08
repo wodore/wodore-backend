@@ -158,6 +158,16 @@ UNFOLD = {
                             "contacts.change_contact"
                         ),
                     },
+                    {
+                        "title": _("External"),
+                        "icon": "public",
+                        "link": reverse_lazy(
+                            "admin:external_geonames_feature_changelist"
+                        ),
+                        "permission": lambda request: request.user.has_perm(
+                            "external_geonames.view_feature"
+                        ),
+                    },
                 ],
             },
             {
@@ -197,7 +207,7 @@ UNFOLD = {
                     {
                         "title": _("Zitadel Users"),
                         "icon": "manage_accounts",
-                        "link": "https://iam.wodore.com/ui/console/users",
+                        "link": "https://auth.burginfra.com/ui/console/users",
                         "permission": lambda request: request.user.is_superuser,
                         "target": "_blank",
                     },
@@ -376,6 +386,46 @@ UNFOLD = {
                     "link": reverse_lazy("admin:images_imagetag_changelist"),
                     "permission": lambda request: request.user.has_perm(
                         "images.view_imagetags"
+                    ),
+                },
+            ],
+        },
+        {
+            "models": [
+                "external_geonames.feature",
+                "external_geonames.geoname",
+                "external_geonames.alternativename",
+                "external_geonames.boundary",
+            ],
+            "items": [
+                {
+                    "title": _("Features"),
+                    "link": reverse_lazy("admin:external_geonames_feature_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "external_geonames.view_feature"
+                    ),
+                },
+                {
+                    "title": _("GeoNames"),
+                    "link": reverse_lazy("admin:external_geonames_geoname_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "external_geonames.view_geoname"
+                    ),
+                },
+                {
+                    "title": _("Alternative Names"),
+                    "link": reverse_lazy(
+                        "admin:external_geonames_alternativename_changelist"
+                    ),
+                    "permission": lambda request: request.user.has_perm(
+                        "external_geonames.view_alternativename"
+                    ),
+                },
+                {
+                    "title": _("Boundaries"),
+                    "link": reverse_lazy("admin:external_geonames_boundary_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "external_geonames.view_boundary"
                     ),
                 },
             ],
