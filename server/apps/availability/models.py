@@ -3,7 +3,8 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from server.core.models import TimeStampedModel
-from server.apps.huts.models import Hut, HutType
+from server.apps.huts.models import Hut
+from server.apps.categories.models import Category
 from server.apps.organizations.models import Organization
 
 from .managers import (
@@ -152,7 +153,7 @@ class HutAvailability(TimeStampedModel):
         verbose_name=_("Booking Link"),
     )
     hut_type = models.ForeignKey(
-        HutType,
+        Category,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -196,7 +197,7 @@ class HutAvailability(TimeStampedModel):
         self,
         free: int,
         total: int,
-        hut_type: HutType | None = None,
+        hut_type: Category | None = None,
         reservation_status: str | None = None,
     ) -> bool:
         """Check if availability data has changed"""
@@ -214,7 +215,7 @@ class HutAvailability(TimeStampedModel):
         occupancy_percent: float = 0.0,
         occupancy_status: str = "unknown",
         reservation_status: str = "unknown",
-        hut_type: HutType | None = None,
+        hut_type: Category | None = None,
     ) -> "HutAvailabilityHistory":
         """
         Record a change to history.
@@ -248,7 +249,7 @@ class HutAvailability(TimeStampedModel):
         occupancy_status: str = "unknown",
         reservation_status: str = "unknown",
         link: str = "",
-        hut_type: HutType | None = None,
+        hut_type: Category | None = None,
     ) -> tuple[bool, "HutAvailabilityHistory | None"]:
         """
         Update availability with change detection.
@@ -353,7 +354,7 @@ class HutAvailabilityHistory(TimeStampedModel):
 
     # Metadata
     hut_type = models.ForeignKey(
-        HutType,
+        Category,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

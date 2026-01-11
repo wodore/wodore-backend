@@ -34,9 +34,9 @@ class Category(models.Model):
         "name",
         "description",
         "order",
-        "symbol",
+        "symbol_detailed",
         "symbol_simple",
-        "icon",
+        "symbol_mono",
         "parent",
         "default",
         "parent",
@@ -75,7 +75,7 @@ class Category(models.Model):
     )
 
     # Images (mandatory)
-    symbol = models.ImageField(
+    symbol_detailed = models.ImageField(
         max_length=300,
         upload_to="categories/symbols/detailed",
         help_text=_("Detailed symbol for map display"),
@@ -87,10 +87,10 @@ class Category(models.Model):
         help_text=_("Simple symbol for smaller displays"),
     )
 
-    icon = models.ImageField(
+    symbol_mono = models.ImageField(
         max_length=300,
-        upload_to="categories/icons",
-        help_text=_("Icon (typically black/monochrome)"),
+        upload_to="categories/symbols/mono",
+        help_text=_("Monochrome symbol for UI elements"),
     )
 
     # Hierarchy
@@ -195,6 +195,22 @@ class Category(models.Model):
             level += 1
             current = current.parent
         return level
+
+    def get_identifier(self) -> str:
+        """
+        Get the full identifier path (max 2 levels: parent.child).
+
+        Returns:
+            - "slug" for root categories
+            - "parent.slug" for child categories
+        """
+        if self.parent:
+            return f"{self.parent.slug}.{self.slug}"
+        return self.slug
+
+    def has_children(self) -> bool:
+        """Check if this category has any children."""
+        return self.children.exists()
 
     def get_default_or_self(self) -> "Category":
         """Get the default child if set, otherwise return self."""

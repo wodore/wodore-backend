@@ -1,7 +1,6 @@
 import contextlib
 
 from django.conf import settings
-from django.contrib import admin
 from django.db.models.functions import Lower
 from django.http import HttpRequest
 from django.urls import reverse
@@ -17,13 +16,10 @@ from unfold.decorators import display
 from server.apps.manager.admin import ModelAdmin
 from server.apps.translations.forms import required_i18n_fields_form_factory
 
-from ..models import (
-    HutType,
-)
-
 
 ## ADMIN
-@admin.register(HutType)
+# HutType is now a helper class, not a model. Use Category admin instead.
+# @admin.register(HutType)
 class HutTypesAdmin(ModelAdmin):
     form = required_i18n_fields_form_factory("name")
     search_fields = ("name",)
@@ -39,7 +35,7 @@ class HutTypesAdmin(ModelAdmin):
     fieldsets = (
         (
             _("Main Information"),
-            {"fields": (("slug", "name_i18n", "level"), "description_i18n")},
+            {"fields": (("slug", "name_i18n", "order"), "description_i18n")},
         ),
         (
             _("Translations"),
@@ -53,15 +49,15 @@ class HutTypesAdmin(ModelAdmin):
         ),
         (
             _("Symbols & Icon"),
-            {"fields": (("symbol", "symbol_simple", "icon"),)},
+            {"fields": (("symbol_detailed", "symbol_simple", "symbol_mono"),)},
         ),
     )
 
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request)
         return qs.annotate(
-            number_huts_open=models.Count("hut_open_set", distinct=True),
-            number_huts_closed=models.Count("hut_closed_set", distinct=True),
+            number_huts_open=models.Count("huts_open", distinct=True),
+            number_huts_closed=models.Count("huts_closed", distinct=True),
         )
 
     def _get_url_str(
@@ -92,15 +88,15 @@ class HutTypesAdmin(ModelAdmin):
 
     @display(description=_("Symbol"))
     def symbol_img(self, obj):  # new
-        return mark_safe(f'<img src = "{obj.symbol.url}" width = "34"/>')
+        return mark_safe(f'<img src = "{obj.symbol_detailed.url}" width = "34"/>')
 
     @display(description=_("Icon"))
     def icon_img(self, obj):  # new
-        return mark_safe(f'<img src = "{obj.icon.url}" width = "16"/>')
+        return mark_safe(f'<img src = "{obj.symbol_mono.url}" width = "16"/>')
 
     def avatar(self, url):  # new
         return mark_safe(f'<img src = "{url}" width = "20"/>')
 
-    @display(description=_("Level"), ordering="level")
+    @display(description=_("Order"), ordering="order")
     def comfort(self, obj):  # new
-        return mark_safe(f"<small>{obj.level}</small>")
+        return mark_safe(f"<small>{obj.order}</small>")

@@ -8,20 +8,31 @@ def migrate_huttypes_to_categories(apps, schema_editor):
     Migrate HutType instances to Category model.
 
     Creates:
-    1. Root 'accommodation' category
-    2. Child categories for each HutType
+    1. Child categories for each HutType (preserving their IDs)
+    2. Root 'accommodation' category (with ID = max(HutType.id) + 1)
     """
     Category = apps.get_model("categories", "Category")
     HutType = apps.get_model("huts", "HutType")
 
-    # Create root accommodation category
-    # modeltrans pattern: base field = default lang (de), i18n = {"name_en": "...", "name_fr": "..."}
+    # Get all HutTypes first to determine max ID
+    hut_types = HutType.objects.all().order_by("level", "slug")
+
+    if not hut_types.exists():
+        print("✓ No HutTypes found, nothing to migrate")
+        return
+
+    # Find max HutType ID to avoid conflicts
+    max_huttype_id = max(ht.id for ht in hut_types)
+    accommodation_id = max_huttype_id + 1
+
+    # Create root accommodation category with ID higher than any HutType
     accommodation, created = Category.objects.get_or_create(
         slug="accommodation",
         parent=None,
         defaults={
+            "id": accommodation_id,
             "name": "Unterkunft",  # Default language (de)
-            "description": "Arten von Bergunterkünften",  # Default language (de)
+            "description": "Arten von Unterkünften",  # Default language (de)
             "i18n": {
                 "name_en": "Accommodation",
                 "name_fr": "Hébergement",
@@ -34,9 +45,9 @@ def migrate_huttypes_to_categories(apps, schema_editor):
     )
 
     if created:
-        print(f"✓ Created root 'accommodation' category")
+        print(f"✓ Created root 'accommodation' category (id={accommodation.id})")
     else:
-        print(f"✓ Root 'accommodation' category already exists")
+        print(f"✓ Root 'accommodation' category already exists (id={accommodation.id})")
 
     # Migrate each HutType - iterate through model instances to properly copy JSONFields
     hut_types = HutType.objects.all().order_by("level", "slug")
@@ -58,6 +69,7 @@ def migrate_huttypes_to_categories(apps, schema_editor):
 
         # Create category from hut type
         category = Category.objects.create(
+            id=ht.id,
             slug=slug,
             parent=accommodation,
             # Set base fields (default language = de)
@@ -80,6 +92,17 @@ def migrate_huttypes_to_categories(apps, schema_editor):
     print(f"  HutTypes found: {len(hut_types)}")
     print(f"  Categories created: {migrated}")
     print(f"  Categories skipped (already exist): {skipped}")
+
+    # Update PostgreSQL sequence to avoid ID conflicts in future inserts
+    # Set sequence to max(id) + 1
+    if migrated > 0 or created:
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT setval(pg_get_serial_sequence('categories_category', 'id'), "
+                "(SELECT MAX(id) FROM categories_category));"
+            )
+        print(f"  ✓ Updated category ID sequence")
 
 
 def reverse_migration(apps, schema_editor):
@@ -141,6 +164,16 @@ def reverse_migration(apps, schema_editor):
     print(f"  HutTypes restored: {restored}")
     print(f"  HutTypes skipped (already exist): {skipped}")
     print(f"  Categories deleted: {deleted_count}")
+
+    # Update HutType sequence after restoration
+    if restored > 0:
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT setval(pg_get_serial_sequence('huts_huttype', 'id'), "
+                "(SELECT MAX(id) FROM huts_huttype));"
+            )
+        print(f"  ✓ Updated HutType ID sequence")
 
 
 class Migration(migrations.Migration):

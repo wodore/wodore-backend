@@ -259,8 +259,8 @@ UNFOLD = {
         {
             "models": [
                 "huts.hut",
-                "huts.huttype",
                 "huts.hutsource",
+                "categories.category",  # Categories now used instead of HutType
             ],
             "items": [
                 {
@@ -271,10 +271,10 @@ UNFOLD = {
                     ),
                 },
                 {
-                    "title": _("Types"),
-                    "link": reverse_lazy("admin:huts_huttype_changelist"),
+                    "title": _("Categories"),
+                    "link": reverse_lazy("admin:categories_category_changelist"),
                     "permission": lambda request: request.user.has_perm(
-                        "huts.view_huttype"
+                        "categories.view_category"
                     ),
                 },
                 {
@@ -434,6 +434,20 @@ UNFOLD = {
                     "link": reverse_lazy("admin:external_geonames_boundary_changelist"),
                     "permission": lambda request: request.user.has_perm(
                         "external_geonames.view_boundary"
+                    ),
+                },
+            ],
+        },
+        {
+            "models": [
+                "geometries.geoplace",
+            ],
+            "items": [
+                {
+                    "title": _("Geo Places"),
+                    "link": reverse_lazy("admin:geometries_geoplace_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "geometries.view_geoplace"
                     ),
                 },
             ],

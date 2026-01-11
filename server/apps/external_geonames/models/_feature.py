@@ -68,15 +68,14 @@ class Feature(models.Model):
         verbose_name=_("Enabled"),
         help_text=_("Only enabled features are imported into GeoPlace"),
     )
-    # TODO: Enable after geoplace app is created
-    # default_place_type = models.ForeignKey(
-    #     "geoplace.GeoPlaceType",
-    #     null=True,
-    #     blank=True,
-    #     on_delete=models.SET_NULL,
-    #     verbose_name=_("Default Place Type"),
-    #     help_text=_("Default mapping for import to GeoPlaceType"),
-    # )
+    category = models.ForeignKey(
+        "categories.Category",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        verbose_name=_("Category"),
+        help_text=_("Category mapping for import to GeoPlace"),
+    )
     importance = models.SmallIntegerField(
         default=25,
         verbose_name=_("Importance"),

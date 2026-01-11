@@ -119,6 +119,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "server.apps.huts",
     "server.apps.availability",
     "server.apps.external_geonames",
+    "server.apps.geometries",
     "server.apps.api",
     # Extension:
     "pgtrigger",  # https://django-pgtrigger.readthedocs.io/
@@ -431,3 +432,12 @@ AVAILABILITY_UPDATE_SETTINGS = {
     # Date range for priority-based selection (days)
     "NEXT_DAYS": config("AVAILABILITY_NEXT_DAYS", cast=int, default=14),
 }
+
+
+# Hut Categories Settings
+# Configuration for hut type categories
+
+# Category parent for hut types
+# Format: "parent.child" or "root_slug"
+# This defines where hut categories (hut, bivouac, etc.) are located in the category hierarchy
+HUTS_CATEGORY_PARENT = config("HUTS_CATEGORY_PARENT", default="map.accommodation")

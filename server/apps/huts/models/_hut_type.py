@@ -1,99 +1,97 @@
+"""
+HutType helper - wrapper around Category model for hut types.
+
+This maintains backward compatibility while using the new Category system.
+"""
+
 from collections import defaultdict
+from typing import TYPE_CHECKING
 
 from descriptors import cachedclassproperty
-from django_cleanup import cleanup
 
-from modeltrans.fields import TranslationField
+from django.conf import settings
 
-from django.contrib.postgres.indexes import GinIndex
-from django.db import models
-from django.utils.text import slugify
-from django.utils.translation import gettext_lazy as _
+from server.apps.categories.models import Category
 
-from server.core.managers import BaseMutlilingualManager
+if TYPE_CHECKING:
+    from server.apps.categories.models import Category as CategoryType
 
 
-@cleanup.ignore
-class HutType(models.Model):
-    FIELDS = (
-        "slug",
-        "name",
-        "symbol",
-        "description",
-        "level",
-        "symbol",
-        "symbol_simple",
-        "icon",
-    )
-    i18n = TranslationField(fields=("name", "description"))
-    objects = BaseMutlilingualManager()
+class HutType:
+    """
+    Helper class for accessing hut type categories.
 
-    slug = models.SlugField(unique=True, max_length=10)
-    # name = TranslationJSONField(models.CharField(max_length=100), help_text="Hut type name")
-    # description = TranslationJSONField(models.CharField(max_length=400), help_text="Hut type description")
-    name = models.CharField(
-        max_length=100, blank=True, null=True, default="", help_text="Hut type name"
-    )
-    name_i18n: str
-    description = models.CharField(
-        max_length=400,
-        blank=True,
-        null=True,
-        default="",
-        help_text="Hut type description",
-    )
-    description_i18n: str
-    level = models.PositiveSmallIntegerField(
-        default=0, help_text=_("Comfort level, higher is more comfort")
-    )
-    symbol = models.ImageField(
-        max_length=300,
-        upload_to="huts_type/symbols/detailed",
-        default="huts/types/symbols/detailed/unknown.png",
-        help_text="Normal icon",
-    )
-    symbol_simple = models.ImageField(
-        max_length=300,
-        upload_to="huts_type/symbols/simple",
-        default="huts/types/symbols/simple/unknown.png",
-        help_text="Simple icon",
-    )
-    icon = models.ImageField(
-        max_length=300,
-        upload_to="huts_type/icons",
-        default="huts/types/icons/unknown.png",
-        help_text="Black icon",
-    )
+    Provides backward-compatible interface to Category model.
+    Hut types are categories under the configured parent (default: map.accommodation).
+    """
 
-    def __str__(self) -> str:
-        if self.name_i18n is not None:
-            return self.name_i18n
-        return "-"
-
-    class Meta:
-        verbose_name = _("Hut Type")
-        verbose_name_plural = _("Hut Types")
-        ordering = ("level", "slug")
-        indexes = (GinIndex(fields=["i18n"]),)
-
-    def save(self, *args, **kwargs):
-        if not self.slug:
-            self.slug = slugify(self.name_i18n)
-        super().save(*args, **kwargs)
+    _parent_cache: "CategoryType | None" = None
+    _values_cache: dict[str, "CategoryType"] | None = None
 
     @classmethod
-    def get_default_type(cls) -> "HutType":
-        return cls.default_type
+    def _get_parent(cls) -> "CategoryType":
+        """Get the parent category for hut types (cached)."""
+        if cls._parent_cache is None:
+            parent_path = settings.HUTS_CATEGORY_PARENT
+            category, paths = Category.objects.find_by_slug(parent_path)
+            if category is None:
+                raise ValueError(
+                    f"Hut category parent '{parent_path}' not found. "
+                    f"Available paths: {', '.join(paths) if paths else 'none'}"
+                )
+            cls._parent_cache = category
+        return cls._parent_cache
+
+    @classmethod
+    def get(cls, slug: str) -> "CategoryType":
+        """
+        Get a hut type category by slug.
+
+        Args:
+            slug: Category slug (e.g., "hut", "bivouac")
+
+        Returns:
+            Category instance or default/unknown if not found
+        """
+        parent = cls._get_parent()
+        category = Category.objects.by_slug(slug, parent=parent)
+        if category is None:
+            return cls.get_default_type()
+        return category
+
+    @classmethod
+    def get_default_type(cls) -> "CategoryType":
+        """Get the default/unknown hut type."""
+        parent = cls._get_parent()
+        return Category.get_default_type(parent=parent)
 
     @cachedclassproperty
-    def default_type(cls) -> "HutType":
-        """Returns a 'unknown' type."""
-        obj, _created = cls.objects.get_or_create(slug="unknown")
-        return obj
+    def default_type(cls) -> "CategoryType":
+        """Returns the default 'unknown' hut type."""
+        return cls.get_default_type()
 
     @cachedclassproperty
-    def values(cls) -> dict[str, "HutType"]:
-        """Returns a dictionay with slug: HutType relationship. If a key is not found the 'unknown' type is returned."""
-        vals: dict[str, HutType] = defaultdict(cls.get_default_type)
-        vals.update({ht.slug: ht for ht in cls.objects.all()})
-        return vals
+    def values(cls) -> dict[str, "CategoryType"]:
+        """
+        Returns a dictionary with slug: Category relationship.
+        If a key is not found, the 'unknown' type is returned.
+
+        This mimics the old HutType.values behavior.
+        """
+        if cls._values_cache is None:
+            parent = cls._get_parent()
+            vals: dict[str, Category] = defaultdict(cls.get_default_type)
+            vals.update(
+                {
+                    cat.slug: cat
+                    for cat in Category.objects.filter(parent=parent, is_active=True)
+                }
+            )
+            cls._values_cache = vals
+        return cls._values_cache
+
+    @classmethod
+    def clear_cache(cls):
+        """Clear cached parent and values (useful for tests)."""
+        cls._parent_cache = None
+        cls._values_cache = None

@@ -42,6 +42,7 @@ from ._associations import (
 )
 from ._hut_source import HutSource
 from ._hut_type import HutType
+from server.apps.categories.models import Category
 
 SERVICES: dict[str, BaseService] = settings.SERVICES
 
@@ -188,17 +189,17 @@ class Hut(TimeStampedModel):
     )
 
     hut_type_open = models.ForeignKey(
-        HutType,
-        related_name="hut_open_set",
+        Category,
+        related_name="huts_open",
         on_delete=models.RESTRICT,
         verbose_name=_("Hut type if open"),
         db_index=True,
     )
     hut_type_closed = models.ForeignKey(
-        HutType,
+        Category,
         null=True,
         blank=True,
-        related_name="hut_closed_set",
+        related_name="huts_closed",
         on_delete=models.RESTRICT,
         verbose_name=_("Hut type if closed"),
         db_index=True,

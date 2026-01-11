@@ -48,12 +48,23 @@ app update_availability --all
 - **API**: Django Ninja (not DRF) - endpoints typically in `api.py`
 - **Admin**: Django Unfold - configuration in `server/settings/components/unfold.py`
 
-## API Documentation
+## Documentation
+
+### API Documentation
 
 OpenAPI schema available at:
 
 - **Local**: <http://localhost:8000/v1/openapi.json>
 - **Production**: <https://hub.wodore.com> (may not be up-to-date during development)
+
+### WEPs (Wodore Enhancement Proposals)
+
+Technical proposals for significant features and architectural decisions:
+
+- **Location**: `docs/weps/board/` - Blog posts in MkDocs
+- **Format**: Single-sentence summary + detailed analysis with categories/tags
+- **Build**: `inv docs.serve` - Shows all WEPs with integrated TOC in left sidebar
+- **Online Access**: `/weps/` (blog index), `/weps/tags/` (tags), `/weps/category/` (categories)
 
 ## Tech Stack
 

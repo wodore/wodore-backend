@@ -1,10 +1,19 @@
 import typing as t
+from enum import Enum
 
-from ninja import Field, ModelSchema
+from ninja import Field, ModelSchema, Schema
 
 from django.conf import settings
 
 from .models import Category
+
+
+class MediaUrlModeEnum(str, Enum):
+    """Media URL mode for image fields."""
+
+    no = "no"  # Exclude media fields
+    relative = "relative"  # Return relative paths (e.g., /media/...)
+    absolute = "absolute"  # Return absolute URLs (e.g., http://...)
 
 
 class CategorySchema(ModelSchema):
@@ -19,21 +28,21 @@ class CategorySchema(ModelSchema):
     )
 
     # Image URLs
-    symbol: str | None = None
+    symbol_detailed: str | None = None
     symbol_simple: str | None = None
-    icon: str | None = None
+    symbol_mono: str | None = None
 
     # Parent reference
     parent_slug: str | None = Field(None, description="Parent category slug")
 
     @staticmethod
-    def resolve_symbol(obj: Category, context: dict[str, t.Any]) -> str | None:
+    def resolve_symbol_detailed(obj: Category, context: dict[str, t.Any]) -> str | None:
         """Resolve absolute URL for detailed symbol."""
-        if not obj.symbol:
+        if not obj.symbol_detailed:
             return None
         request = context["request"]
         media_url = request.build_absolute_uri(settings.MEDIA_URL)
-        return f"{media_url}{obj.symbol}"
+        return f"{media_url}{obj.symbol_detailed}"
 
     @staticmethod
     def resolve_symbol_simple(obj: Category, context: dict[str, t.Any]) -> str | None:
@@ -45,13 +54,13 @@ class CategorySchema(ModelSchema):
         return f"{media_url}{obj.symbol_simple}"
 
     @staticmethod
-    def resolve_icon(obj: Category, context: dict[str, t.Any]) -> str | None:
-        """Resolve absolute URL for icon."""
-        if not obj.icon:
+    def resolve_symbol_mono(obj: Category, context: dict[str, t.Any]) -> str | None:
+        """Resolve absolute URL for monochrome symbol."""
+        if not obj.symbol_mono:
             return None
         request = context["request"]
         media_url = request.build_absolute_uri(settings.MEDIA_URL)
-        return f"{media_url}{obj.icon}"
+        return f"{media_url}{obj.symbol_mono}"
 
     @staticmethod
     def resolve_level(obj: Category) -> int:
@@ -70,9 +79,9 @@ class CategorySchema(ModelSchema):
             "name",
             "description",
             "order",
-            "symbol",
+            "symbol_detailed",
             "symbol_simple",
-            "icon",
+            "symbol_mono",
         )
 
 
@@ -108,19 +117,59 @@ class CategoryDetailSchema(CategorySchema):
         fields = CategorySchema.Meta.fields + ("is_active",)
 
 
-class CategoryTreeSchema(ModelSchema):
+class CategoryTreeSchema(Schema):
     """Hierarchical tree representation of categories."""
 
     slug: str
-    name: str = Field(..., alias="name_i18n")
+    name: str
+    description: str = ""
     order: int
     level: int
-    children: list["CategoryTreeSchema"] = []
+    parent: str | None = None  # Parent slug
+    identifier: str  # Full path identifier (e.g., "map.accommodation.hut")
 
-    @staticmethod
-    def resolve_level(obj: Category) -> int:
-        return obj.get_level()
+    # Optional media fields
+    symbol_detailed: str | None = None
+    symbol_simple: str | None = None
+    symbol_mono: str | None = None
 
-    class Meta:
-        model = Category
-        fields = ("slug", "name", "order")
+    children: list["CategoryTreeSchema"] | bool = False
+
+
+class CategoryListItemSchema(Schema):
+    """Simple category item for list view."""
+
+    slug: str
+    name: str
+    description: str = ""
+    order: int
+    level: int
+    parent: str | None = None  # Parent slug
+    identifier: str  # Full path identifier (e.g., "map.accommodation.hut")
+    children: bool  # Whether this category has children
+
+    # Optional media fields
+    symbol_detailed: str | None = None
+    symbol_simple: str | None = None
+    symbol_mono: str | None = None
+
+
+class CategoryMapSchema(Schema):
+    """Category with children for map view."""
+
+    slug: str
+    name: str
+    description: str = ""
+    order: int
+    level: int
+    parent: str | None = None  # Parent slug
+    identifier: str  # Full path identifier (e.g., "map.accommodation.hut")
+    children_count: int  # Number of direct children
+
+    # Optional media fields
+    symbol_detailed: str | None = None
+    symbol_simple: str | None = None
+    symbol_mono: str | None = None
+
+    # Children as dict mapping
+    children: dict[str, "CategoryMapSchema"] = {}

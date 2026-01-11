@@ -39,8 +39,6 @@ def enable_key_features(apps, schema_editor):
         "H.GLCR": 90,    # glacier - important for alpine routes
         "H.STM": 60,     # stream
         "H.STMS": 55,    # streams
-        "H.SPNG": 65,    # spring - water source
-        "H.RSV": 70,     # reservoir
         "H.BAY": 45,     # bay
         "H.GULF": 45,    # gulf
 
@@ -51,12 +49,9 @@ def enable_key_features(apps, schema_editor):
         "P.PPLA3": 70,   # seat of third-order admin
         "P.PPLA4": 65,   # seat of fourth-order admin
         "P.PPLC": 90,    # capital
-        "P.PPLX": 60,    # section of populated place
 
         # === ADMINISTRATIVE - For regional context ===
         "L.RGN": 75,     # region - important for search/context
-        "L.RGNH": 30,    # historical region
-        "L.CONT": 20,    # continent
 
         # === TRANSPORTATION - Essential for trip planning ===
         "S.RSTN": 80,    # railroad station
@@ -68,27 +63,21 @@ def enable_key_features(apps, schema_editor):
         "S.AIRP": 40,    # airport
         "S.FY": 40,      # ferry
         "S.FYT": 50,     # ferry terminal
+        "S.PKLT": 35,    # parking lot
 
         # === LANDMARKS - Low-Medium importance ===
         "S.CH": 30,      # church (landmark/waypoint)
         "S.CSTL": 35,    # castle (landmark)
         "S.OBPT": 60,    # observation point - scenic viewpoint
         "S.CAVE": 50,    # cave - attraction
-        "S.MNMT": 50,    # monument
-        "S.TMPL": 50,    # temple
-        "S.RUIN": 45,    # ruin
-        "S.ANS": 30,     # archaeological site
-        "S.HSTS": 30,    # historical site
 
         # === FACILITIES - Low importance (not accommodations) ===
         "S.REST": 40,    # restaurant
         "S.MUS": 40,     # museum
         "S.RECG": 45,    # golf course
-        "S.PKLT": 35,    # parking lot
         "S.PRK": 60,     # park (nature area)
 
         # === INFRASTRUCTURE - Low importance ===
-        "S.BDG": 30,     # bridge - can be landmark/waypoint
         "S.DAM": 50,     # dam
     }
 

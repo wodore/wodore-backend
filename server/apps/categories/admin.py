@@ -68,8 +68,8 @@ class CategoryAdmin(ModelAdmin):
             },
         ),
         (
-            _("Symbols & Icon"),
-            {"fields": (("symbol", "symbol_simple", "icon"),)},
+            _("Symbols"),
+            {"fields": (("symbol_detailed", "symbol_simple", "symbol_mono"),)},
         ),
     )
 
@@ -94,15 +94,19 @@ class CategoryAdmin(ModelAdmin):
     @display(description=_("Symbol"))
     def symbol_img(self, obj):
         """Display detailed symbol."""
-        if obj.symbol:
-            return mark_safe(f'<img src="{obj.symbol.url}" width="34" alt="symbol"/>')
+        if obj.symbol_detailed:
+            return mark_safe(
+                f'<img src="{obj.symbol_detailed.url}" width="34" alt="symbol"/>'
+            )
         return "-"
 
-    @display(description=_("Icon"))
+    @display(description=_("Mono"))
     def icon_img(self, obj):
-        """Display icon."""
-        if obj.icon:
-            return mark_safe(f'<img src="{obj.icon.url}" width="16" alt="icon"/>')
+        """Display monochrome symbol."""
+        if obj.symbol_mono:
+            return mark_safe(
+                f'<img src="{obj.symbol_mono.url}" width="16" alt="mono"/>'
+            )
         return "-"
 
     @display(description=_("Order"), ordering="order")
