@@ -2,39 +2,50 @@
 API endpoints for GeoPlace search and queries.
 """
 
+from enum import Enum
 from typing import Any
 
 from ninja import Query, Router
+from ninja.decorators import decorate_view
 
+from django.conf import settings
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
 from django.db.models import Q
 from django.http import HttpRequest, HttpResponse
+from django.views.decorators.cache import cache_control
 
 from .models import GeoPlace
-from .schemas import GeoPlaceNearbySchema, GeoPlaceSearchSchema
 
 router = Router(tags=["geoplaces"])
 
 
+class IncludeModeEnum(str, Enum):
+    """Include mode enum for search endpoint - controls level of detail."""
+
+    no = "no"
+    slug = "slug"
+    all = "all"
+
+
 @router.get(
     "search",
-    response=list[GeoPlaceSearchSchema],
+    response=list[dict],
     exclude_unset=True,
     operation_id="search_geoplaces",
 )
+@decorate_view(cache_control(max_age=60))
 def search_geoplaces(
     request: HttpRequest,
     response: HttpResponse,
     q: str = Query(
         ...,
-        description="Search query string to match against place names",
+        description="Search query string to match against place names in all languages",
         example="Matterhorn",
     ),
-    limit: int = Query(
-        15, description="Maximum number of results to return (default: 15)"
-    ),
+    limit: int = Query(15, description="Maximum number of results to return"),
+    offset: int = Query(0, description="Number of results to skip for pagination"),
     types: list[str] | None = Query(
         None,
         description="Filter by place type slugs (e.g., 'peak', 'pass', 'lake'). Use 'parent.child' format for child categories.",
@@ -50,21 +61,18 @@ def search_geoplaces(
     threshold: float = Query(
         0.1,
         description="Minimum similarity score (0.0-1.0). Lower values return more results but with lower relevance. Recommended: 0.1 for fuzzy matching, 0.3 for stricter matching.",
-        example=0.3,
     ),
     min_importance: int = Query(
         0,
         description="Minimum importance score (0-100). Higher values filter for more prominent places.",
     ),
+    include_place_type: IncludeModeEnum = Query(
+        IncludeModeEnum.all,
+        description="Include place type information: 'no' excludes field, 'slug' returns type slug only, 'all' returns full type details with name and description",
+    ),
 ) -> Any:
-    """
-    Search for geographic places using fuzzy text search.
-
-    Returns results ordered by importance and relevance. Searches across
-    all language fields (name translations) and uses trigram similarity
-    for fuzzy matching.
-    """
-    # Start with active, public places
+    """Search for geographic places using fuzzy text search across all language fields."""
+    # Start with active, public places - use only() for better performance
     queryset = GeoPlace.objects.filter(is_active=True, is_public=True)
 
     # Filter by importance
@@ -96,6 +104,10 @@ def search_geoplaces(
                 )
         queryset = queryset.filter(type_conditions)
 
+    # Only select_related if we need the place_type data
+    if include_place_type != IncludeModeEnum.no:
+        queryset = queryset.select_related("place_type", "place_type__parent")
+
     # Fuzzy search using trigram similarity
     # Use similarity on name field (searches across all i18n variants via modeltrans)
     from django.contrib.postgres.search import TrigramSimilarity
@@ -103,18 +115,65 @@ def search_geoplaces(
     queryset = (
         queryset.annotate(similarity=TrigramSimilarity("name", q))
         .filter(similarity__gte=threshold)
-        .order_by("-importance", "-similarity")[:limit]
+        .order_by("-importance", "-similarity")[offset : offset + limit]
     )
 
-    return list(queryset.select_related("place_type", "place_type__parent"))
+    # Build simplified response
+    results = []
+    media_url = settings.MEDIA_URL
+    if not media_url.startswith("http"):
+        media_url = request.build_absolute_uri(media_url)
+
+    for place in queryset:
+        result = {
+            "name": place.name_i18n,
+            "country_code": str(place.country_code) if place.country_code else None,
+            "id": place.id,
+            "elevation": place.elevation,
+            "importance": place.importance,
+            "location": {
+                "lat": place.location.y if place.location else None,
+                "lon": place.location.x if place.location else None,
+            },
+        }
+
+        # Include score
+        result["score"] = place.similarity
+
+        # Include place_type based on parameter
+        if include_place_type == IncludeModeEnum.slug:
+            result["place_type"] = place.place_type.slug if place.place_type else None
+        elif include_place_type == IncludeModeEnum.all:
+            if place.place_type:
+                result["place_type"] = {
+                    "slug": place.place_type.slug,
+                    "name": place.place_type.name_i18n,
+                    "description": place.place_type.description_i18n,
+                    "icon": f"{media_url}{place.place_type.symbol_mono}"
+                    if place.place_type.symbol_mono
+                    else None,
+                    "symbol": f"{media_url}{place.place_type.symbol_detailed}"
+                    if place.place_type.symbol_detailed
+                    else None,
+                    "symbol_simple": f"{media_url}{place.place_type.symbol_simple}"
+                    if place.place_type.symbol_simple
+                    else None,
+                }
+            else:
+                result["place_type"] = None
+
+        results.append(result)
+
+    return results
 
 
 @router.get(
     "nearby",
-    response=list[GeoPlaceNearbySchema],
+    response=list[dict],
     exclude_unset=True,
     operation_id="nearby_geoplaces",
 )
+@decorate_view(cache_control(max_age=60))
 def nearby_geoplaces(
     request: HttpRequest,
     response: HttpResponse,
@@ -123,7 +182,8 @@ def nearby_geoplaces(
     radius: float = Query(
         10000, description="Search radius in meters (default: 10000 = 10km)"
     ),
-    limit: int = Query(20, description="Maximum number of results (default: 20)"),
+    limit: int = Query(20, description="Maximum number of results"),
+    offset: int = Query(0, description="Number of results to skip for pagination"),
     types: list[str] | None = Query(
         None,
         description="Filter by place type slugs (e.g., 'peak', 'pass'). Use 'parent.child' format for child categories.",
@@ -132,13 +192,12 @@ def nearby_geoplaces(
         None, description="Filter by parent category slugs"
     ),
     min_importance: int = Query(0, description="Minimum importance score (0-100)"),
+    include_place_type: IncludeModeEnum = Query(
+        IncludeModeEnum.all,
+        description="Include place type information: 'no' excludes field, 'slug' returns type slug only, 'all' returns full type details with name and description",
+    ),
 ) -> Any:
-    """
-    Find places near coordinates within a radius.
-
-    Returns places ordered by distance from the given coordinates.
-    Includes distance in meters for each result.
-    """
+    """Find places near coordinates within a radius, ordered by distance."""
     point = Point(lon, lat, srid=4326)
 
     # Start with active, public places within radius
@@ -171,31 +230,62 @@ def nearby_geoplaces(
                 )
         queryset = queryset.filter(type_conditions)
 
-    # Annotate with distance and order by it
-    queryset = (
-        queryset.annotate(distance=Distance("location", point))
-        .order_by("distance")[:limit]
-        .select_related("place_type", "place_type__parent")
-    )
+    # Only select_related if we need the place_type data
+    if include_place_type != IncludeModeEnum.no:
+        queryset = queryset.select_related("place_type", "place_type__parent")
 
-    # Convert distance to meters (Distance returns in default units)
+    # Annotate with distance and order by it
+    queryset = queryset.annotate(distance=Distance("location", point)).order_by(
+        "distance"
+    )[offset : offset + limit]
+
+    # Build simplified response
     results = []
+    media_url = settings.MEDIA_URL
+    if not media_url.startswith("http"):
+        media_url = request.build_absolute_uri(media_url)
+
     for place in queryset:
         # Distance annotation is a Distance object - convert to meters
         distance_m = (
             place.distance.m if hasattr(place.distance, "m") else place.distance
         )
-        result_dict = {
-            "id": place.id,
+
+        result = {
             "name": place.name_i18n,
-            "place_type": place.place_type,
-            "country_code": place.country_code,
+            "country_code": str(place.country_code) if place.country_code else None,
+            "id": place.id,
             "elevation": place.elevation,
             "importance": place.importance,
-            "latitude": place.location.y if place.location else None,
-            "longitude": place.location.x if place.location else None,
+            "location": {
+                "lat": place.location.y if place.location else None,
+                "lon": place.location.x if place.location else None,
+            },
             "distance": round(distance_m, 2) if distance_m else None,
         }
-        results.append(result_dict)
+
+        # Include place_type based on parameter
+        if include_place_type == IncludeModeEnum.slug:
+            result["place_type"] = place.place_type.slug if place.place_type else None
+        elif include_place_type == IncludeModeEnum.all:
+            if place.place_type:
+                result["place_type"] = {
+                    "slug": place.place_type.slug,
+                    "name": place.place_type.name_i18n,
+                    "description": place.place_type.description_i18n,
+                    "icon": f"{media_url}{place.place_type.symbol_mono}"
+                    if place.place_type.symbol_mono
+                    else None,
+                    "symbol": f"{media_url}{place.place_type.symbol_detailed}"
+                    if place.place_type.symbol_detailed
+                    else None,
+                    "symbol_simple": f"{media_url}{place.place_type.symbol_simple}"
+                    if place.place_type.symbol_simple
+                    else None,
+                }
+            else:
+                result["place_type"] = None
+
+        results.append(result)
 
     return results

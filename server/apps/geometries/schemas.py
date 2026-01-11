@@ -2,8 +2,8 @@
 Schemas for GeoPlace API endpoints.
 """
 
+from hut_services import LocationSchema
 from ninja import Field, ModelSchema
-from pydantic import computed_field
 
 from server.apps.categories.models import Category
 from server.apps.geometries.models import GeoPlace
@@ -25,6 +25,12 @@ class GeoPlaceBaseSchema(ModelSchema):
 
     name: str = Field(..., alias="name_i18n")
     place_type: CategorySchema
+    country_code: str
+
+    @staticmethod
+    def resolve_country_code(obj):
+        """Convert Country object to string code."""
+        return str(obj.country_code) if obj.country_code else None
 
     class Meta:
         model = GeoPlace
@@ -41,17 +47,13 @@ class GeoPlaceBaseSchema(ModelSchema):
 class GeoPlaceSearchSchema(GeoPlaceBaseSchema):
     """Schema for search results with location coordinates."""
 
-    @computed_field
-    @property
-    def latitude(self) -> float | None:
-        """Extract latitude from location point."""
-        return self.location.y if self.location else None
+    location: LocationSchema
+    score: float | None = None
 
-    @computed_field
-    @property
-    def longitude(self) -> float | None:
-        """Extract longitude from location point."""
-        return self.location.x if self.location else None
+    @staticmethod
+    def resolve_score(obj):
+        """Get search similarity score from the dynamically attached attribute."""
+        return getattr(obj, "similarity", None)
 
     class Meta:
         model = GeoPlace
@@ -62,6 +64,7 @@ class GeoPlaceSearchSchema(GeoPlaceBaseSchema):
             "country_code",
             "elevation",
             "importance",
+            "location",
         )
 
 
@@ -85,10 +88,16 @@ class GeoPlaceDetailSchema(GeoPlaceSearchSchema):
         )
 
 
-class GeoPlaceNearbySchema(GeoPlaceSearchSchema):
+class GeoPlaceNearbySchema(GeoPlaceBaseSchema):
     """Schema for nearby places with distance information."""
 
-    distance: float | None = None  # Distance in meters, set by the query
+    location: LocationSchema
+    distance: float | None = None
+
+    @staticmethod
+    def resolve_distance(obj):
+        """Get distance in meters from the dynamically attached attribute."""
+        return getattr(obj, "distance_m", None)
 
     class Meta:
         model = GeoPlace
@@ -99,4 +108,5 @@ class GeoPlaceNearbySchema(GeoPlaceSearchSchema):
             "country_code",
             "elevation",
             "importance",
+            "location",
         )
