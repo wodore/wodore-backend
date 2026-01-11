@@ -11,6 +11,7 @@ Usage:
     app import_geoplaces --source geonames -c alps             # Import all Alpine countries
     app import_geoplaces --source geonames --update            # Update existing places
     app import_geoplaces --source geonames -l 1000             # Import max 1000 entries (testing)
+    app import_geoplaces --source wodore                       # Import huts into GeoPlace for search
 """
 
 import math
@@ -25,18 +26,21 @@ from server.apps.external_geonames.management.commands._country_groups import (
 )
 from server.apps.external_geonames.models import Feature, GeoName
 from server.apps.geometries.models import GeoPlace
+from server.apps.huts.models import Hut
 
 
 class Command(BaseCommand):
     help = "Import GeoPlace data from external GeoNames"
+    batch_size = 100
+    default_hut_importance = 80
 
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--source",
             type=str,
             default="geonames",
-            choices=["geonames"],
-            help="Source to import from (currently only 'geonames' supported)",
+            choices=["geonames", "wodore"],
+            help="Source to import from",
         )
         parser.add_argument(
             "--dry-run",
@@ -83,22 +87,39 @@ class Command(BaseCommand):
                 self.style.WARNING("DRY RUN MODE - No changes will be made")
             )
 
-        if source == "geonames":
-            created, updated, skipped = self._import_from_geonames(
-                countries=countries,
-                update=update,
-                limit=limit,
-                min_importance=min_importance,
-                dry_run=dry_run,
-            )
+        source_handlers = {
+            "geonames": self._import_from_geonames,
+            "wodore": self._import_from_wodore,
+        }
 
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"\nImport complete: {created} created, {updated} updated, {skipped} skipped"
-                )
-            )
-        else:
+        handler = source_handlers.get(source)
+        if not handler:
             self.stdout.write(self.style.ERROR(f"Unknown source: {source}"))
+            return
+
+        created, updated, skipped = handler(
+            countries=countries,
+            update=update,
+            limit=limit,
+            min_importance=min_importance,
+            dry_run=dry_run,
+        )
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"\nImport complete: {created} created, {updated} updated, {skipped} skipped"
+            )
+        )
+
+    def _normalize_elevation(self, elevation: float | int | None) -> int | None:
+        if elevation is None:
+            return None
+        try:
+            if float(elevation) == 0:
+                return None
+            return int(round(float(elevation)))
+        except (TypeError, ValueError):
+            return None
 
     def _import_from_geonames(
         self,
@@ -111,12 +132,14 @@ class Command(BaseCommand):
         """Import from external_geonames GeoName model."""
 
         # Get enabled features with categories assigned
-        enabled_features = Feature.objects.filter(
-            is_enabled=True,
-            category__isnull=False,
-        ).select_related("category", "category__parent")
+        enabled_features = list(
+            Feature.objects.filter(
+                is_enabled=True,
+                category__isnull=False,
+            ).select_related("category", "category__parent")
+        )
 
-        if not enabled_features.exists():
+        if not enabled_features:
             self.stdout.write(
                 self.style.WARNING(
                     "No enabled features with categories found. "
@@ -126,7 +149,7 @@ class Command(BaseCommand):
             return 0, 0, 0
 
         self.stdout.write(
-            f"Found {enabled_features.count()} enabled features with categories assigned:"
+            f"Found {len(enabled_features)} enabled features with categories assigned:"
         )
         for feature in enabled_features:
             self.stdout.write(
@@ -158,50 +181,64 @@ class Command(BaseCommand):
         skipped_count = 0
 
         # Process in batches
-        batch_size = 100
         processed = 0
+        for geoname in queryset.iterator(chunk_size=self.batch_size):
+            processed += 1
 
-        for i in range(0, total_count, batch_size):
-            batch = list(queryset[i : i + batch_size])
+            # Calculate importance for this place
+            importance = self._calculate_importance(geoname)
 
-            for geoname in batch:
-                processed += 1
+            # Skip if below minimum importance
+            if importance < min_importance:
+                skipped_count += 1
+                continue
 
-                # Calculate importance for this place
-                importance = self._calculate_importance(geoname)
+            # Check for duplicate (proximity + name similarity)
+            existing_place = self._find_duplicate(geoname)
 
-                # Skip if below minimum importance
-                if importance < min_importance:
-                    skipped_count += 1
-                    continue
+            if existing_place and not update:
+                skipped_count += 1
+                if processed % self.batch_size == 0:
+                    self.stdout.write(
+                        f"  Processed {processed}/{total_count} (skipped existing: {existing_place.name_i18n})"
+                    )
+                continue
 
-                # Check for duplicate (proximity + name similarity)
-                existing_place = self._find_duplicate(geoname)
-
-                if existing_place and not update:
-                    skipped_count += 1
-                    if processed % 100 == 0:
-                        self.stdout.write(
-                            f"  Processed {processed}/{total_count} (skipped existing: {existing_place.name_i18n})"
-                        )
-                    continue
-
-                # Create or update place
-                if dry_run:
-                    if existing_place:
-                        self.stdout.write(
-                            f"  [DRY RUN] Would update: {geoname.name} ({geoname.feature_id})"
-                        )
-                        updated_count += 1
-                    else:
-                        self.stdout.write(
-                            f"  [DRY RUN] Would create: {geoname.name} ({geoname.feature_id}, importance={importance})"
-                        )
-                        created_count += 1
+            # Create or update place
+            if dry_run:
+                if existing_place:
+                    self.stdout.write(
+                        f"  [DRY RUN] Would update: {geoname.name} ({geoname.feature_id})"
+                    )
+                    updated_count += 1
                 else:
-                    if existing_place:
-                        if update:
-                            # Update existing place (only if changed)
+                    self.stdout.write(
+                        f"  [DRY RUN] Would create: {geoname.name} ({geoname.feature_id}, importance={importance})"
+                    )
+                    created_count += 1
+            else:
+                if existing_place:
+                    if update:
+                        # Update existing place (only if changed)
+                        was_updated = self._update_place(
+                            existing_place, geoname, importance
+                        )
+                        if was_updated:
+                            updated_count += 1
+                        else:
+                            skipped_count += 1
+                    else:
+                        # Skip existing place
+                        skipped_count += 1
+                else:
+                    # Create new place
+                    try:
+                        self._create_place(geoname, importance)
+                        created_count += 1
+                    except Exception as e:
+                        # If creation fails (e.g., race condition), try to find and update
+                        existing_place = self._find_duplicate(geoname)
+                        if existing_place and update:
                             was_updated = self._update_place(
                                 existing_place, geoname, importance
                             )
@@ -210,33 +247,106 @@ class Command(BaseCommand):
                             else:
                                 skipped_count += 1
                         else:
-                            # Skip existing place
-                            skipped_count += 1
-                    else:
-                        # Create new place
-                        try:
-                            self._create_place(geoname, importance)
-                            created_count += 1
-                        except Exception as e:
-                            # If creation fails (e.g., race condition), try to find and update
-                            existing_place = self._find_duplicate(geoname)
-                            if existing_place and update:
-                                was_updated = self._update_place(
-                                    existing_place, geoname, importance
-                                )
-                                if was_updated:
-                                    updated_count += 1
-                                else:
-                                    skipped_count += 1
-                            else:
-                                raise e
+                            raise e
 
-                if processed % 100 == 0:
-                    self.stdout.write(
-                        f"  Processed {processed}/{total_count} ({created_count} created, {updated_count} updated, {skipped_count} skipped)"
-                    )
+            if processed % self.batch_size == 0:
+                self.stdout.write(
+                    f"  Processed {processed}/{total_count} ({created_count} created, {updated_count} updated, {skipped_count} skipped)"
+                )
 
         return created_count, updated_count, skipped_count
+
+    def _import_from_wodore(
+        self,
+        countries: list[str] | None,
+        update: bool,
+        limit: int | None,
+        min_importance: int,
+        dry_run: bool,
+    ) -> Tuple[int, int, int]:
+        """Import from huts into GeoPlace for search."""
+        queryset = Hut.objects.filter(is_active=True).select_related("hut_type_open")
+
+        if countries:
+            queryset = queryset.filter(country_field__in=[c.upper() for c in countries])
+            self.stdout.write(f"\nFiltering to countries: {', '.join(countries)}")
+
+        if limit:
+            queryset = queryset[:limit]
+            self.stdout.write(f"Limiting to {limit} records")
+
+        total_count = queryset.count()
+        self.stdout.write(f"\nProcessing {total_count} huts...")
+
+        created_count = 0
+        updated_count = 0
+        skipped_count = 0
+        processed = 0
+
+        for hut in queryset.iterator(chunk_size=self.batch_size):
+            processed += 1
+            importance = self._calculate_hut_importance(hut)
+
+            if importance < min_importance:
+                skipped_count += 1
+                continue
+
+            existing_place = self._find_place_by_source("wodore", hut.slug)
+
+            if existing_place and not update:
+                skipped_count += 1
+                if processed % self.batch_size == 0:
+                    self.stdout.write(
+                        f"  Processed {processed}/{total_count} (skipped existing: {existing_place.name_i18n})"
+                    )
+                continue
+
+            if dry_run:
+                if existing_place:
+                    self.stdout.write(
+                        f"  [DRY RUN] Would update: {hut.name} ({hut.slug})"
+                    )
+                    updated_count += 1
+                else:
+                    self.stdout.write(
+                        f"  [DRY RUN] Would create: {hut.name} ({hut.slug}, importance={importance})"
+                    )
+                    created_count += 1
+            else:
+                if existing_place:
+                    if update:
+                        was_updated = self._update_place_from_hut(
+                            existing_place, hut, importance
+                        )
+                        if was_updated:
+                            updated_count += 1
+                        else:
+                            skipped_count += 1
+                    else:
+                        skipped_count += 1
+                else:
+                    self._create_place_from_hut(hut, importance)
+                    created_count += 1
+
+            if processed % self.batch_size == 0:
+                self.stdout.write(
+                    f"  Processed {processed}/{total_count} ({created_count} created, {updated_count} updated, {skipped_count} skipped)"
+                )
+
+        return created_count, updated_count, skipped_count
+
+    def _calculate_hut_importance(self, hut: Hut) -> int:
+        return self.default_hut_importance
+
+    def _find_place_by_source(self, source: str, source_id: str) -> GeoPlace | None:
+        return (
+            GeoPlace.objects.filter(
+                source_associations__organization__slug=source,
+                source_associations__source_id=source_id,
+            )
+            .order_by("id")
+            .first()
+        )
 
     def _calculate_importance(self, geoname: GeoName) -> int:
         """
@@ -277,26 +387,25 @@ class Command(BaseCommand):
         Returns first match or None.
         """
         # Search for places within 30m with same category
-        candidates = (
+        return (
             GeoPlace.objects.filter(
                 location__distance_lte=(geoname.location, D(m=30)),
                 place_type=geoname.feature.category,
             )
             .annotate(distance=Distance("location", geoname.location))
-            .order_by("distance")[:5]
+            .order_by("distance")
+            .first()
         )
 
-        # For now, just return first match if any
-        # Could add name similarity check here in the future
-        return candidates.first() if candidates.exists() else None
-
     def _create_place(self, geoname: GeoName, importance: int) -> GeoPlace:
-        """Create a new GeoPlace from GeoName data."""
-        place = GeoPlace.objects.create(
+        """Create a new GeoPlace from GeoName data with source association."""
+        place = GeoPlace.create_with_source(
+            source="geonames",
+            source_id=str(geoname.id),
             name=geoname.name,
             place_type=geoname.feature.category,
             location=geoname.location,
-            elevation=geoname.elevation,
+            elevation=self._normalize_elevation(geoname.elevation),
             country_code=geoname.country_code,
             importance=importance,
             is_active=True,
@@ -315,6 +424,9 @@ class Command(BaseCommand):
         if place.is_modified:
             return False
 
+        # Ensure source association exists
+        place.add_source(source="geonames", source_id=str(geoname.id))
+
         # Check if any fields actually changed
         changed = False
         if place.name != geoname.name:
@@ -323,8 +435,9 @@ class Command(BaseCommand):
         if place.location != geoname.location:
             place.location = geoname.location
             changed = True
-        if place.elevation != geoname.elevation:
-            place.elevation = geoname.elevation
+        new_elevation = self._normalize_elevation(geoname.elevation)
+        if place.elevation != new_elevation:
+            place.elevation = new_elevation
             changed = True
         if place.importance != importance:
             place.importance = importance
@@ -337,6 +450,77 @@ class Command(BaseCommand):
                     "location",
                     "elevation",
                     "importance",
+                    "modified",
+                ]
+            )
+            return True
+        return False
+
+    def _create_place_from_hut(self, hut: Hut, importance: int) -> GeoPlace:
+        return GeoPlace.create_with_source(
+            source="wodore",
+            source_id=hut.slug,
+            name=hut.name,
+            place_type=hut.hut_type_open,
+            location=hut.location,
+            elevation=self._normalize_elevation(hut.elevation),
+            country_code=hut.country_field,
+            importance=importance,
+            is_active=hut.is_active,
+            is_public=hut.is_public,
+            is_modified=hut.is_modified,
+        )
+
+    def _update_place_from_hut(
+        self, place: GeoPlace, hut: Hut, importance: int
+    ) -> bool:
+        if place.is_modified:
+            return False
+
+        place.add_source(source="wodore", source_id=hut.slug)
+
+        changed = False
+        if place.name != hut.name:
+            place.name = hut.name
+            changed = True
+        if place.place_type != hut.hut_type_open:
+            place.place_type = hut.hut_type_open
+            changed = True
+        if place.location != hut.location:
+            place.location = hut.location
+            changed = True
+        new_elevation = self._normalize_elevation(hut.elevation)
+        if place.elevation != new_elevation:
+            place.elevation = new_elevation
+            changed = True
+        if place.country_code != hut.country_field:
+            place.country_code = hut.country_field
+            changed = True
+        if place.importance != importance:
+            place.importance = importance
+            changed = True
+        if place.is_active != hut.is_active:
+            place.is_active = hut.is_active
+            changed = True
+        if place.is_public != hut.is_public:
+            place.is_public = hut.is_public
+            changed = True
+        if place.is_modified != hut.is_modified:
+            place.is_modified = hut.is_modified
+            changed = True
+
+        if changed:
+            place.save(
+                update_fields=[
+                    "name",
+                    "place_type",
+                    "location",
+                    "elevation",
+                    "country_code",
+                    "importance",
+                    "is_active",
+                    "is_public",
+                    "is_modified",
                     "modified",
                 ]
             )

@@ -56,7 +56,7 @@ class GeoPlaceSourceAssociation(TimeStampedModel, ComputedFieldsModel):
         help_text=_("Source properties."), blank=True, default=dict
     )
     source_id = models.CharField(
-        max_length=40, blank=True, null=True, default="", help_text="Source id"
+        max_length=100, blank=True, null=True, default="", help_text="Source id"
     )
 
     import_date = models.DateTimeField(auto_now_add=True)

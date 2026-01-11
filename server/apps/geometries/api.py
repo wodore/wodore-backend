@@ -12,9 +12,13 @@ from django.conf import settings
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
-from django.db.models import Q
+from django.contrib.postgres.aggregates import JSONBAgg
+from django.db.models import F, Q
+from django.db.models.functions import JSONObject
 from django.http import HttpRequest, HttpResponse
 from django.views.decorators.cache import cache_control
+
+from server.apps.translations import LanguageParam, activate, with_language_param
 
 from .models import GeoPlace
 
@@ -36,9 +40,11 @@ class IncludeModeEnum(str, Enum):
     operation_id="search_geoplaces",
 )
 @decorate_view(cache_control(max_age=60))
+@with_language_param("lang")
 def search_geoplaces(
     request: HttpRequest,
     response: HttpResponse,
+    lang: LanguageParam,
     q: str = Query(
         ...,
         description="Search query string to match against place names in all languages",
@@ -70,8 +76,14 @@ def search_geoplaces(
         IncludeModeEnum.all,
         description="Include place type information: 'no' excludes field, 'slug' returns type slug only, 'all' returns full type details with name and description",
     ),
+    include_sources: IncludeModeEnum = Query(
+        IncludeModeEnum.no,
+        description="Include data sources: 'no' excludes field, 'slug' returns source slugs only, 'all' returns full source details with name and logo",
+    ),
 ) -> Any:
     """Search for geographic places using fuzzy text search across all language fields."""
+    activate(lang)
+
     # Start with active, public places - use only() for better performance
     queryset = GeoPlace.objects.filter(is_active=True, is_public=True)
 
@@ -107,6 +119,25 @@ def search_geoplaces(
     # Only select_related if we need the place_type data
     if include_place_type != IncludeModeEnum.no:
         queryset = queryset.select_related("place_type", "place_type__parent")
+
+    # Add source annotations based on include_sources parameter
+    if include_sources == IncludeModeEnum.slug:
+        queryset = queryset.annotate(
+            source_slugs=JSONBAgg(F("source_set__slug"), distinct=True),
+            source_ids=JSONBAgg(F("source_associations__source_id"), distinct=True),
+        )
+    elif include_sources == IncludeModeEnum.all:
+        queryset = queryset.annotate(
+            sources_data=JSONBAgg(
+                JSONObject(
+                    slug="source_set__slug",
+                    name="source_set__name_i18n",
+                    logo="source_set__logo",
+                    source_id="source_associations__source_id",
+                ),
+                distinct=True,
+            )
+        )
 
     # Fuzzy search using trigram similarity
     # Use similarity on name field (searches across all i18n variants via modeltrans)
@@ -162,6 +193,36 @@ def search_geoplaces(
             else:
                 result["place_type"] = None
 
+        # Include sources based on parameter
+        if include_sources == IncludeModeEnum.slug:
+            slugs = [slug for slug in (place.source_slugs or []) if slug is not None]
+            ids = [sid for sid in (place.source_ids or []) if sid is not None]
+            # Create list of dicts with source and source_id
+            sources_list = []
+            for i, slug in enumerate(slugs):
+                source_item = {"source": slug}
+                if i < len(ids) and ids[i]:
+                    source_item["source_id"] = ids[i]
+                sources_list.append(source_item)
+            result["sources"] = sources_list
+        elif include_sources == IncludeModeEnum.all:
+            sources = []
+            for src in place.sources_data or []:
+                if src.get("slug") is not None:
+                    source_item = {
+                        "source": {
+                            "slug": src["slug"],
+                            "name": src.get("name"),
+                            "logo": f"{media_url}{src['logo']}"
+                            if src.get("logo")
+                            else None,
+                        }
+                    }
+                    if src.get("source_id"):
+                        source_item["source_id"] = src["source_id"]
+                    sources.append(source_item)
+            result["sources"] = sources
+
         results.append(result)
 
     return results
@@ -174,9 +235,11 @@ def search_geoplaces(
     operation_id="nearby_geoplaces",
 )
 @decorate_view(cache_control(max_age=60))
+@with_language_param("lang")
 def nearby_geoplaces(
     request: HttpRequest,
     response: HttpResponse,
+    lang: LanguageParam,
     lat: float = Query(..., description="Latitude coordinate", example=46.0342),
     lon: float = Query(..., description="Longitude coordinate", example=7.6488),
     radius: float = Query(
@@ -196,8 +259,14 @@ def nearby_geoplaces(
         IncludeModeEnum.all,
         description="Include place type information: 'no' excludes field, 'slug' returns type slug only, 'all' returns full type details with name and description",
     ),
+    include_sources: IncludeModeEnum = Query(
+        IncludeModeEnum.no,
+        description="Include data sources: 'no' excludes field, 'slug' returns source slugs only, 'all' returns full source details with name and logo",
+    ),
 ) -> Any:
     """Find places near coordinates within a radius, ordered by distance."""
+    activate(lang)
+
     point = Point(lon, lat, srid=4326)
 
     # Start with active, public places within radius
@@ -233,6 +302,25 @@ def nearby_geoplaces(
     # Only select_related if we need the place_type data
     if include_place_type != IncludeModeEnum.no:
         queryset = queryset.select_related("place_type", "place_type__parent")
+
+    # Add source annotations based on include_sources parameter
+    if include_sources == IncludeModeEnum.slug:
+        queryset = queryset.annotate(
+            source_slugs=JSONBAgg(F("source_set__slug"), distinct=True),
+            source_ids=JSONBAgg(F("source_associations__source_id"), distinct=True),
+        )
+    elif include_sources == IncludeModeEnum.all:
+        queryset = queryset.annotate(
+            sources_data=JSONBAgg(
+                JSONObject(
+                    slug="source_set__slug",
+                    name="source_set__name_i18n",
+                    logo="source_set__logo",
+                    source_id="source_associations__source_id",
+                ),
+                distinct=True,
+            )
+        )
 
     # Annotate with distance and order by it
     queryset = queryset.annotate(distance=Distance("location", point)).order_by(
@@ -285,6 +373,36 @@ def nearby_geoplaces(
                 }
             else:
                 result["place_type"] = None
+
+        # Include sources based on parameter
+        if include_sources == IncludeModeEnum.slug:
+            slugs = [slug for slug in (place.source_slugs or []) if slug is not None]
+            ids = [sid for sid in (place.source_ids or []) if sid is not None]
+            # Create list of dicts with source and source_id
+            sources_list = []
+            for i, slug in enumerate(slugs):
+                source_item = {"source": slug}
+                if i < len(ids) and ids[i]:
+                    source_item["source_id"] = ids[i]
+                sources_list.append(source_item)
+            result["sources"] = sources_list
+        elif include_sources == IncludeModeEnum.all:
+            sources = []
+            for src in place.sources_data or []:
+                if src.get("slug") is not None:
+                    source_item = {
+                        "source": {
+                            "slug": src["slug"],
+                            "name": src.get("name"),
+                            "logo": f"{media_url}{src['logo']}"
+                            if src.get("logo")
+                            else None,
+                        }
+                    }
+                    if src.get("source_id"):
+                        source_item["source_id"] = src["source_id"]
+                    sources.append(source_item)
+            result["sources"] = sources
 
         results.append(result)
 
