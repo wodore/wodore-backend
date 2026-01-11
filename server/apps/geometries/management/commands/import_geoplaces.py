@@ -199,14 +199,37 @@ class Command(BaseCommand):
                         )
                         created_count += 1
                 else:
-                    if existing_place and update:
-                        # Update existing place
-                        self._update_place(existing_place, geoname, importance)
-                        updated_count += 1
-                    elif not existing_place:
+                    if existing_place:
+                        if update:
+                            # Update existing place (only if changed)
+                            was_updated = self._update_place(
+                                existing_place, geoname, importance
+                            )
+                            if was_updated:
+                                updated_count += 1
+                            else:
+                                skipped_count += 1
+                        else:
+                            # Skip existing place
+                            skipped_count += 1
+                    else:
                         # Create new place
-                        self._create_place(geoname, importance)
-                        created_count += 1
+                        try:
+                            self._create_place(geoname, importance)
+                            created_count += 1
+                        except Exception as e:
+                            # If creation fails (e.g., race condition), try to find and update
+                            existing_place = self._find_duplicate(geoname)
+                            if existing_place and update:
+                                was_updated = self._update_place(
+                                    existing_place, geoname, importance
+                                )
+                                if was_updated:
+                                    updated_count += 1
+                                else:
+                                    skipped_count += 1
+                            else:
+                                raise e
 
                 if processed % 100 == 0:
                     self.stdout.write(
@@ -282,14 +305,32 @@ class Command(BaseCommand):
         )
         return place
 
-    def _update_place(self, place: GeoPlace, geoname: GeoName, importance: int) -> None:
-        """Update an existing GeoPlace with GeoName data."""
+    def _update_place(self, place: GeoPlace, geoname: GeoName, importance: int) -> bool:
+        """
+        Update an existing GeoPlace with GeoName data.
+
+        Returns True if the place was updated, False if no changes needed.
+        """
         # Only update if not manually modified
-        if not place.is_modified:
+        if place.is_modified:
+            return False
+
+        # Check if any fields actually changed
+        changed = False
+        if place.name != geoname.name:
             place.name = geoname.name
+            changed = True
+        if place.location != geoname.location:
             place.location = geoname.location
+            changed = True
+        if place.elevation != geoname.elevation:
             place.elevation = geoname.elevation
+            changed = True
+        if place.importance != importance:
             place.importance = importance
+            changed = True
+
+        if changed:
             place.save(
                 update_fields=[
                     "name",
@@ -299,3 +340,5 @@ class Command(BaseCommand):
                     "modified",
                 ]
             )
+            return True
+        return False
