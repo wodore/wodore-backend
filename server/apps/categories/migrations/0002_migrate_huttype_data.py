@@ -36,8 +36,10 @@ def migrate_huttypes_to_categories(apps, schema_editor):
             "i18n": {
                 "name_en": "Accommodation",
                 "name_fr": "Hébergement",
+                "name_it": "Alloggio",
                 "description_en": "Types of mountain accommodations",
                 "description_fr": "Types d'hébergements de montagne",
+                "description_it": "Tipi di rifugi di montagna",
             },
             "order": 10,
             "is_active": True,
