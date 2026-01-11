@@ -170,11 +170,13 @@ class Category(ComputedFieldsModel, models.Model):
         ]
 
     def __str__(self) -> str:
-        if self.name_i18n:
-            if self.parent:
-                return f"{self.parent.name_i18n} → {self.name_i18n}"
-            return self.name_i18n
-        return self.slug
+        # Use identifier field (computed, no extra queries) and format it nicely
+        return (
+            self.identifier.replace(".", " → ")
+            .replace("root → ", "")
+            .replace("_", " ")
+            .title()
+        )
 
     def save(self, *args, **kwargs):
         """Auto-generate slug from name if not provided."""

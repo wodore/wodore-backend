@@ -7,9 +7,10 @@ Calculates importance scores and handles deduplication.
 Usage:
     app import_geoplaces --source geonames                     # Import from enabled GeoNames features
     app import_geoplaces --source geonames --dry-run           # Dry run to see what would be imported
-    app import_geoplaces --source geonames --countries ch,fr   # Limit to specific countries
+    app import_geoplaces --source geonames -c ch,fr            # Limit to specific countries
+    app import_geoplaces --source geonames -c alps             # Import all Alpine countries
     app import_geoplaces --source geonames --update            # Update existing places
-    app import_geoplaces --source geonames --limit 1000        # Import max 1000 entries (testing)
+    app import_geoplaces --source geonames -l 1000             # Import max 1000 entries (testing)
 """
 
 import math
@@ -19,6 +20,9 @@ from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.measure import D
 from django.core.management.base import BaseCommand, CommandParser
 
+from server.apps.external_geonames.management.commands._country_groups import (
+    expand_countries,
+)
 from server.apps.external_geonames.models import Feature, GeoName
 from server.apps.geometries.models import GeoPlace
 
@@ -40,9 +44,10 @@ class Command(BaseCommand):
             help="Show what would be imported without making changes",
         )
         parser.add_argument(
+            "-c",
             "--countries",
             type=str,
-            help="Comma-separated country codes to import (e.g., 'ch,fr,it')",
+            help="Comma-separated country codes or group name (e.g., 'ch,de' or 'alps' for AT,CH,DE,FR,IT,LI,MC,SI)",
         )
         parser.add_argument(
             "--update",
@@ -50,6 +55,7 @@ class Command(BaseCommand):
             help="Update existing places instead of skipping them",
         )
         parser.add_argument(
+            "-l",
             "--limit",
             type=int,
             default=None,
@@ -66,9 +72,7 @@ class Command(BaseCommand):
         source = options["source"]
         dry_run = options["dry_run"]
         countries = (
-            [c.strip().upper() for c in options["countries"].split(",")]
-            if options["countries"]
-            else None
+            expand_countries(options["countries"]) if options["countries"] else None
         )
         update = options["update"]
         limit = options["limit"]

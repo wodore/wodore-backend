@@ -23,6 +23,7 @@ class FeatureAdmin(ModelAdmin):
         "is_enabled",
         # "default_place_type",  # TODO: Enable after geoplace app is created
         "importance",
+        "category",
     )
     list_display_links = ("feature_code_display", "name_description_display")
     list_filter = (
@@ -34,7 +35,12 @@ class FeatureAdmin(ModelAdmin):
     readonly_fields = ("feature_class", "feature_code", "name", "description")
 
     # Enable inline editing
-    list_editable = ("is_enabled", "importance")
+    list_editable = ("is_enabled", "importance", "category")
+
+    def get_queryset(self, request):
+        """Optimize queryset by prefetching category relationships."""
+        qs = super().get_queryset(request)
+        return qs.select_related("category", "category__parent")
 
     fieldsets = (
         (

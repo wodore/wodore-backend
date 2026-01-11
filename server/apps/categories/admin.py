@@ -127,7 +127,7 @@ class CategoryAdmin(ModelAdmin):
     )
 
     list_editable = ("order", "parent")
-    list_per_page = 20  # Limit rows per page for better performance
+    list_per_page = 25
     ordering = ("-parent", "order")  # Order by parent (NULL first, then by parent ID)
     search_fields = ("name", "slug")
 

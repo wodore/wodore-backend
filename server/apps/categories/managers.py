@@ -132,8 +132,8 @@ class CategoryManager(BaseMutlilingualManager):
     """Custom manager for Category model."""
 
     def get_queryset(self):
-        """Return custom queryset."""
-        return CategoryQuerySet(self.model, using=self._db)
+        """Return custom queryset with optimized parent relationship."""
+        return CategoryQuerySet(self.model, using=self._db).select_related("parent")
 
     def active(self):
         """Filter to only active categories."""
