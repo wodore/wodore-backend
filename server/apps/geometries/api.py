@@ -65,7 +65,7 @@ def search_geoplaces(
         description="Filter by country codes (e.g., 'CH', 'FR', 'IT')",
     ),
     threshold: float = Query(
-        0.1,
+        0.2,
         description="Minimum similarity score (0.0-1.0). Lower values return more results but with lower relevance. Recommended: 0.1 for fuzzy matching, 0.3 for stricter matching.",
     ),
     min_importance: int = Query(

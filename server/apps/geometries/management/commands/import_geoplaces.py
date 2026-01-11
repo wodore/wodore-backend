@@ -401,7 +401,7 @@ class Command(BaseCommand):
         """Create a new GeoPlace from GeoName data with source association."""
         place = GeoPlace.create_with_source(
             source="geonames",
-            source_id=str(geoname.id),
+            source_id=str(geoname.geoname_id),
             name=geoname.name,
             place_type=geoname.feature.category,
             location=geoname.location,
@@ -425,7 +425,7 @@ class Command(BaseCommand):
             return False
 
         # Ensure source association exists
-        place.add_source(source="geonames", source_id=str(geoname.id))
+        place.add_source(source="geonames", source_id=str(geoname.geoname_id))
 
         # Check if any fields actually changed
         changed = False
