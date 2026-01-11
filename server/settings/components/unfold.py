@@ -166,6 +166,20 @@ UNFOLD = {
                             "contacts.change_contact"
                         ),
                     },
+                ],
+            },
+            {
+                "title": None,  # lambda request: _("Users") if request.user.is_superuser else None,  # TODO: does not work
+                "separator": True,  # Top border
+                "items": [
+                    {
+                        "title": _("Geo Places"),
+                        "icon": "map_search",
+                        "link": reverse_lazy("admin:geometries_geoplace_changelist"),
+                        "permission": lambda request: request.user.has_perm(
+                            "geometries_geoplace.view_feature"
+                        ),
+                    },
                     {
                         "title": _("External"),
                         "icon": "public",
@@ -260,7 +274,6 @@ UNFOLD = {
             "models": [
                 "huts.hut",
                 "huts.hutsource",
-                "categories.category",  # Categories now used instead of HutType
             ],
             "items": [
                 {
@@ -268,13 +281,6 @@ UNFOLD = {
                     "link": reverse_lazy("admin:huts_hut_changelist"),
                     "permission": lambda request: request.user.has_perm(
                         "huts.view_hut"
-                    ),
-                },
-                {
-                    "title": _("Categories"),
-                    "link": reverse_lazy("admin:categories_category_changelist"),
-                    "permission": lambda request: request.user.has_perm(
-                        "categories.view_category"
                     ),
                 },
                 {

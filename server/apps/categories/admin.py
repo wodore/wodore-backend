@@ -23,17 +23,18 @@ from .models import Category
 class CategoryAdmin(ModelAdmin):
     form = required_i18n_fields_form_factory("name")
 
-    search_fields = ("name", "slug")
+    search_fields = ("name", "slug", "identifier")
     list_display = (
         "title",
         "symbol_img",
         "icon_img",
         # "order_display",
+        "identifier",
         "slug",
-        "parent_display",
+        # "parent_display",
         "order",
         "is_active",
-        # "parent",
+        "parent",
     )
 
     list_filter = (
@@ -41,17 +42,18 @@ class CategoryAdmin(ModelAdmin):
         "parent",
     )
 
-    list_editable = ("is_active", "order")  # , "parent")
+    list_editable = ("is_active", "order", "parent")  # , "parent")
     search_fields = ("name", "slug")
 
-    readonly_fields = ("name_i18n", "description_i18n")
+    readonly_fields = ("identifier", "name_i18n", "description_i18n")
 
     fieldsets = (
         (
             _("Main Information"),
             {
                 "fields": (
-                    ("slug", "name_i18n", "is_active"),
+                    ("slug", "identifier", "is_active"),
+                    "name_i18n",
                     ("parent", "default", "order"),
                     "description_i18n",
                 )

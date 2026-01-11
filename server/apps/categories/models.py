@@ -1,5 +1,6 @@
 from collections import defaultdict
 
+from computedfields.models import ComputedFieldsModel, computed
 from descriptors import cachedclassproperty
 from django_cleanup import cleanup
 
@@ -14,7 +15,7 @@ from .managers import CategoryManager
 
 
 @cleanup.ignore
-class Category(models.Model):
+class Category(ComputedFieldsModel, models.Model):
     """
     Generic hierarchical category model.
 
@@ -52,6 +53,28 @@ class Category(models.Model):
         help_text=_("Unique identifier within parent level"),
     )
 
+    @computed(
+        models.CharField(
+            max_length=102,  # 50 (parent slug) + 1 (dot) + 50 (slug) + 1 (null)
+            db_index=True,
+            help_text=_("Full identifier path (root.slug or parent.slug)"),
+        ),
+        depends=[
+            ("self", ["slug", "parent_id"]),
+        ],
+    )
+    def identifier(self):
+        """Generate identifier as parent.slug or root if no parent."""
+        if self.parent_id:
+            # Need to fetch parent slug from database
+            parent = (
+                Category.objects.filter(id=self.parent_id)
+                .values_list("slug", flat=True)
+                .first()
+            )
+            return f"{parent}.{self.slug}" if parent else f"root.{self.slug}"
+        return f"root.{self.slug}"
+
     # Translated fields
     name = models.CharField(
         max_length=100, blank=True, null=True, default="", help_text=_("Category name")
@@ -74,22 +97,28 @@ class Category(models.Model):
         help_text=_("Display order (lower values appear first)"),
     )
 
-    # Images (mandatory)
+    # Images (optional)
     symbol_detailed = models.ImageField(
         max_length=300,
         upload_to="categories/symbols/detailed",
+        blank=True,
+        null=True,
         help_text=_("Detailed symbol for map display"),
     )
 
     symbol_simple = models.ImageField(
         max_length=300,
         upload_to="categories/symbols/simple",
+        blank=True,
+        null=True,
         help_text=_("Simple symbol for smaller displays"),
     )
 
     symbol_mono = models.ImageField(
         max_length=300,
         upload_to="categories/symbols/mono",
+        blank=True,
+        null=True,
         help_text=_("Monochrome symbol for UI elements"),
     )
 
