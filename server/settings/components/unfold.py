@@ -151,11 +151,43 @@ UNFOLD = {
                         ),
                     },
                     {
+                        "title": _("Categories"),
+                        "icon": "category",
+                        "link": reverse_lazy("admin:categories_category_changelist"),
+                        "permission": lambda request: request.user.has_perm(
+                            "categories.view_category"
+                        ),
+                    },
+                    {
                         "title": _("Contacts"),
                         "icon": "contacts",
                         "link": reverse_lazy("admin:contacts_contact_changelist"),
                         "permission": lambda request: request.user.has_perm(
                             "contacts.change_contact"
+                        ),
+                    },
+                ],
+            },
+            {
+                "title": None,  # lambda request: _("Users") if request.user.is_superuser else None,  # TODO: does not work
+                "separator": True,  # Top border
+                "items": [
+                    {
+                        "title": _("Geo Places"),
+                        "icon": "map_search",
+                        "link": reverse_lazy("admin:geometries_geoplace_changelist"),
+                        "permission": lambda request: request.user.has_perm(
+                            "geometries_geoplace.view_feature"
+                        ),
+                    },
+                    {
+                        "title": _("External"),
+                        "icon": "public",
+                        "link": reverse_lazy(
+                            "admin:external_geonames_feature_changelist"
+                        ),
+                        "permission": lambda request: request.user.has_perm(
+                            "external_geonames.view_feature"
                         ),
                     },
                 ],
@@ -197,7 +229,7 @@ UNFOLD = {
                     {
                         "title": _("Zitadel Users"),
                         "icon": "manage_accounts",
-                        "link": "https://iam.wodore.com/ui/console/users",
+                        "link": "https://auth.burginfra.com/ui/console/users",
                         "permission": lambda request: request.user.is_superuser,
                         "target": "_blank",
                     },
@@ -241,7 +273,6 @@ UNFOLD = {
         {
             "models": [
                 "huts.hut",
-                "huts.huttype",
                 "huts.hutsource",
             ],
             "items": [
@@ -250,13 +281,6 @@ UNFOLD = {
                     "link": reverse_lazy("admin:huts_hut_changelist"),
                     "permission": lambda request: request.user.has_perm(
                         "huts.view_hut"
-                    ),
-                },
-                {
-                    "title": _("Types"),
-                    "link": reverse_lazy("admin:huts_huttype_changelist"),
-                    "permission": lambda request: request.user.has_perm(
-                        "huts.view_huttype"
                     ),
                 },
                 {
@@ -376,6 +400,60 @@ UNFOLD = {
                     "link": reverse_lazy("admin:images_imagetag_changelist"),
                     "permission": lambda request: request.user.has_perm(
                         "images.view_imagetags"
+                    ),
+                },
+            ],
+        },
+        {
+            "models": [
+                "external_geonames.feature",
+                "external_geonames.geoname",
+                "external_geonames.alternativename",
+                "external_geonames.boundary",
+            ],
+            "items": [
+                {
+                    "title": _("Features"),
+                    "link": reverse_lazy("admin:external_geonames_feature_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "external_geonames.view_feature"
+                    ),
+                },
+                {
+                    "title": _("GeoNames"),
+                    "link": reverse_lazy("admin:external_geonames_geoname_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "external_geonames.view_geoname"
+                    ),
+                },
+                {
+                    "title": _("Alternative Names"),
+                    "link": reverse_lazy(
+                        "admin:external_geonames_alternativename_changelist"
+                    ),
+                    "permission": lambda request: request.user.has_perm(
+                        "external_geonames.view_alternativename"
+                    ),
+                },
+                {
+                    "title": _("Boundaries"),
+                    "link": reverse_lazy("admin:external_geonames_boundary_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "external_geonames.view_boundary"
+                    ),
+                },
+            ],
+        },
+        {
+            "models": [
+                "geometries.geoplace",
+            ],
+            "items": [
+                {
+                    "title": _("Geo Places"),
+                    "link": reverse_lazy("admin:geometries_geoplace_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "geometries.view_geoplace"
                     ),
                 },
             ],

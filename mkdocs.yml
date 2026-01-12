@@ -11,6 +11,8 @@ nav:
   - Packages: packages.md
   #- API Reference:
   #    - server: reference/
+  - WEPs: weps
+  - "TODOs": TODOS.md
   - Changelog: changelog.md
 
 extra:
@@ -85,7 +87,34 @@ theme:
 
 # Plugins
 plugins:
-  #  - blog
+  - tags:
+      tags_file: weps/tags.md
+  - blog:
+      blog_dir: weps
+      blog_toc: true
+      post_dir: "{blog}/board"
+      post_date_format: yyyy-MM-dd
+      post_url_date_format: yyyy/MM/dd
+      post_url_format: "{slug}"
+      archive: true
+      archive_name: Archive
+      archive_date_format: yyyy
+      archive_url_date_format: yyyy
+      archive_url_format: "archive/{date}"
+      categories: true
+      categories_name: Categories
+      categories_url_format: "category/{slug}"
+      categories_toc: true
+      authors: false
+      pagination: false
+      pagination_per_page: 10
+      draft: true
+      draft_on_serve: true
+      draft_if_future_date: false
+      post_excerpt: required
+      post_excerpt_max_authors: 0
+      post_excerpt_max_categories: 0
+      post_readtime: false
   - neoteroi.mkdocsoad:
       use_pymdownx: true
   - open-in-new-tab:

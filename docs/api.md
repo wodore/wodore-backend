@@ -1,3 +1,5 @@
-Interactive API docs: [api.wodore.com/v1/docs](https://api.wodore.com/v1/docs)
+# API Documentation
 
-[OAD(https://api.wodore.com/v1/openapi.json)]
+Interactive API docs: [hub.wodore.com/v1/docs](https://hub.wodore.com/v1/docs)
+
+[OAD(https://hub.wodore.com/v1/openapi.json)]

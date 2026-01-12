@@ -1,6 +1,45 @@
-from ninja import Field, ModelSchema
+from typing import Any
+
+from django.conf import settings
+from django.http import HttpRequest
+from ninja import Field, ModelSchema, Schema
 
 from .models import Organization
+
+
+class OrganizationSearchSchema(Schema):
+    """Schema for organization in search results."""
+
+    slug: str
+    name: str | None = None
+    logo: str | None = None
+
+    @staticmethod
+    def resolve_logo(obj: Any, request: HttpRequest | None = None) -> str | None:
+        """Get logo URL."""
+        if not hasattr(obj, "logo") or not obj.logo:
+            return None
+        path = str(obj.logo)
+        if path.startswith("http"):
+            return path
+        media_url = getattr(settings, "MEDIA_URL", "/media/")
+        if request and not media_url.startswith("http"):
+            media_url = request.build_absolute_uri(media_url)
+        return f"{media_url}{path}"
+
+
+class OrganizationSourceIdSlugSchema(Schema):
+    """Schema for organization with source ID - slug only version."""
+
+    source: str
+    source_id: str | None = None
+
+
+class OrganizationSourceIdDetailSchema(Schema):
+    """Schema for organization with source ID - full details version."""
+
+    source: OrganizationSearchSchema
+    source_id: str | None = None
 
 
 class OrganizationUpdate(ModelSchema):

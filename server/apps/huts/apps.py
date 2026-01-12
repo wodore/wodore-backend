@@ -1,16 +1,14 @@
 from typing import Any
 
 from django.apps import AppConfig
-from django.core.management import call_command
 from django.db.models.signals import post_migrate
 from django.utils.translation import gettext_lazy as _
 
 
 def _create_hut_types(sender: "HutsConfig", **kwargs: Any) -> None:
-    from server.apps.huts.models import HutType
-
-    if not HutType.objects.exists():
-        call_command("hut_types", add=True, force=True)
+    # HutType is now a wrapper around Category - no need to auto-create
+    # Categories are created via migrations and can be managed via admin
+    pass
 
 
 class HutsConfig(AppConfig):

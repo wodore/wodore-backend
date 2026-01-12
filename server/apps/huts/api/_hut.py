@@ -163,11 +163,11 @@ def search_huts(
                 "open": {
                     "slug": hut.hut_type_open.slug,
                     "name": hut.hut_type_open.name_i18n,
-                    "icon": f"{media_url}{hut.hut_type_open.icon}"
-                    if hut.hut_type_open.icon
+                    "icon": f"{media_url}{hut.hut_type_open.symbol_mono}"
+                    if hut.hut_type_open.symbol_mono
                     else None,
-                    "symbol": f"{media_url}{hut.hut_type_open.symbol}"
-                    if hut.hut_type_open.symbol
+                    "symbol": f"{media_url}{hut.hut_type_open.symbol_detailed}"
+                    if hut.hut_type_open.symbol_detailed
                     else None,
                     "symbol_simple": f"{media_url}{hut.hut_type_open.symbol_simple}"
                     if hut.hut_type_open.symbol_simple
@@ -178,11 +178,11 @@ def search_huts(
                 "closed": {
                     "slug": hut.hut_type_closed.slug,
                     "name": hut.hut_type_closed.name_i18n,
-                    "icon": f"{media_url}{hut.hut_type_closed.icon}"
-                    if hut.hut_type_closed.icon
+                    "icon": f"{media_url}{hut.hut_type_closed.symbol_mono}"
+                    if hut.hut_type_closed.symbol_mono
                     else None,
-                    "symbol": f"{media_url}{hut.hut_type_closed.symbol}"
-                    if hut.hut_type_closed.symbol
+                    "symbol": f"{media_url}{hut.hut_type_closed.symbol_detailed}"
+                    if hut.hut_type_closed.symbol_detailed
                     else None,
                     "symbol_simple": f"{media_url}{hut.hut_type_closed.symbol_simple}"
                     if hut.hut_type_closed.symbol_simple
@@ -527,11 +527,11 @@ def get_huts_geojson(  # type: ignore  # noqa: PGH003
                 "type": {
                     "open": {
                         "slug": "hut_type_open__slug",
-                        "level": "hut_type_open__level",
+                        "order": "hut_type_open__order",
                     },
                     "closed": {
                         "slug": "hut_type_closed__slug",
-                        "level": "hut_type_closed__level",
+                        "order": "hut_type_closed__order",
                     },
                 },
             },

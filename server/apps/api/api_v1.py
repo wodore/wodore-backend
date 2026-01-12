@@ -14,6 +14,9 @@ api = NinjaAPI(
 
 root_path = "server.apps"
 
+# Add routers from most specific to least specific to avoid conflicts
+api.add_router("/geo/places/", "server.apps.geometries.api.router", tags=["geometries"])
+api.add_router("/categories/", "server.apps.categories.api.router", tags=["category"])
 api.add_router("/huts", "server.apps.huts.api.router", tags=["hut"])
 api.add_router(
     "/organizations/", "server.apps.organizations.api.router", tags=["organization"]

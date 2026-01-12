@@ -41,9 +41,13 @@ class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimp
         return url, request_kwargs
 
     def retrieve_matching_jwk(self, token):
-        """Override to add Host header support for JWKS endpoint"""
+        """Override to add Host header support for JWKS endpoint
+
+        Returns a PEM-formatted key string (not a JWK dict) for PyJWT compatibility.
+        """
         import json
         from base64 import urlsafe_b64decode
+        from jwt.algorithms import RSAAlgorithm
 
         url, kwargs = self._prepare_request_with_custom_host(self.OIDC_OP_JWKS_ENDPOINT)
         kwargs["verify"] = self.get_settings("OIDC_VERIFY_SSL", True)
@@ -56,16 +60,21 @@ class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimp
 
         # Decode the JWT header to get the key ID
         # JWT format: header.payload.signature (each base64url encoded)
-        header_segment = token.split(b".")[0]
+        # In mozilla-django-oidc 5.x, token is a string (not bytes)
+        if isinstance(token, bytes):
+            token = token.decode("utf-8")
+        header_segment = token.split(".")[0]
         # Add padding if needed for base64 decoding
-        padding = b"=" * (4 - (len(header_segment) % 4))
+        padding = "=" * (4 - (len(header_segment) % 4))
         header_data = urlsafe_b64decode(header_segment + padding)
         header = json.loads(header_data)
 
-        # Find and return the matching key dict from the JWKS
+        # Find the matching JWK and convert it to PEM format
         for jwk in jwks.get("keys", []):
             if jwk.get("kid") == header.get("kid"):
-                return jwk
+                # Convert JWK dict to PEM-formatted public key
+                public_key = RSAAlgorithm.from_jwk(json.dumps(jwk))
+                return public_key
 
         return None
 
