@@ -105,6 +105,7 @@ COPY --chown=web:web ./uv.lock ./pyproject.toml ./docker/django/minify_venv.sh /
 RUN --mount=type=cache,target="$UV_CACHE_DIR" \
   --mount=type=secret,id=READ_GITHUB_TOKEN,env=READ_GITHUB_TOKEN \
   --mount=type=secret,id=READ_GITHUB_USER,env=READ_GITHUB_USER <<EOF
+set -euo pipefail
 if [ "$READ_GITHUB_TOKEN" != "" ]; then
   git config --global url."https://${READ_GITHUB_USER}:${READ_GITHUB_TOKEN}@github.com".insteadOf ssh://git@github.com
   extra_arg="--extra private"
