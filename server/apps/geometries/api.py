@@ -150,7 +150,13 @@ def search_geoplaces(
 
     # Only select_related if we need the place_type data
     if include_place_type != IncludeModeEnum.no:
-        queryset = queryset.select_related("place_type", "place_type__parent")
+        queryset = queryset.select_related(
+            "place_type",
+            "place_type__parent",
+            "place_type__symbol_detailed2",
+            "place_type__symbol_simple2",
+            "place_type__symbol_mono2",
+        )
 
     # Add source annotations based on include_sources parameter
     if include_sources == IncludeModeEnum.slug:
@@ -370,24 +376,24 @@ def search_geoplaces(
                     "name": place.place_type.name_i18n,
                     "description": place.place_type.description_i18n,
                 }
-                # Add symbol if requested
+                # Add symbol if requested (using new Symbol FK fields)
                 if (
-                    place.place_type.symbol_simple
-                    or place.place_type.symbol_detailed
-                    or place.place_type.symbol_mono
+                    place.place_type.symbol_simple2
+                    or place.place_type.symbol_detailed2
+                    or place.place_type.symbol_mono2
                 ):
                     symbol_data = {}
-                    if place.place_type.symbol_simple:
-                        symbol_data["simple"] = (
-                            f"{media_url}{place.place_type.symbol_simple}"
+                    if place.place_type.symbol_simple2:
+                        symbol_data["simple"] = request.build_absolute_uri(
+                            place.place_type.symbol_simple2.svg_file.url
                         )
-                    if place.place_type.symbol_detailed:
-                        symbol_data["detailed"] = (
-                            f"{media_url}{place.place_type.symbol_detailed}"
+                    if place.place_type.symbol_detailed2:
+                        symbol_data["detailed"] = request.build_absolute_uri(
+                            place.place_type.symbol_detailed2.svg_file.url
                         )
-                    if place.place_type.symbol_mono:
-                        symbol_data["mono"] = (
-                            f"{media_url}{place.place_type.symbol_mono}"
+                    if place.place_type.symbol_mono2:
+                        symbol_data["mono"] = request.build_absolute_uri(
+                            place.place_type.symbol_mono2.svg_file.url
                         )
                     category_data["symbol"] = symbol_data
                 result["place_type"] = category_data
@@ -508,7 +514,13 @@ def nearby_geoplaces(
 
     # Only select_related if we need the place_type data
     if include_place_type != IncludeModeEnum.no:
-        queryset = queryset.select_related("place_type", "place_type__parent")
+        queryset = queryset.select_related(
+            "place_type",
+            "place_type__parent",
+            "place_type__symbol_detailed2",
+            "place_type__symbol_simple2",
+            "place_type__symbol_mono2",
+        )
 
     # Add source annotations based on include_sources parameter
     if include_sources == IncludeModeEnum.slug:
@@ -571,24 +583,24 @@ def nearby_geoplaces(
                     "name": place.place_type.name_i18n,
                     "description": place.place_type.description_i18n,
                 }
-                # Add symbol if requested
+                # Add symbol if requested (using new Symbol FK fields)
                 if (
-                    place.place_type.symbol_simple
-                    or place.place_type.symbol_detailed
-                    or place.place_type.symbol_mono
+                    place.place_type.symbol_simple2
+                    or place.place_type.symbol_detailed2
+                    or place.place_type.symbol_mono2
                 ):
                     symbol_data = {}
-                    if place.place_type.symbol_simple:
-                        symbol_data["simple"] = (
-                            f"{media_url}{place.place_type.symbol_simple}"
+                    if place.place_type.symbol_simple2:
+                        symbol_data["simple"] = request.build_absolute_uri(
+                            place.place_type.symbol_simple2.svg_file.url
                         )
-                    if place.place_type.symbol_detailed:
-                        symbol_data["detailed"] = (
-                            f"{media_url}{place.place_type.symbol_detailed}"
+                    if place.place_type.symbol_detailed2:
+                        symbol_data["detailed"] = request.build_absolute_uri(
+                            place.place_type.symbol_detailed2.svg_file.url
                         )
-                    if place.place_type.symbol_mono:
-                        symbol_data["mono"] = (
-                            f"{media_url}{place.place_type.symbol_mono}"
+                    if place.place_type.symbol_mono2:
+                        symbol_data["mono"] = request.build_absolute_uri(
+                            place.place_type.symbol_mono2.svg_file.url
                         )
                     category_data["symbol"] = symbol_data
                 result["place_type"] = category_data

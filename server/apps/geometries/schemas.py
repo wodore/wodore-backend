@@ -75,6 +75,15 @@ class CategorySchema(ModelSchema):
         fields = ("slug", "name", "description")
 
 
+class CategoryPlaceTypeSchema(Schema):
+    """Schema for category place type with symbols (used in GeoPlace)."""
+
+    slug: str
+    name: str
+    description: str = ""
+    symbol: dict[str, str] | None = None
+
+
 class GeoPlaceBaseSchema(Schema):
     """Base schema for GeoPlace with common fields."""
 
@@ -84,7 +93,7 @@ class GeoPlaceBaseSchema(Schema):
     elevation: int | None
     importance: int
     location: LocationSchema
-    place_type: str | CategorySchema | None = None
+    place_type: str | CategoryPlaceTypeSchema | None = None
     sources: (
         list[OrganizationSourceIdSlugSchema]
         | list[OrganizationSourceIdDetailSchema]

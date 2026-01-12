@@ -3,7 +3,6 @@ from enum import Enum
 
 from ninja import Field, ModelSchema, Schema
 
-from django.conf import settings
 
 from .models import Category
 
@@ -27,7 +26,7 @@ class CategorySchema(ModelSchema):
         None, description="Hierarchy level (0=root, 1=child, etc.)"
     )
 
-    # Image URLs
+    # Image URLs (now using new Symbol FK fields)
     symbol_detailed: str | None = None
     symbol_simple: str | None = None
     symbol_mono: str | None = None
@@ -37,30 +36,27 @@ class CategorySchema(ModelSchema):
 
     @staticmethod
     def resolve_symbol_detailed(obj: Category, context: dict[str, t.Any]) -> str | None:
-        """Resolve absolute URL for detailed symbol."""
-        if not obj.symbol_detailed:
+        """Resolve absolute URL for detailed symbol from new Symbol app."""
+        if not obj.symbol_detailed2 or not obj.symbol_detailed2.svg_file:
             return None
         request = context["request"]
-        media_url = request.build_absolute_uri(settings.MEDIA_URL)
-        return f"{media_url}{obj.symbol_detailed}"
+        return request.build_absolute_uri(obj.symbol_detailed2.svg_file.url)
 
     @staticmethod
     def resolve_symbol_simple(obj: Category, context: dict[str, t.Any]) -> str | None:
-        """Resolve absolute URL for simple symbol."""
-        if not obj.symbol_simple:
+        """Resolve absolute URL for simple symbol from new Symbol app."""
+        if not obj.symbol_simple2 or not obj.symbol_simple2.svg_file:
             return None
         request = context["request"]
-        media_url = request.build_absolute_uri(settings.MEDIA_URL)
-        return f"{media_url}{obj.symbol_simple}"
+        return request.build_absolute_uri(obj.symbol_simple2.svg_file.url)
 
     @staticmethod
     def resolve_symbol_mono(obj: Category, context: dict[str, t.Any]) -> str | None:
-        """Resolve absolute URL for monochrome symbol."""
-        if not obj.symbol_mono:
+        """Resolve absolute URL for monochrome symbol from new Symbol app."""
+        if not obj.symbol_mono2 or not obj.symbol_mono2.svg_file:
             return None
         request = context["request"]
-        media_url = request.build_absolute_uri(settings.MEDIA_URL)
-        return f"{media_url}{obj.symbol_mono}"
+        return request.build_absolute_uri(obj.symbol_mono2.svg_file.url)
 
     @staticmethod
     def resolve_level(obj: Category) -> int:
