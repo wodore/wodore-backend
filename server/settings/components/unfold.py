@@ -213,6 +213,14 @@ UNFOLD = {
                         ),
                     },
                     {
+                        "title": _("Symbols"),
+                        "icon": "star",
+                        "link": reverse_lazy("admin:symbols_symbol_changelist"),
+                        "permission": lambda request: request.user.has_perm(
+                            "symbols.view_symbol"
+                        ),
+                    },
+                    {
                         "title": _("Licenses"),
                         "icon": "copyright",
                         "link": reverse_lazy("admin:licenses_license_changelist"),
@@ -400,6 +408,20 @@ UNFOLD = {
                     "link": reverse_lazy("admin:images_imagetag_changelist"),
                     "permission": lambda request: request.user.has_perm(
                         "images.view_imagetags"
+                    ),
+                },
+            ],
+        },
+        {
+            "models": [
+                "symbols.symbol",
+            ],
+            "items": [
+                {
+                    "title": _("Symbols"),
+                    "link": reverse_lazy("admin:symbols_symbol_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "symbols.view_symbol"
                     ),
                 },
             ],

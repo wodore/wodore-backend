@@ -8,6 +8,7 @@ old/
 slim.report.json
 .env.*
 SUMMARY_*.md
+AGENT/
 
 
 # Static folders

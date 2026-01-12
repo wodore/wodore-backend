@@ -110,6 +110,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "server.apps.main",
     "server.apps.meta_image_field",
     "server.apps.images",
+    "server.apps.symbols",
     "server.apps.organizations",
     "server.apps.licenses",
     "server.apps.contacts",
