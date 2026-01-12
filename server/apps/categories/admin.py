@@ -87,13 +87,13 @@ class ChildCategoryInline(admin.TabularInline):
     @display(description="")
     def symbol_preview(self, obj):
         """Display symbol preview."""
-        if obj.symbol_detailed:
+        if obj.symbol_detailed and obj.symbol_detailed.svg_file:
             return mark_safe(
-                f'<img src="{obj.symbol_detailed.url}" alt="{obj.slug}" style="width: 24px; height: 24px;" />'
+                f'<img src="{obj.symbol_detailed.svg_file.url}" alt="{obj.slug}" style="width: 24px; height: 24px;" />'
             )
-        elif obj.symbol_simple:
+        elif obj.symbol_simple and obj.symbol_simple.svg_file:
             return mark_safe(
-                f'<img src="{obj.symbol_simple.url}" alt="{obj.slug}" style="width: 24px; height: 24px;" />'
+                f'<img src="{obj.symbol_simple.svg_file.url}" alt="{obj.slug}" style="width: 24px; height: 24px;" />'
             )
         return "-"
 
@@ -116,8 +116,6 @@ class CategoryAdmin(ModelAdmin):
         "title",
         "symbol_img",
         "icon_img",
-        "symbol_img2",
-        "icon_img2",
         # "order_display",
         "identifier_display",
         "slug",
@@ -162,12 +160,8 @@ class CategoryAdmin(ModelAdmin):
             },
         ),
         (
-            _("Symbols (Old)"),
+            _("Symbols"),
             {"fields": (("symbol_detailed", "symbol_simple", "symbol_mono"),)},
-        ),
-        (
-            _("Symbols (New)"),
-            {"fields": (("symbol_detailed2", "symbol_simple2", "symbol_mono2"),)},
         ),
     )
 
@@ -213,9 +207,9 @@ class CategoryAdmin(ModelAdmin):
             # Count categories using this symbol
             group["category_count"] = (
                 Category.objects.filter(
-                    Q(symbol_detailed2__slug=slug)
-                    | Q(symbol_simple2__slug=slug)
-                    | Q(symbol_mono2__slug=slug)
+                    Q(symbol_detailed__slug=slug)
+                    | Q(symbol_simple__slug=slug)
+                    | Q(symbol_mono__slug=slug)
                 )
                 .distinct()
                 .count()
@@ -252,42 +246,28 @@ class CategoryAdmin(ModelAdmin):
         description = (
             f"{level_indent}{obj.description_i18n}" if obj.description_i18n else ""
         )
-        avatar = self.avatar(obj.symbol_simple.url) if obj.symbol_simple else ""
+        avatar = (
+            self.avatar(obj.symbol_simple.svg_file.url)
+            if obj.symbol_simple and obj.symbol_simple.svg_file
+            else ""
+        )
         return (name, description, avatar)
 
     @display(description=_("Symbol"))
     def symbol_img(self, obj):
         """Display detailed symbol."""
-        if obj.symbol_detailed:
+        if obj.symbol_detailed and obj.symbol_detailed.svg_file:
             return mark_safe(
-                f'<img src="{obj.symbol_detailed.url}" width="34" alt="symbol"/>'
+                f'<img src="{obj.symbol_detailed.svg_file.url}" width="34" alt="symbol"/>'
             )
         return "-"
 
     @display(description=_("Mono"))
     def icon_img(self, obj):
         """Display monochrome symbol."""
-        if obj.symbol_mono:
+        if obj.symbol_mono and obj.symbol_mono.svg_file:
             return mark_safe(
-                f'<img src="{obj.symbol_mono.url}" width="16" alt="mono"/>'
-            )
-        return "-"
-
-    @display(description=_("Symbol (New)"))
-    def symbol_img2(self, obj):
-        """Display detailed symbol from new Symbol app."""
-        if obj.symbol_detailed2 and obj.symbol_detailed2.svg_file:
-            return mark_safe(
-                f'<img src="{obj.symbol_detailed2.svg_file.url}" width="34" alt="symbol"/>'
-            )
-        return "-"
-
-    @display(description=_("Mono (New)"))
-    def icon_img2(self, obj):
-        """Display monochrome symbol from new Symbol app."""
-        if obj.symbol_mono2 and obj.symbol_mono2.svg_file:
-            return mark_safe(
-                f'<img src="{obj.symbol_mono2.svg_file.url}" width="16" alt="mono"/>'
+                f'<img src="{obj.symbol_mono.svg_file.url}" width="16" alt="mono"/>'
             )
         return "-"
 

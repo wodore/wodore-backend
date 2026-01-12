@@ -97,61 +97,36 @@ class Category(ComputedFieldsModel, models.Model):
         help_text=_("Display order (lower values appear first)"),
     )
 
-    # Images (optional)
-    symbol_detailed = models.ImageField(
-        max_length=300,
-        upload_to="categories/symbols/detailed",
-        blank=True,
-        null=True,
-        help_text=_("Detailed symbol for map display"),
-    )
-
-    symbol_simple = models.ImageField(
-        max_length=300,
-        upload_to="categories/symbols/simple",
-        blank=True,
-        null=True,
-        help_text=_("Simple symbol for smaller displays"),
-    )
-
-    symbol_mono = models.ImageField(
-        max_length=300,
-        upload_to="categories/symbols/mono",
-        blank=True,
-        null=True,
-        help_text=_("Monochrome symbol for UI elements"),
-    )
-
-    # New symbol references (ForeignKeys to Symbol app)
-    symbol_detailed2 = models.ForeignKey(
+    # Symbol references (ForeignKeys to Symbol app)
+    symbol_detailed = models.ForeignKey(
         "symbols.Symbol",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="categories_detailed",
-        verbose_name=_("Symbol (Detailed) - New"),
+        verbose_name=_("Symbol (Detailed)"),
         help_text=_("Reference to detailed symbol from Symbols app"),
         limit_choices_to={"style": "detailed"},
     )
 
-    symbol_simple2 = models.ForeignKey(
+    symbol_simple = models.ForeignKey(
         "symbols.Symbol",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="categories_simple",
-        verbose_name=_("Symbol (Simple) - New"),
+        verbose_name=_("Symbol (Simple)"),
         help_text=_("Reference to simple symbol from Symbols app"),
         limit_choices_to={"style": "simple"},
     )
 
-    symbol_mono2 = models.ForeignKey(
+    symbol_mono = models.ForeignKey(
         "symbols.Symbol",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="categories_mono",
-        verbose_name=_("Symbol (Monochrome) - New"),
+        verbose_name=_("Symbol (Monochrome)"),
         help_text=_("Reference to monochrome symbol from Symbols app"),
         limit_choices_to={"style": "mono"},
     )

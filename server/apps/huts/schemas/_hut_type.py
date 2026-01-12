@@ -2,7 +2,8 @@ import typing as t
 
 from ninja import Field, ModelSchema
 
-from django.conf import settings
+from server.apps.symbols.utils import resolve_symbol_urls
+
 
 from server.apps.categories.models import Category
 
@@ -44,27 +45,14 @@ class HutTypeSchema(ModelSchema):
     order: int | None = Field(None, alias="order")
     slug: str
     name: str | None = Field(..., alias="name_i18n")
-    symbol: str | None
-    symbol_simple: str | None
-    icon: str | None
+    symbol: dict[str, str | None] | None = None
 
     @staticmethod
-    def resolve_symbol(obj: Category, context: dict[str, t.Any]) -> str:
-        request = context["request"]
-        media_url = request.build_absolute_uri(settings.MEDIA_URL)
-        return f"{media_url}{obj.symbol_detailed}"
-
-    @staticmethod
-    def resolve_symbol_simple(obj: Category, context: dict[str, t.Any]) -> str:
-        request = context["request"]
-        media_url = request.build_absolute_uri(settings.MEDIA_URL)
-        return f"{media_url}{obj.symbol_simple}"
-
-    @staticmethod
-    def resolve_icon(obj: Category, context: dict[str, t.Any]) -> str:
-        request = context["request"]
-        media_url = request.build_absolute_uri(settings.MEDIA_URL)
-        return f"{media_url}{obj.symbol_mono}"
+    def resolve_symbol(
+        obj: Category, context: dict[str, t.Any]
+    ) -> dict[str, str | None] | None:
+        """Resolve symbol URLs from new Symbol FK fields."""
+        return resolve_symbol_urls(obj, context)
 
     class Meta:
         model = Category
@@ -72,7 +60,4 @@ class HutTypeSchema(ModelSchema):
             "order",
             "slug",
             "name",
-            "symbol_detailed",
-            "symbol_simple",
-            "symbol_mono",
         )

@@ -153,9 +153,9 @@ def search_geoplaces(
         queryset = queryset.select_related(
             "place_type",
             "place_type__parent",
-            "place_type__symbol_detailed2",
-            "place_type__symbol_simple2",
-            "place_type__symbol_mono2",
+            "place_type__symbol_detailed",
+            "place_type__symbol_simple",
+            "place_type__symbol_mono",
         )
 
     # Add source annotations based on include_sources parameter
@@ -377,24 +377,12 @@ def search_geoplaces(
                     "description": place.place_type.description_i18n,
                 }
                 # Add symbol if requested (using new Symbol FK fields)
-                if (
-                    place.place_type.symbol_simple2
-                    or place.place_type.symbol_detailed2
-                    or place.place_type.symbol_mono2
-                ):
-                    symbol_data = {}
-                    if place.place_type.symbol_simple2:
-                        symbol_data["simple"] = request.build_absolute_uri(
-                            place.place_type.symbol_simple2.svg_file.url
-                        )
-                    if place.place_type.symbol_detailed2:
-                        symbol_data["detailed"] = request.build_absolute_uri(
-                            place.place_type.symbol_detailed2.svg_file.url
-                        )
-                    if place.place_type.symbol_mono2:
-                        symbol_data["mono"] = request.build_absolute_uri(
-                            place.place_type.symbol_mono2.svg_file.url
-                        )
+                from server.apps.symbols.utils import resolve_symbol_urls
+
+                symbol_data = resolve_symbol_urls(
+                    place.place_type, {"request": request}
+                )
+                if symbol_data:
                     category_data["symbol"] = symbol_data
                 result["place_type"] = category_data
             else:
@@ -517,9 +505,9 @@ def nearby_geoplaces(
         queryset = queryset.select_related(
             "place_type",
             "place_type__parent",
-            "place_type__symbol_detailed2",
-            "place_type__symbol_simple2",
-            "place_type__symbol_mono2",
+            "place_type__symbol_detailed",
+            "place_type__symbol_simple",
+            "place_type__symbol_mono",
         )
 
     # Add source annotations based on include_sources parameter
@@ -584,24 +572,12 @@ def nearby_geoplaces(
                     "description": place.place_type.description_i18n,
                 }
                 # Add symbol if requested (using new Symbol FK fields)
-                if (
-                    place.place_type.symbol_simple2
-                    or place.place_type.symbol_detailed2
-                    or place.place_type.symbol_mono2
-                ):
-                    symbol_data = {}
-                    if place.place_type.symbol_simple2:
-                        symbol_data["simple"] = request.build_absolute_uri(
-                            place.place_type.symbol_simple2.svg_file.url
-                        )
-                    if place.place_type.symbol_detailed2:
-                        symbol_data["detailed"] = request.build_absolute_uri(
-                            place.place_type.symbol_detailed2.svg_file.url
-                        )
-                    if place.place_type.symbol_mono2:
-                        symbol_data["mono"] = request.build_absolute_uri(
-                            place.place_type.symbol_mono2.svg_file.url
-                        )
+                from server.apps.symbols.utils import resolve_symbol_urls
+
+                symbol_data = resolve_symbol_urls(
+                    place.place_type, {"request": request}
+                )
+                if symbol_data:
                     category_data["symbol"] = symbol_data
                 result["place_type"] = category_data
             else:

@@ -3,6 +3,7 @@ from enum import Enum
 
 from ninja import Field, ModelSchema, Schema
 
+from server.apps.symbols.utils import resolve_symbol_url
 
 from .models import Category
 
@@ -37,26 +38,17 @@ class CategorySchema(ModelSchema):
     @staticmethod
     def resolve_symbol_detailed(obj: Category, context: dict[str, t.Any]) -> str | None:
         """Resolve absolute URL for detailed symbol from new Symbol app."""
-        if not obj.symbol_detailed2 or not obj.symbol_detailed2.svg_file:
-            return None
-        request = context["request"]
-        return request.build_absolute_uri(obj.symbol_detailed2.svg_file.url)
+        return resolve_symbol_url(obj, context, "detailed")
 
     @staticmethod
     def resolve_symbol_simple(obj: Category, context: dict[str, t.Any]) -> str | None:
         """Resolve absolute URL for simple symbol from new Symbol app."""
-        if not obj.symbol_simple2 or not obj.symbol_simple2.svg_file:
-            return None
-        request = context["request"]
-        return request.build_absolute_uri(obj.symbol_simple2.svg_file.url)
+        return resolve_symbol_url(obj, context, "simple")
 
     @staticmethod
     def resolve_symbol_mono(obj: Category, context: dict[str, t.Any]) -> str | None:
         """Resolve absolute URL for monochrome symbol from new Symbol app."""
-        if not obj.symbol_mono2 or not obj.symbol_mono2.svg_file:
-            return None
-        request = context["request"]
-        return request.build_absolute_uri(obj.symbol_mono2.svg_file.url)
+        return resolve_symbol_url(obj, context, "mono")
 
     @staticmethod
     def resolve_level(obj: Category) -> int:

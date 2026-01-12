@@ -84,15 +84,24 @@ class HutTypesAdmin(ModelAdmin):
         header=True, description=_("Name and Description"), ordering=Lower("name_i18n")
     )
     def title(self, obj):
-        return (obj.name_i18n, obj.description_i18n, self.avatar(obj.symbol_simple.url))
+        avatar = ""
+        if obj.symbol_simple and obj.symbol_simple.svg_file:
+            avatar = self.avatar(obj.symbol_simple.svg_file.url)
+        return (obj.name_i18n, obj.description_i18n, avatar)
 
     @display(description=_("Symbol"))
     def symbol_img(self, obj):  # new
-        return mark_safe(f'<img src = "{obj.symbol_detailed.url}" width = "34"/>')
+        if obj.symbol_detailed and obj.symbol_detailed.svg_file:
+            return mark_safe(
+                f'<img src="{obj.symbol_detailed.svg_file.url}" width="34"/>'
+            )
+        return "-"
 
     @display(description=_("Icon"))
     def icon_img(self, obj):  # new
-        return mark_safe(f'<img src = "{obj.symbol_mono.url}" width = "16"/>')
+        if obj.symbol_mono and obj.symbol_mono.svg_file:
+            return mark_safe(f'<img src="{obj.symbol_mono.svg_file.url}" width="16"/>')
+        return "-"
 
     def avatar(self, url):  # new
         return mark_safe(f'<img src = "{url}" width = "20"/>')
