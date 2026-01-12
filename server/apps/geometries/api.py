@@ -9,11 +9,31 @@ from ninja import Query, Router
 from ninja.decorators import decorate_view
 
 from django.conf import settings
+from django.contrib.gis.db.models import PointField
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
 from django.contrib.postgres.aggregates import JSONBAgg
+from django.contrib.postgres.search import (
+    SearchQuery,
+    SearchRank,
+    SearchVector,
+    TrigramSimilarity,
+    TrigramWordSimilarity,
+)
 from django.db.models import F, Q
+from django.db.models import (
+    Case,
+    CharField,
+    ExpressionWrapper,
+    FloatField,
+    Func,
+    Value,
+    When,
+    Window,
+)
+from django.db.models.fields.json import KeyTextTransform
+from django.db.models.functions import Cast, Coalesce, Greatest, Lower, RowNumber
 from django.db.models.functions import JSONObject
 from django.http import HttpRequest, HttpResponse
 from django.views.decorators.cache import cache_control
@@ -145,28 +165,6 @@ def search_geoplaces(
 
     # Fuzzy search using trigram similarity
     # Use similarity on name field (searches across all i18n variants via modeltrans)
-    from django.contrib.postgres.search import (
-        SearchQuery,
-        SearchRank,
-        SearchVector,
-        TrigramSimilarity,
-        TrigramWordSimilarity,
-    )
-    from django.contrib.gis.db.models import PointField
-
-    from django.db.models import (
-        Case,
-        CharField,
-        ExpressionWrapper,
-        FloatField,
-        Func,
-        Value,
-        When,
-        Window,
-    )
-    from django.db.models.fields.json import KeyTextTransform
-    from django.db.models.functions import Cast, Coalesce, Greatest, Lower, RowNumber
-
     default_language = settings.LANGUAGE_CODE
     requested_language = lang
     translated_name = None
