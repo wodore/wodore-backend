@@ -226,6 +226,8 @@ def buildx(
             "No github token found in env var 'READ_GITHUB_TOKEN' or '--github-token' parameter."
         )
         warning("Private repos are not installed.")
+    else:
+        info(f"Github user:     '{github_user}'")
     for dist in distros:
         check_dirty_files(c, force=force)
         suffix_ = dist if suffix is None else suffix
@@ -244,7 +246,6 @@ def buildx(
             registry=registry,
             no_sha_tag=no_sha_tag,
         )
-        header("Run docker build job")
         dockerfile = f"./docker/django/Dockerfile.{dist}"
         git_short_hash = c.run("git rev-parse --short HEAD", hide=True).stdout.strip()
         build_args = {
@@ -253,6 +254,9 @@ def buildx(
             "GIT_HASH": git_short_hash,
         }
         info(f"Git hash:        '{git_short_hash}'")
+        info(f"Django env:      '{django_env}'")
+        info(f"Wit dev deps:    '{with_dev}'")
+        header("Run docker build job")
         secrets = []
         if github_token:
             if not github_user:
