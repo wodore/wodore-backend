@@ -97,29 +97,38 @@ class Category(ComputedFieldsModel, models.Model):
         help_text=_("Display order (lower values appear first)"),
     )
 
-    # Images (optional)
-    symbol_detailed = models.ImageField(
-        max_length=300,
-        upload_to="categories/symbols/detailed",
-        blank=True,
+    # Symbol references (ForeignKeys to Symbol app)
+    symbol_detailed = models.ForeignKey(
+        "symbols.Symbol",
+        on_delete=models.SET_NULL,
         null=True,
-        help_text=_("Detailed symbol for map display"),
+        blank=True,
+        related_name="categories_detailed",
+        verbose_name=_("Symbol (Detailed)"),
+        help_text=_("Reference to detailed symbol from Symbols app"),
+        limit_choices_to={"style": "detailed"},
     )
 
-    symbol_simple = models.ImageField(
-        max_length=300,
-        upload_to="categories/symbols/simple",
-        blank=True,
+    symbol_simple = models.ForeignKey(
+        "symbols.Symbol",
+        on_delete=models.SET_NULL,
         null=True,
-        help_text=_("Simple symbol for smaller displays"),
+        blank=True,
+        related_name="categories_simple",
+        verbose_name=_("Symbol (Simple)"),
+        help_text=_("Reference to simple symbol from Symbols app"),
+        limit_choices_to={"style": "simple"},
     )
 
-    symbol_mono = models.ImageField(
-        max_length=300,
-        upload_to="categories/symbols/mono",
-        blank=True,
+    symbol_mono = models.ForeignKey(
+        "symbols.Symbol",
+        on_delete=models.SET_NULL,
         null=True,
-        help_text=_("Monochrome symbol for UI elements"),
+        blank=True,
+        related_name="categories_mono",
+        verbose_name=_("Symbol (Monochrome)"),
+        help_text=_("Reference to monochrome symbol from Symbols app"),
+        limit_choices_to={"style": "mono"},
     )
 
     # Hierarchy

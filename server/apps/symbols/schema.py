@@ -1,6 +1,16 @@
 from ninja import ModelSchema
+from pydantic import BaseModel
+
 
 from .models import Symbol
+
+
+class SymbolURLSchema(BaseModel):
+    """Schema for symbol URLs with three style variants."""
+
+    detailed: str | None = None
+    simple: str | None = None
+    mono: str | None = None
 
 
 class SymbolSchema(ModelSchema):

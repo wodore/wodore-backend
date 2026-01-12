@@ -157,9 +157,14 @@ class HutsAdmin(ModelAdmin):
 
     @display(description="")
     def symbol_img(self, obj):  # new
-        return mark_safe(
-            f'<img src="{obj.hut_type_open.symbol_detailed.url}" width="50px"/>'
-        )
+        if (
+            obj.hut_type_open.symbol_detailed
+            and obj.hut_type_open.symbol_detailed.svg_file
+        ):
+            return mark_safe(
+                f'<img src="{obj.hut_type_open.symbol_detailed.svg_file.url}" width="50px"/>'
+            )
+        return "-"
 
     @display(description=_("Sources"))
     def logo_orgs(self, obj: Hut) -> str:  # new
