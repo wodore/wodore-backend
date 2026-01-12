@@ -72,6 +72,10 @@ def search_geoplaces(
         0,
         description="Minimum importance score (0-100). Higher values filter for more prominent places.",
     ),
+    deduplicate: bool = Query(
+        False,
+        description="Remove near-identical places that share a name and a very close location before pagination.",
+    ),
     include_place_type: IncludeModeEnum = Query(
         IncludeModeEnum.all,
         description="Include place type information: 'no' excludes field, 'slug' returns type slug only, 'all' returns full type details with name and description",
@@ -142,12 +146,96 @@ def search_geoplaces(
     # Fuzzy search using trigram similarity
     # Use similarity on name field (searches across all i18n variants via modeltrans)
     from django.contrib.postgres.search import TrigramSimilarity
+    from django.contrib.gis.db.models import PointField
 
-    queryset = (
-        queryset.annotate(similarity=TrigramSimilarity("name", q))
-        .filter(similarity__gte=threshold)
-        .order_by("-importance", "-similarity")[offset : offset + limit]
+    from django.db.models import (
+        Case,
+        CharField,
+        ExpressionWrapper,
+        FloatField,
+        Func,
+        Value,
+        When,
+        Window,
     )
+    from django.db.models.fields.json import KeyTextTransform
+    from django.db.models.functions import Cast, Coalesce, Greatest, Lower, RowNumber
+
+    primary_similarity = Coalesce(TrigramSimilarity("name", q), Value(0.0))
+    translation_languages = [
+        lang
+        for lang in getattr(settings, "LANGUAGE_CODES", [])
+        if lang and lang != settings.LANGUAGE_CODE
+    ]
+    translation_similarity_exprs = [
+        Coalesce(
+            TrigramSimilarity(
+                Cast(
+                    KeyTextTransform(f"name_{lang}", "i18n"),
+                    output_field=CharField(),
+                ),
+                q,
+            ),
+            Value(0.0),
+        )
+        for lang in translation_languages
+    ]
+    if translation_similarity_exprs:
+        best_translation_similarity = Greatest(*translation_similarity_exprs)
+    else:
+        best_translation_similarity = Value(0.0)
+    translation_boost = ExpressionWrapper(
+        Value(0.6) * best_translation_similarity,
+        output_field=FloatField(),
+    )
+    similarity_expr = ExpressionWrapper(
+        Greatest(primary_similarity, translation_boost),
+        output_field=FloatField(),
+    )
+    normalized_importance = Case(
+        When(importance__lt=0, then=Value(0.0)),
+        When(importance__gt=100, then=Value(1.0)),
+        default=Coalesce(F("importance"), Value(0)) / Value(100.0),
+        output_field=FloatField(),
+    )
+    rank_score = ExpressionWrapper(
+        Value(0.8) * similarity_expr + Value(0.2) * normalized_importance,
+        output_field=FloatField(),
+    )
+
+    queryset = queryset.annotate(
+        similarity=similarity_expr, rank_score=rank_score
+    ).filter(similarity__gte=threshold)
+
+    if deduplicate:
+        grid_size = Value(0.00005)
+        snapped_location = Func(
+            F("location"),
+            grid_size,
+            grid_size,
+            function="ST_SnapToGrid",
+            output_field=PointField(),
+        )
+        normalized_name = Lower(F("name"))
+        duplicate_rank = Window(
+            expression=RowNumber(),
+            partition_by=[
+                snapped_location,
+                normalized_name,
+                F("place_type"),
+                F("country_code"),
+            ],
+            order_by=[
+                F("rank_score").desc(nulls_last=True),
+                F("similarity").desc(nulls_last=True),
+                F("id").asc(),
+            ],
+        )
+        queryset = queryset.annotate(duplicate_rank=duplicate_rank).filter(
+            duplicate_rank=1
+        )
+
+    queryset = queryset.order_by("-rank_score", "-similarity")[offset : offset + limit]
 
     # Build simplified response
     results = []
@@ -168,8 +256,8 @@ def search_geoplaces(
             },
         }
 
-        # Include score
-        result["score"] = place.similarity
+        # Include blended rank score
+        result["score"] = place.rank_score
 
         # Include place_type based on parameter
         if include_place_type == IncludeModeEnum.slug:
