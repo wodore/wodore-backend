@@ -1,0 +1,11 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+    {{ block.super }}
+    <li>
+        <a href="{% url 'admin:categories_category_symbols' %}" class="button">
+            {% translate 'View All Symbols' %}
+        </a>
+    </li>
+{% endblock %}

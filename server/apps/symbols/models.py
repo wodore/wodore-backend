@@ -3,10 +3,8 @@ import uuid
 
 from model_utils.fields import MonitorField
 from server.core.models import TimeStampedModel
-from modeltrans.fields import TranslationField
 
 from django.contrib.auth import get_user_model
-from django.contrib.postgres.indexes import GinIndex
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -18,9 +16,9 @@ User = get_user_model()
 
 
 class _SymbolStyleChoices(models.TextChoices):
-    detailed = "detailed", _("Detailed")
-    simple = "simple", _("Simple")
-    mono = "mono", _("Monochrome")
+    detailed = "detailed", "detailed"
+    simple = "simple", "simple"
+    mono = "mono", "mono"
 
 
 class _ReviewStatusChoices(models.TextChoices):
@@ -33,7 +31,7 @@ class _ReviewStatusChoices(models.TextChoices):
 class Symbol(TimeStampedModel):
     """SVG icon with style variants."""
 
-    i18n = TranslationField(fields=())  # No translatable fields currently
+    # i18n = TranslationField(fields=())  # No translatable fields currently
     objects = BaseMutlilingualManager()
     ReviewStatusChoices = _ReviewStatusChoices
     StyleChoices = _SymbolStyleChoices
@@ -142,7 +140,6 @@ class Symbol(TimeStampedModel):
         indexes = (
             models.Index(fields=["slug", "style"]),
             models.Index(fields=["is_active", "slug"]),
-            GinIndex(fields=["i18n"]),
         )
         constraints = (
             models.UniqueConstraint(
@@ -193,3 +190,17 @@ class Symbol(TimeStampedModel):
     @classmethod
     def get_fields_exclude(cls):
         return ["created", "modified"]
+
+
+class SymbolGroup(Symbol):
+    """
+    Proxy model for grouping symbols by slug in admin.
+
+    This allows displaying all three styles (detailed, simple, mono) of a symbol
+    on a single line in the admin interface.
+    """
+
+    class Meta:
+        proxy = True
+        verbose_name = _("Symbol Group")
+        verbose_name_plural = _("Symbol Groups")

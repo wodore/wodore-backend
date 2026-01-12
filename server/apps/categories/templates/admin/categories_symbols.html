@@ -1,0 +1,92 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+&rsaquo; <a href="{% url 'admin:app_list' app_label='categories' %}">Categories</a>
+&rsaquo; <a href="{% url 'admin:categories_category_changelist' %}">{% translate 'Categories' %}</a>
+&rsaquo; {% translate 'All Symbols' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <div class="module" style="max-width: 1200px;">
+        <h2>{% translate 'All Symbols Grouped by Slug' %}</h2>
+        <p>{% translate 'View all three style variants (detailed, simple, monochrome) for each symbol grouped by slug.' %}</p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate 'Slug' %}</th>
+                    <th>{% translate 'Detailed' %}</th>
+                    <th>{% translate 'Simple' %}</th>
+                    <th>{% translate 'Monochrome' %}</th>
+                    <th>{% translate 'Categories' %}</th>
+                    <th>{% translate 'Actions' %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for group in symbol_groups %}
+                <tr>
+                    <td><strong>{{ group.slug }}</strong></td>
+                    <td>
+                        {% if group.symbols.detailed %}
+                            <a href="{% url 'admin:symbols_symbol_change' group.symbols.detailed.pk %}" title="{% translate 'Edit detailed symbol' %}">
+                                <img src="{{ group.symbols.detailed.svg_file.url }}" width="32" height="32" style="object-fit:contain;" />
+                            </a>
+                        {% else %}
+                            <span style="color:#999;">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if group.symbols.simple %}
+                            <a href="{% url 'admin:symbols_symbol_change' group.symbols.simple.pk %}" title="{% translate 'Edit simple symbol' %}">
+                                <img src="{{ group.symbols.simple.svg_file.url }}" width="32" height="32" style="object-fit:contain;" />
+                            </a>
+                        {% else %}
+                            <span style="color:#999;">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if group.symbols.mono %}
+                            <a href="{% url 'admin:symbols_symbol_change' group.symbols.mono.pk %}" title="{% translate 'Edit monochrome symbol' %}">
+                                <img src="{{ group.symbols.mono.svg_file.url }}" width="32" height="32" style="object-fit:contain;" />
+                            </a>
+                        {% else %}
+                            <span style="color:#999;">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if group.category_count > 0 %}
+                            <a href="{% url 'admin:categories_category_changelist' %}?symbol_detailed2__slug__exact={{ group.slug }}" style="color:#0066cc;font-weight:bold;">
+                                {{ group.category_count }}
+                            </a>
+                        {% else %}
+                            <span style="color:#999;">0</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if group.symbols.detailed %}
+                            <a href="{% url 'admin:symbols_symbol_change' group.symbols.detailed.pk %}" style="margin-right:8px;">Detailed</a>
+                        {% endif %}
+                        {% if group.symbols.simple %}
+                            <a href="{% url 'admin:symbols_symbol_change' group.symbols.simple.pk %}" style="margin-right:8px;">Simple</a>
+                        {% endif %}
+                        {% if group.symbols.mono %}
+                            <a href="{% url 'admin:symbols_symbol_change' group.symbols.mono.pk %}" style="margin-right:8px;">Mono</a>
+                        {% endif %}
+                        <a href="{% url 'admin:categories_category_changelist' %}?symbol_detailed2__slug__exact={{ group.slug }}" style="color:#0066cc;">View Categories</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="submit-row" style="margin-top: 20px;">
+            <a href="{% url 'admin:categories_category_changelist' %}" class="button">{% translate 'Back to Categories' %}</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

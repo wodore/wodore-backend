@@ -2,7 +2,7 @@ import contextlib
 
 from django.conf import settings
 from django.contrib import admin
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.db.models.functions import Lower
 from django.http import HttpRequest
 from django.urls import reverse
@@ -28,6 +28,12 @@ class ParentCategoryFilter(admin.RelatedFieldListFilter):
         """Override field_choices to show cleaner category names and sort NULL parents first."""
         # Get original choices from parent
         choices = super().field_choices(field, request, model_admin)
+
+        # Pre-fetch all root category IDs in a single query to avoid N+1
+        root_category_ids = set(
+            Category.objects.filter(parent__isnull=True).values_list("pk", flat=True)
+        )
+
         # Clean up the display names and separate into two groups
         null_parent_choices = []
         with_parent_choices = []
@@ -37,11 +43,9 @@ class ParentCategoryFilter(admin.RelatedFieldListFilter):
             if displ and str(displ).startswith("root."):
                 displ = str(displ)[5:]  # Remove 'root.' prefix
 
-            # Separate NULL parents from non-NULL
-            # Check if this is a root category by querying
+            # Separate NULL parents from non-NULL using pre-fetched IDs
             if pk is not None:
-                category = Category.objects.filter(pk=pk, parent__isnull=True).exists()
-                if category:
+                if pk in root_category_ids:
                     null_parent_choices.append((pk, displ))
                 else:
                     with_parent_choices.append((pk, displ))
@@ -105,12 +109,15 @@ class ChildCategoryInline(admin.TabularInline):
 @admin.register(Category)
 class CategoryAdmin(ModelAdmin):
     form = required_i18n_fields_form_factory("name")
+    change_list_template = "admin/categories_change_list.html"
 
     search_fields = ("name", "slug", "identifier")
     list_display = (
         "title",
         "symbol_img",
         "icon_img",
+        "symbol_img2",
+        "icon_img2",
         # "order_display",
         "identifier_display",
         "slug",
@@ -129,7 +136,6 @@ class CategoryAdmin(ModelAdmin):
     list_editable = ("order", "parent")
     list_per_page = 25
     ordering = ("-parent", "order")  # Order by parent (NULL first, then by parent ID)
-    search_fields = ("name", "slug")
 
     readonly_fields = ("identifier", "name_i18n", "description_i18n")
 
@@ -156,12 +162,75 @@ class CategoryAdmin(ModelAdmin):
             },
         ),
         (
-            _("Symbols"),
+            _("Symbols (Old)"),
             {"fields": (("symbol_detailed", "symbol_simple", "symbol_mono"),)},
+        ),
+        (
+            _("Symbols (New)"),
+            {"fields": (("symbol_detailed2", "symbol_simple2", "symbol_mono2"),)},
         ),
     )
 
     inlines = (ChildCategoryInline,)
+
+    # Add custom views for symbol management
+    def get_urls(self):
+        """Add custom URL for symbols view."""
+        from django.urls import path
+
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "symbols/",
+                self.admin_site.admin_view(self.symbols_view),
+                name="categories_category_symbols",
+            ),
+        ]
+        return custom_urls + urls
+
+    def symbols_view(self, request):
+        """Display all symbols grouped by slug with their three style variants."""
+        from server.apps.symbols.models import Symbol
+        from django.template.response import TemplateResponse
+
+        # Get all unique slugs
+        slugs = (
+            Symbol.objects.values("slug")
+            .order_by("slug")
+            .distinct()
+            .values_list("slug", flat=True)
+        )
+
+        # Build symbol groups
+        symbol_groups = []
+        for slug in slugs:
+            symbols = Symbol.objects.filter(slug=slug).order_by("style")
+            group = {"slug": slug, "symbols": {}}
+
+            for symbol in symbols:
+                group["symbols"][symbol.style] = symbol
+
+            # Count categories using this symbol
+            group["category_count"] = (
+                Category.objects.filter(
+                    Q(symbol_detailed2__slug=slug)
+                    | Q(symbol_simple2__slug=slug)
+                    | Q(symbol_mono2__slug=slug)
+                )
+                .distinct()
+                .count()
+            )
+
+            symbol_groups.append(group)
+
+        context = {
+            **self.admin_site.each_context(request),
+            "symbol_groups": symbol_groups,
+            "opts": self.model._meta,
+            "title": _("All Symbols by Category"),
+            "has_permission": True,
+        }
+        return TemplateResponse(request, "admin/categories_symbols.html", context)
 
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         """Optimize queryset with parent selection and annotate children count."""
@@ -201,6 +270,24 @@ class CategoryAdmin(ModelAdmin):
         if obj.symbol_mono:
             return mark_safe(
                 f'<img src="{obj.symbol_mono.url}" width="16" alt="mono"/>'
+            )
+        return "-"
+
+    @display(description=_("Symbol (New)"))
+    def symbol_img2(self, obj):
+        """Display detailed symbol from new Symbol app."""
+        if obj.symbol_detailed2 and obj.symbol_detailed2.svg_file:
+            return mark_safe(
+                f'<img src="{obj.symbol_detailed2.svg_file.url}" width="34" alt="symbol"/>'
+            )
+        return "-"
+
+    @display(description=_("Mono (New)"))
+    def icon_img2(self, obj):
+        """Display monochrome symbol from new Symbol app."""
+        if obj.symbol_mono2 and obj.symbol_mono2.svg_file:
+            return mark_safe(
+                f'<img src="{obj.symbol_mono2.svg_file.url}" width="16" alt="mono"/>'
             )
         return "-"
 
