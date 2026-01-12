@@ -2,11 +2,65 @@
 Schemas for GeoPlace API endpoints.
 """
 
+from typing import Any
+
+from django.conf import settings
+from django.http import HttpRequest
 from hut_services import LocationSchema
-from ninja import Field, ModelSchema
+from ninja import Field, ModelSchema, Schema
 
 from server.apps.categories.models import Category
-from server.apps.geometries.models import GeoPlace
+from server.apps.organizations.schema import (
+    OrganizationSourceIdDetailSchema,
+    OrganizationSourceIdSlugSchema,
+)
+
+
+class SymbolSchema(Schema):
+    """Schema for symbol URLs with different variants."""
+
+    simple: str | None = None
+    detailed: str | None = None
+    mono: str | None = None
+
+    @staticmethod
+    def resolve_simple(obj: Any, request: HttpRequest | None = None) -> str | None:
+        """Get simple symbol URL."""
+        if not hasattr(obj, "symbol_simple") or not obj.symbol_simple:
+            return None
+        path = str(obj.symbol_simple)
+        if path.startswith("http"):
+            return path
+        media_url = getattr(settings, "MEDIA_URL", "/media/")
+        if request and not media_url.startswith("http"):
+            media_url = request.build_absolute_uri(media_url)
+        return f"{media_url}{path}"
+
+    @staticmethod
+    def resolve_detailed(obj: Any, request: HttpRequest | None = None) -> str | None:
+        """Get detailed symbol URL."""
+        if not hasattr(obj, "symbol_detailed") or not obj.symbol_detailed:
+            return None
+        path = str(obj.symbol_detailed)
+        if path.startswith("http"):
+            return path
+        media_url = getattr(settings, "MEDIA_URL", "/media/")
+        if request and not media_url.startswith("http"):
+            media_url = request.build_absolute_uri(media_url)
+        return f"{media_url}{path}"
+
+    @staticmethod
+    def resolve_mono(obj: Any, request: HttpRequest | None = None) -> str | None:
+        """Get mono symbol URL."""
+        if not hasattr(obj, "symbol_mono") or not obj.symbol_mono:
+            return None
+        path = str(obj.symbol_mono)
+        if path.startswith("http"):
+            return path
+        media_url = getattr(settings, "MEDIA_URL", "/media/")
+        if request and not media_url.startswith("http"):
+            media_url = request.build_absolute_uri(media_url)
+        return f"{media_url}{path}"
 
 
 class CategorySchema(ModelSchema):
@@ -14,58 +68,34 @@ class CategorySchema(ModelSchema):
 
     name: str | None = Field(..., alias="name_i18n")
     description: str | None = Field(None, alias="description_i18n")
+    symbol: SymbolSchema | None = None
 
     class Meta:
         model = Category
         fields = ("slug", "name", "description")
 
 
-class GeoPlaceBaseSchema(ModelSchema):
-    """Base schema for GeoPlace with essential fields."""
+class GeoPlaceBaseSchema(Schema):
+    """Base schema for GeoPlace with common fields."""
 
-    name: str = Field(..., alias="name_i18n")
-    place_type: CategorySchema
-    country_code: str
-
-    @staticmethod
-    def resolve_country_code(obj):
-        """Convert Country object to string code."""
-        return str(obj.country_code) if obj.country_code else None
-
-    class Meta:
-        model = GeoPlace
-        fields = (
-            "id",
-            "name",
-            "place_type",
-            "country_code",
-            "elevation",
-            "importance",
-        )
+    id: int
+    name: str
+    country_code: str | None
+    elevation: int | None
+    importance: int
+    location: LocationSchema
+    place_type: str | CategorySchema | None = None
+    sources: (
+        list[OrganizationSourceIdSlugSchema]
+        | list[OrganizationSourceIdDetailSchema]
+        | None
+    ) = None
 
 
 class GeoPlaceSearchSchema(GeoPlaceBaseSchema):
     """Schema for search results with location coordinates."""
 
-    location: LocationSchema
     score: float | None = None
-
-    @staticmethod
-    def resolve_score(obj):
-        """Get search similarity score from the dynamically attached attribute."""
-        return getattr(obj, "similarity", None)
-
-    class Meta:
-        model = GeoPlace
-        fields = (
-            "id",
-            "name",
-            "place_type",
-            "country_code",
-            "elevation",
-            "importance",
-            "location",
-        )
 
 
 class GeoPlaceDetailSchema(GeoPlaceSearchSchema):
@@ -73,40 +103,8 @@ class GeoPlaceDetailSchema(GeoPlaceSearchSchema):
 
     parent: GeoPlaceBaseSchema | None = None
 
-    class Meta:
-        model = GeoPlace
-        fields = (
-            "id",
-            "name",
-            "place_type",
-            "country_code",
-            "elevation",
-            "importance",
-            "parent",
-            "is_active",
-            "is_public",
-        )
-
 
 class GeoPlaceNearbySchema(GeoPlaceBaseSchema):
     """Schema for nearby places with distance information."""
 
-    location: LocationSchema
     distance: float | None = None
-
-    @staticmethod
-    def resolve_distance(obj):
-        """Get distance in meters from the dynamically attached attribute."""
-        return getattr(obj, "distance_m", None)
-
-    class Meta:
-        model = GeoPlace
-        fields = (
-            "id",
-            "name",
-            "place_type",
-            "country_code",
-            "elevation",
-            "importance",
-            "location",
-        )

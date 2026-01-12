@@ -5,13 +5,13 @@ API endpoints for GeoPlace search and queries.
 from enum import Enum
 from typing import Any
 
+from django.contrib.gis.geos import Point
 from ninja import Query, Router
 from ninja.decorators import decorate_view
 
 from django.conf import settings
 from django.contrib.gis.db.models import PointField
 from django.contrib.gis.db.models.functions import Distance
-from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
 from django.contrib.postgres.aggregates import JSONBAgg
 from django.contrib.postgres.search import (
@@ -41,8 +41,16 @@ from django.views.decorators.cache import cache_control
 from server.apps.translations import LanguageParam, activate, with_language_param
 
 from .models import GeoPlace
+from .schemas import (
+    GeoPlaceNearbySchema,
+    GeoPlaceSearchSchema,
+)
+from server.apps.organizations.schema import (
+    OrganizationSourceIdDetailSchema,
+    OrganizationSourceIdSlugSchema,
+)
 
-router = Router(tags=["geoplaces"])
+router = Router(tags=["geometries"])
 
 
 class IncludeModeEnum(str, Enum):
@@ -55,7 +63,7 @@ class IncludeModeEnum(str, Enum):
 
 @router.get(
     "search",
-    response=list[dict],
+    response=list[GeoPlaceSearchSchema],
     exclude_unset=True,
     operation_id="search_geoplaces",
 )
@@ -330,13 +338,14 @@ def search_geoplaces(
         "-similarity",
     )[offset : offset + limit]
 
-    # Build simplified response
+    # Build structured response using schemas
     results = []
     media_url = settings.MEDIA_URL
     if not media_url.startswith("http"):
         media_url = request.build_absolute_uri(media_url)
 
     for place in queryset:
+        # Build base result
         result = {
             "name": place.name_i18n,
             "country_code": str(place.country_code) if place.country_code else None,
@@ -347,30 +356,41 @@ def search_geoplaces(
                 "lat": place.location.y if place.location else None,
                 "lon": place.location.x if place.location else None,
             },
+            "score": place.rank_score,
         }
-
-        # Include blended rank score
-        result["score"] = place.rank_score
 
         # Include place_type based on parameter
         if include_place_type == IncludeModeEnum.slug:
             result["place_type"] = place.place_type.slug if place.place_type else None
         elif include_place_type == IncludeModeEnum.all:
             if place.place_type:
-                result["place_type"] = {
+                # Build category schema manually
+                category_data = {
                     "slug": place.place_type.slug,
                     "name": place.place_type.name_i18n,
                     "description": place.place_type.description_i18n,
-                    "icon": f"{media_url}{place.place_type.symbol_mono}"
-                    if place.place_type.symbol_mono
-                    else None,
-                    "symbol": f"{media_url}{place.place_type.symbol_detailed}"
-                    if place.place_type.symbol_detailed
-                    else None,
-                    "symbol_simple": f"{media_url}{place.place_type.symbol_simple}"
-                    if place.place_type.symbol_simple
-                    else None,
                 }
+                # Add symbol if requested
+                if (
+                    place.place_type.symbol_simple
+                    or place.place_type.symbol_detailed
+                    or place.place_type.symbol_mono
+                ):
+                    symbol_data = {}
+                    if place.place_type.symbol_simple:
+                        symbol_data["simple"] = (
+                            f"{media_url}{place.place_type.symbol_simple}"
+                        )
+                    if place.place_type.symbol_detailed:
+                        symbol_data["detailed"] = (
+                            f"{media_url}{place.place_type.symbol_detailed}"
+                        )
+                    if place.place_type.symbol_mono:
+                        symbol_data["mono"] = (
+                            f"{media_url}{place.place_type.symbol_mono}"
+                        )
+                    category_data["symbol"] = symbol_data
+                result["place_type"] = category_data
             else:
                 result["place_type"] = None
 
@@ -378,40 +398,46 @@ def search_geoplaces(
         if include_sources == IncludeModeEnum.slug:
             slugs = [slug for slug in (place.source_slugs or []) if slug is not None]
             ids = [sid for sid in (place.source_ids or []) if sid is not None]
-            # Create list of dicts with source and source_id
             sources_list = []
             for i, slug in enumerate(slugs):
-                source_item = {"source": slug}
-                if i < len(ids) and ids[i]:
-                    source_item["source_id"] = ids[i]
-                sources_list.append(source_item)
-            result["sources"] = sources_list
+                source_item = OrganizationSourceIdSlugSchema(
+                    source=slug, source_id=ids[i] if i < len(ids) and ids[i] else None
+                )
+                sources_list.append(source_item.dict(exclude_unset=True))
+            if sources_list:
+                result["sources"] = sources_list
         elif include_sources == IncludeModeEnum.all:
             sources = []
             for src in place.sources_data or []:
                 if src.get("slug") is not None:
-                    source_item = {
-                        "source": {
-                            "slug": src["slug"],
-                            "name": src.get("name"),
-                            "logo": f"{media_url}{src['logo']}"
-                            if src.get("logo")
-                            else None,
-                        }
+                    # Create a dict-based organization object for the schema
+                    org_data = {
+                        "slug": src["slug"],
+                        "name": src.get("name"),
+                        "logo": (
+                            f"{media_url}{src['logo']}" if src.get("logo") else None
+                        ),
                     }
-                    if src.get("source_id"):
-                        source_item["source_id"] = src["source_id"]
-                    sources.append(source_item)
-            result["sources"] = sources
+                    source_item = OrganizationSourceIdDetailSchema(
+                        source=org_data,
+                        source_id=src.get("source_id"),
+                    )
+                    sources.append(
+                        source_item.dict(
+                            exclude_unset=True, exclude={"source": {"logo"}}
+                        )
+                    )
+            if sources:
+                result["sources"] = sources
 
         results.append(result)
 
-    return results
+    return [GeoPlaceSearchSchema(**result) for result in results]
 
 
 @router.get(
     "nearby",
-    response=list[dict],
+    response=list[GeoPlaceNearbySchema],
     exclude_unset=True,
     operation_id="nearby_geoplaces",
 )
@@ -508,7 +534,7 @@ def nearby_geoplaces(
         "distance"
     )[offset : offset + limit]
 
-    # Build simplified response
+    # Build structured response using schemas
     results = []
     media_url = settings.MEDIA_URL
     if not media_url.startswith("http"):
@@ -520,6 +546,7 @@ def nearby_geoplaces(
             place.distance.m if hasattr(place.distance, "m") else place.distance
         )
 
+        # Build base result
         result = {
             "name": place.name_i18n,
             "country_code": str(place.country_code) if place.country_code else None,
@@ -538,20 +565,33 @@ def nearby_geoplaces(
             result["place_type"] = place.place_type.slug if place.place_type else None
         elif include_place_type == IncludeModeEnum.all:
             if place.place_type:
-                result["place_type"] = {
+                # Build category schema manually
+                category_data = {
                     "slug": place.place_type.slug,
                     "name": place.place_type.name_i18n,
                     "description": place.place_type.description_i18n,
-                    "icon": f"{media_url}{place.place_type.symbol_mono}"
-                    if place.place_type.symbol_mono
-                    else None,
-                    "symbol": f"{media_url}{place.place_type.symbol_detailed}"
-                    if place.place_type.symbol_detailed
-                    else None,
-                    "symbol_simple": f"{media_url}{place.place_type.symbol_simple}"
-                    if place.place_type.symbol_simple
-                    else None,
                 }
+                # Add symbol if requested
+                if (
+                    place.place_type.symbol_simple
+                    or place.place_type.symbol_detailed
+                    or place.place_type.symbol_mono
+                ):
+                    symbol_data = {}
+                    if place.place_type.symbol_simple:
+                        symbol_data["simple"] = (
+                            f"{media_url}{place.place_type.symbol_simple}"
+                        )
+                    if place.place_type.symbol_detailed:
+                        symbol_data["detailed"] = (
+                            f"{media_url}{place.place_type.symbol_detailed}"
+                        )
+                    if place.place_type.symbol_mono:
+                        symbol_data["mono"] = (
+                            f"{media_url}{place.place_type.symbol_mono}"
+                        )
+                    category_data["symbol"] = symbol_data
+                result["place_type"] = category_data
             else:
                 result["place_type"] = None
 
@@ -559,32 +599,38 @@ def nearby_geoplaces(
         if include_sources == IncludeModeEnum.slug:
             slugs = [slug for slug in (place.source_slugs or []) if slug is not None]
             ids = [sid for sid in (place.source_ids or []) if sid is not None]
-            # Create list of dicts with source and source_id
             sources_list = []
             for i, slug in enumerate(slugs):
-                source_item = {"source": slug}
-                if i < len(ids) and ids[i]:
-                    source_item["source_id"] = ids[i]
-                sources_list.append(source_item)
-            result["sources"] = sources_list
+                source_item = OrganizationSourceIdSlugSchema(
+                    source=slug, source_id=ids[i] if i < len(ids) and ids[i] else None
+                )
+                sources_list.append(source_item.dict(exclude_unset=True))
+            if sources_list:
+                result["sources"] = sources_list
         elif include_sources == IncludeModeEnum.all:
             sources = []
             for src in place.sources_data or []:
                 if src.get("slug") is not None:
-                    source_item = {
-                        "source": {
-                            "slug": src["slug"],
-                            "name": src.get("name"),
-                            "logo": f"{media_url}{src['logo']}"
-                            if src.get("logo")
-                            else None,
-                        }
+                    # Create a dict-based organization object for the schema
+                    org_data = {
+                        "slug": src["slug"],
+                        "name": src.get("name"),
+                        "logo": (
+                            f"{media_url}{src['logo']}" if src.get("logo") else None
+                        ),
                     }
-                    if src.get("source_id"):
-                        source_item["source_id"] = src["source_id"]
-                    sources.append(source_item)
-            result["sources"] = sources
+                    source_item = OrganizationSourceIdDetailSchema(
+                        source=org_data,
+                        source_id=src.get("source_id"),
+                    )
+                    sources.append(
+                        source_item.dict(
+                            exclude_unset=True, exclude={"source": {"logo"}}
+                        )
+                    )
+            if sources:
+                result["sources"] = sources
 
         results.append(result)
 
-    return results
+    return [GeoPlaceNearbySchema(**result) for result in results]
