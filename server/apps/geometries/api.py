@@ -145,7 +145,13 @@ def search_geoplaces(
 
     # Fuzzy search using trigram similarity
     # Use similarity on name field (searches across all i18n variants via modeltrans)
-    from django.contrib.postgres.search import TrigramSimilarity
+    from django.contrib.postgres.search import (
+        SearchQuery,
+        SearchRank,
+        SearchVector,
+        TrigramSimilarity,
+        TrigramWordSimilarity,
+    )
     from django.contrib.gis.db.models import PointField
 
     from django.db.models import (
@@ -161,20 +167,51 @@ def search_geoplaces(
     from django.db.models.fields.json import KeyTextTransform
     from django.db.models.functions import Cast, Coalesce, Greatest, Lower, RowNumber
 
-    primary_similarity = Coalesce(TrigramSimilarity("name", q), Value(0.0))
+    default_language = settings.LANGUAGE_CODE
+    requested_language = lang
+    translated_name = None
+    if requested_language != default_language:
+        translated_name = Cast(
+            KeyTextTransform(f"name_{requested_language}", "i18n"),
+            output_field=CharField(),
+        )
+        primary_similarity = Coalesce(
+            Greatest(
+                TrigramSimilarity(translated_name, q),
+                TrigramWordSimilarity(translated_name, Value(q)),
+            ),
+            Value(0.0),
+        )
+    else:
+        primary_similarity = Coalesce(
+            Greatest(
+                TrigramSimilarity("name", q),
+                TrigramWordSimilarity("name", Value(q)),
+            ),
+            Value(0.0),
+        )
     translation_languages = [
-        lang
-        for lang in getattr(settings, "LANGUAGE_CODES", [])
-        if lang and lang != settings.LANGUAGE_CODE
+        code
+        for code in getattr(settings, "LANGUAGE_CODES", [])
+        if code and code not in {default_language, requested_language}
     ]
     translation_similarity_exprs = [
         Coalesce(
-            TrigramSimilarity(
-                Cast(
-                    KeyTextTransform(f"name_{lang}", "i18n"),
-                    output_field=CharField(),
+            Greatest(
+                TrigramSimilarity(
+                    Cast(
+                        KeyTextTransform(f"name_{lang}", "i18n"),
+                        output_field=CharField(),
+                    ),
+                    q,
                 ),
-                q,
+                TrigramWordSimilarity(
+                    Cast(
+                        KeyTextTransform(f"name_{lang}", "i18n"),
+                        output_field=CharField(),
+                    ),
+                    Value(q),
+                ),
             ),
             Value(0.0),
         )
@@ -192,6 +229,51 @@ def search_geoplaces(
         Greatest(primary_similarity, translation_boost),
         output_field=FloatField(),
     )
+    stripped_query = q.strip()
+    tokens = [token for token in stripped_query.split() if token]
+    if len(tokens) > 1:
+        search_vector = SearchVector("name", weight="A", config="simple")
+        if translated_name is not None:
+            search_vector = search_vector + SearchVector(
+                translated_name, weight="A", config="simple"
+            )
+        search_query = SearchQuery(stripped_query, search_type="plain", config="simple")
+        fts_rank = SearchRank(search_vector, search_query)
+        token_cases = [
+            Case(
+                When(name__icontains=token, then=Value(1.0)),
+                default=Value(0.0),
+                output_field=FloatField(),
+            )
+            for token in tokens[:3]
+        ]
+        token_match = ExpressionWrapper(
+            sum(token_cases) / Value(len(token_cases)),
+            output_field=FloatField(),
+        )
+    else:
+        fts_rank = Value(0.0)
+        token_match = Value(0.0)
+    if translated_name is not None:
+        translated_prefix_lookup = {f"i18n__name_{requested_language}__istartswith": q}
+        prefix_match = Greatest(
+            Case(
+                When(name__istartswith=q, then=Value(1.0)),
+                default=Value(0.0),
+                output_field=FloatField(),
+            ),
+            Case(
+                When(**translated_prefix_lookup, then=Value(1.0)),
+                default=Value(0.0),
+                output_field=FloatField(),
+            ),
+        )
+    else:
+        prefix_match = Case(
+            When(name__istartswith=q, then=Value(1.0)),
+            default=Value(0.0),
+            output_field=FloatField(),
+        )
     normalized_importance = Case(
         When(importance__lt=0, then=Value(0.0)),
         When(importance__gt=100, then=Value(1.0)),
@@ -204,7 +286,11 @@ def search_geoplaces(
     )
 
     queryset = queryset.annotate(
-        similarity=similarity_expr, rank_score=rank_score
+        similarity=similarity_expr,
+        rank_score=rank_score,
+        prefix_match=prefix_match,
+        fts_rank=fts_rank,
+        token_match=token_match,
     ).filter(similarity__gte=threshold)
 
     if deduplicate:
@@ -226,7 +312,10 @@ def search_geoplaces(
                 F("country_code"),
             ],
             order_by=[
+                F("prefix_match").desc(nulls_last=True),
+                F("token_match").desc(nulls_last=True),
                 F("rank_score").desc(nulls_last=True),
+                F("fts_rank").desc(nulls_last=True),
                 F("similarity").desc(nulls_last=True),
                 F("id").asc(),
             ],
@@ -235,7 +324,13 @@ def search_geoplaces(
             duplicate_rank=1
         )
 
-    queryset = queryset.order_by("-rank_score", "-similarity")[offset : offset + limit]
+    queryset = queryset.order_by(
+        "-prefix_match",
+        "-token_match",
+        "-rank_score",
+        "-fts_rank",
+        "-similarity",
+    )[offset : offset + limit]
 
     # Build simplified response
     results = []
