@@ -182,7 +182,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("categories", "0001_initial"),
-        ("huts", "__latest__"),  # Ensure HutType model is available
+        ("huts", "0050_add_name_gin_index"),  # Need HutType model before it's deleted in 0051
     ]
 
     operations = [

@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("categories", "0001_initial"),  # Only need Category model to exist, not the data migration
+        ("categories", "0002_migrate_huttype_data"),  # Need HutTypes copied to Categories first
         ("huts", "0050_add_name_gin_index"),
     ]
 
