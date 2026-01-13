@@ -1,9 +1,6 @@
 # Generated manually on 2026-01-10
 
-import os
-from pathlib import Path
 from django.db import migrations
-from django.core.files import File
 
 
 def create_categories_and_map_features(apps, schema_editor):
@@ -13,34 +10,12 @@ def create_categories_and_map_features(apps, schema_editor):
     Creates parent categories (terrain, hydrographic, populated_place, etc.)
     and child categories (peak, lake, village, etc.), then maps enabled
     GeoNames features to the appropriate categories.
+
+    Note: Symbols are handled by categories.0009_migrate_category_symbols
+    which runs before this migration (see dependency on categories.0010).
     """
     Category = apps.get_model("categories", "Category")
     Feature = apps.get_model("external_geonames", "Feature")
-
-    # Base path for category asset files (in categories app, not geometries app)
-    base_path = Path(__file__).resolve().parent.parent.parent / "categories" / "assets"
-
-    def get_symbol_path(parent_slug, child_slug, variant):
-        """Get the path to a symbol file, falling back to parent then generic if not found."""
-        # Map 'mono' to 'simple' since we only have 'detailed' and 'simple' variants
-        actual_variant = variant # "simple" if variant == "mono" else variant
-
-        if child_slug:
-            specific_path = base_path / parent_slug / actual_variant / f"{child_slug}.svg"
-            if specific_path.exists():
-                return specific_path
-
-        # Fallback to parent symbol
-        parent_path = base_path / parent_slug / actual_variant / f"{parent_slug}.svg"
-        if parent_path.exists():
-            return parent_path
-
-        # Fallback to generic
-        generic_path = base_path / "generic" / actual_variant / "generic.svg"
-        if generic_path.exists():
-            return generic_path
-
-        return None
 
     # Parent categories configuration with German names and translations
     parent_categories = [
@@ -283,11 +258,6 @@ def create_categories_and_map_features(apps, schema_editor):
             }
         )
 
-        # Get symbol paths
-        detailed_path = get_symbol_path(parent_data["slug"], None, "detailed")
-        simple_path = get_symbol_path(parent_data["slug"], None, "simple")
-        mono_path = get_symbol_path(parent_data["slug"], None, "mono")
-
         needs_update = False
 
         if created:
@@ -298,27 +268,8 @@ def create_categories_and_map_features(apps, schema_editor):
         else:
             print(f"  Skipped existing parent: {parent.slug} ({parent.name})")
 
-        # Update missing symbols (for both new and existing categories)
-        if (not parent.symbol_detailed or not parent.symbol_detailed.name) and detailed_path:
-            with open(detailed_path, 'rb') as f:
-                parent.symbol_detailed.save(f'{parent_data["slug"]}.svg', File(f), save=False)
-            needs_update = True
-            print(f"    Added detailed symbol")
-
-        if (not parent.symbol_simple or not parent.symbol_simple.name) and simple_path:
-            with open(simple_path, 'rb') as f:
-                parent.symbol_simple.save(f'{parent_data["slug"]}.svg', File(f), save=False)
-            needs_update = True
-            print(f"    Added simple symbol")
-
-        if (not parent.symbol_mono or not parent.symbol_mono.name) and mono_path:
-            with open(mono_path, 'rb') as f:
-                parent.symbol_mono.save(f'{parent_data["slug"]}.svg', File(f), save=False)
-            needs_update = True
-            print(f"    Added mono symbol")
-
-        if not all([detailed_path, simple_path, mono_path]):
-            print(f"    WARNING: Some symbol files not found for {parent_data['slug']}")
+        # Note: Symbols are handled by categories.0009_migrate_category_symbols
+        # which runs before this migration (see dependency on categories.0010)
 
         if needs_update:
             parent.save()
@@ -342,11 +293,6 @@ def create_categories_and_map_features(apps, schema_editor):
             }
         )
 
-        # Get symbol paths
-        detailed_path = get_symbol_path(parent_slug, child_slug, "detailed")
-        simple_path = get_symbol_path(parent_slug, child_slug, "simple")
-        mono_path = get_symbol_path(parent_slug, child_slug, "mono")
-
         needs_update = False
 
         if created:
@@ -357,27 +303,8 @@ def create_categories_and_map_features(apps, schema_editor):
         else:
             print(f"  Skipped existing child: {parent_slug}.{child_slug} ({child.name})")
 
-        # Update missing symbols (for both new and existing categories)
-        if (not child.symbol_detailed or not child.symbol_detailed.name) and detailed_path:
-            with open(detailed_path, 'rb') as f:
-                child.symbol_detailed.save(f'{child_slug}.svg', File(f), save=False)
-            needs_update = True
-            print(f"    Added detailed symbol")
-
-        if (not child.symbol_simple or not child.symbol_simple.name) and simple_path:
-            with open(simple_path, 'rb') as f:
-                child.symbol_simple.save(f'{child_slug}.svg', File(f), save=False)
-            needs_update = True
-            print(f"    Added simple symbol")
-
-        if (not child.symbol_mono or not child.symbol_mono.name) and mono_path:
-            with open(mono_path, 'rb') as f:
-                child.symbol_mono.save(f'{child_slug}.svg', File(f), save=False)
-            needs_update = True
-            print(f"    Added mono symbol")
-
-        if not all([detailed_path, simple_path, mono_path]):
-            print(f"    WARNING: Some symbol files not found for {parent_slug}.{child_slug}")
+        # Note: Symbols are handled by categories.0009_migrate_category_symbols
+        # which runs before this migration (see dependency on categories.0010)
 
         if needs_update:
             child.save()
