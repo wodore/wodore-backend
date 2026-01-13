@@ -85,6 +85,8 @@ def get_tags(
     registry: str | None = None,
     no_sha_tag: bool = False,
 ) -> tuple[list[str], list[str]]:
+    from datetime import datetime
+
     tag_names = [] if no_edge_tag else ["edge"]
     if version_tag:
         major, minor, bugfix = from_pyproject(c, "project.version").split(".")
@@ -94,8 +96,11 @@ def get_tags(
 
     if not no_sha_tag:
         git_short_hash = c.run("git rev-parse --short HEAD", hide=True).stdout.strip()
-        tag_names += [f"sha-{git_short_hash}"]
+        # Add timestamp + SHA tag (matching CI format: YYYYMMDDTHHmm-sha-<short-sha>)
+        timestamp = datetime.now().strftime("%Y%m%dT%H%M")
+        tag_names += [f"{timestamp}-sha-{git_short_hash}", f"sha-{git_short_hash}"]
         info(f"Git hash:        '{git_short_hash}'")
+        info(f"Timestamp tag:   '{timestamp}-sha-{git_short_hash}'")
     package_name = package_name or from_pyproject(c, "project.name")
     tags = [f"{package_name}:{name}" for name in tag_names]
     push_tags = []
