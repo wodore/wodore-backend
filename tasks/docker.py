@@ -98,7 +98,7 @@ def get_tags(
         git_short_hash = c.run("git rev-parse --short HEAD", hide=True).stdout.strip()
         # Add timestamp + SHA tag (matching CI format: YYYYMMDDTHHmm-sha-<short-sha>)
         timestamp = datetime.now().strftime("%Y%m%dT%H%M")
-        tag_names += [f"{timestamp}-sha-{git_short_hash}", f"sha-{git_short_hash}"]
+        tag_names += [f"{timestamp}-sha-{git_short_hash}"]
         info(f"Git hash:        '{git_short_hash}'")
         info(f"Timestamp tag:   '{timestamp}-sha-{git_short_hash}'")
     package_name = package_name or from_pyproject(c, "project.name")
