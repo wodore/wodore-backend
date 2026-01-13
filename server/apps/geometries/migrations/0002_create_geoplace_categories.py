@@ -420,7 +420,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("geometries", "0001_initial"),
-        ("categories", "0003_rename_symbol_fields"),
+        ("categories", "0010_cleanup_symbol_fields"),  # Need symbol fields fully migrated and renamed
         ("external_geonames", "0007_feature_category"),
     ]
 
