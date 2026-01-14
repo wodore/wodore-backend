@@ -8,7 +8,6 @@ import click
 from django.core.management import call_command
 from django.db import IntegrityError
 
-from server.apps.huts.models import HutType
 from server.apps.organizations.models import Organization
 from server.core import UpdateCreateStatus
 from server.core.management import CRUDCommand
@@ -238,9 +237,8 @@ class Command(CRUDCommand):
             if not Organization.objects.exists():
                 self.stdout.write(self.style.HTTP_INFO("Organizations"))
                 call_command("organizations", add=True, force=force)
-            if not HutType.objects.exists():
-                self.stdout.write(self.style.HTTP_INFO("Add hut types"))
-                call_command("hut_types", add=True, force=force)
+            # Note: Hut categories are now created via migration (0002_migrate_huttype_data)
+            # No need to call the old hut_types command anymore
             limit = options.get("limit")
             for params in [
                 {"org": "sac", "no_review": True},

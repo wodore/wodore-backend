@@ -1,7 +1,8 @@
 """
-HutType helper - wrapper around Category model for hut types.
+HutTypeHelper - wrapper around Category model for hut types.
 
-This maintains backward compatibility while using the new Category system.
+This provides a clean interface to access Category objects for hut types.
+Hut types are categories under the configured parent (default: accommodation).
 """
 
 from collections import defaultdict
@@ -17,12 +18,12 @@ if TYPE_CHECKING:
     from server.apps.categories.models import Category as CategoryType
 
 
-class HutType:
+class HutTypeHelper:
     """
     Helper class for accessing hut type categories.
 
-    Provides backward-compatible interface to Category model.
-    Hut types are categories under the configured parent (default: map.accommodation).
+    Hut types are categories under the configured parent (default: accommodation).
+    This provides a clean interface to the Category model for hut type operations.
     """
 
     _parent_cache: "CategoryType | None" = None

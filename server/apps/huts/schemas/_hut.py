@@ -20,7 +20,6 @@ from server.apps.images.transfomer import ImagorImage
 from server.apps.owners.models import Owner
 
 # from server.apps.translations import TranslationSchema
-# from ..models import Hut, HutType
 from ._hut_type import HutTypeSchema
 
 _HUT_FIELDS = (

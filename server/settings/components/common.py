@@ -441,4 +441,5 @@ AVAILABILITY_UPDATE_SETTINGS = {
 # Category parent for hut types
 # Format: "parent.child" or "root_slug"
 # This defines where hut categories (hut, bivouac, etc.) are located in the category hierarchy
-HUTS_CATEGORY_PARENT = config("HUTS_CATEGORY_PARENT", default="map.accommodation")
+# Note: The migration creates "accommodation" at root level, not "map.accommodation"
+HUTS_CATEGORY_PARENT = config("HUTS_CATEGORY_PARENT", default="accommodation")
