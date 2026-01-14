@@ -10,7 +10,7 @@ from server.apps.translations import (
     with_language_param,
 )
 
-from ..models import HutType
+from ..models import HutTypeHelper
 from ..schemas import HutTypeDetailSchema
 from ._router import router
 
@@ -20,8 +20,10 @@ def _get_hut_types(  # type: ignore  # noqa: PGH003
     lang: LanguageParam,
     fields: Query[FieldsParam[HutTypeDetailSchema]],
 ) -> list[HutTypeDetailSchema]:
-    qs = HutType.objects.all().order_by("level", "slug")
-    fields.update_default(HutType.FIELDS)
+    # Get the parent category for hut types
+    parent = HutTypeHelper._get_parent()
+    # Query all child categories (hut types)
+    qs = parent.children.filter(is_active=True).order_by("order", "slug")
     media_url = request.build_absolute_uri(settings.MEDIA_URL)
     with override(lang):
         hts = fields.validate(list(qs))

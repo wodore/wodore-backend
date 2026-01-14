@@ -16,7 +16,7 @@ from django.db.models.functions import Cast
 from django.db.models import CharField
 from django.utils import timezone
 
-from server.apps.huts.models import Hut, HutType
+from server.apps.huts.models import Hut, HutTypeHelper
 from server.apps.organizations.models import Organization
 
 from .models import AvailabilityStatus, HutAvailability, HutAvailabilityHistory
@@ -482,10 +482,9 @@ class AvailabilityService:
         hut_type_cache = {}
         if unique_hut_types:
             for hut_type_slug in unique_hut_types:
-                try:
-                    hut_type_cache[hut_type_slug] = HutType.values.get(hut_type_slug)
-                except HutType.DoesNotExist:
-                    hut_type_cache[hut_type_slug] = None
+                # HutTypeHelper.values is a dict that returns default type for missing keys
+                # It returns Category objects (the actual FK model for HutAvailability.hut_type)
+                hut_type_cache[hut_type_slug] = HutTypeHelper.values.get(hut_type_slug)
 
         # Use a single transaction for the entire batch
         with transaction.atomic():
@@ -760,12 +759,11 @@ class AvailabilityService:
             hut_type_cache = {}
             if unique_hut_types:
                 for hut_type_slug in unique_hut_types:
-                    try:
-                        hut_type_cache[hut_type_slug] = HutType.values.get(
-                            hut_type_slug
-                        )
-                    except HutType.DoesNotExist:
-                        hut_type_cache[hut_type_slug] = None
+                    # HutTypeHelper.values is a dict that returns default type for missing keys
+                    # It returns Category objects (the actual FK model for HutAvailability.hut_type)
+                    hut_type_cache[hut_type_slug] = HutTypeHelper.values.get(
+                        hut_type_slug
+                    )
 
             # Get existing history records for unchanged availabilities (bulk fetch)
             unchanged_availability_ids = []

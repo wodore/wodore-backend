@@ -41,7 +41,7 @@ from ._associations import (
     HutOrganizationAssociation,
 )
 from ._hut_source import HutSource
-from ._hut_type import HutType
+from ._hut_type import HutTypeHelper
 from server.apps.categories.models import Category
 
 SERVICES: dict[str, BaseService] = settings.SERVICES
@@ -397,7 +397,7 @@ class Hut(TimeStampedModel):
                 if value:
                     i18n_fields[f"{out_field}_{code}"] = value
         type_closed = (
-            HutType.values[str(hut_schema.hut_type.if_closed.value)]
+            HutTypeHelper.values[str(hut_schema.hut_type.if_closed.value)]
             if hut_schema.hut_type.if_closed
             else None
         )
@@ -415,7 +415,7 @@ class Hut(TimeStampedModel):
             country_field=hut_schema.country_code or "CH",
             # photos=hut_schema.photos[0].thumb or hut_schema.photos[0].url if hut_schema.photos else "",
             # photos_attribution=hut_schema.photos[0].attribution if hut_schema.photos else "",
-            hut_type_open=HutType.values[str(hut_schema.hut_type.if_open.value)],
+            hut_type_open=HutTypeHelper.values[str(hut_schema.hut_type.if_open.value)],
             hut_type_closed=type_closed,
             review_status=review_status,
             is_modified=is_modified or hut_schema.extras.get("is_modified", False),
@@ -426,9 +426,9 @@ class Hut(TimeStampedModel):
             0 > 0 and not type_closed
         ):
             if (hut_db.elevation or 0) < 3000:
-                hut_db.hut_type_closed = HutType.values["selfhut"]
+                hut_db.hut_type_closed = HutTypeHelper.values["selfhut"]
             else:
-                hut_db.hut_type_closed = HutType.values["bicouac"]
+                hut_db.hut_type_closed = HutTypeHelper.values["bicouac"]
         ## Owner stuff -> add to Owner
         src_hut_owner = hut_schema.owner
         owner = None
@@ -628,11 +628,11 @@ class Hut(TimeStampedModel):
             # updates["photos_attribution"] = hut_schema.photos[0].attribution if hut_schema.photos else ""
         if "hut_type" in updates:
             del updates["hut_type"]
-            updates["hut_type_open"] = HutType.values[
+            updates["hut_type_open"] = HutTypeHelper.values[
                 str(hut_schema.hut_type.if_open.value)
             ]
             updates["hut_type_closed"] = (
-                HutType.values[str(hut_schema.hut_type.if_closed.value)]
+                HutTypeHelper.values[str(hut_schema.hut_type.if_closed.value)]
                 if hut_schema.hut_type.if_closed
                 else None
             )
