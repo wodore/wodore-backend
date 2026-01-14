@@ -211,6 +211,12 @@
   pk: 7
   fields:
     i18n:
+      name_en: Wodore
+      name_fr: Wodore
+      name_it: Wodore
+      fullname_en: Wodore
+      fullname_fr: Wodore
+      fullname_it: Wodore
       description_en: ""
       description_fr: ""
       description_it: ""
@@ -236,6 +242,37 @@
           type: string
           description: hut slug by refuges.info
     order: 80
+- model: organizations.organization
+  pk: 8
+  fields:
+    i18n:
+      name_en: GeoNames
+      name_fr: GeoNames
+      name_it: GeoNames
+      fullname_en: GeoNames
+      fullname_fr: GeoNames
+      fullname_it: GeoNames
+      attribution_en: (C) GeoNames
+      attribution_fr: (C) GeoNames
+      attribution_it: (C) GeoNames
+      description_en: ""
+      description_fr: ""
+      description_it: ""
+    slug: geonames
+    is_active: true
+    is_public: false
+    name: GeoNames
+    fullname: GeoNames
+    description: ""
+    url: https://www.geonames.org
+    attribution: (C) GeoNames
+    link_hut_pattern: https://www.geonames.org/{{id}}
+    logo: organizations/logos/geonames_icon.png
+    color_light: "#e08020"
+    color_dark: "#874d12"
+    config: {}
+    props_schema: {}
+    order: 0
 - model: organizations.organization
   pk: 9
   fields:

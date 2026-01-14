@@ -5,18 +5,22 @@ Imports enabled GeoNames features into curated GeoPlace model.
 Calculates importance scores and handles deduplication.
 
 Usage:
-    app import_geoplaces --source geonames                     # Import from enabled GeoNames features
-    app import_geoplaces --source geonames --dry-run           # Dry run to see what would be imported
-    app import_geoplaces --source geonames -c ch,fr            # Limit to specific countries
-    app import_geoplaces --source geonames -c alps             # Import all Alpine countries
-    app import_geoplaces --source geonames --update            # Update existing places
-    app import_geoplaces --source geonames -l 1000             # Import max 1000 entries (testing)
-    app import_geoplaces --source wodore                       # Import huts into GeoPlace for search
+    app import_geoplaces                                    # Import from all sources (geonames, wodore)
+    app import_geoplaces -s geonames                        # Import only from GeoNames
+    app import_geoplaces -s wodore                          # Import only from Wodore huts
+    app import_geoplaces -s geonames,wodore                 # Import from multiple sources
+    app import_geoplaces --dry-run                          # Dry run to see what would be imported
+    app import_geoplaces -c ch,fr                           # Limit to specific countries
+    app import_geoplaces -c alps                            # Import all Alpine countries
+    app import_geoplaces --update                           # Update existing places
+    app import_geoplaces -l 1000                            # Import max 1000 entries (testing)
 """
 
 import math
+from pathlib import Path
 from typing import Tuple
 
+import yaml
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.measure import D
 from django.core.management.base import BaseCommand, CommandParser
@@ -27,6 +31,7 @@ from server.apps.external_geonames.management.commands._country_groups import (
 from server.apps.external_geonames.models import Feature, GeoName
 from server.apps.geometries.models import GeoPlace
 from server.apps.huts.models import Hut
+from server.apps.organizations.models import Organization
 
 
 class Command(BaseCommand):
@@ -36,11 +41,11 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
-            "--source",
+            "-s",
+            "--sources",
             type=str,
-            default="geonames",
-            choices=["geonames", "wodore"],
-            help="Source to import from",
+            default="geonames,wodore",
+            help="Comma-separated list of sources to import from (default: all sources)",
         )
         parser.add_argument(
             "--dry-run",
@@ -73,7 +78,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options) -> None:
-        source = options["source"]
+        sources_str = options["sources"]
         dry_run = options["dry_run"]
         countries = (
             expand_countries(options["countries"]) if options["countries"] else None
@@ -87,27 +92,67 @@ class Command(BaseCommand):
                 self.style.WARNING("DRY RUN MODE - No changes will be made")
             )
 
+        # Parse sources
+        sources = [s.strip() for s in sources_str.split(",") if s.strip()]
+        valid_sources = ["geonames", "wodore"]
+
+        # Validate sources
+        invalid_sources = [s for s in sources if s not in valid_sources]
+        if invalid_sources:
+            self.stdout.write(
+                self.style.ERROR(
+                    f"Invalid source(s): {', '.join(invalid_sources)}. "
+                    f"Valid options: {', '.join(valid_sources)}"
+                )
+            )
+            return
+
+        self.stdout.write(f"Importing from sources: {', '.join(sources)}")
+
+        # Ensure required organizations exist for all sources
+        for source in sources:
+            self._ensure_organizations_exist(source, dry_run)
+
         source_handlers = {
             "geonames": self._import_from_geonames,
             "wodore": self._import_from_wodore,
         }
 
-        handler = source_handlers.get(source)
-        if not handler:
-            self.stdout.write(self.style.ERROR(f"Unknown source: {source}"))
-            return
+        # Process each source
+        total_created = 0
+        total_updated = 0
+        total_skipped = 0
 
-        created, updated, skipped = handler(
-            countries=countries,
-            update=update,
-            limit=limit,
-            min_importance=min_importance,
-            dry_run=dry_run,
-        )
+        for source in sources:
+            handler = source_handlers.get(source)
+            if not handler:
+                self.stdout.write(self.style.ERROR(f"Unknown source: {source}"))
+                continue
+
+            self.stdout.write(f"\n{'='*60}")
+            self.stdout.write(f"Processing source: {source}")
+            self.stdout.write("=" * 60)
+
+            created, updated, skipped = handler(
+                countries=countries,
+                update=update,
+                limit=limit,
+                min_importance=min_importance,
+                dry_run=dry_run,
+            )
+
+            total_created += created
+            total_updated += updated
+            total_skipped += skipped
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"\nImport complete: {created} created, {updated} updated, {skipped} skipped"
+                f"\n{'='*60}\n"
+                f"Total import complete:\n"
+                f"  {total_created} created\n"
+                f"  {total_updated} updated\n"
+                f"  {total_skipped} skipped\n"
+                f"{'='*60}"
             )
         )
 
@@ -120,6 +165,88 @@ class Command(BaseCommand):
             return int(round(float(elevation)))
         except (TypeError, ValueError):
             return None
+
+    def _ensure_organizations_exist(self, source: str, dry_run: bool) -> None:
+        """
+        Ensure required organizations exist. Create them if missing.
+
+        Strategy:
+        1. Try to load from fixture file (organizations.yaml) for full details
+        2. Fall back to minimal creation if fixture not found
+
+        This allows the import to work even if the fixtures haven't been loaded yet.
+        Users can later run 'app organizations --add' to load/update fixture data.
+        """
+        # Fallback minimal data if fixture not available
+        fallback_orgs = {
+            "geonames": {
+                "name": "GeoNames",
+                "fullname": "GeoNames",
+                "url": "https://www.geonames.org",
+                "attribution": "(C) GeoNames",
+            },
+            "wodore": {
+                "name": "Wodore",
+                "fullname": "Wodore",
+                "url": "https://wodore.com",
+            },
+        }
+
+        slug = source
+        try:
+            Organization.objects.get(slug=slug)
+            self.stdout.write(f"Organization '{slug}' already exists")
+            return
+        except Organization.DoesNotExist:
+            pass  # Need to create it
+
+        # Try to load from fixture first
+        fixture_path = (
+            Path(__file__).parent.parent.parent
+            / "organizations"
+            / "fixtures"
+            / "organizations.yaml"
+        )
+
+        org_data = None
+        if fixture_path.exists():
+            try:
+                with open(fixture_path) as f:
+                    fixtures = yaml.safe_load(f)
+                for item in fixtures:
+                    if item.get("model") == "organizations.organization":
+                        if item.get("fields", {}).get("slug") == slug:
+                            # Remove pk to avoid conflicts, let Django auto-generate
+                            fields = item["fields"].copy()
+                            fields.pop("id", None)
+                            org_data = fields
+                            self.stdout.write(f"Found '{slug}' in fixture file")
+                            break
+            except Exception as e:
+                self.stdout.write(
+                    self.style.WARNING(f"Could not load fixture file: {e}")
+                )
+
+        # Fall back to minimal data if not in fixture
+        if not org_data:
+            org_data = fallback_orgs.get(slug, {})
+            org_data["slug"] = slug
+            org_data["is_active"] = True
+            org_data["is_public"] = False
+            self.stdout.write(f"Using minimal data for '{slug}' (not in fixture)")
+
+        if dry_run:
+            self.stdout.write(
+                self.style.WARNING(f"[DRY RUN] Would create organization: {slug}")
+            )
+        else:
+            Organization.objects.create(**org_data)
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Created organization '{slug}' "
+                    f"(run 'app organizations --add' to load/update full fixture details)"
+                )
+            )
 
     def _import_from_geonames(
         self,
