@@ -10,6 +10,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 import os
 import subprocess
+from django_countries.data import COUNTRIES
 
 # Set the environment variables - fix boto3 issue when uploading file
 # https://stackoverflow.com/questions/79375793/s3uploadfailederror-due-to-missingcontentlength-when-calling-putobject-in-mlflow
@@ -294,7 +295,11 @@ MODELTRANS_FALLBACK = {
     "it": ("fr", "de", "en"),
     "fr": ("it", "de", "en"),
 }
-COUNTRIES_ONLY = ["DE", "CH", "AT", "FR", "IT"]
+
+# Use all countries from django-countries package
+# This ensures the GeoPlace.country_code constraint accepts all valid ISO 3166-1 alpha-2 codes
+
+COUNTRIES_ONLY = list(COUNTRIES.keys())
 
 
 # Static files (CSS, JavaScript, Images)
