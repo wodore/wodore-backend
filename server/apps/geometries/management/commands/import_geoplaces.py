@@ -346,17 +346,33 @@ class Command(BaseCommand):
         # Efficient skip: get all already imported GeoName IDs in one query
         imported_geoname_ids = set()
         if continue_import:
+            self.stdout.write(
+                self.style.NOTICE(
+                    "Continue mode: Fetching already imported GeoNames..."
+                )
+            )
             imported_geoname_ids = set(
                 GeoPlace.objects.filter(
                     source_associations__organization__slug="geonames",
                     source_associations__source_id__isnull=False,
                 ).values_list("source_associations__source_id", flat=True)
             )
+            self.stdout.write(
+                f"Found {len(imported_geoname_ids)} already imported GeoNames"
+            )
             # Exclude already imported from queryset
             if imported_geoname_ids:
                 queryset = queryset.exclude(geoname_id__in=imported_geoname_ids)
                 self.stdout.write(
-                    f"Skipping {len(imported_geoname_ids)} already imported GeoNames"
+                    self.style.SUCCESS(
+                        f"Excluding {len(imported_geoname_ids)} already imported from queryset"
+                    )
+                )
+            else:
+                self.stdout.write(
+                    self.style.WARNING(
+                        "No imported GeoNames found - this will import everything!"
+                    )
                 )
 
         total_count = queryset.count()
