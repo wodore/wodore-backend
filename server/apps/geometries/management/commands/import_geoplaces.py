@@ -76,6 +76,17 @@ class Command(BaseCommand):
             default=0,
             help="Only import features with importance >= this value (0-100)",
         )
+        parser.add_argument(
+            "--continue",
+            dest="continue_import",
+            action="store_true",
+            help="Continue from last imported entry (skips already imported GeoNames efficiently)",
+        )
+        parser.add_argument(
+            "--drop",
+            action="store_true",
+            help="Drop all GeoPlaces from specified sources before importing (use with caution!)",
+        )
 
     def handle(self, *args, **options) -> None:
         sources_str = options["sources"]
@@ -86,11 +97,27 @@ class Command(BaseCommand):
         update = options["update"]
         limit = options["limit"]
         min_importance = options["min_importance"]
+        continue_import = options["continue_import"]
+        drop = options["drop"]
 
         if dry_run:
             self.stdout.write(
                 self.style.WARNING("DRY RUN MODE - No changes will be made")
             )
+
+        # Safety check for --drop flag
+        if drop and not dry_run:
+            self.stdout.write(
+                self.style.ERROR(
+                    "\n"
+                    "⚠️  WARNING: --drop flag will DELETE all GeoPlaces from the specified sources!\n"
+                    "   This action cannot be undone!\n"
+                )
+            )
+            confirmation = input('Type "DELETE" to confirm: ')
+            if confirmation != "DELETE":
+                self.stdout.write(self.style.ERROR("Aborted by user."))
+                return
 
         # Parse sources
         sources = [s.strip() for s in sources_str.split(",") if s.strip()]
@@ -112,6 +139,24 @@ class Command(BaseCommand):
         # Ensure required organizations exist for all sources
         for source in sources:
             self._ensure_organizations_exist(source, dry_run)
+
+        # Drop existing GeoPlaces if --drop flag is set
+        if drop:
+            self.stdout.write(self.style.WARNING("\n" + "=" * 60))
+            self.stdout.write(
+                self.style.WARNING(
+                    "Dropping existing GeoPlaces from specified sources..."
+                )
+            )
+            self.stdout.write(self.style.WARNING("=" * 60 + "\n"))
+            for source in sources:
+                deleted_count = self._drop_places_by_source(source, dry_run)
+                if not dry_run:
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            f"Deleted {deleted_count} places from '{source}'"
+                        )
+                    )
 
         source_handlers = {
             "geonames": self._import_from_geonames,
@@ -139,6 +184,7 @@ class Command(BaseCommand):
                 limit=limit,
                 min_importance=min_importance,
                 dry_run=dry_run,
+                continue_import=continue_import,
             )
 
             total_created += created
@@ -653,3 +699,45 @@ class Command(BaseCommand):
             )
             return True
         return False
+
+    def _drop_places_by_source(self, source: str, dry_run: bool) -> int:
+        """
+        Drop all GeoPlaces that have associations with the specified source.
+
+        Args:
+            source: Organization slug (e.g., 'geonames', 'wodore')
+            dry_run: If True, only report what would be deleted
+
+        Returns:
+            Number of places deleted (or that would be deleted in dry-run mode)
+        """
+        # Find all GeoPlaces that have this source
+        places_to_delete = GeoPlace.objects.filter(
+            source_associations__organization__slug=source
+        ).distinct()
+
+        count = places_to_delete.count()
+
+        if dry_run:
+            self.stdout.write(
+                f"  [DRY RUN] Would delete {count} places from '{source}'"
+            )
+            return count
+
+        if count == 0:
+            self.stdout.write(
+                self.style.NOTICE(f"No places found for '{source}' - nothing to delete")
+            )
+            return 0
+
+        # Delete in batches to avoid memory issues
+        batch_size = 1000
+        deleted = 0
+        while places_to_delete.exists():
+            batch = places_to_delete[:batch_size]
+            batch_ids = list(batch.values_list("id", flat=True))
+            GeoPlace.objects.filter(id__in=batch_ids).delete()
+            deleted += len(batch_ids)
+            self.stdout.write(f"  Deleted {deleted}/{count} places...")
+
+        return deleted
