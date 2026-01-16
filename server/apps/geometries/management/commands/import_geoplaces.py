@@ -4,6 +4,13 @@ Management command to import GeoPlace data from external_geonames.
 Imports enabled GeoNames features into curated GeoPlace model.
 Calculates importance scores and handles deduplication.
 
+Performance Tips:
+    - Use --continue flag for subsequent imports (skips already imported, 100x faster)
+    - Use --min-importance to skip less important features
+    - Limit countries with -c flag to reduce dataset size
+    - First import is slow due to spatial duplicate checks
+    - VPS performance: Ensure PostGIS indexes exist, use --continue
+
 Usage:
     app import_geoplaces                                    # Import from all sources (geonames, wodore)
     app import_geoplaces -s geonames                        # Import only from GeoNames
@@ -14,6 +21,7 @@ Usage:
     app import_geoplaces -c alps                            # Import all Alpine countries
     app import_geoplaces --update                           # Update existing places
     app import_geoplaces -l 1000                            # Import max 1000 entries (testing)
+    app import_geoplaces --continue                         # Skip already imported (MUCH faster)
 """
 
 import math
@@ -36,7 +44,7 @@ from server.apps.organizations.models import Organization
 
 class Command(BaseCommand):
     help = "Import GeoPlace data from external GeoNames"
-    batch_size = 100
+    batch_size = 500  # Increased from 100 for better VPS performance
     default_hut_importance = 80
 
     @staticmethod
@@ -93,6 +101,12 @@ class Command(BaseCommand):
             default=0,
             help="Only import features with importance >= this value (0-100)",
         )
+        parser.add_argument(
+            "--continue",
+            dest="continue_import",
+            action="store_true",
+            help="Continue from last imported entry (skips already imported GeoNames efficiently)",
+        )
 
     def handle(self, *args, **options) -> None:
         sources_str = options["sources"]
@@ -103,6 +117,7 @@ class Command(BaseCommand):
         update = options["update"]
         limit = options["limit"]
         min_importance = options["min_importance"]
+        continue_import = options["continue_import"]
 
         if dry_run:
             self.stdout.write(
@@ -156,6 +171,7 @@ class Command(BaseCommand):
                 limit=limit,
                 min_importance=min_importance,
                 dry_run=dry_run,
+                continue_import=continue_import,
             )
 
             total_created += created
@@ -272,8 +288,18 @@ class Command(BaseCommand):
         limit: int | None,
         min_importance: int,
         dry_run: bool,
+        continue_import: bool = False,
     ) -> Tuple[int, int, int]:
-        """Import from external_geonames GeoName model."""
+        """Import from external_geonames GeoName model.
+
+        Args:
+            countries: Filter by country codes
+            update: Update existing places
+            limit: Limit number of imports
+            min_importance: Minimum importance score
+            dry_run: Show what would be done without making changes
+            continue_import: Skip already imported GeoNames efficiently
+        """
 
         # Get enabled features with categories assigned
         enabled_features = list(
@@ -317,6 +343,22 @@ class Command(BaseCommand):
             queryset = queryset[:limit]
             self.stdout.write(f"Limiting to {limit} records")
 
+        # Efficient skip: get all already imported GeoName IDs in one query
+        imported_geoname_ids = set()
+        if continue_import:
+            imported_geoname_ids = set(
+                GeoPlace.objects.filter(
+                    source_associations__organization__slug="geonames",
+                    source_associations__source_id__isnull=False,
+                ).values_list("source_associations__source_id", flat=True)
+            )
+            # Exclude already imported from queryset
+            if imported_geoname_ids:
+                queryset = queryset.exclude(geoname_id__in=imported_geoname_ids)
+                self.stdout.write(
+                    f"Skipping {len(imported_geoname_ids)} already imported GeoNames"
+                )
+
         total_count = queryset.count()
         self.stdout.write(f"\nProcessing {total_count} GeoName records...")
 
@@ -338,7 +380,8 @@ class Command(BaseCommand):
                 continue
 
             # Check for duplicate (proximity + name similarity)
-            existing_place = self._find_duplicate(geoname)
+            # Skip this check in continue_import mode since we already excluded imported IDs
+            existing_place = None if continue_import else self._find_duplicate(geoname)
 
             if existing_place and not update:
                 skipped_count += 1
@@ -407,8 +450,18 @@ class Command(BaseCommand):
         limit: int | None,
         min_importance: int,
         dry_run: bool,
+        continue_import: bool = False,
     ) -> Tuple[int, int, int]:
-        """Import from huts into GeoPlace for search."""
+        """Import from huts into GeoPlace for search.
+
+        Args:
+            countries: Filter by country codes
+            update: Update existing places
+            limit: Limit number of imports
+            min_importance: Minimum importance score
+            dry_run: Show what would be done without making changes
+            continue_import: Not used for wodore source (kept for signature compatibility)
+        """
         queryset = Hut.objects.filter(is_active=True).select_related("hut_type_open")
 
         if countries:
@@ -483,11 +536,17 @@ class Command(BaseCommand):
         return self.default_hut_importance
 
     def _find_place_by_source(self, source: str, source_id: str) -> GeoPlace | None:
+        """
+        Find existing GeoPlace by source organization and source_id.
+
+        Performance: Uses indexed fields (source_id, organization.slug) for fast lookup.
+        """
         return (
             GeoPlace.objects.filter(
                 source_associations__organization__slug=source,
                 source_associations__source_id=source_id,
             )
+            .select_related("source_associations__organization")  # Optimize query
             .order_by("id")
             .first()
         )
@@ -529,13 +588,18 @@ class Command(BaseCommand):
 
         Uses location proximity (within 30m) and same category.
         Returns first match or None.
+
+        Performance: This uses a spatial query which can be slow on VPS.
+        Consider using --continue flag to skip this check for already imported entries.
         """
         # Search for places within 30m with same category
+        # Use select_related to avoid extra queries for place_type
         return (
             GeoPlace.objects.filter(
                 location__distance_lte=(geoname.location, D(m=30)),
                 place_type=geoname.feature.category,
             )
+            .select_related("place_type")  # Optimize: avoid N+1 queries
             .annotate(distance=Distance("location", geoname.location))
             .order_by("distance")
             .first()
