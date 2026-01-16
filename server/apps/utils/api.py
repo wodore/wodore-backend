@@ -6,7 +6,11 @@ from ninja import Field, Query, Router, Schema
 from ninja.errors import HttpError
 from ninja.orm import create_schema
 
-from server.settings.components.common import BUILD_TIMESTAMP, GIT_HASH
+from server.settings.components.common import (
+    BUILD_TIMESTAMP,
+    get_git_long_hash,
+    get_git_short_hash,
+)
 
 
 # Get package version
@@ -52,7 +56,12 @@ router = Router()
 
 
 class VersionSchema(Schema):
-    hash: str = Field(..., description="Git commit hash", example="abc123e")
+    hash: str = Field(..., description="Git commit short hash", example="abc123e")
+    hash_long: str = Field(
+        ...,
+        description="Git commit full hash",
+        example="abc123ef4567890abcdef1234567890abcdef12",
+    )
     version: str = Field(..., description="Sematic version", example="1.2.0")
     timestamp: datetime = Field(
         ...,
@@ -65,11 +74,12 @@ class VersionSchema(Schema):
     )
 
 
-@router.get("/version", response=VersionSchema, tags=["utils"])
+@router.get("/version", response=VersionSchema, tags=["version"])
 def get_version(request):
-    """Get version information including git hash, package version, build timestamp, and environment."""
+    """Get version information including git short hash, full hash, package version, build timestamp, and environment."""
     return {
-        "hash": GIT_HASH,
+        "hash": get_git_short_hash(),
+        "hash_long": get_git_long_hash(),
         "version": PACKAGE_VERSION,
         "timestamp": datetime.fromisoformat(BUILD_TIMESTAMP),
         "environment": DJANGO_ENV,
