@@ -39,6 +39,23 @@ class Command(BaseCommand):
     batch_size = 100
     default_hut_importance = 80
 
+    @staticmethod
+    def _truncate_name(name: str, max_length: int = 200) -> str:
+        """
+        Truncate name to max_length if necessary.
+
+        Args:
+            name: The name to truncate
+            max_length: Maximum allowed length (default 200)
+
+        Returns:
+            Truncated name with ellipsis if truncated
+        """
+        if len(name) <= max_length:
+            return name
+        # Truncate and add ellipsis
+        return name[: max_length - 3] + "..."
+
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "-s",
@@ -529,7 +546,7 @@ class Command(BaseCommand):
         place = GeoPlace.create_with_source(
             source="geonames",
             source_id=str(geoname.geoname_id),
-            name=geoname.name,
+            name=self._truncate_name(geoname.name),
             place_type=geoname.feature.category,
             location=geoname.location,
             elevation=self._normalize_elevation(geoname.elevation),
@@ -556,8 +573,9 @@ class Command(BaseCommand):
 
         # Check if any fields actually changed
         changed = False
-        if place.name != geoname.name:
-            place.name = geoname.name
+        truncated_name = self._truncate_name(geoname.name)
+        if place.name != truncated_name:
+            place.name = truncated_name
             changed = True
         if place.location != geoname.location:
             place.location = geoname.location
