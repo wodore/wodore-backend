@@ -252,13 +252,15 @@ def buildx(
             no_sha_tag=no_sha_tag,
         )
         dockerfile = f"./docker/django/Dockerfile.{dist}"
-        git_short_hash = c.run("git rev-parse --short HEAD", hide=True).stdout.strip()
+        git_full_hash = c.run("git rev-parse HEAD", hide=True).stdout.strip()
+        git_short_hash = git_full_hash[:7]
         build_args = {
             "DJANGO_ENV": django_env,
             "WITH_DEV": "1" if with_dev else "0",
-            "GIT_HASH": git_short_hash,
+            "GIT_HASH": git_full_hash,
         }
-        info(f"Git hash:        '{git_short_hash}'")
+        info(f"Git hash (full): '{git_full_hash}'")
+        info(f"Git hash (short): '{git_short_hash}'")
         info(f"Django env:      '{django_env}'")
         info(f"Wit dev deps:    '{with_dev}'")
         header("Run docker build job")

@@ -42,7 +42,7 @@ SECRET_KEY = config("DJANGO_SECRET_KEY", "NotSet")
 
 # Git version/hash for cache busting and version tracking
 def _get_git_hash() -> str:
-    """Get git hash from env var or git command (dev mode only)."""
+    """Get git full hash from env var or git command (dev mode only)."""
     # First try environment variable (for production/docker)
     git_hash = config("GIT_HASH", default=None)
     if git_hash:
@@ -52,7 +52,7 @@ def _get_git_hash() -> str:
     # This requires DEBUG to be set, but we check if we're likely in dev mode
     try:
         result = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
+            ["git", "rev-parse", "HEAD"],
             cwd=BASE_DIR,
             capture_output=True,
             text=True,
@@ -66,6 +66,18 @@ def _get_git_hash() -> str:
 
 
 GIT_HASH = _get_git_hash()
+
+
+def get_git_short_hash() -> str:
+    """Get git short hash (first 7 characters of full hash)."""
+    if GIT_HASH and GIT_HASH != "unknown":
+        return GIT_HASH[:7]
+    return "unknown"
+
+
+def get_git_long_hash() -> str:
+    """Get git full hash."""
+    return GIT_HASH
 
 
 # Build timestamp for version tracking

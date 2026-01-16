@@ -112,7 +112,7 @@ jobs:
           echo "VERSION_MINOR=$MINOR" >> $GITHUB_ENV
           echo "VERSION_MAJOR=$MAJOR" >> $GITHUB_ENV
           echo "LATEST=$LATEST" >> $GITHUB_ENV
-          echo "GIT_HASH=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "GIT_HASH=$(git rev-parse HEAD)" >> $GITHUB_ENV
           echo "VERSION_TAG=$VERSION_TAG" >> $GITHUB_ENV
 
           # Handle workflow_dispatch custom_tag
