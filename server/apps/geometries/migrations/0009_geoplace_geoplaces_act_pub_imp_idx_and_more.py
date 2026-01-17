@@ -7,7 +7,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("categories", "0011_alter_category_symbol_detailed_and_more"),
-        ("geometries", "0007_update_country_constraint_all_countries"),
+        ("geometries", "0008_alter_geoplace_name"),
         ("images", "0024_image_upd_mod_8c4acfcb_imagetag_upd_mod_43df27cd"),
         ("organizations", "0020_organization_upd_mod_406b4872"),
     ]
