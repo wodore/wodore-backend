@@ -10,11 +10,25 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AlterField(
-            model_name="geoplacesourceassociation",
-            name="source_id",
-            field=models.CharField(
-                blank=True, db_index=True, default="", help_text="Source id", max_length=100, null=True
-            ),
+        migrations.RunSQL(
+            sql="""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_indexes
+                        WHERE tablename = 'geometries_geoplacesourceassociation'
+                        AND indexname = 'geometries_geoplacesourceassociation_source_id_dde97df7'
+                    ) THEN
+                        CREATE INDEX "geometries_geoplacesourceassociation_source_id_dde97df7"
+                        ON "geometries_geoplacesourceassociation" ("source_id");
+                        CREATE INDEX "geometries_geoplacesourceassociation_source_id_dde97df7_like"
+                        ON "geometries_geoplacesourceassociation" ("source_id" varchar_pattern_ops);
+                    END IF;
+                END $$;
+            """,
+            reverse_sql="""
+                DROP INDEX IF EXISTS "geometries_geoplacesourceassociation_source_id_dde97df7_like";
+                DROP INDEX IF EXISTS "geometries_geoplacesourceassociation_source_id_dde97df7";
+            """,
         ),
     ]
