@@ -5,7 +5,9 @@ SECURITY WARNING: don't run with debug turned on in production!
 """
 
 import logging
+import re
 import socket
+import subprocess
 from importlib.util import find_spec
 
 from server.settings.components.common import (
@@ -35,6 +37,31 @@ DEBUG = True
 
 WITH_DEV = find_spec("debug_toolbar") is not None
 
+
+# Get local IP address dynamically
+def get_local_ip() -> str | None:
+    """Get the local IP address using the route to 8.8.8.8."""
+    try:
+        result = subprocess.run(
+            ["ip", "-o", "route", "get", "to", "8.8.8.8"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        # Extract IP from output: "192.168.1.50 dev eth0 src 192.168.1.50 uid 0"
+        # Using the sed command approach
+        import re
+
+        match = re.search(r"src (\d+\.\d+\.\d+\.\d+)", result.stdout)
+        if match:
+            return match.group(1)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+    return None
+
+
+LOCAL_IP = get_local_ip()
+
 ALLOWED_HOSTS = [
     *DJANGO_TRUSTED_DOMAINS,
     "api.localhost",
@@ -44,6 +71,10 @@ ALLOWED_HOSTS = [
     "127.0.0.1",
     "[::1]",
 ]
+
+# Add local IP dynamically if available
+if LOCAL_IP:
+    ALLOWED_HOSTS.append(LOCAL_IP)
 
 
 CSRF_TRUSTED_ORIGINS = [
@@ -58,6 +89,16 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^.*\.localhost:\d+$",
     *[f"^https?://{d}" for d in DJANGO_TRUSTED_DOMAINS],
 ]
+
+# Add local IP pattern to CORS dynamically
+if LOCAL_IP:
+    # Match the specific local IP on any port
+    CORS_ALLOWED_ORIGIN_REGEXES.append(rf"^https?://{re.escape(LOCAL_IP)}:\d+$")
+    # Also match the entire subnet (e.g., 192.168.1.x)
+    ip_parts = LOCAL_IP.split(".")
+    if len(ip_parts) == 4:
+        subnet_pattern = r"^https?://" + r"\.".join(ip_parts[:3]) + r"\.\d+:\d+$"
+        CORS_ALLOWED_ORIGIN_REGEXES.append(subnet_pattern)
 
 # Installed apps for development only:
 
