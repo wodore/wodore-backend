@@ -13,12 +13,35 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddIndex(
-            model_name="geoplace",
-            index=models.Index(fields=["is_active", "is_public", "importance"], name="geoplaces_act_pub_imp_idx"),
-        ),
-        migrations.AddIndex(
-            model_name="geoplace",
-            index=models.Index(fields=["is_active", "is_public", "country_code"], name="geoplaces_act_pub_cnt_idx"),
+        migrations.RunSQL(
+            sql="""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_indexes
+                        WHERE tablename = 'geometries_geoplace'
+                        AND indexname = 'geoplaces_act_pub_imp_idx'
+                    ) THEN
+                        CREATE INDEX "geoplaces_act_pub_imp_idx"
+                        ON "geometries_geoplace" ("is_active", "is_public", "importance");
+                    END IF;
+                END $$;
+
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_indexes
+                        WHERE tablename = 'geometries_geoplace'
+                        AND indexname = 'geoplaces_act_pub_cnt_idx'
+                    ) THEN
+                        CREATE INDEX "geoplaces_act_pub_cnt_idx"
+                        ON "geometries_geoplace" ("is_active", "is_public", "country_code");
+                    END IF;
+                END $$;
+            """,
+            reverse_sql="""
+                DROP INDEX IF EXISTS "geoplaces_act_pub_imp_idx";
+                DROP INDEX IF EXISTS "geoplaces_act_pub_cnt_idx";
+            """,
         ),
     ]
