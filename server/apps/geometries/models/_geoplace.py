@@ -30,7 +30,7 @@ class GeoPlace(TimeStampedModel):
     # Translation support
     i18n = TranslationField(fields=("name",))
 
-    name = models.CharField(max_length=100, verbose_name=_("Name"))
+    name = models.CharField(max_length=200, verbose_name=_("Name"))
     name_i18n: str  # for typing
 
     # Classification
