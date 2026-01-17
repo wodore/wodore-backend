@@ -107,6 +107,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Continue from last imported entry (skips already imported GeoNames efficiently)",
         )
+        parser.add_argument(
+            "--drop",
+            action="store_true",
+            help="Drop all GeoPlaces from specified sources before importing (use with caution!)",
+        )
 
     def handle(self, *args, **options) -> None:
         sources_str = options["sources"]
@@ -118,11 +123,26 @@ class Command(BaseCommand):
         limit = options["limit"]
         min_importance = options["min_importance"]
         continue_import = options["continue_import"]
+        drop = options["drop"]
 
         if dry_run:
             self.stdout.write(
                 self.style.WARNING("DRY RUN MODE - No changes will be made")
             )
+
+        # Safety check for --drop flag
+        if drop and not dry_run:
+            self.stdout.write(
+                self.style.ERROR(
+                    "\n"
+                    "⚠️  WARNING: --drop flag will DELETE all GeoPlaces from the specified sources!\n"
+                    "   This action cannot be undone!\n"
+                )
+            )
+            confirmation = input('Type "DELETE" to confirm: ')
+            if confirmation != "DELETE":
+                self.stdout.write(self.style.ERROR("Aborted by user."))
+                return
 
         # Parse sources
         sources = [s.strip() for s in sources_str.split(",") if s.strip()]
@@ -144,6 +164,24 @@ class Command(BaseCommand):
         # Ensure required organizations exist for all sources
         for source in sources:
             self._ensure_organizations_exist(source, dry_run)
+
+        # Drop existing GeoPlaces if --drop flag is set
+        if drop:
+            self.stdout.write(self.style.WARNING("\n" + "=" * 60))
+            self.stdout.write(
+                self.style.WARNING(
+                    "Dropping existing GeoPlaces from specified sources..."
+                )
+            )
+            self.stdout.write(self.style.WARNING("=" * 60 + "\n"))
+            for source in sources:
+                deleted_count = self._drop_places_by_source(source, dry_run)
+                if not dry_run:
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            f"Deleted {deleted_count} places from '{source}'"
+                        )
+                    )
 
         source_handlers = {
             "geonames": self._import_from_geonames,

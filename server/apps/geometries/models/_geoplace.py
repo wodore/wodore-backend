@@ -93,13 +93,26 @@ class GeoPlace(TimeStampedModel):
             models.Index(
                 fields=["is_active", "is_public"], name="geoplaces_active_public_idx"
             ),
+            # Composite index for active + public + importance (used in search/nearby)
+            models.Index(
+                fields=["is_active", "is_public", "importance"],
+                name="geoplaces_act_pub_imp_idx",
+            ),
+            # Composite index for active + public + country (used in search)
+            models.Index(
+                fields=["is_active", "is_public", "country_code"],
+                name="geoplaces_act_pub_cnt_idx",
+            ),
             models.Index(fields=["-importance"]),
-            GinIndex(fields=["i18n"]),
+            # GIN index for trigram similarity search (critical for search performance)
             GinIndex(
                 fields=["name"],
                 name="geoplaces_name_gin_idx",
                 opclasses=["gin_trgm_ops"],
             ),
+            # GIN index for i18n fields (supports multi-language search)
+            GinIndex(fields=["i18n"]),
+            # GIST index for spatial queries (critical for nearby search)
             GistIndex(fields=["location"], name="geoplaces_location_gist_idx"),
         ]
         constraints = (
