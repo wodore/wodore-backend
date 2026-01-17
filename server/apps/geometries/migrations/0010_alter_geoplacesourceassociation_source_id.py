@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("geometries", "0008_alter_geoplace_name"),
+        ("geometries", "0009_geoplace_geoplaces_act_pub_imp_idx_and_more"),
     ]
 
     operations = [
