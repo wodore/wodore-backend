@@ -143,10 +143,12 @@ class WeatherCodeAdmin(ModelAdmin):
         """Show night symbol preview."""
         try:
             if obj.symbol_night and obj.symbol_night.svg_file:
-                return mark_safe(
-                    f'<img src="{obj.symbol_night.svg_file.url}" width="30" height="30" '
-                    f'style="object-fit:contain;" title="{obj.symbol_night.slug}" />'
+                img = (
+                    f'<img src="{obj.symbol_night.svg_file.url}" '
+                    f'width="30" height="30" style="object-fit:contain;" '
+                    f'title="{obj.symbol_night.slug}" />'
                 )
+                return mark_safe(img)
         except Exception:
             pass
         return mark_safe('<span style="color:#999;">-</span>')

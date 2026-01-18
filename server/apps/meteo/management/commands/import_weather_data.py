@@ -167,8 +167,9 @@ class Command(BaseCommand):
         all_languages = [lang[0] for lang in settings.LANGUAGES]
         other_languages = [lang for lang in all_languages if lang != main_language]
 
+        other_langs_str = ", ".join(other_languages)
         self.stdout.write(
-            f"Using main language: {main_language}, other languages: {', '.join(other_languages)}"
+            f"Using main language: {main_language}, other languages: {other_langs_str}"
         )
 
         # Get or create organization
@@ -195,11 +196,11 @@ class Command(BaseCommand):
             with open(descriptions_file, "r") as f:
                 wmo_descriptions = json.load(f)
         else:
-            self.stdout.write(
-                self.style.WARNING(
-                    f"WMO descriptions file not found: {descriptions_file}. Translations will not be available."
-                )
+            msg = (
+                f"WMO descriptions file not found: {descriptions_file}. "
+                "Translations will not be available."
             )
+            self.stdout.write(self.style.WARNING(msg))
 
         # Load category mapping
         category_mapping_file = base_path / "wmo_category_mapping.json"
@@ -217,7 +218,8 @@ class Command(BaseCommand):
             day_icon = entry["day"]["icon"]
             night_icon = entry["night"]["icon"]
 
-            # Get descriptions from wmo_descriptions.json if available, otherwise use fallback from mapping
+            # Get descriptions from wmo_descriptions.json if available,
+            # otherwise use fallback from mapping
             code_str = str(code)
             descriptions_day = {}
             descriptions_night = {}
@@ -261,7 +263,8 @@ class Command(BaseCommand):
                     slug=f"weather-icons-{night_icon}", style="detailed"
                 ).first()
 
-            # Check if code already exists (lookup by source_id which is the icon filename)
+            # Check if code already exists
+            # (lookup by source_id which is the icon filename)
             existing = None
             if not dry_run:
                 existing = WeatherCode.objects.filter(
@@ -365,11 +368,11 @@ class Command(BaseCommand):
                         weather_code.save()
 
                         stats["codes_created"] += 1
-                        self.stdout.write(
-                            self.style.SUCCESS(
-                                f"  ✓ Created WMO {code} (slug: {weather_code.slug}): {main_desc_day}"
-                            )
+                        msg = (
+                            f"  ✓ Created WMO {code} "
+                            f"(slug: {weather_code.slug}): {main_desc_day}"
                         )
+                        self.stdout.write(self.style.SUCCESS(msg))
                     except Exception as e:
                         self.stderr.write(
                             self.style.ERROR(f"  ✗ Failed to create WMO {code}: {e}")
@@ -385,7 +388,6 @@ class Command(BaseCommand):
             license = License.objects.create(
                 slug="mit",
                 name="MIT License",
-                url="https://opensource.org/licenses/MIT",
                 link="https://opensource.org/licenses/MIT",
                 attribution_required=False,
                 no_commercial=False,
@@ -397,20 +399,21 @@ class Command(BaseCommand):
         return license
 
     def _get_or_create_organization(self, dry_run):
-        """Get or create Open-Meteo organization"""
-        org = Organization.objects.filter(slug="open-meteo").first()
+        """Get or create Weather Icons organization"""
+        org = Organization.objects.filter(slug="weather-icons").first()
         if not org and not dry_run:
             org = Organization.objects.create(
-                slug="open-meteo",
-                name="Open-Meteo",
-                fullname="Open-Meteo Weather API",
-                description="Open-source weather API",
+                slug="weather-icons",
+                name="Weather Icons",
+                fullname="Weather Icons by Basmilius",
+                description="Weather icon set by Basmilius",
+                url="https://meteocons.com",
                 is_active=True,
                 is_public=True,
             )
-            self.stdout.write(self.style.SUCCESS("Created Open-Meteo organization"))
+            self.stdout.write(self.style.SUCCESS("Created Weather Icons organization"))
         elif not org and dry_run:
-            self.stdout.write("Would create Open-Meteo organization")
+            self.stdout.write("Would create Weather Icons organization")
         return org
 
     def _get_or_create_meteo_categories(self, dry_run):

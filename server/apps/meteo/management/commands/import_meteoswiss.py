@@ -303,9 +303,11 @@ class Command(BaseCommand):
         if dry_run:
             stats["codes_created"] += 1
             day_night = "day" if is_day else "night"
-            self.stdout.write(
-                f"  → Would create WMO {wmo_code} (MeteoSwiss {icon_id}, priority {priority}, {day_night}): {main_desc}"
+            msg = (
+                f"  → Would create WMO {wmo_code} (MeteoSwiss {icon_id}, "
+                f"priority {priority}, {day_night}): {main_desc}"
             )
+            self.stdout.write(msg)
             return
 
         existing = WeatherCode.objects.filter(
@@ -382,11 +384,11 @@ class Command(BaseCommand):
                 existing.save()
                 stats["codes_updated"] += 1
                 day_night = "day" if is_day else "night"
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        f"  ✓ Updated WMO {wmo_code} (MeteoSwiss {icon_id}, priority {priority}, {day_night})"
-                    )
+                msg = (
+                    f"  ✓ Updated WMO {wmo_code} (MeteoSwiss {icon_id}, "
+                    f"priority {priority}, {day_night})"
                 )
+                self.stdout.write(self.style.SUCCESS(msg))
             else:
                 stats["codes_skipped"] += 1
                 self.stdout.write(
@@ -395,7 +397,8 @@ class Command(BaseCommand):
         else:
             # Create - slug will be auto-generated
             try:
-                # Set both day and night to same values initially, will be updated by alt entries
+                # Set both day and night to same values initially
+                # Will be updated by alternative entries
                 # Main language goes into main field, other languages into i18n
                 weather_code = WeatherCode(
                     source_organization=organization,
@@ -420,17 +423,15 @@ class Command(BaseCommand):
 
                 stats["codes_created"] += 1
                 day_night = "day" if is_day else "night"
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        f"  ✓ Created WMO {wmo_code} (MeteoSwiss {icon_id}, slug: {weather_code.slug}, priority {priority}, {day_night}): {main_desc}"
-                    )
+                msg = (
+                    f"  ✓ Created WMO {wmo_code} (MeteoSwiss {icon_id}, "
+                    f"slug: {weather_code.slug}, priority {priority}, "
+                    f"{day_night}): {main_desc}"
                 )
+                self.stdout.write(self.style.SUCCESS(msg))
             except Exception as e:
-                self.stderr.write(
-                    self.style.ERROR(
-                        f"  ✗ Failed to create WMO {wmo_code} (MeteoSwiss {icon_id}): {e}"
-                    )
-                )
+                msg = f"  ✗ Failed to create WMO {wmo_code} (MeteoSwiss {icon_id}): {e}"
+                self.stderr.write(self.style.ERROR(msg))
 
     def _get_or_create_license(self, dry_run):
         """Get or create license for MeteoSwiss data"""
@@ -439,7 +440,6 @@ class Command(BaseCommand):
             license = License.objects.create(
                 slug="open-data-meteoswiss",
                 name="MeteoSwiss Open Data",
-                url="https://www.meteoswiss.admin.ch/services-and-publications/service/open-government-data.html",
                 link="https://www.meteoswiss.admin.ch/services-and-publications/service/open-government-data.html",
                 attribution_required=True,
                 no_commercial=False,
@@ -461,6 +461,7 @@ class Command(BaseCommand):
                 name="MeteoSwiss",
                 fullname="Federal Office of Meteorology and Climatology MeteoSwiss",
                 description="Swiss national weather service",
+                url="https://www.meteoschweiz.admin.ch",
                 is_active=True,
                 is_public=True,
             )

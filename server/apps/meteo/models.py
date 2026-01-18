@@ -105,7 +105,8 @@ class WeatherCode(TimeStampedModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.source_organization.slug}:{self.code} ({self.slug}) - {self.description_day}"
+        org_slug = self.source_organization.slug
+        return f"{org_slug}:{self.code} ({self.slug}) - {self.description_day}"
 
     def save(self, *args, **kwargs):
         """Auto-generate unique slug if not set, or handle conflicts on updates"""
