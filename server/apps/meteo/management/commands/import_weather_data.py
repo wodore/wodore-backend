@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from django.conf import settings
 from django.core.files import File
 from django.core.management.base import BaseCommand
 
@@ -161,6 +162,15 @@ class Command(BaseCommand):
 
     def _import_wmo_codes(self, base_path, dry_run, stats):
         """Import WMO weather codes from wmo4677mapping.json"""
+        # Get language configuration from settings
+        main_language = settings.LANGUAGE_CODE
+        all_languages = [lang[0] for lang in settings.LANGUAGES]
+        other_languages = [lang for lang in all_languages if lang != main_language]
+
+        self.stdout.write(
+            f"Using main language: {main_language}, other languages: {', '.join(other_languages)}"
+        )
+
         # Get or create organization
         organization = self._get_or_create_organization(dry_run)
         if organization is None and not dry_run:
@@ -178,6 +188,19 @@ class Command(BaseCommand):
         with open(mapping_file, "r") as f:
             wmo_data = json.load(f)
 
+        # Load WMO descriptions with translations
+        descriptions_file = base_path / "wmo_descriptions.json"
+        wmo_descriptions = {}
+        if descriptions_file.exists():
+            with open(descriptions_file, "r") as f:
+                wmo_descriptions = json.load(f)
+        else:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"WMO descriptions file not found: {descriptions_file}. Translations will not be available."
+                )
+            )
+
         # Load category mapping
         category_mapping_file = base_path / "wmo_category_mapping.json"
         category_mapping = {}
@@ -191,10 +214,32 @@ class Command(BaseCommand):
         # Process each weather code
         for entry in wmo_data:
             code = entry["weathercode"]
-            day_desc = entry["day"]["description"]
-            night_desc = entry["night"]["description"]
             day_icon = entry["day"]["icon"]
             night_icon = entry["night"]["icon"]
+
+            # Get descriptions from wmo_descriptions.json if available, otherwise use fallback from mapping
+            code_str = str(code)
+            descriptions_day = {}
+            descriptions_night = {}
+
+            if code_str in wmo_descriptions:
+                # Extract descriptions for all available languages
+                for lang in all_languages:
+                    descriptions_day[lang] = wmo_descriptions[code_str].get(lang, "")
+                    descriptions_night[lang] = wmo_descriptions[code_str].get(
+                        f"{lang}_night", ""
+                    )
+            else:
+                # Fallback to English from mapping file for all languages
+                day_desc = entry["day"]["description"]
+                night_desc = entry["night"]["description"]
+                for lang in all_languages:
+                    descriptions_day[lang] = day_desc
+                    descriptions_night[lang] = night_desc
+
+            # Get main language descriptions
+            main_desc_day = descriptions_day.get(main_language, "")
+            main_desc_night = descriptions_night.get(main_language, "")
 
             # Get category
             category = None
@@ -216,24 +261,56 @@ class Command(BaseCommand):
                     slug=f"weather-icons-{night_icon}", style="detailed"
                 ).first()
 
-            # Generate slug
-            slug = f"wmo-{code}"
-
-            # Check if code already exists
+            # Check if code already exists (lookup by source_id which is the icon filename)
             existing = None
             if not dry_run:
                 existing = WeatherCode.objects.filter(
-                    source_organization=organization, code=code
+                    source_organization=organization, source_id=day_icon
                 ).first()
 
             if existing:
                 # Update existing
+                # Main language goes into main field, other languages into i18n
                 updated = False
-                if existing.description_day != day_desc:
-                    existing.description_day = day_desc
+
+                # Check if day description needs update
+                desc_day_changed = existing.description_day != main_desc_day
+                for lang in other_languages:
+                    field_name = f"description_day_{lang}"
+                    if getattr(existing, field_name, None) != descriptions_day.get(
+                        lang, ""
+                    ):
+                        desc_day_changed = True
+                        break
+
+                if desc_day_changed:
+                    existing.description_day = main_desc_day  # Main language
+                    i18n_data = existing.i18n or {}
+                    for lang in other_languages:
+                        i18n_data[f"description_day_{lang}"] = descriptions_day.get(
+                            lang, ""
+                        )
+                    existing.i18n = i18n_data
                     updated = True
-                if existing.description_night != night_desc:
-                    existing.description_night = night_desc
+
+                # Check if night description needs update
+                desc_night_changed = existing.description_night != main_desc_night
+                for lang in other_languages:
+                    field_name = f"description_night_{lang}"
+                    if getattr(existing, field_name, None) != descriptions_night.get(
+                        lang, ""
+                    ):
+                        desc_night_changed = True
+                        break
+
+                if desc_night_changed:
+                    existing.description_night = main_desc_night  # Main language
+                    i18n_data = existing.i18n or {}
+                    for lang in other_languages:
+                        i18n_data[f"description_night_{lang}"] = descriptions_night.get(
+                            lang, ""
+                        )
+                    existing.i18n = i18n_data
                     updated = True
                 if existing.category != category:
                     existing.category = category
@@ -249,32 +326,49 @@ class Command(BaseCommand):
                     existing.save()
                     stats["codes_updated"] += 1
                     self.stdout.write(
-                        self.style.SUCCESS(f"  ✓ Updated WMO {code}: {day_desc}")
+                        self.style.SUCCESS(f"  ✓ Updated WMO {code}: {main_desc_day}")
                     )
                 else:
                     stats["codes_skipped"] += 1
                     if dry_run:
-                        self.stdout.write(f"  → Would update WMO {code}: {day_desc}")
+                        self.stdout.write(
+                            f"  → Would update WMO {code}: {main_desc_day}"
+                        )
                     else:
                         self.stdout.write(f"  ⊘ Skipped WMO {code}: no changes")
             else:
                 # Create new
+                # Main language goes into main field, other languages into i18n
                 if not dry_run:
                     try:
-                        WeatherCode.objects.create(
+                        weather_code = WeatherCode(
                             source_organization=organization,
-                            source_id=str(code),
+                            source_id=day_icon,  # Use day icon filename as source_id
                             code=code,
-                            slug=slug,
+                            # slug is auto-generated in model's save() method
                             category=category,
-                            description_day=day_desc,
-                            description_night=night_desc,
+                            description_day=main_desc_day,  # Main language
+                            description_night=main_desc_night,  # Main language
                             symbol_day=symbol_day,
                             symbol_night=symbol_night,
                         )
+                        # Set translations using i18n property (other languages)
+                        i18n_data = {}
+                        for lang in other_languages:
+                            i18n_data[f"description_day_{lang}"] = descriptions_day.get(
+                                lang, ""
+                            )
+                            i18n_data[f"description_night_{lang}"] = (
+                                descriptions_night.get(lang, "")
+                            )
+                        weather_code.i18n = i18n_data
+                        weather_code.save()
+
                         stats["codes_created"] += 1
                         self.stdout.write(
-                            self.style.SUCCESS(f"  ✓ Created WMO {code}: {day_desc}")
+                            self.style.SUCCESS(
+                                f"  ✓ Created WMO {code} (slug: {weather_code.slug}): {main_desc_day}"
+                            )
                         )
                     except Exception as e:
                         self.stderr.write(
@@ -282,7 +376,7 @@ class Command(BaseCommand):
                         )
                 else:
                     stats["codes_created"] += 1
-                    self.stdout.write(f"  → Would create WMO {code}: {day_desc}")
+                    self.stdout.write(f"  → Would create WMO {code}: {main_desc_day}")
 
     def _get_or_create_license(self, dry_run):
         """Get or create MIT license for weather icons"""

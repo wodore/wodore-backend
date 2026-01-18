@@ -108,13 +108,25 @@ class WeatherCode(TimeStampedModel):
         return f"{self.source_organization.slug}:{self.code} ({self.slug}) - {self.description_day}"
 
     def save(self, *args, **kwargs):
-        """Auto-generate unique slug if not set or if there's a conflict"""
-        if not self.slug or not self.pk:
-            # Generate base slug from WMO code description or category
+        """Auto-generate unique slug if not set, or handle conflicts on updates"""
+        if not self.slug:
+            # No slug set - generate one
             base_slug = self._generate_base_slug()
-
-            # Ensure uniqueness within organization
             self.slug = self._ensure_unique_slug(base_slug)
+        elif self.pk:
+            # Existing object with slug - check if slug conflicts with another record
+            # This handles the case where slug was manually changed
+            conflict_exists = (
+                WeatherCode.objects.filter(
+                    source_organization=self.source_organization, slug=self.slug
+                )
+                .exclude(pk=self.pk)
+                .exists()
+            )
+            if conflict_exists:
+                # Slug conflicts - generate alternative slug
+                base_slug = self.slug
+                self.slug = self._ensure_unique_slug(base_slug)
 
         super().save(*args, **kwargs)
 
