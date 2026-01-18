@@ -129,6 +129,7 @@ Weather forecast integration for huts and mountain locations.
 * **Coverage**: Swiss-specific weather symbols
 * **Format**: SVG
 
+**Link:** https://www.meteoswiss.admin.ch/weather/weather-and-climate-from-a-to-z/weather-symbols.html
 **Link**: [https://docs.discover.swiss/dev/reference/weather-icons/](https://docs.discover.swiss/dev/reference/weather-icons/)
 **URL**: `https://www.meteoswiss.admin.ch/static/resources/weather-symbols/{id}.svg`
 
