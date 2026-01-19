@@ -166,6 +166,14 @@ UNFOLD = {
                             "contacts.change_contact"
                         ),
                     },
+                    {
+                        "title": _("Meteo"),
+                        "icon": "wb_sunny",
+                        "link": reverse_lazy("admin:meteo_weathercode_changelist"),
+                        "permission": lambda request: request.user.has_perm(
+                            "meteo.view_weathercode"
+                        ),
+                    },
                 ],
             },
             {
@@ -476,6 +484,20 @@ UNFOLD = {
                     "link": reverse_lazy("admin:geometries_geoplace_changelist"),
                     "permission": lambda request: request.user.has_perm(
                         "geometries.view_geoplace"
+                    ),
+                },
+            ],
+        },
+        {
+            "models": [
+                "meteo.weathercode",
+            ],
+            "items": [
+                {
+                    "title": _("Weather Codes"),
+                    "link": reverse_lazy("admin:meteo_weathercode_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "meteo.view_weathercode"
                     ),
                 },
             ],

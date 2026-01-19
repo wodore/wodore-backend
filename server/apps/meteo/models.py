@@ -137,8 +137,8 @@ class WeatherCode(TimeStampedModel):
         # Includes forecast codes (0-3, 45-99) and observational codes (4-44)
         wmo_slug_map = {
             # Clear/Cloudy (0-3)
-            0: "sunny",
-            1: "mostly-sunny",
+            0: "clear",
+            1: "mostly-clear",
             2: "partly-cloudy",
             3: "cloudy",
             # Observational: Atmospheric phenomena (4-19)
