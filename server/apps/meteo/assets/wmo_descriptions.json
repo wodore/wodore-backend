@@ -49,6 +49,26 @@
     "it_night": "Nebbia",
     "en_night": "Fog"
   },
+  "46": {
+    "en": "Low fog (building up)",
+    "de": "Bodennebel (zunehmend)",
+    "fr": "Brouillard bas (se formant)",
+    "it": "Nebbia bassa (in aumento)",
+    "en_night": "Low fog (building up)",
+    "de_night": "Bodennebel (zunehmend)",
+    "fr_night": "Brouillard bas (se formant)",
+    "it_night": "Nebbia bassa (in aumento)"
+  },
+  "47": {
+    "en": "Fog (building up)",
+    "de": "Nebel (zunehmend)",
+    "fr": "Brouillard (se formant)",
+    "it": "Nebbia (in aumento)",
+    "en_night": "Fog (building up)",
+    "de_night": "Nebel (zunehmend)",
+    "fr_night": "Brouillard (se formant)",
+    "it_night": "Nebbia (in aumento)"
+  },
   "48": {
     "de": "Nebel mit Reifablagerung",
     "fr": "Brouillard givrant",
@@ -58,6 +78,26 @@
     "fr_night": "Brouillard givrant",
     "it_night": "Nebbia con brina",
     "en_night": "Depositing rime fog"
+  },
+  "49": {
+    "en": "Freezing Fog",
+    "de": "Gefrierender Nebel",
+    "fr": "Brouillard givrant",
+    "it": "Nebbia gelata",
+    "en_night": "Freezing Fog",
+    "de_night": "Gefrierender Nebel",
+    "fr_night": "Brouillard givrant",
+    "it_night": "Nebbia gelata"
+  },
+  "50": {
+    "en": "Light Intermittent Drizzle",
+    "de": "Leichter unterbrochener Nieselregen",
+    "fr": "Bruine légère intermittente",
+    "it": "Pioggerella leggera intermittente",
+    "en_night": "Light Intermittent Drizzle",
+    "de_night": "Leichter unterbrochener Nieselregen",
+    "fr_night": "Bruine légère intermittente",
+    "it_night": "Pioggerella leggera intermittente"
   },
   "51": {
     "de": "Leichter Nieselregen",
@@ -69,6 +109,16 @@
     "it_night": "Pioggerella leggera",
     "en_night": "Light drizzle"
   },
+  "52": {
+    "en": "Intermittent Drizzle",
+    "de": "Unterbrochener Nieselregen",
+    "fr": "Bruine intermittente",
+    "it": "Pioggerella intermittente",
+    "en_night": "Intermittent Drizzle",
+    "de_night": "Unterbrochener Nieselregen",
+    "fr_night": "Bruine intermittente",
+    "it_night": "Pioggerella intermittente"
+  },
   "53": {
     "de": "Mässiger Nieselregen",
     "fr": "Bruine modérée",
@@ -78,6 +128,16 @@
     "fr_night": "Bruine modérée",
     "it_night": "Pioggerella moderata",
     "en_night": "Moderate drizzle"
+  },
+  "54": {
+    "en": "Dense Intermittent Drizzle",
+    "de": "Starker unterbrochener Nieselregen",
+    "fr": "Bruine dense intermittente",
+    "it": "Pioggerella densa intermittente",
+    "en_night": "Dense Intermittent Drizzle",
+    "de_night": "Starker unterbrochener Nieselregen",
+    "fr_night": "Bruine dense intermittente",
+    "it_night": "Pioggerella densa intermittente"
   },
   "55": {
     "de": "Starker Nieselregen",
@@ -109,6 +169,36 @@
     "it_night": "Pioggerella gelata",
     "en_night": "Freezing drizzle"
   },
+  "58": {
+    "en": "Light Rain / Drizzle",
+    "de": "Leichter Regen mit Nieselregen",
+    "fr": "Pluie légère et bruine",
+    "it": "Pioggia leggera e pioggerella",
+    "en_night": "Light Rain / Drizzle",
+    "de_night": "Leichter Regen mit Nieselregen",
+    "fr_night": "Pluie légère et bruine",
+    "it_night": "Pioggia leggera e pioggerella"
+  },
+  "59": {
+    "en": "Rain / Drizzle",
+    "de": "Regen mit Nieselregen",
+    "fr": "Pluie et bruine",
+    "it": "Pioggia e pioggerella",
+    "en_night": "Rain / Drizzle",
+    "de_night": "Regen mit Nieselregen",
+    "fr_night": "Pluie et bruine",
+    "it_night": "Pioggia e pioggerella"
+  },
+  "60": {
+    "en": "Light Intermittent Rain",
+    "de": "Leichter unterbrochener Regen",
+    "fr": "Pluie légère intermittente",
+    "it": "Pioggia leggera intermittente",
+    "en_night": "Light Intermittent Rain",
+    "de_night": "Leichter unterbrochener Regen",
+    "fr_night": "Pluie légère intermittente",
+    "it_night": "Pioggia leggera intermittente"
+  },
   "61": {
     "de": "Leichter Regen",
     "fr": "Pluie faible",
@@ -119,6 +209,16 @@
     "it_night": "Pioggia leggera",
     "en_night": "Light rain"
   },
+  "62": {
+    "en": "Intermittent Rain",
+    "de": "Unterbrochener Regen",
+    "fr": "Pluie intermittente",
+    "it": "Pioggia intermittente",
+    "en_night": "Intermittent Rain",
+    "de_night": "Unterbrochener Regen",
+    "fr_night": "Pluie intermittente",
+    "it_night": "Pioggia intermittente"
+  },
   "63": {
     "de": "Mässiger Regen",
     "fr": "Pluie modérée",
@@ -128,6 +228,16 @@
     "fr_night": "Pluie modérée",
     "it_night": "Pioggia moderata",
     "en_night": "Moderate rain"
+  },
+  "64": {
+    "en": "Heavy Intermittent Rain",
+    "de": "Starker unterbrochener Regen",
+    "fr": "Pluie forte intermittente",
+    "it": "Pioggia forte intermittente",
+    "en_night": "Heavy Intermittent Rain",
+    "de_night": "Starker unterbrochener Regen",
+    "fr_night": "Pluie forte intermittente",
+    "it_night": "Pioggia forte intermittente"
   },
   "65": {
     "de": "Starker Regen",
@@ -169,6 +279,26 @@
     "it_night": "Pioggia e neve mista leggera",
     "en_night": "Light rain and snow"
   },
+  "69": {
+    "en": "Sleet",
+    "de": "Schneeregen",
+    "fr": "Pluie et neige mêlées",
+    "it": "Pioggia mista a neve",
+    "en_night": "Sleet",
+    "de_night": "Schneeregen",
+    "fr_night": "Pluie et neige mêlées",
+    "it_night": "Pioggia mista a neve"
+  },
+  "70": {
+    "en": "Light Intermittent Snowfalls",
+    "de": "Leichter unterbrochener Schneefall",
+    "fr": "Chute de neige légère intermittente",
+    "it": "Nevicata leggera intermittente",
+    "en_night": "Light Intermittent Snowfalls",
+    "de_night": "Leichter unterbrochener Schneefall",
+    "fr_night": "Chute de neige légère intermittente",
+    "it_night": "Nevicata leggera intermittente"
+  },
   "71": {
     "de": "Leichter Schneefall",
     "fr": "Chute de neige légère",
@@ -178,6 +308,16 @@
     "fr_night": "Chute de neige légère",
     "it_night": "Nevicata leggera",
     "en_night": "Light snow"
+  },
+  "72": {
+    "en": "Intermittent Snowfalls",
+    "de": "Unterbrochener Schneefall",
+    "fr": "Chute de neige intermittente",
+    "it": "Nevicata intermittente",
+    "en_night": "Intermittent Snowfalls",
+    "de_night": "Unterbrochener Schneefall",
+    "fr_night": "Chute de neige intermittente",
+    "it_night": "Nevicata intermittente"
   },
   "73": {
     "de": "Mässiger Schneefall",
@@ -189,6 +329,16 @@
     "it_night": "Nevicata moderata",
     "en_night": "Moderate snow"
   },
+  "74": {
+    "en": "Heavy Intermittent Snowfalls",
+    "de": "Starker unterbrochener Schneefall",
+    "fr": "Chute de neige forte intermittente",
+    "it": "Nevicata intensa intermittente",
+    "en_night": "Heavy Intermittent Snowfalls",
+    "de_night": "Starker unterbrochener Schneefall",
+    "fr_night": "Chute de neige forte intermittente",
+    "it_night": "Nevicata intensa intermittente"
+  },
   "75": {
     "de": "Starker Schneefall",
     "fr": "Chute de neige forte",
@@ -199,6 +349,16 @@
     "it_night": "Nevicata intensa",
     "en_night": "Heavy snow"
   },
+  "76": {
+    "en": "Diamond dust",
+    "de": "Eisnadeln",
+    "fr": "Aiguilles de glace",
+    "it": "Aghi di ghiaccio",
+    "en_night": "Diamond dust",
+    "de_night": "Eisnadeln",
+    "fr_night": "Aiguilles de glace",
+    "it_night": "Aghi di ghiaccio"
+  },
   "77": {
     "de": "Schneegriesel",
     "fr": "Grains de neige",
@@ -208,6 +368,26 @@
     "fr_night": "Grains de neige",
     "it_night": "Granelli di neve",
     "en_night": "Snow grains"
+  },
+  "78": {
+    "en": "Sparse snow crystals",
+    "de": "Vereinzelte Schneekristalle",
+    "fr": "Cristaux de neige isolés",
+    "it": "Cristalli di neve sparsi",
+    "en_night": "Sparse snow crystals",
+    "de_night": "Vereinzelte Schneekristalle",
+    "fr_night": "Cristaux de neige isolés",
+    "it_night": "Cristalli di neve sparsi"
+  },
+  "79": {
+    "en": "Ice pellets",
+    "de": "Eiskörner",
+    "fr": "Granules de glace",
+    "it": "Granuli di ghiaccio",
+    "en_night": "Ice pellets",
+    "de_night": "Eiskörner",
+    "fr_night": "Granules de glace",
+    "it_night": "Granuli di ghiaccio"
   },
   "80": {
     "de": "Leichte Regenschauer",
@@ -239,6 +419,26 @@
     "it_night": "Rovesci intensi",
     "en_night": "Violent rain showers"
   },
+  "83": {
+    "en": "Light Sleet Showers",
+    "de": "Leichte Schneeregenschauer",
+    "fr": "Averses légères de pluie et neige mêlées",
+    "it": "Rovesci leggeri di pioggia e neve",
+    "en_night": "Light Sleet Showers",
+    "de_night": "Leichte Schneeregenschauer",
+    "fr_night": "Averses légères de pluie et neige mêlées",
+    "it_night": "Rovesci leggeri di pioggia e neve"
+  },
+  "84": {
+    "en": "Sleet Showers",
+    "de": "Schneeregenschauer",
+    "fr": "Averses de pluie et neige mêlées",
+    "it": "Rovesci di pioggia e neve",
+    "en_night": "Sleet Showers",
+    "de_night": "Schneeregenschauer",
+    "fr_night": "Averses de pluie et neige mêlées",
+    "it_night": "Rovesci di pioggia e neve"
+  },
   "85": {
     "de": "Leichte Schneeschauer",
     "fr": "Averses de neige légères",
@@ -259,6 +459,86 @@
     "it_night": "Rovesci di neve intensi",
     "en_night": "Heavy snow showers"
   },
+  "87": {
+    "en": "Light Snow Pellets / Small Hail",
+    "de": "Leichte Graupelschauer",
+    "fr": "Averses légères de grésil",
+    "it": "Rovesci leggeri di nevischio",
+    "en_night": "Light Snow Pellets / Small Hail",
+    "de_night": "Leichte Graupelschauer",
+    "fr_night": "Averses légères de grésil",
+    "it_night": "Rovesci leggeri di nevischio"
+  },
+  "88": {
+    "en": "Snow Pellets / Small Hail",
+    "de": "Graupelschauer",
+    "fr": "Averses de grésil",
+    "it": "Rovesci di nevischio",
+    "en_night": "Snow Pellets / Small Hail",
+    "de_night": "Graupelschauer",
+    "fr_night": "Averses de grésil",
+    "it_night": "Rovesci di nevischio"
+  },
+  "89": {
+    "en": "Slight Hail Showers",
+    "de": "Leichte Hagelschauer",
+    "fr": "Averses de grêle légères",
+    "it": "Rovesci di grandine leggeri",
+    "en_night": "Slight Hail Showers",
+    "de_night": "Leichte Hagelschauer",
+    "fr_night": "Averses de grêle légères",
+    "it_night": "Rovesci di grandine leggeri"
+  },
+  "90": {
+    "en": "Hail Showers",
+    "de": "Hagelschauer",
+    "fr": "Averses de grêle",
+    "it": "Rovesci di grandine",
+    "en_night": "Hail Showers",
+    "de_night": "Hagelschauer",
+    "fr_night": "Averses de grêle",
+    "it_night": "Rovesci di grandine"
+  },
+  "91": {
+    "en": "Light rain (post-thunderstorm)",
+    "de": "Leichter Regen nach Gewitter",
+    "fr": "Pluie légère (post-orage)",
+    "it": "Pioggia leggera (post-temporale)",
+    "en_night": "Light rain (post-thunderstorm)",
+    "de_night": "Leichter Regen nach Gewitter",
+    "fr_night": "Pluie légère (post-orage)",
+    "it_night": "Pioggia leggera (post-temporale)"
+  },
+  "92": {
+    "en": "Rain (post-thunderstorm)",
+    "de": "Regen nach Gewitter",
+    "fr": "Pluie (post-orage)",
+    "it": "Pioggia (post-temporale)",
+    "en_night": "Rain (post-thunderstorm)",
+    "de_night": "Regen nach Gewitter",
+    "fr_night": "Pluie (post-orage)",
+    "it_night": "Pioggia (post-temporale)"
+  },
+  "93": {
+    "en": "Light snow (post-thunderstorm)",
+    "de": "Leichter Schnee nach Gewitter",
+    "fr": "Neige légère (post-orage)",
+    "it": "Neve leggera (post-temporale)",
+    "en_night": "Light snow (post-thunderstorm)",
+    "de_night": "Leichter Schnee nach Gewitter",
+    "fr_night": "Neige légère (post-orage)",
+    "it_night": "Neve leggera (post-temporale)"
+  },
+  "94": {
+    "en": "Snow (post-thunderstorm)",
+    "de": "Schnee nach Gewitter",
+    "fr": "Neige (post-orage)",
+    "it": "Neve (post-temporale)",
+    "en_night": "Snow (post-thunderstorm)",
+    "de_night": "Schnee nach Gewitter",
+    "fr_night": "Neige (post-orage)",
+    "it_night": "Neve (post-temporale)"
+  },
   "95": {
     "de": "Gewitter",
     "fr": "Orage",
@@ -278,6 +558,26 @@
     "fr_night": "Orage avec grêle légère",
     "it_night": "Temporale con grandine leggera",
     "en_night": "Thunderstorm with slight hail"
+  },
+  "97": {
+    "en": "Heavy Thunderstorm with Showers",
+    "de": "Starkes Gewitter mit Regen",
+    "fr": "Orage violent avec pluie",
+    "it": "Temporale forte con pioggia",
+    "en_night": "Heavy Thunderstorm with Showers",
+    "de_night": "Starkes Gewitter mit Regen",
+    "fr_night": "Orage violent avec pluie",
+    "it_night": "Temporale forte con pioggia"
+  },
+  "98": {
+    "en": "Thunderstorm with dust/sandstorm",
+    "de": "Gewitter mit Staub- oder Sandsturm",
+    "fr": "Orage avec tempête de sable/poussière",
+    "it": "Temporale con tempesta di sabbia/polvere",
+    "en_night": "Thunderstorm with dust/sandstorm",
+    "de_night": "Gewitter mit Staub- oder Sandsturm",
+    "fr_night": "Orage avec tempête de sable/poussière",
+    "it_night": "Temporale con tempesta di sabbia/polvere"
   },
   "99": {
     "de": "Gewitter mit starkem Hagel",

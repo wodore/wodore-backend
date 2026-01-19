@@ -1,758 +1,758 @@
 {
   "1": {
-    "wmo_code": 0,
-    "priority": 100,
+    "wmo_codes": [0],
     "is_day": true,
+    "priority": 100,
     "description_de": "sonnig",
     "description_fr": "ensoleillé",
     "description_it": "soleggiato",
     "description_en": "sunny"
   },
-  "101": {
-    "wmo_code": 0,
-    "priority": 90,
-    "is_day": false,
-    "description_de": "klar",
-    "description_fr": "ciel dégagé",
-    "description_it": "sereno",
-    "description_en": "clear"
-  },
   "2": {
-    "wmo_code": 1,
-    "priority": 100,
+    "wmo_codes": [1],
     "is_day": true,
+    "priority": 100,
     "description_de": "ziemlich sonnig",
     "description_fr": "assez ensoleillé, quelques passages nuageux",
     "description_it": "abbastanza soleggiato",
     "description_en": "mostly sunny, some clouds"
   },
-  "102": {
-    "wmo_code": 1,
-    "priority": 90,
-    "is_day": false,
-    "description_de": "leicht bewölkt",
-    "description_fr": "peu nuageux",
-    "description_it": "poco nuvoloso",
-    "description_en": "slightly overcast"
-  },
   "3": {
-    "wmo_code": 2,
-    "priority": 100,
+    "wmo_codes": [2],
     "is_day": true,
+    "priority": 100,
     "description_de": "teilweise sonnig",
     "description_fr": "en partie ensoleillé, passages nuageux parfois denses",
     "description_it": "parzialmente soleggiato",
     "description_en": "partly sunny, thick passing clouds"
   },
-  "26": {
-    "wmo_code": 2,
-    "priority": 90,
-    "is_day": true,
-    "description_de": "Hohe Bewölkung",
-    "description_fr": "nuages élevés",
-    "description_it": "a tratti nuvolosità ad alta quota",
-    "description_en": "high clouds"
-  },
-  "103": {
-    "wmo_code": 2,
-    "priority": 80,
-    "is_day": false,
-    "description_de": "zum Teil bewölkt",
-    "description_fr": "en partie nuageux",
-    "description_it": "in parte nuvoloso",
-    "description_en": "heavy cloud formations"
-  },
-  "126": {
-    "wmo_code": 2,
-    "priority": 70,
-    "is_day": false,
-    "description_de": "Hohe Bewölkung",
-    "description_fr": "nuages élevés",
-    "description_it": "a tratti nuvolosità ad alta quota",
-    "description_en": "high cloud"
-  },
   "4": {
-    "wmo_code": 3,
-    "priority": 100,
+    "wmo_codes": [3],
     "is_day": true,
+    "priority": 100,
     "description_de": "wechselnd bewölkt",
     "description_fr": "nuageux",
     "description_it": "nuvoloso",
     "description_en": "overcast"
   },
   "5": {
-    "wmo_code": 3,
-    "priority": 90,
+    "wmo_codes": [3],
     "is_day": true,
+    "priority": 90,
     "description_de": "bedeckt",
     "description_fr": "très nuageux",
     "description_it": "coperto",
     "description_en": "very cloudy"
-  },
-  "35": {
-    "wmo_code": 3,
-    "priority": 80,
-    "is_day": true,
-    "description_de": "bedeckt und trocken",
-    "description_fr": "couvert et sec",
-    "description_it": "estesa nuvolosità ad alta quota",
-    "description_en": "overcast and dry"
-  },
-  "104": {
-    "wmo_code": 3,
-    "priority": 70,
-    "is_day": false,
-    "description_de": "wechselnd bewölkt",
-    "description_fr": "nuageux",
-    "description_it": "nuvoloso",
-    "description_en": "overcast"
-  },
-  "105": {
-    "wmo_code": 3,
-    "priority": 60,
-    "is_day": false,
-    "description_de": "bedeckt",
-    "description_fr": "très nuageux",
-    "description_it": "coperto",
-    "description_en": "very cloudy"
-  },
-  "135": {
-    "wmo_code": 3,
-    "priority": 50,
-    "is_day": false,
-    "description_de": "bedeckt und trocken",
-    "description_fr": "couvert et sec",
-    "description_it": "estesa nuvolosità ad alta quota",
-    "description_en": "overcast and dry"
-  },
-  "28": {
-    "wmo_code": 45,
-    "priority": 100,
-    "is_day": true,
-    "description_de": "Nebel",
-    "description_fr": "brouillard",
-    "description_it": "nebbia",
-    "description_en": "fog"
-  },
-  "27": {
-    "wmo_code": 45,
-    "priority": 90,
-    "is_day": true,
-    "description_de": "Hochnebel",
-    "description_fr": "stratus",
-    "description_it": "nebbia alta",
-    "description_en": "stratus"
-  },
-  "128": {
-    "wmo_code": 45,
-    "priority": 80,
-    "is_day": false,
-    "description_de": "Nebel",
-    "description_fr": "brouillard",
-    "description_it": "nebbia",
-    "description_en": "fog"
-  },
-  "127": {
-    "wmo_code": 45,
-    "priority": 70,
-    "is_day": false,
-    "description_de": "Hochnebel",
-    "description_fr": "stratus",
-    "description_it": "nebbia alta",
-    "description_en": "stratus"
-  },
-  "15": {
-    "wmo_code": 56,
-    "priority": 100,
-    "is_day": true,
-    "description_de": "stark bewölkt, schwacher Schnee oder Regen",
-    "description_fr": "très nuageux, faibles chutes de pluie et neige mêlées",
-    "description_it": "molto nuvoloso, debole pioggia frammista a neve",
-    "description_en": "very cloudy, light sleet"
-  },
-  "115": {
-    "wmo_code": 56,
-    "priority": 90,
-    "is_day": false,
-    "description_de": "stark bewölkt, schwacher Schnee oder Regen",
-    "description_fr": "très nuageux, faibles chutes de pluie et neige mêlées",
-    "description_it": "molto nuvoloso, debole pioggia frammista a neve",
-    "description_en": "very cloudy, light rain and snow  showers"
-  },
-  "14": {
-    "wmo_code": 61,
-    "priority": 100,
-    "is_day": true,
-    "description_de": "stark bewölkt, schwacher Regen",
-    "description_fr": "très nuageux, faibles pluies",
-    "description_it": "molto nuvoloso, deboli piogge",
-    "description_en": "very cloudy, light rain"
-  },
-  "114": {
-    "wmo_code": 61,
-    "priority": 90,
-    "is_day": false,
-    "description_de": "stark bewölkt, schwacher Regen",
-    "description_fr": "très nuageux, faibles pluies",
-    "description_it": "molto nuvoloso, deboli piogge",
-    "description_en": "very cloudy, light rain"
-  },
-  "17": {
-    "wmo_code": 63,
-    "priority": 100,
-    "is_day": true,
-    "description_de": "stark bewölkt, zeitweise Regen",
-    "description_fr": "très nuageux, pluies intermittentes",
-    "description_it": "molto nuvoloso, piogge intermittenti",
-    "description_en": "very cloudy, intermittent rain"
-  },
-  "117": {
-    "wmo_code": 63,
-    "priority": 90,
-    "is_day": false,
-    "description_de": "stark bewölkt, zeitweise Regen",
-    "description_fr": "très nuageux, pluies intermittences",
-    "description_it": "molto nuvoloso, piogge intermittenti",
-    "description_en": "very cloudy, intermittent rain"
-  },
-  "20": {
-    "wmo_code": 65,
-    "priority": 100,
-    "is_day": true,
-    "description_de": "stark bewölkt, anhaltender Regen",
-    "description_fr": "très nuageux, pluie continue",
-    "description_it": "molto nuvoloso, piogge intense",
-    "description_en": "very overcast with rain"
-  },
-  "120": {
-    "wmo_code": 65,
-    "priority": 90,
-    "is_day": false,
-    "description_de": "stark bewölkt, anhaltender Regen",
-    "description_fr": "très nuageux, pluie continue",
-    "description_it": "molto nuvoloso, piogge intense",
-    "description_en": "very cloudy,  constant rain"
-  },
-  "21": {
-    "wmo_code": 67,
-    "priority": 100,
-    "is_day": true,
-    "description_de": "stark bewölkt, anhaltender Regen oder Schnee",
-    "description_fr": "très nuageux, fréquentes chutes de pluie et neige mêlées",
-    "description_it": "molto nuvoloso, piogge e nevicate intense",
-    "description_en": "very overcast with frequent sleet"
-  },
-  "121": {
-    "wmo_code": 67,
-    "priority": 90,
-    "is_day": false,
-    "description_de": "stark bewölkt, anhaltender Regen oder Schnee",
-    "description_fr": "très nuageux, fréquentes chutes de pluie et neige mêlées",
-    "description_it": "molto nuvoloso, piogge e nevicate intense",
-    "description_en": "very cloudy, frequent rain and snowfall"
-  },
-  "7": {
-    "wmo_code": 68,
-    "priority": 100,
-    "is_day": true,
-    "description_de": "Aufhellungen, einzelne Regen- oder Schneeschauer",
-    "description_fr": "éclaircies, averses isolées de pluie et neige mêlées",
-    "description_it": "nuvolosità variabile con rovesci di pioggia e neve isolati",
-    "description_en": "sunny intervals, isolated sleet"
-  },
-  "10": {
-    "wmo_code": 68,
-    "priority": 90,
-    "is_day": true,
-    "description_de": "bewölkt, einige Regen- oder Schneeschauer",
-    "description_fr": "nuageux, quelques averses de pluie et neige mêlées",
-    "description_it": "nuvoloso con rovesci di pioggia e neve",
-    "description_en": "overcast, some sleet"
-  },
-  "18": {
-    "wmo_code": 68,
-    "priority": 80,
-    "is_day": true,
-    "description_de": "stark bewölkt, zeitweise Schnee oder Regen",
-    "description_fr": "très nuageux, chutes intermittentes de pluie et neige mêlées",
-    "description_it": "molto nuvoloso, pioggia frammista a neve intermittente",
-    "description_en": "very cloudy, intermittent sleet"
-  },
-  "31": {
-    "wmo_code": 68,
-    "priority": 70,
-    "is_day": true,
-    "description_de": "teilweise sonnig, einige Schnee- oder Regenschauer",
-    "description_fr": "belles éclaircies, giboulées de pluie et de neige mêlées",
-    "description_it": "in parte nuvoloso, con rovesci di pioggia e di neve",
-    "description_en": "sunny intervals, scattered sleet"
-  },
-  "107": {
-    "wmo_code": 68,
-    "priority": 60,
-    "is_day": false,
-    "description_de": "Aufhellungen, einzelne Regen- oder Schneeschauer",
-    "description_fr": "quelques éclaircies, par moments averses de pluie et neige mêlées",
-    "description_it": "nuvolosità variabile con rovesci di pioggia e neve isolati",
-    "description_en": "overcast, scattered rain and snow showers"
-  },
-  "110": {
-    "wmo_code": 68,
-    "priority": 50,
-    "is_day": false,
-    "description_de": "bewölkt, einige Regen- oder Schneeschauer",
-    "description_fr": "nuageux, quelques averses de pluie et neige mêlées",
-    "description_it": "nuvoloso con rovesci di pioggia e neve",
-    "description_en": "overcast, some rain and snow showers"
-  },
-  "118": {
-    "wmo_code": 68,
-    "priority": 40,
-    "is_day": false,
-    "description_de": "stark bewölkt, zeitweise Schnee oder Regen",
-    "description_fr": "très nuageux, chutes intermittentes de pluie et neige mêlées",
-    "description_it": "molto nuvoloso, pioggia frammista a neve intermittente",
-    "description_en": "very cloudy, intermittant mixed rain and snowfall"
-  },
-  "131": {
-    "wmo_code": 68,
-    "priority": 30,
-    "is_day": false,
-    "description_de": "leicht bewölkt, einige Schnee- oder Regenschauer",
-    "description_fr": "peu nuageux, giboulées de pluie et neige mêlées",
-    "description_it": "in parte nuvoloso, con alcuni rovesci di pioggia e di neve",
-    "description_en": "slightly overcast, rain and snow showers"
-  },
-  "16": {
-    "wmo_code": 71,
-    "priority": 100,
-    "is_day": true,
-    "description_de": "stark bewölkt, schwacher Schnee",
-    "description_fr": "très nuageux, faibles chutes de neige",
-    "description_it": "molto nuvoloso, deboli nevicate",
-    "description_en": "very cloudy, light snow showers"
-  },
-  "116": {
-    "wmo_code": 71,
-    "priority": 90,
-    "is_day": false,
-    "description_de": "stark bewölkt, schwacher Schnee",
-    "description_fr": "très nuageux, faibles chutes de neige",
-    "description_it": "molto nuvoloso, deboli nevicate",
-    "description_en": "very cloudy, light snowfall"
-  },
-  "19": {
-    "wmo_code": 73,
-    "priority": 100,
-    "is_day": true,
-    "description_de": "stark bewölkt, zeitweise Schnee",
-    "description_fr": "très nuageux, chutes de neige intermittentes",
-    "description_it": "molto nuvoloso, nevicate intermittenti",
-    "description_en": "very cloudy, intermittent snow"
-  },
-  "119": {
-    "wmo_code": 73,
-    "priority": 90,
-    "is_day": false,
-    "description_de": "stark bewölkt, zeitweise Schnee",
-    "description_fr": "très nuageux, chutes de neige intermittentes",
-    "description_it": "molto nuvoloso, nevicate intermittenti",
-    "description_en": "very cloudy, intermittent snowfall"
-  },
-  "22": {
-    "wmo_code": 75,
-    "priority": 100,
-    "is_day": true,
-    "description_de": "stark bewölkt, anhaltender Schnee",
-    "description_fr": "très nuageux, fortes chutes de neige",
-    "description_it": "molto nuvoloso, nevicate intense",
-    "description_en": "very overcast with heavy snow"
-  },
-  "122": {
-    "wmo_code": 75,
-    "priority": 90,
-    "is_day": false,
-    "description_de": "stark bewölkt, anhaltender Schnee",
-    "description_fr": "très nuageux, fortes chutes de neige",
-    "description_it": "molto nuvoloso, nevicate intense",
-    "description_en": "very cloudy, heavy snowfall"
   },
   "6": {
-    "wmo_code": 80,
-    "priority": 100,
+    "wmo_codes": [80],
     "is_day": true,
+    "priority": 100,
     "description_de": "Aufhellungen, einzelne Regenschauer",
     "description_fr": "éclaircies, averses isolées",
     "description_it": "nuvolosità variabile con rovesci di pioggia isolati",
     "description_en": "sunny intervals,  isolated showers"
   },
-  "9": {
-    "wmo_code": 80,
-    "priority": 90,
+  "7": {
+    "wmo_codes": [68],
     "is_day": true,
-    "description_de": "bewölkt, einige Regenschauer",
-    "description_fr": "nuageux, quelques averses",
-    "description_it": "nuvoloso con rovesci di pioggia",
-    "description_en": "overcast, some rain showers"
-  },
-  "29": {
-    "wmo_code": 80,
-    "priority": 80,
-    "is_day": true,
-    "description_de": "leicht bewölkt, einzelne Regenschauer",
-    "description_fr": "belles éclaircies, averses éparses",
-    "description_it": "in parte nuvoloso, isolati rovesci",
-    "description_en": "sunny intervals, scattered showers"
-  },
-  "32": {
-    "wmo_code": 80,
-    "priority": 70,
-    "is_day": true,
-    "description_de": "teilweise sonnig, einige Regenschauer",
-    "description_fr": "éclaircies, quelques averses",
-    "description_it": "in parte nuvoloso con rovesci",
-    "description_en": "sunny intervals, some showers"
-  },
-  "106": {
-    "wmo_code": 80,
-    "priority": 60,
-    "is_day": false,
-    "description_de": "Aufhellungen, einzelne Regenschauer",
-    "description_fr": "quelques éclaircies, averses par moments",
-    "description_it": "nuvolosità variabile con rovesci di pioggia isolati",
-    "description_en": "overcast, scattered showers"
-  },
-  "109": {
-    "wmo_code": 80,
-    "priority": 50,
-    "is_day": false,
-    "description_de": "bewölkt, einige Regenschauer",
-    "description_fr": "nuageux, quelques averses",
-    "description_it": "nuvoloso con rovesci di pioggia",
-    "description_en": "overcast, some showers"
-  },
-  "129": {
-    "wmo_code": 80,
-    "priority": 40,
-    "is_day": false,
-    "description_de": "leicht bewölkt, einzelne Regenschauer",
-    "description_fr": "peu nuageux, averses éparses",
-    "description_it": "in parte nuvoloso, isolati rovesci",
-    "description_en": "slightly overcast, scattered showers"
-  },
-  "132": {
-    "wmo_code": 80,
-    "priority": 30,
-    "is_day": false,
-    "description_de": "leicht bewölkt, einige Regenschauer",
-    "description_fr": "peu nuageux, quelques averses",
-    "description_it": "in parte nuvoloso con alcuni rovesci",
-    "description_en": "slightly overcast, some showers"
-  },
-  "33": {
-    "wmo_code": 81,
     "priority": 100,
-    "is_day": true,
-    "description_de": "bewölkt, häufige Regenschauer",
-    "description_fr": "rares éclaircies, fréquentes averses",
-    "description_it": "nuvoloso con frequenti rovesci di pioggia",
-    "description_en": "short sunny intervals, frequent rain"
-  },
-  "133": {
-    "wmo_code": 81,
-    "priority": 90,
-    "is_day": false,
-    "description_de": "bewölkt, häufige Regenschauer",
-    "description_fr": "nuageux, fréquentes averses",
-    "description_it": "nuvoloso con frequenti rovesci di pioggia",
-    "description_en": "overcast, frequent snow showers"
+    "description_de": "Aufhellungen, einzelne Regen- oder Schneeschauer",
+    "description_fr": "éclaircies, averses isolées de pluie et neige mêlées",
+    "description_it": "nuvolosità variabile con rovesci di pioggia e neve isolati",
+    "description_en": "sunny intervals, isolated sleet"
   },
   "8": {
-    "wmo_code": 85,
-    "priority": 100,
+    "wmo_codes": [85],
     "is_day": true,
+    "priority": 100,
     "description_de": "Aufhellungen, einzelne Schneeschauer",
     "description_fr": "éclaircies, giboulées de neige",
     "description_it": "nuvolosità variabile con rovesci di neve isolati",
     "description_en": "sunny intervals, snow showers"
   },
+  "9": {
+    "wmo_codes": [80],
+    "is_day": true,
+    "priority": 90,
+    "description_de": "bewölkt, einige Regenschauer",
+    "description_fr": "nuageux, quelques averses",
+    "description_it": "nuvoloso con rovesci di pioggia",
+    "description_en": "overcast, some rain showers"
+  },
+  "10": {
+    "wmo_codes": [68, 83, 84],
+    "is_day": true,
+    "priority": 90,
+    "description_de": "bewölkt, einige Regen- oder Schneeschauer",
+    "description_fr": "nuageux, quelques averses de pluie et neige mêlées",
+    "description_it": "nuvoloso con rovesci di pioggia e neve",
+    "description_en": "overcast, some sleet"
+  },
   "11": {
-    "wmo_code": 85,
-    "priority": 90,
+    "wmo_codes": [85, 87, 88, 89, 90],
     "is_day": true,
+    "priority": 90,
     "description_de": "bewölkt, einige Schneeschauer",
     "description_fr": "nuageux, quelques averses de neige",
     "description_it": "nuvoloso con rovesci di neve",
     "description_en": "overcast, some snow showers"
-  },
-  "30": {
-    "wmo_code": 85,
-    "priority": 80,
-    "is_day": true,
-    "description_de": "leicht bewölkt, leichter Schneefall",
-    "description_fr": "belles éclaircies, giboulées de neige",
-    "description_it": "in parte nuvoloso, isolati rovesci di neve",
-    "description_en": "sunny intervals, scattered snow showers"
-  },
-  "108": {
-    "wmo_code": 85,
-    "priority": 70,
-    "is_day": false,
-    "description_de": "Aufhellungen, einzelne Schneeschauer",
-    "description_fr": "quelques éclaircies, giboulées de neige",
-    "description_it": "nuvolosità variabile con rovesci di neve isolati",
-    "description_en": "overcast, snow showers"
-  },
-  "111": {
-    "wmo_code": 85,
-    "priority": 60,
-    "is_day": false,
-    "description_de": "bewölkt, einige Schneeschauer",
-    "description_fr": "nuageux, quelques averses de neige",
-    "description_it": "nuvoloso con rovesci di neve",
-    "description_en": "overcast, some snow showers"
-  },
-  "130": {
-    "wmo_code": 85,
-    "priority": 50,
-    "is_day": false,
-    "description_de": "leicht bewölkt, leichter Schneefall",
-    "description_fr": "peu nuageux, giboulées de neige",
-    "description_it": "in parte nuvoloso, isolati rovesci di neve",
-    "description_en": "slightly overcast, scattered snowfall"
-  },
-  "34": {
-    "wmo_code": 86,
-    "priority": 100,
-    "is_day": true,
-    "description_de": "bewölkt, häufige Schneeschauer",
-    "description_fr": "rares éclaircies, fréquentes averses de neige",
-    "description_it": "nuvoloso con frequenti rovesci di neve",
-    "description_en": "short sunny intervals, frequent snowfalls"
-  },
-  "134": {
-    "wmo_code": 86,
-    "priority": 90,
-    "is_day": false,
-    "description_de": "bewölkt, häufige Schneeschauer",
-    "description_fr": "nuageux, fréquentes averses de neige",
-    "description_it": "nuvoloso con frequenti rovesci di neve",
-    "description_en": "overcast, frequent snow showers"
-  },
-  "24": {
-    "wmo_code": 95,
-    "priority": 100,
-    "is_day": true,
-    "description_de": "stark bewölkt, gewitterhaft",
-    "description_fr": "très nuageux, orageux",
-    "description_it": "molto nuvoloso, temporalesco",
-    "description_en": "very overcast with storms"
   },
   "12": {
-    "wmo_code": 95,
-    "priority": 90,
+    "wmo_codes": [95],
     "is_day": true,
+    "priority": 90,
     "description_de": "Aufhellungen, leicht gewitterhaft",
     "description_fr": "éclaircies, faiblement orageux",
     "description_it": "nuvolosità variabile, con temporali possibili",
     "description_en": "sunny intervals, chance of thunderstorms"
   },
   "13": {
-    "wmo_code": 95,
-    "priority": 85,
+    "wmo_codes": [95],
     "is_day": true,
+    "priority": 85,
     "description_de": "Aufhellungen und gewitterhaft",
     "description_fr": "éclaircies, orageux",
     "description_it": "nuvolosità variabile e temporalesco",
     "description_en": "sunny intervals, possible thunderstorms"
   },
-  "23": {
-    "wmo_code": 95,
-    "priority": 80,
+  "14": {
+    "wmo_codes": [50, 51, 52, 53, 54, 55, 58, 59, 60, 61, 91],
     "is_day": true,
+    "priority": 100,
+    "description_de": "stark bewölkt, schwacher Regen",
+    "description_fr": "très nuageux, faibles pluies",
+    "description_it": "molto nuvoloso, deboli piogge",
+    "description_en": "very cloudy, light rain"
+  },
+  "15": {
+    "wmo_codes": [56, 57, 69],
+    "is_day": true,
+    "priority": 100,
+    "description_de": "stark bewölkt, schwacher Schnee oder Regen",
+    "description_fr": "très nuageux, faibles chutes de pluie et neige mêlées",
+    "description_it": "molto nuvoloso, debole pioggia frammista a neve",
+    "description_en": "very cloudy, light sleet"
+  },
+  "16": {
+    "wmo_codes": [70, 71, 76, 77, 78, 79, 93],
+    "is_day": true,
+    "priority": 100,
+    "description_de": "stark bewölkt, schwacher Schnee",
+    "description_fr": "très nuageux, faibles chutes de neige",
+    "description_it": "molto nuvoloso, deboli nevicate",
+    "description_en": "very cloudy, light snow showers"
+  },
+  "17": {
+    "wmo_codes": [62, 63, 92],
+    "is_day": true,
+    "priority": 100,
+    "description_de": "stark bewölkt, zeitweise Regen",
+    "description_fr": "très nuageux, pluies intermittentes",
+    "description_it": "molto nuvoloso, piogge intermittenti",
+    "description_en": "very cloudy, intermittent rain"
+  },
+  "18": {
+    "wmo_codes": [68],
+    "is_day": true,
+    "priority": 80,
+    "description_de": "stark bewölkt, zeitweise Schnee oder Regen",
+    "description_fr": "très nuageux, chutes intermittentes de pluie et neige mêlées",
+    "description_it": "molto nuvoloso, pioggia frammista a neve intermittente",
+    "description_en": "very cloudy, intermittent sleet"
+  },
+  "19": {
+    "wmo_codes": [72, 73, 94],
+    "is_day": true,
+    "priority": 100,
+    "description_de": "stark bewölkt, zeitweise Schnee",
+    "description_fr": "très nuageux, chutes de neige intermittentes",
+    "description_it": "molto nuvoloso, nevicate intermittenti",
+    "description_en": "very cloudy, intermittent snow"
+  },
+  "20": {
+    "wmo_codes": [64, 65],
+    "is_day": true,
+    "priority": 100,
+    "description_de": "stark bewölkt, anhaltender Regen",
+    "description_fr": "très nuageux, pluie continue",
+    "description_it": "molto nuvoloso, piogge intense",
+    "description_en": "very overcast with rain"
+  },
+  "21": {
+    "wmo_codes": [66, 67],
+    "is_day": true,
+    "priority": 100,
+    "description_de": "stark bewölkt, anhaltender Regen oder Schnee",
+    "description_fr": "très nuageux, fréquentes chutes de pluie et neige mêlées",
+    "description_it": "molto nuvoloso, piogge e nevicate intense",
+    "description_en": "very overcast with frequent sleet"
+  },
+  "22": {
+    "wmo_codes": [74, 75],
+    "is_day": true,
+    "priority": 100,
+    "description_de": "stark bewölkt, anhaltender Schnee",
+    "description_fr": "très nuageux, fortes chutes de neige",
+    "description_it": "molto nuvoloso, nevicate intense",
+    "description_en": "very overcast with heavy snow"
+  },
+  "23": {
+    "wmo_codes": [95],
+    "is_day": true,
+    "priority": 80,
     "description_de": "stark bewölkt, leicht gewitterhaft",
     "description_fr": "très nuageux, faiblement orageux",
     "description_it": "molto nuvoloso, temporali isolati",
     "description_en": "very overcast, slight chance of storms"
   },
-  "36": {
-    "wmo_code": 95,
-    "priority": 75,
+  "24": {
+    "wmo_codes": [95, 96, 97, 98],
     "is_day": true,
+    "priority": 100,
+    "description_de": "stark bewölkt, gewitterhaft",
+    "description_fr": "très nuageux, orageux",
+    "description_it": "molto nuvoloso, temporalesco",
+    "description_en": "very overcast with storms"
+  },
+  "25": {
+    "wmo_codes": [99],
+    "is_day": true,
+    "priority": 100,
+    "description_de": "stark bewölkt, stark gewitterhaft",
+    "description_fr": "très nuageux, très orageux",
+    "description_it": "molto nuvoloso con temporali intensi",
+    "description_en": "very cloudy, very stormy"
+  },
+  "26": {
+    "wmo_codes": [2],
+    "is_day": true,
+    "priority": 90,
+    "description_de": "Hohe Bewölkung",
+    "description_fr": "nuages élevés",
+    "description_it": "a tratti nuvolosità ad alta quota",
+    "description_en": "high clouds"
+  },
+  "27": {
+    "wmo_codes": [45],
+    "is_day": true,
+    "priority": 90,
+    "description_de": "Hochnebel",
+    "description_fr": "stratus",
+    "description_it": "nebbia alta",
+    "description_en": "stratus"
+  },
+  "28": {
+    "wmo_codes": [45, 46, 47, 48, 49],
+    "is_day": true,
+    "priority": 100,
+    "description_de": "Nebel",
+    "description_fr": "brouillard",
+    "description_it": "nebbia",
+    "description_en": "fog"
+  },
+  "29": {
+    "wmo_codes": [80],
+    "is_day": true,
+    "priority": 80,
+    "description_de": "leicht bewölkt, einzelne Regenschauer",
+    "description_fr": "belles éclaircies, averses éparses",
+    "description_it": "in parte nuvoloso, isolati rovesci",
+    "description_en": "sunny intervals, scattered showers"
+  },
+  "30": {
+    "wmo_codes": [85],
+    "is_day": true,
+    "priority": 80,
+    "description_de": "leicht bewölkt, leichter Schneefall",
+    "description_fr": "belles éclaircies, giboulées de neige",
+    "description_it": "in parte nuvoloso, isolati rovesci di neve",
+    "description_en": "sunny intervals, scattered snow showers"
+  },
+  "31": {
+    "wmo_codes": [68],
+    "is_day": true,
+    "priority": 70,
+    "description_de": "teilweise sonnig, einige Schnee- oder Regenschauer",
+    "description_fr": "belles éclaircies, giboulées de pluie et de neige mêlées",
+    "description_it": "in parte nuvoloso, con rovesci di pioggia e di neve",
+    "description_en": "sunny intervals, scattered sleet"
+  },
+  "32": {
+    "wmo_codes": [80],
+    "is_day": true,
+    "priority": 70,
+    "description_de": "teilweise sonnig, einige Regenschauer",
+    "description_fr": "éclaircies, quelques averses",
+    "description_it": "in parte nuvoloso con rovesci",
+    "description_en": "sunny intervals, some showers"
+  },
+  "33": {
+    "wmo_codes": [81, 82],
+    "is_day": true,
+    "priority": 100,
+    "description_de": "bewölkt, häufige Regenschauer",
+    "description_fr": "rares éclaircies, fréquentes averses",
+    "description_it": "nuvoloso con frequenti rovesci di pioggia",
+    "description_en": "short sunny intervals, frequent rain"
+  },
+  "34": {
+    "wmo_codes": [86],
+    "is_day": true,
+    "priority": 100,
+    "description_de": "bewölkt, häufige Schneeschauer",
+    "description_fr": "rares éclaircies, fréquentes averses de neige",
+    "description_it": "nuvoloso con frequenti rovesci di neve",
+    "description_en": "short sunny intervals, frequent snowfalls"
+  },
+  "35": {
+    "wmo_codes": [3],
+    "is_day": true,
+    "priority": 80,
+    "description_de": "bedeckt und trocken",
+    "description_fr": "couvert et sec",
+    "description_it": "estesa nuvolosità ad alta quota",
+    "description_en": "overcast and dry"
+  },
+  "36": {
+    "wmo_codes": [95],
+    "is_day": true,
+    "priority": 75,
     "description_de": "teilweise sonnig, gewitterhaft",
     "description_fr": "partiellement ensoleillé, orageux",
     "description_it": "in parte nuvoloso, temporali isolati",
     "description_en": "partly sunny, slightly stormy"
   },
   "37": {
-    "wmo_code": 95,
-    "priority": 70,
+    "wmo_codes": [95],
     "is_day": true,
+    "priority": 70,
     "description_de": "teilweise sonnig, Gewitter und Schneeschauer",
     "description_fr": "partiellement ensoleillé, averses de neige orageuses",
     "description_it": "in parte nuvoloso, temporali con rovesci di neve",
     "description_en": "partly sunny, stormy snow showers"
   },
   "38": {
-    "wmo_code": 95,
-    "priority": 65,
+    "wmo_codes": [95],
     "is_day": true,
+    "priority": 65,
     "description_de": "bewölkt, Gewitter und häufige Regenschauer",
     "description_fr": "nuageux, averses orageuses",
     "description_it": "nuvoloso, temporalesco",
     "description_en": "overcast, thundery showers"
   },
   "39": {
-    "wmo_code": 95,
-    "priority": 60,
+    "wmo_codes": [95],
     "is_day": true,
+    "priority": 60,
     "description_de": "bewölkt, Gewitter und häufige Schneeschauer",
     "description_fr": "nuageux, averses de neige orageuses",
     "description_it": "nuvoloso, temporali con rovesci di neve",
     "description_en": "overcast, thundery snow showers"
   },
   "40": {
-    "wmo_code": 95,
-    "priority": 55,
+    "wmo_codes": [95],
     "is_day": true,
+    "priority": 55,
     "description_de": "stark bewölkt, leicht gewitterhaft",
     "description_fr": "très nuageux, faiblement orageux",
     "description_it": "molto nuvoloso, con temporali possibili",
     "description_en": "very cloudly, slightly stormy"
   },
   "41": {
-    "wmo_code": 95,
-    "priority": 50,
+    "wmo_codes": [95],
     "is_day": true,
+    "priority": 50,
     "description_de": "bewölkt, leicht gewitterhaft",
     "description_fr": "nuageux, faiblement orageux",
     "description_it": "nuvoloso, con temporali possibili",
     "description_en": "overcast, slightly stormy"
   },
   "42": {
-    "wmo_code": 95,
-    "priority": 45,
+    "wmo_codes": [95],
     "is_day": true,
+    "priority": 45,
     "description_de": "stark bewölkt, Gewitter und häufige Schneeschauer",
     "description_fr": "très nuageux, averses de neige orageuses",
     "description_it": "molto nuvoloso, temporali con rovesci di neve",
     "description_en": "very cloudly, thundery snow showers"
   },
-  "112": {
-    "wmo_code": 95,
-    "priority": 40,
+  "101": {
+    "wmo_codes": [0],
     "is_day": false,
+    "priority": 90,
+    "description_de": "klar",
+    "description_fr": "ciel dégagé",
+    "description_it": "sereno",
+    "description_en": "clear"
+  },
+  "102": {
+    "wmo_codes": [1],
+    "is_day": false,
+    "priority": 90,
+    "description_de": "leicht bewölkt",
+    "description_fr": "peu nuageux",
+    "description_it": "poco nuvoloso",
+    "description_en": "slightly overcast"
+  },
+  "103": {
+    "wmo_codes": [2],
+    "is_day": false,
+    "priority": 80,
+    "description_de": "zum Teil bewölkt",
+    "description_fr": "en partie nuageux",
+    "description_it": "in parte nuvoloso",
+    "description_en": "heavy cloud formations"
+  },
+  "104": {
+    "wmo_codes": [3],
+    "is_day": false,
+    "priority": 70,
+    "description_de": "wechselnd bewölkt",
+    "description_fr": "nuageux",
+    "description_it": "nuvoloso",
+    "description_en": "overcast"
+  },
+  "105": {
+    "wmo_codes": [3],
+    "is_day": false,
+    "priority": 60,
+    "description_de": "bedeckt",
+    "description_fr": "très nuageux",
+    "description_it": "coperto",
+    "description_en": "very cloudy"
+  },
+  "106": {
+    "wmo_codes": [80],
+    "is_day": false,
+    "priority": 60,
+    "description_de": "Aufhellungen, einzelne Regenschauer",
+    "description_fr": "quelques éclaircies, averses par moments",
+    "description_it": "nuvolosità variabile con rovesci di pioggia isolati",
+    "description_en": "overcast, scattered showers"
+  },
+  "107": {
+    "wmo_codes": [68],
+    "is_day": false,
+    "priority": 60,
+    "description_de": "Aufhellungen, einzelne Regen- oder Schneeschauer",
+    "description_fr": "quelques éclaircies, par moments averses de pluie et neige mêlées",
+    "description_it": "nuvolosità variabile con rovesci di pioggia e neve isolati",
+    "description_en": "overcast, scattered rain and snow showers"
+  },
+  "108": {
+    "wmo_codes": [85],
+    "is_day": false,
+    "priority": 70,
+    "description_de": "Aufhellungen, einzelne Schneeschauer",
+    "description_fr": "quelques éclaircies, giboulées de neige",
+    "description_it": "nuvolosità variabile con rovesci di neve isolati",
+    "description_en": "overcast, snow showers"
+  },
+  "109": {
+    "wmo_codes": [80],
+    "is_day": false,
+    "priority": 50,
+    "description_de": "bewölkt, einige Regenschauer",
+    "description_fr": "nuageux, quelques averses",
+    "description_it": "nuvoloso con rovesci di pioggia",
+    "description_en": "overcast, some showers"
+  },
+  "110": {
+    "wmo_codes": [68, 83, 84],
+    "is_day": false,
+    "priority": 50,
+    "description_de": "bewölkt, einige Regen- oder Schneeschauer",
+    "description_fr": "nuageux, quelques averses de pluie et neige mêlées",
+    "description_it": "nuvoloso con rovesci di pioggia e neve",
+    "description_en": "overcast, some rain and snow showers"
+  },
+  "111": {
+    "wmo_codes": [85, 87, 88, 89, 90],
+    "is_day": false,
+    "priority": 60,
+    "description_de": "bewölkt, einige Schneeschauer",
+    "description_fr": "nuageux, quelques averses de neige",
+    "description_it": "nuvoloso con rovesci di neve",
+    "description_en": "overcast, some snow showers"
+  },
+  "112": {
+    "wmo_codes": [95],
+    "is_day": false,
+    "priority": 40,
     "description_de": "Aufhellungen, leicht gewitterhaft",
     "description_fr": "faiblement orageux",
     "description_it": "nuvolosità variabile, con temporali possibili",
     "description_en": "slightly stormy"
   },
   "113": {
-    "wmo_code": 95,
-    "priority": 35,
+    "wmo_codes": [95],
     "is_day": false,
+    "priority": 35,
     "description_de": "Aufhellungen und gewitterhaft",
     "description_fr": "orageux",
     "description_it": "nuvolosità variabile e temporalesco",
     "description_en": "storms"
   },
-  "123": {
-    "wmo_code": 95,
-    "priority": 30,
+  "114": {
+    "wmo_codes": [50, 51, 52, 53, 54, 55, 58, 59, 60, 61, 91],
     "is_day": false,
+    "priority": 90,
+    "description_de": "stark bewölkt, schwacher Regen",
+    "description_fr": "très nuageux, faibles pluies",
+    "description_it": "molto nuvoloso, deboli piogge",
+    "description_en": "very cloudy, light rain"
+  },
+  "115": {
+    "wmo_codes": [56, 57, 69],
+    "is_day": false,
+    "priority": 90,
+    "description_de": "stark bewölkt, schwacher Schnee oder Regen",
+    "description_fr": "très nuageux, faibles chutes de pluie et neige mêlées",
+    "description_it": "molto nuvoloso, debole pioggia frammista a neve",
+    "description_en": "very cloudy, light rain and snow  showers"
+  },
+  "116": {
+    "wmo_codes": [70, 71, 76, 77, 78, 79, 93],
+    "is_day": false,
+    "priority": 90,
+    "description_de": "stark bewölkt, schwacher Schnee",
+    "description_fr": "très nuageux, faibles chutes de neige",
+    "description_it": "molto nuvoloso, deboli nevicate",
+    "description_en": "very cloudy, light snowfall"
+  },
+  "117": {
+    "wmo_codes": [62, 63, 92],
+    "is_day": false,
+    "priority": 90,
+    "description_de": "stark bewölkt, zeitweise Regen",
+    "description_fr": "très nuageux, pluies intermittences",
+    "description_it": "molto nuvoloso, piogge intermittenti",
+    "description_en": "very cloudy, intermittent rain"
+  },
+  "118": {
+    "wmo_codes": [68],
+    "is_day": false,
+    "priority": 40,
+    "description_de": "stark bewölkt, zeitweise Schnee oder Regen",
+    "description_fr": "très nuageux, chutes intermittentes de pluie et neige mêlées",
+    "description_it": "molto nuvoloso, pioggia frammista a neve intermittente",
+    "description_en": "very cloudy, intermittant mixed rain and snowfall"
+  },
+  "119": {
+    "wmo_codes": [72, 73, 94],
+    "is_day": false,
+    "priority": 90,
+    "description_de": "stark bewölkt, zeitweise Schnee",
+    "description_fr": "très nuageux, chutes de neige intermittentes",
+    "description_it": "molto nuvoloso, nevicate intermittenti",
+    "description_en": "very cloudy, intermittent snowfall"
+  },
+  "120": {
+    "wmo_codes": [64, 65],
+    "is_day": false,
+    "priority": 90,
+    "description_de": "stark bewölkt, anhaltender Regen",
+    "description_fr": "très nuageux, pluie continue",
+    "description_it": "molto nuvoloso, piogge intense",
+    "description_en": "very cloudy,  constant rain"
+  },
+  "121": {
+    "wmo_codes": [66, 67],
+    "is_day": false,
+    "priority": 90,
+    "description_de": "stark bewölkt, anhaltender Regen oder Schnee",
+    "description_fr": "très nuageux, fréquentes chutes de pluie et neige mêlées",
+    "description_it": "molto nuvoloso, piogge e nevicate intense",
+    "description_en": "very cloudy, frequent rain and snowfall"
+  },
+  "122": {
+    "wmo_codes": [74, 75],
+    "is_day": false,
+    "priority": 90,
+    "description_de": "stark bewölkt, anhaltender Schnee",
+    "description_fr": "très nuageux, fortes chutes de neige",
+    "description_it": "molto nuvoloso, nevicate intense",
+    "description_en": "very cloudy, heavy snowfall"
+  },
+  "123": {
+    "wmo_codes": [95],
+    "is_day": false,
+    "priority": 30,
     "description_de": "stark bewölkt, leicht gewitterhaft",
     "description_fr": "très nuageux, faiblement orageux",
     "description_it": "molto nuvoloso, temporali isolati",
     "description_en": "very cloudy, slightly stormy"
   },
   "124": {
-    "wmo_code": 95,
-    "priority": 25,
+    "wmo_codes": [95, 96, 97, 98],
     "is_day": false,
+    "priority": 25,
     "description_de": "stark bewölkt, gewitterhaft",
     "description_fr": "très nuageux, orageux",
     "description_it": "molto nuvoloso, temporalesco",
     "description_en": "very cloudy, stormy"
   },
-  "136": {
-    "wmo_code": 95,
-    "priority": 20,
+  "125": {
+    "wmo_codes": [99],
     "is_day": false,
+    "priority": 90,
+    "description_de": "stark bewölkt, stark gewitterhaft",
+    "description_fr": "très nuageux, très orageux",
+    "description_it": "molto nuvoloso con temporali intensi",
+    "description_en": "very cloudy, storms"
+  },
+  "126": {
+    "wmo_codes": [2],
+    "is_day": false,
+    "priority": 70,
+    "description_de": "Hohe Bewölkung",
+    "description_fr": "nuages élevés",
+    "description_it": "a tratti nuvolosità ad alta quota",
+    "description_en": "high cloud"
+  },
+  "127": {
+    "wmo_codes": [45],
+    "is_day": false,
+    "priority": 70,
+    "description_de": "Hochnebel",
+    "description_fr": "stratus",
+    "description_it": "nebbia alta",
+    "description_en": "stratus"
+  },
+  "128": {
+    "wmo_codes": [45, 46, 47, 48, 49],
+    "is_day": false,
+    "priority": 80,
+    "description_de": "Nebel",
+    "description_fr": "brouillard",
+    "description_it": "nebbia",
+    "description_en": "fog"
+  },
+  "129": {
+    "wmo_codes": [80],
+    "is_day": false,
+    "priority": 40,
+    "description_de": "leicht bewölkt, einzelne Regenschauer",
+    "description_fr": "peu nuageux, averses éparses",
+    "description_it": "in parte nuvoloso, isolati rovesci",
+    "description_en": "slightly overcast, scattered showers"
+  },
+  "130": {
+    "wmo_codes": [85],
+    "is_day": false,
+    "priority": 50,
+    "description_de": "leicht bewölkt, leichter Schneefall",
+    "description_fr": "peu nuageux, giboulées de neige",
+    "description_it": "in parte nuvoloso, isolati rovesci di neve",
+    "description_en": "slightly overcast, scattered snowfall"
+  },
+  "131": {
+    "wmo_codes": [68],
+    "is_day": false,
+    "priority": 30,
+    "description_de": "leicht bewölkt, einige Schnee- oder Regenschauer",
+    "description_fr": "peu nuageux, giboulées de pluie et neige mêlées",
+    "description_it": "in parte nuvoloso, con alcuni rovesci di pioggia e di neve",
+    "description_en": "slightly overcast, rain and snow showers"
+  },
+  "132": {
+    "wmo_codes": [80],
+    "is_day": false,
+    "priority": 30,
+    "description_de": "leicht bewölkt, einige Regenschauer",
+    "description_fr": "peu nuageux, quelques averses",
+    "description_it": "in parte nuvoloso con alcuni rovesci",
+    "description_en": "slightly overcast, some showers"
+  },
+  "133": {
+    "wmo_codes": [81, 82],
+    "is_day": false,
+    "priority": 90,
+    "description_de": "bewölkt, häufige Regenschauer",
+    "description_fr": "nuageux, fréquentes averses",
+    "description_it": "nuvoloso con frequenti rovesci di pioggia",
+    "description_en": "overcast, frequent snow showers"
+  },
+  "134": {
+    "wmo_codes": [86],
+    "is_day": false,
+    "priority": 90,
+    "description_de": "bewölkt, häufige Schneeschauer",
+    "description_fr": "nuageux, fréquentes averses de neige",
+    "description_it": "nuvoloso con frequenti rovesci di neve",
+    "description_en": "overcast, frequent snow showers"
+  },
+  "135": {
+    "wmo_codes": [3],
+    "is_day": false,
+    "priority": 50,
+    "description_de": "bedeckt und trocken",
+    "description_fr": "couvert et sec",
+    "description_it": "estesa nuvolosità ad alta quota",
+    "description_en": "overcast and dry"
+  },
+  "136": {
+    "wmo_codes": [95],
+    "is_day": false,
+    "priority": 20,
     "description_de": "Aufhellungen, gewitterhaft",
     "description_fr": "en partie nuageux, orageux",
     "description_it": "in parte nuvoloso, temporali isolati",
     "description_en": "slightly overcast, slightly stormy"
   },
   "137": {
-    "wmo_code": 95,
-    "priority": 15,
+    "wmo_codes": [95],
     "is_day": false,
+    "priority": 15,
     "description_de": "leicht bewölkt, Gewitter und Schneeschauer",
     "description_fr": "en partie nuageux, averses de neige orageuses",
     "description_it": "in parte nuvoloso, temporali con rovesci di neve",
     "description_en": "slightly overcast, stormy snow showers"
   },
   "138": {
-    "wmo_code": 95,
-    "priority": 10,
+    "wmo_codes": [95],
     "is_day": false,
+    "priority": 10,
     "description_de": "bewölkt, Gewitter und häufige Regenschauer",
     "description_fr": "nuageux, averses orageuses",
     "description_it": "nuvoloso, temporalesco",
     "description_en": "overcast, thundery showers"
   },
   "139": {
-    "wmo_code": 95,
-    "priority": 5,
+    "wmo_codes": [95],
     "is_day": false,
+    "priority": 5,
     "description_de": "bewölkt, Gewitter und häufige Schneeschauer",
     "description_fr": "nuageux, averses de neige orageuses",
     "description_it": "nuvoloso, temporali con rovesci di neve",
     "description_en": "overcast, thundery snow showers"
   },
   "140": {
-    "wmo_code": 95,
-    "priority": 4,
+    "wmo_codes": [95],
     "is_day": false,
+    "priority": 4,
     "description_de": "stark bewölkt, leicht gewitterhaft",
     "description_fr": "très nuageux, faiblement orageux",
     "description_it": "molto nuvoloso, con temporali possibili",
     "description_en": "very cloudly, slightly stormy"
   },
   "141": {
-    "wmo_code": 95,
-    "priority": 3,
+    "wmo_codes": [95],
     "is_day": false,
+    "priority": 3,
     "description_de": "bewölkt, leicht gewitterhaft",
     "description_fr": "nuageux, faiblement orageux",
     "description_it": "nuvoloso, con temporali possibili",
     "description_en": "overcast, slightly stormy"
   },
   "142": {
-    "wmo_code": 95,
-    "priority": 2,
+    "wmo_codes": [95],
     "is_day": false,
+    "priority": 2,
     "description_de": "stark bewölkt, Gewitter und häufige Schneeschauer",
     "description_fr": "très nuageux, averses de neige orageuses",
     "description_it": "molto nuvoloso, temporali con rovesci di neve",
     "description_en": "very cloudly, thundery snow showers"
-  },
-  "25": {
-    "wmo_code": 99,
-    "priority": 100,
-    "is_day": true,
-    "description_de": "stark bewölkt, stark gewitterhaft",
-    "description_fr": "très nuageux, très orageux",
-    "description_it": "molto nuvoloso con temporali intensi",
-    "description_en": "very cloudy, very stormy"
-  },
-  "125": {
-    "wmo_code": 99,
-    "priority": 90,
-    "is_day": false,
-    "description_de": "stark bewölkt, stark gewitterhaft",
-    "description_fr": "très nuageux, très orageux",
-    "description_it": "molto nuvoloso con temporali intensi",
-    "description_en": "very cloudy, storms"
   }
 }

@@ -183,7 +183,13 @@ class Command(BaseCommand):
 
         # Process each icon from the JSON mapping
         for icon_id, mapping in wmo_mappings.items():
-            wmo_code = mapping["wmo_code"]
+            # NEW: wmo_codes is now a list
+            wmo_codes = mapping.get(
+                "wmo_codes", [mapping.get("wmo_code")]
+            )  # Backwards compat
+            if not isinstance(wmo_codes, list):
+                wmo_codes = [wmo_codes]
+
             priority = mapping["priority"]
             is_day = mapping.get("is_day", True)
 
@@ -197,34 +203,36 @@ class Command(BaseCommand):
                     # Fallback to main language if translation missing
                     descriptions[lang] = mapping.get(f"description_{main_language}", "")
 
-            # Create symbol
+            # Create symbol once for this icon
             symbol = self._create_or_get_symbol(
                 icon_id, icons_path, license, dry_run, stats
             )
 
-            # Get category
-            category = None
-            if str(wmo_code) in category_mapping and meteo_parent:
-                category_slug = category_mapping[str(wmo_code)]
-                category = Category.objects.filter(
-                    parent=meteo_parent, slug=category_slug
-                ).first()
+            # Create weather code entry for EACH WMO code
+            for wmo_code in wmo_codes:
+                # Get category for this specific WMO code
+                category = None
+                if str(wmo_code) in category_mapping and meteo_parent:
+                    category_slug = category_mapping[str(wmo_code)]
+                    category = Category.objects.filter(
+                        parent=meteo_parent, slug=category_slug
+                    ).first()
 
-            # Create weather code
-            self._create_or_update_weathercode(
-                organization,
-                icon_id,
-                wmo_code,
-                priority,
-                descriptions,
-                main_language,
-                other_languages,
-                is_day,
-                category,
-                symbol,
-                dry_run,
-                stats,
-            )
+                # Create weather code
+                self._create_or_update_weathercode(
+                    organization,
+                    icon_id,
+                    wmo_code,
+                    priority,
+                    descriptions,
+                    main_language,
+                    other_languages,
+                    is_day,
+                    category,
+                    symbol,
+                    dry_run,
+                    stats,
+                )
 
     def _create_or_get_symbol(self, icon_id, icons_path, license, dry_run, stats):
         """Create or get symbol for MeteoSwiss icon"""
