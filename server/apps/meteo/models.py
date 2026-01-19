@@ -11,28 +11,23 @@ from server.apps.organizations.models import Organization
 
 class WeatherCode(TimeStampedModel):
     """
-    WMO weather codes (WMO 4677) with localized descriptions and symbol mappings.
-    Used for mapping weather API codes to human-readable descriptions and icons.
+    WMO weather codes (WMO 4677) with localized descriptions.
+    Universal weather code definitions independent of icon providers.
     """
 
     i18n = TranslationField(fields=("description_day", "description_night"))
     objects = BaseMutlilingualManager()
+
     code = models.PositiveSmallIntegerField(
+        unique=True,
         verbose_name=_("Weather Code"),
         help_text=_("WMO weather code (e.g., 0 = clear sky, 61 = rain)"),
         db_index=True,
     )
     slug = models.SlugField(
         max_length=100,
+        unique=True,
         verbose_name=_("Slug"),
-        db_index=True,
-    )
-    priority = models.PositiveSmallIntegerField(
-        default=50,
-        verbose_name=_("Priority"),
-        help_text=_(
-            "Priority for WMO code mapping (higher = more important, default: 50)"
-        ),
         db_index=True,
     )
     category = models.ForeignKey(
@@ -43,7 +38,6 @@ class WeatherCode(TimeStampedModel):
         related_name="weather_codes",
         verbose_name=_("Category"),
         help_text=_("Weather category for grouping"),
-        db_index=False,
     )
     description_day = models.CharField(
         max_length=200,
@@ -55,84 +49,23 @@ class WeatherCode(TimeStampedModel):
         verbose_name=_("Description (Night)"),
         help_text=_("Weather description for nighttime"),
     )
-    symbol_day = models.ForeignKey(
-        Symbol,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="weather_codes_day",
-        verbose_name=_("Symbol (Day)"),
-        help_text=_("Weather symbol for daytime"),
-    )
-    symbol_night = models.ForeignKey(
-        Symbol,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="weather_codes_night",
-        verbose_name=_("Symbol (Night)"),
-        help_text=_("Weather symbol for nighttime"),
-    )
-
-    source_organization = models.ForeignKey(
-        Organization,
-        on_delete=models.CASCADE,
-        related_name="weather_codes",
-        verbose_name=_("Source Organization"),
-        help_text=_("Organization providing the weather code mapping"),
-        db_index=False,
-    )
-    source_id = models.CharField(
-        max_length=50,
-        verbose_name=_("Source ID"),
-        help_text=_("Weather code ID in the source organization's system"),
-    )
 
     class Meta:
         verbose_name = _("Weather Code")
         verbose_name_plural = _("Weather Codes")
-        ordering = ("source_organization", "code", "-priority")
-        indexes = [
-            models.Index(fields=["source_organization", "code", "-priority"]),
-            models.Index(fields=["source_organization", "slug"]),
-            models.Index(fields=["code", "-priority"]),
-        ]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["source_organization", "slug"],
-                name="unique_source_slug",
-            ),
-        ]
+        ordering = ("code",)
 
     def __str__(self) -> str:
-        org_slug = self.source_organization.slug
-        return f"{org_slug}:{self.code} ({self.slug}) - {self.description_day}"
+        return f"WMO {self.code} ({self.slug}) - {self.description_day}"
 
     def save(self, *args, **kwargs):
-        """Auto-generate unique slug if not set, or handle conflicts on updates"""
+        """Auto-generate slug if not set"""
         if not self.slug:
-            # No slug set - generate one
-            base_slug = self._generate_base_slug()
-            self.slug = self._ensure_unique_slug(base_slug)
-        elif self.pk:
-            # Existing object with slug - check if slug conflicts with another record
-            # This handles the case where slug was manually changed
-            conflict_exists = (
-                WeatherCode.objects.filter(
-                    source_organization=self.source_organization, slug=self.slug
-                )
-                .exclude(pk=self.pk)
-                .exists()
-            )
-            if conflict_exists:
-                # Slug conflicts - generate alternative slug
-                base_slug = self.slug
-                self.slug = self._ensure_unique_slug(base_slug)
-
+            self.slug = self._generate_slug()
         super().save(*args, **kwargs)
 
-    def _generate_base_slug(self):
-        """Generate base slug from WMO code with friendly names for all 100 codes"""
+    def _generate_slug(self):
+        """Generate slug from WMO code with friendly names for all 100 codes"""
         # Complete WMO 4677 code mapping (0-99)
         # Includes forecast codes (0-3, 45-99) and observational codes (4-44)
         wmo_slug_map = {
@@ -252,19 +185,98 @@ class WeatherCode(TimeStampedModel):
 
         return wmo_slug_map.get(self.code, f"wmo-{self.code}")
 
-    def _ensure_unique_slug(self, base_slug):
-        """Ensure slug is unique within organization, add -alt1, -alt2, etc if needed"""
-        slug = base_slug
-        counter = 1
 
-        while (
-            WeatherCode.objects.filter(
-                source_organization=self.source_organization, slug=slug
-            )
-            .exclude(pk=self.pk)
-            .exists()
-        ):
-            slug = f"{base_slug}-alt{counter}"
-            counter += 1
+class WeatherCodeSymbolCollection(TimeStampedModel):
+    """
+    A collection/package of weather symbols from a specific source.
+    Examples: meteoswiss-filled, weather-icons-outlined-mono, weather-icons-filled
+    """
 
-        return slug
+    slug = models.SlugField(
+        max_length=100,
+        unique=True,
+        verbose_name=_("Slug"),
+        help_text=_("Unique identifier for this symbol collection"),
+        db_index=True,
+    )
+    source_org = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="weather_symbol_collections",
+        verbose_name=_("Source Organization"),
+        help_text=_("Organization providing this symbol collection"),
+    )
+
+    class Meta:
+        verbose_name = _("Weather Symbol Collection")
+        verbose_name_plural = _("Weather Symbol Collections")
+        ordering = ("slug",)
+
+    def __str__(self) -> str:
+        return f"{self.slug} ({self.source_org.name})"
+
+
+class WeatherCodeSymbol(TimeStampedModel):
+    """
+    Links a weather code to its day/night symbols within a specific collection.
+    Each WMO code should have exactly one entry per collection.
+    """
+
+    weather_code = models.ForeignKey(
+        WeatherCode,
+        on_delete=models.CASCADE,
+        related_name="symbols",
+        verbose_name=_("Weather Code"),
+        db_index=True,
+    )
+    collection = models.ForeignKey(
+        WeatherCodeSymbolCollection,
+        on_delete=models.CASCADE,
+        related_name="symbols",
+        verbose_name=_("Symbol Collection"),
+        db_index=True,
+    )
+    symbol_day = models.ForeignKey(
+        Symbol,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="weather_code_symbols_day",
+        verbose_name=_("Day Symbol"),
+        help_text=_("Weather symbol for daytime"),
+        db_index=True,
+    )
+    symbol_night = models.ForeignKey(
+        Symbol,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="weather_code_symbols_night",
+        verbose_name=_("Night Symbol"),
+        help_text=_("Weather symbol for nighttime"),
+        db_index=True,
+    )
+
+    class Meta:
+        verbose_name = _("Weather Code Symbol")
+        verbose_name_plural = _("Weather Code Symbols")
+        ordering = ("collection", "weather_code__code")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["weather_code", "collection"],
+                name="unique_weathercode_collection",
+            ),
+        ]
+        indexes = [
+            # Index for filtering symbols by collection (used in admin inline)
+            models.Index(
+                fields=["collection", "weather_code"], name="idx_collection_code"
+            ),
+            # Index for filtering symbols by weather code (used in admin inline)
+            models.Index(
+                fields=["weather_code", "collection"], name="idx_code_collection"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.collection.slug}: WMO {self.weather_code.code}"

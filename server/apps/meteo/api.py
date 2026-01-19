@@ -9,14 +9,14 @@ from ninja.errors import HttpError
 from server.apps.translations import LanguageParam, override, with_language_param
 from server.apps.categories.models import Category
 
-from .models import WeatherCode
-from .schemas import IncludeModeEnum, SymbolStyleEnum, DayTimeEnum
+from .models import WeatherCode, WeatherCodeSymbol, WeatherCodeSymbolCollection
+from .schemas import IncludeModeEnum, DayTimeEnum
 
 router = Router()
 
-DEFAULT_ORG_SLUG = "weather-icons"
-# CACHE_MAX_AGE = 7 * 24 * 60 * 60  # 7 days in seconds
-CACHE_MAX_AGE = 60  # 60 secs for dev
+DEFAULT_COLLECTION = "weather-icons-outlined-mono"
+CACHE_MAX_AGE = 7 * 24 * 60 * 60  # 7 days in seconds
+# CACHE_MAX_AGE = 60  # 60 secs for dev
 
 
 def resolve_symbol_url(
@@ -40,78 +40,83 @@ def resolve_symbol_url(
 
 
 def build_weather_code_dict(
-    code: WeatherCode,
+    weather_code: WeatherCode,
+    code_symbol: WeatherCodeSymbol | None,
     request: HttpRequest,
     include_symbols: IncludeModeEnum,
     include_category: IncludeModeEnum,
-    include_organization: IncludeModeEnum,
+    include_collection: IncludeModeEnum,
 ) -> dict:
     """Build weather code dictionary with configurable detail levels."""
     data = {
-        "code": code.code,
-        "slug": code.slug,
-        "priority": code.priority,
-        "description_day": code.description_day_i18n,
-        "description_night": code.description_night_i18n,
+        "code": weather_code.code,
+        "slug": weather_code.slug,
+        "description_day": weather_code.description_day_i18n,
+        "description_night": weather_code.description_night_i18n,
     }
 
-    # Add symbols based on include mode
-    if include_symbols != IncludeModeEnum.no:
+    # Add symbols based on include mode (from WeatherCodeSymbol)
+    if include_symbols != IncludeModeEnum.no and code_symbol:
         if include_symbols == IncludeModeEnum.slug:
-            data["symbol_day"] = code.symbol_day.slug if code.symbol_day else None
-            data["symbol_night"] = code.symbol_night.slug if code.symbol_night else None
+            data["symbol_day"] = (
+                code_symbol.symbol_day.slug if code_symbol.symbol_day else None
+            )
+            data["symbol_night"] = (
+                code_symbol.symbol_night.slug if code_symbol.symbol_night else None
+            )
         else:  # all
             data["symbol_day"] = resolve_symbol_url(
-                request, code.symbol_day, include_symbols
+                request, code_symbol.symbol_day, include_symbols
             )
             data["symbol_night"] = resolve_symbol_url(
-                request, code.symbol_night, include_symbols
+                request, code_symbol.symbol_night, include_symbols
             )
 
     # Add category based on include mode
-    if include_category != IncludeModeEnum.no and code.category:
+    if include_category != IncludeModeEnum.no and weather_code.category:
         if include_category == IncludeModeEnum.slug:
-            data["category"] = code.category.slug
+            data["category"] = weather_code.category.slug
             # Add parent category if exists
-            if code.category.parent:
-                data["category"] = f"{code.category.parent.slug}.{code.category.slug}"
+            if weather_code.category.parent:
+                data["category"] = (
+                    f"{weather_code.category.parent.slug}.{weather_code.category.slug}"
+                )
         else:  # all
             category_data = {
-                "slug": code.category.slug,
-                "name": code.category.name_i18n,
+                "slug": weather_code.category.slug,
+                "name": weather_code.category.name_i18n,
             }
             # Add parent slug if exists
-            if code.category.parent:
-                category_data["parent"] = code.category.parent.slug
+            if weather_code.category.parent:
+                category_data["parent"] = weather_code.category.parent.slug
                 category_data["slug"] = (
-                    f"{code.category.parent.slug}.{code.category.slug}"
+                    f"{weather_code.category.parent.slug}.{weather_code.category.slug}"
                 )
 
             # Add symbol URLs
-            if code.category.symbol_detailed:
+            if weather_code.category.symbol_detailed:
                 category_data["symbol_detailed"] = request.build_absolute_uri(
-                    code.category.symbol_detailed.svg_file.url
+                    weather_code.category.symbol_detailed.svg_file.url
                 )
-            if code.category.symbol_simple:
+            if weather_code.category.symbol_simple:
                 category_data["symbol_simple"] = request.build_absolute_uri(
-                    code.category.symbol_simple.svg_file.url
+                    weather_code.category.symbol_simple.svg_file.url
                 )
-            if code.category.symbol_mono:
+            if weather_code.category.symbol_mono:
                 category_data["symbol_mono"] = request.build_absolute_uri(
-                    code.category.symbol_mono.svg_file.url
+                    weather_code.category.symbol_mono.svg_file.url
                 )
 
             data["category"] = category_data
 
-    # Add organization based on include mode
-    if include_organization != IncludeModeEnum.no:
-        if include_organization == IncludeModeEnum.slug:
-            data["organization"] = code.source_organization.slug
+    # Add collection based on include mode
+    if include_collection != IncludeModeEnum.no and code_symbol:
+        if include_collection == IncludeModeEnum.slug:
+            data["collection"] = code_symbol.collection.slug
         else:  # all
-            data["organization"] = {
-                "slug": code.source_organization.slug,
-                "name": code.source_organization.name_i18n,
-                "fullname": code.source_organization.fullname_i18n,
+            data["collection"] = {
+                "slug": code_symbol.collection.slug,
+                "organization": code_symbol.collection.source_org.slug,
             }
 
     return data
@@ -129,13 +134,13 @@ def get_weather_codes(
     request: HttpRequest,
     response: HttpResponse,
     lang: LanguageParam,
-    org: str = Query(
-        DEFAULT_ORG_SLUG,
-        description="Organization slug (default: weather-icons)",
+    collection: str = Query(
+        DEFAULT_COLLECTION,
+        description="Symbol collection slug (default: weather-icons-outlined-mono)",
     ),
     category: str | None = Query(
         None,
-        description="Filter by category slug (supports dot notation like 'accommodation.hut')",
+        description="Filter by category slug (supports dot notation like 'meteo.rain')",
     ),
     include_symbols: IncludeModeEnum = Query(
         IncludeModeEnum.slug,
@@ -145,23 +150,30 @@ def get_weather_codes(
         IncludeModeEnum.no,
         description="Include category: 'no' excludes, 'slug' returns slug, 'all' returns full details with symbols",
     ),
-    include_organization: IncludeModeEnum = Query(
+    include_collection: IncludeModeEnum = Query(
         IncludeModeEnum.slug,
-        description="Include organization: 'no' excludes, 'slug' returns slug, 'all' returns full details",
+        description="Include collection: 'no' excludes, 'slug' returns slug, 'all' returns full details",
     ),
 ) -> dict[int, dict]:
     """
     Get all weather codes as a dictionary with WMO code as key.
 
-    When multiple codes exist for the same WMO code, returns the one with highest priority.
+    Returns weather codes with symbols from the specified collection.
+    If a WMO code is missing from the collection, an error is raised.
     """
     with override(lang):
-        # Get queryset filtered by organization
-        qs = WeatherCode.objects.filter(source_organization__slug=org)
+        # Verify collection exists
+        collection_obj = WeatherCodeSymbolCollection.objects.filter(
+            slug=collection
+        ).first()
+        if collection_obj is None:
+            raise HttpError(404, f"Collection '{collection}' not found")
+
+        # Get base weather codes
+        qs = WeatherCode.objects.all()
 
         # Filter by category if provided
         if category:
-            # Support dot notation - find by slug
             category_obj, paths = Category.objects.find_by_slug(
                 category, is_active=True
             )
@@ -175,14 +187,11 @@ def get_weather_codes(
                     raise HttpError(404, f"Category '{category}' not found")
             qs = qs.filter(category=category_obj)
 
-        # Optimize with select_related based on include parameters
-        select_related_fields = ["source_organization"]
-        if include_symbols != IncludeModeEnum.no:
-            select_related_fields.extend(["symbol_day", "symbol_night"])
+        # Optimize with select_related/prefetch_related
+        select_related_fields = []
         if include_category != IncludeModeEnum.no:
             select_related_fields.append("category")
             if include_category == IncludeModeEnum.all:
-                # Also fetch parent and category symbols
                 select_related_fields.extend(
                     [
                         "category__parent",
@@ -192,21 +201,47 @@ def get_weather_codes(
                     ]
                 )
 
-        qs = qs.select_related(*select_related_fields)
+        if select_related_fields:
+            qs = qs.select_related(*select_related_fields)
 
-        # Order by priority descending (highest first) and get distinct codes
-        # Using distinct() to ensure only one entry per WMO code
-        codes = qs.order_by("code", "-priority").distinct("code")
+        # Get weather codes
+        weather_codes = qs.order_by("code")
 
-        # Build dictionary with WMO code as key
+        # Get symbols for this collection
+        code_symbols = {}
+        if (
+            include_symbols != IncludeModeEnum.no
+            or include_collection != IncludeModeEnum.no
+        ):
+            symbol_qs = WeatherCodeSymbol.objects.filter(
+                collection=collection_obj, weather_code__in=weather_codes
+            ).select_related(
+                "weather_code",
+                "symbol_day",
+                "symbol_night",
+                "collection",
+                "collection__source_org",
+            )
+
+            for cs in symbol_qs:
+                code_symbols[cs.weather_code.code] = cs
+
+        # Build result
         result = {}
-        for code in codes:
-            result[code.code] = build_weather_code_dict(
-                code=code,
+        for weather_code in weather_codes:
+            code_symbol = code_symbols.get(weather_code.code)
+
+            # Note: If a forecast code (0-3, 45-99) is missing from the collection,
+            # we still return the weather code data but without symbols.
+            # This allows the API to work even if collection data is incomplete.
+
+            result[weather_code.code] = build_weather_code_dict(
+                weather_code=weather_code,
+                code_symbol=code_symbol,
                 request=request,
                 include_symbols=include_symbols,
                 include_category=include_category,
-                include_organization=include_organization,
+                include_collection=include_collection,
             )
 
         return result
@@ -225,9 +260,9 @@ def get_weather_code(
     response: HttpResponse,
     code: int,
     lang: LanguageParam,
-    org: str = Query(
-        DEFAULT_ORG_SLUG,
-        description="Organization slug (default: weather-icons)",
+    collection: str = Query(
+        DEFAULT_COLLECTION,
+        description="Symbol collection slug (default: weather-icons-outlined-mono)",
     ),
     include_symbols: IncludeModeEnum = Query(
         IncludeModeEnum.slug,
@@ -237,136 +272,125 @@ def get_weather_code(
         IncludeModeEnum.no,
         description="Include category: 'no' excludes, 'slug' returns slug, 'all' returns full details with symbols",
     ),
-    include_organization: IncludeModeEnum = Query(
+    include_collection: IncludeModeEnum = Query(
         IncludeModeEnum.slug,
-        description="Include organization: 'no' excludes, 'slug' returns slug, 'all' returns full details",
+        description="Include collection: 'no' excludes, 'slug' returns slug, 'all' returns full details",
     ),
 ) -> dict:
     """Get a specific weather code by WMO code."""
     with override(lang):
-        # Get queryset filtered by organization and code
-        qs = WeatherCode.objects.filter(
-            source_organization__slug=org,
-            code=code,
-        )
+        # Verify collection exists
+        collection_obj = WeatherCodeSymbolCollection.objects.filter(
+            slug=collection
+        ).first()
+        if collection_obj is None:
+            raise HttpError(404, f"Collection '{collection}' not found")
 
-        # Optimize with select_related based on include parameters
-        select_related_fields = ["source_organization"]
-        if include_symbols != IncludeModeEnum.no:
-            select_related_fields.extend(["symbol_day", "symbol_night"])
-        if include_category != IncludeModeEnum.no:
-            select_related_fields.append("category")
-            if include_category == IncludeModeEnum.all:
-                select_related_fields.extend(
-                    [
-                        "category__parent",
-                        "category__symbol_detailed",
-                        "category__symbol_simple",
-                        "category__symbol_mono",
-                    ]
-                )
-
-        qs = qs.select_related(*select_related_fields)
-
-        # Get highest priority code
-        weather_code = qs.order_by("-priority").first()
-
+        # Get weather code
+        weather_code = WeatherCode.objects.filter(code=code).first()
         if weather_code is None:
-            raise HttpError(
-                404, f"Weather code {code} not found for organization '{org}'"
+            raise HttpError(404, f"Weather code {code} not found")
+
+        # Optimize with select_related
+        if include_category != IncludeModeEnum.no:
+            weather_code = (
+                WeatherCode.objects.filter(code=code)
+                .select_related(
+                    "category",
+                    "category__parent"
+                    if include_category == IncludeModeEnum.all
+                    else None,
+                )
+                .first()
             )
 
+        # Get symbol for this collection
+        code_symbol = None
+        if (
+            include_symbols != IncludeModeEnum.no
+            or include_collection != IncludeModeEnum.no
+        ):
+            code_symbol = (
+                WeatherCodeSymbol.objects.filter(
+                    collection=collection_obj, weather_code=weather_code
+                )
+                .select_related(
+                    "symbol_day", "symbol_night", "collection", "collection__source_org"
+                )
+                .first()
+            )
+
+            if code_symbol is None:
+                raise HttpError(
+                    404,
+                    f"Weather code {code} not found in collection '{collection}'",
+                )
+
         return build_weather_code_dict(
-            code=weather_code,
+            weather_code=weather_code,
+            code_symbol=code_symbol,
             request=request,
             include_symbols=include_symbols,
             include_category=include_category,
-            include_organization=include_organization,
+            include_collection=include_collection,
         )
 
 
 @router.get(
-    "symbol/{style}/{time}/{code}.svg",
+    "symbol/{collection}/{time}/{code}.svg",
     operation_id="get_weather_code_svg",
 )
 @decorate_view(cache_control(max_age=CACHE_MAX_AGE))
 def get_weather_code_svg(
     request: HttpRequest,
-    style: SymbolStyleEnum,
+    collection: str,
     time: DayTimeEnum,
     code: int,
-    org: str = Query(
-        DEFAULT_ORG_SLUG,
-        description="Organization slug (default: weather-icons)",
-    ),
 ) -> HttpResponseRedirect:
     """
-    Redirect to the SVG icon for a weather code.
+    Redirect to the SVG icon for a weather code from a specific collection.
 
-    Style options: detailed, simple, mono
+    Collection examples: weather-icons-outlined-mono, weather-icons-filled, meteoswiss-filled
     Time options: day, night
 
-    Fallback chain: requested style → simple → detailed → 404
+    If the collection doesn't have a symbol for the WMO code, returns 404.
     """
 
+    # Get the collection
+    collection_obj = WeatherCodeSymbolCollection.objects.filter(slug=collection).first()
+    if collection_obj is None:
+        raise HttpError(404, f"Collection '{collection}' not found")
+
     # Get the weather code
-    qs = WeatherCode.objects.filter(
-        source_organization__slug=org,
-        code=code,
-    ).select_related("symbol_day", "symbol_night")
-
-    weather_code = qs.order_by("-priority").first()
-
+    weather_code = WeatherCode.objects.filter(code=code).first()
     if weather_code is None:
-        raise HttpError(404, f"Weather code {code} not found for organization '{org}'")
+        raise HttpError(404, f"Weather code {code} not found")
+
+    # Get the symbol for this code in this collection
+    code_symbol = (
+        WeatherCodeSymbol.objects.filter(
+            collection=collection_obj, weather_code=weather_code
+        )
+        .select_related("symbol_day", "symbol_night")
+        .first()
+    )
+
+    if code_symbol is None:
+        raise HttpError(
+            404, f"Weather code {code} not found in collection '{collection}'"
+        )
 
     # Determine which symbol to use (day or night)
     symbol = (
-        weather_code.symbol_day
-        if time == DayTimeEnum.day
-        else weather_code.symbol_night
+        code_symbol.symbol_day if time == DayTimeEnum.day else code_symbol.symbol_night
     )
 
     if symbol is None:
-        raise HttpError(404, f"No symbol found for weather code {code} ({time})")
-
-    # Fallback chain: requested style → simple → detailed → 404
-    fallback_styles = [style]
-    if style != SymbolStyleEnum.simple:
-        fallback_styles.append(SymbolStyleEnum.simple)
-    if style != SymbolStyleEnum.detailed:
-        fallback_styles.append(SymbolStyleEnum.detailed)
-
-    # Try to find a symbol with one of the styles
-    target_symbol = None
-    for fallback_style in fallback_styles:
-        # Look for symbol with the style
-        target_symbol = (
-            WeatherCode.objects.filter(
-                source_organization__slug=org,
-                code=code,
-            )
-            .select_related("symbol_day" if time == DayTimeEnum.day else "symbol_night")
-            .order_by("-priority")
-            .first()
+        raise HttpError(
+            404, f"No {time} symbol found for weather code {code} in '{collection}'"
         )
 
-        if target_symbol:
-            symbol_to_check = (
-                target_symbol.symbol_day
-                if time == DayTimeEnum.day
-                else target_symbol.symbol_night
-            )
-            if symbol_to_check and symbol_to_check.style == fallback_style:
-                # Found matching style
-                return HttpResponseRedirect(symbol_to_check.svg_file.url)
+    if not symbol.svg_file:
+        raise HttpError(404, f"SVG file not found for symbol {symbol.slug}")
 
-    # If no style match found, use the original symbol
-    if symbol.svg_file:
-        return HttpResponseRedirect(symbol.svg_file.url)
-
-    # No SVG file found
-    raise HttpError(
-        404,
-        f"SVG icon not found for weather code {code} (style: {style}, time: {time})",
-    )
+    return HttpResponseRedirect(symbol.svg_file.url)

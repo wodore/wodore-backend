@@ -129,7 +129,7 @@ Weather forecast integration for huts and mountain locations.
 * **Coverage**: Swiss-specific weather symbols
 * **Format**: SVG
 
-**Link:** https://www.meteoswiss.admin.ch/weather/weather-and-climate-from-a-to-z/weather-symbols.html
+**Link:** <https://www.meteoswiss.admin.ch/weather/weather-and-climate-from-a-to-z/weather-symbols.html>
 **Link**: [https://docs.discover.swiss/dev/reference/weather-icons/](https://docs.discover.swiss/dev/reference/weather-icons/)
 **URL**: `https://www.meteoswiss.admin.ch/static/resources/weather-symbols/{id}.svg`
 
@@ -222,3 +222,35 @@ WeatherForecast
 * **National Services**: Link to MeteoSwiss (CH), ZAMG (AT), etc. for detailed forecasts
 * **Phase 1**: Frontend-only 14-day display
 * **Phase 2**: Backend storage for weather-based hut search
+
+## Implementation Status
+
+### Completed (Phase 0: Foundation)
+
+* **WMO Weather Code System**: Full support for WMO 4677 standard (100 codes: 0-99)
+  * Universal weather code definitions with multilingual descriptions (DE/FR/IT/EN)
+  * Separation of weather codes from symbol collections
+  * Support for both forecast codes (0-3, 45-99) and observational codes (4-44)
+  * Category-based organization (clear, cloudy, rain, snow, fog, etc.)
+* **Symbol Collection Management**: Flexible system for multiple icon providers
+  * MeteoSwiss filled icon collection with day/night variants (84 icons)
+  * Weather-icons collections: filled, outlined, outlined-mono, filled-animated, outlined-animated (236+ icons each)
+  * Collection-based symbol mapping system (one WMO code → multiple collections)
+  * Extensible symbol style system supporting 11 styles (detailed, simple, mono, outlined, filled, and animated variants)
+* **Import Scripts**: Automated data import from multiple sources
+  * MeteoSwiss icon downloader with priority-based selection
+  * Weather-icons batch importer supporting all styles
+  * WMO code mapping with complete translations and categories
+  * Automatic verification of forecast code coverage
+* **API Endpoints**: RESTful API for weather codes and symbols
+  * Query by collection, category, and individual codes
+  * Configurable response detail levels (no/slug/all for symbols, categories, collections)
+  * SVG redirect endpoints for efficient icon delivery
+  * HTTP caching with Cache-Control headers (60s dev, 7 days production)
+  * Default collection: weather-icons-outlined-mono
+* **Database Optimization**: Complete indexing and query optimization
+  * Foreign key indexes on all relationships
+  * Composite indexes for common query patterns (collection+code, code+collection)
+  * Check constraints for data integrity
+  * Admin interface optimized with targeted prefetch queries
+  * Disabled inlines for large datasets to improve performance

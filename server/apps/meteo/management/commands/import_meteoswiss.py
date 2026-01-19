@@ -11,7 +11,11 @@ from server.apps.licenses.models import License
 from server.apps.symbols.models import Symbol
 from server.apps.organizations.models import Organization
 from server.apps.categories.models import Category
-from server.apps.meteo.models import WeatherCode
+from server.apps.meteo.models import (
+    WeatherCode,
+    WeatherCodeSymbolCollection,
+    WeatherCodeSymbol,
+)
 
 
 class Command(BaseCommand):
@@ -47,7 +51,7 @@ class Command(BaseCommand):
         # Base paths
         base_path = Path(__file__).resolve().parent.parent.parent / "assets"
         meteoswiss_path = base_path / "meteoswiss"
-        icons_path = meteoswiss_path / "icons"
+        icons_path = meteoswiss_path / "symbols" / "filled"
         mapping_json_path = meteoswiss_path / "wmo4677mapping.json"
         descriptions_json_path = base_path / "wmo_descriptions.json"
 
@@ -76,9 +80,11 @@ class Command(BaseCommand):
             "icons_failed": 0,
             "symbols_created": 0,
             "symbols_skipped": 0,
-            "codes_created": 0,
-            "codes_updated": 0,
-            "codes_skipped": 0,
+            "weather_codes_created": 0,
+            "weather_codes_updated": 0,
+            "collection_created": False,
+            "code_symbols_created": 0,
+            "code_symbols_updated": 0,
         }
 
         # Read WMO mapping JSON and descriptions
@@ -107,14 +113,26 @@ class Command(BaseCommand):
         # Print summary
         self.stdout.write("\n" + "=" * 60)
         self.stdout.write("Summary:")
-        self.stdout.write(f"  Icons downloaded:    {stats['icons_downloaded']}")
-        self.stdout.write(f"  Icons skipped:       {stats['icons_skipped']}")
-        self.stdout.write(f"  Icons failed:        {stats['icons_failed']}")
-        self.stdout.write(f"  Symbols created:     {stats['symbols_created']}")
-        self.stdout.write(f"  Symbols skipped:     {stats['symbols_skipped']}")
-        self.stdout.write(f"  Codes created:       {stats['codes_created']}")
-        self.stdout.write(f"  Codes updated:       {stats['codes_updated']}")
-        self.stdout.write(f"  Codes skipped:       {stats['codes_skipped']}")
+        self.stdout.write(f"  Icons downloaded:         {stats['icons_downloaded']}")
+        self.stdout.write(f"  Icons skipped:            {stats['icons_skipped']}")
+        self.stdout.write(f"  Icons failed:             {stats['icons_failed']}")
+        self.stdout.write(f"  Symbols created:          {stats['symbols_created']}")
+        self.stdout.write(f"  Symbols skipped:          {stats['symbols_skipped']}")
+        self.stdout.write(
+            f"  Weather codes created:    {stats['weather_codes_created']}"
+        )
+        self.stdout.write(
+            f"  Weather codes updated:    {stats['weather_codes_updated']}"
+        )
+        self.stdout.write(
+            f"  Collection created:       {'Yes' if stats['collection_created'] else 'No'}"
+        )
+        self.stdout.write(
+            f"  Code symbols created:     {stats['code_symbols_created']}"
+        )
+        self.stdout.write(
+            f"  Code symbols updated:     {stats['code_symbols_updated']}"
+        )
         self.stdout.write("=" * 60)
 
     def _download_icons(self, wmo_mappings, icons_path, dry_run, stats):
@@ -184,6 +202,12 @@ class Command(BaseCommand):
             self.stderr.write(self.style.ERROR("Failed to get/create organization"))
             return
 
+        # Get or create symbol collection
+        collection = self._get_or_create_collection(organization, dry_run, stats)
+        if collection is None and not dry_run:
+            self.stderr.write(self.style.ERROR("Failed to get/create collection"))
+            return
+
         # Get or create meteo parent category
         meteo_parent = self._get_or_create_meteo_categories(dry_run)
 
@@ -195,14 +219,11 @@ class Command(BaseCommand):
             with open(category_mapping_file, "r") as f:
                 category_mapping = json.load(f)
 
-        # Process each icon from the JSON mapping
-        # Group by WMO codes - process each WMO code once with day/night symbols
-        wmo_code_mappings = {}  # wmo_code -> [(icon_id, is_day, priority), ...]
+        # Group icons by WMO code and day/night
+        wmo_code_mappings = {}  # wmo_code -> {"day": [(icon_id, priority)], "night": [...]}
 
         for icon_id, mapping in wmo_mappings.items():
-            wmo_codes = mapping.get(
-                "wmo_codes", [mapping.get("wmo_code")]
-            )  # Backwards compat
+            wmo_codes = mapping.get("wmo_codes", [mapping.get("wmo_code")])
             if not isinstance(wmo_codes, list):
                 wmo_codes = [wmo_codes]
 
@@ -217,7 +238,9 @@ class Command(BaseCommand):
                 wmo_code_mappings[wmo_code][period].append((icon_id, priority))
 
         # Process each WMO code
-        for wmo_code, periods in wmo_code_mappings.items():
+        for wmo_code in sorted(wmo_code_mappings.keys()):
+            periods = wmo_code_mappings[wmo_code]
+
             # Get category for this WMO code
             category = None
             if str(wmo_code) in category_mapping and meteo_parent:
@@ -232,70 +255,237 @@ class Command(BaseCommand):
             descriptions_night = {}
 
             for lang in all_languages:
-                # Day descriptions (no suffix)
                 descriptions_day[lang] = wmo_desc.get(lang, "")
-                # Night descriptions (with _night suffix)
                 descriptions_night[lang] = wmo_desc.get(f"{lang}_night", "")
 
-            # Get highest priority icons for day and night
-            # Sort by priority (descending), take first
+            # Get best (highest priority) icons for day and night
             day_icons = sorted(periods.get("day", []), key=lambda x: x[1], reverse=True)
             night_icons = sorted(
                 periods.get("night", []), key=lambda x: x[1], reverse=True
             )
 
-            if not day_icons and not night_icons:
-                self.stdout.write(
-                    self.style.WARNING(
-                        f"  ⚠ No day or night icons for WMO code {wmo_code}"
-                    )
-                )
-                continue
-
-            # Get best icon for each period (highest priority)
             best_day_icon_id = day_icons[0][0] if day_icons else None
-            best_day_priority = day_icons[0][1] if day_icons else 0
-
             best_night_icon_id = night_icons[0][0] if night_icons else None
-            best_night_priority = night_icons[0][1] if night_icons else 0
 
-            # Use the highest priority overall as the main priority
-            main_priority = max(best_day_priority, best_night_priority)
-
-            # Create/get symbols for day and night
-            symbol_day = None
-            symbol_night = None
-
-            if best_day_icon_id:
-                symbol_day = self._create_or_get_symbol(
-                    best_day_icon_id, icons_path, license, dry_run, stats
-                )
-
-            if best_night_icon_id:
-                symbol_night = self._create_or_get_symbol(
-                    best_night_icon_id, icons_path, license, dry_run, stats
-                )
-
-            # Create/update the WeatherCode entry
-            self._create_or_update_weathercode(
-                organization,
+            # Create or update WeatherCode (universal, no symbols)
+            weather_code_obj = self._create_or_update_weathercode(
                 wmo_code,
-                main_priority,
                 descriptions_day,
                 descriptions_night,
                 main_language,
                 other_languages,
                 category,
-                symbol_day,
-                symbol_night,
                 dry_run,
                 stats,
             )
 
-    def _create_or_get_symbol(self, icon_id, icons_path, license, dry_run, stats):
+            if weather_code_obj is None and not dry_run:
+                self.stderr.write(
+                    self.style.ERROR(f"Failed to create WeatherCode {wmo_code}")
+                )
+                continue
+
+            # Create symbols for best day and night icons
+            symbol_day = None
+            symbol_night = None
+
+            if best_day_icon_id:
+                symbol_day = self._create_or_get_symbol(
+                    best_day_icon_id, icons_path, license, organization, dry_run, stats
+                )
+
+            if best_night_icon_id:
+                symbol_night = self._create_or_get_symbol(
+                    best_night_icon_id,
+                    icons_path,
+                    license,
+                    organization,
+                    dry_run,
+                    stats,
+                )
+
+            # Create or update WeatherCodeSymbol (links code to symbols in this collection)
+            self._create_or_update_code_symbol(
+                weather_code_obj,
+                collection,
+                symbol_day,
+                symbol_night,
+                wmo_code,
+                dry_run,
+                stats,
+            )
+
+        # Verify all forecast codes are covered
+        if not dry_run:
+            self._verify_coverage(collection, stats)
+
+    def _create_or_update_weathercode(
+        self,
+        wmo_code,
+        descriptions_day,
+        descriptions_night,
+        main_language,
+        other_languages,
+        category,
+        dry_run,
+        stats,
+    ):
+        """Create or update universal WeatherCode"""
+        main_desc_day = descriptions_day.get(main_language, "")
+        main_desc_night = descriptions_night.get(main_language, "")
+
+        if dry_run:
+            stats["weather_codes_created"] += 1
+            msg = (
+                f"  → Would create WMO {wmo_code}: {main_desc_day} / {main_desc_night}"
+            )
+            self.stdout.write(msg)
+            return None
+
+        # Check if exists
+        existing = WeatherCode.objects.filter(code=wmo_code).first()
+
+        if existing:
+            # Update
+            updated = False
+
+            if existing.category != category:
+                existing.category = category
+                updated = True
+
+            if existing.description_day != main_desc_day:
+                existing.description_day = main_desc_day
+                updated = True
+
+            if existing.description_night != main_desc_night:
+                existing.description_night = main_desc_night
+                updated = True
+
+            # Update translations
+            i18n_data = existing.i18n or {}
+            for lang in other_languages:
+                day_key = f"description_day_{lang}"
+                night_key = f"description_night_{lang}"
+
+                new_day = descriptions_day.get(lang, "")
+                new_night = descriptions_night.get(lang, "")
+
+                if i18n_data.get(day_key) != new_day:
+                    i18n_data[day_key] = new_day
+                    updated = True
+
+                if i18n_data.get(night_key) != new_night:
+                    i18n_data[night_key] = new_night
+                    updated = True
+
+            if updated:
+                existing.i18n = i18n_data
+                existing.save()
+                stats["weather_codes_updated"] += 1
+                self.stdout.write(
+                    self.style.SUCCESS(f"  ✓ Updated WeatherCode WMO {wmo_code}")
+                )
+            else:
+                self.stdout.write(f"  ⊘ Skipped WeatherCode WMO {wmo_code}: no changes")
+
+            return existing
+        else:
+            # Create
+            try:
+                weather_code = WeatherCode(
+                    code=wmo_code,
+                    category=category,
+                    description_day=main_desc_day,
+                    description_night=main_desc_night,
+                )
+
+                # Set translations
+                i18n_data = {}
+                for lang in other_languages:
+                    i18n_data[f"description_day_{lang}"] = descriptions_day.get(
+                        lang, ""
+                    )
+                    i18n_data[f"description_night_{lang}"] = descriptions_night.get(
+                        lang, ""
+                    )
+                weather_code.i18n = i18n_data
+
+                weather_code.save()
+                stats["weather_codes_created"] += 1
+                msg = f"  ✓ Created WeatherCode WMO {wmo_code} (slug: {weather_code.slug})"
+                self.stdout.write(self.style.SUCCESS(msg))
+                return weather_code
+            except Exception as e:
+                msg = f"  ✗ Failed to create WeatherCode {wmo_code}: {e}"
+                self.stderr.write(self.style.ERROR(msg))
+                return None
+
+    def _create_or_update_code_symbol(
+        self,
+        weather_code_obj,
+        collection,
+        symbol_day,
+        symbol_night,
+        wmo_code,
+        dry_run,
+        stats,
+    ):
+        """Create or update WeatherCodeSymbol linking code to symbols in collection"""
+        if dry_run:
+            stats["code_symbols_created"] += 1
+            day_id = symbol_day if isinstance(symbol_day, str) else "?"
+            night_id = symbol_night if isinstance(symbol_night, str) else "?"
+            msg = f"  → Would link WMO {wmo_code} to day:{day_id}, night:{night_id}"
+            self.stdout.write(msg)
+            return
+
+        # Check if exists
+        existing = WeatherCodeSymbol.objects.filter(
+            weather_code=weather_code_obj, collection=collection
+        ).first()
+
+        if existing:
+            # Update
+            updated = False
+
+            if existing.symbol_day != symbol_day:
+                existing.symbol_day = symbol_day
+                updated = True
+
+            if existing.symbol_night != symbol_night:
+                existing.symbol_night = symbol_night
+                updated = True
+
+            if updated:
+                existing.save()
+                stats["code_symbols_updated"] += 1
+                msg = f"  ✓ Updated symbols for WMO {wmo_code}"
+                self.stdout.write(self.style.SUCCESS(msg))
+            else:
+                self.stdout.write(f"  ⊘ Skipped symbols for WMO {wmo_code}: no changes")
+        else:
+            # Create
+            try:
+                code_symbol = WeatherCodeSymbol(
+                    weather_code=weather_code_obj,
+                    collection=collection,
+                    symbol_day=symbol_day,
+                    symbol_night=symbol_night,
+                )
+                code_symbol.save()
+                stats["code_symbols_created"] += 1
+                msg = f"  ✓ Linked WMO {wmo_code} to collection symbols"
+                self.stdout.write(self.style.SUCCESS(msg))
+            except Exception as e:
+                msg = f"  ✗ Failed to link WMO {wmo_code}: {e}"
+                self.stderr.write(self.style.ERROR(msg))
+
+    def _create_or_get_symbol(
+        self, icon_id, icons_path, license, organization, dry_run, stats
+    ):
         """Create or get symbol for MeteoSwiss icon"""
         slug = f"meteoswiss-{icon_id}"
-        style = "simple"
+        style = "filled"
 
         # Check if symbol exists
         if not dry_run:
@@ -323,6 +513,7 @@ class Command(BaseCommand):
                     is_active=True,
                     review_status="approved",
                     source_url="https://www.meteoswiss.admin.ch/weather/weather-and-climate-from-a-to-z/weather-symbols.html",
+                    source_org=organization,
                     author="MeteoSwiss",
                     author_url="https://www.meteoswiss.admin.ch/",
                 )
@@ -344,146 +535,59 @@ class Command(BaseCommand):
         else:
             stats["symbols_created"] += 1
             self.stdout.write(f"  → Would create symbol {slug}")
-            return None
+            return icon_id  # Return icon_id for dry-run display
 
-    def _create_or_update_weathercode(
-        self,
-        organization,
-        wmo_code,
-        priority,
-        descriptions_day,
-        descriptions_night,
-        main_language,
-        other_languages,
-        category,
-        symbol_day,
-        symbol_night,
-        dry_run,
-        stats,
-    ):
-        """Create or update weather code"""
-        # Use WMO code as source_id (one entry per WMO code)
-        source_id = str(wmo_code)
-
-        # Get main language descriptions
-        main_desc_day = descriptions_day.get(main_language, "")
-        main_desc_night = descriptions_night.get(main_language, "")
+    def _get_or_create_collection(self, organization, dry_run, stats):
+        """Get or create WeatherCodeSymbolCollection"""
+        slug = "meteoswiss-filled"
 
         if dry_run:
-            stats["codes_created"] += 1
-            msg = (
-                f"  → Would create WMO {wmo_code} (priority {priority}): "
-                f"Day: {main_desc_day}, Night: {main_desc_night}"
-            )
-            self.stdout.write(msg)
-            return
+            self.stdout.write(f"Would create collection '{slug}'")
+            stats["collection_created"] = True
+            return None
 
-        # Check if exists by source_id (one entry per WMO code)
-        existing = WeatherCode.objects.filter(
-            source_organization=organization, source_id=source_id
-        ).first()
-
+        existing = WeatherCodeSymbolCollection.objects.filter(slug=slug).first()
         if existing:
-            # Update
-            updated = False
+            self.stdout.write(f"Using existing collection '{slug}'")
+            return existing
 
-            if existing.code != wmo_code:
-                existing.code = wmo_code
-                updated = True
+        try:
+            collection = WeatherCodeSymbolCollection.objects.create(
+                slug=slug, source_org=organization
+            )
+            stats["collection_created"] = True
+            self.stdout.write(self.style.SUCCESS(f"Created collection '{slug}'"))
+            return collection
+        except Exception as e:
+            self.stderr.write(
+                self.style.ERROR(f"Failed to create collection '{slug}': {e}")
+            )
+            return None
 
-            if existing.priority != priority:
-                existing.priority = priority
-                updated = True
+    def _verify_coverage(self, collection, stats):
+        """Verify all forecast codes (0-3, 45-99) are covered in the collection"""
+        forecast_codes = set(range(0, 4)) | set(range(45, 100))
 
-            if existing.category != category:
-                existing.category = category
-                updated = True
+        covered = WeatherCodeSymbol.objects.filter(
+            collection=collection, weather_code__code__in=forecast_codes
+        ).values_list("weather_code__code", flat=True)
 
-            # Update day descriptions
-            if existing.description_day != main_desc_day:
-                existing.description_day = main_desc_day
-                updated = True
+        covered_set = set(covered)
+        missing = forecast_codes - covered_set
 
-            # Update night descriptions
-            if existing.description_night != main_desc_night:
-                existing.description_night = main_desc_night
-                updated = True
+        self.stdout.write("\n" + "=" * 60)
+        self.stdout.write("Coverage Verification:")
+        self.stdout.write(f"  Forecast codes covered: {len(covered_set)}/59")
 
-            # Update translations
-            i18n_data = existing.i18n or {}
-            for lang in other_languages:
-                day_key = f"description_day_{lang}"
-                night_key = f"description_night_{lang}"
-
-                new_day = descriptions_day.get(lang, "")
-                new_night = descriptions_night.get(lang, "")
-
-                if i18n_data.get(day_key) != new_day:
-                    i18n_data[day_key] = new_day
-                    updated = True
-
-                if i18n_data.get(night_key) != new_night:
-                    i18n_data[night_key] = new_night
-                    updated = True
-
-            if updated:
-                existing.i18n = i18n_data
-
-            # Update symbols
-            if existing.symbol_day != symbol_day:
-                existing.symbol_day = symbol_day
-                updated = True
-
-            if existing.symbol_night != symbol_night:
-                existing.symbol_night = symbol_night
-                updated = True
-
-            if updated:
-                existing.save()
-                stats["codes_updated"] += 1
-                msg = f"  ✓ Updated WMO {wmo_code} (priority {priority})"
-                self.stdout.write(self.style.SUCCESS(msg))
-            else:
-                stats["codes_skipped"] += 1
-                self.stdout.write(f"  ⊘ Skipped WMO {wmo_code}: no changes")
+        if missing:
+            self.stderr.write(
+                self.style.ERROR(f"  ✗ Missing WMO codes: {sorted(missing)}")
+            )
+            raise Exception(
+                f"Incomplete coverage! Missing {len(missing)} forecast codes: {sorted(missing)}"
+            )
         else:
-            # Create new entry
-            try:
-                weather_code = WeatherCode(
-                    source_organization=organization,
-                    source_id=source_id,
-                    code=wmo_code,
-                    priority=priority,
-                    category=category,
-                    description_day=main_desc_day,
-                    description_night=main_desc_night,
-                    symbol_day=symbol_day,
-                    symbol_night=symbol_night,
-                )
-
-                # Set translations
-                i18n_data = {}
-                for lang in other_languages:
-                    i18n_data[f"description_day_{lang}"] = descriptions_day.get(
-                        lang, ""
-                    )
-                    i18n_data[f"description_night_{lang}"] = descriptions_night.get(
-                        lang, ""
-                    )
-                weather_code.i18n = i18n_data
-
-                # Save (slug will be auto-generated)
-                weather_code.save()
-
-                stats["codes_created"] += 1
-                msg = (
-                    f"  ✓ Created WMO {wmo_code} (slug: {weather_code.slug}, "
-                    f"priority {priority}): Day: {main_desc_day}, Night: {main_desc_night}"
-                )
-                self.stdout.write(self.style.SUCCESS(msg))
-            except Exception as e:
-                msg = f"  ✗ Failed to create WMO {wmo_code}: {e}"
-                self.stderr.write(self.style.ERROR(msg))
+            self.stdout.write(self.style.SUCCESS("  ✓ All forecast codes covered!"))
 
     def _get_or_create_license(self, dry_run):
         """Get or create license for MeteoSwiss data"""
@@ -547,6 +651,7 @@ class Command(BaseCommand):
             ("snow", "Snow", "Snow"),
             ("shower", "Shower", "Rain showers"),
             ("thunderstorm", "Thunderstorm", "Thunderstorms"),
+            ("observational", "Observational", "Observational weather phenomena"),
         ]
 
         for slug, name, description in weather_categories:
