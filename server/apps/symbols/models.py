@@ -19,6 +19,13 @@ class _SymbolStyleChoices(models.TextChoices):
     detailed = "detailed", "detailed"
     simple = "simple", "simple"
     mono = "mono", "mono"
+    outlined = "outlined", "outlined"
+    filled = "filled", "filled"
+    detailed_animated = "detailed-animated", "detailed-animated"
+    simple_animated = "simple-animated", "simple-animated"
+    mono_animated = "mono-animated", "mono-animated"
+    outlined_animated = "outlined-animated", "outlined-animated"
+    filled_animated = "filled-animated", "filled-animated"
 
 
 class _ReviewStatusChoices(models.TextChoices):
@@ -44,7 +51,7 @@ class Symbol(TimeStampedModel):
         help_text=_("Symbol identifier (e.g., 'water', 'mountain')"),
     )
     style = models.CharField(
-        max_length=10,
+        max_length=20,
         choices=_SymbolStyleChoices.choices,
         default=_SymbolStyleChoices.detailed,
         db_index=True,
@@ -196,7 +203,8 @@ class SymbolGroup(Symbol):
     """
     Proxy model for grouping symbols by slug in admin.
 
-    This allows displaying all three styles (detailed, simple, mono) of a symbol
+    This allows displaying all style variants of a symbol
+    (filled, outlined, outlined-mono, animated variants, etc.)
     on a single line in the admin interface.
     """
 

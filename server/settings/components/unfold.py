@@ -166,6 +166,14 @@ UNFOLD = {
                             "contacts.change_contact"
                         ),
                     },
+                    {
+                        "title": _("Meteo"),
+                        "icon": "wb_sunny",
+                        "link": reverse_lazy("admin:meteo_weathercode_changelist"),
+                        "permission": lambda request: request.user.has_perm(
+                            "meteo.view_weathercode"
+                        ),
+                    },
                 ],
             },
             {
@@ -476,6 +484,38 @@ UNFOLD = {
                     "link": reverse_lazy("admin:geometries_geoplace_changelist"),
                     "permission": lambda request: request.user.has_perm(
                         "geometries.view_geoplace"
+                    ),
+                },
+            ],
+        },
+        {
+            "models": [
+                "meteo.weathercode",
+                "meteo.weathercodesymbolcollection",
+                "meteo.weathercodesymbol",
+            ],
+            "items": [
+                {
+                    "title": _("Weather Codes"),
+                    "link": reverse_lazy("admin:meteo_weathercode_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "meteo.view_weathercode"
+                    ),
+                },
+                {
+                    "title": _("Symbol Collections"),
+                    "link": reverse_lazy(
+                        "admin:meteo_weathercodesymbolcollection_changelist"
+                    ),
+                    "permission": lambda request: request.user.has_perm(
+                        "meteo.view_weathercodesymbolcollection"
+                    ),
+                },
+                {
+                    "title": _("Code Symbols"),
+                    "link": reverse_lazy("admin:meteo_weathercodesymbol_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "meteo.view_weathercodesymbol"
                     ),
                 },
             ],
