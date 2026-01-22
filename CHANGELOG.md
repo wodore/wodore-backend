@@ -7,6 +7,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.12] - 2026-01-22
+
+#### 🏗️ Breaking changes
+- Update symbol references ([#66](https://github.com/wodore/wodore-backend/pull/66))
+
+#### 🚀 Features
+- Add meteo app ([#83](https://github.com/wodore/wodore-backend/pull/83))
+- Improve search performance and import geonames command ([#78](https://github.com/wodore/wodore-backend/pull/78), [#77](https://github.com/wodore/wodore-backend/pull/77))
+- Include long git hash in version information ([#76](https://github.com/wodore/wodore-backend/pull/76))
+- Add symbols table ([#65](https://github.com/wodore/wodore-backend/pull/65))
+- Add hut type `symbol_detailed` and `symbol_simple` for hut search ([#62](https://github.com/wodore/wodore-backend/pull/62))
+
+#### 🐛 Fixes
+- Migrations for hut and category failed due to country contstains ([#75](https://github.com/wodore/wodore-backend/pull/75))
+- Fix availability script. Add GeoNames organization. ([#73](https://github.com/wodore/wodore-backend/pull/73))
+- Fix add symbols migration ([#72](https://github.com/wodore/wodore-backend/pull/72))
+- Fix geometries.0002 migration to run after symbol migration completes ([#71](https://github.com/wodore/wodore-backend/pull/71))
+- Fix external_geonames.0002 migration to use migration-safe model access ([#70](https://github.com/wodore/wodore-backend/pull/70))
+- Fix migration ordering to ensure HutTypes are copied before FK constraints ([#69](https://github.com/wodore/wodore-backend/pull/69))
+
+#### 🌀 Others
+- Use correct utc timestamp for docker builds ([#74](https://github.com/wodore/wodore-backend/pull/74))
+- Docker build fail fast ([#68](https://github.com/wodore/wodore-backend/pull/68))
+
+[0.1.12]: https://github.com/wodore/wodore-backend/compare/v0.1.11..v0.1.12
+
 ## [0.1.11] - 2026-01-06
 
 #### 🚀 Features
