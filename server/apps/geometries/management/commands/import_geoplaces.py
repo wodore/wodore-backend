@@ -600,7 +600,7 @@ class Command(BaseCommand):
                 source_associations__organization__slug=source,
                 source_associations__source_id=source_id,
             )
-            .select_related("source_associations__organization")  # Optimize query
+            .select_related("place_type")  # Optimize query for forward relation
             .order_by("id")
             .first()
         )
