@@ -51,8 +51,28 @@ services:
       FILE_RESULT_STORAGE_BASE_DIR: /mnt/data/result # enable file result storage by specifying base dir
       FILE_RESULT_STORAGE_MKDIR_PERMISSION: 0755 # optional
       FILE_RESULT_STORAGE_WRITE_PERMISSION: 0666 # optional
-      IMAGOR_RESULT_STORAGE_PATH_STYLE:
-        size
+      IMAGOR_RESULT_STORAGE_PATH_STYLE: size
+  martin:
+    image: ghcr.io/maplibre/martin:latest
+    container_name: django-local-martin
+    restart: unless-stopped
+    pull_policy: always
+    ports:
+      - "8075:3000"
+    networks:
+      - postgresnet
+    volumes:
+      - ./tile_server/config/martin.yaml:/config/martin.yaml:ro
+      - ./server/apps/categories/assets/:/sprite/assets/:ro
+      - ./tile_server/tests:/mbtiles:ro
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-wodore}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wodore}
+      POSTGRES_DB: ${POSTGRES_DB:-wodore}
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-wodore}:${POSTGRES_PASSWORD:-wodore}@db:5432/${POSTGRES_DB:-wodore}"
+    command: --config /config/martin.yaml --webui enable-for-all
+    depends_on:
+      - db
 
         #web:
         #  <<: &web
