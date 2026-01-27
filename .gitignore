@@ -7,6 +7,7 @@ old/
 .zitadel-api-key
 slim.report.json
 .env.*
+!.env.template
 SUMMARY_*.md
 AGENT/
 
