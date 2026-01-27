@@ -1,38 +1,13 @@
-[
-  {
-    "id": "huts-circle",
-    "type": "circle",
-    "source": "huts",
-    "source-layer": "huts",
-    "minzoom": 8,
-    "paint": {
-      "circle-color": "#FF5722",
-      "circle-radius": 6,
-      "circle-stroke-color": "#FFFFFF",
-      "circle-stroke-width": 2
-    }
-  },
-  {
-    "id": "huts-symbol",
-    "type": "symbol",
-    "source": "huts",
-    "source-layer": "huts",
-    "minzoom": 8,
-    "layout": {
-      "icon-image": ["concat", ["get", "type_open_slug"]],
-      "icon-size": 0.8,
-      "icon-allow-overlap": false,
-      "text-field": ["get", "name"],
-      "text-font": ["Open Sans Regular"],
-      "text-size": 12,
-      "text-anchor": "top",
-      "text-offset": [0, 1],
-      "text-optional": true
-    },
-    "paint": {
-      "text-color": "#333333",
-      "text-halo-color": "#FFFFFF",
-      "text-halo-width": 2
-    }
+{
+  "id": "huts-circle",
+  "type": "circle",
+  "source": "huts",
+  "source-layer": "huts",
+  "minzoom": 8,
+  "paint": {
+    "circle-color": "#FF5722",
+    "circle-radius": 6,
+    "circle-stroke-color": "#FFFFFF",
+    "circle-stroke-width": 2
   }
-]
+}

@@ -159,11 +159,11 @@ class HutsForTilesView(PostgresViewModel):
               {name_columns},
 
               -- Hut type (open state)
-              cat_open.identifier as type_open_slug,
+              cat_open.slug as type_open_slug,
               cat_open."order" as type_open_order,
 
               -- Hut type (closed state)
-              cat_closed.identifier as type_closed_slug,
+              cat_closed.slug as type_closed_slug,
               cat_closed."order" as type_closed_order,
 
               -- Availability status
