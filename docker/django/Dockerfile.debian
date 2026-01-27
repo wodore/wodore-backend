@@ -169,6 +169,8 @@ COPY --chown=web:web server /code/server
 # TODO: collectstatic in build process and copy from there!
 COPY --chown=web:web static /code/static
 COPY --chown=web:web ${CONFIG_DIR} /code/config
+# Martin tile server config (needed for martin_sync command)
+COPY --chown=web:web tile_server/config /code/tile_server/config
 
 # Generate build timestamp automatically during build
 RUN printf 'export BUILD_TIMESTAMP=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%S.%6NZ)" > /code/.build_timestamp \

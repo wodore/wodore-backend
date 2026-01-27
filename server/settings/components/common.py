@@ -137,6 +137,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "server.apps.geometries",
     "server.apps.api",
     # Extension:
+    "psqlextra",  # https://django-postgres-extra.readthedocs.io/
     "pgtrigger",  # https://django-pgtrigger.readthedocs.io/
     "ninja",
     "colorfield",
@@ -230,7 +231,7 @@ WSGI_APPLICATION = "server.wsgi.application"
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.contrib.gis.db.backends.postgis",
+        "ENGINE": "psqlextra.backend",  # django-postgres-extra backend (wraps PostGIS)
         "NAME": config("POSTGRES_DB", ""),
         "USER": config("POSTGRES_USER", ""),
         "PASSWORD": config("POSTGRES_PASSWORD", ""),
@@ -243,6 +244,9 @@ DATABASES = {
         },
     },
 }
+
+# Configure django-postgres-extra to wrap PostGIS backend
+POSTGRES_EXTRA_DB_BACKEND_BASE = "django.contrib.gis.db.backends.postgis"
 
 DEFAULT_FILE_STORAGE = "django.core.files.storage.FileSystemStorage"
 if config("AWS_ACCESS_KEY_ID", ""):

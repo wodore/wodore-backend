@@ -73,8 +73,15 @@ Technical proposals for significant features and architectural decisions:
 
 Services are defined in `docker-compose.yml`:
 
-- PostgreSQL Database (PostGIS)
-- Imagor (Image Processing)
+- **PostgreSQL Database (PostGIS)** - Port 5432
+- **Imagor** (Image Processing) - Port 8079
+- **Martin** (Vector Tile Server) - Port 8075
+  - Serves vector tiles from PostGIS database
+  - Configuration: `config/martin.yaml`
+  - Endpoint: `http://localhost:8075/huts/{z}/{x}/{y}.pbf`
+  - Catalog: `http://localhost:8075/catalog`
+  - Currently serving: `huts` table (public and active huts only)
+  - Properties: `slug`, `elevation`, `capacity_open`, `capacity_closed`, `hut_type_open_id`, `hut_type_closed_id`
 
 ## Common Patterns
 

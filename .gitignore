@@ -16,6 +16,9 @@ AGENT/
 /media_local/*
 /static/*
 
+# Martin sync output
+/martin_sync/
+
 node_modules
 # Byte-compiled / optimized / DLL files
 __pycache__/

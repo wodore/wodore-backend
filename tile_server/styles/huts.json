@@ -1,0 +1,13 @@
+{
+  "id": "huts-circle",
+  "type": "circle",
+  "source": "huts",
+  "source-layer": "huts",
+  "minzoom": 8,
+  "paint": {
+    "circle-color": "#FF5722",
+    "circle-radius": 6,
+    "circle-stroke-color": "#FFFFFF",
+    "circle-stroke-width": 2
+  }
+}
