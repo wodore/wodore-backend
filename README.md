@@ -18,6 +18,7 @@
 
 - [Django](https://www.djangoproject.com/) with [django ninja](https://django-ninja.dev/) for the API and [unfold admin](https://unfoldadmin.com/)
 - [PostgreSQL](https://www.postgresql.org/) with [PostGIS](https://postgis.net/) for the database
+- [Martin](https://maplibre.org/martin/) for vector tile serving
 - [Imagor](https://github.com/cshum/imagor) for image serving and processing
 - [Zitadel](https://zitadel.com/) for authentication and user management _(optional)_
 
@@ -220,6 +221,22 @@ Watch and compile Tailwind CSS:
 
 ```bash
 npx tailwindcss -i styles.css -o server/apps/manager/static/css/styles.css --minify --watch
+```
+
+Sync Martin tile server assets for production (Kubernetes):
+
+```bash
+# Preview sync (dry-run) - syncs all categories by default
+(.venv) app martin_sync --dry-run
+
+# Sync to default target (./martin_sync)
+(.venv) app martin_sync
+
+# Sync specific categories only
+(.venv) app martin_sync --include accommodation,transport
+
+# Sync to custom target (e.g., production PVC)
+(.venv) app martin_sync --target /mnt/martin-pvc
 ```
 
 ### Package Updates

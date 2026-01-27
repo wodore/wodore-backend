@@ -62,15 +62,16 @@ services:
     networks:
       - postgresnet
     volumes:
-      - ./tile_server/config/martin.yaml:/config/martin.yaml:ro
-      - ./server/apps/categories/assets/:/sprite/assets/:ro
-      - ./tile_server/tests:/mbtiles:ro
+      #- ./martin_sync/config/martin.yaml:/config/martin.yaml:ro
+      - ./martin_sync:/martin_sync:ro
+      #- ./tile_server/tests:/mbtiles:ro
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-wodore}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wodore}
       POSTGRES_DB: ${POSTGRES_DB:-wodore}
       DATABASE_URL: "postgresql://${POSTGRES_USER:-wodore}:${POSTGRES_PASSWORD:-wodore}@db:5432/${POSTGRES_DB:-wodore}"
-    command: --config /config/martin.yaml --webui enable-for-all
+      MARTIN_SYNC_MOUNT: /martin_sync
+    command: --config /martin_sync/config/martin.yaml --webui enable-for-all
     depends_on:
       - db
 

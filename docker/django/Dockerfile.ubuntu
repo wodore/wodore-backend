@@ -162,6 +162,8 @@ COPY --chown=web:web server /code/server
 # TODO: collectstatic in build process and copy from there!
 #COPY --chown=web:web static /code/static
 COPY --chown=web:web ${CONFIG_DIR} /code/config
+# Martin tile server config (needed for martin_sync command)
+COPY --chown=web:web tile_server/config /code/tile_server/config
 
 # Setting up proper permissions:
 RUN <<EOF

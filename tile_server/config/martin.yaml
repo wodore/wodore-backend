@@ -80,65 +80,68 @@ postgres:
       minzoom: 0
       maxzoom: 20
 
-    # Ski routes (test data from Alps.sqlite)
-    test_ski_routes:
-      layer_id: ski_routes
+    ## # Ski routes (test data from Alps.sqlite)
+    ## test_ski_routes:
+    ##   layer_id: ski_routes
 
-      schema: public
-      table: test_ski_routes
+    ##   schema: public
+    ##   table: test_ski_routes
 
-      geometry_column: geometry
-      srid: 4326
-      geometry_type: LINESTRING
+    ##   geometry_column: geometry
+    ##   srid: 4326
+    ##   geometry_type: LINESTRING
 
-      properties:
-        id: int4
-        start: text
-        stop: text
-        diff: int4
-        length: float8
-        skitour: int8
-        pop: int4
-        adiff: text
+    ##   properties:
+    ##     id: int4
+    ##     start: text
+    ##     stop: text
+    ##     diff: int4
+    ##     length: float8
+    ##     skitour: int8
+    ##     pop: int4
+    ##     adiff: text
 
-      extent: 4096
-      buffer: 64
-      clip_geom: true
+    ##   extent: 4096
+    ##   buffer: 64
+    ##   clip_geom: true
 
-      minzoom: 0
-      maxzoom: 14
+    ##   minzoom: 0
+    ##   maxzoom: 14
 
-    # Swiss ski segments (test data from Switzerland_Segments.geojson)
-    test_ski_routes_geojson:
-      layer_id: ski_segments
+    ## # Swiss ski segments (test data from Switzerland_Segments.geojson)
+    ## test_ski_routes_geojson:
+    ##   layer_id: ski_segments
 
-      schema: public
-      table: test_ski_routes_geojson
+    ##   schema: public
+    ##   table: test_ski_routes_geojson
 
-      geometry_column: geometry
-      srid: 4326
-      geometry_type: LINESTRING
+    ##   geometry_column: geometry
+    ##   srid: 4326
+    ##   geometry_type: LINESTRING
 
-      properties:
-        id: int4
+    ##   properties:
+    ##     id: int4
 
-      extent: 4096
-      buffer: 64
-      clip_geom: true
+    ##   extent: 4096
+    ##   buffer: 64
+    ##   clip_geom: true
 
-      minzoom: 0
-      maxzoom: 14
+    ##   minzoom: 0
+    ##   maxzoom: 14
 sprites:
   # Size of the sprite cache (in MB).
   # Defaults to cache_size_mb / 8
   cache_size_mb: 64
 
-  sources:
-    # SVG images in this directory will be published as a "my_sprites" sprite source
-    hut_type_simple: /sprite/assets/accommodation/simple
-    hut_type_detailed: /sprite/assets/accommodation/detailed
+  paths:
+    # - ${MARTIN_SYNC_MOUNT:-/martin_sync}/sprites/CATEGORY1
 
+  #sources:
+  #  # SVG images in this directory will be published as a "categories" sprite source
+  #  # Default: /sprite/sprites (mounted in docker-compose from ./martin_sync/sprites)
+  #  # Production: /sprite/sprites (mounted from PVC after martin_sync command)
+  #  categories: ${SPRITE_PATH:-/sprite/sprites}
 # MBTiles file sources
 # Martin can serve MBTiles files directly - add paths here
-mbtiles:
-  paths: /mbtiles/
+#mbtiles:
+#  paths: /mbtiles/
