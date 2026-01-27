@@ -65,6 +65,7 @@ services:
       #- ./martin_sync/config/martin.yaml:/config/martin.yaml:ro
       - ./martin_sync:/martin_sync:ro
       #- ./tile_server/tests:/mbtiles:ro
+      # - ./tile_server/styles:/styles:ro
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-wodore}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wodore}

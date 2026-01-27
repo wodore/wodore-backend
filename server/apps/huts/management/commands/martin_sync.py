@@ -48,11 +48,11 @@ class Command(BaseCommand):
             "If not specified, all categories are included.",
         )
         parser.add_argument(
-            "--styles",
+            "--category-variants",
             type=str,
             default="",
-            help="Comma-separated list of styles to sync (e.g., detailed,simple,mono). "
-            "Default: all available styles",
+            help="Comma-separated list of category variants to sync (e.g., detailed,simple,mono). "
+            "Default: all available variants",
         )
         parser.add_argument(
             "--dry-run",
@@ -73,28 +73,32 @@ class Command(BaseCommand):
         dry_run = options.get("dry_run", False)
         validate = options.get("validate", False)
         include_slugs = options.get("include", "").strip()
-        styles_param = options.get("styles", "").strip()
+        variants_param = options.get("category_variants", "").strip()
 
         if dry_run:
             self.stdout.write(
                 self.style.WARNING("DRY RUN MODE - No changes will be made")
             )
 
-        # Parse styles
-        if styles_param:
-            requested_styles = [s.strip() for s in styles_param.split(",") if s.strip()]
-            # Validate styles against Symbol.StyleChoices
-            valid_styles = [choice[0] for choice in Symbol.StyleChoices.choices]
-            invalid_styles = [s for s in requested_styles if s not in valid_styles]
-            if invalid_styles:
+        # Parse category variants
+        if variants_param:
+            requested_variants = [
+                s.strip() for s in variants_param.split(",") if s.strip()
+            ]
+            # Validate variants against Symbol.StyleChoices
+            valid_variants = [choice[0] for choice in Symbol.StyleChoices.choices]
+            invalid_variants = [
+                s for s in requested_variants if s not in valid_variants
+            ]
+            if invalid_variants:
                 raise CommandError(
-                    f"Invalid styles: {', '.join(invalid_styles)}. "
-                    f"Valid styles: {', '.join(valid_styles)}"
+                    f"Invalid variants: {', '.join(invalid_variants)}. "
+                    f"Valid variants: {', '.join(valid_variants)}"
                 )
-            styles = requested_styles
+            variants = requested_variants
         else:
-            # Default: all available styles
-            styles = [choice[0] for choice in Symbol.StyleChoices.choices]
+            # Default: all available variants
+            variants = [choice[0] for choice in Symbol.StyleChoices.choices]
 
         # Parse include slugs
         if include_slugs:
@@ -104,7 +108,7 @@ class Command(BaseCommand):
             include_list = None  # None means all
             self.stdout.write("Including: ALL categories")
 
-        self.stdout.write(f"Styles: {', '.join(styles)}")
+        self.stdout.write(f"Category variants: {', '.join(variants)}")
 
         # Validate target path
         if not dry_run:
@@ -138,9 +142,14 @@ class Command(BaseCommand):
         }
 
         # 1. Copy sprites from database (do this first to get sprite_dirs list)
-        self._sync_sprites(target_path, dry_run, stats, include_list, styles, Category)
+        self._sync_sprites(
+            target_path, dry_run, stats, include_list, variants, Category
+        )
 
-        # 2. Generate and copy martin.yaml config with sprite paths
+        # 2. Copy style files
+        self._sync_styles(target_path, dry_run, stats)
+
+        # 3. Generate and copy martin.yaml config with sprite paths
         self._sync_config(target_path, dry_run, stats)
 
         # Validation
@@ -156,9 +165,47 @@ class Command(BaseCommand):
         # Print summary
         self._print_summary(stats, dry_run)
 
+    def _sync_styles(self, target_path, dry_run, stats):
+        """Copy MapLibre style JSON files."""
+        self.stdout.write("\n[2/3] Syncing style files...")
+
+        # Source: tile_server/styles/ in Git repo
+        source_dir = Path(settings.BASE_DIR) / "tile_server" / "styles"
+
+        if not source_dir.exists():
+            self.stdout.write(
+                self.style.WARNING(f"  ⚠ Styles directory not found: {source_dir}")
+            )
+            return
+
+        # Target: <target>/styles/
+        target_dir = target_path / "styles"
+
+        # Find all JSON style files
+        style_files = list(source_dir.glob("*.json"))
+
+        if not style_files:
+            self.stdout.write(
+                self.style.WARNING(f"  ⚠ No style files found in {source_dir}")
+            )
+            return
+
+        self.stdout.write(f"  Found {len(style_files)} style file(s)")
+
+        for style_file in sorted(style_files):
+            target_file = target_dir / style_file.name
+            self._copy_file(
+                style_file,
+                target_file,
+                target_dir,
+                dry_run,
+                stats,
+                label=f"style: {style_file.stem}",
+            )
+
     def _sync_config(self, target_path, dry_run, stats):
         """Generate and copy martin.yaml config file with sprite paths."""
-        self.stdout.write("\n[2/2] Generating config file...")
+        self.stdout.write("\n[3/3] Generating config file...")
 
         # Source: tile_server/config/martin.yaml in Git repo
         # BASE_DIR is already the repo root (wodore-backend/)
@@ -249,10 +296,10 @@ class Command(BaseCommand):
             stats["files_copied"] += 1
 
     def _sync_sprites(
-        self, target_path, dry_run, stats, include_list, styles, Category
+        self, target_path, dry_run, stats, include_list, variants, Category
     ):
         """Copy sprite SVG files from database (Category -> Symbol -> svg_file)."""
-        self.stdout.write("\n[1/2] Syncing sprites from database...")
+        self.stdout.write("\n[1/3] Syncing sprites from database...")
 
         # Get root categories (no parent)
         root_categories = Category.objects.filter(
@@ -290,7 +337,7 @@ class Command(BaseCommand):
             self._sync_category_sprites(
                 root_category,
                 target_base_dir,
-                styles,
+                variants,
                 dry_run,
                 stats,
                 parent_slug=root_category.slug,
@@ -307,7 +354,7 @@ class Command(BaseCommand):
                     self._sync_category_sprites(
                         child,
                         target_base_dir,
-                        styles,
+                        variants,
                         dry_run,
                         stats,
                         parent_slug=root_category.slug,
@@ -330,7 +377,7 @@ class Command(BaseCommand):
         stats["sprite_dirs"] = sprite_dirs
 
     def _sync_category_sprites(
-        self, category, target_base_dir, styles, dry_run, stats, parent_slug
+        self, category, target_base_dir, variants, dry_run, stats, parent_slug
     ):
         """
         Sync all style variants for a single category.
@@ -353,21 +400,21 @@ class Command(BaseCommand):
         # Track if we copied any files for this category
         copied_any = False
 
-        # Process each style
-        for style in styles:
-            # Get symbol for this style
-            symbol_field = f"symbol_{style}"
+        # Process each variant
+        for variant in variants:
+            # Get symbol for this variant
+            symbol_field = f"symbol_{variant}"
             symbol = getattr(category, symbol_field, None)
 
             if symbol is None:
-                # No symbol for this style - skip silently
+                # No symbol for this variant - skip silently
                 continue
 
             # Get SVG file path
             if not symbol.svg_file:
                 self.stdout.write(
                     self.style.WARNING(
-                        f"    ⚠ {category.slug}: {style} symbol has no svg_file"
+                        f"    ⚠ {category.slug}: {variant} symbol has no svg_file"
                     )
                 )
                 continue
@@ -377,7 +424,7 @@ class Command(BaseCommand):
             except Exception as e:
                 self.stdout.write(
                     self.style.WARNING(
-                        f"    ⚠ {category.slug}: {style} svg_file path error: {e}"
+                        f"    ⚠ {category.slug}: {variant} svg_file path error: {e}"
                     )
                 )
                 continue
@@ -385,13 +432,13 @@ class Command(BaseCommand):
             if not source_file.exists():
                 self.stdout.write(
                     self.style.WARNING(
-                        f"    ⚠ {category.slug}: {style} svg_file not found: {source_file}"
+                        f"    ⚠ {category.slug}: {variant} svg_file not found: {source_file}"
                     )
                 )
                 continue
 
             # Build target path: {parent_slug}/{variant}/{slug}.svg
-            target_dir = target_base_dir / parent_slug / style
+            target_dir = target_base_dir / parent_slug / variant
             target_file = target_dir / filename
 
             # Copy file
@@ -401,7 +448,7 @@ class Command(BaseCommand):
                 target_dir,
                 dry_run,
                 stats,
-                label=f"{category.slug} ({style})",
+                label=f"{category.slug} ({variant})",
             )
             copied_any = True
 

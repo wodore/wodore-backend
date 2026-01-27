@@ -143,5 +143,10 @@ sprites:
   #  categories: ${SPRITE_PATH:-/sprite/sprites}
 # MBTiles file sources
 # Martin can serve MBTiles files directly - add paths here
-#mbtiles:
-#  paths: /mbtiles/
+## mbtiles:
+##   paths: /mbtiles/
+
+# MapLibre styles
+# Point to directory containing style JSON files
+styles:
+  paths: ${MARTIN_SYNC_MOUNT:-/martin_sync}/styles

@@ -1,0 +1,39 @@
+{
+  "version": 8,
+  "name": "Huts",
+  "sources": {
+    "huts": {
+      "type": "vector",
+      "tiles": ["http://localhost:8075/huts/{z}/{x}/{y}.pbf"],
+      "minzoom": 0,
+      "maxzoom": 20
+    }
+  },
+  "sprite": "http://localhost:8075/sprites/accommodation",
+  "glyphs": "https://fonts.openmaptiles.org/{fontstack}/{range}.pbf",
+  "layers": [
+    {
+      "id": "huts",
+      "type": "symbol",
+      "source": "huts",
+      "source-layer": "huts",
+      "minzoom": 8,
+      "layout": {
+        "icon-image": ["concat", "detailed/", ["get", "type_open_slug"]],
+        "icon-size": 0.8,
+        "icon-allow-overlap": false,
+        "text-field": ["get", "name"],
+        "text-font": ["Open Sans Regular"],
+        "text-size": 12,
+        "text-anchor": "top",
+        "text-offset": [0, 1],
+        "text-optional": true
+      },
+      "paint": {
+        "text-color": "#333333",
+        "text-halo-color": "#FFFFFF",
+        "text-halo-width": 2
+      }
+    }
+  ]
+}
