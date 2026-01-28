@@ -159,8 +159,9 @@ class Command(BaseCommand):
                     continue
 
                 # Get or create symbol
+                symbol_slug = f"availability_{slug}"
                 symbol = self._get_or_create_symbol(
-                    svg_path, style, slug, license, dry_run
+                    svg_path, style, symbol_slug, license, dry_run
                 )
 
                 if symbol:
@@ -168,7 +169,7 @@ class Command(BaseCommand):
                     setattr(category, symbol_field, symbol)
                 else:
                     self.stdout.write(
-                        f"  ⚠ Failed to create symbol for {slug} ({style})"
+                        f"  ⚠ Failed to create symbol {symbol_slug} for {slug} ({style})"
                     )
 
             # Save category
