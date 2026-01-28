@@ -3,17 +3,14 @@
 
 # PostgreSQL connection
 postgres:
-  # Connection string - using environment variables that match docker-compose
-  connection_string: "postgresql://${POSTGRES_USER:-wodore}:${POSTGRES_PASSWORD:-wodore}@db:5432/${POSTGRES_DB:-wodore}"
-
   # Pool size for database connections
-  pool_size: 20
+  pool_size: ${POOL_SIZE:-20}
 
   # Default SRID for spatial queries
   default_srid: 4326
 
   # Automatically compute bounds for tables
-  auto_bounds: quick
+  auto_bounds: ${AUTO_BOUNDS:-quick}
 
   # Explicitly define tables/views to serve as vector tiles
   tables:
@@ -148,5 +145,5 @@ sprites:
 
 # MapLibre styles
 # Point to directory containing style JSON files
-styles:
-  paths: ${MARTIN_SYNC_MOUNT:-/martin_sync}/styles
+#styles:
+#  paths: ${MARTIN_SYNC_MOUNT:-/martin_sync}/styles
