@@ -17,15 +17,7 @@ class Migration(migrations.Migration):
             model_name="geoplacesourceassociation",
             name="source_id",
             field=models.CharField(
-                blank=True, db_index=True, default="", help_text="Source id", max_length=100, null=True
+                blank=True, default="", help_text="Source id", max_length=100, null=True
             ),
-        ),
-        migrations.AddIndex(
-            model_name="geoplace",
-            index=models.Index(fields=["is_active", "is_public", "importance"], name="geoplaces_act_pub_imp_idx"),
-        ),
-        migrations.AddIndex(
-            model_name="geoplace",
-            index=models.Index(fields=["is_active", "is_public", "country_code"], name="geoplaces_act_pub_cnt_idx"),
         ),
     ]
