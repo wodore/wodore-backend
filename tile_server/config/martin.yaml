@@ -3,9 +3,6 @@
 
 # PostgreSQL connection
 postgres:
-  # Connection string - using environment variables that match docker-compose
-  connection_string: "postgresql://${POSTGRES_USER:-wodore}:${POSTGRES_PASSWORD:-wodore}@db:5432/${POSTGRES_DB:-wodore}"
-
   # Pool size for database connections
   pool_size: 20
 
