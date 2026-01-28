@@ -3,14 +3,15 @@
 
 # PostgreSQL connection
 postgres:
+  connection_string: $DATABASE_URL
   # Pool size for database connections
-  pool_size: ${POOL_SIZE:-20}
+  pool_size: 20
 
   # Default SRID for spatial queries
   default_srid: 4326
 
   # Automatically compute bounds for tables
-  auto_bounds: ${AUTO_BOUNDS:-quick}
+  auto_bounds: quick
 
   # Explicitly define tables/views to serve as vector tiles
   tables:
