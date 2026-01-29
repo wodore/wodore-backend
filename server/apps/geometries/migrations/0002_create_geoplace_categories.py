@@ -160,7 +160,7 @@ def create_categories_and_map_features(apps, schema_editor):
         ("transport", "parking", "Parkplatz", "Parkplatz", {"name_en": "Parking", "name_fr": "Parking", "name_it": "Parcheggio", "description_en": "Parking area", "description_fr": "Zone de stationnement", "description_it": "Area di parcheggio"}, 70),
 
         # Accommodation children
-        ("accommodation", "restaurant", "Restaurant", "Restaurant oder Gaststätte", {"name_en": "Restaurant", "name_fr": "Restaurant", "name_it": "Ristorante", "description_en": "Restaurant or dining facility", "description_fr": "Restaurant ou établissement de restauration", "description_it": "Ristorante o locale per ristorazione"}, 10),
+        ("accommodation", "resta", "Restaurant", "Restaurant oder Gaststätte", {"name_en": "Restaurant", "name_fr": "Restaurant", "name_it": "Ristorante", "description_en": "Restaurant or dining facility", "description_fr": "Restaurant ou établissement de restauration", "description_it": "Ristorante o locale per ristorazione"}, 10),
 
         # Spot children
         ("spot", "church", "Kirche", "Kirche oder religiöses Gebäude", {"name_en": "Church", "name_fr": "Église", "name_it": "Chiesa", "description_en": "Church or religious building", "description_fr": "Église ou bâtiment religieux", "description_it": "Chiesa o edificio religioso"}, 10),
@@ -230,7 +230,7 @@ def create_categories_and_map_features(apps, schema_editor):
         "S.PKLT": ("transport", "parking"),
 
         # Accommodation
-        "S.REST": ("accommodation", "restaurant"),
+        "S.REST": ("accommodation", "resta"),
 
         # Spot/POI
         "S.CH": ("spot", "church"),
