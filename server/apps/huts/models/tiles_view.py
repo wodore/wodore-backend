@@ -36,8 +36,8 @@ class HutsForTilesView(PostgresViewModel):
     elevation = models.DecimalField(
         max_digits=5, decimal_places=1, null=True, blank=True
     )
-    capacity_open = models.PositiveSmallIntegerField(null=True, blank=True)
-    capacity_closed = models.PositiveSmallIntegerField(null=True, blank=True)
+    capacity_standard = models.PositiveSmallIntegerField(null=True, blank=True)
+    capacity_reduced = models.PositiveSmallIntegerField(null=True, blank=True)
 
     # Default language name with fallbacks (based on MODELTRANS_FALLBACK)
     name = models.CharField(max_length=100)
@@ -49,13 +49,15 @@ class HutsForTilesView(PostgresViewModel):
     name_fr = models.CharField(max_length=100)
     name_it = models.CharField(max_length=100)
 
-    # Hut type (open state)
-    type_open_slug = models.CharField(max_length=50, null=True, blank=True)
-    type_open_order = models.PositiveSmallIntegerField(null=True, blank=True)
+    # Hut type (standard state - formerly "open")
+    type_standard_slug = models.CharField(max_length=50, null=True, blank=True)
+    type_standard_order = models.PositiveSmallIntegerField(null=True, blank=True)
+    type_standard_identifier = models.CharField(max_length=102, null=True, blank=True)
 
-    # Hut type (closed state - for winter bivouacs)
-    type_closed_slug = models.CharField(max_length=50, null=True, blank=True)
-    type_closed_order = models.PositiveSmallIntegerField(null=True, blank=True)
+    # Hut type (reduced state - formerly "closed", for winter bivouacs)
+    type_reduced_slug = models.CharField(max_length=50, null=True, blank=True)
+    type_reduced_order = models.PositiveSmallIntegerField(null=True, blank=True)
+    type_reduced_identifier = models.CharField(max_length=102, null=True, blank=True)
 
     # Availability
     has_availability = models.BooleanField(default=False)
@@ -149,8 +151,8 @@ class HutsForTilesView(PostgresViewModel):
               h.slug,
               h.location,
               h.elevation,
-              h.capacity_open,
-              h.capacity_closed,
+              h.capacity_open as capacity_standard,
+              h.capacity_closed as capacity_reduced,
 
               -- Default language name with fallbacks (based on MODELTRANS_FALLBACK)
               {default_lang_coalesce} as name,
@@ -158,13 +160,15 @@ class HutsForTilesView(PostgresViewModel):
               -- Multilingual names with fallbacks (based on MODELTRANS_FALLBACK)
               {name_columns},
 
-              -- Hut type (open state)
-              cat_open.slug as type_open_slug,
-              cat_open."order" as type_open_order,
+              -- Hut type (standard state - formerly "open")
+              cat_open.slug as type_standard_slug,
+              cat_open."order" as type_standard_order,
+              cat_open.identifier as type_standard_identifier,
 
-              -- Hut type (closed state)
-              cat_closed.slug as type_closed_slug,
-              cat_closed."order" as type_closed_order,
+              -- Hut type (reduced state - formerly "closed")
+              cat_closed.slug as type_reduced_slug,
+              cat_closed."order" as type_reduced_order,
+              cat_closed.identifier as type_reduced_identifier,
 
               -- Availability status
               (h.availability_source_ref_id IS NOT NULL) as has_availability,
