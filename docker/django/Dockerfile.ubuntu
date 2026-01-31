@@ -164,6 +164,7 @@ COPY --chown=web:web server /code/server
 COPY --chown=web:web ${CONFIG_DIR} /code/config
 # Martin tile server config (needed for martin_sync command)
 COPY --chown=web:web tile_server/config /code/tile_server/config
+COPY --chown=web:web tile_server/styles /code/tile_server/styles
 
 # Setting up proper permissions:
 RUN <<EOF

@@ -89,12 +89,12 @@ COPY --from=ghcr.io/astral-sh/uv:0.7.2 /uv /usr/local/bin/uv
 # - pick a Python (use `/usr/bin/python3.12` on uv 0.5.0 and later),
 # - and finally declare `/app` as the target for `uv sync`.
 ENV UV_LINK_MODE=copy \
-    UV_COMPILE_BYTECODE=1 \
-    UV_PYTHON_DOWNLOADS=never \
-    UV_PYTHON_PREFERENCE=only-system \
-    UV_CACHE_DIR='/var/cache/uv-cache/' \
-    UV_PYTHON=python$PYTHON_VERSION
-    #UV_PROJECT_ENVIRONMENT=/app
+  UV_COMPILE_BYTECODE=1 \
+  UV_PYTHON_DOWNLOADS=never \
+  UV_PYTHON_PREFERENCE=only-system \
+  UV_CACHE_DIR='/var/cache/uv-cache/' \
+  UV_PYTHON=python$PYTHON_VERSION
+#UV_PROJECT_ENVIRONMENT=/app
 
 WORKDIR /code
 
@@ -103,8 +103,8 @@ COPY --chown=web:web ./uv.lock ./pyproject.toml ./docker/django/minify_venv.sh /
 
 # Download public key for github.com
 RUN --mount=type=cache,target="$UV_CACHE_DIR" \
-    --mount=type=secret,id=READ_GITHUB_TOKEN,env=READ_GITHUB_TOKEN \
-    --mount=type=secret,id=READ_GITHUB_USER,env=READ_GITHUB_USER <<EOF
+  --mount=type=secret,id=READ_GITHUB_TOKEN,env=READ_GITHUB_TOKEN \
+  --mount=type=secret,id=READ_GITHUB_USER,env=READ_GITHUB_USER <<EOF
 set -euo pipefail
 if [ "$READ_GITHUB_TOKEN" != "" ]; then
   git config --global url."https://${READ_GITHUB_USER}:${READ_GITHUB_TOKEN}@github.com".insteadOf ssh://git@github.com
@@ -162,6 +162,7 @@ COPY --chown=web:web server /code/server
 COPY --chown=web:web ${CONFIG_DIR} /code/config
 # Martin tile server config (needed for martin_sync command)
 COPY --chown=web:web tile_server/config /code/tile_server/config
+COPY --chown=web:web tile_server/styles /code/tile_server/styles
 
 # Setting up proper permissions:
 #RUN --mount=type=secret,id=env,target=/code/config/.env \
