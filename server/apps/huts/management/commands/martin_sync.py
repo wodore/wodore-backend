@@ -139,7 +139,13 @@ class Command(BaseCommand):
             "categories_skipped": 0,
             "errors": 0,
             "config_changed": False,
+            "files_deleted": 0,
         }
+
+        # 0. Cleanup old sprite files before syncing
+        self._cleanup_old_sprites(
+            target_path, dry_run, stats, include_list, variants, Category
+        )
 
         # 1. Copy sprites from database (do this first to get sprite_dirs list)
         self._sync_sprites(
@@ -164,6 +170,116 @@ class Command(BaseCommand):
 
         # Print summary
         self._print_summary(stats, dry_run)
+
+    def _cleanup_old_sprites(
+        self, target_path, dry_run, stats, include_list, variants, Category
+    ):
+        """
+        Remove old sprite files that are no longer in the database.
+
+        This handles cases where category identifiers change (e.g., from slug to identifier)
+        or when categories/symbols are deleted.
+
+        Only removes files in the sprite directories, never touches config or styles.
+        """
+        self.stdout.write("\n[0/3] Cleaning up old sprite files...")
+
+        # Target: <target>/sprites/
+        target_base_dir = target_path / "sprites"
+
+        if not target_base_dir.exists():
+            self.stdout.write(
+                "  ⚠ Sprites directory does not exist yet, skipping cleanup"
+            )
+            return
+
+        # Get root categories to check (same filtering as sync)
+        root_categories = Category.objects.filter(
+            is_active=True, parent=None
+        ).select_related("symbol_detailed", "symbol_simple", "symbol_mono")
+
+        # Filter by include_list if specified
+        if include_list is not None:
+            root_categories = [
+                cat for cat in root_categories if cat.slug in include_list
+            ]
+
+        if not root_categories:
+            self.stdout.write("  ⚠ No root categories found, skipping cleanup")
+            return
+
+        # Build set of expected file paths (what should exist after sync)
+        expected_files = set()
+
+        for root_category in root_categories:
+            # Add root category files
+            for variant in variants:
+                symbol_field = f"symbol_{variant}"
+                symbol = getattr(root_category, symbol_field, None)
+                if symbol and symbol.svg_file:
+                    filename = f"{root_category.identifier}.svg"
+                    expected_files.add(Path(root_category.slug) / variant / filename)
+
+            # Add child category files
+            children = Category.objects.filter(
+                is_active=True, parent=root_category
+            ).select_related("symbol_detailed", "symbol_simple", "symbol_mono")
+
+            for child in children:
+                for variant in variants:
+                    symbol_field = f"symbol_{variant}"
+                    symbol = getattr(child, symbol_field, None)
+                    if symbol and symbol.svg_file:
+                        filename = f"{child.identifier}.svg"
+                        expected_files.add(
+                            Path(root_category.slug) / variant / filename
+                        )
+
+        # Find and remove old files
+        files_deleted_count = 0
+        for root_category_dir in target_base_dir.iterdir():
+            if not root_category_dir.is_dir():
+                continue
+
+            for variant_dir in root_category_dir.iterdir():
+                if not variant_dir.is_dir():
+                    continue
+
+                for sprite_file in variant_dir.iterdir():
+                    if not sprite_file.is_file() or not sprite_file.suffix == ".svg":
+                        continue
+
+                    # Build relative path for comparison
+                    rel_path = sprite_file.relative_to(target_base_dir)
+
+                    # Check if this file should exist
+                    if rel_path not in expected_files:
+                        if dry_run:
+                            self.stdout.write(f"  Would delete: {rel_path}")
+                            files_deleted_count += 1
+                        else:
+                            try:
+                                sprite_file.unlink()
+                                self.stdout.write(f"  ✓ Deleted old file: {rel_path}")
+                                files_deleted_count += 1
+                            except Exception as e:
+                                self.stderr.write(
+                                    self.style.ERROR(
+                                        f"  ✗ Failed to delete {rel_path}: {e}"
+                                    )
+                                )
+                                stats["errors"] += 1
+
+        stats["files_deleted"] = files_deleted_count
+
+        if files_deleted_count > 0:
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"  ✓ Deleted {files_deleted_count} old sprite file(s)"
+                )
+            )
+        else:
+            self.stdout.write("  ✓ No old files to remove")
 
     def _sync_styles(self, target_path, dry_run, stats):
         """Copy MapLibre style JSON files."""
@@ -252,6 +368,10 @@ class Command(BaseCommand):
             self.stdout.write(
                 "  No sprite directories synced, paths field removed from config"
             )
+
+        # Configure styles path
+        config["styles"] = {"paths": "${MARTIN_SYNC_MOUNT:-/martin_sync}/styles"}
+        self.stdout.write("  Configured styles path")
 
         # Target: <target>/config/martin.yaml
         target_dir = target_path / "config"
@@ -383,8 +503,8 @@ class Command(BaseCommand):
         Sync all style variants for a single category.
 
         Structure:
-        - Root category: {parent_slug}/{variant}/{parent_slug}.svg
-        - Child category: {parent_slug}/{variant}/{child_slug}.svg
+        - Root category: {parent_slug}/{variant}/{identifier}.svg
+        - Child category: {parent_slug}/{variant}/{identifier}.svg
 
         Args:
             category: Category instance to sync
@@ -394,8 +514,8 @@ class Command(BaseCommand):
         """
         stats["categories_processed"] += 1
 
-        # Filename is always the category's own slug
-        filename = f"{category.slug}.svg"
+        # Filename uses the category's identifier (e.g., "accommodation.hut")
+        filename = f"{category.identifier}.svg"
 
         # Track if we copied any files for this category
         copied_any = False
@@ -622,8 +742,12 @@ class Command(BaseCommand):
                 stats["files_copied"] - stats["files_created"] - stats["files_updated"]
             )
             self.stdout.write(f"  Files unchanged:      {files_unchanged}")
+            if stats["files_deleted"] > 0:
+                self.stdout.write(f"  Files deleted:        {stats['files_deleted']}")
         else:
             self.stdout.write(f"  Files to process:     {stats['files_copied']}")
+            if stats["files_deleted"] > 0:
+                self.stdout.write(f"  Files to delete:      {stats['files_deleted']}")
 
         if stats["bytes_copied"] > 0:
             total_mb = stats["bytes_copied"] / (1024 * 1024)
@@ -652,6 +776,7 @@ class Command(BaseCommand):
         changes_made = (
             stats["files_created"] > 0
             or stats["files_updated"] > 0
+            or stats["files_deleted"] > 0
             or stats["config_changed"]
         )
 

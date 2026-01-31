@@ -35,8 +35,8 @@ postgres:
         # Core fields
         slug: text
         elevation: numeric
-        capacity_open: int2
-        capacity_closed: int2
+        capacity_standard: int2
+        capacity_reduced: int2
 
         # Default language name with fallbacks
         name: text
@@ -48,10 +48,12 @@ postgres:
         name_it: text
 
         # Hut type slugs and order (instead of IDs)
-        type_open_slug: text
-        type_open_order: int2
-        type_closed_slug: text
-        type_closed_order: int2
+        type_standard_slug: text
+        type_standard_identifier: text
+        type_standard_order: int2
+        type_reduced_slug: text
+        type_reduced_identifier: text
+        type_reduced_order: int2
 
         # Availability
         has_availability: bool

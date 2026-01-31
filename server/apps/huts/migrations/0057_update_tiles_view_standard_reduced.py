@@ -1,4 +1,4 @@
-# Generated manually to update view to add name field
+# Generated manually to update view with all standard/reduced changes
 
 from django.db import migrations
 
@@ -30,7 +30,10 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # Recreate the view with the new name field
+        # Recreate the view with all changes:
+        # - Renamed capacity_open/closed to capacity_standard/reduced
+        # - Renamed type_open/closed to type_standard/reduced
+        # - Added type_standard_identifier and type_reduced_identifier
         migrations.RunPython(
             code=create_view_from_model,
             reverse_code=drop_view,
