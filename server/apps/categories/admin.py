@@ -16,8 +16,8 @@ with contextlib.suppress(ModuleNotFoundError):
 from unfold.decorators import display
 
 from server.apps.manager.admin import ModelAdmin
-from server.apps.translations.forms import required_i18n_fields_form_factory
 
+from .forms import category_admin_form_factory
 from .models import Category
 
 
@@ -108,8 +108,11 @@ class ChildCategoryInline(admin.TabularInline):
 
 @admin.register(Category)
 class CategoryAdmin(ModelAdmin):
-    form = required_i18n_fields_form_factory("name")
+    form = category_admin_form_factory()
     change_list_template = "admin/categories_change_list.html"
+
+    class Media:
+        css = {"all": ("css/admin-categories.css",)}
 
     search_fields = ("name", "slug", "identifier")
     list_display = (
@@ -117,13 +120,14 @@ class CategoryAdmin(ModelAdmin):
         "symbol_img",
         "icon_img",
         # "order_display",
-        "identifier_display",
+        # "identifier_display",
         "slug",
         "children_count",
         # "parent_display",
         "order",
-        "is_active",
+        "color",
         "parent",
+        "is_active",
     )
 
     list_filter = (
@@ -131,9 +135,11 @@ class CategoryAdmin(ModelAdmin):
         ("parent", ParentCategoryFilter),
     )
 
-    list_editable = ("order", "parent")
+    list_editable = ("order", "parent", "color")
     list_per_page = 25
     ordering = ("-parent", "order")  # Order by parent (NULL first, then by parent ID)
+
+    actions = ["auto_set_color_from_svg"]
 
     readonly_fields = ("identifier", "name_i18n", "description_i18n")
 
@@ -148,6 +154,10 @@ class CategoryAdmin(ModelAdmin):
                     "description_i18n",
                 )
             },
+        ),
+        (
+            _("Color"),
+            {"fields": ("color",)},
         ),
         (
             _("Translations"),
@@ -310,3 +320,40 @@ class CategoryAdmin(ModelAdmin):
     def avatar(self, url):
         """Helper to create small avatar image."""
         return mark_safe(f'<img src="{url}" width="20" alt="avatar"/>')
+
+    @display(description=_("Auto-set color from SVG"))
+    def auto_set_color_from_svg(self, request, queryset):
+        """
+        Admin action to automatically set color from SVG symbols.
+
+        Extracts the dominant color from each category's symbol SVG
+        and sets it as the category color.
+        """
+        updated_count = 0
+        skipped_count = 0
+
+        for category in queryset:
+            if category.auto_set_color_from_svg(save=True):
+                updated_count += 1
+            else:
+                skipped_count += 1
+
+        if updated_count > 0:
+            message = _(
+                f"Successfully updated color for {updated_count} category(ies)."
+            )
+            if skipped_count > 0:
+                message += _(
+                    f" Skipped {skipped_count} category(ies) with no SVG or no colors."
+                )
+            self.message_user(request, message, level="success")
+        else:
+            self.message_user(
+                request,
+                _(
+                    "No colors were updated. Make sure categories have SVG symbols with colors."
+                ),
+                level="warning",
+            )
+
+    auto_set_color_from_svg.short_description = _("Auto-set color from SVG symbols")
