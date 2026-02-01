@@ -53,11 +53,13 @@ class HutsForTilesView(PostgresViewModel):
     type_standard_slug = models.CharField(max_length=50, null=True, blank=True)
     type_standard_order = models.PositiveSmallIntegerField(null=True, blank=True)
     type_standard_identifier = models.CharField(max_length=102, null=True, blank=True)
+    type_standard_color = models.CharField(max_length=7, null=True, blank=True)
 
     # Hut type (reduced state - formerly "closed", for winter bivouacs)
     type_reduced_slug = models.CharField(max_length=50, null=True, blank=True)
     type_reduced_order = models.PositiveSmallIntegerField(null=True, blank=True)
     type_reduced_identifier = models.CharField(max_length=102, null=True, blank=True)
+    type_reduced_color = models.CharField(max_length=7, null=True, blank=True)
 
     # Availability
     has_availability = models.BooleanField(default=False)
@@ -164,11 +166,13 @@ class HutsForTilesView(PostgresViewModel):
               cat_open.slug as type_standard_slug,
               cat_open."order" as type_standard_order,
               cat_open.identifier as type_standard_identifier,
+              cat_open.color as type_standard_color,
 
               -- Hut type (reduced state - formerly "closed")
               cat_closed.slug as type_reduced_slug,
               cat_closed."order" as type_reduced_order,
               cat_closed.identifier as type_reduced_identifier,
+              cat_closed.color as type_reduced_color,
 
               -- Availability status
               (h.availability_source_ref_id IS NOT NULL) as has_availability,

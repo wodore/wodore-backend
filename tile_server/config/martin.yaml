@@ -51,9 +51,11 @@ postgres:
         type_standard_slug: text
         type_standard_identifier: text
         type_standard_order: int2
+        type_standard_color: text
         type_reduced_slug: text
         type_reduced_identifier: text
         type_reduced_order: int2
+        type_reduced_color: text
 
         # Availability
         has_availability: bool

@@ -1,0 +1,28 @@
+/* Compact color picker for Category admin list view */
+
+/* Target the color field inputs in the list editable */
+input[type="text"][name*="color_light"],
+input[type="text"][name*="color_dark"] {
+  width: 40px !important;
+  min-width: 40px !important;
+  padding: 2px 4px !important;
+  text-align: center !important;
+}
+
+/* Hide the colorfield widget wrapper text if present */
+.field-color_light .colorfield-widget,
+.field-color_dark .colorfield-widget {
+  display: flex;
+  align-items: center;
+}
+
+.field-color_light .colorfield-widget input[type="text"],
+.field-color_dark .colorfield-widget input[type="text"] {
+  width: 50px !important;
+}
+
+/* Make the color picker icon more prominent */
+.field-color_light .colorfield-widget i,
+.field-color_dark .colorfield-widget i {
+  cursor: pointer;
+}

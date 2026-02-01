@@ -1,5 +1,8 @@
 from collections import defaultdict
+import re
+from xml.etree import ElementTree as ET
 
+from colorfield.fields import ColorField
 from computedfields.models import ComputedFieldsModel, computed
 from descriptors import cachedclassproperty
 from django_cleanup import cleanup
@@ -161,6 +164,13 @@ class Category(ComputedFieldsModel, models.Model):
         help_text=_("Whether this category is currently active"),
     )
 
+    # Color
+    color = ColorField(
+        verbose_name=_("Color"),
+        help_text=_("theme color as hex number with #"),
+        default="#4B8E43",
+    )
+
     class Meta:
         verbose_name = _("Category")
         verbose_name_plural = _("Categories")
@@ -255,6 +265,90 @@ class Category(ComputedFieldsModel, models.Model):
     def get_default_or_self(self) -> "Category":
         """Get the default child if set, otherwise return self."""
         return self.default if self.default else self
+
+    def extract_dominant_color_from_svg(self) -> str | None:
+        """
+        Extract the dominant color from the symbol SVG file.
+
+        Prioritizes symbols in this order: detailed, simple, mono.
+        Returns the most common color as hex string or None if no SVG found.
+        """
+        # Try to get an SVG file from symbols (in order of preference)
+        symbol = self.symbol_detailed or self.symbol_simple or self.symbol_mono
+
+        if not symbol or not symbol.svg_file or not symbol.svg_file.path:
+            return None
+
+        try:
+            # Read the SVG file
+            with open(symbol.svg_file.path, "r", encoding="utf-8") as f:
+                svg_content = f.read()
+
+            # Parse the SVG XML
+            root = ET.fromstring(svg_content)
+
+            # Collect all colors from fill and stroke attributes
+            colors = []
+
+            # Check all elements for fill and stroke attributes
+            for elem in root.iter():
+                fill = elem.get("fill", "")
+                stroke = elem.get("stroke", "")
+
+                # Only add non-empty, non-black, non-white colors
+                for color in [fill, stroke]:
+                    if color and color not in [
+                        "none",
+                        "transparent",
+                        "#000000",
+                        "#ffffff",
+                        "black",
+                        "white",
+                    ]:
+                        # Extract hex colors
+                        hex_match = re.match(
+                            r"^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$", color
+                        )
+                        if hex_match:
+                            colors.append(color)
+
+            if not colors:
+                return None
+
+            # Count color occurrences and return the most common one
+            from collections import Counter
+
+            color_counter = Counter(colors)
+            dominant_color = color_counter.most_common(1)[0][0]
+
+            return dominant_color
+
+        except Exception:
+            # If anything goes wrong (file not found, parsing error, etc.)
+            return None
+
+    def auto_set_color_from_svg(self, save: bool = True) -> bool:
+        """
+        Automatically set color from the dominant SVG color.
+
+        Args:
+            save: Whether to save the model after updating color
+
+        Returns:
+            True if color was updated, False otherwise
+        """
+        dominant_color = self.extract_dominant_color_from_svg()
+
+        if not dominant_color:
+            return False
+
+        # Set the dominant color
+        self.color = dominant_color
+
+        if save:
+            self.save(update_fields=["color"])
+
+        return True
 
     # Class methods for backward compatibility with HutType
 
