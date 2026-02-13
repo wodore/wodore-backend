@@ -1,6 +1,10 @@
 from ninja import Query, Router
-from django.http import HttpRequest
+from ninja.decorators import decorate_view
+from ninja.errors import HttpError
+
+from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
+from django.views.decorators.cache import cache_control
 
 from server.apps.api.query import FieldsParam
 from server.apps.translations import LanguageParam, override, with_language_param
@@ -9,6 +13,7 @@ from .models import Symbol
 from .schema import SymbolOptional
 
 router = Router()
+CACHE_MAX_AGE = 7 * 24 * 60 * 60  # 7 days in seconds
 
 
 @router.get(
@@ -89,6 +94,37 @@ def get_symbols_by_slug(
 
     with override(lang):
         return fields.validate(list(symbols))
+
+
+@router.get(
+    "/{style_slug}/{slug}.svg",
+    operation_id="get_symbol_svg",
+)
+@decorate_view(cache_control(max_age=CACHE_MAX_AGE))
+def get_symbol_svg(
+    request: HttpRequest,
+    response: HttpResponse,
+    style_slug: str,
+    slug: str,
+) -> HttpResponseRedirect:
+    """
+    Redirect to the SVG file for a symbol by style and slug.
+
+    Style options: detailed, simple, mono
+    Example: /v1/symbols/detailed/mountain.svg
+
+    If the symbol doesn't exist or has no SVG file, returns 404.
+    """
+    # Get the symbol (only active symbols)
+    symbol = Symbol.objects.filter(slug=slug, style=style_slug, is_active=True).first()
+
+    if symbol is None:
+        raise HttpError(404, f"Symbol '{slug}' with style '{style_slug}' not found")
+
+    if not symbol.svg_file:
+        raise HttpError(404, f"SVG file not found for symbol {symbol.slug}")
+
+    return HttpResponseRedirect(symbol.svg_file.url)
 
 
 @router.get(
