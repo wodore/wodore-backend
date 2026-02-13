@@ -16,6 +16,14 @@ class MediaUrlModeEnum(str, Enum):
     absolute = "absolute"  # Return absolute URLs (e.g., http://...)
 
 
+class SymbolVariantEnum(str, Enum):
+    """Symbol variant types for categories."""
+
+    detailed = "detailed"
+    simple = "simple"
+    mono = "mono"
+
+
 class CategorySchema(ModelSchema):
     """Basic category schema with essential fields."""
 
