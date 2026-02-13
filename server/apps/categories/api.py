@@ -1,9 +1,11 @@
 from typing import Any, Literal
 
 from ninja import Query, Router
+from ninja.decorators import decorate_view
 from ninja.errors import HttpError
 
-from django.http import HttpRequest
+from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
+from django.views.decorators.cache import cache_control
 
 from server.apps.translations import LanguageParam, override, with_language_param
 
@@ -13,23 +15,30 @@ from .schemas import (
     CategoryMapSchema,
     CategoryTreeSchema,
     MediaUrlModeEnum,
+    SymbolVariantEnum,
 )
 
 router = Router()
+CACHE_MAX_AGE = 7 * 24 * 60 * 60  # 7 days in seconds
 
 
 def resolve_media_url(
-    request: HttpRequest, path: str | None, mode: MediaUrlModeEnum
+    request: HttpRequest, symbol, mode: MediaUrlModeEnum
 ) -> str | None:
     """Resolve media URL based on mode."""
-    if not path or mode == MediaUrlModeEnum.no:
+    if not symbol or mode == MediaUrlModeEnum.no:
         return None
-    if mode == MediaUrlModeEnum.relative:
-        # Return relative path from media root
-        url = path.url if hasattr(path, "url") else str(path)
-        return url
-    # absolute
-    return request.build_absolute_uri(path.url if hasattr(path, "url") else path)
+
+    # Symbol is a ForeignKey to the Symbol model
+    # Get the svg_file from the symbol
+    if hasattr(symbol, "svg_file") and symbol.svg_file:
+        if mode == MediaUrlModeEnum.relative:
+            # Return relative path from media root
+            return symbol.svg_file.url
+        # absolute
+        return request.build_absolute_uri(symbol.svg_file.url)
+
+    return None
 
 
 def build_category_dict(
@@ -390,3 +399,85 @@ def get_category_map(
                     root, request, level, is_active, media_mode, 0
                 )
             return result
+
+
+def _get_category_symbol_redirect(
+    variant: SymbolVariantEnum,
+    slug: str,
+) -> HttpResponseRedirect:
+    """Helper function to get category symbol redirect."""
+    # Resolve slug (handles dot notation and ambiguity)
+    category, paths = Category.objects.find_by_slug(slug, is_active=True)
+
+    if category is None:
+        if paths:
+            # Ambiguous slug
+            raise HttpError(
+                400,
+                f"Slug '{slug}' is not unique. Use one of: {', '.join(paths)}",
+            )
+        else:
+            # Not found
+            raise HttpError(404, f"Category '{slug}' not found")
+
+    # Get the symbol based on variant
+    if variant == SymbolVariantEnum.detailed:
+        symbol = category.symbol_detailed
+    elif variant == SymbolVariantEnum.simple:
+        symbol = category.symbol_simple
+    else:  # mono
+        symbol = category.symbol_mono
+
+    if symbol is None:
+        raise HttpError(404, f"No {variant} symbol found for category '{slug}'")
+
+    if not symbol.svg_file:
+        raise HttpError(404, f"SVG file not found for symbol {symbol.slug}")
+
+    return HttpResponseRedirect(symbol.svg_file.url)
+
+
+@router.get(
+    "symbol/{variant}/{parent}/{slug}.svg",
+    operation_id="get_category_symbol_svg_with_parent",
+)
+@decorate_view(cache_control(max_age=CACHE_MAX_AGE))
+def get_category_symbol_svg_with_parent(
+    request: HttpRequest,
+    response: HttpResponse,
+    variant: SymbolVariantEnum,
+    parent: str,
+    slug: str,
+) -> HttpResponseRedirect:
+    """
+    Redirect to the SVG icon for a category with explicit parent.
+
+    Variant options: detailed, simple, mono
+    Example: /v1/categories/symbol/detailed/map/transport.svg
+
+    If the category doesn't have a symbol for the variant, returns 404.
+    """
+    full_slug = f"{parent}.{slug}"
+    return _get_category_symbol_redirect(variant, full_slug)
+
+
+@router.get(
+    "symbol/{variant}/{slug}.svg",
+    operation_id="get_category_symbol_svg",
+)
+@decorate_view(cache_control(max_age=CACHE_MAX_AGE))
+def get_category_symbol_svg(
+    request: HttpRequest,
+    response: HttpResponse,
+    variant: SymbolVariantEnum,
+    slug: str,
+) -> HttpResponseRedirect:
+    """
+    Redirect to the SVG icon for a category.
+
+    Variant options: detailed, simple, mono
+    Slug can be a simple slug (e.g., 'transport') or root category
+
+    If the category doesn't have a symbol for the variant, returns 404.
+    """
+    return _get_category_symbol_redirect(variant, slug)
