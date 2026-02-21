@@ -56,6 +56,7 @@ def build_category_dict(
         "level": category.get_level() - base_level,  # Relative to base
         "parent": category.parent.slug if category.parent else None,
         "identifier": category.get_identifier(),
+        "color": category.color,
     }
 
     if media_mode != MediaUrlModeEnum.no:
