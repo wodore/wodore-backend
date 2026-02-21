@@ -123,6 +123,7 @@ class CategoryTreeSchema(Schema):
     level: int
     parent: str | None = None  # Parent slug
     identifier: str  # Full path identifier (e.g., "map.accommodation.hut")
+    color: str  # Theme color as hex (e.g., "#4B8E43")
 
     # Optional media fields
     symbol_detailed: str | None = None
@@ -142,6 +143,7 @@ class CategoryListItemSchema(Schema):
     level: int
     parent: str | None = None  # Parent slug
     identifier: str  # Full path identifier (e.g., "map.accommodation.hut")
+    color: str  # Theme color as hex (e.g., "#4B8E43")
     children: bool  # Whether this category has children
 
     # Optional media fields
@@ -160,6 +162,7 @@ class CategoryMapSchema(Schema):
     level: int
     parent: str | None = None  # Parent slug
     identifier: str  # Full path identifier (e.g., "map.accommodation.hut")
+    color: str  # Theme color as hex (e.g., "#4B8E43")
     children_count: int  # Number of direct children
 
     # Optional media fields
