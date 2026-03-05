@@ -35,6 +35,17 @@ class AvailabilityDaySchema(BaseModel):
     hut_type: str = Field(
         default="unknown", description="Hut type on this date (e.g., 'hut', 'bivouac')"
     )
+    type_slug: str | None = Field(
+        None, description="Hut type slug (e.g., 'hut', 'bivouac')"
+    )
+    type_identifier: str | None = Field(
+        None, description="Hut type identifier symbol (emoji)"
+    )
+    type_color: str | None = Field(None, description="Hut type color as hex code")
+    type: str | None = Field(
+        None,
+        description="Either 'standard' or 'reduced' depending on which hut type applies",
+    )
 
 
 class HutAvailabilityPropertiesSchema(BaseModel):
@@ -54,6 +65,30 @@ class HutAvailabilityPropertiesSchema(BaseModel):
     days: int = Field(..., description="Number of days of availability data", ge=1)
     start_date: datetime.date = Field(
         ..., description="Start date of availability period"
+    )
+    type_standard_slug: str | None = Field(
+        None, description="Hut type slug in standard state (summer/fully open)"
+    )
+    type_standard_identifier: str | None = Field(
+        None, description="Hut type identifier symbol in standard state"
+    )
+    type_standard_color: str | None = Field(
+        None, description="Hut type color as hex code in standard state"
+    )
+    type_standard_order: int | None = Field(
+        None, description="Hut type display order in standard state"
+    )
+    type_reduced_slug: str | None = Field(
+        None, description="Hut type slug in reduced state (winter/closed)"
+    )
+    type_reduced_identifier: str | None = Field(
+        None, description="Hut type identifier symbol in reduced state"
+    )
+    type_reduced_color: str | None = Field(
+        None, description="Hut type color as hex code in reduced state"
+    )
+    type_reduced_order: int | None = Field(
+        None, description="Hut type display order in reduced state"
     )
     data: t.Sequence[AvailabilityDaySchema] = Field(
         ..., description="List of availability data for each day"
@@ -96,6 +131,17 @@ class CurrentAvailabilityDaySchema(BaseModel):
     hut_type: str = Field(
         default="unknown", description="Hut type on this date (e.g., 'hut', 'bivouac')"
     )
+    type_slug: str | None = Field(
+        None, description="Hut type slug (e.g., 'hut', 'bivouac')"
+    )
+    type_identifier: str | None = Field(
+        None, description="Hut type identifier symbol (emoji)"
+    )
+    type_color: str | None = Field(None, description="Hut type color as hex code")
+    type: str | None = Field(
+        None,
+        description="Either 'standard' or 'reduced' depending on which hut type applies",
+    )
     link: str = Field(..., description="Booking link for this date")
     first_checked: datetime.datetime = Field(
         ..., description="When this availability was first recorded"
@@ -122,6 +168,30 @@ class CurrentAvailabilitySchema(BaseModel):
     days: int = Field(..., description="Number of days of availability data", ge=1)
     start_date: datetime.date = Field(
         ..., description="Start date of availability period"
+    )
+    type_standard_slug: str | None = Field(
+        None, description="Hut type slug in standard state (summer/fully open)"
+    )
+    type_standard_identifier: str | None = Field(
+        None, description="Hut type identifier symbol in standard state"
+    )
+    type_standard_color: str | None = Field(
+        None, description="Hut type color as hex code in standard state"
+    )
+    type_standard_order: int | None = Field(
+        None, description="Hut type display order in standard state"
+    )
+    type_reduced_slug: str | None = Field(
+        None, description="Hut type slug in reduced state (winter/closed)"
+    )
+    type_reduced_identifier: str | None = Field(
+        None, description="Hut type identifier symbol in reduced state"
+    )
+    type_reduced_color: str | None = Field(
+        None, description="Hut type color as hex code in reduced state"
+    )
+    type_reduced_order: int | None = Field(
+        None, description="Hut type display order in reduced state"
     )
     data: t.Sequence[CurrentAvailabilityDaySchema] = Field(
         ..., description="List of current availability data for each day"

@@ -13,7 +13,8 @@ from ninja.decorators import decorate_view
 from ninja.errors import HttpError
 
 from django.contrib.postgres.aggregates import JSONBAgg
-from django.db.models import F, Max, Value
+from django.db import models
+from django.db.models import Case, F, Max, Q, Value, When
 from django.db.models.functions import Coalesce, JSONObject
 from django.http import HttpRequest, HttpResponse
 from django.views.decorators.cache import cache_control
@@ -150,6 +151,16 @@ def get_hut_availability_geojson(
         location=F(
             "hut__location"
         ),  # No Max() needed - geometry is same for all records
+        # Hut type standard (summer/fully open) - flat fields
+        type_standard_slug=Max(F("hut__hut_type_open__slug")),
+        type_standard_identifier=Max(F("hut__hut_type_open__identifier")),
+        type_standard_color=Max(F("hut__hut_type_open__color")),
+        type_standard_order=Max(F("hut__hut_type_open__order")),
+        # Hut type reduced (winter/closed) - flat fields
+        type_reduced_slug=Max(F("hut__hut_type_closed__slug")),
+        type_reduced_identifier=Max(F("hut__hut_type_closed__identifier")),
+        type_reduced_color=Max(F("hut__hut_type_closed__color")),
+        type_reduced_order=Max(F("hut__hut_type_closed__order")),
         # Metadata
         days=Value(queries.days),
         start_date=Value(start_date.isoformat()),
@@ -163,7 +174,29 @@ def get_hut_availability_geojson(
                 occupancy_percent=F("occupancy_percent"),
                 occupancy_steps=F("occupancy_steps"),
                 occupancy_status=F("occupancy_status"),
+                # Keep hut_type for backwards compatibility
                 hut_type=Coalesce(F("hut_type__slug"), Value("unknown")),
+                # New fields: add type information
+                type_slug=Coalesce(F("hut_type__slug"), Value(None)),
+                type_identifier=Coalesce(F("hut_type__identifier"), Value(None)),
+                type_color=Coalesce(F("hut_type__color"), Value(None)),
+                # Determine if this is standard or reduced based on comparison with hut types
+                # We'll use a CASE expression to check if hut_type matches open or closed
+                type=Case(
+                    # If hut_type matches hut_type_open, it's "standard"
+                    When(
+                        Q(hut_type_id=F("hut__hut_type_open_id")),
+                        then=Value("standard"),
+                    ),
+                    # If hut_type matches hut_type_closed, it's "reduced"
+                    When(
+                        Q(hut_type_id=F("hut__hut_type_closed_id")),
+                        then=Value("reduced"),
+                    ),
+                    # Otherwise unknown (shouldn't happen normally)
+                    default=Value(None),
+                    output_field=models.CharField(),
+                ),
             ),
             ordering="availability_date",  # Ensure data is ordered by date
         ),
@@ -183,6 +216,14 @@ def get_hut_availability_geojson(
         "source",
         "days",
         "start_date",
+        "type_standard_slug",
+        "type_standard_identifier",
+        "type_standard_color",
+        "type_standard_order",
+        "type_reduced_slug",
+        "type_reduced_identifier",
+        "type_reduced_color",
+        "type_reduced_order",
         "data",
     ]
 
@@ -263,22 +304,39 @@ def get_hut_availability_current(
     source_link = hut_org_association.link if hut_org_association else ""
 
     # Build response
-    data = [
-        {
-            "date": avail.availability_date,
-            "reservation_status": avail.reservation_status,
-            "free": avail.free,
-            "total": avail.total,
-            "occupancy_percent": avail.occupancy_percent,
-            "occupancy_steps": avail.occupancy_steps,
-            "occupancy_status": avail.occupancy_status,
-            "hut_type": avail.hut_type.slug if avail.hut_type else "unknown",
-            "link": avail.link,
-            "first_checked": avail.first_checked,
-            "last_checked": avail.last_checked,
-        }
-        for avail in availabilities
-    ]
+    data = []
+    for avail in availabilities:
+        # Determine if this is standard or reduced type
+        type_value = None
+        if avail.hut_type:
+            if avail.hut_type_id == hut.hut_type_open_id:
+                type_value = "standard"
+            elif avail.hut_type_id == hut.hut_type_closed_id:
+                type_value = "reduced"
+
+        data.append(
+            {
+                "date": avail.availability_date,
+                "reservation_status": avail.reservation_status,
+                "free": avail.free,
+                "total": avail.total,
+                "occupancy_percent": avail.occupancy_percent,
+                "occupancy_steps": avail.occupancy_steps,
+                "occupancy_status": avail.occupancy_status,
+                # Keep hut_type for backwards compatibility
+                "hut_type": avail.hut_type.slug if avail.hut_type else "unknown",
+                # New fields
+                "type_slug": avail.hut_type.slug if avail.hut_type else None,
+                "type_identifier": avail.hut_type.identifier
+                if avail.hut_type
+                else None,
+                "type_color": avail.hut_type.color if avail.hut_type else None,
+                "type": type_value,
+                "link": avail.link,
+                "first_checked": avail.first_checked,
+                "last_checked": avail.last_checked,
+            }
+        )
 
     return CurrentAvailabilitySchema(
         slug=hut.slug,
@@ -288,6 +346,18 @@ def get_hut_availability_current(
         source_link=source_link,
         days=queries.days,
         start_date=start_date,
+        type_standard_slug=hut.hut_type_open.slug if hut.hut_type_open else None,
+        type_standard_identifier=hut.hut_type_open.identifier
+        if hut.hut_type_open
+        else None,
+        type_standard_color=hut.hut_type_open.color if hut.hut_type_open else None,
+        type_standard_order=hut.hut_type_open.order if hut.hut_type_open else None,
+        type_reduced_slug=hut.hut_type_closed.slug if hut.hut_type_closed else None,
+        type_reduced_identifier=hut.hut_type_closed.identifier
+        if hut.hut_type_closed
+        else None,
+        type_reduced_color=hut.hut_type_closed.color if hut.hut_type_closed else None,
+        type_reduced_order=hut.hut_type_closed.order if hut.hut_type_closed else None,
         data=data,
     )
 
