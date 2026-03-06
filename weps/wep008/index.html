@@ -1,0 +1,1332 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://api.wodore.com/weps/wep008/">
+      
+      
+        <link rel="prev" href="../wep007/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>WEP 8 GeoPlace Extensions & Amenity Import - Wodore backend</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../css/custom.css">
+    
+      <link rel="stylesheet" href="../../css/neoteroi-api-mkdocs-plugin-v1.1.3.css">
+    
+      <link rel="stylesheet" href="../../termynal.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#wep-8-geoplace-extensions-amenity-import" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Wodore backend" class="md-header__button md-logo" aria-label="Wodore backend" data-md-component="logo">
+      
+  <img src="../../assets/favicon.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Wodore backend
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              WEP 8 GeoPlace Extensions &amp; Amenity Import
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="green"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="green"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/wodore/wodore-backend" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    wodore/wodore-backend
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Getting Started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../infos/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Links
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../api/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  API
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../packages/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Packages
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  WEPs
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../TODOS/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  TODOs
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../changelog/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Changelog
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+                
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" hidden>
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Wodore backend" class="md-nav__button md-logo" aria-label="Wodore backend" data-md-component="logo">
+      
+  <img src="../../assets/favicon.png" alt="logo">
+
+    </a>
+    Wodore backend
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/wodore/wodore-backend" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    wodore/wodore-backend
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../infos/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Links
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../packages/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Packages
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    WEPs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../TODOS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TODOs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+  <div class="md-content md-content--post" data-md-component="content">
+    <div class="md-sidebar md-sidebar--post" data-md-component="sidebar" data-md-type="navigation">
+      <div class="md-sidebar__scrollwrap">
+        <div class="md-sidebar__inner md-post">
+          <nav class="md-nav md-nav--primary">
+            <div class="md-post__back">
+              <div class="md-nav__title md-nav__container">
+                <a href="../" class="md-nav__link">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+                  <span class="md-ellipsis">
+                    Back to index
+                  </span>
+                </a>
+              </div>
+            </div>
+            
+            <ul class="md-post__meta md-nav__list">
+              <li class="md-nav__item md-nav__item--section">
+                <div class="md-post__title">
+                  <span class="md-ellipsis">
+                    Metadata
+                  </span>
+                </div>
+                <nav class="md-nav">
+                  <ul class="md-nav__list">
+                    <li class="md-nav__item">
+                      <div class="md-nav__link">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 19H5V8h14m-3-7v2H8V1H6v2H5c-1.11 0-2 .89-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-1V1m-1 11h-5v5h5z"/></svg>
+                        <time datetime="2026-03-06 00:00:00+00:00" class="md-ellipsis">2026-03-06</time>
+                      </div>
+                    </li>
+                    
+                      <li class="md-nav__item">
+                        <div class="md-nav__link">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M15 13h1.5v2.82l2.44 1.41-.75 1.3L15 16.69zm4-5H5v11h4.67c-.43-.91-.67-1.93-.67-3a7 7 0 0 1 7-7c1.07 0 2.09.24 3 .67zM5 21a2 2 0 0 1-2-2V5c0-1.11.89-2 2-2h1V1h2v2h8V1h2v2h1a2 2 0 0 1 2 2v6.1c1.24 1.26 2 2.99 2 4.9a7 7 0 0 1-7 7c-1.91 0-3.64-.76-4.9-2zm11-9.85A4.85 4.85 0 0 0 11.15 16c0 2.68 2.17 4.85 4.85 4.85A4.85 4.85 0 0 0 20.85 16c0-2.68-2.17-4.85-4.85-4.85"/></svg>
+                          <time datetime="2026-03-06 00:00:00+00:00" class="md-ellipsis">2026-03-06</time>
+                        </div>
+                      </li>
+                    
+                    
+                      <li class="md-nav__item">
+                        <div class="md-nav__link">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9 3v15h3V3zm3 2 4 13 3-1-4-13zM5 5v13h3V5zM3 19v2h18v-2z"/></svg>
+                          <span class="md-ellipsis">
+                            in
+                            
+                              <a href="../category/wep/">WEP</a>, 
+                              <a href="../category/places/">Places</a>, 
+                              <a href="../category/osm/">OSM</a></span>
+                        </div>
+                      </li>
+                    
+                    
+                  </ul>
+                </nav>
+              </li>
+            </ul>
+            
+          </nav>
+          
+            
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#motivation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Motivation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#geoplace-extensions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GeoPlace Extensions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#category-hierarchy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Category Hierarchy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#source-tracking-import-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Source Tracking &amp; Import Policy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-source-deduplication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-source Deduplication
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-import" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data Import
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#api" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Notes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#out-of-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Out of Scope
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+          
+        </div>
+      </div>
+    </div>
+    <article class="md-content__inner md-typeset">
+      
+        
+  
+
+
+  <nav class="md-tags" >
+    
+      
+      
+      
+      
+        <a href="../tags/#tag:geoplace" class="md-tag">geoplace</a>
+      
+    
+      
+      
+      
+      
+        <a href="../tags/#tag:import" class="md-tag">import</a>
+      
+    
+      
+      
+      
+      
+        <a href="../tags/#tag:wep008" class="md-tag">wep008</a>
+      
+    
+  </nav>
+
+
+  
+  
+
+
+<h1 id="wep-8-geoplace-extensions-amenity-import"><code>WEP 8</code> GeoPlace Extensions &amp; Amenity Import<a class="headerlink" href="#wep-8-geoplace-extensions-amenity-import" title="Permanent link">&para;</a></h1>
+<p>Extend <code>GeoPlace</code> with typed detail models and import amenities from OSM.</p>
+<!-- more -->
+
+<h2 id="motivation">Motivation<a class="headerlink" href="#motivation" title="Permanent link">&para;</a></h2>
+<p><code>GeoPlace</code> currently covers huts and natural features, but lacks structured data
+for amenities relevant to Alpine tours: food supplies, transport, emergency
+services, and accommodation. This WEP introduces typed detail models, per-source
+import policies, and an automated OSM import pipeline.</p>
+<h2 id="geoplace-extensions">GeoPlace Extensions<a class="headerlink" href="#geoplace-extensions" title="Permanent link">&para;</a></h2>
+<p>Rather than adding all fields to <code>GeoPlace</code> directly, we introduce lightweight
+OneToOne detail models per place type. <code>GeoPlace</code> itself gains a few shared
+fields.</p>
+<p><strong>New fields on <code>GeoPlace</code></strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>slug</code></td>
+<td>Unique URL identifier</td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td>Long-form text (i18n)</td>
+</tr>
+<tr>
+<td><code>review_status</code></td>
+<td>Editorial state: <code>new / review / done / work / reject</code></td>
+</tr>
+<tr>
+<td><code>review_comment</code></td>
+<td>Internal reviewer note</td>
+</tr>
+<tr>
+<td><code>detail_type</code></td>
+<td>Which detail model is attached: <code>amenity / transport / admin / natural / none</code></td>
+</tr>
+<tr>
+<td><code>protected_fields</code></td>
+<td>JSON list of field names no source may overwrite</td>
+</tr>
+</tbody>
+</table>
+<p><code>protected_fields</code> is maintained automatically — whenever a field is edited via
+the Wodore admin or API, its name is appended to the list. Falls back to a
+minimal global default of <code>["name", "location"]</code> when empty. Also editable
+manually in the admin.</p>
+<p><code>detail_type</code> is a fixed enum tied to the available detail models — not derived
+from category. Categories remain flexible (new category slugs can be added
+freely). The mapping between a category and its <code>detail_type</code> lives in code.
+<code>GeoPlace</code> exposes factory methods (<code>create_amenity</code>, <code>create_transport</code>, …)
+that set <code>detail_type</code> and create the corresponding detail row atomically.</p>
+<p>Natural features (peaks, passes, lakes, glaciers) have <code>detail_type=natural</code>
+but no detail model — the category slug and existing <code>GeoPlace</code> fields
+(location, elevation, name, <code>parent</code>) are sufficient. Mountain ranges and
+administrative regions are represented via the <code>parent</code> self-FK.</p>
+<p><strong><code>AmenityDetail</code></strong> — food, shops, restaurants, emergency, accommodation</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>operating_status</code></td>
+<td><code>open / temporarily_closed / permanently_closed / unknown</code></td>
+</tr>
+<tr>
+<td><code>opening_months</code></td>
+<td>Monthly availability per month: <code>yes / yesish / maybe / no / noish / unknown</code></td>
+</tr>
+<tr>
+<td><code>opening_hours</code></td>
+<td>Structured weekly hours per weekday + public holidays</td>
+</tr>
+<tr>
+<td><code>websites</code></td>
+<td>List of URLs with optional labels</td>
+</tr>
+<tr>
+<td><code>phones</code></td>
+<td>List of phone numbers</td>
+</tr>
+<tr>
+<td><code>extra</code></td>
+<td>Category-specific overflow (JSON)</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>TransportDetail</code></strong> — bus stops, train stations, cable cars</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>station_id</code></td>
+<td>External identifier (e.g. Swiss DIDOK, UIC station code)</td>
+</tr>
+<tr>
+<td><code>operator</code></td>
+<td>Operating company (e.g. SBB, PostAuto, RhB)</td>
+</tr>
+</tbody>
+</table>
+<p>Connects naturally to GTFS integration (see WEP003).</p>
+<p><strong><code>AdminDetail</code></strong> — cities, villages, valleys</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>admin_level</code></td>
+<td>OSM admin level (2 = country … 10 = village)</td>
+</tr>
+<tr>
+<td><code>population</code></td>
+<td>Inhabitant count</td>
+</tr>
+</tbody>
+</table>
+<h2 id="category-hierarchy">Category Hierarchy<a class="headerlink" href="#category-hierarchy" title="Permanent link">&para;</a></h2>
+<p>Categories follow a <code>parent.child</code> slug pattern. The mapping to <code>detail_type</code>
+is defined in code and is not a hard DB constraint — categories stay flexible.</p>
+<table>
+<thead>
+<tr>
+<th>Example categories</th>
+<th>Typical <code>detail_type</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>natural.*</code> (peak, pass, lake, glacier, waterfall, waypoint)</td>
+<td><code>natural</code></td>
+</tr>
+<tr>
+<td><code>admin.*</code> (city, village, valley)</td>
+<td><code>admin</code></td>
+</tr>
+<tr>
+<td><code>food_supply.*</code>, <code>restaurant.*</code>, <code>accommodation.*</code>, <code>emergency.*</code></td>
+<td><code>amenity</code></td>
+</tr>
+<tr>
+<td><code>mobility.*</code> (bus_stop, train_station, cable_car, parking)</td>
+<td><code>transport</code></td>
+</tr>
+<tr>
+<td><code>mobility.*</code> (bike_repair, bike_rental)</td>
+<td><code>amenity</code></td>
+</tr>
+</tbody>
+</table>
+<p>The <code>Hut</code> model is not migrated as part of this WEP and continues to coexist.</p>
+<h2 id="source-tracking-import-policy">Source Tracking &amp; Import Policy<a class="headerlink" href="#source-tracking-import-policy" title="Permanent link">&para;</a></h2>
+<p>All source-related data lives in <code>GeoPlaceSourceAssociation</code>, extended with:</p>
+<table>
+<thead>
+<tr>
+<th>New field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>modified_date</code></td>
+<td>Last time this source updated the record (set on every import run)</td>
+</tr>
+<tr>
+<td><code>update_policy</code></td>
+<td>How this source may update the record</td>
+</tr>
+<tr>
+<td><code>delete_policy</code></td>
+<td>What happens when this source no longer includes the record</td>
+</tr>
+<tr>
+<td><code>priority</code></td>
+<td>Source precedence for field conflicts — lower number wins (e.g. 1=OSM, 2=Overture)</td>
+</tr>
+</tbody>
+</table>
+<p><code>import_date</code> (already exists) records the first import from a source.
+<code>modified_date</code> records the most recent update.</p>
+<p>The <code>wodore</code> source is the built-in manual edit marker. Whenever a place is
+edited via the Wodore admin or API, two things happen automatically:</p>
+<ol>
+<li><code>wodore.modified_date</code> is set — replaces the existing <code>is_modified</code> boolean</li>
+<li>The edited field name is appended to <code>place.protected_fields</code></li>
+</ol>
+<p>Import commands respect two levels of field protection:</p>
+<ul>
+<li><strong><code>place.protected_fields</code></strong> — fields no source may ever overwrite (manually curated)</li>
+<li><strong><code>priority</code></strong> — when two sources both provide the same non-protected field, the lower priority number wins. Higher-priority sources fill fields first; lower-priority sources only fill what remains.</li>
+</ul>
+<p><strong><code>update_policy</code></strong></p>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Behaviour</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>always</code></td>
+<td>Always overwrite all fields</td>
+</tr>
+<tr>
+<td><code>merge</code></td>
+<td>Skip fields already edited by the <code>wodore</code> source</td>
+</tr>
+<tr>
+<td><code>protected</code></td>
+<td>Never overwrite</td>
+</tr>
+<tr>
+<td><code>auto_protect</code></td>
+<td>Behaves as <code>merge</code> until <code>wodore.modified_date</code> is set, then switches to <code>protected</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>delete_policy</code></strong></p>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Behaviour</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>deactivate</code></td>
+<td>Set <code>is_active=False</code></td>
+</tr>
+<tr>
+<td><code>keep</code></td>
+<td>Ignore deletion</td>
+</tr>
+<tr>
+<td><code>delete</code></td>
+<td>Hard delete</td>
+</tr>
+<tr>
+<td><code>auto_keep</code></td>
+<td>Behaves as <code>deactivate</code> until <code>wodore.modified_date</code> is set, then switches to <code>keep</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="multi-source-deduplication">Multi-source Deduplication<a class="headerlink" href="#multi-source-deduplication" title="Permanent link">&para;</a></h2>
+<p>When importing from a new source, each record must be matched against existing
+<code>GeoPlace</code> entries before creating a new one. Matching logic lives in each
+import script. The shared lookup order is:</p>
+<ol>
+<li><strong>Source + source_id</strong> — if this source has already imported this record
+   (association exists), update in place. This ensures manually reviewed records
+   are never re-duplicated on subsequent runs.</li>
+<li><strong>External ID cross-reference</strong> — some sources carry IDs from other sources
+   (e.g. Overture stores <code>osm_id</code>). If a match is found via another source's
+   <code>source_id</code>, associate and update according to policy.</li>
+<li><strong>Location + category parent</strong> — match within a defined radius and same
+   category parent slug (e.g. <code>accommodation</code>). Tolerant of type differences
+   between sources (e.g. <code>hut</code> vs <code>unattended_hut</code>).</li>
+<li><strong>Location + very small radius</strong> — no type match possible. If one candidate
+   → associate. If multiple candidates → set <code>review_status=review</code> on all,
+   keep records separate until manually resolved.</li>
+</ol>
+<p>Run order determines effective priority — whichever source runs first creates
+the <code>GeoPlace</code>. Subsequent sources associate to it and fill non-protected fields
+according to their <code>update_policy</code> and the place's <code>priority</code> ordering.</p>
+<p><strong>Staging table (future option)</strong></p>
+<p>For higher data quality requirements or frequent re-imports, a lightweight
+staging table can be introduced between fetch and merge:</p>
+<ol>
+<li><strong>Fetch</strong> — import all source records into a staging table (<code>location</code> + <code>source_data</code> JSON)</li>
+<li><strong>Merge</strong> — run the deduplication and upsert logic against <code>GeoPlace</code></li>
+<li><strong>Cleanup</strong> — delete staging rows, or keep for diff tracking and review</li>
+</ol>
+<p>This separates the raw import from the merge decision, makes diffs between runs
+easy to compute, and allows a review step before anything touches <code>GeoPlace</code>.
+Currently used for huts. For lower-stakes places (bakeries, bus stops) the
+direct upsert approach is sufficient — staging can be introduced per source if
+conflict rates or data quality requirements justify it.</p>
+<h2 id="data-import">Data Import<a class="headerlink" href="#data-import" title="Permanent link">&para;</a></h2>
+<p><code>GeoPlace</code> and its detail models are populated via Django management commands,
+one per source. Import logic is source-agnostic at the model level — factory
+methods (<code>create_amenity</code>, <code>create_transport</code>, …) are reused regardless of source.</p>
+<p><strong>Import run</strong></p>
+<ol>
+<li><strong>Upsert</strong> — iterate all records from the source. For each record, check
+   <code>update_policy</code> on the association and create or update <code>GeoPlace</code> + detail
+   model accordingly. Set <code>modified_date</code> on the association.</li>
+<li><strong>Cleanup</strong> — after the upsert pass, find all associations for this source
+   where <code>modified_date</code> is older than the current run (i.e. not seen in this
+   import). Apply <code>delete_policy</code>: deactivate, hard delete, or keep as-is.</li>
+</ol>
+<p>This two-pass approach means every import is a full sync — no need to track
+diffs externally.</p>
+<p><strong>Sources</strong></p>
+<ul>
+<li><strong>OSM</strong> (primary for amenities) — weekly CronJob fetching Alps PBF from
+  Geofabrik, filtered with <code>osmium-tool</code>, parsed with <code>pyosmium</code>. Good rural
+  and Alpine coverage, includes <code>opening_hours</code>. Upsert key: <code>(osm_id, osm_type)</code>.</li>
+<li><strong>GeoNames</strong> (currently implemented) — natural features and admin places.</li>
+<li><strong>Overture Maps</strong> (future) — potential supplement for places with low OSM
+  coverage.</li>
+</ul>
+<h2 id="api">API<a class="headerlink" href="#api" title="Permanent link">&para;</a></h2>
+<p>Each <code>detail_type</code> gets its own endpoint with a fixed, fully-typed response
+shape. <code>geo/places/{id}</code> always returns base fields only — no nullable detail
+blobs, no discriminated unions.</p>
+<table>
+<thead>
+<tr>
+<th>Endpoint</th>
+<th>Response</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>geo/places/search</code></td>
+<td>Base fields, paginated</td>
+<td>Existing endpoint</td>
+</tr>
+<tr>
+<td><code>geo/places/{id}</code></td>
+<td>Base <code>GeoPlace</code> fields</td>
+<td>Lightweight, all types</td>
+</tr>
+<tr>
+<td><code>geo/amenity/{id}</code></td>
+<td>Base + <code>AmenityDetail</code></td>
+<td>Food, shops, emergency, accommodation</td>
+</tr>
+<tr>
+<td><code>geo/transport/{id}</code></td>
+<td>Base + <code>TransportDetail</code></td>
+<td>Bus stops, stations, cable cars</td>
+</tr>
+<tr>
+<td><code>geo/admin/{id}</code></td>
+<td>Base + <code>AdminDetail</code></td>
+<td>Cities, villages</td>
+</tr>
+<tr>
+<td><code>geo/natural/{id}</code></td>
+<td>Base fields</td>
+<td>Same as places for now, reserved for future</td>
+</tr>
+</tbody>
+</table>
+<p><code>detail_type</code> on the base response tells the client which typed endpoint to
+call for full details.</p>
+<p><strong>Map layers (Martin)</strong></p>
+<p>For vector tile serving via Martin, a PostgreSQL view is created per logical
+map layer (e.g. <code>v_layer_food_supply</code>, <code>v_layer_transport</code>,
+<code>v_layer_emergency</code>). Each view joins <code>GeoPlace</code> with the relevant detail model
+and exposes only the fields needed for filtering and rendering. <code>detail_type</code>
+and the category slug are always included for client-side style rules.</p>
+<h2 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h2>
+<p>A lightweight <code>Note</code> model is planned to attach time-stamped annotations to any
+<code>GeoPlace</code> (e.g. "hut burned down", "source dry in summer"). Notes will carry a
+severity level and an optional expiry. This is deferred and will be designed
+separately.</p>
+<h2 id="out-of-scope">Out of Scope<a class="headerlink" href="#out-of-scope" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Point review workflow and OSM editing integration (Mangrove, MapComplete) — see WEP 009.</li>
+<li><code>Hut</code> model migration into <code>accommodation.hut</code> — deferred, no timeline.</li>
+</ul>
+
+
+
+
+
+
+
+  
+  
+
+
+
+
+  
+
+
+
+      
+    </article>
+  </div>
+
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/wodore/wodore-backend" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://ghcr.io/wodore/wodore-backend" target="_blank" rel="noopener" title="ghcr.io" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M349.9 236.3h-66.1v-59.4h66.1zm0-204.3h-66.1v60.7h66.1zm78.2 144.8H362v59.4h66.1zm-156.3-72.1h-66.1v60.1h66.1zm78.1 0h-66.1v60.1h66.1zm276.8 100c-14.4-9.7-47.6-13.2-73.1-8.4-3.3-24-16.7-44.9-41.1-63.7l-14-9.3-9.3 14c-18.4 27.8-23.4 73.6-3.7 103.8-8.7 4.7-25.8 11.1-48.4 10.7H2.4c-8.7 50.8 5.8 116.8 44 162.1 37.1 43.9 92.7 66.2 165.4 66.2 157.4 0 273.9-72.5 328.4-204.2 21.4.4 67.6.1 91.3-45.2 1.5-2.5 6.6-13.2 8.5-17.1zm-511.1-27.9h-66v59.4h66.1v-59.4zm78.1 0h-66.1v59.4h66.1zm78.1 0h-66.1v59.4h66.1zm-78.1-72.1h-66.1v60.1h66.1z"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://wodo.re" target="_blank" rel="noopener" title="wodo.re" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M234.2 8.6c12.3-11.4 31.3-11.4 43.5 0L368 92.3V80c0-17.7 14.3-32 32-32h32c17.7 0 32 14.3 32 32v101.5l37.8 35.1c9.6 9 12.8 22.9 8 35.1S493.2 272 480 272h-16v176c0 35.3-28.7 64-64 64H294.4L256 448l80.8-67.3c7.8-6.5 7.6-18.6-.4-24.9l-117.8-92.6c-14.6-11.5-33.8 7-22.8 22L256 368l-85.5 71.2c-6.1 5-7.5 13.8-3.5 20.5l31.3 52.2h-86.4c-35.3 0-64-28.7-64-64v-176h-16c-13.2 0-25-8.1-29.8-20.3s-1.6-26.2 8-35.1l224-208z"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["content.code.annotate", "content.code.copy", "content.tooltips", "navigation.expand", "navigation.indexes", "navigation.tabs", "navigation.tabs.sticky", "navigation.top", "navigation.tracking", "search.highlight", "search.share", "search.suggest", "toc.follow", "toc.integrate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../../js/open_in_new_tab.js"></script>
+      
+        <script src="../../termynal.js"></script>
+      
+    
+  </body>
+</html>
