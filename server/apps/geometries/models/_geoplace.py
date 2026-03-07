@@ -45,7 +45,7 @@ class GeoPlace(TimeStampedModel):
 
     # Identification
     slug = models.SlugField(
-        max_length=30,
+        max_length=200,
         unique=True,
         db_index=True,
         verbose_name=_("Slug"),
@@ -63,6 +63,16 @@ class GeoPlace(TimeStampedModel):
 
     # Location
     location = models.PointField(srid=4326, spatial_index=True)
+    shape = models.PolygonField(
+        srid=4326,
+        null=True,
+        blank=True,
+        spatial_index=True,
+        verbose_name=_("Shape"),
+        help_text=_(
+            "Optional polygon geometry for natural features or administrative areas"
+        ),
+    )
     elevation = models.IntegerField(null=True, blank=True)
     country_code = CountryField(db_index=True)
 
@@ -127,6 +137,33 @@ class GeoPlace(TimeStampedModel):
         blank=True,
         verbose_name=_("Protected Fields"),
         help_text=_("Field names that sources may not overwrite"),
+    )
+
+    # OSM tags (raw data from OpenStreetMap)
+    osm_tags = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name=_("OSM Tags"),
+        help_text=_("Raw tags from OpenStreetMap (JSON)"),
+    )
+
+    # Extra data (category-specific overflow)
+    extra = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name=_("Extra"),
+        help_text=_("Category-specific overflow data (JSON)"),
+    )
+
+    # External links (shared across all place types)
+    external_links = models.ManyToManyField(
+        "external_links.ExternalLink",
+        through="GeoPlaceExternalLink",
+        related_name="geo_places",
+        verbose_name=_("External Links"),
+        help_text=_(
+            "Associated external links (websites, social media, documents, etc.)"
+        ),
     )
 
     # Status
@@ -528,8 +565,8 @@ class GeoPlace(TimeStampedModel):
         Args:
             source: Organization instance, ID, or slug
             source_id: External ID used by the source
-            amenity_data: Data for AmenityDetail model (operating_status, opening_hours, etc.)
-            **kwargs: Fields for GeoPlace creation (name, location, etc.)
+            amenity_data: Data for AmenityDetail model (operating_status, opening_hours, phones, etc.)
+            **kwargs: Fields for GeoPlace creation (name, location, websites, etc.)
 
         Returns:
             Created GeoPlace instance with AmenityDetail and source association
@@ -542,6 +579,7 @@ class GeoPlace(TimeStampedModel):
                 location=Point(8.1234, 46.7890),
                 place_type=bakery_category,
                 country_code="CH",
+                websites=[{"url": "https://bakery.example.com", "label": "Official"}],
                 amenity_data={
                     "operating_status": "open",
                     "opening_hours": {"mon": [["07:00", "12:00"]]},
@@ -644,21 +682,20 @@ class GeoPlace(TimeStampedModel):
         cls,
         source: Organization | int | str,
         source_id: str | None = None,
+        admin_data: dict | None = None,
         **kwargs,
     ) -> "GeoPlace":
         """
         Create a new GeoPlace with AdminDetail.
 
-        Note: AdminDetail model not yet implemented - this is a placeholder
-        for future use as per WEP008.
-
         Args:
             source: Organization instance, ID, or slug
             source_id: External ID used by the source
+            admin_data: Data for AdminDetail model (admin_level, population, etc.)
             **kwargs: Fields for GeoPlace creation (name, location, etc.)
 
         Returns:
-            Created GeoPlace instance with source association
+            Created GeoPlace instance with AdminDetail and source association
 
         Example:
             place = GeoPlace.create_admin(
@@ -668,8 +705,14 @@ class GeoPlace(TimeStampedModel):
                 location=Point(7.7343, 46.0234),
                 place_type=village_category,
                 country_code="CH",
+                admin_data={
+                    "admin_level": 10,
+                    "population": 5700,
+                    "postal_code": "3920",
+                },
             )
         """
+        from ._admin_detail import AdminDetail
         from ._associations import GeoPlaceSourceAssociation
 
         # Set detail_type
@@ -686,7 +729,12 @@ class GeoPlace(TimeStampedModel):
         # Create the place
         place = cls.objects.create(**kwargs)
 
-        # AdminDetail will be created here in the future
+        # Create admin detail
+        if admin_data:
+            AdminDetail.objects.create(
+                geo_place=place,
+                **admin_data,
+            )
 
         # Create source association
         GeoPlaceSourceAssociation.objects.create(

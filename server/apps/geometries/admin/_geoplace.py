@@ -13,9 +13,11 @@ from server.apps.manager.admin import ModelAdmin
 from server.apps.manager.widgets import UnfoldReadonlyJSONSuit
 from server.apps.translations.forms import required_i18n_fields_form_factory
 
+from ..forms import GeoPlaceAdminFieldsets
 from ..models import (
     GeoPlace,
     GeoPlaceSourceAssociation,
+    GeoPlaceExternalLink,
 )
 
 
@@ -79,6 +81,27 @@ class GeoPlaceSourceAssociationInline(unfold_admin.TabularInline):
         return False
 
 
+class GeoPlaceExternalLinkInline(unfold_admin.TabularInline):
+    """GeoPlace external link inline with ordering."""
+
+    model = GeoPlaceExternalLink
+    tab = True
+    fields = (
+        "external_link",
+        "order",
+    )
+    autocomplete_fields = ("external_link",)
+    extra = 1
+    show_change_link = True
+    verbose_name = _("External Link")
+
+    def has_add_permission(self, request, obj):
+        return True
+
+    def has_delete_permission(self, request, obj):
+        return True
+
+
 ## ADMIN
 
 
@@ -128,41 +151,7 @@ class GeoPlaceAdmin(ModelAdmin):
         "modified",
     )
 
-    fieldsets = (
-        (_("Identification"), {"fields": ("name", "name_i18n", "slug", "place_type")}),
-        (
-            _("Location"),
-            {
-                "fields": (
-                    "location",
-                    "location_display",
-                    "elevation",
-                    "country_code",
-                    "parent",
-                )
-            },
-        ),
-        (
-            _("Description"),
-            {"fields": ("description", "description_i18n")},
-        ),
-        (
-            _("Review"),
-            {
-                "fields": (
-                    "review_status",
-                    "review_comment",
-                    "detail_type",
-                    "protected_fields",
-                )
-            },
-        ),
-        (
-            _("Status"),
-            {"fields": ("is_active", "is_public", "importance")},
-        ),
-        (_("Metadata"), {"classes": ["collapse"], "fields": ("created", "modified")}),
-    )
+    fieldsets = GeoPlaceAdminFieldsets
 
     list_per_page = 50
 
@@ -170,6 +159,7 @@ class GeoPlaceAdmin(ModelAdmin):
         """Return inlines for admin."""
         return [
             GeoPlaceSourceAssociationInline,
+            GeoPlaceExternalLinkInline,
         ]
 
     # Display methods

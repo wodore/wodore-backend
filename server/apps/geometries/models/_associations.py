@@ -1,11 +1,9 @@
-# from django.db import models
-from computedfields.models import ComputedFieldsModel
-
-from server.core.models import TimeStampedModel
-from modeltrans.manager import MultilingualManager
-
 from django.contrib.gis.db import models
 from django.utils.translation import gettext_lazy as _
+
+from server.core.models import TimeStampedModel
+from computedfields.models import ComputedFieldsModel
+from modeltrans.manager import MultilingualManager
 
 from server.apps.images.models import Image
 from server.apps.organizations.models import Organization
@@ -144,3 +142,53 @@ class GeoPlaceSourceAssociation(TimeStampedModel, ComputedFieldsModel):
 
     def __str__(self) -> str:
         return f"{self.geo_place} <> {self.organization}"
+
+
+class GeoPlaceExternalLink(models.Model):
+    """
+    Through-model connecting GeoPlaces to ExternalLinks.
+
+    Allows the same ExternalLink to be associated with multiple GeoPlaces
+    with different ordering.
+    """
+
+    geo_place = models.ForeignKey(
+        "GeoPlace",
+        on_delete=models.CASCADE,
+        db_index=True,
+        related_name="link_associations",
+        verbose_name=_("Geo Place"),
+    )
+
+    external_link = models.ForeignKey(
+        "external_links.ExternalLink",
+        on_delete=models.CASCADE,
+        db_index=True,
+        related_name="place_associations",
+        verbose_name=_("External Link"),
+    )
+
+    order = models.PositiveSmallIntegerField(
+        default=0,
+        db_index=True,
+        verbose_name=_("Order"),
+        help_text=_("Display order for this link"),
+    )
+
+    class Meta:
+        verbose_name = _("Geo Place Link")
+        verbose_name_plural = _("Geo Place Links")
+        ordering = ["order", "id"]
+        indexes = [
+            models.Index(fields=["geo_place", "order"]),
+            models.Index(fields=["external_link"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["geo_place", "external_link"],
+                name="%(app_label)s_%(class)s_unique_place_link",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.geo_place.name_i18n} → {self.external_link.label_i18n}"

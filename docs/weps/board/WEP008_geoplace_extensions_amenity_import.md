@@ -42,11 +42,26 @@ fields.
 | `review_comment` | Internal reviewer note |
 | `detail_type` | Which detail model is attached: `amenity / transport / admin / natural / none` |
 | `protected_fields` | JSON list of field names no source may overwrite |
+| `shape` | Optional polygon geometry for natural features and administrative areas |
+| `osm_tags` | Raw tags from OpenStreetMap (JSON) |
+| `extra` | Category-specific overflow data (JSON) |
+| `websites` | List of URLs with optional labels (shared across all place types) |
 
 `protected_fields` is maintained automatically — whenever a field is edited via
 the Wodore admin or API, its name is appended to the list. Falls back to a
 minimal global default of `["name", "location"]` when empty. Also editable
 manually in the admin.
+
+`osm_tags` stores the raw OpenStreetMap tag data for each place, preserving
+the complete source information. This is useful for debugging, data quality
+analysis, and future enrichment.
+
+`extra` provides a flexible overflow field for category-specific data that
+doesn't fit into the standard schema. Each category can define its own expected
+structure within this JSON field.
+
+`websites` is a shared field across all place types, storing a list of website
+objects with optional labels (e.g., "Official", "Booking", "Menu").
 
 `detail_type` is a fixed enum tied to the available detail models — not derived
 from category. Categories remain flexible (new category slugs can be added
@@ -66,9 +81,11 @@ administrative regions are represented via the `parent` self-FK.
 | `operating_status` | `open / temporarily_closed / permanently_closed / unknown` |
 | `opening_months` | Monthly availability per month: `yes / yesish / maybe / no / noish / unknown` |
 | `opening_hours` | Structured weekly hours per weekday + public holidays |
-| `websites` | List of URLs with optional labels |
 | `phones` | List of phone numbers |
-| `extra` | Category-specific overflow (JSON) |
+
+Note: `websites` has been moved to the base `GeoPlace` model and is shared
+across all place types. The `extra` field has also been moved to `GeoPlace`
+for broader use.
 
 **`TransportDetail`** — bus stops, train stations, cable cars
 
@@ -83,8 +100,24 @@ Connects naturally to GTFS integration (see WEP003).
 
 | Field | Description |
 |---|---|
-| `admin_level` | OSM admin level (2 = country … 10 = village) |
+| `admin_level` | OSM admin level (2 = country … 10 = village) - can be calculated from parent but stored for performance |
 | `population` | Inhabitant count |
+| `postal_code` | Postal code for this administrative area |
+| `iso_code` | ISO 3166-2 code for administrative divisions (e.g., CH-ZH for Zürich) |
+
+Note: `website` has been moved to the base `GeoPlace` model's `websites` field
+and is shared across all place types.
+
+The `admin_level` field follows the OpenStreetMap convention:
+
+- Level 2: Country (e.g., Switzerland)
+- Level 4: State/Province/Canton (e.g., Zürich)
+- Level 6: County/District (e.g., Zürich District)
+- Level 8: City/Municipality (e.g., Zürich city)
+- Level 10: Village/Hamlet (e.g., Zermatt)
+
+While `admin_level` can be calculated from the parent relationship, storing it
+directly improves performance and preserves the original OSM classification.
 
 ## Category Hierarchy
 

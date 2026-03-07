@@ -189,6 +189,16 @@ UNFOLD = {
                         ),
                     },
                     {
+                        "title": _("External Links"),
+                        "icon": "link",
+                        "link": reverse_lazy(
+                            "admin:external_links_externallink_changelist"
+                        ),
+                        "permission": lambda request: request.user.has_perm(
+                            "external_links.view_externallink"
+                        ),
+                    },
+                    {
                         "title": _("External"),
                         "icon": "public",
                         "link": reverse_lazy(
