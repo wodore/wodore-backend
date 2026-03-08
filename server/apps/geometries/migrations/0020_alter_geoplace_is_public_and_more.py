@@ -47,4 +47,14 @@ class Migration(migrations.Migration):
                 verbose_name="Update Policy",
             ),
         ),
+        migrations.AddField(
+            model_name="geoplacesourceassociation",
+            name="extra",
+            field=models.JSONField(
+                blank=True,
+                default=dict,
+                help_text="Source-specific overflow data (JSON)",
+                verbose_name="Extra",
+            ),
+        ),
     ]

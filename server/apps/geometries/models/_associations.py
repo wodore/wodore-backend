@@ -80,6 +80,13 @@ class GeoPlaceSourceAssociation(TimeStampedModel, ComputedFieldsModel):
         db_index=True,  # Add index for faster lookups in import_geoplaces
     )
 
+    extra = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name=_("Extra"),
+        help_text=_("Source-specific overflow data (JSON)"),
+    )
+
     import_date = models.DateTimeField(auto_now_add=True)
     modified_date = models.DateTimeField(
         auto_now=False,

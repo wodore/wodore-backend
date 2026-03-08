@@ -180,6 +180,7 @@ OpenStreetMap, Google Maps, OsmAnd, and Organic Maps conventions.
 **finance** (banking) → `amenity`
 
 - bank, atm
+Review the code for import improvements? But probably only the full import is slow, diff import should be faster and all I need. But I am still thinking it gets slwoer with more data, this is not good ..
 
 **shopping** (general retail - non-food) → `amenity`
 

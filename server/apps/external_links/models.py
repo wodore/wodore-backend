@@ -119,6 +119,35 @@ class ExternalLink(TimeStampedModel):
         help_text=_("Number of consecutive check failures"),
     )
 
+    # Template support
+    is_template = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name=_("Is Template"),
+        help_text=_(
+            "Auto-detected: True if URL contains placeholders like {osm_type} or {osm_id}"
+        ),
+    )
+
+    template_vars = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name=_("Template Variables"),
+        help_text=_(
+            "Available template variables and their example values for health check. "
+            "Example: {'osm_type': 'node', 'osm_id': '123456', 'source_id': 'node/123456'}"
+        ),
+    )
+
+    run_health_check = models.BooleanField(
+        default=True,
+        verbose_name=_("Run Health Check"),
+        help_text=_(
+            "Whether to run health checks on this link. "
+            "Disable for templates without example values."
+        ),
+    )
+
     # Metadata
     is_public = models.BooleanField(
         default=True,
@@ -171,16 +200,31 @@ class ExternalLink(TimeStampedModel):
         if not self.identifier:
             self.identifier = self.generate_unique_identifier()
 
+        # Auto-detect template from URL pattern
+        if self.url and "{" in self.url and "}" in self.url:
+            self.is_template = True
+        else:
+            self.is_template = False
+
         # Auto-detect source organization from URL domain if not set
-        if not self.source and self.url:
+        if not self.source and self.url and not self.is_template:
             self.source = self._auto_detect_source()
 
         # Auto-extract title from webpage if label is not provided
-        if not self.label and self.url:
+        if not self.label and self.url and not self.is_template:
             self._auto_extract_title()
 
-        # Run health check on save (unless skipped or no URL)
-        if self.url and not skip_health_check:
+        # Only run health check if enabled and either:
+        # - Not a template, OR
+        # - Is a template with example values
+        should_check = (
+            self.run_health_check
+            and self.url
+            and not skip_health_check
+            and (not self.is_template or self.template_vars)
+        )
+
+        if should_check:
             self.check_health()
 
         super().save(*args, **kwargs)
@@ -391,6 +435,8 @@ class ExternalLink(TimeStampedModel):
         """
         Check the health of all translated URLs by making HEAD requests.
 
+        For template URLs, substitutes template_vars before checking.
+
         Updates the following fields:
         - last_checked: Current timestamp
         - response_code: Best HTTP status code across all languages
@@ -406,16 +452,43 @@ class ExternalLink(TimeStampedModel):
         import requests
         from django.utils import timezone
 
+        # Check if template without example values
+        if self.is_template and not self.template_vars:
+            return {
+                "success": False,
+                "error": "Template link without example values - health check skipped",
+            }
+
         # URLs to check (all available languages)
         urls_to_check = []
         for code in settings.LANGUAGE_CODES:
             url_attr = f"url_{code}"
             if hasattr(self, url_attr) and getattr(self, url_attr):
-                urls_to_check.append((code, getattr(self, url_attr)))
+                url = getattr(self, url_attr)
+                # Substitute template variables if needed
+                if self.is_template and self.template_vars:
+                    try:
+                        url = url.format(**self.template_vars)
+                    except KeyError as e:
+                        return {
+                            "success": False,
+                            "error": f"Missing template variable: {e}",
+                        }
+                urls_to_check.append((code, url))
 
         # If no language-specific URLs, check the default URL
         if not urls_to_check and self.url:
-            urls_to_check.append(("default", self.url))
+            url = self.url
+            # Substitute template variables if needed
+            if self.is_template and self.template_vars:
+                try:
+                    url = url.format(**self.template_vars)
+                except KeyError as e:
+                    return {
+                        "success": False,
+                        "error": f"Missing template variable: {e}",
+                    }
+            urls_to_check.append(("default", url))
 
         if not urls_to_check:
             return {"success": False, "error": "No URLs to check"}
@@ -570,6 +643,49 @@ class ExternalLink(TimeStampedModel):
     def _identifier_exists(cls, identifier: str) -> bool:
         """Check if an identifier already exists in the database."""
         return cls.objects.filter(identifier=identifier).exists()
+
+    def render_url(self, lang: str = None, **kwargs) -> str:
+        """
+        Render template URL with provided variables.
+
+        Args:
+            lang: Language code (e.g., 'de', 'en', 'fr', 'it'). If None, uses current language.
+            **kwargs: Template variables (e.g., osm_type="node", osm_id="123456")
+
+        Returns:
+            Rendered URL for the specified language
+
+        Raises:
+            ValueError: If missing template variable
+
+        Examples:
+            link.render_url(osm_type="node", osm_id="123456")
+            # Returns: "https://mapcomplete.org/transit.html#node/123456"
+
+            link.render_url(lang="de", source_id="node/123456")
+            # Returns German URL with substituted variables
+        """
+        from django.utils import translation
+
+        # Determine language
+        if lang is None:
+            lang = translation.get_language()
+
+        # Get URL for the specified language
+        url_attr = f"url_{lang}"
+        if hasattr(self, url_attr) and getattr(self, url_attr):
+            url = getattr(self, url_attr)
+        else:
+            # Fallback to default URL
+            url = self.url
+
+        if not self.is_template:
+            return url
+
+        try:
+            return url.format(**kwargs)
+        except KeyError as e:
+            raise ValueError(f"Missing template variable: {e}")
 
     def __str__(self) -> str:
         """Return a concise string representation with truncated URL."""

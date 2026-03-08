@@ -171,6 +171,17 @@ class Category(ComputedFieldsModel, models.Model):
         default="#4B8E43",
     )
 
+    # Extra metadata
+    extra = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name=_("Extra Metadata"),
+        help_text=_(
+            "Additional metadata as JSON. "
+            "Example: {'mapcomplete_theme': 'transit', 'custom_field': 'value'}"
+        ),
+    )
+
     class Meta:
         verbose_name = _("Category")
         verbose_name_plural = _("Categories")

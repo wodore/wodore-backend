@@ -38,6 +38,7 @@ class _GeoPlaceSourceAssociationForm(ModelForm):
             "organization",
             "source_id",
             "source_props",
+            "extra",
             "modified_date",
             "update_policy",
             "delete_policy",
@@ -65,12 +66,19 @@ class GeoPlaceSourceAssociationInline(unfold_admin.TabularInline):
     fields = (
         "organization",
         "source_id",
+        "extra_display",
         "import_date",
         "modified_date",
         "update_policy",
         "delete_policy",
     )
-    readonly_fields = ("organization", "source_id", "import_date", "modified_date")
+    readonly_fields = (
+        "organization",
+        "source_id",
+        "extra_display",
+        "import_date",
+        "modified_date",
+    )
     extra = 0
     show_change_link = True
     verbose_name = _("Source")
@@ -80,6 +88,24 @@ class GeoPlaceSourceAssociationInline(unfold_admin.TabularInline):
 
     def has_delete_permission(self, request, obj):
         return False
+
+    @display(description=_("Extra Data"))
+    def extra_display(self, obj: GeoPlaceSourceAssociation) -> str:
+        """Display extra data in a readable format."""
+        if not obj.extra:
+            return "-"
+
+        # Format the extra data as key-value pairs
+        parts = []
+        for key, value in obj.extra.items():
+            if value:
+                parts.append(f"{key}: {value}")
+
+        if parts:
+            return format_html(
+                '<code style="font-size: 0.9em;">{}</code>', ", ".join(parts)
+            )
+        return "-"
 
 
 class GeoPlaceExternalLinkInline(unfold_admin.TabularInline):

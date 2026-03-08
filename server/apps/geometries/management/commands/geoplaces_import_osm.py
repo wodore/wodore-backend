@@ -423,6 +423,7 @@ class Command(BaseCommand):
             updated_count = getattr(self, "_pipeline_updated", 0)
             skipped_count = getattr(self, "_pipeline_skipped", 0)
             deleted_count = getattr(self, "_pipeline_deleted", 0)
+            error_count = getattr(self, "_pipeline_errors", 0)
 
             # Cleanup deleted places (skip if using --since or --limit as it's a partial import)
             # Note: If using diff mode (--since), deletions are already handled via action="delete"
@@ -450,10 +451,16 @@ class Command(BaseCommand):
                 self.stdout.write(f"Saved import state to: {state_file}")
 
             # Summary
-            self.stdout.write(self.style.SUCCESS("\nImport complete!"))
+            if error_count > 0:
+                self.stdout.write(self.style.WARNING("\nImport completed with errors!"))
+            else:
+                self.stdout.write(self.style.SUCCESS("\nImport complete!"))
+
             self.stdout.write(f"  Created: {created_count}")
             self.stdout.write(f"  Updated: {updated_count}")
             self.stdout.write(f"  Skipped: {skipped_count}")
+            if error_count > 0:
+                self.stdout.write(self.style.ERROR(f"  Errors: {error_count}"))
             if not dry_run:
                 self.stdout.write(f"  Deactivated: {deleted_count}")
 
@@ -522,7 +529,8 @@ class Command(BaseCommand):
         # PERFORMANCE: Pre-load all existing OSM associations for this region
         from server.apps.geometries.models import GeoPlaceSourceAssociation
 
-        osm_source_ids = {str(data["osm_id"]) for data in amenities}
+        # Build source_ids in OSM_TYPE/OSM_ID format for lookup
+        osm_source_ids = {f"{data['osm_type']}/{data['osm_id']}" for data in amenities}
         existing_associations = GeoPlaceSourceAssociation.objects.filter(
             organization=osm_org, source_id__in=osm_source_ids
         ).select_related("geo_place")
@@ -755,7 +763,10 @@ class Command(BaseCommand):
         self, data: dict, osm_org: Organization, run_start: datetime
     ) -> str:
         """Create or update GeoPlace + AmenityDetail."""
-        source_id = str(data["osm_id"])  # OSM IDs are unique across nodes and ways
+        # Save source_id as OSM_TYPE/OSM_ID format to ensure uniqueness
+        source_id = (
+            f"{data['osm_type']}/{data['osm_id']}"  # e.g., "node/123456", "way/789"
+        )
         location = Point(data["lon"], data["lat"])
 
         # Find existing place
@@ -780,7 +791,13 @@ class Command(BaseCommand):
         category_slug: str,
         brand: str | None,
     ) -> GeoPlace | None:
-        """Find existing GeoPlace using WEP008 deduplication logic."""
+        """Find existing GeoPlace using WEP008 deduplication logic.
+
+        PERFORMANCE OPTIMIZATIONS:
+        - Filters by country_code to use composite spatial index
+        - Caches OSM source_id lookups
+        - Limits results to avoid fetching large result sets
+        """
         from server.apps.geometries.models import GeoPlaceSourceAssociation
 
         # 1. Check OSM source + source_id (OSM IDs are globally unique)
@@ -800,6 +817,9 @@ class Command(BaseCommand):
         except GeoPlaceSourceAssociation.DoesNotExist:
             pass
 
+        # Get current country for spatial index optimization
+        country_code = getattr(self, "_current_region", "CH")
+
         # 2. Check location + category parent + brand (20m radius)
         # Different brands at same location = different places
         category_parent = category_slug.split(".")[0]
@@ -810,10 +830,16 @@ class Command(BaseCommand):
             brand_category = self._get_or_create_brand_category(brand)
 
         try:
+            # PERFORMANCE: Use distance_lte + country filter to leverage composite GIST index
+            # Note: For SRID 4326 (lat/lon), we must use distance_lte, not dwithin
             nearby = GeoPlace.objects.filter(
-                location__distance_lte=(location, 20),
-                place_type__slug__startswith=category_parent,
+                country_code=country_code,  # Uses composite index
                 is_active=True,
+                location__distance_lte=(
+                    location,
+                    20,
+                ),  # 20 meters - PostGIS handles conversion
+                place_type__slug__startswith=category_parent,
             ).annotate(distance=Distance("location", location))
 
             # Filter by brand if provided
@@ -842,10 +868,15 @@ class Command(BaseCommand):
 
         # 3. Check very small radius (4m) regardless of category or brand
         # Catches edge cases like wrong category or missing brand
+        # PERFORMANCE: Use distance_lte + country filter for bbox optimization
         very_nearby = (
             GeoPlace.objects.filter(
-                location__distance_lte=(location, 4),
+                country_code=country_code,  # Uses composite index
                 is_active=True,
+                location__distance_lte=(
+                    location,
+                    4,
+                ),  # 4 meters - PostGIS handles conversion
             )
             .annotate(distance=Distance("location", location))
             .order_by("distance")[:2]  # PERFORMANCE: Limit to 2 instead of fetching all
@@ -885,16 +916,40 @@ class Command(BaseCommand):
                 data["brand"], data.get("website")
             )
 
-        # Create place
-        place = GeoPlace.objects.create(
-            name=data["name"] or "Unnamed",
-            location=location,
-            place_type=category,
-            country_code=self._guess_country_code(location),
-            detail_type="amenity",
-            osm_tags=data["tags"],
-            review_status="new",
-        )
+        # Extract multilingual names and descriptions
+        name_i18n = self._extract_i18n_field(data["tags"], "name")
+        description_i18n = self._extract_i18n_field(data["tags"], "description")
+
+        # Create place with i18n support
+        # Base fields use Django's LANGUAGE_CODE (de)
+        # Other languages use field_LANG_CODE suffix (name_en, name_fr, etc.)
+        from django.conf import settings
+
+        place_data = {
+            "name": name_i18n.get(settings.LANGUAGE_CODE, "Unnamed"),
+            "location": location,
+            "place_type": category,
+            "country_code": self._guess_country_code(location),
+            "detail_type": "amenity",
+            "osm_tags": data["tags"],
+            "review_status": "new",
+        }
+
+        # Add translations for non-default languages
+        for lang_code, name_value in name_i18n.items():
+            if lang_code != settings.LANGUAGE_CODE:
+                place_data[f"name_{lang_code}"] = name_value
+
+        # Add default description
+        if settings.LANGUAGE_CODE in description_i18n:
+            place_data["description"] = description_i18n[settings.LANGUAGE_CODE]
+
+        # Add description translations for non-default languages
+        for lang_code, desc_value in description_i18n.items():
+            if lang_code != settings.LANGUAGE_CODE and desc_value:
+                place_data[f"description_{lang_code}"] = desc_value
+
+        place = GeoPlace.objects.create(**place_data)
 
         # Create amenity detail
         AmenityDetail.objects.create(
@@ -915,6 +970,10 @@ class Command(BaseCommand):
             import_date=run_start,
             modified_date=run_start,
             priority=1,  # OSM has priority 1
+            extra={
+                "osm_type": data["osm_type"],  # node, way, or relation
+                "osm_id": data["osm_id"],  # numeric ID
+            },
         )
 
         # Handle website via ExternalLink
@@ -928,14 +987,6 @@ class Command(BaseCommand):
                     source_org = brand_org
 
             self._add_external_link(place, data["website"], "website", source_org)
-
-        # Add OSM edit link via MapComplete
-        osm_edit_url = self._create_mapcomplete_url(data)
-        if osm_edit_url:
-            mapcomplete_org = self._get_or_create_mapcomplete_organization()
-            self._add_external_link(
-                place, osm_edit_url, "osm_edit", mapcomplete_org, data["name"]
-            )
 
     def _update_place(
         self,
@@ -956,8 +1007,32 @@ class Command(BaseCommand):
         # Update fields not in protected_fields
         protected = place.protected_fields or ["name", "location"]
 
-        if "name" not in protected and data["name"]:
-            place.name = data["name"]
+        # Extract multilingual names and descriptions
+        name_i18n = self._extract_i18n_field(data["tags"], "name")
+        description_i18n = self._extract_i18n_field(data["tags"], "description")
+
+        from django.conf import settings
+
+        # Update name (default language and translations)
+        if "name" not in protected:
+            # Update base field (default language)
+            if settings.LANGUAGE_CODE in name_i18n:
+                place.name = name_i18n[settings.LANGUAGE_CODE]
+            # Update translations for non-default languages
+            for lang_code, name_value in name_i18n.items():
+                if lang_code != settings.LANGUAGE_CODE:
+                    setattr(place, f"name_{lang_code}", name_value)
+
+        # Update description (default language and translations)
+        if "description" not in protected:
+            # Update base field (default language)
+            if settings.LANGUAGE_CODE in description_i18n:
+                place.description = description_i18n[settings.LANGUAGE_CODE]
+            # Update translations for non-default languages
+            for lang_code, desc_value in description_i18n.items():
+                if lang_code != settings.LANGUAGE_CODE and desc_value:
+                    setattr(place, f"description_{lang_code}", desc_value)
+
         if "location" not in protected:
             place.location = Point(data["lon"], data["lat"])
 
@@ -982,6 +1057,10 @@ class Command(BaseCommand):
             defaults={
                 "source_id": source_id,
                 "modified_date": run_start,
+                "extra": {
+                    "osm_type": data["osm_type"],  # node, way, or relation
+                    "osm_id": data["osm_id"],  # numeric ID
+                },
             },
         )
 
@@ -999,14 +1078,6 @@ class Command(BaseCommand):
                     source_org = brand_org
 
             self._add_external_link(place, data["website"], "website", source_org)
-
-        # Add OSM edit link via MapComplete
-        osm_edit_url = self._create_mapcomplete_url(data)
-        if osm_edit_url:
-            mapcomplete_org = self._get_or_create_mapcomplete_organization()
-            self._add_external_link(
-                place, osm_edit_url, "osm_edit", mapcomplete_org, data["name"]
-            )
 
     def _deactivate_by_osm_id(self, osm_id: str, osm_org: Organization) -> bool:
         """Deactivate a place by its OSM ID.
@@ -1261,18 +1332,6 @@ class Command(BaseCommand):
 
         return brand_category
 
-    def _get_or_create_mapcomplete_organization(self) -> Organization:
-        """Get or create MapComplete organization."""
-        org, _ = Organization.objects.get_or_create(
-            slug="mapcomplete",
-            defaults={
-                "name": "MapComplete",
-                "url": "https://mapcomplete.org",
-                "is_active": True,
-            },
-        )
-        return org
-
     def _get_or_create_brand_organization(
         self, brand_name: str, website: str | None
     ) -> Organization:
@@ -1456,6 +1515,41 @@ class Command(BaseCommand):
 
         return [{"number": p} for p in phones]
 
+    def _extract_i18n_field(self, tags: dict, field_name: str) -> dict:
+        """
+        Extract multilingual field from OSM tags.
+
+        OSM uses format:
+            name         = Default/local name
+            name:de      = German name
+            name:en      = English name
+            name:fr      = French name
+            name:it      = Italian name
+
+        Returns:
+            Dict with language codes as keys
+            The Django default language (LANGUAGE_CODE='de') is used for the base field
+            Example: {'de': 'Zermatt', 'fr': 'Cervin', 'it': 'Cervino', 'en': 'Matterhorn'}
+        """
+        from django.conf import settings
+
+        result = {}
+
+        # Get language-specific values for all configured languages
+        for lang_code in settings.LANGUAGE_CODES:
+            key = f"{field_name}:{lang_code}"
+            if key in tags:
+                result[lang_code] = tags[key]
+
+        # If no language-specific value exists for the default language,
+        # use the generic field value (name -> de if LANGUAGE_CODE='de')
+        if settings.LANGUAGE_CODE not in result:
+            default_value = tags.get(field_name, "")
+            if default_value:
+                result[settings.LANGUAGE_CODE] = default_value
+
+        return result
+
     def _guess_country_code(self, location: Point) -> str:
         """Get country code from current import region.
 
@@ -1463,21 +1557,6 @@ class Command(BaseCommand):
         Falls back to "CH" if not set (for backwards compatibility).
         """
         return getattr(self, "_current_region", "CH")
-
-    def _create_mapcomplete_url(self, data: dict) -> str | None:
-        """Create MapComplete edit URL based on OSM element and category."""
-        osm_type = data.get("osm_type")
-        osm_id = data.get("osm_id")
-        theme = data.get("mapcomplete_theme", "shops")
-
-        if not osm_type or not osm_id:
-            return None
-
-        # Build MapComplete URL
-        # Format: https://mapcomplete.org/{theme}.html#{osm_type}/{osm_id}
-        url = f"https://mapcomplete.org/{theme}.html#{osm_type}/{osm_id}"
-
-        return url
 
     def _process_mapping_worker(
         self,
@@ -1521,7 +1600,6 @@ class Command(BaseCommand):
             total=3,  # 3 stages: fetch, process, import
             mapping=f"{mapping.category_slug}",
             status=f"[yellow]fetching from {server_letter}...[/yellow]",
-            server=f"[dim][{server_letter}][/dim]",
         )
 
         try:
@@ -1570,7 +1648,9 @@ class Command(BaseCommand):
 
             # PIPELINE STAGE 2: PROCESS
             processing_status = f"[cyan]processing...[/cyan] [dim]↓{element_count} ({download_size // 1024}KB)[/dim]"
-            progress.update(task_id, status=processing_status)
+            progress.update(
+                task_id, status=processing_status, server=""
+            )  # Clear server label
             amenities = self._process_elements(
                 elements=elements,
                 mapping=mapping,
@@ -1581,7 +1661,7 @@ class Command(BaseCommand):
             # PIPELINE STAGE 3: IMPORT
             importing_status = f"[magenta]importing...[/magenta] [dim]↓{element_count} ({download_size // 1024}KB)[/dim]"
             progress.update(task_id, status=importing_status)
-            created, updated, skipped, deleted = self._import_amenities(
+            created, updated, skipped, deleted, errors = self._import_amenities(
                 amenities=amenities,
                 osm_org=osm_org,
                 run_start=run_start,
@@ -1597,6 +1677,8 @@ class Command(BaseCommand):
                 status_parts.append(f"[yellow]~{updated}[/yellow]")
             if deleted:
                 status_parts.append(f"[red]-{deleted}[/red]")
+            if errors:
+                status_parts.append(f"[red]!{errors}[/red]")
             if skipped:
                 status_parts.append(f"[dim]·{skipped}[/dim]")
             if download_size and element_count:
@@ -1618,6 +1700,7 @@ class Command(BaseCommand):
                 "updated": updated,
                 "skipped": skipped,
                 "deleted": deleted,
+                "errors": errors,
                 "download_bytes": download_size,
                 "server_label": server_label,
                 "mapping_slug": mapping.category_slug,
@@ -1625,11 +1708,24 @@ class Command(BaseCommand):
             }
 
         except Exception as e:
+            # Log exception to error list
+            if not hasattr(self, "_import_errors"):
+                self._import_errors = []
+
+            self._import_errors.append(
+                {
+                    "name": f"Worker {worker_id}",
+                    "category": mapping.category_slug,
+                    "error": f"Worker exception: {str(e)}",
+                }
+            )
+
             progress.update(
                 task_id,
                 completed=3,
                 mapping=f"{mapping.category_slug}",
                 status=f"[red]✗ ERROR: {str(e)[:30]}[/red]",
+                server="",
             )
             progress.stop_task(task_id)
             progress.advance(overall_task)
@@ -1638,6 +1734,7 @@ class Command(BaseCommand):
                 "updated": 0,
                 "skipped": 0,
                 "deleted": 0,
+                "errors": 1,
                 "download_bytes": 0,
                 "server_label": "",
                 "mapping_slug": "",
@@ -1737,7 +1834,7 @@ class Command(BaseCommand):
 
         # Print symbols footer
         console.print(
-            "[dim]Symbols: ✓ = completed | ✗ = failed | +N = created | ~N = updated | ·N = skipped | ↓N (KB) = downloaded[/dim]\n"
+            "[dim]Symbols: ✓ = completed | ✗ = failed | +N = created | ~N = updated | -N = deleted | !N = errors | ·N = skipped | ↓N (KB) = downloaded[/dim]\n"
         )
 
         # Initialize counters
@@ -1747,11 +1844,33 @@ class Command(BaseCommand):
         total_deleted = 0
         total_download_bytes = 0
 
-        # Create progress display - show all tasks without filtering
+        # Create progress display with auto-cleanup of completed tasks
         # Rich's get_renderable_tasks method limits visible tasks by default, so we override it
+
         class ShowAllProgress(Progress):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.completed_times = {}  # Track when tasks complete
+
+            def stop_task(self, task_id):
+                """Override to track completion time."""
+                super().stop_task(task_id)
+                self.completed_times[task_id] = time.time()
+
             def get_renderable_tasks(self):
-                """Override to show all tasks without any filtering or limits."""
+                """Override to show all tasks without filtering, but auto-remove after 30s."""
+                current_time = time.time()
+                # Remove tasks that completed more than 30 seconds ago
+                tasks_to_remove = [
+                    task_id
+                    for task_id, completion_time in self.completed_times.items()
+                    if current_time - completion_time > 30
+                ]
+                for task_id in tasks_to_remove:
+                    # Find and remove the task
+                    self.tasks = [task for task in self.tasks if task.id != task_id]
+                    del self.completed_times[task_id]
+
                 # Deduplicate tasks by task_id to prevent duplicates in display
                 seen_ids = set()
                 unique_tasks = []
@@ -1770,7 +1889,6 @@ class Command(BaseCommand):
                 TimeElapsedColumn(),
                 TextColumn("•"),
                 TextColumn("{task.fields[status]}", markup=True),
-                TextColumn("{task.fields[server]}"),
                 console=console,
                 expand=False,
                 refresh_per_second=2,  # Reduce refresh rate further to minimize rendering glitches
@@ -1782,7 +1900,6 @@ class Command(BaseCommand):
                 total=total_mappings,
                 mapping="[bold]Overall Progress[/bold]",
                 status="",
-                server="",
             )
 
             # Use ThreadPoolExecutor for parallel processing
@@ -1820,6 +1937,7 @@ class Command(BaseCommand):
                     futures.append(future)
 
                 # Collect results as they complete
+                total_errors = 0
                 for future in as_completed(futures):
                     try:
                         result = future.result()
@@ -1827,6 +1945,7 @@ class Command(BaseCommand):
                         total_updated += result["updated"]
                         total_skipped += result["skipped"]
                         total_deleted += result.get("deleted", 0)
+                        total_errors += result.get("errors", 0)
                         total_download_bytes += result["download_bytes"]
 
                         # Update state for this mapping
@@ -1843,12 +1962,31 @@ class Command(BaseCommand):
                                 )
                     except Exception as e:
                         console.log(f"[red]Worker exception: {e}[/red]")
+                        total_errors += 1
+
+        # Write errors to log file if any occurred
+        if hasattr(self, "_import_errors") and self._import_errors:
+            error_log_path = Path(
+                f"osm_import_errors_{region}_{run_start.strftime('%Y%m%d_%H%M%S')}.log"
+            )
+            with open(error_log_path, "w") as f:
+                f.write(f"OSM Import Errors - {region} - {run_start}\n")
+                f.write("=" * 80 + "\n\n")
+                for idx, error in enumerate(self._import_errors, 1):
+                    f.write(f"{idx}. {error['name']}\n")
+                    f.write(f"   Category: {error.get('category', 'N/A')}\n")
+                    if error.get("osm_type") and error.get("osm_id"):
+                        f.write(f"   OSM: {error['osm_type']}/{error['osm_id']}\n")
+                    f.write(f"   Error: {error['error']}\n")
+                    f.write("\n")
+            console.print(f"[yellow]Errors logged to: {error_log_path}[/yellow]")
 
         # Set instance variables for handle method to use
         self._pipeline_created = total_created
         self._pipeline_updated = total_updated
         self._pipeline_skipped = total_skipped
         self._pipeline_deleted = total_deleted
+        self._pipeline_errors = total_errors
 
     def _process_overpass_pipeline(
         self,
@@ -1948,7 +2086,7 @@ class Command(BaseCommand):
 
         # Print symbols footer that stays visible
         console.print(
-            "[dim]Symbols: ✓ = completed | ✗ = failed | +N = created | ~N = updated | ·N = skipped | ↓N = downloaded[/dim]\n"
+            "[dim]Symbols: ✓ = completed | ✗ = failed | +N = created | ~N = updated | -N = deleted | !N = errors | ·N = skipped | ↓N = downloaded[/dim]\n"
         )
 
         # Create progress bars
@@ -2032,7 +2170,7 @@ class Command(BaseCommand):
 
                 # PIPELINE STAGE 3: IMPORT
                 progress.update(current_task, status="[magenta]importing...[/magenta]")
-                created, updated, skipped, deleted = self._import_amenities(
+                created, updated, skipped, deleted, errors = self._import_amenities(
                     amenities=amenities,
                     osm_org=osm_org,
                     run_start=run_start,
@@ -2044,6 +2182,7 @@ class Command(BaseCommand):
                 self._pipeline_updated += updated
                 self._pipeline_skipped += skipped
                 self._pipeline_deleted = getattr(self, "_pipeline_deleted", 0) + deleted
+                self._pipeline_errors = getattr(self, "_pipeline_errors", 0) + errors
 
                 mapping_time = time.time() - mapping_start
 
@@ -2063,6 +2202,8 @@ class Command(BaseCommand):
                     changes_parts.append(f"[yellow]~{updated}[/yellow]")
                 if deleted:
                     changes_parts.append(f"[red]-{deleted}[/red]")
+                if errors:
+                    changes_parts.append(f"[red]!{errors}[/red]")
                 if skipped:
                     changes_parts.append(f"·{skipped}")
                 changes_str = " ".join(changes_parts) if changes_parts else "·0"
@@ -2100,17 +2241,43 @@ class Command(BaseCommand):
             queries_md.close()
             console.print(f"[dim]Queries written to: {overpass_queries_file}[/dim]")
 
+        # Write errors to log file if any occurred
+        error_count = getattr(self, "_pipeline_errors", 0)
+        if hasattr(self, "_import_errors") and self._import_errors:
+            error_log_path = Path(
+                f"osm_import_errors_{region}_{run_start.strftime('%Y%m%d_%H%M%S')}.log"
+            )
+            with open(error_log_path, "w") as f:
+                f.write(f"OSM Import Errors - {region} - {run_start}\n")
+                f.write("=" * 80 + "\n\n")
+                for idx, error in enumerate(self._import_errors, 1):
+                    f.write(f"{idx}. {error['name']}\n")
+                    f.write(f"   Category: {error.get('category', 'N/A')}\n")
+                    if error.get("osm_type") and error.get("osm_id"):
+                        f.write(f"   OSM: {error['osm_type']}/{error['osm_id']}\n")
+                    f.write(f"   Error: {error['error']}\n")
+                    f.write("\n")
+            console.print(f"[yellow]Errors logged to: {error_log_path}[/yellow]")
+
         # Print summary
         total_time = time.time() - run_start.timestamp()
         total_download_mb = total_download_bytes / (1024 * 1024)
 
-        console.print("\n[bold green]✓ Import complete![/bold green]")
+        if error_count > 0:
+            console.print(
+                "\n[bold yellow]⚠ Import completed with errors![/bold yellow]"
+            )
+        else:
+            console.print("\n[bold green]✓ Import complete![/bold green]")
+
         summary_parts = [
             f"Created: [green]{self._pipeline_created}[/green]",
             f"Updated: [yellow]{self._pipeline_updated}[/yellow]",
         ]
         if self._pipeline_deleted:
             summary_parts.append(f"Deleted: [red]{self._pipeline_deleted}[/red]")
+        if error_count > 0:
+            summary_parts.append(f"Errors: [red]{error_count}[/red]")
         summary_parts.append(f"Skipped: {self._pipeline_skipped}")
         console.print("  " + " | ".join(summary_parts))
         console.print(
@@ -2513,16 +2680,17 @@ class Command(BaseCommand):
         osm_org: Organization,
         run_start: datetime,
         dry_run: bool,
-    ) -> tuple[int, int, int, int]:
+    ) -> tuple[int, int, int, int, int]:
         """Import amenities to database.
 
         Returns:
-            Tuple of (created_count, updated_count, skipped_count, deleted_count)
+            Tuple of (created_count, updated_count, skipped_count, deleted_count, error_count)
         """
         created_count = 0
         updated_count = 0
         skipped_count = 0
         deleted_count = 0
+        error_count = 0
 
         for data in amenities:
             action = data.get("action")  # None, "create", "modify", "delete"
@@ -2554,12 +2722,21 @@ class Command(BaseCommand):
                     else:
                         skipped_count += 1
             except Exception as e:
-                self.stdout.write(
-                    self.style.ERROR(f"    Error processing {data['name']}: {e}")
-                )
-                skipped_count += 1
+                error_count += 1
+                # Log error to instance variable for later reporting
+                if not hasattr(self, "_import_errors"):
+                    self._import_errors = []
 
-        return created_count, updated_count, skipped_count, deleted_count
+                error_info = {
+                    "name": data.get("name", "Unnamed"),
+                    "osm_type": data.get("osm_type"),
+                    "osm_id": data.get("osm_id"),
+                    "category": data.get("category_slug"),
+                    "error": str(e),
+                }
+                self._import_errors.append(error_info)
+
+        return created_count, updated_count, skipped_count, deleted_count, error_count
 
     def _fetch_overpass(
         self,
