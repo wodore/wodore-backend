@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from django.contrib.gis.db import models
 from django.utils.translation import gettext_lazy as _
-from server.apps.geometries import AmenityDetailInput
+from server.apps.geometries.schemas import AmenityDetailInput
 from server.apps.geometries.models import GeoPlace
 from server.core.models import TimeStampedModel
 from server.core.utils import UpdateCreateStatus
