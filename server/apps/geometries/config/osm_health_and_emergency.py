@@ -57,5 +57,11 @@ HEALTH_AND_EMERGENCY = CategoryMappings(
             mapcomplete_theme="healthcare",
             priority=0,
         ),
+        OSMMapping(
+            osm_filters=["shop=optician"],
+            category_slug="health_and_emergency.optician",
+            mapcomplete_theme="healthcare",
+            priority=0,
+        ),
     ],
 )

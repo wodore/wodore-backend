@@ -6,7 +6,7 @@ from .osm_base import CategoryMappings, OSMMapping
 SERVICES = CategoryMappings(
     category="services",
     detail_type="amenity",
-    enabled=False,  # Phase 3 - not enabled by default
+    enabled=True,
     mappings=[
         OSMMapping(
             osm_filters=["shop=hairdresser"],

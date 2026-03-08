@@ -38,31 +38,15 @@ GROCERIES = CategoryMappings(
             priority=0,
         ),
         OSMMapping(
-            osm_filters=["shop=greengrocer"],
-            category_slug="groceries.greengrocer",
-            mapcomplete_theme="shops",
-            priority=0,
-        ),
-        OSMMapping(
             osm_filters=["shop=farm"],
-            category_slug="groceries.farm_shop",
+            category_slug="groceries.farm",
             mapcomplete_theme="shops",
             priority=0,
         ),
         OSMMapping(
-            osm_filters=["shop=deli"],
-            category_slug="groceries.deli",
-            mapcomplete_theme="shops",
-            priority=0,
-        ),
-        OSMMapping(
-            osm_filters=["shop=cheese"],
-            category_slug="groceries.cheese_shop",
-            mapcomplete_theme="shops",
-            priority=0,
-        ),
-        OSMMapping(
-            osm_filters=["shop=dairy"],
+            osm_filters=[
+                ("shop=greengrocer", "shop=deli", "shop=cheese", "shop=dairy")
+            ],  # OR - specialty dairy/produce
             category_slug="groceries.dairy",
             mapcomplete_theme="shops",
             priority=0,

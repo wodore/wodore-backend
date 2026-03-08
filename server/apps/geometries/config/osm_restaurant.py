@@ -20,13 +20,9 @@ RESTAURANT = CategoryMappings(
             priority=0,
         ),
         OSMMapping(
-            osm_filters=["amenity=bar"],
-            category_slug="restaurant.bar",
-            mapcomplete_theme="food",
-            priority=0,
-        ),
-        OSMMapping(
-            osm_filters=["amenity=pub"],
+            osm_filters=[
+                ("amenity=bar", "amenity=pub", "amenity=biergarten")
+            ],  # OR - all drinking establishments
             category_slug="restaurant.pub",
             mapcomplete_theme="food",
             priority=0,
@@ -48,12 +44,6 @@ RESTAURANT = CategoryMappings(
             category_slug="restaurant.ice_cream",
             mapcomplete_theme="food",
             priority=0,
-        ),
-        OSMMapping(
-            osm_filters=["amenity=biergarten"],
-            category_slug="restaurant.pub",  # Map biergarten to pub
-            mapcomplete_theme="food",
-            priority=1,  # Lower priority than direct pub mapping
         ),
     ],
 )

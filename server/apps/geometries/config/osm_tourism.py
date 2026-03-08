@@ -43,5 +43,19 @@ TOURISM = CategoryMappings(
             mapcomplete_theme="tourism",
             priority=0,
         ),
+        OSMMapping(
+            osm_filters=["information=guidepost"],
+            category_slug="tourism.hiking_post",
+            mapcomplete_theme="tourism",
+            priority=0,
+        ),
+        OSMMapping(
+            osm_filters=[
+                ("information=board", "information=office", "information=map")
+            ],  # OR - hiking information infrastructure
+            category_slug="tourism.information",
+            mapcomplete_theme="tourism",
+            priority=1,  # Lower priority than generic tourism=information
+        ),
     ],
 )

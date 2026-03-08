@@ -131,11 +131,11 @@ OpenStreetMap, Google Maps, OsmAnd, and Organic Maps conventions.
 
 **restaurant** (prepared food & drinks) → `amenity`
 
-- restaurant, cafe, bar, pub, fast_food, food_court, ice_cream
+- restaurant, cafe, pub (includes bars and biergartens), fast_food, food_court, ice_cream
 
 **groceries** (food shopping) → `amenity`
 
-- supermarket, convenience, bakery, butcher, greengrocer, farm_shop, deli, vending_machine
+- supermarket, convenience, bakery, butcher, farm, dairy (includes greengrocer, deli, cheese shops), beverages, vending_machine
 
 **accommodation** (lodging) → `accommodation` (not implemented yet, use `amenity`)
 
@@ -143,7 +143,7 @@ OpenStreetMap, Google Maps, OsmAnd, and Organic Maps conventions.
 
 **health_and_emergency** (medical & urgent response) → `amenity`
 
-- hospital, clinic, doctor, dentist, pharmacy, fire_station, police, mountain_rescue
+- hospital, clinic, doctor, dentist, pharmacy, optician, fire_station, police, mountain_rescue
 
 **transport** (public transit) → `transport`
 
@@ -155,15 +155,15 @@ OpenStreetMap, Google Maps, OsmAnd, and Organic Maps conventions.
 
 **sport** (activities, facilities, instruction) → `amenity`
 
-- climbing_gym, swimming_pool, fitness_center, ski_school, playground, mountain_guide
+- climbing_gym, swimming_pool, fitness_center, ski_school, playground, mountain_guide, skate_park
 
 **outdoor_services** (Alpine/outdoor gear - rental, repair, shops) → `amenity`
 
-- ski_rental, bike_rental, bike_repair, bike_shop, outdoor_shop, sports_shop
+- ski_rental, bike_rental, bike_repair, bike_shop, sports_shop (includes outdoor shops)
 
 **tourism** (sightseeing & information) → `amenity`
 
-- information, viewpoint, museum, attraction, artwork, memorial
+- information (includes info boards, offices, maps), viewpoint, museum, attraction, artwork, memorial, hiking_post (guideposts)
 
 **natural** (natural features) → `natural`
 
@@ -175,7 +175,7 @@ OpenStreetMap, Google Maps, OsmAnd, and Organic Maps conventions.
 
 **utilities** (public infrastructure) → `amenity`
 
-- toilets, drinking_water, shower, waste_disposal
+- toilets, drinking_water, shower, waste_disposal, picnic_area, firepit, bench
 
 **finance** (banking) → `amenity`
 
@@ -183,7 +183,7 @@ OpenStreetMap, Google Maps, OsmAnd, and Organic Maps conventions.
 
 **shopping** (general retail - non-food) → `amenity`
 
-- clothes_shop, shoe_shop, hardware_store, bookshop, electronics_store, gift_shop
+- clothes, shoe, hardware, books, electronics, jewelry, toys, gift (includes souvenirs), store (general stores, variety stores, department stores), mall
 
 **services** (personal services) → `amenity`
 

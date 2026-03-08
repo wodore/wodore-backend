@@ -6,7 +6,7 @@ from .osm_base import CategoryMappings, OSMMapping
 SPORT = CategoryMappings(
     category="sport",
     detail_type="amenity",
-    enabled=False,  # Phase 2 - not enabled by default
+    enabled=True,
     mappings=[
         OSMMapping(
             osm_filters=["leisure=sports_centre"],
@@ -48,6 +48,14 @@ SPORT = CategoryMappings(
             osm_filters=["office=guide"],
             category_slug="sport.mountain_guide",
             mapcomplete_theme="tourism",
+            priority=0,
+        ),
+        OSMMapping(
+            osm_filters=[
+                ("leisure=pitch", "sport=skateboard")
+            ],  # AND logic - must have both tags
+            category_slug="sport.skate_park",
+            mapcomplete_theme="sport",
             priority=0,
         ),
     ],

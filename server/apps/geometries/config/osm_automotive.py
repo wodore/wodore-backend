@@ -6,7 +6,7 @@ from .osm_base import CategoryMappings, OSMMapping
 AUTOMOTIVE = CategoryMappings(
     category="automotive",
     detail_type="amenity",
-    enabled=False,  # Phase 2 - not enabled by default
+    enabled=True,
     mappings=[
         OSMMapping(
             osm_filters=["amenity=parking"],

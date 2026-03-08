@@ -8,13 +8,7 @@ OUTDOOR_SERVICES = CategoryMappings(
     detail_type="amenity",
     mappings=[
         OSMMapping(
-            osm_filters=["shop=ski"],
-            category_slug="outdoor_services.ski_rental",
-            mapcomplete_theme="shops",
-            priority=0,
-        ),
-        OSMMapping(
-            osm_filters=["amenity=ski_rental"],
+            osm_filters=[("shop=ski", "amenity=ski_rental")],  # OR
             category_slug="outdoor_services.ski_rental",
             mapcomplete_theme="shops",
             priority=0,
@@ -38,13 +32,9 @@ OUTDOOR_SERVICES = CategoryMappings(
             priority=0,
         ),
         OSMMapping(
-            osm_filters=["shop=outdoor"],
-            category_slug="outdoor_services.outdoor_shop",
-            mapcomplete_theme="shops",
-            priority=0,
-        ),
-        OSMMapping(
-            osm_filters=["shop=sports"],
+            osm_filters=[
+                ("shop=outdoor", "shop=sports")
+            ],  # OR - outdoor and sports shops
             category_slug="outdoor_services.sports_shop",
             mapcomplete_theme="shops",
             priority=0,
