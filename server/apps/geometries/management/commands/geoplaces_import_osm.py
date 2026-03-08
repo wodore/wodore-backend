@@ -328,18 +328,38 @@ class Command(BaseCommand):
             # Initialize place lookup cache for deduplication performance
             self._place_cache = {}
 
+            # Get workers parameter
+            workers = options.get("workers", 1)
+
             # Process each category/mapping in a pipeline (fetch → process → import)
-            success = self._process_overpass_pipeline(
-                region=region,
-                category_names=category_names,
-                osm_org=osm_org,
-                run_start=run_start,
-                limit=limit,
-                overpass_server=overpass_server,
-                overpass_queries_file=overpass_queries_file,
-                since=since,
-                dry_run=dry_run,
-            )
+            if workers > 1:
+                # Use parallel processing
+                self._process_overpass_parallel(
+                    region=region,
+                    category_names=category_names,
+                    osm_org=osm_org,
+                    run_start=run_start,
+                    workers=workers,
+                    limit=limit,
+                    overpass_server=overpass_server,
+                    overpass_queries_file=overpass_queries_file,
+                    since=since,
+                    dry_run=dry_run,
+                )
+                success = True
+            else:
+                # Use sequential processing
+                success = self._process_overpass_pipeline(
+                    region=region,
+                    category_names=category_names,
+                    osm_org=osm_org,
+                    run_start=run_start,
+                    limit=limit,
+                    overpass_server=overpass_server,
+                    overpass_queries_file=overpass_queries_file,
+                    since=since,
+                    dry_run=dry_run,
+                )
 
             if not success:
                 self.stdout.write(
@@ -352,17 +372,21 @@ class Command(BaseCommand):
             updated_count = getattr(self, "_pipeline_updated", 0)
             skipped_count = getattr(self, "_pipeline_skipped", 0)
 
-            # Cleanup deleted places
-            if not dry_run:
+            # Cleanup deleted places (skip if using --since or --limit as it's a partial import)
+            if not dry_run and not since and not limit:
                 self.stdout.write("\nCleaning up deleted places...")
                 deleted_count = self._cleanup_deleted_places(
-                    osm_org, run_start, category_names
+                    osm_org, run_start, category_names, region
                 )
                 self.stdout.write(
                     f"Deactivated {deleted_count} places no longer in OSM"
                 )
             else:
                 deleted_count = 0
+                if since or limit:
+                    self.stdout.write(
+                        "\n[Skipping cleanup - partial import with --since or --limit]"
+                    )
 
             # Save timestamp for --since auto
             if not dry_run:
@@ -804,6 +828,11 @@ class Command(BaseCommand):
         """Update existing GeoPlace + AmenityDetail."""
         from server.apps.geometries.models import GeoPlaceSourceAssociation
 
+        # Reactivate if previously deactivated (place was deleted but now exists again in OSM)
+        if not place.is_active:
+            place.is_active = True
+            place.review_status = "review"  # Reset review status for reactivated places
+
         # Update fields not in protected_fields
         protected = place.protected_fields or ["name", "location"]
 
@@ -860,9 +889,17 @@ class Command(BaseCommand):
             )
 
     def _cleanup_deleted_places(
-        self, osm_org: Organization, run_start: datetime, category_names: list[str]
+        self,
+        osm_org: Organization,
+        run_start: datetime,
+        category_names: list[str],
+        region: str,
     ) -> int:
-        """Deactivate places not seen in this import run."""
+        """Deactivate places not seen in this import run.
+
+        Args:
+            region: Country code (e.g., "CH", "FR") to limit cleanup to specific country
+        """
         from server.apps.geometries.models import GeoPlaceSourceAssociation
 
         # Get categories for this import
@@ -877,10 +914,13 @@ class Command(BaseCommand):
         categories = Category.objects.filter(slug__in=category_slugs)
 
         # PERFORMANCE: Use bulk update instead of iterating
+        # Filter by country code to only deactivate places in the imported region
+        country_code = region.upper()
         stale_place_ids = GeoPlaceSourceAssociation.objects.filter(
             organization=osm_org,
             modified_date__lt=run_start,
             geo_place__place_type__in=categories,
+            geo_place__country_code=country_code,
             geo_place__is_active=True,
         ).values_list("geo_place_id", flat=True)
 
@@ -1264,10 +1304,12 @@ class Command(BaseCommand):
         return [{"number": p} for p in phones]
 
     def _guess_country_code(self, location: Point) -> str:
-        """Guess country code from location (simplified for now)."""
-        # TODO: Implement proper country lookup via shapefile or API
-        # For now, return a default - this should be improved
-        return "CH"  # Default to Switzerland for testing
+        """Get country code from current import region.
+
+        Uses the region parameter from the import command (e.g., "CH", "FR").
+        Falls back to "CH" if not set (for backwards compatibility).
+        """
+        return getattr(self, "_current_region", "CH")
 
     def _create_mapcomplete_url(self, data: dict) -> str | None:
         """Create MapComplete edit URL based on OSM element and category."""
@@ -1283,6 +1325,348 @@ class Command(BaseCommand):
         url = f"https://mapcomplete.org/{theme}.html#{osm_type}/{osm_id}"
 
         return url
+
+    def _process_mapping_worker(
+        self,
+        worker_id: int,
+        mapping_data: tuple,
+        region: str,
+        osm_org: Organization,
+        run_start: datetime,
+        category_names: list[str],
+        api_endpoint: str | None,
+        headers: dict,
+        queries_md: dict,
+        since: datetime | None,
+        limit: int | None,
+        dry_run: bool,
+        console,
+        progress,
+        overall_task,
+    ) -> dict:
+        """Worker function to process a single mapping in parallel.
+
+        Returns a dict with:
+            - created: int
+            - updated: int
+            - skipped: int
+            - download_bytes: int
+            - server_label: str
+            - success: bool
+        """
+        from django.db import connection
+
+        category, mapping = mapping_data
+
+        # Calculate server start index based on worker_id
+        server_start_index = worker_id % len(OVERPASS_SERVERS)
+
+        # Create task for this mapping
+        server_letter = OVERPASS_SERVERS[server_start_index][0]
+        task_id = progress.add_task(
+            f"worker_{worker_id}",
+            total=3,  # 3 stages: fetch, process, import
+            mapping=f"{mapping.category_slug}",
+            status=f"[yellow]fetching from {server_letter}...[/yellow]",
+            server=f"[{server_letter}]",
+        )
+
+        try:
+            # PIPELINE STAGE 1: FETCH
+            elements, download_size, server_label, element_count = (
+                self._fetch_mapping_overpass(
+                    region=region,
+                    mapping=mapping,
+                    api_endpoint=api_endpoint,
+                    headers=headers,
+                    queries_md=queries_md,
+                    since=since,
+                    limit=limit,
+                    console=console,
+                    server_start_index=server_start_index,
+                )
+            )
+            # Show download stats immediately after fetch
+            fetch_status = f"[dim]↓{element_count} ({download_size // 1024}KB)[/dim]"
+            progress.update(
+                task_id, completed=1, server=f"[{server_label}]", status=fetch_status
+            )
+
+            if elements is None:
+                progress.update(
+                    task_id,
+                    completed=3,
+                    mapping=f"{mapping.category_slug}",
+                    status="[red]✗ FAILED[/red]",
+                )
+                progress.stop_task(task_id)
+                progress.advance(overall_task)
+                return {
+                    "created": 0,
+                    "updated": 0,
+                    "skipped": 0,
+                    "download_bytes": 0,
+                    "server_label": server_label,
+                    "success": False,
+                }
+
+            # PIPELINE STAGE 2: PROCESS
+            processing_status = f"[cyan]processing...[/cyan] [dim]↓{element_count} ({download_size // 1024}KB)[/dim]"
+            progress.update(task_id, status=processing_status)
+            amenities = self._process_elements(
+                elements=elements,
+                mapping=mapping,
+                category_names=category_names,
+            )
+            progress.update(task_id, completed=2)
+
+            # PIPELINE STAGE 3: IMPORT
+            importing_status = f"[magenta]importing...[/magenta] [dim]↓{element_count} ({download_size // 1024}KB)[/dim]"
+            progress.update(task_id, status=importing_status)
+            created, updated, skipped = self._import_amenities(
+                amenities=amenities,
+                osm_org=osm_org,
+                run_start=run_start,
+                dry_run=dry_run,
+            )
+            progress.update(task_id, completed=3)
+
+            # Update final status (element_count already set from fetch)
+            status_parts = []
+            if created:
+                status_parts.append(f"[green]+{created}[/green]")
+            if updated:
+                status_parts.append(f"[yellow]~{updated}[/yellow]")
+            if skipped:
+                status_parts.append(f"[dim]·{skipped}[/dim]")
+            if download_size and element_count:
+                status_parts.append(
+                    f"[cyan]↓{element_count} ({download_size // 1024}KB)[/cyan]"
+                )
+
+            status = (
+                "[green]✓[/green] " + " ".join(status_parts)
+                if status_parts
+                else "[green]✓[/green]"
+            )
+            progress.update(task_id, status=status)
+            progress.stop_task(task_id)
+            progress.advance(overall_task)
+
+            return {
+                "created": created,
+                "updated": updated,
+                "skipped": skipped,
+                "download_bytes": download_size,
+                "server_label": server_label,
+                "success": True,
+            }
+
+        except Exception as e:
+            progress.update(
+                task_id,
+                completed=3,
+                mapping=f"{mapping.category_slug}",
+                status=f"[red]✗ ERROR: {str(e)[:30]}[/red]",
+            )
+            progress.stop_task(task_id)
+            progress.advance(overall_task)
+            return {
+                "created": 0,
+                "updated": 0,
+                "skipped": 0,
+                "download_bytes": 0,
+                "server_label": "",
+                "success": False,
+            }
+        finally:
+            # Close database connection for this thread
+            connection.close()
+
+    def _process_overpass_parallel(
+        self,
+        region: str,
+        category_names: list[str],
+        osm_org: Organization,
+        run_start: datetime,
+        workers: int = 4,
+        limit: int | None = None,
+        overpass_server: str | None = None,
+        overpass_queries_file: str | None = None,
+        since: str | None = None,
+        dry_run: bool = False,
+    ):
+        """Process Overpass mappings in parallel using ThreadPoolExecutor.
+
+        Args:
+            workers: Number of parallel workers
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import time
+        from rich.console import Console
+        from rich.progress import (
+            Progress,
+            SpinnerColumn,
+            BarColumn,
+            TextColumn,
+            TimeElapsedColumn,
+        )
+        from rich.panel import Panel
+
+        console = Console()
+
+        # Store region for use in _guess_country_code during place creation
+        self._current_region = region.upper()
+
+        # Parse since parameter
+        since_dt = None
+        if since:
+            try:
+                since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
+            except ValueError:
+                console.print(f"[red]Invalid --since format: {since}[/red]")
+                return
+
+        # Load queries
+        queries_md = {}
+        if overpass_queries_file:
+            queries_md = self._load_queries_file(overpass_queries_file)
+
+        # Determine API endpoint
+        api_endpoint = None
+        server_name = "Server Pool (A/B/C)"
+        if overpass_server:
+            api_endpoint = overpass_server
+            server_name = overpass_server.split("/")[2]
+
+        headers = {"User-Agent": "Wodore/1.0 (https://wodore.com) Python/httpx"}
+
+        # Get categories and build mapping list
+        categories = get_categories(category_names)
+        all_mappings = []
+        for cat in categories:
+            for mapping in cat.mappings:
+                all_mappings.append((cat.category, mapping))
+
+        total_mappings = len(all_mappings)
+
+        # Build server pool display
+        if api_endpoint:
+            server_display = f"Server: {server_name}"
+        else:
+            server_lines = "Server Pool:\n"
+            for label, url in OVERPASS_SERVERS:
+                server_lines += f"  [{label}] {url.split('/')[2]}\n"
+            server_display = server_lines.rstrip()
+
+        # Print header
+        header_text = f"OSM Import Pipeline: [bold cyan]{region.upper()}[/bold cyan]\n"
+        header_text += server_display + "\n"
+        header_text += f"Workers: {workers} | Mappings: {total_mappings}"
+        if since:
+            header_text += f" | Incremental: since {since}"
+        if dry_run:
+            header_text += " | [yellow]DRY RUN[/yellow]"
+        console.print(Panel(header_text, expand=False))
+
+        # Print symbols footer
+        console.print(
+            "[dim]Symbols: ✓ = completed | ✗ = failed | +N = created | ~N = updated | ·N = skipped | ↓N (KB) = downloaded[/dim]\n"
+        )
+
+        # Initialize counters
+        total_created = 0
+        total_updated = 0
+        total_skipped = 0
+        total_download_bytes = 0
+
+        # Create progress display - show all tasks without filtering
+        # Rich's get_renderable_tasks method limits visible tasks by default, so we override it
+        class ShowAllProgress(Progress):
+            def get_renderable_tasks(self):
+                """Override to show all tasks without any filtering or limits."""
+                # Deduplicate tasks by task_id to prevent duplicates in display
+                seen_ids = set()
+                unique_tasks = []
+                for task in self.tasks:
+                    if task.id not in seen_ids:
+                        seen_ids.add(task.id)
+                        unique_tasks.append(task)
+                return unique_tasks
+
+        with (
+            ShowAllProgress(
+                SpinnerColumn(),
+                TextColumn("[bold blue]{task.fields[mapping]:<35}", justify="left"),
+                BarColumn(bar_width=30, complete_style="cyan", finished_style="green"),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                TimeElapsedColumn(),
+                TextColumn("•"),
+                TextColumn("{task.fields[status]}"),
+                TextColumn("[dim]{task.fields[server]:>6}[/dim]"),
+                console=console,
+                expand=False,
+                refresh_per_second=2,  # Reduce refresh rate further to minimize rendering glitches
+            ) as progress
+        ):
+            # Add overall progress task
+            overall_task = progress.add_task(
+                "Overall",
+                total=total_mappings,
+                mapping="[bold]Overall Progress[/bold]",
+                status="",
+                server="",
+            )
+
+            # Use ThreadPoolExecutor for parallel processing
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                # Submit tasks with staggered start
+                futures = []
+                num_servers = len(OVERPASS_SERVERS)
+
+                for idx, mapping_data in enumerate(all_mappings):
+                    # Staggered start logic:
+                    # - First batch (0 to num_servers-1): start immediately
+                    # - Second batch (num_servers to 2*num_servers-1): delay 2 seconds
+                    # - Rest: no delay (will queue naturally)
+                    if idx >= num_servers and idx < 2 * num_servers:
+                        time.sleep(2)
+
+                    future = executor.submit(
+                        self._process_mapping_worker,
+                        worker_id=idx,  # Use idx as worker_id for server rotation
+                        mapping_data=mapping_data,
+                        region=region,
+                        osm_org=osm_org,
+                        run_start=run_start,
+                        category_names=category_names,
+                        api_endpoint=api_endpoint,
+                        headers=headers,
+                        queries_md=queries_md,
+                        since=since_dt,
+                        limit=limit,
+                        dry_run=dry_run,
+                        console=console,
+                        progress=progress,
+                        overall_task=overall_task,
+                    )
+                    futures.append(future)
+
+                # Collect results as they complete
+                for future in as_completed(futures):
+                    try:
+                        result = future.result()
+                        total_created += result["created"]
+                        total_updated += result["updated"]
+                        total_skipped += result["skipped"]
+                        total_download_bytes += result["download_bytes"]
+                    except Exception as e:
+                        console.log(f"[red]Worker exception: {e}[/red]")
+
+        # Set instance variables for handle method to use
+        self._pipeline_created = total_created
+        self._pipeline_updated = total_updated
+        self._pipeline_skipped = total_skipped
 
     def _process_overpass_pipeline(
         self,
@@ -1324,6 +1708,9 @@ class Command(BaseCommand):
         from rich.panel import Panel
 
         console = Console()
+
+        # Store region for use in _guess_country_code during place creation
+        self._current_region = region.upper()
 
         # Open queries file if specified
         queries_md = None
@@ -1388,6 +1775,7 @@ class Command(BaseCommand):
             TimeElapsedColumn(),
             TextColumn("•"),
             TextColumn("{task.fields[status]}"),
+            TextColumn("[dim]{task.fields[server]:>6}[/dim]"),
             console=console,
             expand=False,
         ) as progress:
@@ -1397,6 +1785,7 @@ class Command(BaseCommand):
                 total=total_mappings,
                 mapping="[bold]Overall Progress[/bold]",
                 status="",
+                server="",
             )
 
             # Track completed tasks
@@ -1412,20 +1801,23 @@ class Command(BaseCommand):
                     total=3,  # 3 stages: fetch, process, import
                     mapping=f"{mapping.category_slug}",
                     status="[yellow]fetching...[/yellow]",
+                    server="",
                 )
 
                 # PIPELINE STAGE 1: FETCH
-                elements, download_size = self._fetch_mapping_overpass(
-                    region=region,
-                    mapping=mapping,
-                    api_endpoint=api_endpoint,
-                    headers=headers,
-                    queries_md=queries_md,
-                    since=since,
-                    limit=limit,
-                    console=console,
+                elements, download_size, server_label, element_count = (
+                    self._fetch_mapping_overpass(
+                        region=region,
+                        mapping=mapping,
+                        api_endpoint=api_endpoint,
+                        headers=headers,
+                        queries_md=queries_md,
+                        since=since,
+                        limit=limit,
+                        console=console,
+                    )
                 )
-                progress.update(current_task, completed=1)
+                progress.update(current_task, completed=1, server=server_label)
 
                 if elements is None:
                     progress.update(
@@ -1487,18 +1879,15 @@ class Command(BaseCommand):
                     changes_parts.append(f"·{skipped}")
                 changes_str = " ".join(changes_parts) if changes_parts else "·0"
 
-                # Show downloaded count (can differ from imported with limit or filtering)
-                total_processed = created + updated + skipped
-                downloaded_str = (
-                    f"↓{len(amenities)}" if len(amenities) != total_processed else ""
-                )
+                # Show downloaded count with size (element_count is actual downloaded)
+                downloaded_str = f"↓{element_count} ({size_str})"
 
                 # Update with completion status and mark as done
                 progress.update(
                     current_task,
                     completed=3,
                     mapping=f"{mapping.category_slug}",
-                    status=f"[green]✓[/green] {changes_str} {downloaded_str} │ {size_str} │ {mapping_time:.1f}s",
+                    status=f"[green]✓[/green] {changes_str} {downloaded_str} │ {mapping_time:.1f}s",
                 )
 
                 # Stop the spinner for completed task
@@ -1540,7 +1929,7 @@ class Command(BaseCommand):
         limit: int | None,
         console=None,
         server_start_index: int = 0,
-    ) -> tuple[list[dict] | None, int, str]:
+    ) -> tuple[list[dict] | None, int, str, int]:
         """Fetch elements for a single mapping from Overpass API.
 
         Args:
@@ -1602,7 +1991,7 @@ class Command(BaseCommand):
                     filters_parts.append(f'way{newer_filter}["{filter_item}"](area.a);')
 
         if not filters_parts:
-            return [], 0
+            return [], 0, ""
 
         # Build Overpass QL query
         query = f"""
@@ -1619,60 +2008,70 @@ class Command(BaseCommand):
             queries_md.write(f"```\n[out:json];\n{query.strip()}\n```\n\n")
             queries_md.flush()
 
-        # Retry logic for rate limiting
-        max_retries = 3
+        # Try each server in rotation with retry logic
+        max_retries_per_server = 2
         retry_delay = 5
 
-        for attempt in range(max_retries):
-            try:
-                # Make direct HTTP request to Overpass API
-                full_query = f"[out:json][timeout:300];{query}"
+        for server_label, server_url in servers_to_try:
+            for attempt in range(max_retries_per_server):
+                try:
+                    # Make direct HTTP request to Overpass API
+                    full_query = f"[out:json][timeout:300];{query}"
 
-                response = httpx.post(
-                    api_endpoint,
-                    data={"data": full_query},
-                    headers=headers,
-                    timeout=300.0,
-                )
-                response.raise_for_status()
+                    response = httpx.post(
+                        server_url,
+                        data={"data": full_query},
+                        headers=headers,
+                        timeout=300.0,
+                    )
+                    response.raise_for_status()
 
-                # Get raw response text before parsing
-                response_text = response.text
+                    # Get raw response text before parsing
+                    response_text = response.text
 
-                # Calculate download size from uncompressed response text
-                download_size = len(response_text.encode("utf-8"))
+                    # Calculate download size from uncompressed response text
+                    download_size = len(response_text.encode("utf-8"))
 
-                result = response.json()
+                    result = response.json()
 
-                # Get elements from result
-                all_elements = result.get("elements", [])
+                    # Get elements from result
+                    all_elements = result.get("elements", [])
+                    element_count = len(all_elements)
 
-                # Apply limit if specified
-                if limit:
-                    return all_elements[:limit], download_size
-                return all_elements, download_size
+                    # Apply limit if specified
+                    if limit:
+                        return (
+                            all_elements[:limit],
+                            download_size,
+                            server_label,
+                            element_count,
+                        )
+                    return all_elements, download_size, server_label, element_count
 
-            except Exception as e:
-                # Check if it's a retryable error
-                is_rate_limit = isinstance(
-                    e, httpx.HTTPStatusError
-                ) and e.response.status_code in [429, 503, 504]
-                is_json_error = isinstance(e, json.JSONDecodeError)
+                except Exception as e:
+                    # Check if it's a retryable error
+                    is_rate_limit = isinstance(
+                        e, httpx.HTTPStatusError
+                    ) and e.response.status_code in [429, 503, 504]
+                    is_json_error = isinstance(e, json.JSONDecodeError)
 
-                if (is_rate_limit or is_json_error) and attempt < max_retries - 1:
-                    wait_time = retry_delay * (2**attempt)  # Exponential backoff
-                    # Sleep and retry silently - status is shown in progress bar
-                    time.sleep(wait_time)
-                    continue
+                    if (
+                        is_rate_limit or is_json_error
+                    ) and attempt < max_retries_per_server - 1:
+                        wait_time = retry_delay * (2**attempt)  # Exponential backoff
+                        # Sleep and retry silently - status is shown in progress bar
+                        time.sleep(wait_time)
+                        continue
 
-                # Log error to console for debugging
-                if console:
-                    error_msg = f"[red]Error fetching {mapping.category_slug}: {type(e).__name__}: {str(e)[:100]}[/red]"
-                    console.log(error_msg)
+                    # This attempt failed, break to try next server
+                    break
 
-                return None, 0
+        # All servers failed - log error
+        if console:
+            error_msg = f"[red]All servers failed for {mapping.category_slug}[/red]"
+            console.log(error_msg)
 
-        return None, 0
+        return None, 0, "", 0
 
     def _process_elements(
         self,
