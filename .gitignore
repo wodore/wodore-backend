@@ -11,6 +11,8 @@ slim.report.json
 SUMMARY_*.md
 AGENT/
 tmp/
+.geoplaces_osm_import.json
+
 
 
 # Static folders

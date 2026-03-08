@@ -13,6 +13,7 @@ Usage:
 """
 
 import tempfile
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -39,6 +40,22 @@ OVERPASS_SERVERS = [
     ("B", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"),
     ("C", "https://overpass-api.de/api/interpreter"),
 ]
+
+
+@dataclass
+class OSMElement:
+    """Unified schema for OSM elements from both JSON and XML diff responses."""
+
+    osm_id: str  # e.g., "node/123456" or "way/789"
+    osm_type: str  # "node" or "way"
+    lat: float
+    lon: float
+    tags: dict
+    action: (
+        str | None
+    )  # "create", "modify", "delete" for diff mode; None for full import
+    version: int = 0  # OSM version number
+    timestamp: str = ""  # OSM timestamp
 
 
 class OSMHandler(osmium.SimpleHandler):
@@ -228,6 +245,12 @@ class Command(BaseCommand):
             type=str,
             help="Only fetch elements modified since timestamp (ISO format: 2026-03-08T00:00:00Z) or 'auto' to use last import timestamp",
         )
+        parser.add_argument(
+            "--state-file",
+            type=str,
+            default=None,
+            help="Path to state JSON file for tracking per-mapping timestamps (default: <data-dir>/.geoplaces_osm_import.json)",
+        )
 
     def handle(self, *args, **options):
         """Main command execution."""
@@ -241,21 +264,45 @@ class Command(BaseCommand):
         overpass_server = options.get("overpass_server")
         overpass_queries_file = options.get("overpass_queries")
         since = options.get("since")
+        state_file_path = options.get("state_file")
         run_start = timezone.now()
 
-        # Handle --since auto: load last import timestamp
-        timestamp_file = (
-            Path(data_dir or "tmp")
-            / f".last_import_{region.replace('/', '_')}.timestamp"
-        )
+        # Determine state file location
+        if state_file_path:
+            state_file = Path(state_file_path)
+        else:
+            state_file = Path(data_dir or ".") / ".geoplaces_osm_import.json"
+
+        # Load state for --since auto support
+        state = self._load_state(state_file)
+
+        # Handle --since auto: use last import timestamp from state
+        # For now, use global timestamp (later we can use per-mapping timestamps)
         if since == "auto":
-            if timestamp_file.exists():
-                since = timestamp_file.read_text().strip()
-                self.stdout.write(f"Using --since auto: {since}")
+            # Try to get the most recent timestamp from any mapping in this country
+            country_state = state.get("countries", {}).get(region.upper(), {})
+            mappings_state = country_state.get("mappings", {})
+            if mappings_state:
+                # Get the most recent timestamp across all mappings
+                timestamps = [
+                    m["last_import"]
+                    for m in mappings_state.values()
+                    if "last_import" in m
+                ]
+                if timestamps:
+                    since = max(timestamps)  # Use most recent
+                    self.stdout.write(f"Using --since auto: {since}")
+                else:
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f"No previous import timestamp found in {state_file}, importing all data"
+                        )
+                    )
+                    since = None
             else:
                 self.stdout.write(
                     self.style.WARNING(
-                        f"No previous import timestamp found at {timestamp_file}, importing all data"
+                        f"No previous import found for {region} in {state_file}, importing all data"
                     )
                 )
                 since = None
@@ -345,6 +392,8 @@ class Command(BaseCommand):
                     overpass_queries_file=overpass_queries_file,
                     since=since,
                     dry_run=dry_run,
+                    state=state,
+                    state_file=state_file,
                 )
                 success = True
             else:
@@ -359,6 +408,8 @@ class Command(BaseCommand):
                     overpass_queries_file=overpass_queries_file,
                     since=since,
                     dry_run=dry_run,
+                    state=state,
+                    state_file=state_file,
                 )
 
             if not success:
@@ -371,29 +422,32 @@ class Command(BaseCommand):
             created_count = getattr(self, "_pipeline_created", 0)
             updated_count = getattr(self, "_pipeline_updated", 0)
             skipped_count = getattr(self, "_pipeline_skipped", 0)
+            deleted_count = getattr(self, "_pipeline_deleted", 0)
 
             # Cleanup deleted places (skip if using --since or --limit as it's a partial import)
+            # Note: If using diff mode (--since), deletions are already handled via action="delete"
             if not dry_run and not since and not limit:
                 self.stdout.write("\nCleaning up deleted places...")
-                deleted_count = self._cleanup_deleted_places(
+                cleanup_deleted_count = self._cleanup_deleted_places(
                     osm_org, run_start, category_names, region
                 )
+                deleted_count += cleanup_deleted_count
                 self.stdout.write(
-                    f"Deactivated {deleted_count} places no longer in OSM"
+                    f"Deactivated {cleanup_deleted_count} places no longer in OSM"
                 )
             else:
-                deleted_count = 0
                 if since or limit:
                     self.stdout.write(
                         "\n[Skipping cleanup - partial import with --since or --limit]"
                     )
 
-            # Save timestamp for --since auto
+            # Save state with per-mapping timestamps
             if not dry_run:
-                timestamp_file.parent.mkdir(parents=True, exist_ok=True)
-                current_timestamp = run_start.isoformat()
-                timestamp_file.write_text(current_timestamp)
-                self.stdout.write(f"Saved import timestamp to: {timestamp_file}")
+                # Update state for all processed mappings
+                # Note: Individual mapping counts will be updated by the worker/pipeline
+                # Here we just ensure the file is saved
+                self._save_state(state_file, state)
+                self.stdout.write(f"Saved import state to: {state_file}")
 
             # Summary
             self.stdout.write(self.style.SUCCESS("\nImport complete!"))
@@ -556,12 +610,10 @@ class Command(BaseCommand):
                 except OSError:
                     pass  # Directory not empty, skip
 
-        # Save timestamp for --since auto if using Overpass
+        # Save state for --since auto if using Overpass
         if use_overpass and not dry_run:
-            timestamp_file.parent.mkdir(parents=True, exist_ok=True)
-            current_timestamp = run_start.isoformat()
-            timestamp_file.write_text(current_timestamp)
-            self.stdout.write(f"Saved import timestamp to: {timestamp_file}")
+            self._save_state(state_file, state)
+            self.stdout.write(f"Saved import state to: {state_file}")
 
         # Summary
         self.stdout.write(self.style.SUCCESS("\nImport complete!"))
@@ -570,6 +622,74 @@ class Command(BaseCommand):
         self.stdout.write(f"  Skipped: {skipped_count}")
         if not dry_run:
             self.stdout.write(f"  Deactivated: {deleted_count}")
+
+    def _load_state(self, state_file: Path) -> dict:
+        """Load import state from JSON file.
+
+        Returns dict with structure:
+        {
+            "countries": {
+                "CH": {
+                    "mappings": {
+                        "groceries.supermarket": {
+                            "last_import": "2026-03-08T10:30:00Z",
+                            "last_count": 1234
+                        }
+                    }
+                }
+            }
+        }
+        """
+        if state_file.exists():
+            import json
+
+            try:
+                with open(state_file, "r") as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, IOError):
+                # Return empty state if file is corrupted
+                return {"countries": {}}
+        return {"countries": {}}
+
+    def _save_state(self, state_file: Path, state: dict) -> None:
+        """Save import state to JSON file."""
+        import json
+
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(state_file, "w") as f:
+            json.dump(state, f, indent=2)
+
+    def _update_mapping_state(
+        self,
+        state: dict,
+        country: str,
+        mapping_slug: str,
+        timestamp: str,
+        count: int = 0,
+    ) -> None:
+        """Update state for a specific country/mapping combination."""
+        country = country.upper()
+
+        if country not in state["countries"]:
+            state["countries"][country] = {"mappings": {}}
+
+        if "mappings" not in state["countries"][country]:
+            state["countries"][country]["mappings"] = {}
+
+        state["countries"][country]["mappings"][mapping_slug] = {
+            "last_import": timestamp,
+            "last_count": count,
+        }
+
+    def _get_mapping_timestamp(
+        self, state: dict, country: str, mapping_slug: str
+    ) -> str | None:
+        """Get last import timestamp for a specific country/mapping."""
+        country = country.upper()
+        try:
+            return state["countries"][country]["mappings"][mapping_slug]["last_import"]
+        except KeyError:
+            return None
 
     def _get_or_download_pbf(self, region: str, data_dir: str | None) -> Path:
         """Get existing PBF file or download if not present."""
@@ -887,6 +1007,39 @@ class Command(BaseCommand):
             self._add_external_link(
                 place, osm_edit_url, "osm_edit", mapcomplete_org, data["name"]
             )
+
+    def _deactivate_by_osm_id(self, osm_id: str, osm_org: Organization) -> bool:
+        """Deactivate a place by its OSM ID.
+
+        Args:
+            osm_id: OSM ID in format "node/123456" or "way/789"
+            osm_org: OSM organization
+
+        Returns:
+            True if place was deactivated, False if not found or already inactive
+        """
+        from server.apps.geometries.models import GeoPlaceSourceAssociation
+
+        try:
+            # Find the place by OSM ID
+            association = GeoPlaceSourceAssociation.objects.select_related(
+                "geo_place"
+            ).get(
+                organization=osm_org,
+                source_id=osm_id,
+            )
+
+            # Only deactivate if currently active
+            if association.geo_place.is_active:
+                association.geo_place.is_active = False
+                association.geo_place.review_status = "review"
+                association.geo_place.save(update_fields=["is_active", "review_status"])
+                return True
+
+            return False
+        except GeoPlaceSourceAssociation.DoesNotExist:
+            # Place not in database
+            return False
 
     def _cleanup_deleted_places(
         self,
@@ -1368,7 +1521,7 @@ class Command(BaseCommand):
             total=3,  # 3 stages: fetch, process, import
             mapping=f"{mapping.category_slug}",
             status=f"[yellow]fetching from {server_letter}...[/yellow]",
-            server=f"[{server_letter}]",
+            server=f"[dim][{server_letter}][/dim]",
         )
 
         try:
@@ -1389,7 +1542,10 @@ class Command(BaseCommand):
             # Show download stats immediately after fetch
             fetch_status = f"[dim]↓{element_count} ({download_size // 1024}KB)[/dim]"
             progress.update(
-                task_id, completed=1, server=f"[{server_label}]", status=fetch_status
+                task_id,
+                completed=1,
+                server=f"[dim][{server_label}][/dim]",
+                status=fetch_status,
             )
 
             if elements is None:
@@ -1405,8 +1561,10 @@ class Command(BaseCommand):
                     "created": 0,
                     "updated": 0,
                     "skipped": 0,
+                    "deleted": 0,
                     "download_bytes": 0,
                     "server_label": server_label,
+                    "mapping_slug": mapping.category_slug,
                     "success": False,
                 }
 
@@ -1423,7 +1581,7 @@ class Command(BaseCommand):
             # PIPELINE STAGE 3: IMPORT
             importing_status = f"[magenta]importing...[/magenta] [dim]↓{element_count} ({download_size // 1024}KB)[/dim]"
             progress.update(task_id, status=importing_status)
-            created, updated, skipped = self._import_amenities(
+            created, updated, skipped, deleted = self._import_amenities(
                 amenities=amenities,
                 osm_org=osm_org,
                 run_start=run_start,
@@ -1437,6 +1595,8 @@ class Command(BaseCommand):
                 status_parts.append(f"[green]+{created}[/green]")
             if updated:
                 status_parts.append(f"[yellow]~{updated}[/yellow]")
+            if deleted:
+                status_parts.append(f"[red]-{deleted}[/red]")
             if skipped:
                 status_parts.append(f"[dim]·{skipped}[/dim]")
             if download_size and element_count:
@@ -1449,7 +1609,7 @@ class Command(BaseCommand):
                 if status_parts
                 else "[green]✓[/green]"
             )
-            progress.update(task_id, status=status)
+            progress.update(task_id, status=status, server="")  # Clear server label
             progress.stop_task(task_id)
             progress.advance(overall_task)
 
@@ -1457,8 +1617,10 @@ class Command(BaseCommand):
                 "created": created,
                 "updated": updated,
                 "skipped": skipped,
+                "deleted": deleted,
                 "download_bytes": download_size,
                 "server_label": server_label,
+                "mapping_slug": mapping.category_slug,
                 "success": True,
             }
 
@@ -1475,8 +1637,10 @@ class Command(BaseCommand):
                 "created": 0,
                 "updated": 0,
                 "skipped": 0,
+                "deleted": 0,
                 "download_bytes": 0,
                 "server_label": "",
+                "mapping_slug": "",
                 "success": False,
             }
         finally:
@@ -1495,6 +1659,8 @@ class Command(BaseCommand):
         overpass_queries_file: str | None = None,
         since: str | None = None,
         dry_run: bool = False,
+        state: dict | None = None,
+        state_file: Path | None = None,
     ):
         """Process Overpass mappings in parallel using ThreadPoolExecutor.
 
@@ -1578,6 +1744,7 @@ class Command(BaseCommand):
         total_created = 0
         total_updated = 0
         total_skipped = 0
+        total_deleted = 0
         total_download_bytes = 0
 
         # Create progress display - show all tasks without filtering
@@ -1602,8 +1769,8 @@ class Command(BaseCommand):
                 TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
                 TimeElapsedColumn(),
                 TextColumn("•"),
-                TextColumn("{task.fields[status]}"),
-                TextColumn("[dim]{task.fields[server]:>6}[/dim]"),
+                TextColumn("{task.fields[status]}", markup=True),
+                TextColumn("{task.fields[server]}"),
                 console=console,
                 expand=False,
                 refresh_per_second=2,  # Reduce refresh rate further to minimize rendering glitches
@@ -1659,7 +1826,21 @@ class Command(BaseCommand):
                         total_created += result["created"]
                         total_updated += result["updated"]
                         total_skipped += result["skipped"]
+                        total_deleted += result.get("deleted", 0)
                         total_download_bytes += result["download_bytes"]
+
+                        # Update state for this mapping
+                        if state is not None and result.get("success"):
+                            mapping_slug = result.get("mapping_slug")
+                            if mapping_slug:
+                                count = result["created"] + result["updated"]
+                                self._update_mapping_state(
+                                    state,
+                                    region,
+                                    mapping_slug,
+                                    run_start.isoformat(),
+                                    count,
+                                )
                     except Exception as e:
                         console.log(f"[red]Worker exception: {e}[/red]")
 
@@ -1667,6 +1848,7 @@ class Command(BaseCommand):
         self._pipeline_created = total_created
         self._pipeline_updated = total_updated
         self._pipeline_skipped = total_skipped
+        self._pipeline_deleted = total_deleted
 
     def _process_overpass_pipeline(
         self,
@@ -1679,6 +1861,8 @@ class Command(BaseCommand):
         overpass_queries_file: str | None = None,
         since: str | None = None,
         dry_run: bool = False,
+        state: dict | None = None,
+        state_file: Path | None = None,
     ) -> bool:
         """Process Overpass data using pipeline approach (fetch → process → import per mapping).
 
@@ -1741,6 +1925,7 @@ class Command(BaseCommand):
         self._pipeline_created = 0
         self._pipeline_updated = 0
         self._pipeline_skipped = 0
+        self._pipeline_deleted = 0
         total_download_bytes = 0
 
         # Get categories and build mapping list
@@ -1774,8 +1959,8 @@ class Command(BaseCommand):
             TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
             TimeElapsedColumn(),
             TextColumn("•"),
-            TextColumn("{task.fields[status]}"),
-            TextColumn("[dim]{task.fields[server]:>6}[/dim]"),
+            TextColumn("{task.fields[status]}", markup=True),
+            TextColumn("{task.fields[server]}"),
             console=console,
             expand=False,
         ) as progress:
@@ -1847,7 +2032,7 @@ class Command(BaseCommand):
 
                 # PIPELINE STAGE 3: IMPORT
                 progress.update(current_task, status="[magenta]importing...[/magenta]")
-                created, updated, skipped = self._import_amenities(
+                created, updated, skipped, deleted = self._import_amenities(
                     amenities=amenities,
                     osm_org=osm_org,
                     run_start=run_start,
@@ -1858,6 +2043,7 @@ class Command(BaseCommand):
                 self._pipeline_created += created
                 self._pipeline_updated += updated
                 self._pipeline_skipped += skipped
+                self._pipeline_deleted = getattr(self, "_pipeline_deleted", 0) + deleted
 
                 mapping_time = time.time() - mapping_start
 
@@ -1875,6 +2061,8 @@ class Command(BaseCommand):
                     changes_parts.append(f"[green]+{created}[/green]")
                 if updated:
                     changes_parts.append(f"[yellow]~{updated}[/yellow]")
+                if deleted:
+                    changes_parts.append(f"[red]-{deleted}[/red]")
                 if skipped:
                     changes_parts.append(f"·{skipped}")
                 changes_str = " ".join(changes_parts) if changes_parts else "·0"
@@ -1896,6 +2084,17 @@ class Command(BaseCommand):
 
                 progress.advance(overall_task)
 
+                # Update state for this mapping
+                if state is not None:
+                    count = created + updated
+                    self._update_mapping_state(
+                        state,
+                        region,
+                        mapping.category_slug,
+                        run_start.isoformat(),
+                        count,
+                    )
+
         # Close queries file
         if queries_md:
             queries_md.close()
@@ -1906,17 +2105,122 @@ class Command(BaseCommand):
         total_download_mb = total_download_bytes / (1024 * 1024)
 
         console.print("\n[bold green]✓ Import complete![/bold green]")
-        console.print(
-            f"  Created: [green]{self._pipeline_created}[/green] | "
-            f"Updated: [yellow]{self._pipeline_updated}[/yellow] | "
-            f"Skipped: {self._pipeline_skipped}"
-        )
+        summary_parts = [
+            f"Created: [green]{self._pipeline_created}[/green]",
+            f"Updated: [yellow]{self._pipeline_updated}[/yellow]",
+        ]
+        if self._pipeline_deleted:
+            summary_parts.append(f"Deleted: [red]{self._pipeline_deleted}[/red]")
+        summary_parts.append(f"Skipped: {self._pipeline_skipped}")
+        console.print("  " + " | ".join(summary_parts))
         console.print(
             f"  Downloaded: [cyan]{total_download_mb:.2f} MB[/cyan] | "
             f"Runtime: [cyan]{total_time:.1f}s[/cyan]"
         )
 
         return True
+
+    def _process_full_json(self, json_data: dict) -> list[OSMElement]:
+        """Convert JSON response to OSMElement list.
+
+        All elements get action=None since we don't know if they changed.
+
+        Args:
+            json_data: Parsed JSON response from Overpass API
+
+        Returns:
+            List of OSMElement with action=None
+        """
+        elements = []
+        for elem in json_data.get("elements", []):
+            # Get coordinates
+            if elem["type"] == "node":
+                lat = elem.get("lat")
+                lon = elem.get("lon")
+            else:  # way or relation
+                # Overpass returns center for ways when using 'out center'
+                center = elem.get("center", {})
+                lat = center.get("lat")
+                lon = center.get("lon")
+
+            if lat is None or lon is None:
+                continue  # Skip if no coordinates
+
+            elements.append(
+                OSMElement(
+                    osm_id=f"{elem['type']}/{elem['id']}",
+                    osm_type=elem["type"],
+                    lat=lat,
+                    lon=lon,
+                    tags=elem.get("tags", {}),
+                    action=None,  # Full import - don't know if changed
+                    version=elem.get("version", 0),
+                    timestamp=elem.get("timestamp", ""),
+                )
+            )
+
+        return elements
+
+    def _process_diff_xml(self, xml_data: str) -> list[OSMElement]:
+        """Convert XML diff response to OSMElement list.
+
+        Parses <action type="create|modify|delete"> elements from Overpass diff.
+
+        Args:
+            xml_data: Raw XML string from Overpass API diff mode
+
+        Returns:
+            List of OSMElement with action='create', 'modify', or 'delete'
+        """
+        import xml.etree.ElementTree as ET
+
+        elements = []
+        root = ET.fromstring(xml_data)
+
+        for action_elem in root.findall("action"):
+            action_type = action_elem.get("type")  # create, modify, delete
+
+            # Get the element (could be in <new> or <old> tag)
+            elem_container = action_elem.find("new") or action_elem.find("old")
+            if elem_container is None:
+                continue
+
+            osm_elem = elem_container.find("node") or elem_container.find("way")
+            if osm_elem is None:
+                continue
+
+            # Extract tags
+            tags = {}
+            for tag in osm_elem.findall("tag"):
+                tags[tag.get("k")] = tag.get("v")
+
+            # Get coordinates
+            if osm_elem.tag == "node":
+                lat = float(osm_elem.get("lat"))
+                lon = float(osm_elem.get("lon"))
+            else:  # way
+                # For ways, use center from <center> tag
+                center = osm_elem.find("center")
+                if center is not None:
+                    lat = float(center.get("lat"))
+                    lon = float(center.get("lon"))
+                else:
+                    continue  # Skip ways without center
+
+            elements.append(
+                OSMElement(
+                    osm_id=f"{osm_elem.tag}/{osm_elem.get('id')}",
+                    osm_type=osm_elem.tag,
+                    lat=lat,
+                    lon=lon,
+                    tags=tags,
+                    action=action_type,  # create, modify, delete
+                    version=int(osm_elem.get("version", 0)),
+                    timestamp=osm_elem.get("timestamp", ""),
+                )
+            )
+
+        return elements
 
     def _fetch_mapping_overpass(
         self,
@@ -1929,14 +2233,14 @@ class Command(BaseCommand):
         limit: int | None,
         console=None,
         server_start_index: int = 0,
-    ) -> tuple[list[dict] | None, int, str, int]:
+    ) -> tuple[list[OSMElement] | None, int, str, int]:
         """Fetch elements for a single mapping from Overpass API.
 
         Args:
             server_start_index: Index to start server rotation (for load balancing)
 
         Returns:
-            Tuple of (list of raw Overpass elements or None on error, download size in bytes, server label used)
+            Tuple of (list of OSMElement or None on error, download size in bytes, server label used, element count)
         """
         import httpx
         import time
@@ -1956,8 +2260,10 @@ class Command(BaseCommand):
         # Build Overpass query from osm_filters
         filters_parts = []
 
-        # Build newer filter if needed
+        # Build newer filter if needed (only for non-diff mode)
+        # For diff mode, the diff directive handles time filtering
         newer_filter = f'(newer:"{since}")' if since else ""
+        use_diff_mode = bool(since)  # Use diff mode when since is provided
 
         for filter_item in mapping.osm_filters:
             if isinstance(filter_item, tuple):
@@ -1991,7 +2297,7 @@ class Command(BaseCommand):
                     filters_parts.append(f'way{newer_filter}["{filter_item}"](area.a);')
 
         if not filters_parts:
-            return [], 0, ""
+            return [], 0, "", 0
 
         # Build Overpass QL query
         query = f"""
@@ -2004,8 +2310,12 @@ class Command(BaseCommand):
 
         # Write query to file if specified
         if queries_md:
+            output_format = "xml" if use_diff_mode else "json"
+            diff_directive = f'[diff:"{since}"]' if use_diff_mode else ""
             queries_md.write(f"## {mapping.category_slug}\n\n")
-            queries_md.write(f"```\n[out:json];\n{query.strip()}\n```\n\n")
+            queries_md.write(
+                f"```\n[out:{output_format}]{diff_directive};\n{query.strip()}\n```\n\n"
+            )
             queries_md.flush()
 
         # Try each server in rotation with retry logic
@@ -2015,8 +2325,13 @@ class Command(BaseCommand):
         for server_label, server_url in servers_to_try:
             for attempt in range(max_retries_per_server):
                 try:
-                    # Make direct HTTP request to Overpass API
-                    full_query = f"[out:json][timeout:300];{query}"
+                    # Build query with appropriate output format
+                    if use_diff_mode:
+                        # XML diff mode for incremental updates
+                        full_query = f'[out:xml][diff:"{since}"][timeout:300];{query}'
+                    else:
+                        # JSON mode for full imports
+                        full_query = f"[out:json][timeout:300];{query}"
 
                     response = httpx.post(
                         server_url,
@@ -2032,10 +2347,15 @@ class Command(BaseCommand):
                     # Calculate download size from uncompressed response text
                     download_size = len(response_text.encode("utf-8"))
 
-                    result = response.json()
+                    # Parse response based on mode
+                    if use_diff_mode:
+                        # Parse XML diff response
+                        all_elements = self._process_diff_xml(response_text)
+                    else:
+                        # Parse JSON response
+                        result = response.json()
+                        all_elements = self._process_full_json(result)
 
-                    # Get elements from result
-                    all_elements = result.get("elements", [])
                     element_count = len(all_elements)
 
                     # Apply limit if specified
@@ -2075,14 +2395,14 @@ class Command(BaseCommand):
 
     def _process_elements(
         self,
-        elements: list[dict],
+        elements: list[OSMElement],
         mapping,
         category_names: list[str],
     ) -> list[dict]:
-        """Process Overpass elements into amenity data format.
+        """Process OSMElement list into amenity data format.
 
         Returns:
-            List of amenity dicts
+            List of amenity dicts with 'action' field from OSMElement
         """
         from server.apps.geometries.config.osm_categories import match_tags_to_category
 
@@ -2090,7 +2410,7 @@ class Command(BaseCommand):
 
         for element in elements:
             # Pre-process tags if hook exists
-            tags = element.get("tags", {})
+            tags = element.tags.copy()
             if mapping.pre_process:
                 tags = mapping.pre_process(tags)
 
@@ -2101,24 +2421,19 @@ class Command(BaseCommand):
 
             category_slug, _, _ = match_result
 
-            # Get location (Overpass returns 'center' for ways with 'out center')
-            if element["type"] == "node":
-                lat = element["lat"]
-                lon = element["lon"]
-            elif element["type"] == "way":
-                # Use center provided by Overpass
-                center = element.get("center")
-                if not center:
-                    continue
-                lat = center["lat"]
-                lon = center["lon"]
-            else:
-                continue
+            # OSMElement already has lat/lon extracted
+            lat = element.lat
+            lon = element.lon
+
+            # Extract osm_id from "node/123" or "way/456" format
+            osm_type = element.osm_type
+            osm_id_str = element.osm_id.split("/")[-1]  # Get numeric part
+            osm_id = int(osm_id_str)
 
             # Extract amenity data
             data = {
-                "osm_type": element["type"],
-                "osm_id": element["id"],
+                "osm_type": osm_type,
+                "osm_id": osm_id,
                 "lat": lat,
                 "lon": lon,
                 "tags": tags,
@@ -2129,6 +2444,7 @@ class Command(BaseCommand):
                 "phone": tags.get("phone") or tags.get("contact:phone"),
                 "website": tags.get("website") or tags.get("contact:website"),
                 "brand": tags.get("brand"),
+                "action": element.action,  # Include action for diff mode handling
             }
 
             # Post-process data if hook exists
@@ -2197,39 +2513,53 @@ class Command(BaseCommand):
         osm_org: Organization,
         run_start: datetime,
         dry_run: bool,
-    ) -> tuple[int, int, int]:
+    ) -> tuple[int, int, int, int]:
         """Import amenities to database.
 
         Returns:
-            Tuple of (created_count, updated_count, skipped_count)
+            Tuple of (created_count, updated_count, skipped_count, deleted_count)
         """
         created_count = 0
         updated_count = 0
         skipped_count = 0
+        deleted_count = 0
 
         for data in amenities:
+            action = data.get("action")  # None, "create", "modify", "delete"
+
             if dry_run:
+                action_str = f"[{action}] " if action else ""
                 self.stdout.write(
-                    f"    [DRY RUN] Would upsert: {data['name'] or 'Unnamed'} "
+                    f"    [DRY RUN] {action_str}Would upsert: {data['name'] or 'Unnamed'} "
                     f"({data['category_slug']}) at ({data['lat']}, {data['lon']})"
                 )
                 continue
 
             try:
-                result = self._upsert_amenity(data, osm_org, run_start)
-                if result == "created":
-                    created_count += 1
-                elif result == "updated":
-                    updated_count += 1
+                # Handle deletions separately
+                if action == "delete":
+                    osm_id_str = f"{data['osm_type']}/{data['osm_id']}"
+                    deleted = self._deactivate_by_osm_id(osm_id_str, osm_org)
+                    if deleted:
+                        deleted_count += 1
+                    else:
+                        skipped_count += 1  # Already deleted or doesn't exist
                 else:
-                    skipped_count += 1
+                    # Create or modify
+                    result = self._upsert_amenity(data, osm_org, run_start)
+                    if result == "created":
+                        created_count += 1
+                    elif result == "updated":
+                        updated_count += 1
+                    else:
+                        skipped_count += 1
             except Exception as e:
                 self.stdout.write(
                     self.style.ERROR(f"    Error processing {data['name']}: {e}")
                 )
                 skipped_count += 1
 
-        return created_count, updated_count, skipped_count
+        return created_count, updated_count, skipped_count, deleted_count
 
     def _fetch_overpass(
         self,
