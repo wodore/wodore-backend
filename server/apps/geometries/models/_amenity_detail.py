@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from django.contrib.gis.db import models
 from django.utils.translation import gettext_lazy as _
+from server.apps.geometries import AmenityDetailInput
+from server.apps.geometries.models import GeoPlace
 from server.core.models import TimeStampedModel
+from server.core.utils import UpdateCreateStatus
 
 
 class OperatingStatus(models.TextChoices):
@@ -174,3 +177,102 @@ class AmenityDetail(TimeStampedModel):
                 self.opening_months = {}
             self.opening_months[month_names[month - 1]] = status
             self.save(update_fields=["opening_months"])
+
+    @classmethod
+    def update_or_create(
+        cls,
+        place: "GeoPlace",
+        schema: "AmenityDetailInput",
+        protected_fields: set[str] | None = None,
+    ) -> tuple["AmenityDetail", "UpdateCreateStatus"]:
+        """
+        Create or update an AmenityDetail for a GeoPlace.
+
+        Args:
+            place: GeoPlace instance
+            schema: AmenityDetailInput schema with detail data
+            protected_fields: Set of field names that should not be updated
+
+        Returns:
+            Tuple of (AmenityDetail instance, UpdateCreateStatus)
+
+        Example:
+            schema = AmenityDetailInput(
+                operating_status="open",
+                opening_hours={"mon": [["09:00", "18:00"]]},
+                phones=[PhoneSchema(number="+41 123 456 789")],
+            )
+            detail, status = AmenityDetail.update_or_create(
+                place=place,
+                schema=schema,
+                protected_fields={"phones"},
+            )
+        """
+        from server.apps.categories.models import Category
+        from server.core import UpdateCreateStatus
+
+        protected = protected_fields or set()
+
+        # Try to get existing detail
+        try:
+            detail = cls.objects.get(geo_place=place)
+            is_new = False
+        except cls.DoesNotExist:
+            detail = cls(geo_place=place)
+            is_new = True
+
+        # Track if anything was updated
+        updated = False
+        update_fields = []
+
+        # Update operating_status
+        if "operating_status" not in protected:
+            if detail.operating_status != schema.operating_status:
+                detail.operating_status = schema.operating_status
+                update_fields.append("operating_status")
+                updated = True
+
+        # Update opening_months
+        if "opening_months" not in protected and schema.opening_months:
+            if detail.opening_months != schema.opening_months:
+                detail.opening_months = schema.opening_months
+                update_fields.append("opening_months")
+                updated = True
+
+        # Update opening_hours
+        if "opening_hours" not in protected and schema.opening_hours:
+            if detail.opening_hours != schema.opening_hours:
+                detail.opening_hours = schema.opening_hours
+                update_fields.append("opening_hours")
+                updated = True
+
+        # Update phones
+        if "phones" not in protected and schema.phones:
+            new_phones = [
+                p.model_dump() if hasattr(p, "model_dump") else p for p in schema.phones
+            ]
+            if detail.phones != new_phones:
+                detail.phones = new_phones
+                update_fields.append("phones")
+                updated = True
+
+        # Update brand
+        if "brand" not in protected and schema.brand_slug:
+            try:
+                brand = Category.objects.get(slug=schema.brand_slug)
+                if detail.brand != brand:
+                    detail.brand = brand
+                    update_fields.append("brand")
+                    updated = True
+            except Category.DoesNotExist:
+                pass
+
+        # Save the detail
+        if is_new:
+            detail.save()
+            return detail, UpdateCreateStatus.created
+        elif updated:
+            detail.save(update_fields=update_fields)
+            return detail, UpdateCreateStatus.updated
+        else:
+            return detail, UpdateCreateStatus.no_change

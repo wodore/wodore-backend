@@ -759,10 +759,117 @@ class Command(BaseCommand):
                 storage_dir.rmdir()
             return Path()
 
+    def _upsert_amenity_v2(
+        self, data: dict, osm_org: Organization, run_start: datetime
+    ) -> str:
+        """Create or update GeoPlace + AmenityDetail using schema-based approach."""
+        from hut_services import LocationSchema
+
+        from server.apps.geometries.models import OperatingStatus
+        from server.apps.geometries.schemas import (
+            BrandInput,
+            DedupOptions,
+            GeoPlaceAmenityInput,
+            PhoneSchema,
+            SourceInput,
+        )
+        from server.apps.translations.schema import TranslationSchema
+        from server.core import UpdateCreateStatus
+
+        # Extract multilingual names and descriptions
+        name_i18n_dict = self._extract_i18n_field(data["tags"], "name")
+        description_i18n_dict = self._extract_i18n_field(data["tags"], "description")
+
+        # Build TranslationSchema for name
+        name_translations = TranslationSchema(**name_i18n_dict)
+
+        # Build TranslationSchema for description (if exists)
+        description_translations = (
+            TranslationSchema(**description_i18n_dict)
+            if description_i18n_dict
+            else None
+        )
+
+        # Parse opening hours
+        opening_hours_data = self._parse_opening_hours(data.get("opening_hours"))
+
+        # Build phones list
+        phones = []
+        if data.get("phone"):
+            phone_numbers = self._format_phones(data.get("phone"))
+            phones = [PhoneSchema(**p) for p in phone_numbers]
+
+        # Get category identifier
+        category = self._get_or_create_category(data["category_slug"])
+        category_identifier = category.identifier
+
+        # Build brand input if provided
+        brand_input = None
+        if data.get("brand"):
+            brand_input = BrandInput(slug=data["brand"])
+
+        # Build flattened GeoPlace schema
+        schema = GeoPlaceAmenityInput(
+            name=name_translations,
+            description=description_translations,
+            location=LocationSchema(lon=data["lon"], lat=data["lat"]),
+            country_code=self._guess_country_code(Point(data["lon"], data["lat"])),
+            place_type_identifier=category_identifier,
+            osm_tags=data["tags"],
+            # Amenity fields (flattened)
+            operating_status=OperatingStatus.OPEN,
+            opening_hours=opening_hours_data,
+            phones=phones,
+            brand=brand_input,
+        )
+
+        # Build source input
+        source_id = f"{data['osm_type']}/{data['osm_id']}"
+        source_input = SourceInput(
+            slug=osm_org.slug,
+            source_id=source_id,
+            import_date=run_start,
+            modified_date=run_start,
+            priority=1,
+            extra={
+                "osm_type": data["osm_type"],
+                "osm_id": data["osm_id"],
+            },
+        )
+
+        # Build dedup options
+        dedup_options = DedupOptions(
+            distance_same=20,
+            distance_any=4,
+        )
+
+        # Use update_or_create with schema
+        place, status = GeoPlace.update_or_create(
+            schema=schema,
+            from_source=source_input,
+            dedup_options=dedup_options,
+        )
+
+        # Cache the place for subsequent lookups
+        if hasattr(self, "_place_cache"):
+            cache_key = f"osm_{source_id}"
+            self._place_cache[cache_key] = place
+
+        # Map UpdateCreateStatus to string for backwards compatibility
+        if status == UpdateCreateStatus.created:
+            return "created"
+        elif status == UpdateCreateStatus.updated:
+            return "updated"
+        else:
+            return "skipped"
+
     def _upsert_amenity(
         self, data: dict, osm_org: Organization, run_start: datetime
     ) -> str:
-        """Create or update GeoPlace + AmenityDetail."""
+        """Create or update GeoPlace + AmenityDetail.
+
+        NOTE: This is the legacy method. Use _upsert_amenity_v2() for new implementations.
+        """
         # Save source_id as OSM_TYPE/OSM_ID format to ensure uniqueness
         source_id = (
             f"{data['osm_type']}/{data['osm_id']}"  # e.g., "node/123456", "way/789"

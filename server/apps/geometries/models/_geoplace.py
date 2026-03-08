@@ -9,11 +9,14 @@ from django.db.models.functions import Lower
 from django.utils.translation import gettext_lazy as _
 from modeltrans.fields import TranslationField
 from django_countries.fields import CountryField
+from django.contrib.gis.geos import Point
 
 from server.apps.categories.models import Category
+from server.apps.geometries.schemas import DedupOptions, GeoPlaceBaseInput, SourceInput
 from server.apps.images.models import Image
 from server.apps.organizations.models import Organization
 from server.core.models import TimeStampedModel
+from server.core.utils import UpdateCreateStatus
 
 if TYPE_CHECKING:
     from ._associations import GeoPlaceSourceAssociation
@@ -243,12 +246,104 @@ class GeoPlace(TimeStampedModel):
     def __str__(self) -> str:
         return f"{self.name_i18n} ({self.place_type.slug})"
 
-    def save(self, *args, **kwargs):
-        """Auto-generate slug from name if not provided."""
+    def save(self, *args, track_modifications=True, **kwargs):
+        """Auto-generate slug from name if not provided and track manual modifications.
+
+        Args:
+            track_modifications: If True, track field changes and mark as modified.
+                                Set to False during imports to avoid marking as manually edited.
+        """
+        # Auto-generate slug from name if not provided
         if not self.slug and self.name_i18n:
             self.slug = self.generate_unique_slug(self.name_i18n, exclude_id=self.id)
 
+        # Track modifications if this is a manual edit (not an import)
+        if track_modifications and self.pk:
+            self._track_field_modifications()
+
         super().save(*args, **kwargs)
+
+    def _track_field_modifications(self):
+        """Track which fields were manually modified and add them to protected_fields.
+
+        This is called during save() when track_modifications=True (manual edits).
+        During imports, track_modifications=False so fields remain unprotected.
+        """
+        if not self.pk:
+            return  # New instance, nothing to track
+
+        # Get original instance from database
+        try:
+            original = self.__class__.objects.get(pk=self.pk)
+        except self.__class__.DoesNotExist:
+            return
+
+        if getattr(original, "is_modified") and not getattr(self, "is_modified"):
+            # it was removed on purpose, reset proteted fields
+            self.protected_fields = list()
+            return
+
+        # Fields to check for modifications
+        simple_fields = [
+            "elevation",
+            "country_code",
+            "place_type",
+            "importance",
+            "parent",
+            "location",
+            "shape",
+            "osm_tags",
+            "extra",
+            "is_active",
+            "is_public",
+        ]
+        translation_fields = ["name", "description"]
+
+        # Helper function to normalize values for comparison
+        def normalize_value(value):
+            """Treat None and empty string as equivalent."""
+            if value is None or value == "":
+                return ""
+            return value
+
+        # Track simple field changes
+        modified_fields = []
+        for field in simple_fields:
+            if field in translation_fields:
+                continue
+            original_value = normalize_value(getattr(original, field, None))
+            current_value = normalize_value(getattr(self, field, None))
+            if original_value != current_value:
+                modified_fields.append(field)
+
+        # Track translation field changes
+        # Strategy:
+        # - Always use suffixes (name_de, name_en, etc.) - even for default language
+        # - Only protect the specific translation fields that were edited
+        # - Exception: if base field 'name' (no suffix) changed, protect ALL translations
+
+        # Check if base 'name' field (without suffix) was edited
+        for tfield in translation_fields:
+            # Check individual language translations (with suffixes)
+            for lang_code in settings.LANGUAGE_CODES:
+                if lang_code == settings.LANGUAGE_CODE:
+                    name_field = tfield
+                else:
+                    name_field = f"{tfield}_{lang_code}"
+                original_value = normalize_value(getattr(original, name_field, None))
+                current_value = normalize_value(getattr(self, name_field, None))
+                if original_value != current_value:
+                    modified_fields.append(
+                        f"{tfield}_{lang_code}"
+                    )  # Only protect this specific language
+
+        # If any fields were modified, mark as modified and update protected_fields
+        if modified_fields:
+            self.is_modified = True
+            # Add to protected_fields (avoid duplicates)
+            current_protected = set(self.protected_fields)
+            current_protected.update(modified_fields)
+            self.protected_fields = list(current_protected)
 
     @classmethod
     def generate_unique_slug(
@@ -508,6 +603,526 @@ class GeoPlace(TimeStampedModel):
         )
 
         return place
+
+    @classmethod
+    def from_schema(
+        cls,
+        schema: "GeoPlaceBaseInput",
+        from_source: "SourceInput | None" = None,
+        dedup_options: "DedupOptions | None" = None,
+    ) -> tuple["GeoPlace", "UpdateCreateStatus"]:
+        """
+        Helper method that routes to update_or_create based on schema type.
+
+        This is an alias for update_or_create() to provide a more intuitive API.
+
+        Args:
+            schema: Input schema (GeoPlaceBaseInput or subclass)
+            from_source: Source information (organization, source_id, policies)
+            dedup_options: Deduplication options
+
+        Returns:
+            Tuple of (GeoPlace instance, UpdateCreateStatus)
+        """
+        return cls.update_or_create(
+            schema=schema,
+            from_source=from_source,
+            dedup_options=dedup_options,
+        )
+
+    @classmethod
+    def update_or_create(
+        cls,
+        schema: "GeoPlaceBaseInput",
+        from_source: "SourceInput | None" = None,
+        dedup_options: "DedupOptions | None" = None,
+    ) -> tuple["GeoPlace", "UpdateCreateStatus"]:
+        """
+        Create or update a GeoPlace using a schema.
+
+        This method handles:
+        - Deduplication based on location proximity
+        - Multi-language field handling (name, description)
+        - Detail model creation/update (AmenityDetail, AdminDetail, etc.)
+        - Source association with update/delete policies
+        - Protected fields that won't be overwritten
+
+        Args:
+            schema: Input schema (GeoPlaceBaseInput or subclass)
+            from_source: Source information with organization slug, source_id, and policies
+            dedup_options: Deduplication options (distances, checks)
+
+        Returns:
+            Tuple of (GeoPlace instance, UpdateCreateStatus)
+
+        Example:
+            schema = GeoPlaceAmenityInput(
+                name=TranslationSchema(de="Bäckerei", en="Bakery"),
+                location=LocationSchema(lon=7.7343, lat=46.0234),
+                country_code="CH",
+                place_type_identifier="shop.bakery",
+                operating_status=OperatingStatus.OPEN,
+                brand=BrandInput(slug="volg"),
+            )
+
+            place, status = GeoPlace.update_or_create(
+                schema=schema,
+                from_source=SourceInput(
+                    slug="osm",
+                    source_id="node/123456",
+                    extra={"osm_type": "node", "osm_id": "123456"},
+                ),
+                dedup_options=DedupOptions(distance_same=20, distance_any=4),
+            )
+        """
+
+        # Set default dedup options
+        if dedup_options is None:
+            dedup_options = DedupOptions()
+
+        # Convert location to Point
+        location = Point(schema.location.lon, schema.location.lat, srid=4326)
+
+        # Resolve source organization
+        source_obj = None
+        if from_source is not None:
+            source_obj = Organization.objects.get(slug=from_source.slug)
+
+        # Check for existing place (deduplication)
+        existing_place = None
+        if dedup_options.enabled:
+            existing_place = cls._find_existing_place_by_schema(
+                schema, location, source_obj, from_source, dedup_options
+            )
+
+        if existing_place:
+            # UPDATE PATH
+            return cls._update_from_schema(
+                existing_place,
+                schema,
+                source_obj,
+                from_source,
+            )
+        else:
+            # CREATE PATH
+            return cls._create_from_schema(
+                schema,
+                location,
+                source_obj,
+                from_source,
+            )
+
+    @classmethod
+    def _find_existing_place_by_schema(
+        cls,
+        schema: "GeoPlaceBaseInput",
+        location: "Point",
+        source_obj: Organization | None,
+        from_source: "SourceInput | None",
+        dedup_options: "DedupOptions",
+    ) -> "GeoPlace | None":
+        """Find existing place using deduplication logic."""
+        from django.contrib.gis.db.models.functions import Distance
+
+        from ._associations import GeoPlaceSourceAssociation
+
+        # 1. Check source ID first (if enabled and source provided)
+        if dedup_options.check_source_id and from_source and source_obj:
+            try:
+                assoc = GeoPlaceSourceAssociation.objects.select_related(
+                    "geo_place"
+                ).get(organization=source_obj, source_id=from_source.source_id)
+                return assoc.geo_place
+            except GeoPlaceSourceAssociation.DoesNotExist:
+                pass
+
+        # 2. Check by location + category + brand
+        if dedup_options.distance_same > 0:
+            filters = {
+                "is_active": True,
+                "location__distance_lte": (location, dedup_options.distance_same),
+            }
+
+            # Add category filter if enabled
+            if dedup_options.check_category:
+                category_parent = schema.place_type_identifier.split(".")[0]
+                filters["place_type__slug__startswith"] = category_parent
+
+            nearby = cls.objects.filter(**filters).annotate(
+                distance=Distance("location", location)
+            )
+
+            # Filter by brand if enabled and provided
+            if dedup_options.check_brand and schema.brand:
+                from server.apps.categories.models import Category
+
+                try:
+                    brand_cat = Category.objects.get(slug=schema.brand.slug)
+                    nearby = nearby.filter(amenity_detail__brand=brand_cat)
+                except Category.DoesNotExist:
+                    pass
+            elif dedup_options.check_brand:
+                # No brand specified - only match places without brand
+                nearby = nearby.filter(amenity_detail__brand__isnull=True)
+
+            nearby_list = list(nearby.order_by("distance")[:2])
+            if len(nearby_list) == 1:
+                return nearby_list[0]
+
+        # 3. Check very close proximity (any place)
+        if dedup_options.distance_any > 0:
+            very_nearby = list(
+                cls.objects.filter(
+                    is_active=True,
+                    location__distance_lte=(location, dedup_options.distance_any),
+                )
+                .annotate(distance=Distance("location", location))
+                .order_by("distance")[:2]
+            )
+            if len(very_nearby) == 1:
+                return very_nearby[0]
+
+        return None
+
+    @classmethod
+    def _create_from_schema(
+        cls,
+        schema: "GeoPlaceBaseInput",
+        location: "Point",
+        source_obj: Organization | None,
+        from_source: "SourceInput | None",
+    ) -> tuple["GeoPlace", "UpdateCreateStatus"]:
+        """Create a new GeoPlace from schema."""
+        from django.contrib.gis.geos import GEOSGeometry
+
+        from server.core import UpdateCreateStatus
+
+        from ._admin_detail import AdminDetail
+        from ._amenity_detail import AmenityDetail
+        from ._associations import GeoPlaceSourceAssociation
+
+        # Get category
+        category = Category.objects.get(identifier=schema.place_type_identifier)
+
+        # Prepare name translations
+        name_dict = schema.get_name_dict()
+        description_dict = schema.get_description_dict()
+
+        # Build place data
+        place_data = {
+            "name": name_dict.get(settings.LANGUAGE_CODE, "Unnamed"),
+            "location": location,
+            "place_type": category,
+            "country_code": schema.country_code,
+            "detail_type": schema.detail_type,
+            "elevation": schema.elevation,
+            "importance": schema.importance,
+            "review_status": schema.review_status.value,
+            "osm_tags": schema.osm_tags,
+            "extra": schema.extra,
+            "is_active": schema.is_active,
+            "is_public": schema.is_public,
+            # is_modified and protected_fields are managed automatically
+        }
+
+        # Add slug if provided
+        if schema.slug:
+            place_data["slug"] = schema.slug
+
+        # Add parent if provided
+        if schema.parent_id:
+            place_data["parent_id"] = schema.parent_id
+
+        # Add shape if provided
+        if schema.shape:
+            if isinstance(schema.shape, str):
+                place_data["shape"] = GEOSGeometry(schema.shape, srid=4326)
+            else:
+                place_data["shape"] = schema.shape
+
+        # Add name translations for non-default languages
+        for lang_code, name_value in name_dict.items():
+            if lang_code != settings.LANGUAGE_CODE:
+                place_data[f"name_{lang_code}"] = name_value
+
+        # Add description (default language)
+        if settings.LANGUAGE_CODE in description_dict:
+            place_data["description"] = description_dict[settings.LANGUAGE_CODE]
+
+        # Add description translations for non-default languages
+        for lang_code, desc_value in description_dict.items():
+            if lang_code != settings.LANGUAGE_CODE and desc_value:
+                place_data[f"description_{lang_code}"] = desc_value
+
+        # Create the place (track_modifications=False for imports)
+        place = cls(**place_data)
+        place.save(track_modifications=False)
+
+        # Create detail model based on type (flattened structure)
+        from ..schemas import DetailType
+
+        if schema.detail_type == DetailType.AMENITY and schema.operating_status:
+            amenity_kwargs = {
+                "geo_place": place,
+                "operating_status": schema.operating_status.value,
+                "opening_months": schema.opening_months,
+                "opening_hours": schema.opening_hours,
+                "phones": [
+                    p.model_dump() if hasattr(p, "model_dump") else p
+                    for p in schema.phones
+                ],
+            }
+            # Add brand if provided
+            if schema.brand:
+                brand = Category.objects.get(slug=schema.brand.slug)
+                amenity_kwargs["brand"] = brand
+
+            AmenityDetail.objects.create(**amenity_kwargs)
+
+        elif schema.detail_type == DetailType.ADMIN and schema.admin_level:
+            AdminDetail.objects.create(
+                geo_place=place,
+                admin_level=schema.admin_level,
+                population=schema.population,
+                postal_code=schema.postal_code,
+            )
+
+        # Create source association if provided
+        if source_obj and from_source:
+            GeoPlaceSourceAssociation.objects.create(
+                geo_place=place,
+                organization=source_obj,
+                source_id=from_source.source_id,
+                import_date=from_source.import_date,
+                modified_date=from_source.modified_date,
+                confidence=from_source.confidence,
+                update_policy=from_source.update_policy.value,
+                delete_policy=from_source.delete_policy.value,
+                priority=from_source.priority,
+                extra=from_source.extra,
+            )
+
+        return place, UpdateCreateStatus.created
+
+    @classmethod
+    def _update_from_schema(
+        cls,
+        place: "GeoPlace",
+        schema: "GeoPlaceBaseInput",
+        source_obj: Organization | None,
+        from_source: "SourceInput | None",
+    ) -> tuple["GeoPlace", "UpdateCreateStatus"]:
+        """Update an existing GeoPlace from schema."""
+        from datetime import datetime
+
+        from django.contrib.gis.geos import GEOSGeometry
+
+        from server.core import UpdateCreateStatus
+
+        from ._admin_detail import AdminDetail
+        from ._amenity_detail import AmenityDetail
+        from ._associations import GeoPlaceSourceAssociation, UpdatePolicy
+
+        # Get or create source association
+        association = None
+        if source_obj and from_source:
+            association, _ = GeoPlaceSourceAssociation.objects.get_or_create(
+                geo_place=place,
+                organization=source_obj,
+                defaults={
+                    "source_id": from_source.source_id,
+                    "import_date": from_source.import_date or datetime.now(),
+                    "modified_date": from_source.modified_date,
+                    "confidence": from_source.confidence,
+                    "update_policy": from_source.update_policy.value,
+                    "delete_policy": from_source.delete_policy.value,
+                    "priority": from_source.priority,
+                    "extra": from_source.extra,
+                },
+            )
+
+            # Update modified_date
+            if from_source.modified_date:
+                association.modified_date = from_source.modified_date
+                association.save(update_fields=["modified_date"])
+
+        # Check update policy
+        if association and association.update_policy == UpdatePolicy.PROTECTED:
+            # Don't update protected records
+            return place, UpdateCreateStatus.no_change
+
+        # Determine which fields can be updated
+        protected = set(place.protected_fields)
+
+        # Check if we should respect protected fields
+        respect_protected = False
+        if association:
+            if association.update_policy == UpdatePolicy.MERGE:
+                respect_protected = True
+            elif association.update_policy == UpdatePolicy.AUTO_PROTECT:
+                # Check if place has been manually modified
+                if place.is_modified:
+                    respect_protected = True
+
+        if respect_protected:
+            pass  # TODO do something with it
+
+        # Track if anything was updated
+        updated = False
+        update_fields = []
+
+        # Get category
+        category = Category.objects.get(identifier=schema.place_type_identifier)
+
+        # Update place_type
+        if "place_type" not in protected and place.place_type != category:
+            place.place_type = category
+            update_fields.append("place_type")
+            updated = True
+
+        # Update name translations
+        if "name" not in protected:
+            name_dict = schema.get_name_dict()
+            for lang_code, name_value in name_dict.items():
+                if lang_code == settings.LANGUAGE_CODE:
+                    if place.name != name_value:
+                        place.name = name_value
+                        update_fields.append("name")
+                        updated = True
+                else:
+                    field_name = f"name_{lang_code}"
+                    current_value = getattr(place, field_name, None)
+                    if current_value != name_value:
+                        setattr(place, field_name, name_value)
+                        update_fields.append(field_name)
+                        updated = True
+
+        # Update description translations
+        if "description" not in protected:
+            description_dict = schema.get_description_dict()
+            for lang_code, desc_value in description_dict.items():
+                if lang_code == settings.LANGUAGE_CODE:
+                    if place.description != desc_value:
+                        place.description = desc_value
+                        update_fields.append("description")
+                        updated = True
+                else:
+                    field_name = f"description_{lang_code}"
+                    current_value = getattr(place, field_name, None)
+                    if current_value != desc_value:
+                        setattr(place, field_name, desc_value)
+                        update_fields.append(field_name)
+                        updated = True
+
+        # Update other fields
+        field_mapping = {
+            "elevation": schema.elevation,
+            "country_code": schema.country_code,
+            "importance": schema.importance,
+            "is_active": schema.is_active,
+            "is_public": schema.is_public,
+        }
+
+        for field, value in field_mapping.items():
+            if field not in protected and getattr(place, field) != value:
+                setattr(place, field, value)
+                update_fields.append(field)
+                updated = True
+
+        # Update shape if provided
+        if "shape" not in protected and schema.shape:
+            new_shape = schema.shape
+            if isinstance(new_shape, str):
+                new_shape = GEOSGeometry(new_shape, srid=4326)
+            if place.shape != new_shape:
+                place.shape = new_shape
+                update_fields.append("shape")
+                updated = True
+
+        # Update OSM tags (merge strategy)
+        if "osm_tags" not in protected and schema.osm_tags:
+            if place.osm_tags != schema.osm_tags:
+                place.osm_tags = {**place.osm_tags, **schema.osm_tags}
+                update_fields.append("osm_tags")
+                updated = True
+
+        # Update extra data (merge strategy)
+        if "extra" not in protected and schema.extra:
+            if place.extra != schema.extra:
+                place.extra = {**place.extra, **schema.extra}
+                update_fields.append("extra")
+                updated = True
+
+        # Save place if updated (track_modifications=False for imports)
+        if updated:
+            place.save(update_fields=update_fields, track_modifications=False)
+
+        # Update or create detail model (flattened structure)
+        from ..schemas import DetailType
+
+        detail_updated = False
+        if schema.detail_type == DetailType.AMENITY and schema.operating_status:
+            # Build amenity detail data from flattened schema
+            try:
+                amenity_detail = place.amenity_detail
+                is_new = False
+            except AmenityDetail.DoesNotExist:
+                amenity_detail = AmenityDetail(geo_place=place)
+                is_new = True
+
+            update_fields = []
+            if (
+                "operating_status" not in protected
+                and amenity_detail.operating_status != schema.operating_status.value
+            ):
+                amenity_detail.operating_status = schema.operating_status.value
+                update_fields.append("operating_status")
+                detail_updated = True
+
+            if "opening_hours" not in protected and schema.opening_hours:
+                if amenity_detail.opening_hours != schema.opening_hours:
+                    amenity_detail.opening_hours = schema.opening_hours
+                    update_fields.append("opening_hours")
+                    detail_updated = True
+
+            if "phones" not in protected and schema.phones:
+                new_phones = [
+                    p.model_dump() if hasattr(p, "model_dump") else p
+                    for p in schema.phones
+                ]
+                if amenity_detail.phones != new_phones:
+                    amenity_detail.phones = new_phones
+                    update_fields.append("phones")
+                    detail_updated = True
+
+            if "brand" not in protected and schema.brand:
+                brand = Category.objects.get(slug=schema.brand.slug)
+                if amenity_detail.brand != brand:
+                    amenity_detail.brand = brand
+                    update_fields.append("brand")
+                    detail_updated = True
+
+            if is_new:
+                amenity_detail.save()
+            elif update_fields:
+                amenity_detail.save(update_fields=update_fields)
+
+        elif schema.detail_type == DetailType.ADMIN and schema.admin_level:
+            admin_detail, created = AdminDetail.objects.update_or_create(
+                geo_place=place,
+                defaults={
+                    "admin_level": schema.admin_level,
+                    "population": schema.population,
+                    "postal_code": schema.postal_code,
+                },
+            )
+            if not created:
+                detail_updated = True
+
+        # Return appropriate status
+        if updated or detail_updated:
+            return place, UpdateCreateStatus.updated
+        return place, UpdateCreateStatus.no_change
 
     def add_source(
         self,

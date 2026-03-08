@@ -12,7 +12,6 @@ GeoPlaceAdminFieldsets = [
                 ("place_type", "parent"),
                 ("review_status", "detail_type"),
                 "review_comment",
-                "protected_fields",
                 "description_i18n",
             ],
         },
@@ -51,6 +50,16 @@ GeoPlaceAdminFieldsets = [
             "classes": ["tab"],
             "fields": [
                 "osm_tags",
+            ],
+        },
+    ),
+    (
+        _("Modifications"),
+        {
+            "classes": ["tab"],
+            "fields": [
+                "is_modified",
+                "protected_fields",
             ],
         },
     ),
