@@ -1539,15 +1539,30 @@ class Command(BaseCommand):
         since: str | None,
         limit: int | None,
         console=None,
-    ) -> tuple[list[dict] | None, int]:
+        server_start_index: int = 0,
+    ) -> tuple[list[dict] | None, int, str]:
         """Fetch elements for a single mapping from Overpass API.
 
+        Args:
+            server_start_index: Index to start server rotation (for load balancing)
+
         Returns:
-            Tuple of (list of raw Overpass elements or None on error, download size in bytes)
+            Tuple of (list of raw Overpass elements or None on error, download size in bytes, server label used)
         """
         import httpx
         import time
         import json
+
+        # If custom server provided, use it directly
+        if api_endpoint:
+            server_label = "custom"
+            servers_to_try = [(server_label, api_endpoint)]
+        else:
+            # Try all servers starting from server_start_index
+            servers_to_try = []
+            for offset in range(len(OVERPASS_SERVERS)):
+                idx = (server_start_index + offset) % len(OVERPASS_SERVERS)
+                servers_to_try.append(OVERPASS_SERVERS[idx])
 
         # Build Overpass query from osm_filters
         filters_parts = []
