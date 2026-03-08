@@ -193,6 +193,27 @@ class Command(BaseCommand):
             action="store_true",
             help="Skip confirmation prompt when using --drop",
         )
+        parser.add_argument(
+            "--overpass",
+            action="store_true",
+            help="Use Overpass API instead of PBF files (region must be country code like CH, AT, DE)",
+        )
+        parser.add_argument(
+            "--overpass-server",
+            type=str,
+            default=None,
+            help="Overpass API server URL (default: use built-in pool). Useful for parallel runs with different servers.",
+        )
+        parser.add_argument(
+            "--overpass-queries",
+            type=str,
+            help="Write all Overpass queries to a markdown file (for debugging)",
+        )
+        parser.add_argument(
+            "--since",
+            type=str,
+            help="Only fetch elements modified since timestamp (ISO format: 2026-03-08T00:00:00Z) or 'auto' to use last import timestamp",
+        )
 
     def handle(self, *args, **options):
         """Main command execution."""
@@ -202,7 +223,28 @@ class Command(BaseCommand):
         data_dir = options.get("data_dir")
         drop = options.get("drop", False)
         force = options.get("force", False)
+        use_overpass = options.get("overpass", False)
+        overpass_server = options.get("overpass_server")
+        overpass_queries_file = options.get("overpass_queries")
+        since = options.get("since")
         run_start = timezone.now()
+
+        # Handle --since auto: load last import timestamp
+        timestamp_file = (
+            Path(data_dir or "tmp")
+            / f".last_import_{region.replace('/', '_')}.timestamp"
+        )
+        if since == "auto":
+            if timestamp_file.exists():
+                since = timestamp_file.read_text().strip()
+                self.stdout.write(f"Using --since auto: {since}")
+            else:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"No previous import timestamp found at {timestamp_file}, importing all data"
+                    )
+                )
+                since = None
 
         # Parse categories
         category_names = None
@@ -257,47 +299,108 @@ class Command(BaseCommand):
             # Exit after drop operation
             return
 
-        # Normal import operation
-        self.stdout.write(f"Importing OSM amenities from {region}...")
-
-        if dry_run:
-            self.stdout.write(
-                self.style.WARNING("DRY RUN MODE - No changes will be made")
+        # 2. Fetch amenities (either via Overpass API or PBF file)
+        if use_overpass:
+            # Get or create OSM organization
+            osm_org, _ = Organization.objects.get_or_create(
+                slug="osm",
+                defaults={
+                    "name": "OpenStreetMap",
+                    "url": "https://www.openstreetmap.org",
+                    "is_active": True,
+                },
             )
 
-        # 2. Get or download PBF file
-        self.stdout.write("Locating PBF file...")
-        pbf_path = self._get_or_download_pbf(region, data_dir)
+            # Initialize place lookup cache for deduplication performance
+            self._place_cache = {}
 
-        if not pbf_path.exists():
-            self.stdout.write(self.style.ERROR(f"Failed to get PBF file for {region}"))
+            # Process each category/mapping in a pipeline (fetch → process → import)
+            success = self._process_overpass_pipeline(
+                region=region,
+                category_names=category_names,
+                osm_org=osm_org,
+                run_start=run_start,
+                limit=limit,
+                overpass_server=overpass_server,
+                overpass_queries_file=overpass_queries_file,
+                since=since,
+                dry_run=dry_run,
+            )
+
+            if not success:
+                self.stdout.write(
+                    self.style.ERROR("Failed to process Overpass API data")
+                )
+                return
+
+            # Get stats from instance variables set by pipeline
+            created_count = getattr(self, "_pipeline_created", 0)
+            updated_count = getattr(self, "_pipeline_updated", 0)
+            skipped_count = getattr(self, "_pipeline_skipped", 0)
+
+            # Cleanup deleted places
+            if not dry_run:
+                self.stdout.write("\nCleaning up deleted places...")
+                deleted_count = self._cleanup_deleted_places(
+                    osm_org, run_start, category_names
+                )
+                self.stdout.write(
+                    f"Deactivated {deleted_count} places no longer in OSM"
+                )
+            else:
+                deleted_count = 0
+
+            # Save timestamp for --since auto
+            if not dry_run:
+                timestamp_file.parent.mkdir(parents=True, exist_ok=True)
+                current_timestamp = run_start.isoformat()
+                timestamp_file.write_text(current_timestamp)
+                self.stdout.write(f"Saved import timestamp to: {timestamp_file}")
+
+            # Summary
+            self.stdout.write(self.style.SUCCESS("\nImport complete!"))
+            self.stdout.write(f"  Created: {created_count}")
+            self.stdout.write(f"  Updated: {updated_count}")
+            self.stdout.write(f"  Skipped: {skipped_count}")
+            if not dry_run:
+                self.stdout.write(f"  Deactivated: {deleted_count}")
+
             return
+        else:
+            # PBF approach
+            self.stdout.write("Locating PBF file...")
+            pbf_path = self._get_or_download_pbf(region, data_dir)
 
-        self.stdout.write(self.style.SUCCESS(f"PBF file: {pbf_path}"))
+            if not pbf_path.exists():
+                self.stdout.write(
+                    self.style.ERROR(f"Failed to get PBF file for {region}")
+                )
+                return
 
-        # 3. Pre-filter PBF using osmium CLI
-        force = options.get("force", False)
-        self.stdout.write("Pre-filtering PBF with osmium tags-filter...")
-        filtered_pbf = self._filter_pbf(pbf_path, category_names, force)
+            self.stdout.write(self.style.SUCCESS(f"PBF file: {pbf_path}"))
 
-        if filtered_pbf is None:
-            self.stdout.write(self.style.ERROR("Failed to create filtered PBF"))
-            return
+            # Pre-filter PBF using osmium CLI
+            self.stdout.write("Pre-filtering PBF with osmium tags-filter...")
+            filtered_pbf = self._filter_pbf(pbf_path, category_names, force)
 
-        # 4. Parse filtered PBF with location support for ways
-        self.stdout.write("Parsing filtered OSM data...")
-        handler = OSMHandler(category_names)
+            if filtered_pbf is None:
+                self.stdout.write(self.style.ERROR("Failed to create filtered PBF"))
+                return
 
-        # Apply with location handler for way centroid calculation
-        idx = osmium.index.create_map("flex_mem")
-        location_handler = osmium.NodeLocationsForWays(idx)
-        location_handler.ignore_errors()
-        osmium.apply(str(filtered_pbf), location_handler, handler)
+            # Parse filtered PBF with location support for ways
+            self.stdout.write("Parsing filtered OSM data...")
+            handler = OSMHandler(category_names)
 
-        amenities = handler.amenities
+            # Apply with location handler for way centroid calculation
+            idx = osmium.index.create_map("flex_mem")
+            location_handler = osmium.NodeLocationsForWays(idx)
+            location_handler.ignore_errors()
+            osmium.apply(str(filtered_pbf), location_handler, handler)
 
-        # Clean up filtered file
-        filtered_pbf.unlink()
+            amenities = handler.amenities
+
+            # Clean up filtered file
+            filtered_pbf.unlink()
 
         self.stdout.write(f"Found {len(amenities)} amenities")
 
@@ -414,6 +517,13 @@ class Command(BaseCommand):
                     self._storage_dir.rmdir()
                 except OSError:
                     pass  # Directory not empty, skip
+
+        # Save timestamp for --since auto if using Overpass
+        if use_overpass and not dry_run:
+            timestamp_file.parent.mkdir(parents=True, exist_ok=True)
+            current_timestamp = run_start.isoformat()
+            timestamp_file.write_text(current_timestamp)
+            self.stdout.write(f"Saved import timestamp to: {timestamp_file}")
 
         # Summary
         self.stdout.write(self.style.SUCCESS("\nImport complete!"))
@@ -1159,6 +1269,808 @@ class Command(BaseCommand):
         url = f"https://mapcomplete.org/{theme}.html#{osm_type}/{osm_id}"
 
         return url
+
+    def _process_overpass_pipeline(
+        self,
+        region: str,
+        category_names: list[str],
+        osm_org: Organization,
+        run_start: datetime,
+        limit: int | None = None,
+        overpass_server: str | None = None,
+        overpass_queries_file: str | None = None,
+        since: str | None = None,
+        dry_run: bool = False,
+    ) -> bool:
+        """Process Overpass data using pipeline approach (fetch → process → import per mapping).
+
+        Args:
+            region: Country code (e.g., CH, AT, DE)
+            category_names: List of category names to fetch
+            osm_org: OSM Organization instance
+            run_start: Import start timestamp
+            limit: If set, limit amenities per mapping (for testing)
+            overpass_server: Overpass API server URL (if None, use pool)
+            overpass_queries_file: If set, write queries to markdown file
+            since: If set, only fetch elements modified since this timestamp
+            dry_run: If True, don't make DB changes
+
+        Returns:
+            True on success, False on error
+        """
+        import time
+        from rich.console import Console
+        from rich.progress import (
+            Progress,
+            SpinnerColumn,
+            BarColumn,
+            TextColumn,
+            TimeElapsedColumn,
+        )
+        from rich.panel import Panel
+
+        console = Console()
+
+        # Open queries file if specified
+        queries_md = None
+        if overpass_queries_file:
+            queries_md = open(overpass_queries_file, "w")
+            queries_md.write(f"# Overpass Queries for {region}\n\n")
+            queries_md.write(
+                f"Generated for categories: {', '.join(category_names)}\n\n"
+            )
+
+        # Determine API endpoint
+        if overpass_server:
+            api_endpoint = overpass_server
+            server_name = overpass_server.split("/")[2]
+        else:
+            # Pool of Overpass API endpoints
+            overpass_endpoints = [
+                "https://overpass.private.coffee/api/interpreter",
+                "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+                "https://overpass-api.de/api/interpreter",
+            ]
+            api_endpoint = overpass_endpoints[0]
+            server_name = api_endpoint.split("/")[2]
+
+        headers = {"User-Agent": "Wodore/1.0 (https://wodore.com) Python/httpx"}
+
+        # Initialize counters
+        self._pipeline_created = 0
+        self._pipeline_updated = 0
+        self._pipeline_skipped = 0
+        total_download_bytes = 0
+
+        # Get categories and build mapping list
+        categories = get_categories(category_names)
+        all_mappings = []
+        for cat in categories:
+            for mapping in cat.mappings:
+                all_mappings.append((cat.category, mapping))
+
+        total_mappings = len(all_mappings)
+
+        # Print header
+        header_text = f"OSM Import Pipeline: [bold cyan]{region.upper()}[/bold cyan]\n"
+        header_text += f"Server: {server_name} | Mappings: {total_mappings}"
+        if since:
+            header_text += f" | Incremental: since {since}"
+        if dry_run:
+            header_text += " | [yellow]DRY RUN[/yellow]"
+        console.print(Panel(header_text, expand=False))
+
+        # Print symbols footer that stays visible
+        console.print(
+            "[dim]Symbols: ✓ = completed | ✗ = failed | +N = created | ~N = updated | ·N = skipped | ↓N = downloaded[/dim]\n"
+        )
+
+        # Create progress bars
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.fields[mapping]:<35}", justify="left"),
+            BarColumn(bar_width=30),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TimeElapsedColumn(),
+            TextColumn("•"),
+            TextColumn("{task.fields[status]}"),
+            console=console,
+            expand=False,
+        ) as progress:
+            # Add overall progress task
+            overall_task = progress.add_task(
+                "Overall",
+                total=total_mappings,
+                mapping="[bold]Overall Progress[/bold]",
+                status="",
+            )
+
+            # Track completed tasks
+            completed_tasks = []
+
+            # Process each mapping
+            for idx, (category_name, mapping) in enumerate(all_mappings):
+                mapping_start = time.time()
+
+                # Add new task for this mapping
+                current_task = progress.add_task(
+                    f"mapping_{idx}",
+                    total=3,  # 3 stages: fetch, process, import
+                    mapping=f"{mapping.category_slug}",
+                    status="[yellow]fetching...[/yellow]",
+                )
+
+                # PIPELINE STAGE 1: FETCH
+                elements, download_size = self._fetch_mapping_overpass(
+                    region=region,
+                    mapping=mapping,
+                    api_endpoint=api_endpoint,
+                    headers=headers,
+                    queries_md=queries_md,
+                    since=since,
+                    limit=limit,
+                    console=console,
+                )
+                progress.update(current_task, completed=1)
+
+                if elements is None:
+                    progress.update(
+                        current_task,
+                        completed=3,
+                        mapping=f"{mapping.category_slug}",
+                        status="[red]✗ FAILED[/red]",
+                    )
+                    progress.stop_task(current_task)
+                    completed_tasks.append(current_task)
+                    progress.advance(overall_task)
+                    continue
+
+                total_download_bytes += download_size
+
+                # PIPELINE STAGE 2: PROCESS
+                progress.update(current_task, status="[cyan]processing...[/cyan]")
+                amenities = self._process_elements(
+                    elements=elements,
+                    mapping=mapping,
+                    category_names=category_names,
+                )
+                progress.update(current_task, completed=2)
+
+                # Pre-cache data for this mapping
+                self._precache_mapping_data(amenities)
+
+                # PIPELINE STAGE 3: IMPORT
+                progress.update(current_task, status="[magenta]importing...[/magenta]")
+                created, updated, skipped = self._import_amenities(
+                    amenities=amenities,
+                    osm_org=osm_org,
+                    run_start=run_start,
+                    dry_run=dry_run,
+                )
+                progress.update(current_task, completed=3)
+
+                self._pipeline_created += created
+                self._pipeline_updated += updated
+                self._pipeline_skipped += skipped
+
+                mapping_time = time.time() - mapping_start
+
+                # Format download size
+                if download_size < 1024:
+                    size_str = f"{download_size}B"
+                elif download_size < 1024 * 1024:
+                    size_str = f"{download_size / 1024:.1f}KB"
+                else:
+                    size_str = f"{download_size / (1024 * 1024):.1f}MB"
+
+                # Build changes display
+                changes_parts = []
+                if created:
+                    changes_parts.append(f"[green]+{created}[/green]")
+                if updated:
+                    changes_parts.append(f"[yellow]~{updated}[/yellow]")
+                if skipped:
+                    changes_parts.append(f"·{skipped}")
+                changes_str = " ".join(changes_parts) if changes_parts else "·0"
+
+                # Show downloaded count (can differ from imported with limit or filtering)
+                total_processed = created + updated + skipped
+                downloaded_str = (
+                    f"↓{len(amenities)}" if len(amenities) != total_processed else ""
+                )
+
+                # Update with completion status and mark as done
+                progress.update(
+                    current_task,
+                    completed=3,
+                    mapping=f"{mapping.category_slug}",
+                    status=f"[green]✓[/green] {changes_str} {downloaded_str} │ {size_str} │ {mapping_time:.1f}s",
+                )
+
+                # Stop the spinner for completed task
+                progress.stop_task(current_task)
+                completed_tasks.append(current_task)
+
+                progress.advance(overall_task)
+
+        # Close queries file
+        if queries_md:
+            queries_md.close()
+            console.print(f"[dim]Queries written to: {overpass_queries_file}[/dim]")
+
+        # Print summary
+        total_time = time.time() - run_start.timestamp()
+        total_download_mb = total_download_bytes / (1024 * 1024)
+
+        console.print("\n[bold green]✓ Import complete![/bold green]")
+        console.print(
+            f"  Created: [green]{self._pipeline_created}[/green] | "
+            f"Updated: [yellow]{self._pipeline_updated}[/yellow] | "
+            f"Skipped: {self._pipeline_skipped}"
+        )
+        console.print(
+            f"  Downloaded: [cyan]{total_download_mb:.2f} MB[/cyan] | "
+            f"Runtime: [cyan]{total_time:.1f}s[/cyan]"
+        )
+
+        return True
+
+    def _fetch_mapping_overpass(
+        self,
+        region: str,
+        mapping,
+        api_endpoint: str,
+        headers: dict,
+        queries_md,
+        since: str | None,
+        limit: int | None,
+        console=None,
+    ) -> tuple[list[dict] | None, int]:
+        """Fetch elements for a single mapping from Overpass API.
+
+        Returns:
+            Tuple of (list of raw Overpass elements or None on error, download size in bytes)
+        """
+        import httpx
+        import time
+        import json
+
+        # Build Overpass query from osm_filters
+        filters_parts = []
+
+        # Build newer filter if needed
+        newer_filter = f'(newer:"{since}")' if since else ""
+
+        for filter_item in mapping.osm_filters:
+            if isinstance(filter_item, tuple):
+                # OR: create union of separate queries
+                for tag in filter_item:
+                    if "=" in tag:
+                        key, value = tag.split("=", 1)
+                        filters_parts.append(
+                            f'node{newer_filter}["{key}"="{value}"](area.a);'
+                        )
+                        filters_parts.append(
+                            f'way{newer_filter}["{key}"="{value}"](area.a);'
+                        )
+                    else:
+                        filters_parts.append(f'node{newer_filter}["{tag}"](area.a);')
+                        filters_parts.append(f'way{newer_filter}["{tag}"](area.a);')
+            elif isinstance(filter_item, str):
+                # AND: add to filter chain
+                if "=" in filter_item:
+                    key, value = filter_item.split("=", 1)
+                    filters_parts.append(
+                        f'node{newer_filter}["{key}"="{value}"](area.a);'
+                    )
+                    filters_parts.append(
+                        f'way{newer_filter}["{key}"="{value}"](area.a);'
+                    )
+                else:
+                    filters_parts.append(
+                        f'node{newer_filter}["{filter_item}"](area.a);'
+                    )
+                    filters_parts.append(f'way{newer_filter}["{filter_item}"](area.a);')
+
+        if not filters_parts:
+            return [], 0
+
+        # Build Overpass QL query
+        query = f"""
+        area["ISO3166-1"="{region.upper()}"]->.a;
+        (
+            {chr(10).join("    " + fp for fp in filters_parts)}
+        );
+        out center;
+        """
+
+        # Write query to file if specified
+        if queries_md:
+            queries_md.write(f"## {mapping.category_slug}\n\n")
+            queries_md.write(f"```\n[out:json];\n{query.strip()}\n```\n\n")
+            queries_md.flush()
+
+        # Retry logic for rate limiting
+        max_retries = 3
+        retry_delay = 5
+
+        for attempt in range(max_retries):
+            try:
+                # Make direct HTTP request to Overpass API
+                full_query = f"[out:json][timeout:300];{query}"
+
+                response = httpx.post(
+                    api_endpoint,
+                    data={"data": full_query},
+                    headers=headers,
+                    timeout=300.0,
+                )
+                response.raise_for_status()
+
+                # Get raw response text before parsing
+                response_text = response.text
+
+                # Calculate download size from uncompressed response text
+                download_size = len(response_text.encode("utf-8"))
+
+                result = response.json()
+
+                # Get elements from result
+                all_elements = result.get("elements", [])
+
+                # Apply limit if specified
+                if limit:
+                    return all_elements[:limit], download_size
+                return all_elements, download_size
+
+            except Exception as e:
+                # Check if it's a retryable error
+                is_rate_limit = isinstance(
+                    e, httpx.HTTPStatusError
+                ) and e.response.status_code in [429, 503, 504]
+                is_json_error = isinstance(e, json.JSONDecodeError)
+
+                if (is_rate_limit or is_json_error) and attempt < max_retries - 1:
+                    wait_time = retry_delay * (2**attempt)  # Exponential backoff
+                    # Sleep and retry silently - status is shown in progress bar
+                    time.sleep(wait_time)
+                    continue
+
+                # Log error to console for debugging
+                if console:
+                    error_msg = f"[red]Error fetching {mapping.category_slug}: {type(e).__name__}: {str(e)[:100]}[/red]"
+                    console.log(error_msg)
+
+                return None, 0
+
+        return None, 0
+
+    def _process_elements(
+        self,
+        elements: list[dict],
+        mapping,
+        category_names: list[str],
+    ) -> list[dict]:
+        """Process Overpass elements into amenity data format.
+
+        Returns:
+            List of amenity dicts
+        """
+        from server.apps.geometries.config.osm_categories import match_tags_to_category
+
+        amenities = []
+
+        for element in elements:
+            # Pre-process tags if hook exists
+            tags = element.get("tags", {})
+            if mapping.pre_process:
+                tags = mapping.pre_process(tags)
+
+            # Check if tags match (for AND logic with multiple filter items)
+            match_result = match_tags_to_category(tags, category_names)
+            if not match_result:
+                continue
+
+            category_slug, _, _ = match_result
+
+            # Get location (Overpass returns 'center' for ways with 'out center')
+            if element["type"] == "node":
+                lat = element["lat"]
+                lon = element["lon"]
+            elif element["type"] == "way":
+                # Use center provided by Overpass
+                center = element.get("center")
+                if not center:
+                    continue
+                lat = center["lat"]
+                lon = center["lon"]
+            else:
+                continue
+
+            # Extract amenity data
+            data = {
+                "osm_type": element["type"],
+                "osm_id": element["id"],
+                "lat": lat,
+                "lon": lon,
+                "tags": tags,
+                "category_slug": category_slug,
+                "mapcomplete_theme": mapping.mapcomplete_theme,
+                "name": tags.get("name", ""),
+                "opening_hours": tags.get("opening_hours"),
+                "phone": tags.get("phone") or tags.get("contact:phone"),
+                "website": tags.get("website") or tags.get("contact:website"),
+                "brand": tags.get("brand"),
+            }
+
+            # Post-process data if hook exists
+            if mapping.post_process:
+                data = mapping.post_process(tags, data)
+
+            amenities.append(data)
+
+        return amenities
+
+    def _precache_mapping_data(self, amenities: list[dict]):
+        """Pre-cache categories and brands for a mapping's amenities."""
+        if not amenities:
+            return
+
+        # Collect unique category slugs and brands
+        category_slugs = set()
+        brands = set()
+
+        for data in amenities:
+            category_slugs.add(data["category_slug"])
+            if data.get("brand"):
+                brands.add(data["brand"].lower())
+
+        # Pre-create categories if not cached
+        if not hasattr(self, "_category_cache"):
+            self._category_cache = {}
+
+        for category_slug in category_slugs:
+            if category_slug not in self._category_cache:
+                try:
+                    self._category_cache[category_slug] = self._get_or_create_category(
+                        category_slug
+                    )
+                except Exception:
+                    pass
+
+        # Pre-create brand categories if not cached
+        if not hasattr(self, "_brand_cache"):
+            self._brand_cache = {}
+
+        if brands:
+            brand_parent, _ = Category.objects.get_or_create(
+                slug="brand",
+                defaults={"name": "Brand"},
+            )
+
+            for brand_name in brands:
+                if brand_name not in self._brand_cache:
+                    brand_slug = brand_name.replace(" ", "_")[:50]
+                    try:
+                        brand_category, _ = Category.objects.get_or_create(
+                            slug=brand_slug,
+                            defaults={
+                                "name": brand_name.title(),
+                                "parent": brand_parent,
+                            },
+                        )
+                        self._brand_cache[brand_name] = brand_category
+                    except Exception:
+                        pass
+
+    def _import_amenities(
+        self,
+        amenities: list[dict],
+        osm_org: Organization,
+        run_start: datetime,
+        dry_run: bool,
+    ) -> tuple[int, int, int]:
+        """Import amenities to database.
+
+        Returns:
+            Tuple of (created_count, updated_count, skipped_count)
+        """
+        created_count = 0
+        updated_count = 0
+        skipped_count = 0
+
+        for data in amenities:
+            if dry_run:
+                self.stdout.write(
+                    f"    [DRY RUN] Would upsert: {data['name'] or 'Unnamed'} "
+                    f"({data['category_slug']}) at ({data['lat']}, {data['lon']})"
+                )
+                continue
+
+            try:
+                result = self._upsert_amenity(data, osm_org, run_start)
+                if result == "created":
+                    created_count += 1
+                elif result == "updated":
+                    updated_count += 1
+                else:
+                    skipped_count += 1
+            except Exception as e:
+                self.stdout.write(
+                    self.style.ERROR(f"    Error processing {data['name']}: {e}")
+                )
+                skipped_count += 1
+
+        return created_count, updated_count, skipped_count
+
+    def _fetch_overpass(
+        self,
+        country_code: str,
+        category_names: list[str],
+        limit: int | None = None,
+        queries_file: str | None = None,
+        since: str | None = None,
+    ) -> list[dict] | None:
+        """Fetch amenities from Overpass API.
+
+        Args:
+            country_code: ISO3166-1 country code (e.g., CH, AT, DE)
+            category_names: List of category names to fetch
+            limit: If set, only process up to LIMIT amenities per mapping (for testing)
+            queries_file: If set, write all queries to this markdown file (for debugging)
+            since: If set, only fetch elements modified since this timestamp (ISO format)
+
+        Returns:
+            List of amenity dicts in same format as PBF parser, or None on error
+        """
+        import httpx
+
+        # Open queries file if specified
+        queries_md = None
+        if queries_file:
+            queries_md = open(queries_file, "w")
+            queries_md.write(f"# Overpass Queries for {country_code}\n\n")
+            queries_md.write(
+                f"Generated for categories: {', '.join(category_names)}\n\n"
+            )
+
+        # Pool of Overpass API endpoints with fallback
+        overpass_endpoints = [
+            "https://overpass.private.coffee/api/interpreter",
+            "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+            "https://overpass-api.de/api/interpreter",
+        ]
+
+        # Use first endpoint (will rotate on errors via retry logic)
+        api_endpoint = overpass_endpoints[0]
+        self.stdout.write(f"Using Overpass endpoint: {api_endpoint}")
+
+        headers = {"User-Agent": "Wodore/1.0 (https://wodore.com) Python/httpx"}
+
+        amenities = []
+
+        categories = get_categories(category_names)
+
+        for cat in categories:
+            self.stdout.write(f"  Fetching category: {cat.category}")
+
+            for mapping in cat.mappings:
+                self.stdout.write(f"    Mapping: {mapping.category_slug}")
+                self.stdout.write("      [1/3] Fetching from Overpass API...")
+
+                # Build Overpass query from osm_filters
+                filters_parts = []
+
+                for filter_item in mapping.osm_filters:
+                    if isinstance(filter_item, tuple):
+                        # OR: create union of separate queries
+                        for tag in filter_item:
+                            if "=" in tag:
+                                key, value = tag.split("=", 1)
+                                filters_parts.append(
+                                    f'node["{key}"="{value}"](area.a);'
+                                )
+                                filters_parts.append(f'way["{key}"="{value}"](area.a);')
+                            else:
+                                filters_parts.append(f'node["{tag}"](area.a);')
+                                filters_parts.append(f'way["{tag}"](area.a);')
+                    elif isinstance(filter_item, str):
+                        # AND: add to filter chain
+                        if "=" in filter_item:
+                            key, value = filter_item.split("=", 1)
+                            filters_parts.append(f'node["{key}"="{value}"](area.a);')
+                            filters_parts.append(f'way["{key}"="{value}"](area.a);')
+                        else:
+                            filters_parts.append(f'node["{filter_item}"](area.a);')
+                            filters_parts.append(f'way["{filter_item}"](area.a);')
+
+                if not filters_parts:
+                    continue
+
+                # Build Overpass QL query (library adds [out:json] automatically)
+                # Add (newer:"timestamp") filter for incremental updates if since is provided
+                newer_filter = f'(newer:"{since}")' if since else ""
+                query = f"""
+                area["ISO3166-1"="{country_code.upper()}"]->.a;
+                (
+                    {chr(10).join("    " + fp for fp in filters_parts)}
+                ){newer_filter};
+                out center;
+                """
+
+                # Write query to file if specified
+                if queries_md:
+                    queries_md.write(f"## {cat.category} - {mapping.category_slug}\n\n")
+                    queries_md.write(f"```\n[out:json];\n{query.strip()}\n```\n\n")
+                    queries_md.flush()
+
+                # Retry logic for rate limiting
+                max_retries = 3
+                retry_delay = 5  # seconds
+
+                for attempt in range(max_retries):
+                    try:
+                        # Make direct HTTP request to Overpass API
+                        # Add [out:json] header to query
+                        full_query = f"[out:json][timeout:300];{query}"
+
+                        response = httpx.post(
+                            api_endpoint,
+                            data={"data": full_query},
+                            headers=headers,
+                            timeout=300.0,
+                        )
+                        response.raise_for_status()
+                        result = response.json()
+
+                        self.stdout.write(
+                            f"      Debug: API result type: {type(result)}"
+                        )
+                        self.stdout.write(
+                            f"      Debug: API result keys: {result.keys() if isinstance(result, dict) else 'not a dict'}"
+                        )
+                        if isinstance(result, dict) and "elements" in result:
+                            self.stdout.write(
+                                f"      Debug: elements count in result: {len(result['elements'])}"
+                            )
+                        break  # Success, exit retry loop
+                    except Exception as e:
+                        import time
+                        import json
+
+                        # Check if it's a retryable error
+                        is_rate_limit = isinstance(
+                            e, httpx.HTTPStatusError
+                        ) and e.response.status_code in [429, 503, 504]
+                        is_json_error = isinstance(e, json.JSONDecodeError)
+
+                        if (
+                            is_rate_limit or is_json_error
+                        ) and attempt < max_retries - 1:
+                            wait_time = retry_delay * (
+                                2**attempt
+                            )  # Exponential backoff
+                            error_type = (
+                                "Rate limited"
+                                if is_rate_limit
+                                else "Invalid JSON response"
+                            )
+                            self.stdout.write(
+                                self.style.WARNING(
+                                    f"{error_type}. Waiting {wait_time}s before retry {attempt + 2}/{max_retries}..."
+                                )
+                            )
+                            time.sleep(wait_time)
+                            continue
+                        # Re-raise if not retryable or max retries exceeded
+                        raise
+
+                try:
+                    # Convert Overpass result to our format
+                    all_elements = result.get("elements", [])
+
+                    # Debug: show raw result
+                    self.stdout.write(
+                        f"      Debug: Overpass returned {len(all_elements)} elements"
+                    )
+                    if all_elements and len(all_elements) > 0:
+                        self.stdout.write(
+                            f"      Debug: First element: {all_elements[0]}"
+                        )
+
+                    # Apply limit per mapping if specified (for testing)
+                    if limit:
+                        elements = all_elements[:limit]
+                        self.stdout.write(
+                            f"      [2/3] Processing {len(elements)} elements (limited from {len(all_elements)})..."
+                        )
+                    else:
+                        elements = all_elements
+                        self.stdout.write(
+                            f"      [2/3] Processing {len(elements)} elements..."
+                        )
+
+                    for element in elements:
+                        # Pre-process tags if hook exists
+                        tags = element.get("tags", {})
+                        if mapping.pre_process:
+                            tags = mapping.pre_process(tags)
+
+                        # Check if tags match (for AND logic with multiple filter items)
+                        from server.apps.geometries.config.osm_categories import (
+                            match_tags_to_category,
+                        )
+
+                        match_result = match_tags_to_category(tags, category_names)
+                        if not match_result:
+                            continue
+
+                        category_slug, _, _ = match_result
+
+                        # Get location (Overpass returns 'center' for ways with 'out center')
+                        if element["type"] == "node":
+                            lat = element["lat"]
+                            lon = element["lon"]
+                        elif element["type"] == "way":
+                            # Use center provided by Overpass
+                            center = element.get("center")
+                            if not center:
+                                continue
+                            lat = center["lat"]
+                            lon = center["lon"]
+                        else:
+                            continue
+
+                        # Extract amenity data
+                        data = {
+                            "osm_type": element["type"],
+                            "osm_id": element["id"],
+                            "lat": lat,
+                            "lon": lon,
+                            "tags": tags,
+                            "category_slug": category_slug,
+                            "mapcomplete_theme": mapping.mapcomplete_theme,
+                            "name": tags.get("name", ""),
+                            "opening_hours": tags.get("opening_hours"),
+                            "phone": tags.get("phone") or tags.get("contact:phone"),
+                            "website": tags.get("website")
+                            or tags.get("contact:website"),
+                            "brand": tags.get("brand"),
+                        }
+
+                        # Post-process data if hook exists
+                        if mapping.post_process:
+                            data = mapping.post_process(tags, data)
+
+                        amenities.append(data)
+
+                    self.stdout.write(
+                        f"      [3/3] Collected {len(amenities)} amenities total"
+                    )
+
+                except Exception as e:
+                    self.stdout.write(
+                        self.style.ERROR(
+                            f"Overpass query failed for {cat.category}.{mapping.category_slug}: {e}"
+                        )
+                    )
+                    self.stdout.write(
+                        self.style.ERROR(f"Exception type: {type(e).__name__}")
+                    )
+                    self.stdout.write(self.style.ERROR(f"Query: {query}"))
+                    import traceback
+
+                    self.stdout.write(self.style.ERROR(traceback.format_exc()))
+                    if queries_md:
+                        queries_md.close()
+                    return None
+
+        # Close queries file
+        if queries_md:
+            queries_md.close()
+            self.stdout.write(f"Queries written to: {queries_file}")
+
+        return amenities
 
     def _filter_pbf(
         self, pbf_path: Path, category_names: list[str], force: bool = False
