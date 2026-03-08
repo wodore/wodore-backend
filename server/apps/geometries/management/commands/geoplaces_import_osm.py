@@ -928,7 +928,7 @@ class Command(BaseCommand):
             },
         )
 
-        brand_slug = brand_name_lower.replace(" ", "_")
+        brand_slug = brand_name_lower.replace(" ", "_")[:50]  # Limit to 50 chars
 
         brand_category, _ = Category.objects.get_or_create(
             slug=brand_slug,
@@ -960,7 +960,7 @@ class Command(BaseCommand):
         self, brand_name: str, website: str | None
     ) -> Organization:
         """Get or create organization for brand (cached)."""
-        brand_slug = brand_name.lower().replace(" ", "_")
+        brand_slug = brand_name.lower().replace(" ", "_")[:50]  # Limit to 50 chars
 
         # Check cache first
         if hasattr(self, "_brand_org_cache") and brand_slug in self._brand_org_cache:
