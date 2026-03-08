@@ -487,6 +487,7 @@ UNFOLD = {
         {
             "models": [
                 "geometries.geoplace",
+                "geometries.amenitydetail",
             ],
             "items": [
                 {
@@ -494,6 +495,13 @@ UNFOLD = {
                     "link": reverse_lazy("admin:geometries_geoplace_changelist"),
                     "permission": lambda request: request.user.has_perm(
                         "geometries.view_geoplace"
+                    ),
+                },
+                {
+                    "title": _("Amenities"),
+                    "link": reverse_lazy("admin:geometries_amenitydetail_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "geometries.view_amenitydetail"
                     ),
                 },
             ],

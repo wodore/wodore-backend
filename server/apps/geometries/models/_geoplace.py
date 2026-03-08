@@ -168,7 +168,7 @@ class GeoPlace(TimeStampedModel):
 
     # Status
     is_active = models.BooleanField(default=True, db_index=True)
-    is_public = models.BooleanField(default=False, db_index=True)
+    is_public = models.BooleanField(default=True, db_index=True)
     is_modified = models.BooleanField(
         default=False,
         db_index=True,

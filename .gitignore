@@ -10,6 +10,7 @@ slim.report.json
 !.env.template
 SUMMARY_*.md
 AGENT/
+tmp/
 
 
 # Static folders

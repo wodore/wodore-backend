@@ -1,0 +1,645 @@
+"""
+Management command to import amenities from OpenStreetMap.
+
+Imports food supply amenities (supermarkets, bakeries, etc.) from OSM via Geofabrik PBF files.
+Handles deduplication, opening hours parsing, and category management.
+
+Usage:
+    app geoplaces_import_osm europe/switzerland              # Import Switzerland
+    app geoplaces_import_osm europe/alps                     # Import Alps region
+    app geoplaces_import_osm --dry-run europe/switzerland    # Dry run (no DB changes)
+    app geoplaces_import_osm -l 100 europe/switzerland       # Limit to 100 records
+"""
+
+import tempfile
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+import httpx
+import osmium
+from django.contrib.gis.db.models.functions import Distance
+from django.contrib.gis.geos import Point
+from django.core.management.base import BaseCommand, CommandParser
+from django.db import transaction
+from django.utils import timezone
+
+from server.apps.categories.models import Category
+from server.apps.geometries.models import AmenityDetail, GeoPlace
+from server.apps.organizations.models import Organization
+
+
+# OSM tag mapping to category slugs
+FOOD_SUPPLY_TAGS = {
+    "shop=convenience": "food_supply.grocery",
+    "shop=general": "food_supply.grocery",
+    "shop=supermarket": "food_supply.supermarket",
+    "shop=bakery": "food_supply.bakery",
+    "shop=butcher": "food_supply.butcher",
+    "shop=greengrocer": "food_supply.greengrocer",
+    "shop=farm": "food_supply.farm_shop",
+    "shop=deli": "food_supply.deli",
+    "shop=cheese": "food_supply.cheese_shop",
+    "shop=dairy": "food_supply.dairy",
+    "shop=beverages": "food_supply.beverages",
+    "amenity=vending_machine": "food_supply.vending_machine",  # Will check vending=food/drinks
+}
+
+
+class OSMHandler(osmium.SimpleHandler):
+    """Handler for parsing OSM PBF files."""
+
+    def __init__(self):
+        super().__init__()
+        self.amenities = []
+        self._node_cache = {}  # For way centroid calculation
+
+    def node(self, n):
+        """Process OSM nodes (point features)."""
+        # Cache node locations for way processing
+        self._node_cache[n.id] = (n.location.lon, n.location.lat)
+
+        # Check if this is a food supply amenity
+        category_slug = self._get_category_slug(n.tags)
+        if category_slug:
+            self.amenities.append(
+                self._extract_amenity_data(
+                    osm_type="node",
+                    osm_id=n.id,
+                    lat=n.location.lat,
+                    lon=n.location.lon,
+                    tags=dict(n.tags),
+                    category_slug=category_slug,
+                )
+            )
+
+    def way(self, w):
+        """Process OSM ways (polygon features)."""
+        category_slug = self._get_category_slug(w.tags)
+        if not category_slug:
+            return
+
+        # Calculate centroid from way nodes
+        lons, lats = [], []
+        for node in w.nodes:
+            if node.ref in self._node_cache:
+                lon, lat = self._node_cache[node.ref]
+                lons.append(lon)
+                lats.append(lat)
+
+        if not lons:
+            return
+
+        # Simple centroid calculation
+        centroid_lon = sum(lons) / len(lons)
+        centroid_lat = sum(lats) / len(lats)
+
+        self.amenities.append(
+            self._extract_amenity_data(
+                osm_type="way",
+                osm_id=w.id,
+                lat=centroid_lat,
+                lon=centroid_lon,
+                tags=dict(w.tags),
+                category_slug=category_slug,
+            )
+        )
+
+    def _get_category_slug(self, tags) -> str | None:
+        """Determine category slug from OSM tags."""
+        for tag_pattern, category_slug in FOOD_SUPPLY_TAGS.items():
+            key, value = tag_pattern.split("=")
+            if tags.get(key) == value:
+                # Special case for vending machines - check vending type
+                if key == "amenity" and value == "vending_machine":
+                    vending = tags.get("vending", "")
+                    if vending in ["food", "drinks", "sweets", "coffee"]:
+                        return category_slug
+                else:
+                    return category_slug
+        return None
+
+    def _extract_amenity_data(
+        self,
+        osm_type: str,
+        osm_id: int,
+        lat: float,
+        lon: float,
+        tags: dict,
+        category_slug: str,
+    ) -> dict:
+        """Extract amenity data from OSM element."""
+        return {
+            "osm_type": osm_type,
+            "osm_id": osm_id,
+            "lat": lat,
+            "lon": lon,
+            "tags": tags,
+            "category_slug": category_slug,
+            "name": tags.get("name", ""),
+            "opening_hours": tags.get("opening_hours"),
+            "phone": tags.get("phone") or tags.get("contact:phone"),
+            "website": tags.get("website") or tags.get("contact:website"),
+        }
+
+
+class Command(BaseCommand):
+    help = "Import food supply amenities from OpenStreetMap via Geofabrik"
+
+    def add_arguments(self, parser: CommandParser) -> None:
+        parser.add_argument(
+            "region",
+            type=str,
+            help="Geofabrik region path (e.g., europe/switzerland, europe/alps)",
+        )
+        parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="Show what would be imported without making changes",
+        )
+        parser.add_argument(
+            "-l",
+            "--limit",
+            type=int,
+            default=None,
+            help="Limit number of places to import (for testing)",
+        )
+        parser.add_argument(
+            "--data-dir",
+            type=str,
+            default=None,
+            help="Directory for PBF files (default: use temp dir). Files are cached and not re-downloaded.",
+        )
+
+    def handle(self, *args, **options):
+        """Main command execution."""
+        region = options["region"]
+        dry_run = options["dry_run"]
+        limit = options.get("limit")
+        run_start = timezone.now()
+
+        self.stdout.write(f"Importing OSM amenities from {region}...")
+
+        if dry_run:
+            self.stdout.write(
+                self.style.WARNING("DRY RUN MODE - No changes will be made")
+            )
+
+        # 1. Download PBF file
+        self.stdout.write("Downloading PBF file from Geofabrik...")
+        pbf_path = self._download_pbf(region)
+
+        if not pbf_path.exists():
+            self.stdout.write(
+                self.style.ERROR(f"Failed to download PBF file from {region}")
+            )
+            return
+
+        self.stdout.write(self.style.SUCCESS(f"Downloaded: {pbf_path}"))
+
+        # 2. Parse PBF file
+        self.stdout.write("Parsing OSM data...")
+        handler = OSMHandler()
+        handler.apply_file(str(pbf_path))
+        amenities = handler.amenities
+
+        self.stdout.write(f"Found {len(amenities)} amenities")
+
+        if limit:
+            amenities = amenities[:limit]
+            self.stdout.write(f"Limited to {limit} amenities")
+
+        # 3. Get or create OSM organization
+        osm_org, _ = Organization.objects.get_or_create(
+            slug="osm",
+            defaults={
+                "name": "OpenStreetMap",
+                "url": "https://www.openstreetmap.org",
+                "is_active": True,
+            },
+        )
+
+        # 4. Upsert amenities
+        self.stdout.write("Upserting amenities to database...")
+        created_count = 0
+        updated_count = 0
+        skipped_count = 0
+
+        for i, data in enumerate(amenities):
+            if dry_run:
+                self.stdout.write(
+                    f"[DRY RUN] Would upsert: {data['name'] or 'Unnamed'} "
+                    f"({data['category_slug']}) at ({data['lat']}, {data['lon']})"
+                )
+                continue
+
+            try:
+                with transaction.atomic():
+                    result = self._upsert_amenity(data, osm_org, run_start)
+                    if result == "created":
+                        created_count += 1
+                    elif result == "updated":
+                        updated_count += 1
+                    else:
+                        skipped_count += 1
+
+                if (i + 1) % 100 == 0:
+                    self.stdout.write(f"Processed {i + 1}/{len(amenities)}")
+
+            except Exception as e:
+                self.stdout.write(
+                    self.style.ERROR(f"Error processing {data['name']}: {e}")
+                )
+
+        # 5. Cleanup deleted places
+        if not dry_run:
+            self.stdout.write("Cleaning up deleted places...")
+            deleted_count = self._cleanup_deleted_places(osm_org, run_start)
+            self.stdout.write(f"Deactivated {deleted_count} places no longer in OSM")
+
+        # Cleanup temp file
+        pbf_path.unlink()
+        pbf_path.parent.rmdir()
+
+        # Summary
+        self.stdout.write(self.style.SUCCESS("\nImport complete!"))
+        self.stdout.write(f"  Created: {created_count}")
+        self.stdout.write(f"  Updated: {updated_count}")
+        self.stdout.write(f"  Skipped: {skipped_count}")
+        if not dry_run:
+            self.stdout.write(f"  Deactivated: {deleted_count}")
+
+    def _download_pbf(self, region: str) -> Path:
+        """Download PBF file from Geofabrik."""
+        url = f"https://download.geofabrik.de/{region}-latest.osm.pbf"
+        temp_dir = Path(tempfile.mkdtemp())
+        pbf_path = temp_dir / f"{region.replace('/', '_')}.osm.pbf"
+
+        try:
+            with httpx.stream(
+                "GET", url, follow_redirects=True, timeout=300.0
+            ) as response:
+                response.raise_for_status()
+                total = int(response.headers.get("content-length", 0))
+                downloaded = 0
+
+                with open(pbf_path, "wb") as f:
+                    for chunk in response.iter_bytes(chunk_size=8192):
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total:
+                            progress = (downloaded / total) * 100
+                            if downloaded % (1024 * 1024 * 10) == 0:  # Every 10MB
+                                self.stdout.write(f"  Downloaded: {progress:.1f}%")
+
+        except Exception as e:
+            self.stdout.write(self.style.ERROR(f"Download failed: {e}"))
+            return Path()
+
+        return pbf_path
+
+    def _upsert_amenity(
+        self, data: dict, osm_org: Organization, run_start: datetime
+    ) -> str:
+        """Create or update GeoPlace + AmenityDetail."""
+        source_id = f"{data['osm_type']}/{data['osm_id']}"
+        location = Point(data["lon"], data["lat"])
+
+        # Find existing place
+        existing = self._find_existing_place(
+            osm_org, source_id, location, data["category_slug"]
+        )
+
+        if existing:
+            # Update existing place
+            self._update_place(existing, data, osm_org, source_id, run_start)
+            return "updated"
+        else:
+            # Create new place
+            self._create_place(data, osm_org, source_id, run_start, location)
+            return "created"
+
+    def _find_existing_place(
+        self, osm_org: Organization, source_id: str, location: Point, category_slug: str
+    ) -> GeoPlace | None:
+        """Find existing GeoPlace using WEP008 deduplication logic."""
+        # 1. Check OSM source + source_id
+        try:
+            from server.apps.geometries.models import GeoPlaceSourceAssociation
+
+            assoc = GeoPlaceSourceAssociation.objects.get(
+                organization=osm_org, source_id=source_id
+            )
+            return assoc.place
+        except GeoPlaceSourceAssociation.DoesNotExist:
+            pass
+
+        # 2. Check location + category parent (50m radius)
+        category_parent = category_slug.split(".")[0]
+        try:
+            nearby = (
+                GeoPlace.objects.filter(
+                    location__distance_lte=(location, 50),
+                    place_type__slug__startswith=category_parent,
+                    is_active=True,
+                )
+                .annotate(distance=Distance("location", location))
+                .order_by("distance")
+            )
+
+            if nearby.count() == 1:
+                return nearby.first()
+            elif nearby.count() > 1:
+                # Mark all for review
+                nearby.update(review_status="review")
+                return None
+        except Exception:
+            pass
+
+        # 3. Check very small radius (10m) regardless of category
+        very_nearby = (
+            GeoPlace.objects.filter(
+                location__distance_lte=(location, 10),
+                is_active=True,
+            )
+            .annotate(distance=Distance("location", location))
+            .order_by("distance")
+        )
+
+        if very_nearby.count() == 1:
+            return very_nearby.first()
+        elif very_nearby.count() > 1:
+            very_nearby.update(review_status="review")
+            return None
+
+        return None
+
+    def _create_place(
+        self,
+        data: dict,
+        osm_org: Organization,
+        source_id: str,
+        run_start: datetime,
+        location: Point,
+    ):
+        """Create new GeoPlace + AmenityDetail."""
+        # Get or create category
+        category = self._get_or_create_category(data["category_slug"])
+
+        # Parse opening hours
+        opening_hours_data = self._parse_opening_hours(data.get("opening_hours"))
+
+        # Create place
+        place = GeoPlace.objects.create(
+            name=data["name"] or "Unnamed",
+            location=location,
+            place_type=category,
+            country_code=self._guess_country_code(location),
+            detail_type="amenity",
+            osm_tags=data["tags"],
+            review_status="new",
+        )
+
+        # Create amenity detail
+        amenity_detail = AmenityDetail.objects.create(
+            geo_place=place,
+            operating_status="open",
+            opening_hours=opening_hours_data,
+            phones=self._format_phones(data.get("phone")),
+        )
+
+        # Create source association
+        from server.apps.geometries.models import GeoPlaceSourceAssociation
+
+        GeoPlaceSourceAssociation.objects.create(
+            place=place,
+            organization=osm_org,
+            source_id=source_id,
+            import_date=run_start,
+            modified_date=run_start,
+            priority=1,  # OSM has priority 1
+        )
+
+        # Handle website via ExternalLink
+        if data.get("website"):
+            self._add_external_link(place, data["website"], "website")
+
+    def _update_place(
+        self,
+        place: GeoPlace,
+        data: dict,
+        osm_org: Organization,
+        source_id: str,
+        run_start: datetime,
+    ):
+        """Update existing GeoPlace + AmenityDetail."""
+        from server.apps.geometries.models import GeoPlaceSourceAssociation
+
+        # Update fields not in protected_fields
+        protected = place.protected_fields or ["name", "location"]
+
+        if "name" not in protected and data["name"]:
+            place.name = data["name"]
+        if "location" not in protected:
+            place.location = Point(data["lon"], data["lat"])
+
+        place.osm_tags = data["tags"]
+        place.save()
+
+        # Update AmenityDetail
+        if hasattr(place, "amenity_detail"):
+            detail = place.amenity_detail
+            if data.get("opening_hours"):
+                detail.opening_hours = self._parse_opening_hours(data["opening_hours"])
+            if data.get("phone"):
+                detail.phones = self._format_phones(data["phone"])
+            detail.save()
+
+        # Update source association
+        assoc, created = GeoPlaceSourceAssociation.objects.update_or_create(
+            place=place,
+            organization=osm_org,
+            defaults={
+                "source_id": source_id,
+                "modified_date": run_start,
+            },
+        )
+
+        # Handle website via ExternalLink
+        if data.get("website"):
+            self._add_external_link(place, data["website"], "website")
+
+    def _cleanup_deleted_places(
+        self, osm_org: Organization, run_start: datetime
+    ) -> int:
+        """Deactivate places not seen in this import run."""
+        from server.apps.geometries.models import GeoPlaceSourceAssociation
+
+        stale_associations = GeoPlaceSourceAssociation.objects.filter(
+            organization=osm_org, modified_date__lt=run_start
+        )
+
+        count = 0
+        for assoc in stale_associations:
+            if assoc.place.is_active:
+                assoc.place.is_active = False
+                assoc.place.review_status = "review"
+                assoc.place.save()
+                count += 1
+
+        return count
+
+    def _get_or_create_category(self, category_slug: str) -> Category:
+        """Get or create category by slug."""
+        parts = category_slug.split(".")
+        parent_slug = parts[0] if len(parts) > 1 else None
+        child_slug = parts[1] if len(parts) > 1 else parts[0]
+
+        # Get or create parent category
+        if parent_slug:
+            parent, _ = Category.objects.get_or_create(
+                slug=parent_slug,
+                defaults={
+                    "name": parent_slug.replace("_", " ").title(),
+                },
+            )
+        else:
+            parent = None
+
+        # Get or create child category
+        category, _ = Category.objects.get_or_create(
+            slug=category_slug,
+            defaults={
+                "name": child_slug.replace("_", " ").title(),
+                "parent": parent,
+            },
+        )
+
+        return category
+
+    def _parse_opening_hours(self, opening_hours_str: str | None) -> dict:
+        """Parse OSM opening_hours format to our JSON schema."""
+        if not opening_hours_str:
+            return {}
+
+        try:
+            from opening_hours import OpeningHours
+            from datetime import datetime, timedelta
+
+            oh = OpeningHours(opening_hours_str)
+
+            # Convert to our weekly format
+            result = {}
+            weekdays = [
+                "monday",
+                "tuesday",
+                "wednesday",
+                "thursday",
+                "friday",
+                "saturday",
+                "sunday",
+            ]
+
+            # Get a reference date (use current week)
+            today = datetime.now()
+            start_of_week = today - timedelta(days=today.weekday())
+
+            for i, weekday in enumerate(weekdays):
+                day_date = start_of_week + timedelta(days=i)
+
+                # Get intervals for this day
+                intervals = []
+                try:
+                    # Check if open at various times throughout the day
+                    # Sample every 30 minutes to find open periods
+                    current_time = day_date.replace(hour=0, minute=0, second=0)
+                    end_time = day_date.replace(hour=23, minute=59, second=59)
+
+                    in_open_period = False
+                    period_start = None
+
+                    while current_time <= end_time:
+                        is_open = oh.is_open(current_time)
+
+                        if is_open and not in_open_period:
+                            # Start of open period
+                            in_open_period = True
+                            period_start = current_time.strftime("%H:%M")
+                        elif not is_open and in_open_period:
+                            # End of open period
+                            in_open_period = False
+                            intervals.append(
+                                {
+                                    "open": period_start,
+                                    "close": current_time.strftime("%H:%M"),
+                                }
+                            )
+
+                        current_time += timedelta(minutes=30)
+
+                    # Close any open period at end of day
+                    if in_open_period:
+                        intervals.append({"open": period_start, "close": "23:59"})
+
+                except Exception:
+                    # If parsing fails for this day, skip it
+                    pass
+
+                if intervals:
+                    result[weekday] = intervals
+
+            # Store raw string for reference
+            if result:
+                result["_raw"] = opening_hours_str
+            else:
+                # If parsing produced no results, just store raw
+                result = {"_raw": opening_hours_str}
+
+            return result
+
+        except Exception as e:
+            # Fallback: store raw string
+            return {"_raw": opening_hours_str}
+
+    def _format_phones(self, phone: str | None) -> list:
+        """Format phone number(s) to our JSON schema."""
+        if not phone:
+            return []
+
+        # Split multiple phone numbers (some OSM entries have multiple separated by ;)
+        phones = [p.strip() for p in phone.split(";") if p.strip()]
+
+        return [{"number": p} for p in phones]
+
+    def _guess_country_code(self, location: Point) -> str:
+        """Guess country code from location (simplified for now)."""
+        # TODO: Implement proper country lookup via shapefile or API
+        # For now, return a default - this should be improved
+        return "CH"  # Default to Switzerland for testing
+
+    def _add_external_link(self, place: GeoPlace, url: str, link_type: str):
+        """Add external link to place via ExternalLink model."""
+        from server.apps.external_links.models import ExternalLink
+
+        # Get or create link_type category
+        link_type_category, _ = Category.objects.get_or_create(
+            slug=f"external_link.{link_type}",
+            defaults={"name": link_type.title()},
+        )
+
+        # Create ExternalLink
+        external_link, _ = ExternalLink.objects.get_or_create(
+            url=url,
+            defaults={
+                "label": place.name,
+                "link_type": link_type_category,
+            },
+        )
+
+        # Associate with place
+        from server.apps.geometries.models import GeoPlaceExternalLink
+
+        GeoPlaceExternalLink.objects.get_or_create(
+            geo_place=place,
+            external_link=external_link,
+        )

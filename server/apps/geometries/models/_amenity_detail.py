@@ -76,15 +76,6 @@ class AmenityDetail(TimeStampedModel):
     )
 
     # Contact information
-    websites = models.JSONField(
-        default=list,
-        blank=True,
-        verbose_name=_("Websites"),
-        help_text=_(
-            "List of URLs with optional labels: [{'url': 'https://...', 'label': 'Official'}]"
-        ),
-    )
-
     phones = models.JSONField(
         default=list,
         blank=True,
@@ -92,6 +83,17 @@ class AmenityDetail(TimeStampedModel):
         help_text=_(
             "List of phone numbers: [{'number': '+41 123 456 78 90', 'label': 'Main'}]"
         ),
+    )
+
+    # Brand information
+    brand = models.ForeignKey(
+        "categories.Category",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="amenity_brands",
+        verbose_name=_("Brand"),
+        help_text=_("Brand category (e.g., Volg, Migros, Coop)"),
     )
 
     class Meta:

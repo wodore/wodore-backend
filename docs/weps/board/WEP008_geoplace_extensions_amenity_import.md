@@ -124,15 +124,95 @@ directly improves performance and preserves the original OSM classification.
 Categories follow a `parent.child` slug pattern. The mapping to `detail_type`
 is defined in code and is not a hard DB constraint — categories stay flexible.
 
-| Example categories | Typical `detail_type` |
-|---|---|
-| `natural.*` (peak, pass, lake, glacier, waterfall, waypoint) | `natural` |
-| `admin.*` (city, village, valley) | `admin` |
-| `food_supply.*`, `restaurant.*`, `accommodation.*`, `emergency.*` | `amenity` |
-| `mobility.*` (bus_stop, train_station, cable_car, parking) | `transport` |
-| `mobility.*` (bike_repair, bike_rental) | `amenity` |
+### Complete Category Taxonomy (15 top-level categories)
 
-The `Hut` model is not migrated as part of this WEP and continues to coexist.
+This taxonomy balances Alpine/tourism focus with general utility, informed by
+OpenStreetMap, Google Maps, OsmAnd, and Organic Maps conventions.
+
+**restaurant** (prepared food & drinks) → `amenity`
+
+- restaurant, cafe, bar, pub, fast_food, food_court, ice_cream
+
+**groceries** (food shopping) → `amenity`
+
+- supermarket, convenience, bakery, butcher, greengrocer, farm_shop, deli, vending_machine
+
+**accommodation** (lodging) → `accommodation` (not implemented yet, use `amenity`)
+
+- hotel, hostel, guesthouse, campground, alpine_hut
+
+**health_and_emergency** (medical & urgent response) → `amenity`
+
+- hospital, clinic, doctor, dentist, pharmacy, fire_station, police, mountain_rescue
+
+**transport** (public transit) → `transport`
+
+- bus_stop, train_station, cable_car, gondola, chairlift, funicular
+
+**automotive** (vehicle services) → `amenity`
+
+- parking, fuel, charging_station, car_wash, car_rental
+
+**sport** (activities, facilities, instruction) → `amenity`
+
+- climbing_gym, swimming_pool, fitness_center, ski_school, playground, mountain_guide
+
+**outdoor_services** (Alpine/outdoor gear - rental, repair, shops) → `amenity`
+
+- ski_rental, bike_rental, bike_repair, bike_shop, outdoor_shop, sports_shop
+
+**tourism** (sightseeing & information) → `amenity`
+
+- information, viewpoint, museum, attraction, artwork, memorial
+
+**natural** (natural features) → `natural`
+
+- peak, pass, lake, glacier, waterfall, cave, spring, cliff, saddle, ridge, valley_entrance
+
+**admin** (administrative areas) → `admin`
+
+- country, state, canton, district, city, municipality, village, hamlet
+
+**utilities** (public infrastructure) → `amenity`
+
+- toilets, drinking_water, shower, waste_disposal
+
+**finance** (banking) → `amenity`
+
+- bank, atm
+
+**shopping** (general retail - non-food) → `amenity`
+
+- clothes_shop, shoe_shop, hardware_store, bookshop, electronics_store, gift_shop
+
+**services** (personal services) → `amenity`
+
+- hairdresser, tailor, computer_repair, veterinary, laundry
+
+### Category → detail_type Mapping
+
+| Categories | `detail_type` | Notes |
+|---|---|---|
+| restaurant, groceries, health_and_emergency, automotive, outdoor_services, shopping, services, utilities, sport, tourism, finance | `amenity` | Uses AmenityDetail |
+| accommodation | `accommodation` | Uses AccommodationDetail (not implemented yet, use `amenity`) |
+| transport | `transport` | Uses TransportDetail |
+| natural | `natural` | No detail model - base GeoPlace fields sufficient |
+| admin | `admin` | Uses AdminDetail |
+
+**Natural features** use existing `GeoPlace` fields:
+
+- `location` (Point) for peaks, passes, waypoints
+- `elevation` for altitude
+- `parent` (self-FK) for mountain ranges (e.g., peak → Bernese Alps)
+- `shape` (Polygon) for lakes, glaciers, valleys
+- Category slug differentiates: `natural.peak`, `natural.lake`, etc.
+
+**Admin areas** use `AdminDetail` plus:
+
+- `location` (Point) - administrative center
+- `shape` (Polygon) - boundary
+- `parent` (self-FK) - village → municipality → canton → country
+- Fields: admin_level, population, postal_code, iso_code
 
 ## Source Tracking & Import Policy
 

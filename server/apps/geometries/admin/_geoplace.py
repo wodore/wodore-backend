@@ -18,6 +18,7 @@ from ..models import (
     GeoPlace,
     GeoPlaceSourceAssociation,
     GeoPlaceExternalLink,
+    AmenityDetail,
 )
 
 
@@ -126,6 +127,8 @@ class GeoPlaceAdmin(ModelAdmin):
         "review_status_display",
         "is_public",
         "is_active",
+        "created",
+        "modified",
     )
 
     list_display_links = ("name",)
@@ -147,6 +150,19 @@ class GeoPlaceAdmin(ModelAdmin):
         "name_i18n",
         "description_i18n",
         "location_display",
+        "osm_tags",
+        "created",
+        "modified",
+    )
+
+    sortable_by = (
+        "name",
+        "slug",
+        "country_code",
+        "elevation_display",
+        "review_status",
+        "is_public",
+        "is_active",
         "created",
         "modified",
     )
@@ -206,3 +222,126 @@ class GeoPlaceAdmin(ModelAdmin):
                 obj.location.x,
             )
         return "-"
+
+
+@admin.register(AmenityDetail)
+class AmenityDetailAdmin(ModelAdmin):
+    """
+    Admin interface for AmenityDetail model.
+
+    Provides management of amenity-specific details like opening hours,
+    operating status, and brand information.
+    """
+
+    list_display = (
+        "place_name",
+        "place_type",
+        "operating_status",
+        "brand",
+        "has_opening_hours",
+        "has_phones",
+        "created",
+        "modified",
+    )
+
+    list_display_links = ("place_name",)
+
+    list_filter = (
+        "operating_status",
+        "brand__parent",
+        "brand",
+        "geo_place__place_type__parent",
+        "geo_place__place_type",
+        "geo_place__country_code",
+    )
+
+    search_fields = (
+        "geo_place__name",
+        "geo_place__name_i18n",
+        "geo_place__slug",
+    )
+
+    autocomplete_fields = ("geo_place", "brand")
+
+    readonly_fields = (
+        "created",
+        "modified",
+    )
+
+    fieldsets = [
+        (
+            _("Place"),
+            {
+                "fields": [
+                    "geo_place",
+                ],
+            },
+        ),
+        (
+            _("Status"),
+            {
+                "fields": [
+                    "operating_status",
+                ],
+            },
+        ),
+        (
+            _("Brand"),
+            {
+                "fields": [
+                    "brand",
+                ],
+            },
+        ),
+        (
+            _("Opening Information"),
+            {
+                "fields": [
+                    "opening_months",
+                    "opening_hours",
+                ],
+            },
+        ),
+        (
+            _("Contact"),
+            {
+                "fields": [
+                    "phones",
+                ],
+            },
+        ),
+        (
+            _("Timestamps"),
+            {
+                "fields": [
+                    ("created", "modified"),
+                ],
+            },
+        ),
+    ]
+
+    list_per_page = 50
+
+    # Display methods
+
+    @display(description=_("Place Name"))
+    def place_name(self, obj: AmenityDetail) -> str:
+        """Display associated place name."""
+        return obj.geo_place.name_i18n
+
+    @display(description=_("Type"))
+    def place_type(self, obj: AmenityDetail) -> str:
+        """Display place type."""
+        if obj.geo_place.place_type.parent:
+            return f"{obj.geo_place.place_type.parent.name_i18n} → {obj.geo_place.place_type.name_i18n}"
+        return obj.geo_place.place_type.name_i18n
+
+    @display(description=_("Opening Hours"), boolean=True)
+    def has_opening_hours(self, obj: AmenityDetail) -> bool:
+        """Check if opening hours are defined."""
+        return bool(obj.opening_hours)
+
+    @display(description=_("Phones"), boolean=True)
+    def has_phones(self, obj: AmenityDetail) -> bool:
+        """Check if phone numbers are defined."""
+        return bool(obj.phones)

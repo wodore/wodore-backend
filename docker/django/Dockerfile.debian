@@ -2,7 +2,7 @@
 # This Dockerfile uses multi-stage build to customize DEV and PROD images:
 # https://docs.docker.com/develop/develop-images/multistage-build/
 
-FROM python:3.11.5-slim-bookworm AS python-base
+FROM python:3.12.13-slim-bookworm AS python-base
 
 LABEL maintainer="wodore.com"
 LABEL vendor="wodore.com"
@@ -73,6 +73,8 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
   binutils \
   libproj-dev \
   gdal-bin \
+  osmium-tool \
+  libosmium2-dev \
   # Installing `tini` utility:
   # https://github.com/krallin/tini
   # Get architecture to download appropriate tini release:
@@ -142,6 +144,7 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
   && apt-get install -y --no-install-recommends \
   wait-for-it \
   gdal-bin \
+  osmium-tool \
   #libproj-dev \
   # Cleaning cache:
   && rm -rf /var/lib/apt/lists/*

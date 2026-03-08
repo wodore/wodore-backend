@@ -96,7 +96,7 @@ class GeoPlaceSourceAssociation(TimeStampedModel, ComputedFieldsModel):
     update_policy = models.CharField(
         max_length=20,
         choices=UpdatePolicy.choices,
-        default=UpdatePolicy.ALWAYS,
+        default=UpdatePolicy.AUTO_PROTECT,
         verbose_name=_("Update Policy"),
         help_text=_("How this source may update the record"),
     )
@@ -104,7 +104,7 @@ class GeoPlaceSourceAssociation(TimeStampedModel, ComputedFieldsModel):
     delete_policy = models.CharField(
         max_length=20,
         choices=DeletePolicy.choices,
-        default=DeletePolicy.DEACTIVATE,
+        default=DeletePolicy.AUTO_KEEP,
         verbose_name=_("Delete Policy"),
         help_text=_("What happens when this source no longer includes the record"),
     )

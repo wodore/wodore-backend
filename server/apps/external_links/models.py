@@ -161,8 +161,13 @@ class ExternalLink(TimeStampedModel):
             ),
         ]
 
-    def save(self, *args, **kwargs):
-        """Auto-generate identifier if not provided and run health check."""
+    def save(self, *args, skip_health_check=False, **kwargs):
+        """
+        Auto-generate identifier if not provided and run health check.
+
+        Args:
+            skip_health_check: If True, skip health check (useful for bulk imports)
+        """
         if not self.identifier:
             self.identifier = self.generate_unique_identifier()
 
@@ -174,8 +179,8 @@ class ExternalLink(TimeStampedModel):
         if not self.label and self.url:
             self._auto_extract_title()
 
-        # Run health check on save (unless it's a new object without a URL yet)
-        if self.url:
+        # Run health check on save (unless skipped or no URL)
+        if self.url and not skip_health_check:
             self.check_health()
 
         super().save(*args, **kwargs)

@@ -46,6 +46,15 @@ GeoPlaceAdminFieldsets = [
         },
     ),
     (
+        _("OSM Tags"),
+        {
+            "classes": ["tab"],
+            "fields": [
+                "osm_tags",
+            ],
+        },
+    ),
+    (
         _("Timestamps"),
         {
             "classes": ["tab"],
