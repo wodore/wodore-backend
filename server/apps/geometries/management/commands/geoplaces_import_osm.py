@@ -19,7 +19,6 @@ from pathlib import Path
 
 import httpx
 import osmium
-from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point
 from django.core.management.base import BaseCommand, CommandParser
 from django.db import transaction
@@ -31,7 +30,7 @@ from server.apps.geometries.config.osm_categories import (
     get_enabled_categories,
     match_tags_to_category,
 )
-from server.apps.geometries.models import AmenityDetail, GeoPlace
+from server.apps.geometries.models import GeoPlace
 from server.apps.organizations.models import Organization
 
 # Global Overpass server list with labels for display
@@ -759,7 +758,7 @@ class Command(BaseCommand):
                 storage_dir.rmdir()
             return Path()
 
-    def _upsert_amenity_v2(
+    def _upsert_amenity(
         self, data: dict, osm_org: Organization, run_start: datetime
     ) -> str:
         """Create or update GeoPlace + AmenityDetail using schema-based approach."""
@@ -803,10 +802,12 @@ class Command(BaseCommand):
         category = self._get_or_create_category(data["category_slug"])
         category_identifier = category.identifier
 
-        # Build brand input if provided
+        # Build brand input if provided (only for chain brands, not product lists)
         brand_input = None
         if data.get("brand"):
-            brand_input = BrandInput(slug=data["brand"])
+            # Skip if brand is a list (contains semicolons) - these are product brands, not chain brands
+            if ";" not in data["brand"]:
+                brand_input = BrandInput(slug=data["brand"])
 
         # Build flattened GeoPlace schema
         schema = GeoPlaceAmenityInput(
@@ -862,329 +863,6 @@ class Command(BaseCommand):
             return "updated"
         else:
             return "skipped"
-
-    def _upsert_amenity(
-        self, data: dict, osm_org: Organization, run_start: datetime
-    ) -> str:
-        """Create or update GeoPlace + AmenityDetail.
-
-        NOTE: This is the legacy method. Use _upsert_amenity_v2() for new implementations.
-        """
-        # Save source_id as OSM_TYPE/OSM_ID format to ensure uniqueness
-        source_id = (
-            f"{data['osm_type']}/{data['osm_id']}"  # e.g., "node/123456", "way/789"
-        )
-        location = Point(data["lon"], data["lat"])
-
-        # Find existing place
-        existing = self._find_existing_place(
-            osm_org, source_id, location, data["category_slug"], data.get("brand")
-        )
-
-        if existing:
-            # Update existing place
-            self._update_place(existing, data, osm_org, source_id, run_start)
-            return "updated"
-        else:
-            # Create new place
-            self._create_place(data, osm_org, source_id, run_start, location)
-            return "created"
-
-    def _find_existing_place(
-        self,
-        osm_org: Organization,
-        source_id: str,
-        location: Point,
-        category_slug: str,
-        brand: str | None,
-    ) -> GeoPlace | None:
-        """Find existing GeoPlace using WEP008 deduplication logic.
-
-        PERFORMANCE OPTIMIZATIONS:
-        - Filters by country_code to use composite spatial index
-        - Caches OSM source_id lookups
-        - Limits results to avoid fetching large result sets
-        """
-        from server.apps.geometries.models import GeoPlaceSourceAssociation
-
-        # 1. Check OSM source + source_id (OSM IDs are globally unique)
-        # PERFORMANCE: Use cache to avoid repeated DB lookups
-        cache_key = f"osm_{source_id}"
-        if hasattr(self, "_place_cache") and cache_key in self._place_cache:
-            return self._place_cache[cache_key]
-
-        try:
-            assoc = GeoPlaceSourceAssociation.objects.select_related("geo_place").get(
-                organization=osm_org, source_id=source_id
-            )
-            place = assoc.geo_place
-            if hasattr(self, "_place_cache"):
-                self._place_cache[cache_key] = place
-            return place
-        except GeoPlaceSourceAssociation.DoesNotExist:
-            pass
-
-        # Get current country for spatial index optimization
-        country_code = getattr(self, "_current_region", "CH")
-
-        # 2. Check location + category parent + brand (20m radius)
-        # Different brands at same location = different places
-        category_parent = category_slug.split(".")[0]
-
-        # Get brand category if brand exists
-        brand_category = None
-        if brand:
-            brand_category = self._get_or_create_brand_category(brand)
-
-        try:
-            # PERFORMANCE: Use distance_lte + country filter to leverage composite GIST index
-            # Note: For SRID 4326 (lat/lon), we must use distance_lte, not dwithin
-            nearby = GeoPlace.objects.filter(
-                country_code=country_code,  # Uses composite index
-                is_active=True,
-                location__distance_lte=(
-                    location,
-                    20,
-                ),  # 20 meters - PostGIS handles conversion
-                place_type__slug__startswith=category_parent,
-            ).annotate(distance=Distance("location", location))
-
-            # Filter by brand if provided
-            if brand_category:
-                nearby = nearby.filter(amenity_detail__brand=brand_category)
-            else:
-                # No brand specified - only match places without brand
-                nearby = nearby.filter(amenity_detail__brand__isnull=True)
-
-            nearby = nearby.order_by("distance")[
-                :2
-            ]  # PERFORMANCE: Limit to 2 instead of fetching all
-
-            count = len(nearby)
-            if count == 1:
-                return nearby[0]
-            elif count > 1:
-                # Mark all for review
-                nearby_ids = [p.id for p in nearby]
-                GeoPlace.objects.filter(id__in=nearby_ids).update(
-                    review_status="review"
-                )
-                return None
-        except Exception:
-            pass
-
-        # 3. Check very small radius (4m) regardless of category or brand
-        # Catches edge cases like wrong category or missing brand
-        # PERFORMANCE: Use distance_lte + country filter for bbox optimization
-        very_nearby = (
-            GeoPlace.objects.filter(
-                country_code=country_code,  # Uses composite index
-                is_active=True,
-                location__distance_lte=(
-                    location,
-                    4,
-                ),  # 4 meters - PostGIS handles conversion
-            )
-            .annotate(distance=Distance("location", location))
-            .order_by("distance")[:2]  # PERFORMANCE: Limit to 2 instead of fetching all
-        )
-
-        very_nearby_list = list(very_nearby)
-        if len(very_nearby_list) == 1:
-            return very_nearby_list[0]
-        elif len(very_nearby_list) > 1:
-            nearby_ids = [p.id for p in very_nearby_list]
-            GeoPlace.objects.filter(id__in=nearby_ids).update(review_status="review")
-            return None
-
-        return None
-
-    def _create_place(
-        self,
-        data: dict,
-        osm_org: Organization,
-        source_id: str,
-        run_start: datetime,
-        location: Point,
-    ):
-        """Create new GeoPlace + AmenityDetail."""
-        # Get or create category
-        category = self._get_or_create_category(data["category_slug"])
-
-        # Parse opening hours
-        opening_hours_data = self._parse_opening_hours(data.get("opening_hours"))
-
-        # Handle brand
-        brand_category = None
-        brand_org = None
-        if data.get("brand"):
-            brand_category = self._get_or_create_brand_category(data["brand"])
-            brand_org = self._get_or_create_brand_organization(
-                data["brand"], data.get("website")
-            )
-
-        # Extract multilingual names and descriptions
-        name_i18n = self._extract_i18n_field(data["tags"], "name")
-        description_i18n = self._extract_i18n_field(data["tags"], "description")
-
-        # Create place with i18n support
-        # Base fields use Django's LANGUAGE_CODE (de)
-        # Other languages use field_LANG_CODE suffix (name_en, name_fr, etc.)
-        from django.conf import settings
-
-        place_data = {
-            "name": name_i18n.get(settings.LANGUAGE_CODE, "Unnamed"),
-            "location": location,
-            "place_type": category,
-            "country_code": self._guess_country_code(location),
-            "detail_type": "amenity",
-            "osm_tags": data["tags"],
-            "review_status": "new",
-        }
-
-        # Add translations for non-default languages
-        for lang_code, name_value in name_i18n.items():
-            if lang_code != settings.LANGUAGE_CODE:
-                place_data[f"name_{lang_code}"] = name_value
-
-        # Add default description
-        if settings.LANGUAGE_CODE in description_i18n:
-            place_data["description"] = description_i18n[settings.LANGUAGE_CODE]
-
-        # Add description translations for non-default languages
-        for lang_code, desc_value in description_i18n.items():
-            if lang_code != settings.LANGUAGE_CODE and desc_value:
-                place_data[f"description_{lang_code}"] = desc_value
-
-        place = GeoPlace.objects.create(**place_data)
-
-        # Create amenity detail
-        AmenityDetail.objects.create(
-            geo_place=place,
-            operating_status="open",
-            opening_hours=opening_hours_data,
-            phones=self._format_phones(data.get("phone")),
-            brand=brand_category,
-        )
-
-        # Create source association
-        from server.apps.geometries.models import GeoPlaceSourceAssociation
-
-        GeoPlaceSourceAssociation.objects.create(
-            geo_place=place,
-            organization=osm_org,
-            source_id=source_id,
-            import_date=run_start,
-            modified_date=run_start,
-            priority=1,  # OSM has priority 1
-            extra={
-                "osm_type": data["osm_type"],  # node, way, or relation
-                "osm_id": data["osm_id"],  # numeric ID
-            },
-        )
-
-        # Handle website via ExternalLink
-        if data.get("website"):
-            # Use brand organization if brand matches website
-            source_org = None
-            if brand_org and data.get("brand") and data.get("website"):
-                brand_lower = data["brand"].lower()
-                website_lower = data["website"].lower()
-                if brand_lower in website_lower:
-                    source_org = brand_org
-
-            self._add_external_link(place, data["website"], "website", source_org)
-
-    def _update_place(
-        self,
-        place: GeoPlace,
-        data: dict,
-        osm_org: Organization,
-        source_id: str,
-        run_start: datetime,
-    ):
-        """Update existing GeoPlace + AmenityDetail."""
-        from server.apps.geometries.models import GeoPlaceSourceAssociation
-
-        # Reactivate if previously deactivated (place was deleted but now exists again in OSM)
-        if not place.is_active:
-            place.is_active = True
-            place.review_status = "review"  # Reset review status for reactivated places
-
-        # Update fields not in protected_fields
-        protected = place.protected_fields or ["name", "location"]
-
-        # Extract multilingual names and descriptions
-        name_i18n = self._extract_i18n_field(data["tags"], "name")
-        description_i18n = self._extract_i18n_field(data["tags"], "description")
-
-        from django.conf import settings
-
-        # Update name (default language and translations)
-        if "name" not in protected:
-            # Update base field (default language)
-            if settings.LANGUAGE_CODE in name_i18n:
-                place.name = name_i18n[settings.LANGUAGE_CODE]
-            # Update translations for non-default languages
-            for lang_code, name_value in name_i18n.items():
-                if lang_code != settings.LANGUAGE_CODE:
-                    setattr(place, f"name_{lang_code}", name_value)
-
-        # Update description (default language and translations)
-        if "description" not in protected:
-            # Update base field (default language)
-            if settings.LANGUAGE_CODE in description_i18n:
-                place.description = description_i18n[settings.LANGUAGE_CODE]
-            # Update translations for non-default languages
-            for lang_code, desc_value in description_i18n.items():
-                if lang_code != settings.LANGUAGE_CODE and desc_value:
-                    setattr(place, f"description_{lang_code}", desc_value)
-
-        if "location" not in protected:
-            place.location = Point(data["lon"], data["lat"])
-
-        place.osm_tags = data["tags"]
-        place.save()
-
-        # Update AmenityDetail
-        if hasattr(place, "amenity_detail"):
-            detail = place.amenity_detail
-            if data.get("opening_hours"):
-                detail.opening_hours = self._parse_opening_hours(data["opening_hours"])
-            if data.get("phone"):
-                detail.phones = self._format_phones(data["phone"])
-            if data.get("brand"):
-                detail.brand = self._get_or_create_brand_category(data["brand"])
-            detail.save()
-
-        # Update source association
-        assoc, created = GeoPlaceSourceAssociation.objects.update_or_create(
-            geo_place=place,
-            organization=osm_org,
-            defaults={
-                "source_id": source_id,
-                "modified_date": run_start,
-                "extra": {
-                    "osm_type": data["osm_type"],  # node, way, or relation
-                    "osm_id": data["osm_id"],  # numeric ID
-                },
-            },
-        )
-
-        # Handle website via ExternalLink
-        if data.get("website"):
-            # Use brand organization if brand matches website
-            source_org = None
-            if data.get("brand") and data.get("website"):
-                brand_lower = data["brand"].lower()
-                website_lower = data["website"].lower()
-                if brand_lower in website_lower:
-                    brand_org = self._get_or_create_brand_organization(
-                        data["brand"], data["website"]
-                    )
-                    source_org = brand_org
-
-            self._add_external_link(place, data["website"], "website", source_org)
 
     def _deactivate_by_osm_id(self, osm_id: str, osm_org: Organization) -> bool:
         """Deactivate a place by its OSM ID.
@@ -1369,7 +1047,8 @@ class Command(BaseCommand):
 
         for data in amenities:
             category_slugs.add(data["category_slug"])
-            if data.get("brand"):
+            if data.get("brand") and ";" not in data["brand"]:
+                # Only cache chain brands, not product lists
                 brands.add(data["brand"].lower())
 
         # Pre-create all categories
@@ -2740,7 +2419,8 @@ class Command(BaseCommand):
 
         for data in amenities:
             category_slugs.add(data["category_slug"])
-            if data.get("brand"):
+            if data.get("brand") and ";" not in data["brand"]:
+                # Only cache chain brands, not product lists
                 brands.add(data["brand"].lower())
 
         # Pre-create categories if not cached

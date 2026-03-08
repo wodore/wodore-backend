@@ -289,6 +289,27 @@ class AmenityDetailAdmin(ModelAdmin):
 
     autocomplete_fields = ("geo_place", "brand")
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Filter FK choices based on field type."""
+        if db_field.name == "brand":
+            # Only show categories that are children of 'brands' parent
+            # or adjust this filter based on your category structure
+            from server.apps.categories.models import Category
+
+            # Try to get brands parent category
+            brands_parent = Category.objects.filter(identifier="root.brand").first()
+            if brands_parent:
+                kwargs["queryset"] = Category.objects.filter(
+                    parent=brands_parent
+                ).order_by("name")
+            else:
+                # Fallback: show all categories (or implement different logic)
+                kwargs["queryset"] = Category.objects.filter(
+                    parent__isnull=False
+                ).order_by("parent__name", "name")
+
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
     readonly_fields = (
         "created",
         "modified",

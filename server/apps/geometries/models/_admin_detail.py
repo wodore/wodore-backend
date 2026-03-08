@@ -2,16 +2,25 @@ from __future__ import annotations
 
 from django.contrib.gis.db import models
 from django.utils.translation import gettext_lazy as _
-from server.core.models import TimeStampedModel
+
+from ._base_detail import GeoPlaceDetailBase
 
 
-class AdminDetail(TimeStampedModel):
+class AdminDetail(GeoPlaceDetailBase):
     """
     Detailed information for administrative places.
 
     Covers cities, villages, valleys, municipalities, and other
     administrative boundaries.
     """
+
+    # Fields to track for modification
+    _trackable_fields = [
+        "admin_level",
+        "population",
+        "postal_code",
+        "iso_code",
+    ]
 
     # OneToOne relationship to GeoPlace
     geo_place = models.OneToOneField(

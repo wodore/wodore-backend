@@ -4,7 +4,8 @@ from typing import TYPE_CHECKING
 
 from django.contrib.gis.db import models
 from django.utils.translation import gettext_lazy as _
-from server.core.models import TimeStampedModel
+
+from ._base_detail import GeoPlaceDetailBase
 
 if TYPE_CHECKING:
     from server.apps.geometries.models import GeoPlace
@@ -32,13 +33,22 @@ class MonthStatus(models.TextChoices):
     UNKNOWN = "unknown", _("Unknown")
 
 
-class AmenityDetail(TimeStampedModel):
+class AmenityDetail(GeoPlaceDetailBase):
     """
     Detailed information for amenity places.
 
     Covers food supplies, shops, restaurants, emergency services,
     and accommodation amenities.
     """
+
+    # Fields to track for modification
+    _trackable_fields = [
+        "operating_status",
+        "opening_months",
+        "opening_hours",
+        "phones",
+        "brand",
+    ]
 
     # OneToOne relationship to GeoPlace
     geo_place = models.OneToOneField(
@@ -275,12 +285,12 @@ class AmenityDetail(TimeStampedModel):
             except Category.DoesNotExist:
                 pass
 
-        # Save the detail
+        # Save the detail (without tracking modifications - this is an import)
         if is_new:
-            detail.save()
+            detail.save(track_modifications=False)
             return detail, UpdateCreateStatus.created
         elif updated:
-            detail.save(update_fields=update_fields)
+            detail.save(update_fields=update_fields, track_modifications=False)
             return detail, UpdateCreateStatus.updated
         else:
             return detail, UpdateCreateStatus.no_change
