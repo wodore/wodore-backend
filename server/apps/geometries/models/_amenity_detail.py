@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.contrib.gis.db import models
 from django.utils.translation import gettext_lazy as _
-from server.apps.geometries.schemas import AmenityDetailInput
-from server.apps.geometries.models import GeoPlace
 from server.core.models import TimeStampedModel
-from server.core.utils import UpdateCreateStatus
+
+if TYPE_CHECKING:
+    from server.apps.geometries.models import GeoPlace
+    from server.apps.geometries.schemas import AmenityDetailInput
+    from server.core.utils import UpdateCreateStatus
 
 
 class OperatingStatus(models.TextChoices):
@@ -197,6 +201,8 @@ class AmenityDetail(TimeStampedModel):
             Tuple of (AmenityDetail instance, UpdateCreateStatus)
 
         Example:
+            from server.apps.geometries.schemas import AmenityDetailInput
+
             schema = AmenityDetailInput(
                 operating_status="open",
                 opening_hours={"mon": [["09:00", "18:00"]]},
@@ -210,6 +216,8 @@ class AmenityDetail(TimeStampedModel):
         """
         from server.apps.categories.models import Category
         from server.core import UpdateCreateStatus
+
+        # Import schema here to avoid circular import during model loading
 
         protected = protected_fields or set()
 

@@ -12,13 +12,17 @@ from django_countries.fields import CountryField
 from django.contrib.gis.geos import Point
 
 from server.apps.categories.models import Category
-from server.apps.geometries.schemas import DedupOptions, GeoPlaceBaseInput, SourceInput
 from server.apps.images.models import Image
 from server.apps.organizations.models import Organization
 from server.core.models import TimeStampedModel
 from server.core.utils import UpdateCreateStatus
 
 if TYPE_CHECKING:
+    from server.apps.geometries.schemas import (
+        DedupOptions,
+        GeoPlaceBaseInput,
+        SourceInput,
+    )
     from ._associations import GeoPlaceSourceAssociation
 
 
@@ -675,6 +679,8 @@ class GeoPlace(TimeStampedModel):
                 dedup_options=DedupOptions(distance_same=20, distance_any=4),
             )
         """
+        # Import here to avoid circular import during model loading
+        from server.apps.geometries.schemas import DedupOptions
 
         # Set default dedup options
         if dedup_options is None:
