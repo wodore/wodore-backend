@@ -33,6 +33,13 @@ from server.apps.geometries.config.osm_categories import (
 from server.apps.geometries.models import AmenityDetail, GeoPlace
 from server.apps.organizations.models import Organization
 
+# Global Overpass server list with labels for display
+OVERPASS_SERVERS = [
+    ("A", "https://overpass.private.coffee/api/interpreter"),
+    ("B", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"),
+    ("C", "https://overpass-api.de/api/interpreter"),
+]
+
 
 class OSMHandler(osmium.SimpleHandler):
     """Handler for parsing OSM PBF files using category mappings."""
@@ -203,6 +210,13 @@ class Command(BaseCommand):
             type=str,
             default=None,
             help="Overpass API server URL (default: use built-in pool). Useful for parallel runs with different servers.",
+        )
+        parser.add_argument(
+            "-w",
+            "--workers",
+            type=int,
+            default=1,
+            help="Number of parallel workers (default: 1). Each worker processes one mapping at a time using a different Overpass server.",
         )
         parser.add_argument(
             "--overpass-queries",
