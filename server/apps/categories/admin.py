@@ -173,6 +173,16 @@ class CategoryAdmin(ModelAdmin):
             _("Symbols"),
             {"fields": (("symbol_detailed", "symbol_simple", "symbol_mono"),)},
         ),
+        (
+            _("Additional Data"),
+            {
+                "classes": ["collapse"],
+                "fields": ("extra",),
+                "description": _(
+                    "Additional metadata as JSON. Example: {'mapcomplete_theme': 'transit'}"
+                ),
+            },
+        ),
     )
 
     inlines = (ChildCategoryInline,)

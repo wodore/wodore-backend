@@ -117,3 +117,46 @@ class GeoPlaceNearbySchema(GeoPlaceBaseSchema):
     """Schema for nearby places with distance information."""
 
     distance: float | None = None
+
+
+# Amenity schemas
+
+
+class WebsiteSchema(Schema):
+    """Schema for website with optional label."""
+
+    url: str
+    label: str | None = None
+
+
+class PhoneSchema(Schema):
+    """Schema for phone number with optional label."""
+
+    number: str
+    label: str | None = None
+
+
+class AmenityDetailSchema(Schema):
+    """Schema for amenity detailed information."""
+
+    operating_status: str
+    opening_months: dict[str, str] = Field(
+        default_factory=dict,
+        description="Monthly availability per month: {'jan': 'yes', 'feb': 'yes', ...}",
+    )
+    opening_hours: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Structured weekly hours per weekday + public holidays",
+    )
+    websites: list[WebsiteSchema] = Field(default_factory=list)
+    phones: list[PhoneSchema] = Field(default_factory=list)
+    extra: dict[str, Any] = Field(default_factory=dict)
+
+
+class AmenitySchema(GeoPlaceBaseSchema):
+    """Schema for amenity places with full details."""
+
+    description: str | None = None
+    detail_type: str
+    review_status: str | None = None
+    amenity_detail: AmenityDetailSchema | None = None

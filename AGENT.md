@@ -32,6 +32,10 @@ app update_availability --all
 
 ## Documentation
 
+### Work In Progress
+
+Document your work under `_work` in this form `yymmdd_working_title.md`. Keep the document up-to-date.
+
 ### API Documentation
 
 OpenAPI schema available at:

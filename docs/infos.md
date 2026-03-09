@@ -19,6 +19,13 @@ Useful links :fontawesome-solid-link: hut informations and development.
     * [x] [Wikidata](https://www.wikidata.org)
     * [x] [wodore](https://wodo.re)
 
+=== "Mapping :fontawesome-solid-map:"
+    *[Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API)
+      *[Overpass Turbo](https://turbo.overpass.private.coffee/) by [private.coffee](https://overpass.private.coffee)
+      *[Overpass Ultra](https://overpass-ultra.us) ([docu](https://overpass-ultra.us/docs/))
+    * Examples:
+      * [trailsta.sh](https://open.trailsta.sh/#9.51/46.2729/6.0132)
+
 === "Development :material-code-block-tags:"
 
     #### :material-cloud-tags: Hosting

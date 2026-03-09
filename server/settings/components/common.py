@@ -135,6 +135,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "server.apps.meteo",
     "server.apps.external_geonames",
     "server.apps.geometries",
+    "server.apps.external_links",
     "server.apps.api",
     # Extension:
     "psqlextra",  # https://django-postgres-extra.readthedocs.io/

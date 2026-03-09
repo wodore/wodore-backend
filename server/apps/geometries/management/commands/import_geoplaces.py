@@ -605,6 +605,35 @@ class Command(BaseCommand):
             .first()
         )
 
+    def _drop_places_by_source(self, source: str, dry_run: bool) -> int:
+        """
+        Drop all GeoPlaces from a specific source.
+
+        Args:
+            source: Source organization slug (e.g., 'geonames', 'wodore')
+            dry_run: If True, only count without deleting
+
+        Returns:
+            Number of places deleted
+        """
+        # Count places to be deleted
+        places_to_delete = GeoPlace.objects.filter(
+            source_associations__organization__slug=source
+        )
+        count = places_to_delete.count()
+
+        if dry_run:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"[DRY RUN] Would delete {count} places from '{source}'"
+                )
+            )
+            return count
+
+        # Delete all places (cascade will handle associations)
+        places_to_delete.delete()
+        return count
+
     def _calculate_importance(self, geoname: GeoName) -> int:
         """
         Calculate importance score for a place based on feature type and attributes.

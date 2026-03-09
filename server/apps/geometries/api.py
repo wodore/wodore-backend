@@ -38,6 +38,7 @@ from server.apps.translations import LanguageParam, activate, with_language_para
 
 from .models import GeoPlace
 from .schemas import (
+    AmenitySchema,
     GeoPlaceNearbySchema,
     GeoPlaceSearchSchema,
 )
@@ -622,3 +623,164 @@ def nearby_geoplaces(
         results.append(result)
 
     return [GeoPlaceNearbySchema(**result) for result in results]
+
+
+@router.get(
+    "amenity/{int:place_id}",
+    response=AmenitySchema,
+    exclude_unset=True,
+    operation_id="get_amenity",
+)
+@decorate_view(cache_control(max_age=60))
+@with_language_param("lang")
+def get_amenity(
+    request: HttpRequest,
+    response: HttpResponse,
+    lang: LanguageParam,
+    place_id: int,
+    include_sources: IncludeModeEnum = Query(
+        IncludeModeEnum.no,
+        description="Include data sources: 'no' excludes field, 'slug' returns source slugs only, 'all' returns full source details with name and logo",
+    ),
+) -> Any:
+    """Get detailed information for an amenity place including AmenityDetail data.
+
+    Returns base GeoPlace fields plus amenity-specific information like
+    operating status, opening hours, websites, and phone numbers.
+    """
+    activate(lang)
+
+    # Get the place with amenity detail
+    try:
+        place = (
+            GeoPlace.objects.filter(
+                id=place_id,
+                is_active=True,
+                detail_type="amenity",
+            )
+            .select_related(
+                "place_type",
+                "place_type__parent",
+                "place_type__symbol_detailed",
+                "place_type__symbol_simple",
+                "place_type__symbol_mono",
+                "amenity_detail",
+            )
+            .only(
+                "id",
+                "name",
+                "i18n",
+                "description",
+                "i18n",
+                "location",
+                "elevation",
+                "importance",
+                "country_code",
+                "place_type",
+                "detail_type",
+                "review_status",
+            )
+            .get()
+        )
+    except GeoPlace.DoesNotExist:
+        from ninja.errors import HttpError
+
+        raise HttpError(404, "Amenity not found")
+
+    # Add source annotations based on include_sources parameter
+    if include_sources == IncludeModeEnum.slug:
+        place = place.annotate(
+            source_slugs=JSONBAgg(F("source_set__slug"), distinct=True),
+            source_ids=JSONBAgg(F("source_associations__source_id"), distinct=True),
+        )
+    elif include_sources == IncludeModeEnum.all:
+        place = place.annotate(
+            sources_data=JSONBAgg(
+                JSONObject(
+                    slug="source_set__slug",
+                    name="source_set__name_i18n",
+                    logo="source_set__logo",
+                    source_id="source_associations__source_id",
+                ),
+                distinct=True,
+            )
+        )
+
+    # Build base result
+    result = {
+        "id": place.id,
+        "name": place.name_i18n,
+        "description": place.description_i18n,
+        "country_code": str(place.country_code) if place.country_code else None,
+        "elevation": place.elevation,
+        "importance": place.importance,
+        "detail_type": place.detail_type,
+        "review_status": place.review_status,
+        "location": {
+            "lat": place.location.y if place.location else None,
+            "lon": place.location.x if place.location else None,
+        },
+    }
+
+    # Add place_type
+    if place.place_type:
+        category_data = {
+            "slug": place.place_type.slug,
+            "name": place.place_type.name_i18n,
+            "description": place.place_type.description_i18n,
+        }
+        from server.apps.symbols.utils import resolve_symbol_urls
+
+        symbol_data = resolve_symbol_urls(place.place_type, {"request": request})
+        if symbol_data:
+            category_data["symbol"] = symbol_data
+        result["place_type"] = category_data
+
+    # Add amenity detail
+    if place.amenity_detail:
+        amenity_detail = {
+            "operating_status": place.amenity_detail.operating_status,
+            "opening_months": place.amenity_detail.opening_months or {},
+            "opening_hours": place.amenity_detail.opening_hours or {},
+            "websites": place.amenity_detail.websites or [],
+            "phones": place.amenity_detail.phones or [],
+            "extra": place.amenity_detail.extra or {},
+        }
+        result["amenity_detail"] = amenity_detail
+
+    # Add sources based on parameter
+    media_url = settings.MEDIA_URL
+    if not media_url.startswith("http"):
+        media_url = request.build_absolute_uri(media_url)
+
+    if include_sources == IncludeModeEnum.slug:
+        slugs = [slug for slug in (place.source_slugs or []) if slug is not None]
+        ids = [sid for sid in (place.source_ids or []) if sid is not None]
+        sources_list = []
+        for i, slug in enumerate(slugs):
+            source_item = OrganizationSourceIdSlugSchema(
+                source=slug, source_id=ids[i] if i < len(ids) and ids[i] else None
+            )
+            sources_list.append(source_item.dict(exclude_unset=True))
+        if sources_list:
+            result["sources"] = sources_list
+    elif include_sources == IncludeModeEnum.all:
+        sources = []
+        for src in place.sources_data or []:
+            if src.get("slug") is not None:
+                org_data = {
+                    "slug": src["slug"],
+                    "name": src.get("name"),
+                    "logo": f"{media_url}{src['logo']}" if src.get("logo") else None,
+                }
+                source_item = OrganizationSourceIdDetailSchema(
+                    source=org_data,
+                    source_id=src.get("source_id"),
+                )
+                sources.append(
+                    source_item.dict(exclude_unset=True, exclude={"source": {"logo"}})
+                )
+        if sources:
+            result["sources"] = sources
+
+    return AmenitySchema(**result)

@@ -42,11 +42,26 @@ fields.
 | `review_comment` | Internal reviewer note |
 | `detail_type` | Which detail model is attached: `amenity / transport / admin / natural / none` |
 | `protected_fields` | JSON list of field names no source may overwrite |
+| `shape` | Optional polygon geometry for natural features and administrative areas |
+| `osm_tags` | Raw tags from OpenStreetMap (JSON) |
+| `extra` | Category-specific overflow data (JSON) |
+| `websites` | List of URLs with optional labels (shared across all place types) |
 
 `protected_fields` is maintained automatically — whenever a field is edited via
 the Wodore admin or API, its name is appended to the list. Falls back to a
 minimal global default of `["name", "location"]` when empty. Also editable
 manually in the admin.
+
+`osm_tags` stores the raw OpenStreetMap tag data for each place, preserving
+the complete source information. This is useful for debugging, data quality
+analysis, and future enrichment.
+
+`extra` provides a flexible overflow field for category-specific data that
+doesn't fit into the standard schema. Each category can define its own expected
+structure within this JSON field.
+
+`websites` is a shared field across all place types, storing a list of website
+objects with optional labels (e.g., "Official", "Booking", "Menu").
 
 `detail_type` is a fixed enum tied to the available detail models — not derived
 from category. Categories remain flexible (new category slugs can be added
@@ -66,9 +81,11 @@ administrative regions are represented via the `parent` self-FK.
 | `operating_status` | `open / temporarily_closed / permanently_closed / unknown` |
 | `opening_months` | Monthly availability per month: `yes / yesish / maybe / no / noish / unknown` |
 | `opening_hours` | Structured weekly hours per weekday + public holidays |
-| `websites` | List of URLs with optional labels |
 | `phones` | List of phone numbers |
-| `extra` | Category-specific overflow (JSON) |
+
+Note: `websites` has been moved to the base `GeoPlace` model and is shared
+across all place types. The `extra` field has also been moved to `GeoPlace`
+for broader use.
 
 **`TransportDetail`** — bus stops, train stations, cable cars
 
@@ -83,23 +100,120 @@ Connects naturally to GTFS integration (see WEP003).
 
 | Field | Description |
 |---|---|
-| `admin_level` | OSM admin level (2 = country … 10 = village) |
+| `admin_level` | OSM admin level (2 = country … 10 = village) - can be calculated from parent but stored for performance |
 | `population` | Inhabitant count |
+| `postal_code` | Postal code for this administrative area |
+| `iso_code` | ISO 3166-2 code for administrative divisions (e.g., CH-ZH for Zürich) |
+
+Note: `website` has been moved to the base `GeoPlace` model's `websites` field
+and is shared across all place types.
+
+The `admin_level` field follows the OpenStreetMap convention:
+
+- Level 2: Country (e.g., Switzerland)
+- Level 4: State/Province/Canton (e.g., Zürich)
+- Level 6: County/District (e.g., Zürich District)
+- Level 8: City/Municipality (e.g., Zürich city)
+- Level 10: Village/Hamlet (e.g., Zermatt)
+
+While `admin_level` can be calculated from the parent relationship, storing it
+directly improves performance and preserves the original OSM classification.
 
 ## Category Hierarchy
 
 Categories follow a `parent.child` slug pattern. The mapping to `detail_type`
 is defined in code and is not a hard DB constraint — categories stay flexible.
 
-| Example categories | Typical `detail_type` |
-|---|---|
-| `natural.*` (peak, pass, lake, glacier, waterfall, waypoint) | `natural` |
-| `admin.*` (city, village, valley) | `admin` |
-| `food_supply.*`, `restaurant.*`, `accommodation.*`, `emergency.*` | `amenity` |
-| `mobility.*` (bus_stop, train_station, cable_car, parking) | `transport` |
-| `mobility.*` (bike_repair, bike_rental) | `amenity` |
+### Complete Category Taxonomy (15 top-level categories)
 
-The `Hut` model is not migrated as part of this WEP and continues to coexist.
+This taxonomy balances Alpine/tourism focus with general utility, informed by
+OpenStreetMap, Google Maps, OsmAnd, and Organic Maps conventions.
+
+**restaurant** (prepared food & drinks) → `amenity`
+
+- restaurant, cafe, pub (includes bars and biergartens), fast_food, food_court, ice_cream
+
+**groceries** (food shopping) → `amenity`
+
+- supermarket, convenience, bakery, butcher, farm, dairy (includes greengrocer, deli, cheese shops), beverages, vending_machine
+
+**accommodation** (lodging) → `accommodation` (not implemented yet, use `amenity`)
+
+- hotel, hostel, guesthouse, campground, alpine_hut
+
+**health_and_emergency** (medical & urgent response) → `amenity`
+
+- hospital, clinic, doctor, dentist, pharmacy, optician, fire_station, police, mountain_rescue
+
+**transport** (public transit) → `transport`
+
+- bus_stop, train_station, cable_car, gondola, chairlift, funicular
+
+**automotive** (vehicle services) → `amenity`
+
+- parking, fuel, charging_station, car_wash, car_rental
+
+**sport** (activities, facilities, instruction) → `amenity`
+
+- climbing_gym, swimming_pool, fitness_center, ski_school, playground, mountain_guide, skate_park
+
+**outdoor_services** (Alpine/outdoor gear - rental, repair, shops) → `amenity`
+
+- ski_rental, bike_rental, bike_repair, bike_shop, sports_shop (includes outdoor shops)
+
+**tourism** (sightseeing & information) → `amenity`
+
+- information (includes info boards, offices, maps), viewpoint, museum, attraction, artwork, memorial, hiking_post (guideposts)
+
+**natural** (natural features) → `natural`
+
+- peak, pass, lake, glacier, waterfall, cave, spring, cliff, saddle, ridge, valley_entrance
+
+**admin** (administrative areas) → `admin`
+
+- country, state, canton, district, city, municipality, village, hamlet
+
+**utilities** (public infrastructure) → `amenity`
+
+- toilets, drinking_water, shower, waste_disposal, picnic_area, firepit, bench
+
+**finance** (banking) → `amenity`
+
+- bank, atm
+Review the code for import improvements? But probably only the full import is slow, diff import should be faster and all I need. But I am still thinking it gets slwoer with more data, this is not good ..
+
+**shopping** (general retail - non-food) → `amenity`
+
+- clothes, shoe, hardware, books, electronics, jewelry, toys, gift (includes souvenirs), store (general stores, variety stores, department stores), mall
+
+**services** (personal services) → `amenity`
+
+- hairdresser, tailor, computer_repair, veterinary, laundry
+
+### Category → detail_type Mapping
+
+| Categories | `detail_type` | Notes |
+|---|---|---|
+| restaurant, groceries, health_and_emergency, automotive, outdoor_services, shopping, services, utilities, sport, tourism, finance | `amenity` | Uses AmenityDetail |
+| accommodation | `accommodation` | Uses AccommodationDetail (not implemented yet, use `amenity`) |
+| transport | `transport` | Uses TransportDetail |
+| natural | `natural` | No detail model - base GeoPlace fields sufficient |
+| admin | `admin` | Uses AdminDetail |
+
+**Natural features** use existing `GeoPlace` fields:
+
+- `location` (Point) for peaks, passes, waypoints
+- `elevation` for altitude
+- `parent` (self-FK) for mountain ranges (e.g., peak → Bernese Alps)
+- `shape` (Polygon) for lakes, glaciers, valleys
+- Category slug differentiates: `natural.peak`, `natural.lake`, etc.
+
+**Admin areas** use `AdminDetail` plus:
+
+- `location` (Point) - administrative center
+- `shape` (Polygon) - boundary
+- `parent` (self-FK) - village → municipality → canton → country
+- Fields: admin_level, population, postal_code, iso_code
 
 ## Source Tracking & Import Policy
 
