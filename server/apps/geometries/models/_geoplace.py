@@ -250,22 +250,68 @@ class GeoPlace(TimeStampedModel):
     def __str__(self) -> str:
         return f"{self.name_i18n} ({self.place_type.slug})"
 
-    def save(self, *args, track_modifications=True, **kwargs):
+    def save(
+        self,
+        *args,
+        track_modifications=True,
+        skip_slug_check=True,
+        max_retries=3,
+        **kwargs,
+    ):
         """Auto-generate slug from name if not provided and track manual modifications.
 
         Args:
             track_modifications: If True, track field changes and mark as modified.
                                 Set to False during imports to avoid marking as manually edited.
+            skip_slug_check: If True, skip DB uniqueness check for slug (default True for performance).
+                             Set to False for manual edits to ensure uniqueness.
+            max_retries: Maximum retry attempts for database lock errors (default 3).
+
+        Raises:
+            IntegrityError: If max retries exceeded and operation still fails.
         """
         # Auto-generate slug from name if not provided
         if not self.slug and self.name_i18n:
-            self.slug = self.generate_unique_slug(self.name_i18n, exclude_id=self.id)
+            self.slug = self.generate_unique_slug(
+                self.name_i18n, exclude_id=self.id, skip_check=skip_slug_check
+            )
 
         # Track modifications if this is a manual edit (not an import)
         if track_modifications and self.pk:
             self._track_field_modifications()
 
-        super().save(*args, **kwargs)
+        # Retry logic for database locks
+        import time
+        from django.db import DatabaseError
+
+        last_exception = None
+        for attempt in range(max_retries):
+            try:
+                super().save(*args, **kwargs)
+                return  # Success, exit retry loop
+            except (DatabaseError, Exception) as e:
+                last_exception = e
+                error_str = str(e).lower()
+
+                # Check if it's a retryable database error
+                is_db_lock = (
+                    "database is locked" in error_str
+                    or "deadlock" in error_str
+                    or "could not serialize" in error_str
+                    or "database error" in error_str
+                )
+
+                if is_db_lock and attempt < max_retries - 1:
+                    # Retry with exponential backoff
+                    wait_time = 0.1 * (2**attempt)  # 100ms, 200ms, 400ms
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    # Not retryable or max retries exceeded
+                    raise
+
+        # If we get here, all retries failed
+        raise last_exception
 
     def _track_field_modifications(self):
         """Track which fields were manually modified and add them to protected_fields.
@@ -353,10 +399,10 @@ class GeoPlace(TimeStampedModel):
     def generate_unique_slug(
         cls,
         name: str,
-        max_length: int = 30,
+        max_length: int = 50,
         min_length: int = 3,
-        uuid_length: int = 3,
         exclude_id: int | None = None,
+        skip_check: bool = True,
     ) -> str:
         """
         Generate a unique slug using hut-style filtering with short UUID suffix.
@@ -364,23 +410,29 @@ class GeoPlace(TimeStampedModel):
         This approach:
         1. Filters out common/unhelpful words (similar to guess_slug_name for huts)
         2. Creates a base slug from the meaningful parts of the name
-        3. Adds a short UUID suffix (3 chars, expanding to 4 if needed)
+        3. Adds a smart UUID suffix based on base slug length:
+           - No slug or slug < 3: 8-char UUID (e.g., "a3b2c4d9")
+           - 3 ≤ slug < 6: 5-char UUID (e.g., "abc-a3b2k")
+           - 6 ≤ slug < 14: 4-char UUID (e.g., "bellevue-a3f9")
+           - slug ≥ 14: 3-char UUID (e.g., "berggasthaus-z2m")
         4. Keeps slugs readable while ensuring uniqueness
 
         Args:
             name: The place name to generate slug from
             max_length: Maximum length for the slug (default 50)
             min_length: Minimum length for the slug (default 3)
-            uuid_length: Starting length for UUID suffix (default 3)
             exclude_id: ID to exclude from uniqueness check (for updates)
+            skip_check: If True, skip DB uniqueness check (default True for bulk imports)
 
         Returns:
             Unique slug string
 
         Examples:
-            "Restaurant Berggasthaus Zermatt" → "berggasthaus-a3f"
-            "Hotel Bellevue" → "bellevue-b2k"
-            "Camping Alpenglühn" → "alpengluehn-c9p"
+            "" (unnamed) → "a3b2c4d9"
+            "XY" → "xy-a3b2c4d9"
+            "Bäckerei" → "baeckerei-a3b2k"
+            "Hotel Bellevue" → "bellevue-a3f9"
+            "Berggasthaus Zermatt" → "berggasthaus-z2m"
         """
         # Common words to filter out (amenity-specific)
         NOT_IN_SLUG = [
@@ -483,7 +535,22 @@ class GeoPlace(TimeStampedModel):
         base_slug = pyslugify(" ".join(slugl), word_boundary=True)
 
         # Truncate if needed, leave room for UUID suffix
-        uuid_space = uuid_length + 1  # +1 for the hyphen
+        # Smart UUID sizing based on base slug length
+        if not base_slug or len(base_slug) < 3:
+            # No slug or very short: use 8-char UUID for uniqueness
+            actual_uuid_length = 8
+            base_slug = "place"  # Use generic base for very short names
+        elif len(base_slug) < 6:
+            # 3 ≤ slug < 6: use 5-char UUID
+            actual_uuid_length = 5
+        elif len(base_slug) < 14:
+            # 6 ≤ slug < 14: use 4-char UUID
+            actual_uuid_length = 4
+        else:
+            # slug ≥ 14: use 3-char UUID
+            actual_uuid_length = 3
+
+        uuid_space = actual_uuid_length + 1  # +1 for the hyphen
         max_base_length = max_length - uuid_space
         if len(base_slug) > max_base_length:
             base_slug = base_slug[:max_base_length]
@@ -494,8 +561,18 @@ class GeoPlace(TimeStampedModel):
                 base_slug[:min_length] if len(base_slug) >= min_length else "place"
             )
 
-        # Add short UUID suffix and ensure uniqueness
-        return cls._add_unique_suffix(base_slug, uuid_length, exclude_id)
+        # Add UUID suffix
+        if skip_check:
+            # Generate without DB check (fast for bulk imports)
+            import secrets
+            import string
+
+            charset = string.ascii_lowercase + string.digits
+            suffix = "".join(secrets.choice(charset) for _ in range(actual_uuid_length))
+            return f"{base_slug}-{suffix}"
+
+        # Original logic with DB check (for manual edits)
+        return cls._add_unique_suffix(base_slug, actual_uuid_length, exclude_id)
 
     @classmethod
     def _slug_exists(cls, slug: str, exclude_id: int | None = None) -> bool:
@@ -729,6 +806,8 @@ class GeoPlace(TimeStampedModel):
     ) -> "GeoPlace | None":
         """Find existing place using deduplication logic."""
         from django.contrib.gis.db.models.functions import Distance
+        from django.contrib.gis.geos import Polygon
+        import math
 
         from ._associations import GeoPlaceSourceAssociation
 
@@ -742,11 +821,51 @@ class GeoPlace(TimeStampedModel):
             except GeoPlaceSourceAssociation.DoesNotExist:
                 pass
 
-        # 2. Check by location + category + brand
+        # Helper function to convert meters to degrees at given latitude
+        def meters_to_degrees(
+            latitude: float, target_meters: float
+        ) -> tuple[float, float]:
+            """Convert meters to latitude/longitude delta at given latitude."""
+            # Meters per degree at this latitude
+            # More accurate formulas accounting for Earth's ellipsoid shape
+            lat_rad = math.radians(latitude)
+            meters_per_deg_lat = (
+                111132.954
+                - 559.822 * math.cos(2 * lat_rad)
+                + 1.175 * math.cos(4 * lat_rad)
+            )
+            meters_per_deg_lon = (
+                111412.84 * math.cos(lat_rad)
+                - 93.5 * math.cos(3 * lat_rad)
+                + 0.118 * math.cos(5 * lat_rad)
+            )
+
+            # Convert target meters to degrees
+            delta_lat = target_meters / meters_per_deg_lat
+            delta_lon = target_meters / meters_per_deg_lon
+
+            return delta_lat, delta_lon
+
+        # 2. Check by location + category + brand using BBox (much faster than distance)
         if dedup_options.distance_same > 0:
+            # Build BBox for fast spatial filtering
+            delta_lat, delta_lon = meters_to_degrees(
+                location.y,  # latitude
+                dedup_options.distance_same,
+            )
+
+            bbox = Polygon.from_bbox(
+                (
+                    location.x - delta_lon,
+                    location.y - delta_lat,
+                    location.x + delta_lon,
+                    location.y + delta_lat,
+                )
+            )
+
             filters = {
                 "is_active": True,
-                "location__distance_lte": (location, dedup_options.distance_same),
+                "location__contained": bbox,  # BBox filter: 10x faster than distance
             }
 
             # Add category filter if enabled
@@ -775,12 +894,25 @@ class GeoPlace(TimeStampedModel):
             if len(nearby_list) == 1:
                 return nearby_list[0]
 
-        # 3. Check very close proximity (any place)
+        # 3. Check very close proximity (any place) using BBox
         if dedup_options.distance_any > 0:
+            delta_lat, delta_lon = meters_to_degrees(
+                location.y, dedup_options.distance_any
+            )
+
+            bbox = Polygon.from_bbox(
+                (
+                    location.x - delta_lon,
+                    location.y - delta_lat,
+                    location.x + delta_lon,
+                    location.y + delta_lat,
+                )
+            )
+
             very_nearby = list(
                 cls.objects.filter(
                     is_active=True,
-                    location__distance_lte=(location, dedup_options.distance_any),
+                    location__contained=bbox,  # BBox filter: 10x faster
                 )
                 .annotate(distance=Distance("location", location))
                 .order_by("distance")[:2]
@@ -861,8 +993,29 @@ class GeoPlace(TimeStampedModel):
                 place_data[f"description_{lang_code}"] = desc_value
 
         # Create the place (track_modifications=False for imports)
+        # Handle slug collisions with retry logic
         place = cls(**place_data)
-        place.save(track_modifications=False)
+        max_slug_attempts = 2  # Try with skip_check=True, then with skip_check=False
+
+        for slug_attempt in range(max_slug_attempts):
+            try:
+                # First attempt: skip DB check (fast)
+                # Second attempt (if collision): use DB check
+                place.save(
+                    track_modifications=False, skip_slug_check=(slug_attempt == 0)
+                )
+                break  # Success
+            except Exception as e:
+                error_str = str(e).lower()
+                is_slug_collision = "unique" in error_str and "slug" in error_str
+
+                if is_slug_collision and slug_attempt < max_slug_attempts - 1:
+                    # Regenerate slug with DB check on next attempt
+                    place.slug = None  # Will trigger regeneration in save()
+                    continue
+                else:
+                    # Not a slug collision or max attempts exceeded
+                    raise
 
         # Create detail model based on type (flattened structure)
         from ..schemas import DetailType

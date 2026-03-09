@@ -176,6 +176,11 @@ class OSMHandler(osmium.SimpleHandler):
 class Command(BaseCommand):
     help = "Import amenities from OpenStreetMap via Geofabrik"
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._error_log_file = None
+        self._error_count = 0
+
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "region",
@@ -253,6 +258,33 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         """Main command execution."""
+        import signal
+
+        # Set up signal handler for graceful shutdown
+        self._shutdown_requested = False
+
+        def signal_handler(signum, frame):
+            """Handle Ctrl+C gracefully."""
+            if not self._shutdown_requested:
+                self._shutdown_requested = True
+                self.stdout.write(
+                    self.style.WARNING(
+                        "\n\n⚠ Shutdown requested (Ctrl+C). Finishing current task and saving state..."
+                    )
+                )
+                self.stdout.write(
+                    self.style.WARNING(
+                        "Press Ctrl+C again to force quit (may lose progress).\n"
+                    )
+                )
+            else:
+                self.stdout.write(
+                    self.style.ERROR("\n\n✗ Force quit! State may not be saved.")
+                )
+                raise KeyboardInterrupt
+
+        signal.signal(signal.SIGINT, signal_handler)
+
         region = options["region"]
         dry_run = options["dry_run"]
         limit = options.get("limit")
@@ -269,8 +301,11 @@ class Command(BaseCommand):
         # Determine state file location
         if state_file_path:
             state_file = Path(state_file_path)
+        elif data_dir:
+            state_file = Path(data_dir) / ".geoplaces_osm_import.json"
         else:
-            state_file = Path(data_dir or ".") / ".geoplaces_osm_import.json"
+            # Use current working directory if no data_dir specified
+            state_file = Path.cwd() / ".geoplaces_osm_import.json"
 
         # Load state for --since auto support
         state = self._load_state(state_file)
@@ -361,109 +396,149 @@ class Command(BaseCommand):
 
         # 2. Fetch amenities (either via Overpass API or PBF file)
         if use_overpass:
-            # Get or create OSM organization
-            osm_org, _ = Organization.objects.get_or_create(
-                slug="osm",
-                defaults={
-                    "name": "OpenStreetMap",
-                    "url": "https://www.openstreetmap.org",
-                    "is_active": True,
-                },
-            )
-
-            # Initialize place lookup cache for deduplication performance
-            self._place_cache = {}
-
-            # Get workers parameter
-            workers = options.get("workers", 1)
-
-            # Process each category/mapping in a pipeline (fetch → process → import)
-            if workers > 1:
-                # Use parallel processing
-                self._process_overpass_parallel(
-                    region=region,
-                    category_names=category_names,
-                    osm_org=osm_org,
-                    run_start=run_start,
-                    workers=workers,
-                    limit=limit,
-                    overpass_server=overpass_server,
-                    overpass_queries_file=overpass_queries_file,
-                    since=since,
-                    dry_run=dry_run,
-                    state=state,
-                    state_file=state_file,
-                )
-                success = True
-            else:
-                # Use sequential processing
-                success = self._process_overpass_pipeline(
-                    region=region,
-                    category_names=category_names,
-                    osm_org=osm_org,
-                    run_start=run_start,
-                    limit=limit,
-                    overpass_server=overpass_server,
-                    overpass_queries_file=overpass_queries_file,
-                    since=since,
-                    dry_run=dry_run,
-                    state=state,
-                    state_file=state_file,
+            try:
+                # Get or create OSM organization
+                osm_org, _ = Organization.objects.get_or_create(
+                    slug="osm",
+                    defaults={
+                        "name": "OpenStreetMap",
+                        "url": "https://www.openstreetmap.org",
+                        "is_active": True,
+                    },
                 )
 
-            if not success:
-                self.stdout.write(
-                    self.style.ERROR("Failed to process Overpass API data")
-                )
-                return
+                # Initialize place lookup cache for deduplication performance
+                self._place_cache = {}
 
-            # Get stats from instance variables set by pipeline
-            created_count = getattr(self, "_pipeline_created", 0)
-            updated_count = getattr(self, "_pipeline_updated", 0)
-            skipped_count = getattr(self, "_pipeline_skipped", 0)
-            deleted_count = getattr(self, "_pipeline_deleted", 0)
-            error_count = getattr(self, "_pipeline_errors", 0)
+                # Get workers parameter
+                workers = options.get("workers", 1)
 
-            # Cleanup deleted places (skip if using --since or --limit as it's a partial import)
-            # Note: If using diff mode (--since), deletions are already handled via action="delete"
-            if not dry_run and not since and not limit:
-                self.stdout.write("\nCleaning up deleted places...")
-                cleanup_deleted_count = self._cleanup_deleted_places(
-                    osm_org, run_start, category_names, region
-                )
-                deleted_count += cleanup_deleted_count
-                self.stdout.write(
-                    f"Deactivated {cleanup_deleted_count} places no longer in OSM"
-                )
-            else:
-                if since or limit:
-                    self.stdout.write(
-                        "\n[Skipping cleanup - partial import with --since or --limit]"
+                # Process each category/mapping in a pipeline (fetch → process → import)
+                if workers > 1:
+                    # Use parallel processing
+                    self._process_overpass_parallel(
+                        region=region,
+                        category_names=category_names,
+                        osm_org=osm_org,
+                        run_start=run_start,
+                        workers=workers,
+                        limit=limit,
+                        overpass_server=overpass_server,
+                        overpass_queries_file=overpass_queries_file,
+                        since=since,
+                        dry_run=dry_run,
+                        state=state,
+                        state_file=state_file,
+                    )
+                    success = True
+                else:
+                    # Use sequential processing
+                    success = self._process_overpass_pipeline(
+                        region=region,
+                        category_names=category_names,
+                        osm_org=osm_org,
+                        run_start=run_start,
+                        limit=limit,
+                        overpass_server=overpass_server,
+                        overpass_queries_file=overpass_queries_file,
+                        since=since,
+                        dry_run=dry_run,
+                        state=state,
+                        state_file=state_file,
                     )
 
-            # Save state with per-mapping timestamps
-            if not dry_run:
-                # Update state for all processed mappings
-                # Note: Individual mapping counts will be updated by the worker/pipeline
-                # Here we just ensure the file is saved
-                self._save_state(state_file, state)
-                self.stdout.write(f"Saved import state to: {state_file}")
+                if not success:
+                    self.stdout.write(
+                        self.style.ERROR("Failed to process Overpass API data")
+                    )
+                    return
 
-            # Summary
-            if error_count > 0:
-                self.stdout.write(self.style.WARNING("\nImport completed with errors!"))
-            else:
-                self.stdout.write(self.style.SUCCESS("\nImport complete!"))
+                # Get stats from instance variables set by pipeline
+                created_count = getattr(self, "_pipeline_created", 0)
+                updated_count = getattr(self, "_pipeline_updated", 0)
+                skipped_count = getattr(self, "_pipeline_skipped", 0)
+                deleted_count = getattr(self, "_pipeline_deleted", 0)
+                error_count = getattr(self, "_pipeline_errors", 0)
 
-            self.stdout.write(f"  Created: {created_count}")
-            self.stdout.write(f"  Updated: {updated_count}")
-            self.stdout.write(f"  Skipped: {skipped_count}")
-            if error_count > 0:
-                self.stdout.write(self.style.ERROR(f"  Errors: {error_count}"))
-            if not dry_run:
-                self.stdout.write(f"  Deactivated: {deleted_count}")
+                # Cleanup deleted places (skip if using --since or --limit as it's a partial import)
+                # Note: If using diff mode (--since), deletions are already handled via action="delete"
+                if not dry_run and not since and not limit:
+                    self.stdout.write("\nCleaning up deleted places...")
+                    cleanup_deleted_count = self._cleanup_deleted_places(
+                        osm_org, run_start, category_names, region
+                    )
+                    deleted_count += cleanup_deleted_count
+                    self.stdout.write(
+                        f"Deactivated {cleanup_deleted_count} places no longer in OSM"
+                    )
+                else:
+                    if since or limit:
+                        self.stdout.write(
+                            "\n[Skipping cleanup - partial import with --since or --limit]"
+                        )
 
-            return
+                # Save state with per-mapping timestamps
+                if not dry_run:
+                    # Update state for all processed mappings
+                    # Note: Individual mapping counts will be updated by the worker/pipeline
+                    # Here we just ensure the file is saved
+                    self._save_state(state_file, state)
+                    self.stdout.write(f"Saved import state to: {state_file}")
+
+                # Summary
+                if error_count > 0:
+                    self.stdout.write(
+                        self.style.WARNING("\nImport completed with errors!")
+                    )
+                else:
+                    self.stdout.write(self.style.SUCCESS("\nImport complete!"))
+
+                self.stdout.write(f"  Created: {created_count}")
+                self.stdout.write(f"  Updated: {updated_count}")
+                self.stdout.write(f"  Skipped: {skipped_count}")
+                if error_count > 0:
+                    self.stdout.write(self.style.ERROR(f"  Errors: {error_count}"))
+                if not dry_run:
+                    self.stdout.write(f"  Deactivated: {deleted_count}")
+
+                return
+
+            except KeyboardInterrupt:
+                # Graceful shutdown on Ctrl+C
+                self.stdout.write(self.style.WARNING("\n\n✓ Import stopped by user."))
+
+                # Save partial state
+                if not dry_run and state is not None and state_file is not None:
+                    self._save_state(state_file, state)
+                    self.stdout.write(
+                        self.style.SUCCESS(f"✓ Partial state saved to: {state_file}")
+                    )
+
+                # Show partial stats if available
+                created_count = getattr(self, "_pipeline_created", 0)
+                updated_count = getattr(self, "_pipeline_updated", 0)
+                skipped_count = getattr(self, "_pipeline_skipped", 0)
+                deleted_count = getattr(self, "_pipeline_deleted", 0)
+                error_count = getattr(self, "_pipeline_errors", 0)
+
+                if created_count or updated_count or skipped_count:
+                    self.stdout.write("\nPartial results:")
+                    self.stdout.write(f"  Created: {created_count}")
+                    self.stdout.write(f"  Updated: {updated_count}")
+                    self.stdout.write(f"  Skipped: {skipped_count}")
+                    if error_count > 0:
+                        self.stdout.write(self.style.ERROR(f"  Errors: {error_count}"))
+                    if deleted_count > 0:
+                        self.stdout.write(f"  Deactivated: {deleted_count}")
+
+                self.stdout.write(
+                    self.style.WARNING(
+                        "\nYou can resume with: app geoplaces_import_osm --overpass {} --since auto".format(
+                            region
+                        )
+                    )
+                )
+                return
         else:
             # PBF approach
             self.stdout.write("Locating PBF file...")
@@ -521,6 +596,7 @@ class Command(BaseCommand):
             "Pre-caching categories, organizations, and existing places..."
         )
         self._precache_data(amenities)
+        self._precache_categories_batch(amenities)  # NEW: Batch category pre-fetch
 
         # Initialize place lookup cache for deduplication performance
         self._place_cache = {}
@@ -540,62 +616,11 @@ class Command(BaseCommand):
 
         self.stdout.write(f"Pre-loaded {len(self._place_cache)} existing associations")
 
-        # 7. Upsert amenities
-        self.stdout.write("Upserting amenities to database...")
-        created_count = 0
-        updated_count = 0
-        skipped_count = 0
-
-        # PERFORMANCE: Larger batch size for better performance
-        batch_size = 500
-        total_batches = (len(amenities) + batch_size - 1) // batch_size
-
-        for batch_num, batch_start in enumerate(
-            range(0, len(amenities), batch_size), 1
-        ):
-            batch_end = min(batch_start + batch_size, len(amenities))
-            batch = amenities[batch_start:batch_end]
-
-            if dry_run:
-                for data in batch:
-                    self.stdout.write(
-                        f"[DRY RUN] Would upsert: {data['name'] or 'Unnamed'} "
-                        f"({data['category_slug']}) at ({data['lat']}, {data['lon']})"
-                    )
-                continue
-
-            # Process batch in single transaction
-            try:
-                with transaction.atomic():
-                    for data in batch:
-                        try:
-                            result = self._upsert_amenity(data, osm_org, run_start)
-                            if result == "created":
-                                created_count += 1
-                            elif result == "updated":
-                                updated_count += 1
-                            else:
-                                skipped_count += 1
-                        except Exception as e:
-                            self.stdout.write(
-                                self.style.ERROR(
-                                    f"Error processing {data['name']}: {e}"
-                                )
-                            )
-
-                # PERFORMANCE: Show progress with percentage and stats
-                progress_pct = (batch_end / len(amenities)) * 100
-                self.stdout.write(
-                    f"[{batch_num}/{total_batches}] {batch_end}/{len(amenities)} "
-                    f"({progress_pct:.1f}%) - Created: {created_count}, Updated: {updated_count}, Skipped: {skipped_count}"
-                )
-
-            except Exception as e:
-                self.stdout.write(
-                    self.style.ERROR(
-                        f"Error processing batch {batch_start}-{batch_end}: {e}"
-                    )
-                )
+        # 7. Upsert amenities using hybrid bulk approach
+        self.stdout.write("Upserting amenities to database (hybrid bulk approach)...")
+        created_count, updated_count, skipped_count, deleted_count, error_count = (
+            self._upsert_amenities_hybrid_bulk(amenities, osm_org, run_start, dry_run)
+        )
 
         # 8. Cleanup deleted places
         if not dry_run:
@@ -630,6 +655,79 @@ class Command(BaseCommand):
         if not dry_run:
             self.stdout.write(f"  Deactivated: {deleted_count}")
 
+    def _init_error_log(
+        self, region: str, run_start: datetime, data_dir: str = None
+    ) -> Path:
+        """Initialize error log file for on-the-fly error logging.
+
+        Returns:
+            Path to error log file
+        """
+        log_dir = Path(data_dir) if data_dir else Path.cwd()
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        error_log_path = (
+            log_dir
+            / f"osm_import_errors_{region}_{run_start.strftime('%Y%m%d_%H%M%S')}.log"
+        )
+
+        # Write header
+        with open(error_log_path, "w") as f:
+            f.write(f"OSM Import Errors - {region} - {run_start}\n")
+            f.write("=" * 80 + "\n\n")
+
+        self._error_log_file = error_log_path
+        return error_log_path
+
+    def _log_error_to_file(
+        self,
+        name: str,
+        category: str = None,
+        osm_type: str = None,
+        osm_id: int = None,
+        error: str = None,
+        osm_tags: dict = None,
+    ) -> None:
+        """Log error to file immediately (on-the-fly).
+
+        This ensures errors are captured even if the process is interrupted.
+        """
+        if not self._error_log_file:
+            return
+
+        self._error_count += 1
+
+        with open(self._error_log_file, "a") as f:
+            f.write(f"{self._error_count}. {name or '(unnamed)'}\n")
+            if category:
+                f.write(f"   Category: {category}\n")
+            if osm_type and osm_id:
+                f.write(f"   OSM: {osm_type}/{osm_id}\n")
+                # Add OSM URL for easy debugging
+                if osm_type == "node":
+                    f.write(f"   URL: https://www.openstreetmap.org/node/{osm_id}\n")
+                elif osm_type == "way":
+                    f.write(f"   URL: https://www.openstreetmap.org/way/{osm_id}\n")
+            if osm_tags:
+                # Show relevant tags that triggered the match
+                relevant_tags = []
+                for key in [
+                    "amenity",
+                    "shop",
+                    "tourism",
+                    "leisure",
+                    "craft",
+                    "office",
+                    "highway",
+                ]:
+                    if key in osm_tags:
+                        relevant_tags.append(f"{key}={osm_tags[key]}")
+                if relevant_tags:
+                    f.write(f"   Tags: {', '.join(relevant_tags)}\n")
+            if error:
+                f.write(f"   Error: {error}\n")
+            f.write("\n")
+
     def _load_state(self, state_file: Path) -> dict:
         """Load import state from JSON file.
 
@@ -640,7 +738,14 @@ class Command(BaseCommand):
                     "mappings": {
                         "groceries.supermarket": {
                             "last_import": "2026-03-08T10:30:00Z",
-                            "last_count": 1234
+                            "stats": {
+                                "created": 1234,
+                                "updated": 56,
+                                "skipped": 10,
+                                "deleted": 2,
+                                "errors": 0,
+                                "total": 1302
+                            }
                         }
                     }
                 }
@@ -659,12 +764,34 @@ class Command(BaseCommand):
         return {"countries": {}}
 
     def _save_state(self, state_file: Path, state: dict) -> None:
-        """Save import state to JSON file."""
+        """Save import state to JSON file.
+
+        Uses atomic write to prevent corruption if interrupted.
+        """
         import json
+        import tempfile
+        import os
 
         state_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(state_file, "w") as f:
-            json.dump(state, f, indent=2)
+
+        # Write to temp file first, then rename (atomic operation)
+        temp_fd, temp_path = tempfile.mkstemp(
+            dir=state_file.parent, prefix=".tmp_", suffix=".json"
+        )
+
+        try:
+            with os.fdopen(temp_fd, "w") as f:
+                json.dump(state, f, indent=2)
+
+            # Atomic rename
+            os.replace(temp_path, state_file)
+        except Exception:
+            # Cleanup temp file on error
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+            raise
 
     def _update_mapping_state(
         self,
@@ -672,9 +799,16 @@ class Command(BaseCommand):
         country: str,
         mapping_slug: str,
         timestamp: str,
-        count: int = 0,
+        created: int = 0,
+        updated: int = 0,
+        skipped: int = 0,
+        deleted: int = 0,
+        errors: int = 0,
+        duration_seconds: float = 0,
+        download_bytes: int = 0,
+        downloaded_entries: int = 0,
     ) -> None:
-        """Update state for a specific country/mapping combination."""
+        """Update state for a specific country/mapping combination with full statistics."""
         country = country.upper()
 
         if country not in state["countries"]:
@@ -683,9 +817,26 @@ class Command(BaseCommand):
         if "mappings" not in state["countries"][country]:
             state["countries"][country]["mappings"] = {}
 
+        total = created + updated + skipped + deleted
+        download_mb = (
+            round(download_bytes / (1024 * 1024), 2) if download_bytes > 0 else 0
+        )
+
         state["countries"][country]["mappings"][mapping_slug] = {
             "last_import": timestamp,
-            "last_count": count,
+            "duration_seconds": round(duration_seconds, 2)
+            if duration_seconds > 0
+            else 0,
+            "download_mb": download_mb,
+            "downloaded_entries": downloaded_entries,
+            "stats": {
+                "created": created,
+                "updated": updated,
+                "skipped": skipped,
+                "deleted": deleted,
+                "errors": errors,
+                "total": total,
+            },
         }
 
     def _get_mapping_timestamp(
@@ -1361,6 +1512,8 @@ class Command(BaseCommand):
         console,
         progress,
         overall_task,
+        state: dict = None,
+        state_file: Path = None,
     ) -> dict:
         """Worker function to process a single mapping in parallel.
 
@@ -1371,9 +1524,12 @@ class Command(BaseCommand):
             - download_bytes: int
             - server_label: str
             - success: bool
+            - duration: float
         """
         from django.db import connection
+        import time as time_module
 
+        mapping_start = time_module.time()
         category, mapping = mapping_data
 
         # Calculate server start index based on worker_id
@@ -1481,6 +1637,27 @@ class Command(BaseCommand):
             progress.stop_task(task_id)
             progress.advance(overall_task)
 
+            # Calculate duration
+            mapping_duration = time_module.time() - mapping_start
+
+            # Save state immediately after mapping completes (incremental save)
+            if not dry_run and state is not None and state_file is not None:
+                self._update_mapping_state(
+                    state,
+                    region,
+                    mapping.category_slug,
+                    run_start.isoformat(),
+                    created=created,
+                    updated=updated,
+                    skipped=skipped,
+                    deleted=deleted,
+                    errors=errors,
+                    duration_seconds=mapping_duration,
+                    download_bytes=download_size,
+                    downloaded_entries=element_count,
+                )
+                self._save_state(state_file, state)
+
             return {
                 "created": created,
                 "updated": updated,
@@ -1490,6 +1667,7 @@ class Command(BaseCommand):
                 "download_bytes": download_size,
                 "server_label": server_label,
                 "mapping_slug": mapping.category_slug,
+                "duration": mapping_duration,
                 "success": True,
             }
 
@@ -1623,6 +1801,12 @@ class Command(BaseCommand):
             "[dim]Symbols: ✓ = completed | ✗ = failed | +N = created | ~N = updated | -N = deleted | !N = errors | ·N = skipped | ↓N (KB) = downloaded[/dim]\n"
         )
 
+        # Initialize error log file for on-the-fly error logging
+        if not dry_run:
+            data_dir = state_file.parent if state_file else None
+            self._init_error_log(region, run_start, data_dir)
+            console.print(f"[dim]Error log: {self._error_log_file}[/dim]\n")
+
         # Initialize counters
         total_created = 0
         total_updated = 0
@@ -1630,44 +1814,10 @@ class Command(BaseCommand):
         total_deleted = 0
         total_download_bytes = 0
 
-        # Create progress display with auto-cleanup of completed tasks
-        # Rich's get_renderable_tasks method limits visible tasks by default, so we override it
-
-        class ShowAllProgress(Progress):
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.completed_times = {}  # Track when tasks complete
-
-            def stop_task(self, task_id):
-                """Override to track completion time."""
-                super().stop_task(task_id)
-                self.completed_times[task_id] = time.time()
-
-            def get_renderable_tasks(self):
-                """Override to show all tasks without filtering, but auto-remove after 30s."""
-                current_time = time.time()
-                # Remove tasks that completed more than 30 seconds ago
-                tasks_to_remove = [
-                    task_id
-                    for task_id, completion_time in self.completed_times.items()
-                    if current_time - completion_time > 30
-                ]
-                for task_id in tasks_to_remove:
-                    # Find and remove the task
-                    self.tasks = [task for task in self.tasks if task.id != task_id]
-                    del self.completed_times[task_id]
-
-                # Deduplicate tasks by task_id to prevent duplicates in display
-                seen_ids = set()
-                unique_tasks = []
-                for task in self.tasks:
-                    if task.id not in seen_ids:
-                        seen_ids.add(task.id)
-                        unique_tasks.append(task)
-                return unique_tasks
-
+        # Create progress display
+        # Note: Tasks remain visible after completion for debugging/review
         with (
-            ShowAllProgress(
+            Progress(
                 SpinnerColumn(),
                 TextColumn("[bold blue]{task.fields[mapping]:<35}", justify="left"),
                 BarColumn(bar_width=30, complete_style="cyan", finished_style="green"),
@@ -1695,6 +1845,13 @@ class Command(BaseCommand):
                 num_servers = len(OVERPASS_SERVERS)
 
                 for idx, mapping_data in enumerate(all_mappings):
+                    # Check for shutdown request
+                    if self._shutdown_requested:
+                        console.print(
+                            "[yellow]Shutdown requested - not starting new tasks[/yellow]"
+                        )
+                        break
+
                     # Staggered start logic:
                     # - First batch (0 to num_servers-1): start immediately
                     # - Second batch (num_servers to 2*num_servers-1): delay 2 seconds
@@ -1719,12 +1876,22 @@ class Command(BaseCommand):
                         console=console,
                         progress=progress,
                         overall_task=overall_task,
+                        state=state,
+                        state_file=state_file,
                     )
                     futures.append(future)
 
                 # Collect results as they complete
                 total_errors = 0
                 for future in as_completed(futures):
+                    # Check for shutdown request
+                    if self._shutdown_requested:
+                        console.print(
+                            "[yellow]Shutdown requested - waiting for running tasks to complete...[/yellow]"
+                        )
+                        # Don't process more results, let remaining tasks finish
+                        break
+
                     try:
                         result = future.result()
                         total_created += result["created"]
@@ -1738,34 +1905,26 @@ class Command(BaseCommand):
                         if state is not None and result.get("success"):
                             mapping_slug = result.get("mapping_slug")
                             if mapping_slug:
-                                count = result["created"] + result["updated"]
                                 self._update_mapping_state(
                                     state,
                                     region,
                                     mapping_slug,
                                     run_start.isoformat(),
-                                    count,
+                                    created=result.get("created", 0),
+                                    updated=result.get("updated", 0),
+                                    skipped=result.get("skipped", 0),
+                                    deleted=result.get("deleted", 0),
+                                    errors=result.get("errors", 0),
                                 )
                     except Exception as e:
                         console.log(f"[red]Worker exception: {e}[/red]")
                         total_errors += 1
 
-        # Write errors to log file if any occurred
-        if hasattr(self, "_import_errors") and self._import_errors:
-            error_log_path = Path(
-                f"osm_import_errors_{region}_{run_start.strftime('%Y%m%d_%H%M%S')}.log"
+        # Show error log location if errors occurred
+        if total_errors > 0 and self._error_log_file:
+            console.print(
+                f"\n[yellow]⚠ {total_errors} errors logged to: {self._error_log_file}[/yellow]"
             )
-            with open(error_log_path, "w") as f:
-                f.write(f"OSM Import Errors - {region} - {run_start}\n")
-                f.write("=" * 80 + "\n\n")
-                for idx, error in enumerate(self._import_errors, 1):
-                    f.write(f"{idx}. {error['name']}\n")
-                    f.write(f"   Category: {error.get('category', 'N/A')}\n")
-                    if error.get("osm_type") and error.get("osm_id"):
-                        f.write(f"   OSM: {error['osm_type']}/{error['osm_id']}\n")
-                    f.write(f"   Error: {error['error']}\n")
-                    f.write("\n")
-            console.print(f"[yellow]Errors logged to: {error_log_path}[/yellow]")
 
         # Set instance variables for handle method to use
         self._pipeline_created = total_created
@@ -1902,6 +2061,13 @@ class Command(BaseCommand):
 
             # Process each mapping
             for idx, (category_name, mapping) in enumerate(all_mappings):
+                # Check for shutdown request
+                if self._shutdown_requested:
+                    console.print(
+                        "[yellow]Shutdown requested - stopping pipeline[/yellow]"
+                    )
+                    break
+
                 mapping_start = time.time()
 
                 # Add new task for this mapping
@@ -1964,6 +2130,16 @@ class Command(BaseCommand):
                 )
                 progress.update(current_task, completed=3)
 
+                # MEMORY FIX: Clear all caches after each mapping to prevent accumulation
+                if hasattr(self, "_place_cache"):
+                    self._place_cache.clear()
+                if hasattr(self, "_category_cache"):
+                    self._category_cache.clear()
+                if hasattr(self, "_brand_cache"):
+                    self._brand_cache.clear()
+                if hasattr(self, "_brand_org_cache"):
+                    self._brand_org_cache.clear()
+
                 self._pipeline_created += created
                 self._pipeline_updated += updated
                 self._pipeline_skipped += skipped
@@ -2013,13 +2189,19 @@ class Command(BaseCommand):
 
                 # Update state for this mapping
                 if state is not None:
-                    count = created + updated
                     self._update_mapping_state(
                         state,
                         region,
                         mapping.category_slug,
                         run_start.isoformat(),
-                        count,
+                        created=created,
+                        updated=updated,
+                        skipped=skipped,
+                        deleted=deleted,
+                        errors=errors,
+                        duration_seconds=mapping_time,
+                        download_bytes=download_size,
+                        downloaded_entries=element_count,
                     )
 
         # Close queries file
@@ -2479,7 +2661,16 @@ class Command(BaseCommand):
         deleted_count = 0
         error_count = 0
 
-        for data in amenities:
+        for idx, data in enumerate(amenities):
+            # Check for shutdown request every 100 places
+            if (
+                idx % 100 == 0
+                and hasattr(self, "_shutdown_requested")
+                and self._shutdown_requested
+            ):
+                # Stop processing new places
+                break
+
             action = data.get("action")  # None, "create", "modify", "delete"
 
             if dry_run:
@@ -2500,28 +2691,78 @@ class Command(BaseCommand):
                     else:
                         skipped_count += 1  # Already deleted or doesn't exist
                 else:
-                    # Create or modify
-                    result = self._upsert_amenity(data, osm_org, run_start)
-                    if result == "created":
-                        created_count += 1
-                    elif result == "updated":
-                        updated_count += 1
-                    else:
-                        skipped_count += 1
+                    # Create or modify with retry for database locks
+                    max_retries = 3
+                    retry_delay = 0.1  # 100ms
+
+                    for attempt in range(max_retries):
+                        try:
+                            result = self._upsert_amenity(data, osm_org, run_start)
+                            if result == "created":
+                                created_count += 1
+                            elif result == "updated":
+                                updated_count += 1
+                            else:
+                                skipped_count += 1
+                            break  # Success, exit retry loop
+                        except Exception as retry_e:
+                            # Check if it's a retryable database error
+                            error_str = str(retry_e).lower()
+                            is_db_lock = (
+                                "database is locked" in error_str
+                                or "deadlock" in error_str
+                            )
+
+                            if is_db_lock and attempt < max_retries - 1:
+                                # Retry with exponential backoff
+                                import time
+
+                                time.sleep(retry_delay * (2**attempt))
+                                continue
+                            else:
+                                # Not retryable or max retries exceeded
+                                raise
             except Exception as e:
                 error_count += 1
-                # Log error to instance variable for later reporting
-                if not hasattr(self, "_import_errors"):
-                    self._import_errors = []
 
-                error_info = {
-                    "name": data.get("name", "Unnamed"),
-                    "osm_type": data.get("osm_type"),
-                    "osm_id": data.get("osm_id"),
-                    "category": data.get("category_slug"),
-                    "error": str(e),
-                }
-                self._import_errors.append(error_info)
+                # Get full exception details
+                import traceback
+
+                error_details = str(e)
+                error_type = type(e).__name__
+
+                # Check if it's a database lock error
+                if (
+                    "database is locked" in error_details.lower()
+                    or "deadlock" in error_details.lower()
+                ):
+                    error_details = f"[DB Lock] {error_type}: {error_details}"
+                elif "does not exist" in error_details.lower():
+                    error_details = f"[Missing Data] {error_type}: {error_details}\n   Traceback: {traceback.format_exc().splitlines()[-3]}"
+                else:
+                    error_details = f"[{error_type}] {error_details}"
+
+                # Log error to file immediately (on-the-fly)
+                self._log_error_to_file(
+                    name=data.get("name", "Unnamed"),
+                    category=data.get("category_slug"),
+                    osm_type=data.get("osm_type"),
+                    osm_id=data.get("osm_id"),
+                    error=error_details,
+                    osm_tags=data.get("tags"),
+                )
+
+            # MEMORY FIX: Clear caches periodically to prevent unbounded growth
+            # Clear every 500 places to keep memory usage stable
+            if idx > 0 and idx % 500 == 0:
+                if hasattr(self, "_place_cache"):
+                    self._place_cache.clear()
+                if hasattr(self, "_category_cache"):
+                    self._category_cache.clear()
+                if hasattr(self, "_brand_cache"):
+                    self._brand_cache.clear()
+                if hasattr(self, "_brand_org_cache"):
+                    self._brand_org_cache.clear()
 
         return created_count, updated_count, skipped_count, deleted_count, error_count
 
@@ -2969,4 +3210,396 @@ class Command(BaseCommand):
         GeoPlaceExternalLink.objects.get_or_create(
             geo_place=place,
             external_link=external_link,
+        )
+
+    def _precache_categories_batch(self, amenities: list[dict]):
+        """Pre-fetch all categories in a single query for batch processing.
+
+        This is much faster than looking up categories individually during import.
+        Creates missing categories if needed.
+        Populates self._category_cache with category_slug -> Category mappings.
+        """
+        if not amenities:
+            return
+
+        # Collect all unique category identifiers
+        category_slugs = set()
+        for amenity in amenities:
+            category_slugs.add(amenity["category_slug"])
+
+        # Initialize cache
+        if not hasattr(self, "_category_cache"):
+            self._category_cache = {}
+
+        # Process each category slug
+        for category_slug in category_slugs:
+            if category_slug not in self._category_cache:
+                # Use the existing _get_or_create_category method
+                # This handles identifier transformation and creation
+                try:
+                    self._category_cache[category_slug] = self._get_or_create_category(
+                        category_slug
+                    )
+                except Exception as e:
+                    # Log error but continue - some categories might fail
+                    self.stderr.write(
+                        f"Warning: Failed to create category '{category_slug}': {e}"
+                    )
+
+        self.stdout.write(f"Pre-cached {len(self._category_cache)} categories")
+
+    def _upsert_amenities_hybrid_bulk(
+        self,
+        amenities: list[dict],
+        osm_org: Organization,
+        run_start: datetime,
+        dry_run: bool,
+        batch_size: int = 20,
+        max_retries: int = 3,
+    ) -> tuple[int, int, int, int, int]:
+        """
+        Upsert amenities using hybrid bulk approach with optimal batch size.
+
+        Strategy:
+        1. Collect elements until buffer >= 20
+        2. Check all for duplicates (BBox queries)
+        3. Split into new places and existing places
+        4. Bulk create new places (single transaction)
+        5. Bulk update existing places (single transaction)
+        6. Process remaining elements in final run
+
+        This provides:
+        - Bulk operation speed
+        - Deduplication safety
+        - Atomic transactions per batch
+        - Retry logic on failures
+
+        Args:
+            amenities: List of amenity data dicts
+            osm_org: OSM Organization instance
+            run_start: Import start timestamp
+            dry_run: If True, don't make DB changes
+            batch_size: Target batch size (default 20)
+            max_retries: Maximum retry attempts per batch
+
+        Returns:
+            Tuple of (created_count, updated_count, skipped_count, deleted_count, error_count)
+        """
+
+        created_count = 0
+        updated_count = 0
+        skipped_count = 0
+        error_count = 0
+
+        if dry_run:
+            for data in amenities:
+                self.stdout.write(
+                    f"[DRY RUN] Would upsert: {data['name'] or 'Unnamed'} "
+                    f"({data['category_slug']}) at ({data['lat']}, {data['lon']})"
+                )
+            return (0, 0, len(amenities), 0, 0)
+
+        # Process in batches using fill-and-process strategy
+        buffer = []
+        total_processed = 0
+
+        for idx, data in enumerate(amenities, 1):
+            # Add to buffer
+            buffer.append(data)
+
+            # Process when buffer is full or this is the last element
+            if len(buffer) >= batch_size or idx == len(amenities):
+                batch_created, batch_updated, batch_skipped, batch_errors = (
+                    self._process_batch_with_retry(
+                        buffer, osm_org, run_start, max_retries
+                    )
+                )
+
+                created_count += batch_created
+                updated_count += batch_updated
+                skipped_count += batch_skipped
+                error_count += batch_errors
+
+                # Show progress
+                total_processed += len(buffer)
+                progress_pct = (total_processed / len(amenities)) * 100
+                self.stdout.write(
+                    f"[{total_processed}/{len(amenities)}] ({progress_pct:.1f}%) - "
+                    f"+{batch_created} ~{batch_updated} ·{batch_skipped}"
+                )
+
+                if batch_errors > 0:
+                    self.stdout.write(f"  ⚠ {batch_errors} errors in this batch")
+
+                # Clear buffer for next batch
+                buffer = []
+
+        return (created_count, updated_count, skipped_count, 0, error_count)
+
+    def _process_batch_with_retry(
+        self,
+        batch: list[dict],
+        osm_org: Organization,
+        run_start: datetime,
+        max_retries: int = 3,
+    ) -> tuple[int, int, int, int]:
+        """
+        Process a batch of amenities with retry logic.
+
+        Splits batch into new and existing places, then performs
+        bulk create and bulk update in atomic transactions.
+
+        Args:
+            batch: List of amenity data dicts
+            osm_org: OSM Organization instance
+            run_start: Import start timestamp
+            max_retries: Maximum retry attempts
+
+        Returns:
+            Tuple of (created_count, updated_count, skipped_count, error_count)
+        """
+        import time
+        from django.db import DatabaseError
+
+        # Step 1: Check all for duplicates (BBox queries)
+        new_places = []
+        existing_places = []
+
+        for data in batch:
+            location = Point(data["lon"], data["lat"], srid=4326)
+
+            # Check cache first (OSM source ID)
+            source_id = f"{data['osm_type']}/{data['osm_id']}"
+            cache_key = f"osm_{source_id}"
+
+            if hasattr(self, "_place_cache") and cache_key in self._place_cache:
+                # Found in cache - this is an update
+                existing = self._place_cache[cache_key]
+                existing_places.append((existing, data))
+                continue
+
+            # Not in cache - check with BBox query
+            from server.apps.geometries.models._geoplace import (
+                GeoPlace as GeoPlaceModel,
+            )
+
+            existing = GeoPlaceModel._find_existing_place_by_schema(
+                schema=self._data_to_schema(data),
+                location=location,
+                source_obj=osm_org,
+                from_source=self._data_to_source(data, run_start),
+                dedup_options=self._get_dedup_options(),
+            )
+
+            if existing is None:
+                new_places.append(data)
+            else:
+                existing_places.append((existing, data))
+                # Add to cache for future lookups
+                self._place_cache[cache_key] = existing
+
+        # Step 2: Retry logic for batch processing
+        for attempt in range(max_retries):
+            try:
+                return self._bulk_create_and_update(
+                    new_places, existing_places, osm_org, run_start
+                )
+            except (DatabaseError, Exception) as e:
+                error_str = str(e).lower()
+
+                # Check if it's a retryable database error
+                is_db_lock = (
+                    "database is locked" in error_str
+                    or "deadlock" in error_str
+                    or "could not serialize" in error_str
+                )
+
+                if is_db_lock and attempt < max_retries - 1:
+                    # Retry with exponential backoff
+                    wait_time = 0.1 * (2**attempt)  # 100ms, 200ms, 400ms
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    # Not retryable or max retries exceeded
+                    # Log errors and continue
+                    error_count = len(batch)
+                    return (0, 0, 0, error_count)
+
+        # If we get here, all retries failed
+        error_count = len(batch)
+        return (0, 0, 0, error_count)
+
+    def _bulk_create_and_update(
+        self,
+        new_places: list[dict],
+        existing_places: list[tuple],
+        osm_org: Organization,
+        run_start: datetime,
+    ) -> tuple[int, int, int, int]:
+        """
+        Perform bulk create and update in atomic transactions.
+
+        Args:
+            new_places: List of amenity data for new places
+            existing_places: List of (place, data) tuples for existing places
+            osm_org: OSM Organization instance
+            run_start: Import start timestamp
+
+        Returns:
+            Tuple of (created_count, updated_count, skipped_count, error_count)
+        """
+        from server.apps.geometries.models import (
+            AmenityDetail,
+            GeoPlaceSourceAssociation,
+        )
+
+        created_count = 0
+        updated_count = 0
+        skipped_count = 0
+
+        with transaction.atomic():
+            # Part 1: Bulk create new places
+            if new_places:
+                geoplaces_to_create = []
+                amenity_details_to_create = []
+                associations_to_create = []
+
+                for data in new_places:
+                    # Prepare GeoPlace
+                    place = self._prepare_geoplace(data)
+                    geoplaces_to_create.append(place)
+
+                    # Prepare AmenityDetail (without geo_place reference yet)
+                    detail = AmenityDetail(
+                        operating_status="open",
+                        opening_hours=data.get("opening_hours"),
+                        phones=self._format_phones(data.get("phone")),
+                    )
+                    amenity_details_to_create.append(detail)
+
+                    # Prepare source association
+                    associations_to_create.append(
+                        GeoPlaceSourceAssociation(
+                            organization=osm_org,
+                            source_id=f"{data['osm_type']}/{data['osm_id']}",
+                            import_date=run_start,
+                            modified_date=run_start,
+                        )
+                    )
+
+                # Bulk create GeoPlaces
+                created_geoplaces = GeoPlace.objects.bulk_create(geoplaces_to_create)
+
+                # Now create details with proper references
+                for place, detail in zip(created_geoplaces, amenity_details_to_create):
+                    detail.geo_place = place
+                    # Set operating_status based on data
+                    if detail.phones:
+                        detail.phones = detail.phones
+
+                # Bulk create AmenityDetails and Associations
+                AmenityDetail.objects.bulk_create(amenity_details_to_create)
+                GeoPlaceSourceAssociation.objects.bulk_create(associations_to_create)
+
+                # Link associations to places
+                for place, assoc in zip(created_geoplaces, associations_to_create):
+                    assoc.geo_place = place
+                    assoc.save(update_fields=["geo_place"])
+
+                created_count += len(new_places)
+
+            # Part 2: Bulk update existing places
+            if existing_places:
+                places_to_update = []
+                details_to_update = []
+
+                for existing, data in existing_places:
+                    # Update GeoPlace fields
+                    existing.name = data.get("name", "")
+                    existing.location = Point(data["lon"], data["lat"], srid=4326)
+                    existing.modified = timezone.now()
+                    places_to_update.append(existing)
+
+                    # Update AmenityDetail if exists
+                    if hasattr(existing, "amenity_detail"):
+                        if data.get("opening_hours"):
+                            existing.amenity_detail.opening_hours = data[
+                                "opening_hours"
+                            ]
+                        if data.get("phone"):
+                            existing.amenity_detail.phones = self._format_phones(
+                                data["phone"]
+                            )
+                        details_to_update.append(existing.amenity_detail)
+
+                # Bulk update
+                if places_to_update:
+                    GeoPlace.objects.bulk_update(
+                        places_to_update, ["name", "location", "modified"]
+                    )
+
+                if details_to_update:
+                    AmenityDetail.objects.bulk_update(
+                        details_to_update, ["opening_hours", "phones"]
+                    )
+
+                updated_count += len(existing_places)
+
+        return (created_count, updated_count, skipped_count, 0)
+
+    def _prepare_geoplace(self, data: dict) -> GeoPlace:
+        """Prepare GeoPlace instance from amenity data."""
+        from server.apps.geometries.models import OperatingStatus
+
+        # Get category
+        category = self._get_or_create_category(data["category_slug"])
+
+        # Build place data
+        place = GeoPlace(
+            name=data.get("name", ""),
+            location=Point(data["lon"], data["lat"], srid=4326),
+            place_type=category,
+            country_code=self._guess_country_code(Point(data["lon"], data["lat"])),
+            detail_type=OperatingStatus.OPEN.value,  # All amenities are open for now
+            is_active=True,
+            is_public=True,
+        )
+
+        # Generate slug (skip DB check for speed)
+        place.slug = GeoPlace.generate_unique_slug(place.name, skip_check=True)
+
+        return place
+
+    def _get_dedup_options(self):
+        """Get deduplication options."""
+        from server.apps.geometries.schemas import DedupOptions
+
+        return DedupOptions(
+            distance_same=20,
+            distance_any=4,
+        )
+
+    def _data_to_schema(self, data: dict):
+        """Convert amenity data to schema."""
+        from server.apps.geometries.schemas import GeoPlaceAmenityInput
+        from server.apps.translations.schema import TranslationSchema
+        from hut_services import LocationSchema
+
+        return GeoPlaceAmenityInput(
+            name=TranslationSchema(de=data.get("name", "")),
+            location=LocationSchema(lon=data["lon"], lat=data["lat"]),
+            country_code=self._guess_country_code(Point(data["lon"], data["lat"])),
+            place_type_identifier=data["category_slug"],
+            operating_status="open",
+        )
+
+    def _data_to_source(self, data: dict, run_start: datetime):
+        """Convert amenity data to source input."""
+        from server.apps.geometries.schemas import SourceInput
+
+        return SourceInput(
+            slug="osm",
+            source_id=f"{data['osm_type']}/{data['osm_id']}",
+            import_date=run_start,
+            modified_date=run_start,
         )

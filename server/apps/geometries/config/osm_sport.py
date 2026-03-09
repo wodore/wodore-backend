@@ -6,7 +6,7 @@ from .osm_base import CategoryMappings, OSMMapping
 SPORT = CategoryMappings(
     category="sport",
     detail_type="amenity",
-    enabled=True,
+    enabled=False,
     mappings=[
         OSMMapping(
             osm_filters=["leisure=sports_centre"],
