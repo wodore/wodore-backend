@@ -890,9 +890,11 @@ class GeoPlace(TimeStampedModel):
                 # No brand specified - only match places without brand
                 nearby = nearby.filter(amenity_detail__brand__isnull=True)
 
-            nearby_list = list(nearby.order_by("distance")[:2])
-            if len(nearby_list) == 1:
-                return nearby_list[0]
+            # CRITICAL FIX: Use first() instead of list() to avoid memory leak
+            # list() creates temporary list objects that aren't garbage collected
+            first_match = nearby.order_by("distance").first()
+            if first_match:
+                return first_match
 
         # 3. Check very close proximity (any place) using BBox
         if dedup_options.distance_any > 0:
@@ -909,16 +911,19 @@ class GeoPlace(TimeStampedModel):
                 )
             )
 
-            very_nearby = list(
+            # CRITICAL FIX: Use first() instead of list() to avoid memory leak
+            very_nearby = (
                 cls.objects.filter(
                     is_active=True,
                     location__contained=bbox,  # BBox filter: 10x faster
                 )
                 .annotate(distance=Distance("location", location))
-                .order_by("distance")[:2]
+                .order_by("distance")
+                .first()
             )
-            if len(very_nearby) == 1:
-                return very_nearby[0]
+
+            if very_nearby:
+                return very_nearby
 
         return None
 
@@ -939,8 +944,24 @@ class GeoPlace(TimeStampedModel):
         from ._amenity_detail import AmenityDetail
         from ._associations import GeoPlaceSourceAssociation
 
-        # Get category
-        category = Category.objects.get(identifier=schema.place_type_identifier)
+        # CRITICAL FIX: Parse identifier and query by slug/parent instead of computed field
+        # The identifier field is computed and may not be populated immediately
+        # Format: "groceries.bakery" or "root.restaurant"
+        identifier = schema.place_type_identifier
+        parts = identifier.split(".")
+
+        # Remove "root" prefix if present
+        if parts and parts[0] == "root":
+            parts = parts[1:]
+
+        if len(parts) == 1:
+            # Root category: "restaurant"
+            category = Category.objects.get(slug=parts[0], parent=None)
+        else:
+            # Child category: "groceries.bakery"
+            parent_slug, child_slug = parts[0], parts[1]
+            parent = Category.objects.get(slug=parent_slug, parent=None)
+            category = Category.objects.get(slug=child_slug, parent=parent)
 
         # Prepare name translations
         name_dict = schema.get_name_dict()
@@ -1130,8 +1151,24 @@ class GeoPlace(TimeStampedModel):
         updated = False
         update_fields = []
 
-        # Get category
-        category = Category.objects.get(identifier=schema.place_type_identifier)
+        # CRITICAL FIX: Parse identifier and query by slug/parent instead of computed field
+        # The identifier field is computed and may not be populated immediately
+        # Format: "groceries.bakery" or "root.restaurant"
+        identifier = schema.place_type_identifier
+        parts = identifier.split(".")
+
+        # Remove "root" prefix if present
+        if parts and parts[0] == "root":
+            parts = parts[1:]
+
+        if len(parts) == 1:
+            # Root category: "restaurant"
+            category = Category.objects.get(slug=parts[0], parent=None)
+        else:
+            # Child category: "groceries.bakery"
+            parent_slug, child_slug = parts[0], parts[1]
+            parent = Category.objects.get(slug=parent_slug, parent=None)
+            category = Category.objects.get(slug=child_slug, parent=parent)
 
         # Update place_type
         if "place_type" not in protected and place.place_type != category:

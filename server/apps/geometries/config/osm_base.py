@@ -1,6 +1,6 @@
 """Base classes for OSM category mappings."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Optional, Union
 
 
@@ -55,6 +55,15 @@ class OSMMapping:
             category_slug="groceries.vending_machine",
             condition=lambda tags: tags.get('vending') in ['food', 'drinks'],
         )
+
+        # With multilingual default name for unnamed places
+        OSMMapping(
+            osm_filters=["amenity=bank"],
+            category_slug="finance.bank",
+            mapcomplete_theme="banks",
+            priority=0,
+            default_name={"en": "Bank", "de": "Bank", "fr": "Banque", "it": "Banca"},
+        )
     """
 
     osm_filters: list[Union[str, tuple[str, ...]]]
@@ -81,6 +90,17 @@ class OSMMapping:
 
     priority: int = 0
     """Priority for this mapping (lower number = higher priority, used when multiple mappings match)"""
+
+    default_name: Optional[dict] = field(default_factory=dict)
+    """
+    Optional multilingual default name for unnamed places.
+
+    Dictionary with language codes as keys and translated names as values.
+    Example: {"en": "Bank", "de": "Bank", "fr": "Banque", "it": "Banca"}
+
+    If empty (default), no default name will be added - only use OSM name/brand/operator tags.
+    This prevents adding names to places that genuinely shouldn't have them.
+    """
 
 
 @dataclass
