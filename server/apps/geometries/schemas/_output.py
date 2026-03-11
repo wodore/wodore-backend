@@ -93,7 +93,7 @@ class GeoPlaceBaseSchema(Schema):
     elevation: int | None
     importance: int
     location: LocationSchema
-    place_type: str | CategoryPlaceTypeSchema | None = None
+    categories: list[str] | list[CategoryPlaceTypeSchema] | None = None
     sources: (
         list[OrganizationSourceIdSlugSchema]
         | list[OrganizationSourceIdDetailSchema]

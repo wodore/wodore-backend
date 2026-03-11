@@ -5,12 +5,31 @@
 # 'Do not log' by Nikita Sobolev (@sobolevn)
 # https://sobolevn.me/2020/03/do-not-log
 
+import logging
+import os
 from typing import TYPE_CHECKING, Callable, final
 
 import structlog
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
+
+
+class SlowQueryFilter(logging.Filter):
+    """Filter DB logs to only include queries above a duration threshold."""
+
+    def __init__(self, threshold_ms: int | None = None) -> None:
+        super().__init__()
+        self._threshold_ms = threshold_ms or int(
+            os.getenv("SLOW_QUERY_THRESHOLD_MS", "200")
+        )
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        duration = getattr(record, "duration", None)
+        if duration is None:
+            return False
+        return duration >= self._threshold_ms
+
 
 LOGGING = {
     "version": 1,
@@ -28,6 +47,11 @@ LOGGING = {
             "processor": structlog.processors.KeyValueRenderer(
                 key_order=["timestamp", "level", "event", "logger"],
             ),
+        },
+    },
+    "filters": {
+        "slow_queries": {
+            "()": "server.settings.components.logging.SlowQueryFilter",
         },
     },
     # You can easily swap `key/value` (default) output and `json` ones.
@@ -51,6 +75,12 @@ LOGGING = {
             "handlers": ["console"],
             "propagate": True,
             "level": "INFO",
+        },
+        "django.db.backends": {
+            "handlers": ["console"],
+            "level": "DEBUG",
+            "filters": ["slow_queries"],
+            "propagate": False,
         },
         "security": {
             "handlers": ["console"],

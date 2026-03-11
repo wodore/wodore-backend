@@ -600,7 +600,6 @@ class Command(BaseCommand):
                 source_associations__organization__slug=source,
                 source_associations__source_id=source_id,
             )
-            .select_related("place_type")  # Optimize query for forward relation
             .order_by("id")
             .first()
         )
@@ -676,13 +675,11 @@ class Command(BaseCommand):
         Consider using --continue flag to skip this check for already imported entries.
         """
         # Search for places within 30m with same category
-        # Use select_related to avoid extra queries for place_type
         return (
             GeoPlace.objects.filter(
                 location__distance_lte=(geoname.location, D(m=30)),
-                place_type=geoname.feature.category,
+                categories=geoname.feature.category,
             )
-            .select_related("place_type")  # Optimize: avoid N+1 queries
             .annotate(distance=Distance("location", geoname.location))
             .order_by("distance")
             .first()
@@ -694,7 +691,6 @@ class Command(BaseCommand):
             source="geonames",
             source_id=str(geoname.geoname_id),
             name=self._truncate_name(geoname.name),
-            place_type=geoname.feature.category,
             location=geoname.location,
             elevation=self._normalize_elevation(geoname.elevation),
             country_code=geoname.country_code,
@@ -703,6 +699,7 @@ class Command(BaseCommand):
             is_public=True,  # Can be changed manually later
             is_modified=False,
         )
+        place.categories.add(geoname.feature.category)
         return place
 
     def _update_place(self, place: GeoPlace, geoname: GeoName, importance: int) -> bool:
@@ -734,6 +731,12 @@ class Command(BaseCommand):
         if place.importance != importance:
             place.importance = importance
             changed = True
+        if (
+            geoname.feature.category
+            and not place.categories.filter(id=geoname.feature.category_id).exists()
+        ):
+            place.categories.add(geoname.feature.category)
+            changed = True
 
         if changed:
             place.save(
@@ -749,11 +752,10 @@ class Command(BaseCommand):
         return False
 
     def _create_place_from_hut(self, hut: Hut, importance: int) -> GeoPlace:
-        return GeoPlace.create_with_source(
+        place = GeoPlace.create_with_source(
             source="wodore",
             source_id=hut.slug,
             name=hut.name,
-            place_type=hut.hut_type_open,
             location=hut.location,
             elevation=self._normalize_elevation(hut.elevation),
             country_code=hut.country_field,
@@ -762,6 +764,9 @@ class Command(BaseCommand):
             is_public=hut.is_public,
             is_modified=hut.is_modified,
         )
+        if hut.hut_type_open:
+            place.categories.add(hut.hut_type_open)
+        return place
 
     def _update_place_from_hut(
         self, place: GeoPlace, hut: Hut, importance: int
@@ -775,8 +780,11 @@ class Command(BaseCommand):
         if place.name != hut.name:
             place.name = hut.name
             changed = True
-        if place.place_type != hut.hut_type_open:
-            place.place_type = hut.hut_type_open
+        if (
+            hut.hut_type_open
+            and not place.categories.filter(id=hut.hut_type_open_id).exists()
+        ):
+            place.categories.add(hut.hut_type_open)
             changed = True
         if place.location != hut.location:
             place.location = hut.location
@@ -805,7 +813,6 @@ class Command(BaseCommand):
             place.save(
                 update_fields=[
                     "name",
-                    "place_type",
                     "location",
                     "elevation",
                     "country_code",

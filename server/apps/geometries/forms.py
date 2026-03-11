@@ -9,7 +9,7 @@ GeoPlaceAdminFieldsets = [
             "fields": [
                 ("slug", "name_i18n"),
                 ("is_public", "is_active", "importance"),
-                ("place_type", "parent"),
+                "parent",
                 ("review_status", "detail_type"),
                 "review_comment",
                 "description_i18n",

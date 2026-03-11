@@ -1,4 +1,5 @@
 from ._associations import (
+    GeoPlaceCategory,
     GeoPlaceImageAssociation,
     GeoPlaceSourceAssociation,
     GeoPlaceExternalLink,
@@ -12,6 +13,7 @@ from ._geoplace import GeoPlace, DetailType
 
 __all__ = [
     "GeoPlace",
+    "GeoPlaceCategory",
     "GeoPlaceImageAssociation",
     "GeoPlaceSourceAssociation",
     "GeoPlaceExternalLink",

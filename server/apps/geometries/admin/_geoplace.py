@@ -4,7 +4,8 @@ from django import forms
 from django.contrib import admin
 from django.forms import ModelForm
 from django.utils.translation import gettext_lazy as _
-from django.utils.html import format_html
+from django.utils.html import format_html, format_html_join
+from django.utils.safestring import mark_safe
 
 from unfold import admin as unfold_admin
 from unfold.decorators import display
@@ -16,6 +17,7 @@ from server.apps.translations.forms import required_i18n_fields_form_factory
 from ..forms import GeoPlaceAdminFieldsets
 from ..models import (
     GeoPlace,
+    GeoPlaceCategory,
     GeoPlaceSourceAssociation,
     GeoPlaceExternalLink,
     AmenityDetail,
@@ -129,6 +131,48 @@ class GeoPlaceExternalLinkInline(unfold_admin.TabularInline):
         return True
 
 
+def _format_categories_list(categories) -> str:
+    if not categories:
+        return "-"
+
+    parts = []
+    for category in categories[:3]:
+        if category.parent:
+            parts.append(f"{category.parent.name_i18n} → {category.name_i18n}")
+        else:
+            parts.append(category.name_i18n)
+
+    if len(categories) > 3:
+        parts.append(mark_safe(f"<i>+{len(categories) - 3} more ...</i>"))
+
+    lines_html = format_html_join(mark_safe("<br>"), "{}", ((part,) for part in parts))
+    return format_html(
+        '<span style="font-size: 0.85em; line-height: 1.2;">{}</span>',
+        lines_html,
+    )
+
+
+class GeoPlaceCategoryInline(unfold_admin.TabularInline):
+    """GeoPlace category association inline with optional classifier."""
+
+    model = GeoPlaceCategory
+    tab = True
+    fields = (
+        "category",
+        "classifier",
+    )
+    autocomplete_fields = ("category", "classifier")
+    extra = 1
+    show_change_link = True
+    verbose_name = _("Category")
+
+    def has_add_permission(self, request, obj):
+        return True
+
+    def has_delete_permission(self, request, obj):
+        return True
+
+
 ## ADMIN
 
 
@@ -147,7 +191,7 @@ class GeoPlaceAdmin(ModelAdmin):
     list_display = (
         "name",
         "slug",
-        "place_type_display",
+        "categories_display",
         "country_code",
         "elevation_display",
         "review_status_display",
@@ -163,14 +207,20 @@ class GeoPlaceAdmin(ModelAdmin):
         "review_status",
         "is_public",
         "is_active",
-        "place_type__parent",  # Filter by category parent (e.g., terrain, transport)
-        "place_type",
+        "categories__parent",  # Filter by category parent (e.g., terrain, transport)
+        "categories",
         "country_code",
     )
 
-    search_fields = ("name", "name_i18n", "slug")
+    search_fields = (
+        "name",
+        "name_i18n",
+        "slug",
+        "categories__name_i18n",
+        "categories__slug",
+    )
 
-    autocomplete_fields = ("place_type", "parent")
+    autocomplete_fields = ("parent",)
 
     readonly_fields = (
         "name_i18n",
@@ -197,21 +247,24 @@ class GeoPlaceAdmin(ModelAdmin):
 
     list_per_page = 50
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related("categories__parent")
+
     def get_inlines(self, request, obj):
         """Return inlines for admin."""
         return [
+            GeoPlaceCategoryInline,
             GeoPlaceSourceAssociationInline,
             GeoPlaceExternalLinkInline,
         ]
 
     # Display methods
 
-    @display(description=_("Type"))
-    def place_type_display(self, obj: GeoPlace) -> str:
-        """Display place type with parent if exists."""
-        if obj.place_type.parent:
-            return f"{obj.place_type.parent.name_i18n} → {obj.place_type.name_i18n}"
-        return obj.place_type.name_i18n
+    @display(description=_("Categories"))
+    def categories_display(self, obj: GeoPlace) -> str:
+        """Display categories with parents if available."""
+        categories = list(obj.categories.all())
+        return _format_categories_list(categories)
 
     @display(description=_("Elevation"))
     def elevation_display(self, obj: GeoPlace) -> str:
@@ -261,7 +314,7 @@ class AmenityDetailAdmin(ModelAdmin):
 
     list_display = (
         "place_name",
-        "place_type",
+        "place_categories",
         "operating_status",
         "brand",
         "has_opening_hours",
@@ -276,8 +329,8 @@ class AmenityDetailAdmin(ModelAdmin):
         "operating_status",
         "brand__parent",
         "brand",
-        "geo_place__place_type__parent",
-        "geo_place__place_type",
+        "geo_place__categories__parent",
+        "geo_place__categories",
         "geo_place__country_code",
     )
 
@@ -285,6 +338,8 @@ class AmenityDetailAdmin(ModelAdmin):
         "geo_place__name",
         "geo_place__name_i18n",
         "geo_place__slug",
+        "geo_place__categories__name_i18n",
+        "geo_place__categories__slug",
     )
 
     autocomplete_fields = ("geo_place", "brand")
@@ -369,6 +424,14 @@ class AmenityDetailAdmin(ModelAdmin):
 
     list_per_page = 50
 
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .select_related("geo_place")
+            .prefetch_related("geo_place__categories__parent")
+        )
+
     # Display methods
 
     @display(description=_("Place Name"))
@@ -376,12 +439,11 @@ class AmenityDetailAdmin(ModelAdmin):
         """Display associated place name."""
         return obj.geo_place.name_i18n
 
-    @display(description=_("Type"))
-    def place_type(self, obj: AmenityDetail) -> str:
-        """Display place type."""
-        if obj.geo_place.place_type.parent:
-            return f"{obj.geo_place.place_type.parent.name_i18n} → {obj.geo_place.place_type.name_i18n}"
-        return obj.geo_place.place_type.name_i18n
+    @display(description=_("Categories"))
+    def place_categories(self, obj: AmenityDetail) -> str:
+        """Display place categories."""
+        categories = list(obj.geo_place.categories.all())
+        return _format_categories_list(categories)
 
     @display(description=_("Opening Hours"), boolean=True)
     def has_opening_hours(self, obj: AmenityDetail) -> bool:
