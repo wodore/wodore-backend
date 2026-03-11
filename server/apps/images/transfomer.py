@@ -105,6 +105,11 @@ class ImagorImage:
             str: The signed path.
         """
         imagor_key = key or settings.IMAGOR_KEY
+
+        # If no key is available, return empty string (will use 'unsafe')
+        if not imagor_key:
+            return ""
+
         safe_path = cls.url_quote(path, quote)
         # print(f"IMAGOR KEY: {key}")
         # hmac_digest = hmac.new(IMAGOR_SECRET.encode("utf-8"), path.encode("utf-8"), hashlib.sha256).digest()
@@ -132,17 +137,18 @@ class ImagorImage:
 
     def _build_path(
         self,
-        size: str,
+        size: Optional[str],
         crop_start: Optional[str],
         crop_stop: Optional[str],
         fit: bool,
         stretch: bool,
         halign: Optional[str],
         valign: Optional[str],
-        focal: Optional[str],
+        focal: Optional[str] | Literal["smart"],
         quality: Optional[int],
         blur: Optional[float],
         round_corner: int | tuple[int, int] | tuple[int, int, int] | None = None,
+        no_upscale: bool = False,
         filters: list[str] | None = None,
     ) -> str:
         """
@@ -156,12 +162,13 @@ class ImagorImage:
             stretch (bool): Whether to stretch the image.
             halign (Optional[str]): Horizontal alignment ('left', 'center', 'right').
             valign (Optional[str]): Vertical alignment ('top', 'middle', 'bottom').
-            focal (Optional[str]): Focal point for image (e.g. '0.1,0.8').
+            focal (Optional[str] | 'smart'): Focal point for image (e.g. '0.1,0.8') or smart.
             quality (Optional[int]): Image quality (0 to 100).
             blur: Image blur (sigma).
             rounded_corder:  adds rounded corners to the image with the specified color as background
                              rx, ry amount of pixel to use as radius. ry = rx if ry is not provided
                             color the color name or hexadecimal rgb expression without the “#” character
+            no_upscale (bool): prevents the image from being upscaled beyond its original dimensions
 
         Returns:
             str: The constructed path for the image.
@@ -183,7 +190,12 @@ class ImagorImage:
         if valign:
             path.append(f"{valign}")
         if focal:
-            filters.append(f"focal({focal})")
+            if focal == "smart":
+                path.append("smart")
+            else:
+                filters.append(f"focal({focal})")
+        if no_upscale:
+            filters.append("no_upscale()")
         if quality:
             filters.append(f"quality({quality})")
         if blur:
@@ -199,19 +211,20 @@ class ImagorImage:
 
     def transform(
         self,
-        size: str = "600x400",
+        size: str | None = None,
         crop_start: Optional[str] = None,
         crop_stop: Optional[str] = None,
         fit: bool = False,
         stretch: bool = False,
         halign: Optional[str] = None,
         valign: Optional[str] = None,
-        focal: Optional[str] = None,
+        focal: Optional[str] | Literal["smart"] = None,
         quality: Optional[int] = None,
         blur: Optional[float] = None,
         round_corner: int | tuple[int, int] | tuple[int, int, int] | None = None,
         filters: list[str] | None = None,
         unsafe: bool = False,
+        no_upscale: bool = False,
     ) -> TransformedImage:
         """
         Apply transformations to the image and return a TransformedImage object.
@@ -246,6 +259,7 @@ class ImagorImage:
             blur=blur,
             round_corner=round_corner,
             filters=filters,
+            no_upscale=no_upscale,
         )
         # print(f"PATH: {path}")
 
@@ -253,6 +267,9 @@ class ImagorImage:
         signature = "unsafe"
         if not unsafe:
             signature = self.sign_path(path, key=self._key)
+            # If sign_path returns empty string, use 'unsafe'
+            if not signature:
+                signature = "unsafe"
 
         # Full URL
         imagor_url = self._url or settings.IMAGOR_URL

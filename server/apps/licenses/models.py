@@ -23,7 +23,7 @@ validate_lic_slug = RegexValidator(
 
 
 class License(TimeStampedModel):
-    i18n = TranslationField(fields=("name", "fullname", "description", "link"))
+    i18n = TranslationField(fields=("name", "fullname", "description", "url"))
     objects = BaseMutlilingualManager()
 
     slug = models.SlugField(unique=True, validators=[validate_lic_slug])
@@ -36,7 +36,7 @@ class License(TimeStampedModel):
     description = models.TextField(
         default="", blank=True, null=True, help_text=_("Description")
     )
-    link = models.URLField(blank=True, max_length=300, null=True)
+    url = models.URLField(blank=True, max_length=300, null=True)
 
     is_active = models.BooleanField(default=False)
     order = models.PositiveSmallIntegerField(
@@ -48,7 +48,36 @@ class License(TimeStampedModel):
     no_modifying = models.BooleanField(default=True)
     share_alike = models.BooleanField(default=True)
     no_publication = models.BooleanField(default=True)
-    # icon = models.ImageField(_("icon"), upload_to="licenses/icons/")
+
+    # Category reference for license symbols
+    category = models.ForeignKey(
+        "categories.Category",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="licenses",
+        verbose_name=_("Category"),
+        help_text=_(
+            "Category for license symbols (references detailed/simple/mono symbols)"
+        ),
+    )
+
+    # Review system
+    review_status = models.CharField(
+        max_length=20,
+        default="done",
+        choices=[
+            ("new", "New"),
+            ("done", "Done"),
+            ("rejected", "Rejected"),
+        ],
+        help_text=_("Review status: 'new' for auto-added, 'done' for reviewed"),
+    )
+    review_comment = models.TextField(
+        blank=True,
+        null=True,
+        help_text=_("Review comments or notes"),
+    )
 
     class Meta:
         verbose_name = _("License")
@@ -70,8 +99,10 @@ class License(TimeStampedModel):
             "name",
             "fullname",
             "description",
-            "link",
-            "latest",
+            "url",
+            "category",
+            "review_status",
+            "review_comment",
             "is_active",
             "order",
         ]

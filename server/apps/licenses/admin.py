@@ -1,9 +1,12 @@
+from typing import ClassVar
 from django.contrib import admin
 
 # Models
 from django.utils.safestring import mark_safe
 
+from server.apps.geometries.schemas import ReviewStatus
 from unfold.decorators import display
+from django.utils.translation import gettext_lazy as _
 
 from server.apps.manager.admin import ModelAdmin
 from server.apps.translations.forms import required_i18n_fields_form_factory
@@ -26,27 +29,45 @@ class LicenseAdmin(ModelAdmin):
     form = required_i18n_fields_form_factory("name", "fullname")
     fieldsets = LicenseAdminFieldsets
     view_on_site = True
+    autocomplete_fields = ("category",)
+    radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
     list_display = (
         "slug",
         "name_i18n",
+        "category",
         "is_active",
         "attribution_required",
         "no_commercial",
         "no_modifying",
         "share_alike",
         "no_publication",
+        "review_tag",
         "order_small",
     )
     list_display_links = ("slug", "name_i18n")
-    search_fields = ("slug", "name_i18n", "fullname_i18n")
+    list_filter = ("review_status", "is_active", "category")
+    search_fields = ("slug", "name_i18n", "fullname_i18n", "review_comment")
     readonly_fields = (
         "name_i18n",
         "fullname_i18n",
         "description_i18n",
-        "link_i18n",
+        "url_i18n",
         "created",
         "modified",
     )
+
+    @display(
+        description=_("Review"),
+        label={
+            ReviewStatus.NEW: "warning",
+            ReviewStatus.REVIEW: "info",
+            ReviewStatus.WORK: "danger",
+            ReviewStatus.DONE: "success",
+        },
+    )
+    def review_tag(self, obj: License) -> str:
+        """Display review status as colored label."""
+        return obj.review_status
 
     # formfield_overrides = {models.JSONField: {"widget": UnfoldJSONSuit}}
 

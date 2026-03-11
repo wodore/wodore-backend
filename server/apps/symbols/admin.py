@@ -103,7 +103,7 @@ class SymbolAdmin(ModelAdmin):
         """Show license with link."""
         if obj.license:
             link = mark_safe(
-                f'<a href="{obj.license.link_i18n}" target="_blank">{obj.license.name_i18n}</a>'
+                f'<a href="{obj.license.url_i18n}" target="_blank">{obj.license.name_i18n}</a>'
             )
             return link, link
         return mark_safe("-"), mark_safe("-")

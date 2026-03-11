@@ -69,6 +69,7 @@ LOGGING = {
     # These loggers are required by our app:
     # - django is required when using `logger.getLogger('django')`
     # - security is required by `axes`
+    # - server.apps.geometries for image API debugging
     "loggers": {
         "django": {
             "handlers": ["console"],
@@ -85,6 +86,11 @@ LOGGING = {
             "handlers": ["console"],
             "level": "ERROR",
             "propagate": False,
+        },
+        "server.apps.geometries": {
+            "handlers": ["console"],
+            "propagate": False,
+            "level": "DEBUG",  # Set to INFO for production, DEBUG for development
         },
     },
 }

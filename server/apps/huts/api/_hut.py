@@ -362,7 +362,7 @@ def get_huts(  # type: ignore  # noqa: PGH003
                     name="image_set__license__name_i18n",
                     fullname="image_set__license__fullname_i18n",
                     description="image_set__license__description_i18n",
-                    link="image_set__license__link_i18n",
+                    url="image_set__license__url_i18n",
                 ),
                 author="image_set__author",
                 author_url="image_set__author_url",
@@ -372,7 +372,7 @@ def get_huts(  # type: ignore  # noqa: PGH003
                     fullname="image_set__source_org__fullname_i18n",
                     slug="image_set__source_org__slug",
                     name="image_set__source_org__name_i18n",
-                    link="image_set__source_org__url",  # get link
+                    url="image_set__source_org__url",  # get url
                     # source_id="orgs_source__source_id",
                     # public="image_set__source_org__is_public",
                     # active="image_set__source_org__is_active",
@@ -729,7 +729,7 @@ def get_hut(
                         "image_set__license__slug",
                     ),
                     description="image_set__license__description_i18n",
-                    link="image_set__license__link_i18n",
+                    url="image_set__license__url_i18n",
                     no_publication="image_set__license__no_publication",
                 ),
                 author="image_set__author",
@@ -740,7 +740,7 @@ def get_hut(
                     fullname="image_set__source_org__fullname_i18n",
                     slug="image_set__source_org__slug",
                     name="image_set__source_org__name_i18n",
-                    link="image_set__source_org__url",  # get link
+                    url="image_set__source_org__url",  # get url
                     # source_id="orgs_source__source_id",
                     # public="image_set__source_org__is_public",
                     # active="image_set__source_org__is_active",
@@ -793,9 +793,9 @@ def get_hut(
         attribution = ""
         if img_s.license:
             attribution = f"&copy; {img_s.license.name}"
-            if img_s.license.link:
+            if img_s.license.url:
                 attribution = (
-                    f"&copy; <a href='{img_s.license.link}'>{img_s.license.name}</a>"
+                    f"&copy; <a href='{img_s.license.url}'>{img_s.license.name}</a>"
                 )
         if img_s.author:
             if img_s.author_url:
@@ -803,8 +803,8 @@ def get_hut(
             else:
                 attribution += f" | {img_s.author}"
         if img_s.organization:
-            if img_s.organization.link:
-                attribution += f" | <a href='{img_s.organization.link}'>{img_s.organization.name}</a>"
+            if img_s.organization.url:
+                attribution += f" | <a href='{img_s.organization.url}'>{img_s.organization.name}</a>"
             else:
                 attribution += f" | {img_s.organization.name}"
         if img_s.source_url:
