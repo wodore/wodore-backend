@@ -5,7 +5,7 @@ Base classes and utilities for image providers.
 import asyncio
 import logging
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from datetime import datetime
 from typing import Any, Literal
 
@@ -13,6 +13,30 @@ from django.contrib.gis.geos import Point
 from django.core.cache import cache
 
 logger = logging.getLogger(__name__)
+
+
+# Cache duration constants (in seconds)
+CACHE_INDEFINITE = 365 * 24 * 60 * 60  # 1 year (~indefinite)
+CACHE_LONGTERM = 30 * 24 * 60 * 60  # 30 days
+CACHE_MEDIUM = 7 * 24 * 60 * 60  # 7 days
+CACHE_SHORT = 24 * 60 * 60  # 24 hours
+CACHE_VERY_SHORT = 6 * 60 * 60  # 6 hours
+
+
+# Cache key prefix for all geoimages caching
+CACHE_KEY_PREFIX = "geoimages"
+
+
+def get_persistent_cache():
+    """
+    Get the persistent cache backend.
+
+    Returns:
+        Cache backend configured for long-term storage
+    """
+    from django.core.cache import caches
+
+    return caches["persistent"]
 
 
 @dataclass
@@ -116,6 +140,9 @@ class ImageProvider(ABC):
     source: str  # Provider identifier
     cache_ttl: int  # Cache TTL in seconds
     priority: int  # Priority for deduplication (1=highest)
+    cache_backend: str = (
+        "persistent"  # Cache backend to use ("default" or "persistent")
+    )
 
     @abstractmethod
     async def fetch(
@@ -125,6 +152,7 @@ class ImageProvider(ABC):
         lon: float,
         radius: float,
         limit: int = 100,
+        update_cache: bool = False,
     ) -> list[ImageResult]:
         """
         Fetch images for the given GeoPlaces.
@@ -135,6 +163,7 @@ class ImageProvider(ABC):
             lon: Query longitude
             radius: Search radius in meters
             limit: Maximum number of results to return
+            update_cache: If True, bypass cache and refresh cached data
 
         Returns:
             List of ImageResult objects (empty if no images or error)
@@ -143,6 +172,17 @@ class ImageProvider(ABC):
             Must never raise - catch and log errors internally.
         """
         raise NotImplementedError
+
+    def get_cache(self):
+        """
+        Get the cache backend for this provider.
+
+        Returns:
+            Cache backend instance
+        """
+        from django.core.cache import caches
+
+        return caches[self.cache_backend]
 
     def _get_cache_key(
         self,
@@ -153,6 +193,8 @@ class ImageProvider(ABC):
     ) -> str:
         """
         Generate cache key for this provider.
+
+        Format: geoimages:PROVIDER:images:lat:lon:radius:precision
 
         Args:
             lat: Latitude
@@ -171,14 +213,32 @@ class ImageProvider(ABC):
             lat_rounded = lat
             lon_rounded = lon
 
-        return f"images:{self.source}:{lat_rounded}:{lon_rounded}:{radius}"
+        return f"{CACHE_KEY_PREFIX}:{self.source}:images:{lat_rounded}:{lon_rounded}:{radius}:{precision}"
+
+    def _get_metadata_cache_key(self, identifier: str) -> str:
+        """
+        Generate cache key for detailed metadata.
+
+        Format: geoimages:PROVIDER:metadata:identifier
+
+        Use this for indefinitely cacheable metadata (e.g., detailed image info
+        that requires a second API call and never changes).
+
+        Args:
+            identifier: Unique identifier (e.g., image ID, QID, filename)
+
+        Returns:
+            Cache key string
+        """
+        return f"{CACHE_KEY_PREFIX}:{self.source}:metadata:{identifier}"
 
     async def _get_cached_results(
         self,
         cache_key: str,
     ) -> list[ImageResult] | None:
         """Get cached results if available and fresh."""
-        data = cache.get(cache_key)
+        cache_instance = self.get_cache()
+        data = cache_instance.get(cache_key)
         if data is not None:
             logger.debug(f"Cache HIT: {cache_key}")
             # Deserialize - stored as list of dicts
@@ -186,23 +246,98 @@ class ImageProvider(ABC):
         logger.debug(f"Cache MISS: {cache_key}")
         return None
 
+    def _set_cached_results(
+        self,
+        cache_key: str,
+        results: list[ImageResult],
+    ) -> None:
+        """Cache results for this provider."""
+        cache_instance = self.get_cache()
+        # Serialize - convert to list of dicts using dataclasses.asdict
+        data = [asdict(result) for result in results]
+        cache_instance.set(cache_key, data, self.cache_ttl)
 
-def _get_provider_info(provider_name: str) -> dict:
+    def invalidate_cache(
+        self, lat: float, lon: float, radius: float, precision: str = "precise"
+    ) -> bool:
+        """
+        Invalidate a specific cache entry for this provider.
+
+        Args:
+            lat: Latitude
+            lon: Longitude
+            radius: Radius in meters
+            precision: Precision level
+
+        Returns:
+            True if deleted, False otherwise
+        """
+        cache_key = self._get_cache_key(lat, lon, radius, precision)
+        cache_instance = self.get_cache()
+        deleted = cache_instance.delete(cache_key)
+        if deleted:
+            logger.debug(f"Invalidated cache: {cache_key}")
+        return deleted
+
+    @classmethod
+    def invalidate_all_provider_cache(cls, provider: str) -> int:
+        """
+        Invalidate all cache entries for a specific provider.
+
+        This uses the cache versioning strategy - increments the version
+        number so all old cache keys are automatically invalidated.
+
+        Args:
+            provider: Provider name (e.g., "camptocamp", "panoramax")
+
+        Returns:
+            New version number
+        """
+        cache_instance = get_persistent_cache()
+        version_key = f"{CACHE_KEY_PREFIX}:{provider}:version"
+        current_version = cache_instance.get(version_key, 1)
+        new_version = current_version + 1
+        cache_instance.set(version_key, new_version)
+        logger.debug(
+            f"Invalidated all cache for provider '{provider}': v{current_version} -> v{new_version}"
+        )
+        return new_version
+
+
+def _invalidate_provider_metadata_cache(provider_name: str) -> None:
+    """
+    Invalidate cached provider metadata (including icons).
+
+    This forces the provider information to be refetched from the database,
+    which will regenerate Imagor URLs with current environment settings.
+
+    Args:
+        provider_name: Name of the provider (e.g., "camptocamp", "panoramax")
+    """
+    cache = get_persistent_cache()
+    cache_key = f"{CACHE_KEY_PREFIX}:provider:{provider_name}"
+    cache.delete(cache_key)
+    logger.info(f"Invalidated provider metadata cache for '{provider_name}'")
+
+
+def _get_provider_info(provider_name: str, force_refresh: bool = False) -> dict:
     """
     Get provider information from database.
 
     Args:
         provider_name: Name of the provider (e.g., "camptocamp", "panoramax")
+        force_refresh: If True, bypass cache and refetch from database
 
     Returns:
         Dictionary with provider information
     """
-    from django.core.cache import cache
+    cache = get_persistent_cache()
+    cache_key = f"{CACHE_KEY_PREFIX}:provider:{provider_name}"
 
-    cache_key = f"provider_info:{provider_name}"
-    cached = cache.get(cache_key)
-    if cached:
-        return cached
+    if not force_refresh:
+        cached = cache.get(cache_key)
+        if cached:
+            return cached
 
     # Fallback provider information for known providers
     provider_fallbacks = {
@@ -299,8 +434,8 @@ def _get_provider_info(provider_name: str) -> dict:
     except Exception as e:
         logger.warning(f"Could not fetch provider info from database: {e}")
 
-    # Cache for 1 hour
-    cache.set(cache_key, provider_info, 3600)
+    # Cache indefinitely (provider info rarely changes)
+    cache.set(cache_key, provider_info, CACHE_INDEFINITE)
 
     return provider_info
 
@@ -399,21 +534,21 @@ def _get_license_info(slug: str | None) -> dict[str, str | None]:
             "description": None,
         }
 
-    # Try to get from database first
+    cache = get_persistent_cache()
+    cache_key = f"{CACHE_KEY_PREFIX}:license:{slug}"
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
+
+    # Try to get from database
     try:
         from server.apps.licenses.models import License
-        from django.core.cache import cache
-
-        cache_key = f"license_info:{slug}"
-        cached = cache.get(cache_key)
-        if cached:
-            return cached
 
         license_obj = License.objects.filter(slug=slug).first()
 
         # Auto-create license if not found
         if not license_obj:
-            logger.info(f"License '{slug}' not found in database, auto-creating...")
+            logger.debug(f"License '{slug}' not found in database, auto-creating...")
 
             # Generate reasonable defaults from slug
             generated_slug = _generate_license_slug(slug)
@@ -446,7 +581,7 @@ def _get_license_info(slug: str | None) -> dict[str, str | None]:
                 is_active=True,
                 order=License.get_next_order_number(),
             )
-            logger.info(
+            logger.debug(
                 f"Created new license '{generated_slug}' with review_status='new'"
             )
 
@@ -481,8 +616,8 @@ def _get_license_info(slug: str | None) -> dict[str, str | None]:
             "description": license_obj.description,
         }
 
-        # Cache for 1 hour
-        cache.set(cache_key, license_info, 3600)
+        # Cache indefinitely (license info rarely changes)
+        cache.set(cache_key, license_info, CACHE_INDEFINITE)
         return license_info
 
     except Exception as e:
@@ -685,6 +820,7 @@ async def fetch_images_for_place(
     radius: float,
     sources: list[str] | None,
     limit: int,
+    update_cache: bool = False,
 ) -> tuple[list[ImageResult], dict[str, Any]]:
     """
     Fetch images for a specific place (GeoPlace or Hut).
@@ -698,6 +834,7 @@ async def fetch_images_for_place(
         radius: Search radius in meters for external providers
         sources: Optional list of providers to query
         limit: Max number of images to return
+        update_cache: If True, bypass cache and refresh cached data
 
     Returns:
         Tuple of (list of ImageResult objects, place info dict)
@@ -765,6 +902,7 @@ async def fetch_images_for_place(
         sources=sources,
         precision="precise",  # Always use high precision
         limit=limit,
+        update_cache=update_cache,
     )
 
     return results, place_info
@@ -772,6 +910,7 @@ async def fetch_images_for_place(
 
 def post_process_images(
     results: list[ImageResult],
+    force_provider_refresh: bool = False,
 ) -> list[dict]:
     """
     Post-process image results to generate final output format.
@@ -784,6 +923,7 @@ def post_process_images(
 
     Args:
         results: List of ImageResult objects from providers
+        force_provider_refresh: If True, bypass provider metadata cache
 
     Returns:
         List of GeoJSON Feature dictionaries
@@ -1086,7 +1226,9 @@ def post_process_images(
             }
 
             # Get provider and license information from database
-            provider_info = _get_provider_info(result.provider)
+            provider_info = _get_provider_info(
+                result.provider, force_refresh=force_provider_refresh
+            )
             license_info = _get_license_info(result.license_slug)
 
             # Build focal and crop metadata
@@ -1201,7 +1343,7 @@ class ProviderRegistry:
     def register(self, provider: ImageProvider) -> None:
         """Register a new provider."""
         self._providers[provider.source] = provider
-        logger.info(f"Registered image provider: {provider.source}")
+        logger.debug(f"Registered image provider: {provider.source}")
 
     def get_provider(self, source: str) -> ImageProvider | None:
         """Get provider by source name."""
@@ -1243,6 +1385,7 @@ async def fetch_images_from_providers(
     precision: str = "precise",
     limit: int = 100,
     huts: list[Any] | None = None,
+    update_cache: bool = False,
 ) -> list[ImageResult]:
     """
     Fetch images from all enabled providers in parallel.
@@ -1256,6 +1399,7 @@ async def fetch_images_from_providers(
         precision: Coordinate precision for caching
         limit: Maximum number of results to fetch per provider
         huts: Optional list of Hut objects (if querying for huts)
+        update_cache: If True, bypass cache and refresh cached data
 
     Returns:
         List of ImageResult objects from all providers
@@ -1271,9 +1415,14 @@ async def fetch_images_from_providers(
     if huts:
         all_places.extend(huts)
 
+    # Log cache update mode
+    if update_cache:
+        logger.debug("UPDATE_CACHE mode: Bypassing cache and refreshing all providers")
+
     # Run all providers in parallel
     tasks = [
-        provider.fetch(all_places, lat, lon, radius, limit) for provider in providers
+        provider.fetch(all_places, lat, lon, radius, limit, update_cache=update_cache)
+        for provider in providers
     ]
     results_lists = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -1290,7 +1439,7 @@ async def fetch_images_from_providers(
                 f"Provider {provider.source} returned {len(result_list)} images"
             )
 
-    logger.info(f"Total images fetched: {len(all_results)}")
+    logger.debug(f"Total images fetched: {len(all_results)}")
     return all_results
 
 
@@ -1359,7 +1508,7 @@ def deduplicate_images(results: list[ImageResult]) -> list[ImageResult]:
         seen_source_id[key] = result
         deduped.append(result)
 
-    logger.info(f"Deduplication: {len(results)} -> {len(deduped)} images")
+    logger.debug(f"Deduplication: {len(results)} -> {len(deduped)} images")
     return deduped
 
 
