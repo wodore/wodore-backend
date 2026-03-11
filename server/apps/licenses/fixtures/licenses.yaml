@@ -2,7 +2,7 @@
   pk: 105
   fields:
     i18n:
-      link_en: https://creativecommons.org/licenses/by-nc-sa/4.0/
+      url_en: https://creativecommons.org/licenses/by-nc-sa/4.0/
       name_en: CC BY-NC-SA
       fullname_en: Creative Commons Attribution-NonCommercial-ShareAlike
       description_en:
@@ -18,7 +18,7 @@
       Diese Lizenz erlaubt anderen, Ihr Werk nicht-kommerziell zu remixen,
       anzupassen und darauf aufzubauen, solange sie Sie nennen und ihre neuen Kreationen
       unter identischen Bedingungen lizenzieren.
-    link: https://creativecommons.org/licenses/by-nc-sa/4.0/deed.de
+    url: https://creativecommons.org/licenses/by-nc-sa/4.0/deed.de
     is_active: true
     order: 20
     attribution_required: true
@@ -26,11 +26,14 @@
     no_modifying: false
     share_alike: true
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 106
   fields:
     i18n:
-      link_en: https://creativecommons.org/licenses/by-nc-nd/4.0/
+      url_en: https://creativecommons.org/licenses/by-nc-nd/4.0/
       name_en: CC BY-NC-ND
       fullname_en: Creative Commons Attribution-NonCommercial-NoDerivatives
       description_en:
@@ -45,7 +48,7 @@
       erlaubt anderen, Ihre Werke herunterzuladen und mit anderen zu teilen, solange
       sie Sie nennen, aber sie dürfen sie in keiner Weise verändern oder kommerziell
       nutzen.
-    link: https://creativecommons.org/licenses/by-nc-nd/4.0/deed.de
+    url: https://creativecommons.org/licenses/by-nc-nd/4.0/deed.de
     is_active: true
     order: 30
     attribution_required: true
@@ -53,11 +56,14 @@
     no_modifying: true
     share_alike: false
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 107
   fields:
     i18n:
-      link_en: https://creativecommons.org/licenses/by-nd/4.0/
+      url_en: https://creativecommons.org/licenses/by-nd/4.0/
       name_en: CC BY-ND
       fullname_en: Creative Commons Attribution-NoDerivatives
       description_en:
@@ -69,7 +75,7 @@
     description:
       Diese Lizenz erlaubt die Verbreitung, kommerziell und nicht-kommerziell,
       solange es unverändert und vollständig weitergegeben wird, mit Namensnennung.
-    link: https://creativecommons.org/licenses/by-nd/4.0/deed.de
+    url: https://creativecommons.org/licenses/by-nd/4.0/deed.de
     is_active: true
     order: 40
     attribution_required: true
@@ -77,11 +83,14 @@
     no_modifying: true
     share_alike: false
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 108
   fields:
     i18n:
-      link_en: https://creativecommons.org/licenses/by-nc/4.0/
+      url_en: https://creativecommons.org/licenses/by-nc/4.0/
       name_en: CC BY-NC
       fullname_en: Creative Commons Attribution-NonCommercial
       description_en:
@@ -97,7 +106,7 @@
       anzupassen und darauf aufzubauen, und obwohl ihre neuen Werke Sie ebenfalls
       anerkennen und nicht-kommerziell sein müssen, müssen sie ihre abgeleiteten Werke
       nicht unter denselben Bedingungen lizenzieren.
-    link: https://creativecommons.org/licenses/by-nc/4.0/deed.de
+    url: https://creativecommons.org/licenses/by-nc/4.0/deed.de
     is_active: true
     order: 50
     attribution_required: true
@@ -105,11 +114,14 @@
     no_modifying: false
     share_alike: false
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 109
   fields:
     i18n:
-      link_en: https://example.com/copyright
+      url_en: https://example.com/copyright
       name_en: Copyright
       fullname_en: All Rights Reserved
       description_en:
@@ -123,7 +135,7 @@
     description:
       Ein allgemeiner Urheberrechtshinweis, der alle Rechte für den Schöpfer
       oder Urheber vorbehält.
-    link: https://example.com/copyright
+    url: https://example.com/copyright
     is_active: true
     order: 60
     attribution_required: true
@@ -131,11 +143,14 @@
     no_modifying: false
     share_alike: false
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 110
   fields:
     i18n:
-      link_en: https://example.com/private
+      url_en: https://example.com/private
       name_en: Private License
       fullname_en: Private License
       description_en: This license does not allow sharing, copying, or any redistribution.
@@ -145,7 +160,7 @@
     name: Private Lizenz
     fullname: Private Lizenz
     description: Diese Lizenz erlaubt keine Weitergabe, Kopieren oder jegliche Verteilung.
-    link: https://example.com/private
+    url: https://example.com/private
     is_active: true
     order: 70
     attribution_required: false
@@ -153,11 +168,14 @@
     no_modifying: true
     share_alike: false
     no_publication: true
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 111
   fields:
     i18n:
-      link_en: https://creativecommons.org/licenses/by/4.0/
+      url_en: https://creativecommons.org/licenses/by/4.0/
       name_en: CC BY
       fullname_en: Creative Commons Attribution
       description_en:
@@ -171,7 +189,7 @@
       Diese Lizenz erlaubt anderen, Ihr Werk zu verbreiten, zu remixen,
       anzupassen und darauf aufzubauen, sogar kommerziell, solange sie Sie für die
       ursprüngliche Schöpfung nennen.
-    link: https://creativecommons.org/licenses/by/4.0/deed.de
+    url: https://creativecommons.org/licenses/by/4.0/deed.de
     is_active: true
     order: 90
     attribution_required: true
@@ -179,11 +197,14 @@
     no_modifying: false
     share_alike: false
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 112
   fields:
     i18n:
-      link_en: https://creativecommons.org/publicdomain/zero/1.0/
+      url_en: https://creativecommons.org/publicdomain/zero/1.0/
       name_en: CC0 1.0
       fullname_en: CC0 1.0 Universal
       description_en:
@@ -199,7 +220,7 @@
       Werk durch Verzicht auf alle seine oder ihre Rechte an dem Werk weltweit nach
       dem Urheberrecht, einschließlich aller verwandten und benachbarten Rechte, in
       dem nach dem Gesetz zulässigen Umfang der Öffentlichkeit gewidmet.
-    link: https://creativecommons.org/publicdomain/zero/1.0/deed.de
+    url: https://creativecommons.org/publicdomain/zero/1.0/deed.de
     is_active: true
     order: 100
     attribution_required: false
@@ -207,11 +228,14 @@
     no_modifying: false
     share_alike: false
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 113
   fields:
     i18n:
-      link_en: https://creativecommons.org/licenses/by/3.0/
+      url_en: https://creativecommons.org/licenses/by/3.0/
       name_en: CC BY 3.0
       fullname_en: Creative Commons Attribution 3.0
       description_en:
@@ -225,7 +249,7 @@
       Diese Lizenz erlaubt anderen, Ihr Werk zu verbreiten, zu remixen,
       anzupassen und darauf aufzubauen, sogar kommerziell, solange sie Sie für die
       ursprüngliche Schöpfung nennen.
-    link: https://creativecommons.org/licenses/by/3.0/deed.de
+    url: https://creativecommons.org/licenses/by/3.0/deed.de
     is_active: false
     order: 200
     attribution_required: true
@@ -233,11 +257,14 @@
     no_modifying: false
     share_alike: false
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 114
   fields:
     i18n:
-      link_en: https://creativecommons.org/licenses/by-sa/3.0/
+      url_en: https://creativecommons.org/licenses/by-sa/3.0/
       name_en: CC BY-SA 3.0
       fullname_en: Creative Commons Attribution-ShareAlike 3.0
       description_en:
@@ -251,7 +278,7 @@
       Diese Lizenz erlaubt anderen, Ihr Werk auch für kommerzielle Zwecke
       zu remixen, anzupassen und darauf aufzubauen, solange sie Sie nennen und ihre
       neuen Kreationen unter identischen Bedingungen lizenzieren.
-    link: https://creativecommons.org/licenses/by-sa/3.0/deed.de
+    url: https://creativecommons.org/licenses/by-sa/3.0/deed.de
     is_active: false
     order: 210
     attribution_required: true
@@ -259,11 +286,14 @@
     no_modifying: false
     share_alike: true
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 115
   fields:
     i18n:
-      link_en: https://creativecommons.org/licenses/by-nc/3.0/
+      url_en: https://creativecommons.org/licenses/by-nc/3.0/
       name_en: CC BY-NC 3.0
       fullname_en: Creative Commons Attribution-NonCommercial 3.0
       description_en:
@@ -279,7 +309,7 @@
       anzupassen und darauf aufzubauen, und obwohl ihre neuen Werke Sie ebenfalls
       anerkennen und nicht-kommerziell sein müssen, müssen sie ihre abgeleiteten Werke
       nicht unter denselben Bedingungen lizenzieren.
-    link: https://creativecommons.org/licenses/by-nc/3.0/deed.de
+    url: https://creativecommons.org/licenses/by-nc/3.0/deed.de
     is_active: false
     order: 220
     attribution_required: true
@@ -287,11 +317,14 @@
     no_modifying: false
     share_alike: false
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 116
   fields:
     i18n:
-      link_en: https://creativecommons.org/licenses/by-nd/3.0/
+      url_en: https://creativecommons.org/licenses/by-nd/3.0/
       name_en: CC BY-ND 3.0
       fullname_en: Creative Commons Attribution-NoDerivatives 3.0
       description_en:
@@ -303,7 +336,7 @@
     description:
       Diese Lizenz erlaubt die Verbreitung, kommerziell und nicht-kommerziell,
       solange es unverändert und vollständig weitergegeben wird, mit Namensnennung.
-    link: https://creativecommons.org/licenses/by-nd/3.0/deed.de
+    url: https://creativecommons.org/licenses/by-nd/3.0/deed.de
     is_active: false
     order: 230
     attribution_required: true
@@ -311,11 +344,14 @@
     no_modifying: true
     share_alike: false
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 117
   fields:
     i18n:
-      link_en: https://creativecommons.org/licenses/by-nc-sa/3.0/
+      url_en: https://creativecommons.org/licenses/by-nc-sa/3.0/
       name_en: CC BY-NC-SA 3.0
       fullname_en: Creative Commons Attribution-NonCommercial-ShareAlike 3.0
       description_en:
@@ -331,7 +367,7 @@
       Diese Lizenz erlaubt anderen, Ihr Werk nicht-kommerziell zu remixen,
       anzupassen und darauf aufzubauen, solange sie Sie nennen und ihre neuen Kreationen
       unter identischen Bedingungen lizenzieren.
-    link: https://creativecommons.org/licenses/by-nc-sa/3.0/deed.de
+    url: https://creativecommons.org/licenses/by-nc-sa/3.0/deed.de
     is_active: false
     order: 240
     attribution_required: true
@@ -339,11 +375,14 @@
     no_modifying: false
     share_alike: true
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 118
   fields:
     i18n:
-      link_en: https://creativecommons.org/licenses/by-nc-nd/3.0/
+      url_en: https://creativecommons.org/licenses/by-nc-nd/3.0/
       name_en: CC BY-NC-ND 3.0
       fullname_en: Creative Commons Attribution-NonCommercial-NoDerivatives 3.0
       description_en:
@@ -358,7 +397,7 @@
       erlaubt anderen, Ihre Werke herunterzuladen und mit anderen zu teilen, solange
       sie Sie nennen, aber sie dürfen sie in keiner Weise verändern oder kommerziell
       nutzen.
-    link: https://creativecommons.org/licenses/by-nc-nd/3.0/deed.de
+    url: https://creativecommons.org/licenses/by-nc-nd/3.0/deed.de
     is_active: false
     order: 250
     attribution_required: true
@@ -366,11 +405,14 @@
     no_modifying: true
     share_alike: false
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 119
   fields:
     i18n:
-      link_en: https://creativecommons.org/licenses/by/2.5/
+      url_en: https://creativecommons.org/licenses/by/2.5/
       name_en: CC BY 2.5
       fullname_en: Creative Commons Attribution 2.5
       description_en:
@@ -384,7 +426,7 @@
       Diese Lizenz erlaubt anderen, Ihr Werk zu verbreiten, zu remixen,
       anzupassen und darauf aufzubauen, sogar kommerziell, solange sie Sie für die
       ursprüngliche Schöpfung nennen.
-    link: https://creativecommons.org/licenses/by/2.5/deed.de
+    url: https://creativecommons.org/licenses/by/2.5/deed.de
     is_active: false
     order: 260
     attribution_required: true
@@ -392,11 +434,14 @@
     no_modifying: false
     share_alike: false
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 120
   fields:
     i18n:
-      link_en: https://creativecommons.org/licenses/by-sa/2.5/
+      url_en: https://creativecommons.org/licenses/by-sa/2.5/
       name_en: CC BY-SA 2.5
       fullname_en: Creative Commons Attribution-ShareAlike 2.5
       description_en:
@@ -410,7 +455,7 @@
       Diese Lizenz erlaubt anderen, Ihr Werk auch für kommerzielle Zwecke
       zu remixen, anzupassen und darauf aufzubauen, solange sie Sie nennen und ihre
       neuen Kreationen unter identischen Bedingungen lizenzieren.
-    link: https://creativecommons.org/licenses/by-sa/2.5/deed.de
+    url: https://creativecommons.org/licenses/by-sa/2.5/deed.de
     is_active: false
     order: 270
     attribution_required: true
@@ -418,11 +463,14 @@
     no_modifying: false
     share_alike: true
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 121
   fields:
     i18n:
-      link_en: https://creativecommons.org/licenses/by-nc/2.5/
+      url_en: https://creativecommons.org/licenses/by-nc/2.5/
       name_en: CC BY-NC 2.5
       fullname_en: Creative Commons Attribution-NonCommercial 2.5
       description_en:
@@ -438,7 +486,7 @@
       anzupassen und darauf aufzubauen, und obwohl ihre neuen Werke Sie ebenfalls
       anerkennen und nicht-kommerziell sein müssen, müssen sie ihre abgeleiteten Werke
       nicht unter denselben Bedingungen lizenzieren.
-    link: https://creativecommons.org/licenses/by-nc/2.5/deed.de
+    url: https://creativecommons.org/licenses/by-nc/2.5/deed.de
     is_active: false
     order: 280
     attribution_required: true
@@ -446,11 +494,14 @@
     no_modifying: false
     share_alike: false
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 122
   fields:
     i18n:
-      link_en: https://creativecommons.org/licenses/by-nd/2.5/
+      url_en: https://creativecommons.org/licenses/by-nd/2.5/
       name_en: CC BY-ND 2.5
       fullname_en: Creative Commons Attribution-NoDerivatives 2.5
       description_en:
@@ -462,7 +513,7 @@
     description:
       Diese Lizenz erlaubt die Verbreitung, kommerziell und nicht-kommerziell,
       solange es unverändert und vollständig weitergegeben wird, mit Namensnennung.
-    link: https://creativecommons.org/licenses/by-nd/2.5/deed.de
+    url: https://creativecommons.org/licenses/by-nd/2.5/deed.de
     is_active: false
     order: 290
     attribution_required: true
@@ -470,11 +521,14 @@
     no_modifying: true
     share_alike: false
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 123
   fields:
     i18n:
-      link_en: https://creativecommons.org/licenses/by-nc-sa/2.5/
+      url_en: https://creativecommons.org/licenses/by-nc-sa/2.5/
       name_en: CC BY-NC-SA 2.5
       fullname_en: Creative Commons Attribution-NonCommercial-ShareAlike 2.5
       description_en:
@@ -490,7 +544,7 @@
       Diese Lizenz erlaubt anderen, Ihr Werk nicht-kommerziell zu remixen,
       anzupassen und darauf aufzubauen, solange sie Sie nennen und ihre neuen Kreationen
       unter identischen Bedingungen lizenzieren.
-    link: https://creativecommons.org/licenses/by-nc-sa/2.5/deed.de
+    url: https://creativecommons.org/licenses/by-nc-sa/2.5/deed.de
     is_active: false
     order: 300
     attribution_required: true
@@ -498,11 +552,14 @@
     no_modifying: false
     share_alike: true
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 124
   fields:
     i18n:
-      link_en: https://creativecommons.org/licenses/by-nc-nd/2.5/
+      url_en: https://creativecommons.org/licenses/by-nc-nd/2.5/
       name_en: CC BY-NC-ND 2.5
       fullname_en: Creative Commons Attribution-NonCommercial-NoDerivatives 2.5
       description_en:
@@ -517,7 +574,7 @@
       erlaubt anderen, Ihre Werke herunterzuladen und mit anderen zu teilen, solange
       sie Sie nennen, aber sie dürfen sie in keiner Weise verändern oder kommerziell
       nutzen.
-    link: https://creativecommons.org/licenses/by-nc-nd/2.5/deed.de
+    url: https://creativecommons.org/licenses/by-nc-nd/2.5/deed.de
     is_active: false
     order: 310
     attribution_required: true
@@ -525,17 +582,20 @@
     no_modifying: true
     share_alike: false
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 125
   fields:
     i18n:
-      link_en: null
+      url_en: null
       name_en: CC-BY-SA-2.0-DE
     slug: cc-by-sa-2.0-de
     name: ""
     fullname: ""
     description: ""
-    link: null
+    url: null
     is_active: true
     order: 330
     attribution_required: true
@@ -543,11 +603,14 @@
     no_modifying: true
     share_alike: true
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 126
   fields:
     i18n:
-      link_en: https://creativecommons.org/licenses/by-sa/4.0/
+      url_en: https://creativecommons.org/licenses/by-sa/4.0/
       name_en: CC BY-SA
       fullname_en: Creative Commons Attribution-ShareAlike
       description_en:
@@ -561,7 +624,7 @@
       Diese Lizenz erlaubt anderen, Ihr Werk auch für kommerzielle Zwecke
       zu remixen, anzupassen und darauf aufzubauen, solange sie Sie nennen und ihre
       neuen Kreationen unter identischen Bedingungen lizenzieren.
-    link: https://creativecommons.org/licenses/by-sa/4.0/deed.de
+    url: https://creativecommons.org/licenses/by-sa/4.0/deed.de
     is_active: true
     order: 10
     attribution_required: true
@@ -569,17 +632,20 @@
     no_modifying: false
     share_alike: true
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 127
   fields:
     i18n:
-      link_en: null
+      url_en: null
       name_en: PD-user
     slug: pd-user
     name: ""
     fullname: ""
     description: ""
-    link: null
+    url: null
     is_active: false
     order: 350
     attribution_required: true
@@ -587,11 +653,14 @@
     no_modifying: true
     share_alike: true
     no_publication: true
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 128
   fields:
     i18n:
-      link_en: https://creativecommons.org/licenses/by-sa/2.0/
+      url_en: https://creativecommons.org/licenses/by-sa/2.0/
       name_en: CC BY-SA 2.0
       fullname_en: Creative Commons Attribution-ShareAlike 2.0
       description_en:
@@ -605,7 +674,7 @@
       Diese Lizenz ermöglicht es anderen, Ihre Arbeit zu remixen, zu bearbeiten
       und darauf aufzubauen, auch kommerziell, solange sie Sie als Urheber nennen
       und ihre neuen Werke unter den gleichen Bedingungen lizenzieren.
-    link: https://creativecommons.org/licenses/by-sa/2.0/deed.de
+    url: https://creativecommons.org/licenses/by-sa/2.0/deed.de
     is_active: false
     order: 370
     attribution_required: true
@@ -613,11 +682,14 @@
     no_modifying: false
     share_alike: true
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 129
   fields:
     i18n:
-      link_en: https://www.sac-cas.ch
+      url_en: https://www.sac-cas.ch
       name_en: Copyright SAC-CAS
       fullname_en: Private Copyright SAC-CAS
       description_en: ""
@@ -627,7 +699,7 @@
     name: null
     fullname: null
     description: ""
-    link: null
+    url: null
     is_active: false
     order: 370
     attribution_required: true
@@ -635,11 +707,14 @@
     no_modifying: true
     share_alike: true
     no_publication: true
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 130
   fields:
     i18n:
-      link_en: https://www.sac-cas.ch
+      url_en: https://www.sac-cas.ch
       name_en: Copyright SAC-CAS
       fullname_en: Copyright SAC-CAS
       description_en: ""
@@ -649,7 +724,7 @@
     name: Copyright SAC-CAS
     fullname: Copyright SAC-CAS
     description: ""
-    link: null
+    url: null
     is_active: false
     order: 380
     attribution_required: true
@@ -657,6 +732,9 @@
     no_modifying: true
     share_alike: true
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 131
   fields:
@@ -670,7 +748,7 @@
     name: null
     fullname: null
     description: ""
-    link: null
+    url: null
     is_active: false
     order: 390
     attribution_required: true
@@ -678,18 +756,21 @@
     no_modifying: false
     share_alike: true
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 132
   fields:
     i18n:
-      link_en: null
+      url_en: null
       name_en: CC-Zero
       fullname_en: CC-Zero
     slug: cc-zero
     name: ""
     fullname: ""
     description: ""
-    link: null
+    url: null
     is_active: false
     order: 400
     attribution_required: true
@@ -697,11 +778,14 @@
     no_modifying: true
     share_alike: true
     no_publication: true
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 133
   fields:
     i18n:
-      link_en: https://example.com/private
+      url_en: https://example.com/private
       name_en: Public Domain
       fullname_en: Public Domain
       description_en: No copyright, public domain.
@@ -709,7 +793,7 @@
     name: Private Lizenz
     fullname: Private Lizenz
     description: Diese Lizenz erlaubt keine Weitergabe, Kopieren oder jegliche Verteilung.
-    link: https://example.com/private
+    url: https://example.com/private
     is_active: true
     order: 80
     attribution_required: false
@@ -717,11 +801,14 @@
     no_modifying: true
     share_alike: false
     no_publication: true
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 134
   fields:
     i18n:
-      link_en: https://creativecommons.org/licenses/by/2.0/
+      url_en: https://creativecommons.org/licenses/by/2.0/
       name_en: CC BY 2.0
       fullname_en: Creative Commons Attribution 2.0
       description_en:
@@ -735,7 +822,7 @@
       Diese Lizenz ermöglicht es anderen, Ihre Arbeit zu verbreiten, zu
       remixen, zu bearbeiten und darauf aufzubauen, auch kommerziell, solange sie
       Sie als Urheber der Originalarbeit nennen.
-    link: https://creativecommons.org/licenses/by/2.0/deed.de
+    url: https://creativecommons.org/licenses/by/2.0/deed.de
     is_active: false
     order: 320
     attribution_required: true
@@ -743,18 +830,21 @@
     no_modifying: false
     share_alike: false
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 135
   fields:
     i18n:
-      link_en: null
+      url_en: null
       name_en: CC-BY-SA-1.0
       fullname_en: CC-BY-SA-1.0
     slug: cc-by-sa-1.0
     name: ""
     fullname: ""
     description: ""
-    link: null
+    url: null
     is_active: false
     order: 430
     attribution_required: true
@@ -762,18 +852,21 @@
     no_modifying: true
     share_alike: true
     no_publication: true
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 136
   fields:
     i18n:
-      link_en: http://www.gnu.org/copyleft/fdl.html
+      url_en: http://www.gnu.org/copyleft/fdl.html
       name_en: GFDL
       fullname_en: GFDL
     slug: gfdl
     name: ""
     fullname: ""
     description: ""
-    link: null
+    url: null
     is_active: false
     order: 440
     attribution_required: true
@@ -781,18 +874,21 @@
     no_modifying: true
     share_alike: true
     no_publication: true
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 137
   fields:
     i18n:
-      link_en: null
+      url_en: null
       name_en: CC-BY-3.0-DE
       fullname_en: CC-BY-3.0-DE
     slug: cc-by-3.0-de
     name: ""
     fullname: ""
     description: ""
-    link: null
+    url: null
     is_active: false
     order: 450
     attribution_required: true
@@ -800,18 +896,21 @@
     no_modifying: true
     share_alike: true
     no_publication: true
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 138
   fields:
     i18n:
-      link_en: null
+      url_en: null
       name_en: CC-BY-SA-3.0-AT
       fullname_en: CC-BY-SA-3.0-AT
     slug: cc-by-sa-3.0-at
     name: ""
     fullname: ""
     description: ""
-    link: null
+    url: null
     is_active: false
     order: 460
     attribution_required: true
@@ -819,18 +918,21 @@
     no_modifying: true
     share_alike: true
     no_publication: true
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 139
   fields:
     i18n:
-      link_en: null
+      url_en: null
       name_en: CC-BY-SA-3.0-DE
       fullname_en: CC-BY-SA-3.0-DE
     slug: cc-by-sa-3.0-de
     name: ""
     fullname: ""
     description: ""
-    link: null
+    url: null
     is_active: false
     order: 470
     attribution_required: true
@@ -838,11 +940,14 @@
     no_modifying: true
     share_alike: true
     no_publication: true
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 141
   fields:
     i18n:
-      link_en: https://creativecommons.org/licenses/by-nc/2.0/
+      url_en: https://creativecommons.org/licenses/by-nc/2.0/
       name_en: CC BY-NC 2.0
       fullname_en: Creative Commons Attribution-NonCommercial 2.0
       description_en:
@@ -858,7 +963,7 @@
       und darauf aufzubauen, nicht-kommerziell, und obwohl ihre neuen Werke Sie als
       Urheber nennen und nicht-kommerziell sein müssen, müssen sie ihre abgeleiteten
       Werke nicht unter den gleichen Bedingungen lizenzieren.
-    link: https://creativecommons.org/licenses/by-nc/2.0/deed.de
+    url: https://creativecommons.org/licenses/by-nc/2.0/deed.de
     is_active: false
     order: 330
     attribution_required: true
@@ -866,11 +971,14 @@
     no_modifying: false
     share_alike: false
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 142
   fields:
     i18n:
-      link_en: https://creativecommons.org/licenses/by-nc-nd/2.0/
+      url_en: https://creativecommons.org/licenses/by-nc-nd/2.0/
       name_en: CC BY-NC-ND 2.0
       fullname_en: Creative Commons Attribution-NonCommercial-NoDerivatives 2.0
       description_en:
@@ -886,7 +994,7 @@
       ermöglicht es anderen nur, Ihre Werke herunterzuladen und sie mit anderen zu
       teilen, solange sie Sie als Urheber nennen, aber sie können sie nicht ändern
       oder kommerziell nutzen.
-    link: https://creativecommons.org/licenses/by-nc-nd/2.0/deed.de
+    url: https://creativecommons.org/licenses/by-nc-nd/2.0/deed.de
     is_active: false
     order: 340
     attribution_required: true
@@ -894,11 +1002,14 @@
     no_modifying: true
     share_alike: false
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 143
   fields:
     i18n:
-      link_en: https://creativecommons.org/licenses/by-nc-sa/2.0/
+      url_en: https://creativecommons.org/licenses/by-nc-sa/2.0/
       name_en: CC BY-NC-SA 2.0
       fullname_en: Creative Commons Attribution-NonCommercial-ShareAlike 2.0
       description_en:
@@ -914,7 +1025,7 @@
       Diese Lizenz ermöglicht es anderen, Ihre Arbeit zu remixen, zu bearbeiten
       und darauf aufzubauen, nicht-kommerziell, solange sie Sie als Urheber nennen
       und ihre neuen Werke unter den gleichen Bedingungen lizenzieren.
-    link: https://creativecommons.org/licenses/by-nc-sa/2.0/deed.de
+    url: https://creativecommons.org/licenses/by-nc-sa/2.0/deed.de
     is_active: false
     order: 350
     attribution_required: true
@@ -922,11 +1033,14 @@
     no_modifying: false
     share_alike: true
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null
 - model: licenses.license
   pk: 144
   fields:
     i18n:
-      link_en: https://creativecommons.org/licenses/by-nd/2.0/
+      url_en: https://creativecommons.org/licenses/by-nd/2.0/
       name_en: CC BY-ND 2.0
       fullname_en: Creative Commons Attribution-NoDerivatives 2.0
       description_en:
@@ -939,7 +1053,7 @@
       Diese Lizenz ermöglicht die Weiterverbreitung, kommerziell und nicht-kommerziell,
       solange sie unverändert und vollständig weitergegeben wird, mit Nennung Ihres
       Namens.
-    link: https://creativecommons.org/licenses/by-nd/2.0/deed.de
+    url: https://creativecommons.org/licenses/by-nd/2.0/deed.de
     is_active: false
     order: 360
     attribution_required: true
@@ -947,3 +1061,6 @@
     no_modifying: true
     share_alike: false
     no_publication: false
+    category: null
+    review_status: done
+    review_comment: null

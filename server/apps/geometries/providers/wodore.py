@@ -338,8 +338,8 @@ class WodoreProvider(ImageProvider):
 
         if image.license:
             license_name = image.license.fullname_i18n or image.license.name_i18n
-            if image.license.link_i18n:
-                parts.append(f'<a href="{image.license.link_i18n}">{license_name}</a>')
+            if image.license.url_i18n:
+                parts.append(f'<a href="{image.license.url_i18n}">{license_name}</a>')
             else:
                 parts.append(license_name)
 

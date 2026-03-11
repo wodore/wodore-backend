@@ -21,6 +21,7 @@ from .schemas import (
     ImageMetadataSchema,
 )
 from .providers import (
+    fetch_images_for_place,
     fetch_images_from_providers,
     provider_registry,
     deduplicate_images,
@@ -221,6 +222,210 @@ def nearby_images(
         center={"lat": lat, "lon": lon},
         geoplaces_found=len(geoplaces),
         huts_found=len(huts),
+    )
+
+    return ImageCollectionResponse(
+        type="FeatureCollection", features=features, metadata=metadata
+    )
+
+
+@router.get(
+    "place/{place_slug}",
+    response={200: ImageCollectionResponse},
+    exclude_unset=True,
+    operation_id="images_for_place",
+)
+@decorate_view(cache_control(max_age=300))  # 5 minutes cache
+@with_language_param("lang")
+def images_for_place(
+    request: HttpRequest,
+    response: HttpResponse,
+    lang: LanguageParam,
+    place_slug: str,
+    radius: float = Query(
+        5000.0,
+        description="Search radius in meters for external providers",
+        gt=0,
+        le=10000,
+        example="5000.0",
+    ),
+    sources: str | None = Query(
+        None,
+        description="Comma-separated provider list (e.g., 'wodore,wikidata,flickr'). If provided without wodore, wodore images are not shown but place is still used for location.",
+    ),
+    limit: int = Query(
+        100,
+        description="Maximum number of images to return",
+        ge=1,
+        le=500,
+    ),
+) -> ImageCollectionResponse:
+    """
+    Get images for a specific GeoPlace from multiple sources.
+
+    Wodore provider uses the place directly (very fast).
+    External providers use the place's coordinates with the given radius.
+
+    Returns GeoJSON Point features with full image metadata.
+    """
+    import asyncio
+
+    activate(lang)
+
+    # Parse sources parameter
+    sources_list = None
+    if sources:
+        sources_list = [s.strip() for s in sources.split(",")]
+
+    logger.debug(f"🔍 Fetching images for GeoPlace '{place_slug}'")
+    logger.debug(f"Radius: {radius}m, Sources: {sources_list}")
+
+    try:
+        # Fetch images and place info
+        results, place_info = asyncio.run(
+            fetch_images_for_place(
+                place_slug=place_slug,
+                place_type="geoplace",
+                radius=radius,
+                sources=sources_list,
+                limit=limit,
+            )
+        )
+        logger.debug(f"📊 Total raw results from all providers: {len(results)} images")
+    except Exception as e:
+        logger.error(f"Error fetching images for place '{place_slug}': {e}")
+        raise
+
+    # Deduplicate results
+    logger.debug(f"🔄 Deduplicating {len(results)} images...")
+    results = deduplicate_images(results)
+    logger.debug(f"✓ After deduplication: {len(results)} unique images")
+
+    # Sort by score (primary), then by distance (secondary)
+    results.sort(key=lambda r: (-r.score, r.distance_m))
+
+    # Limit results
+    logger.debug(f"✂️  Limiting to {limit} results (had {len(results)})")
+    results = results[:limit]
+
+    # Post-process results (generate URLs, convert to GeoJSON)
+    logger.debug(f"🎨 Post-processing {len(results)} results...")
+    features = post_process_images(results)
+
+    # Construct metadata (same format as nearby_images)
+    metadata = ImageMetadataSchema(
+        total=len(features),
+        sources_queried=sources_list
+        or [p.source for p in provider_registry.get_all_providers()],
+        query_radius_m=radius,
+        center={
+            "lat": place_info["location"]["lat"],
+            "lon": place_info["location"]["lon"],
+        },
+        geoplaces_found=1,
+        huts_found=0,
+    )
+
+    return ImageCollectionResponse(
+        type="FeatureCollection", features=features, metadata=metadata
+    )
+
+
+@router.get(
+    "hut/{hut_slug}",
+    response={200: ImageCollectionResponse},
+    exclude_unset=True,
+    operation_id="images_for_hut",
+)
+@decorate_view(cache_control(max_age=300))  # 5 minutes cache
+@with_language_param("lang")
+def images_for_hut(
+    request: HttpRequest,
+    response: HttpResponse,
+    lang: LanguageParam,
+    hut_slug: str,
+    radius: float = Query(
+        5000.0,
+        description="Search radius in meters for external providers",
+        gt=0,
+        le=10000,
+        example="5000.0",
+    ),
+    sources: str | None = Query(
+        None,
+        description="Comma-separated provider list (e.g., 'wodore,wikidata,flickr'). If provided without wodore, wodore images are not shown but hut is still used for location.",
+    ),
+    limit: int = Query(
+        100,
+        description="Maximum number of images to return",
+        ge=1,
+        le=500,
+    ),
+) -> ImageCollectionResponse:
+    """
+    Get images for a specific Hut from multiple sources.
+
+    Wodore provider uses the hut directly (very fast).
+    External providers use the hut's coordinates with the given radius.
+
+    Returns GeoJSON Point features with full image metadata.
+    """
+    import asyncio
+
+    activate(lang)
+
+    # Parse sources parameter
+    sources_list = None
+    if sources:
+        sources_list = [s.strip() for s in sources.split(",")]
+
+    logger.debug(f"🔍 Fetching images for Hut '{hut_slug}'")
+    logger.debug(f"Radius: {radius}m, Sources: {sources_list}")
+
+    try:
+        # Fetch images and place info
+        results, place_info = asyncio.run(
+            fetch_images_for_place(
+                place_slug=hut_slug,
+                place_type="hut",
+                radius=radius,
+                sources=sources_list,
+                limit=limit,
+            )
+        )
+        logger.debug(f"📊 Total raw results from all providers: {len(results)} images")
+    except Exception as e:
+        logger.error(f"Error fetching images for hut '{hut_slug}': {e}")
+        raise
+
+    # Deduplicate results
+    logger.debug(f"🔄 Deduplicating {len(results)} images...")
+    results = deduplicate_images(results)
+    logger.debug(f"✓ After deduplication: {len(results)} unique images")
+
+    # Sort by score (primary), then by distance (secondary)
+    results.sort(key=lambda r: (-r.score, r.distance_m))
+
+    # Limit results
+    logger.debug(f"✂️  Limiting to {limit} results (had {len(results)})")
+    results = results[:limit]
+
+    # Post-process results (generate URLs, convert to GeoJSON)
+    logger.debug(f"🎨 Post-processing {len(results)} results...")
+    features = post_process_images(results)
+
+    # Construct metadata (same format as nearby_images)
+    metadata = ImageMetadataSchema(
+        total=len(features),
+        sources_queried=sources_list
+        or [p.source for p in provider_registry.get_all_providers()],
+        query_radius_m=radius,
+        center={
+            "lat": place_info["location"]["lat"],
+            "lon": place_info["location"]["lon"],
+        },
+        geoplaces_found=0,
+        huts_found=1,
     )
 
     return ImageCollectionResponse(

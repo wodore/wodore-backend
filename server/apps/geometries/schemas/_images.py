@@ -17,6 +17,45 @@ class ImageLicenseSchema(BaseModel):
     slug: str = Field(..., description="License slug (e.g., 'cc-by-sa-4.0', 'cc0')")
     name: str = Field(..., description="Human-readable license name")
     url: str | None = Field(None, description="Link to license text")
+    icon: str | None = Field(None, description="URL to license icon image")
+
+
+class ImageProviderSchema(BaseModel):
+    """Provider/organization information for an image."""
+
+    slug: str = Field(..., description="Provider/organization slug")
+    name: str = Field(..., description="Provider/organization name")
+    url: str | None = Field(None, description="Provider/organization website URL")
+    icon: str | None = Field(None, description="Provider/organization icon/logo URL")
+    description: str | None = Field(
+        None, description="Provider/organization description"
+    )
+
+
+class ImageAuthorSchema(BaseModel):
+    """Author information for an image."""
+
+    name: str = Field(..., description="Author name")
+    url: str | None = Field(None, description="Author profile URL")
+
+
+class ImageAttributionSchema(BaseModel):
+    """Comprehensive attribution information for an image."""
+
+    short: str = Field(
+        ...,
+        description="Short HTML attribution with license icon, license link, and provider link",
+    )
+    full: str = Field(
+        ...,
+        description="Full attribution string (e.g., 'CC BY-SA 4.0, Author Name on Wodore')",
+    )
+    license_icon: str | None = Field(None, description="URL to license icon image")
+    license_short: str = Field(..., description="Short license name with link")
+    license_full: str = Field(..., description="Full license name with link")
+    author: str = Field(
+        ..., description="Author name with provider link (e.g., 'Name on Wodore')"
+    )
 
 
 class ImageUrlsSchema(BaseModel):
@@ -42,14 +81,6 @@ class ImageUrlsSchema(BaseModel):
     )
 
 
-class ImageProviderSchema(BaseModel):
-    """Provider/organization information for an image."""
-
-    slug: str = Field(..., description="Provider/organization slug")
-    name: str | None = Field(None, description="Provider/organization name")
-    logo: str | None = Field(None, description="Provider/organization logo URL")
-
-
 class ImagePlaceReferenceSchema(BaseModel):
     """Brief reference to a GeoPlace or Hut associated with an image."""
 
@@ -65,9 +96,9 @@ class ImagePropertiesSchema(BaseModel):
     Follows the pattern from HutAvailabilityPropertiesSchema.
     """
 
-    # Source identification
-    source: str = Field(
-        ..., description="Provider identifier (e.g., 'wodore', 'wikidata', 'flickr')"
+    # Provider identification
+    provider: ImageProviderSchema = Field(
+        ..., description="Provider/organization information"
     )
     source_id: str = Field(..., description="Original ID in the source system")
     source_url: str | None = Field(None, description="Deep link back to the source")
@@ -81,10 +112,12 @@ class ImagePropertiesSchema(BaseModel):
         ..., description="Distance from query coordinate in meters"
     )
 
-    # Attribution
+    # Attribution and licensing
+    attribution: ImageAttributionSchema = Field(
+        ..., description="Comprehensive attribution information"
+    )
+    author: ImageAuthorSchema | None = Field(None, description="Image author details")
     license: ImageLicenseSchema = Field(..., description="Image license information")
-    attribution: str = Field(..., description="Ready-to-render HTML attribution string")
-    author: str | None = Field(None, description="Image author name")
 
     # URLs
     urls: ImageUrlsSchema = Field(..., description="Image URLs for different sizes")
@@ -115,9 +148,6 @@ class ImagePropertiesSchema(BaseModel):
     source_found: list[str] | None = Field(
         None,
         description="Sources where this image was found (e.g., ['osm', 'wikidata'])",
-    )
-    provider: ImageProviderSchema | None = Field(
-        None, description="Provider/organization information"
     )
 
     # Optional: Link back to GeoPlace (if image is associated with a place)
