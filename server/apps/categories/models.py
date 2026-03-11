@@ -189,6 +189,7 @@ class Category(ComputedFieldsModel, models.Model):
         indexes = (
             GinIndex(fields=["i18n"]),
             models.Index(fields=["parent", "order", "slug"]),
+            models.Index(fields=["parent_id"]),  # For faster parent__slug queries
         )
         constraints = [
             models.UniqueConstraint(
