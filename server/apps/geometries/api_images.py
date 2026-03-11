@@ -31,6 +31,7 @@ from .providers import (
     MapillaryProvider,
     PanoramaxProvider,
     CamptocampProvider,
+    RefugesInfoProvider,
 )
 
 router = Router(tags=["geoimages"])
@@ -41,6 +42,7 @@ logger = logging.getLogger(__name__)
 provider_registry.register(WodoreProvider(place_type="geoplace"))
 provider_registry.register(WodoreProvider(place_type="hut"))
 provider_registry.register(WikimediaCommonsProvider())  # Replaces WikidataProvider
+provider_registry.register(RefugesInfoProvider())  # Add refuges.info provider
 # provider_registry.register(FlickrProvider())
 provider_registry.register(MapillaryProvider())
 provider_registry.register(PanoramaxProvider())

@@ -64,6 +64,7 @@ dependencies = [
   "httpx>=0.25.0", # https://pypi.org/project/httpx/
   "opening-hours-py>=1.1.6", # https://github.com/remi-dupre/opening-hours-rs/tree/master/opening-hours-py
   "overpass>=0.7.2",
+  "dateparser>=1.2.0", # https://pypi.org/project/dateparser/
 ]
 
 

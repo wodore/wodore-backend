@@ -21,6 +21,7 @@ from .mapillary import MapillaryProvider
 from .panoramax import PanoramaxProvider
 from .camptocamp import CamptocampProvider
 from .wikimedia_commons import WikimediaCommonsProvider
+from .refugesinfo import RefugesInfoProvider
 
 __all__ = [
     "ImageProvider",
@@ -39,4 +40,5 @@ __all__ = [
     "PanoramaxProvider",
     "CamptocampProvider",
     "WikimediaCommonsProvider",
+    "RefugesInfoProvider",
 ]

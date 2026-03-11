@@ -234,6 +234,13 @@ def _get_provider_info(provider_name: str) -> dict:
             "icon": None,
             "description": "Wikimedia Commons free media repository",
         },
+        "refugesinfo": {
+            "name": "Refuges.info",
+            "slug": "refugesinfo",
+            "url": "https://www.refuges.info",
+            "icon": None,
+            "description": "Refuges.info mountain huts database",
+        },
         "mapillary": {
             "name": "Mapillary",
             "slug": "mapillary",
@@ -1313,6 +1320,8 @@ def deduplicate_images(results: list[ImageResult]) -> list[ImageResult]:
         "wodore": 1,
         "camptocamp": 2,
         "wikidata": 3,
+        "wikimedia_commons": 2,  # Same as wikidata
+        "refugesinfo": 3,
         "panoramax": 4,
         "mapillary": 5,
         "flickr": 6,
