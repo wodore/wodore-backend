@@ -21,7 +21,7 @@ class LicenseOptional(ModelSchema):
     name: str | None = Field(..., alias="name_i18n")
     fullname: str | None = Field(None, alias="fullname_i18n")
     description: str | None = Field(None, alias="description_i18n")
-    link: str | None = Field(None, alias="url_i18n")
+    url: str | None = Field(None, alias="url_i18n")
     order: int | None = None
 
     class Meta:

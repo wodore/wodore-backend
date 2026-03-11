@@ -2,6 +2,7 @@
 API endpoints for GeoPlace search and queries.
 """
 
+import logging
 from enum import Enum
 from typing import Any
 
@@ -48,6 +49,7 @@ from server.apps.organizations.schema import (
 )
 
 router = Router(tags=["geometries"])
+logger = logging.getLogger(__name__)
 
 
 class IncludeModeEnum(str, Enum):
@@ -59,7 +61,7 @@ class IncludeModeEnum(str, Enum):
 
 
 @router.get(
-    "search",
+    "places/search",
     response=list[GeoPlaceSearchSchema],
     exclude_unset=True,
     operation_id="search_geoplaces",
@@ -417,7 +419,7 @@ def search_geoplaces(
 
 
 @router.get(
-    "nearby",
+    "places/nearby",
     response=list[GeoPlaceNearbySchema],
     exclude_unset=True,
     operation_id="nearby_geoplaces",
@@ -626,7 +628,7 @@ def nearby_geoplaces(
 
 
 @router.get(
-    "amenity/{int:place_id}",
+    "places/amenity/{int:place_id}",
     response=AmenitySchema,
     exclude_unset=True,
     operation_id="get_amenity",

@@ -197,7 +197,7 @@ class Image(TimeStampedModel):
         try:
             focal = self.image_meta.get("focal") if self.image_meta else None
             if focal:
-                focal_str = f"{focal.get('x1',0)}x{focal.get('y1',0)}:{focal.get('x2',1)}x{focal.get('y2',1)}"
+                focal_str = f"{focal.get('x1', 0)}x{focal.get('y1', 0)}:{focal.get('x2', 1)}x{focal.get('y2', 1)}"
                 crop_start, crop_stop = focal_str.split(":")
             else:
                 # focal_str = "0x0:1x1"
@@ -393,7 +393,7 @@ class Image(TimeStampedModel):
                 defaults={
                     "name_en": license.name,
                     "fullname_en": license.name,
-                    "link_en": license.url,
+                    "url_en": license.url,
                 },
             )[0],
             source_org=source_org,

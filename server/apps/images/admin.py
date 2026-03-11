@@ -108,7 +108,7 @@ class ImageAdmin(ModelAdmin):
     @display(description="license", header=True)
     def license_summary(self, obj):
         return mark_safe(
-            f'<a href={obj.license.link_i18n} target="_blank">{obj.license.name_i18n}</a>'
+            f'<a href={obj.license.url_i18n} target="_blank">{obj.license.name_i18n}</a>'
         ), text_shorten_html(obj.license.fullname_i18n, textsize="xs", width=60)
 
     @display(description="Tags", header=False)

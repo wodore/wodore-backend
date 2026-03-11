@@ -543,7 +543,7 @@ class Command(BaseCommand):
             license = License.objects.create(
                 slug="mit",
                 name="MIT License",
-                link="https://opensource.org/licenses/MIT",
+                url="https://opensource.org/licenses/MIT",
                 attribution_required=False,
                 no_commercial=False,
                 is_active=True,

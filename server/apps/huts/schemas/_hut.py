@@ -64,7 +64,7 @@ class OrganizationImageSchema(BaseModel):
     slug: str | None
     name: str | None
     fullname: str | None
-    link: str | None
+    url: str | None
     logo: str | None
     # public: bool
     # active: bool
@@ -78,7 +78,7 @@ class LicenseInfoSchema(BaseModel):
     name: str | None
     fullname: str | None
     description: str | None = None
-    link: str | None = None
+    url: str | None = None
 
 
 class ImageMetaAreaSchema(BaseModel):

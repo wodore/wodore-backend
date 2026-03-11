@@ -8,9 +8,9 @@ LicenseAdminFieldsets = [
             "classes": ["tab"],
             "fields": [
                 ("slug", "order"),
+                ("review_status", "category"),
                 ("name_i18n", "fullname_i18n"),
-                "description_i18n",
-                "link_i18n",
+                ("description_i18n", "url_i18n"),
                 ("created", "modified"),
             ],
         },
@@ -18,7 +18,7 @@ LicenseAdminFieldsets = [
     (
         f"{_('Name')} {_('Translations')} *",
         {
-            "classes": ["collapse", "tab"],
+            "classes": ["tab"],
             "fields": [
                 (f"name_{code}", f"fullname_{code}")
                 for code in settings.LANGUAGE_CODES
@@ -30,19 +30,19 @@ LicenseAdminFieldsets = [
     (
         f"{_('Description')} {_('Translations')}",
         {
-            "classes": ["collapse", "tab"],
+            "classes": ["tab"],
             "fields": [f"description_{code}" for code in settings.LANGUAGE_CODES],
         },
     ),
     (
-        f"{_('Link')} {_('Translations')}",
+        f"{_('URL')} {_('Translations')}",
         {
-            "classes": ["collapse", "tab"],
-            "fields": [f"link_{code}" for code in settings.LANGUAGE_CODES],
+            "classes": ["tab"],
+            "fields": [f"url_{code}" for code in settings.LANGUAGE_CODES],
         },
     ),
     (
-        _("Settings"),
+        _("License Settings"),
         {
             "classes": ["tab"],
             "fields": [
@@ -50,6 +50,13 @@ LicenseAdminFieldsets = [
                 ("attribution_required", "share_alike"),
                 ("no_commercial", "no_modifying"),
             ],
+        },
+    ),
+    (
+        _("Review Comment"),
+        {
+            "classes": ["tab"],
+            "fields": ["review_comment"],
         },
     ),
     # (
