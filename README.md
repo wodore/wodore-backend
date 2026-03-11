@@ -43,7 +43,77 @@ uv sync
 uv run invoke install
 # afterwards activate the virtual environment
 source .venv/bin/activate
+
+# Initialize the persistent cache database (required for image caching)
+app migrate
+app createcachetable
 ```
+
+### Cache Setup (Important)
+
+The image aggregation system uses a **persistent database cache** to store results from external APIs. This improves performance by **92%** (from 668ms to 53ms for cached requests).
+
+#### Initialize Cache Table
+
+```bash
+# Create the cache database table (run once during setup)
+app createcachetable
+
+# Verify cache is working
+app shell -c "from django.core.cache import caches; print('Cache:', caches['persistent'].__class__.__name__)"
+```
+
+**Note**: This can be run multiple times safely (e.g., in Kubernetes init containers). The command is idempotent and will only create the table if it doesn't exist.
+
+#### Kubernetes Pre-Init Job Example
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cache-init
+spec:
+  template:
+    spec:
+      containers:
+      - name: cache-init
+        image: wodore-backend:latest
+        command:
+          - python
+          - manage.py
+          - createcachetable
+        env:
+          - name: DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: database-secret
+                key: url
+      restartPolicy: OnFailure
+```
+
+#### Cache Management
+
+Django provides built-in cache management:
+```bash
+# Create cache table
+app createcachetable
+
+# Clear cache (all entries)
+app shell -c "from django.core.cache import caches; caches['persistent'].clear()"
+
+# Check cache backend
+app shell -c "from django.core.cache import caches; print(caches['persistent'])"
+```
+
+#### Force Cache Refresh
+
+To bypass cache and refresh data from external APIs:
+```bash
+# Use update_cache parameter in API requests
+curl "http://localhost:8000/v1/geo/images/hut/gelmer?update_cache=true"
+```
+
+For more details on caching implementation, see the internal documentation.
 
 ### Setup
 
