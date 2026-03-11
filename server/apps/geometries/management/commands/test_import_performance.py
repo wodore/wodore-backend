@@ -315,7 +315,7 @@ class Command(BaseCommand):
             name=TranslationSchema(de="Test Restaurant"),
             location=LocationSchema(lon=8.5417, lat=47.3769),
             country_code="CH",
-            place_type_identifier="root.restaurant",
+            place_type_identifiers=["root.restaurant"],
             operating_status="open",
         )
 
@@ -346,7 +346,7 @@ class Command(BaseCommand):
 
         # Cleanup test places
         cleanup_count = GeoPlace.objects.filter(
-            name__startswith="Test Restaurant", place_type=category
+            name__startswith="Test Restaurant", categories=category
         ).delete()[0]
 
         # Project for 1M entries
@@ -433,7 +433,7 @@ class Command(BaseCommand):
                             ),
                             location=LocationSchema(lon=8.5417, lat=47.3769),
                             country_code="CH",
-                            place_type_identifier="root.restaurant",
+                            place_type_identifiers=["root.restaurant"],
                             operating_status="open",
                         )
                         source = SourceInput(
@@ -468,7 +468,7 @@ class Command(BaseCommand):
                     name=TranslationSchema(de=f"NoTrans Test {i}"),
                     location=LocationSchema(lon=8.5417, lat=47.3769),
                     country_code="CH",
-                    place_type_identifier="root.restaurant",
+                    place_type_identifiers=["root.restaurant"],
                     operating_status="open",
                 )
                 source = SourceInput(
@@ -566,7 +566,7 @@ class Command(BaseCommand):
                     name=TranslationSchema(de=f"Individual {i}"),
                     location=LocationSchema(lon=8.5417, lat=47.3769),
                     country_code="CH",
-                    place_type_identifier="root.restaurant",
+                    place_type_identifiers=["root.restaurant"],
                     operating_status="open",
                 )
                 source = SourceInput(
@@ -593,13 +593,14 @@ class Command(BaseCommand):
         start = time.time()
 
         places_to_create = []
+        categories_to_create = []
         for i in range(test_iterations):
             try:
                 schema = GeoPlaceAmenityInput(
                     name=TranslationSchema(de=f"Bulk {i}"),
                     location=LocationSchema(lon=8.5417, lat=47.3769),
                     country_code="CH",
-                    place_type_identifier="root.restaurant",
+                    place_type_identifiers=["root.restaurant"],
                     operating_status="open",
                 )
 
@@ -609,18 +610,30 @@ class Command(BaseCommand):
                 place_data = {
                     "name": f"Bulk {i}",
                     "location": Point(8.5417, 47.3769),
-                    "place_type": category,
                     "country_code": "CH",
                     "detail_type": "amenity",
                     "is_active": True,
                 }
                 places_to_create.append(GeoPlace(**place_data))
+                categories_to_create.append(category)
             except Exception:
                 pass
 
         # Actually do the bulk create (without deduplication)
         with transaction.atomic():
-            GeoPlace.objects.bulk_create(places_to_create, batch_size=500)
+            created_places = GeoPlace.objects.bulk_create(
+                places_to_create, batch_size=500
+            )
+            if created_places:
+                from server.apps.geometries.models import GeoPlaceCategory
+
+                GeoPlaceCategory.objects.bulk_create(
+                    [
+                        GeoPlaceCategory(geo_place=place, category=category)
+                        for place, category in zip(created_places, categories_to_create)
+                    ],
+                    ignore_conflicts=True,
+                )
 
         bulk_time = time.time() - start
 
@@ -717,7 +730,7 @@ class Command(BaseCommand):
                     name=TranslationSchema(de=f"Hybrid {i}"),
                     location=LocationSchema(lon=8.5417 + (i * 0.0001), lat=47.3769),
                     country_code="CH",
-                    place_type_identifier="root.restaurant",
+                    place_type_identifiers=["root.restaurant"],
                     operating_status="open",
                 )
                 source = SourceInput(
@@ -737,12 +750,16 @@ class Command(BaseCommand):
                     GeoPlace as GeoPlaceModel,
                 )
 
+                categories = GeoPlaceModel._resolve_categories_from_identifiers(
+                    schema.place_type_identifiers
+                )
                 existing = GeoPlaceModel._find_existing_place_by_schema(
                     schema=schema,
                     location=location,
                     source_obj=osm_org,
                     from_source=source,
                     dedup_options=DedupOptions(distance_same=20, distance_any=4),
+                    categories=categories,
                 )
 
                 if existing is None:
@@ -754,6 +771,7 @@ class Command(BaseCommand):
             if non_duplicates:
                 geoplaces_to_create = []
                 amenity_details_to_create = []
+                categories_to_create = []
 
                 for schema, source in non_duplicates:
                     # Create GeoPlace instance (not saved yet)
@@ -762,7 +780,6 @@ class Command(BaseCommand):
                         location=Point(
                             schema.location.lon, schema.location.lat, srid=4326
                         ),
-                        place_type=category,
                         country_code=schema.country_code,
                         detail_type=schema.detail_type.value,
                         is_active=schema.is_active,
@@ -773,6 +790,7 @@ class Command(BaseCommand):
                         place.name, skip_check=True
                     )
                     geoplaces_to_create.append(place)
+                    categories_to_create.append(category)
 
                     # Create AmenityDetail instance (not saved yet)
                     from server.apps.geometries.models import AmenityDetail
@@ -791,6 +809,19 @@ class Command(BaseCommand):
                 with transaction.atomic():
                     # Bulk create GeoPlaces
                     created_places = GeoPlace.objects.bulk_create(geoplaces_to_create)
+
+                    # Bulk create category associations
+                    from server.apps.geometries.models import GeoPlaceCategory
+
+                    GeoPlaceCategory.objects.bulk_create(
+                        [
+                            GeoPlaceCategory(geo_place=place, category=category)
+                            for place, category in zip(
+                                created_places, categories_to_create
+                            )
+                        ],
+                        ignore_conflicts=True,
+                    )
 
                     # Now create AmenityDetails with proper geo_place reference
                     for place, detail in zip(created_places, amenity_details_to_create):
@@ -916,7 +947,7 @@ class Command(BaseCommand):
                         name=TranslationSchema(de=f"Batch{batch_size}_{i}"),
                         location=LocationSchema(lon=8.5417 + (i * 0.0001), lat=47.3769),
                         country_code="CH",
-                        place_type_identifier="root.restaurant",
+                        place_type_identifiers=["root.restaurant"],
                         operating_status="open",
                     )
                     source = SourceInput(
@@ -937,12 +968,16 @@ class Command(BaseCommand):
                         GeoPlace as GeoPlaceModel,
                     )
 
+                    categories = GeoPlaceModel._resolve_categories_from_identifiers(
+                        schema.place_type_identifiers
+                    )
                     existing = GeoPlaceModel._find_existing_place_by_schema(
                         schema=schema,
                         location=location,
                         source_obj=osm_org,
                         from_source=source,
                         dedup_options=DedupOptions(distance_same=20, distance_any=4),
+                        categories=categories,
                     )
 
                     if existing is None:
@@ -952,6 +987,7 @@ class Command(BaseCommand):
                 if non_duplicates:
                     geoplaces_to_create = []
                     amenity_details_to_create = []
+                    categories_to_create = []
 
                     for schema, source in non_duplicates:
                         place = GeoPlace(
@@ -959,7 +995,6 @@ class Command(BaseCommand):
                             location=Point(
                                 schema.location.lon, schema.location.lat, srid=4326
                             ),
-                            place_type=category,
                             country_code=schema.country_code,
                             detail_type=schema.detail_type.value,
                             is_active=schema.is_active,
@@ -969,6 +1004,7 @@ class Command(BaseCommand):
                             place.name, skip_check=True
                         )
                         geoplaces_to_create.append(place)
+                        categories_to_create.append(category)
 
                         from server.apps.geometries.models import AmenityDetail
 
@@ -985,6 +1021,18 @@ class Command(BaseCommand):
                     with transaction.atomic():
                         created_places = GeoPlace.objects.bulk_create(
                             geoplaces_to_create
+                        )
+
+                        from server.apps.geometries.models import GeoPlaceCategory
+
+                        GeoPlaceCategory.objects.bulk_create(
+                            [
+                                GeoPlaceCategory(geo_place=place, category=category)
+                                for place, category in zip(
+                                    created_places, categories_to_create
+                                )
+                            ],
+                            ignore_conflicts=True,
                         )
 
                         for place, detail in zip(

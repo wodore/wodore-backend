@@ -5,6 +5,7 @@ from server.core.models import TimeStampedModel
 from computedfields.models import ComputedFieldsModel
 from modeltrans.manager import MultilingualManager
 
+from server.apps.categories.models import Category
 from server.apps.images.models import Image
 from server.apps.organizations.models import Organization
 
@@ -205,3 +206,63 @@ class GeoPlaceExternalLink(models.Model):
 
     def __str__(self) -> str:
         return f"{self.geo_place.name_i18n} → {self.external_link.label_i18n}"
+
+
+class GeoPlaceCategory(TimeStampedModel):
+    """Through model for GeoPlace <-> Category with optional classifier."""
+
+    geo_place = models.ForeignKey(
+        "GeoPlace",
+        on_delete=models.CASCADE,
+        db_index=True,
+        related_name="category_associations",
+    )
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.RESTRICT,
+        db_index=True,
+        related_name="geo_place_associations",
+    )
+    classifier = models.ForeignKey(
+        Category,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="classifications",
+        help_text=_("Optional classifier for this association (e.g., seasonal status)"),
+    )
+    extra = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name=_("Extra"),
+        help_text=_("Category-specific overflow data (JSON)"),
+    )
+
+    class Meta:
+        db_table = "geometries_geoplace_category"
+        verbose_name = _("Geo Place Category Association")
+        verbose_name_plural = _("Geo Place Category Associations")
+        ordering = ["geo_place", "category"]
+        indexes = [
+            models.Index(
+                fields=["category", "geo_place"],
+                name="gpc_cat_place_idx",
+            ),
+            models.Index(
+                fields=["geo_place", "category"],
+                name="gpc_place_cat_idx",
+            ),
+            models.Index(fields=["classifier"], name="gpc_classifier_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["geo_place", "category"],
+                name="geoplacecategory_unique_place_category",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        classifier_str = f" [{self.classifier.slug}]" if self.classifier else ""
+        return (
+            f"{self.geo_place.name_i18n} -> {self.category.identifier}{classifier_str}"
+        )

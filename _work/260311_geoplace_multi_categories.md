@@ -283,18 +283,18 @@ class GeoPlaceCategory(TimeStampedModel):
 
 ### Phase 1: Model & Migration (Week 1)
 
-- [ ] Create `GeoPlaceCategory` through model with proper indexes
-- [ ] Add M2M field to `GeoPlace` (keep `place_type` for migration)
-- [ ] Create data migration: migrate existing `place_type` to `GeoPlaceCategory`
+- [x] Create `GeoPlaceCategory` through model with proper indexes
+- [x] Add M2M field to `GeoPlace` (keep `place_type` for migration)
+- [x] Create data migration: migrate existing `place_type` to `GeoPlaceCategory`
 - [ ] Add verification step to ensure all places have categories
-- [ ] Drop `place_type` field
+- [x] Drop `place_type` field
 - [ ] Run tests on development data
 
 ### Phase 2: Admin Updates (Week 1)
 
-- [ ] Update admin list display with structured category format
-- [ ] Replace `place_type` filters with `categories` filters
-- [ ] Add inline editing for `GeoPlaceCategory`
+- [x] Update admin list display with structured category format
+- [x] Replace `place_type` filters with `categories` filters
+- [x] Add inline editing for `GeoPlaceCategory`
 - [ ] Update admin search to work with categories
 - [ ] Test admin performance with prefetch_related
 
@@ -306,22 +306,22 @@ class GeoPlaceCategory(TimeStampedModel):
   - Source_id matching first
   - Category parent matching (check associations)
   - Remove bbox proximity search
-- [ ] Update `GeoPlace.update_or_create()` to handle category lists
-- [ ] Add validation for empty category lists
+- [x] Update `GeoPlace.update_or_create()` to handle category lists
+- [x] Add validation for empty category lists
 - [ ] Test import with parallel processing
 
 ### Phase 4: API Changes (Week 1)
 
-- [ ] Update input schemas: `place_type_identifier` → `place_type_identifiers`
-- [ ] Update output schemas: `place_type` → `categories`
-- [ ] Update helpers: `resolve_categories_from_identifiers()`
-- [ ] Update filters: `place_type__*` → `categories__*`
-- [ ] Add `.distinct()` to M2M filter queries
+- [x] Update input schemas: `place_type_identifier` → `place_type_identifiers`
+- [x] Update output schemas: `place_type` → `categories`
+- [x] Update helpers: `resolve_categories_from_identifiers()`
+- [x] Update filters: `place_type__*` → `categories__*`
+- [x] Add `.distinct()` to M2M filter queries
 - [ ] Update API documentation
 
 ### Phase 5: Performance Optimization (Week 1)
 
-- [ ] Add indexes before migration
+- [x] Add indexes before migration
 - [ ] Update all list views to use `prefetch_related('categories__parent')`
 - [ ] Update detail views with full prefetch
 - [ ] Implement caching for GeoPlace queries

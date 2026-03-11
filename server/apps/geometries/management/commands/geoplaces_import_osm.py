@@ -954,7 +954,7 @@ class Command(BaseCommand):
             description=description_translations,
             location=LocationSchema(lon=data["lon"], lat=data["lat"]),
             country_code=self._guess_country_code(Point(data["lon"], data["lat"])),
-            place_type_identifier=category_identifier,
+            place_type_identifiers=[category_identifier],
             osm_tags=data["tags"],
             # Amenity fields (flattened)
             operating_status=OperatingStatus.OPEN,
@@ -988,8 +988,11 @@ class Command(BaseCommand):
         cache_key = f"osm_{source_id}"
         cached_place = place_cache.get(cache_key)
         if cached_place:
+            categories = GeoPlace._resolve_categories_from_identifiers(
+                schema.place_type_identifiers
+            )
             place, status = GeoPlace._update_from_schema(
-                cached_place, schema, osm_org, source_input
+                cached_place, schema, categories, osm_org, source_input
             )
         else:
             place, status = GeoPlace.update_or_create(
@@ -1073,7 +1076,7 @@ class Command(BaseCommand):
         stale_place_ids = GeoPlaceSourceAssociation.objects.filter(
             organization=osm_org,
             modified_date__lt=run_start,
-            geo_place__place_type__in=categories,
+            geo_place__categories__in=categories,
             geo_place__country_code=country_code,
             geo_place__is_active=True,
         ).values_list("geo_place_id", flat=True)
@@ -1110,7 +1113,7 @@ class Command(BaseCommand):
         count = (
             GeoPlaceSourceAssociation.objects.filter(
                 organization=osm_org,
-                geo_place__place_type__in=categories,
+                geo_place__categories__in=categories,
             )
             .values("geo_place")
             .distinct()
@@ -1155,7 +1158,7 @@ class Command(BaseCommand):
         place_ids = (
             GeoPlaceSourceAssociation.objects.filter(
                 organization=osm_org,
-                geo_place__place_type__in=categories,
+                geo_place__categories__in=categories,
             )
             .values_list("geo_place_id", flat=True)
             .distinct()
@@ -3500,12 +3503,17 @@ class Command(BaseCommand):
                 GeoPlace as GeoPlaceModel,
             )
 
+            schema = self._data_to_schema(data)
+            categories = GeoPlaceModel._resolve_categories_from_identifiers(
+                schema.place_type_identifiers
+            )
             existing = GeoPlaceModel._find_existing_place_by_schema(
-                schema=self._data_to_schema(data),
+                schema=schema,
                 location=location,
                 source_obj=osm_org,
                 from_source=self._data_to_source(data, run_start),
                 dedup_options=self._get_dedup_options(),
+                categories=categories,
             )
 
             if existing is None:
@@ -3567,6 +3575,7 @@ class Command(BaseCommand):
         """
         from server.apps.geometries.models import (
             AmenityDetail,
+            GeoPlaceCategory,
             GeoPlaceSourceAssociation,
         )
 
@@ -3580,11 +3589,13 @@ class Command(BaseCommand):
                 geoplaces_to_create = []
                 amenity_details_to_create = []
                 source_ids = []
+                categories_to_create = []
 
                 for data in new_places:
                     # Prepare GeoPlace
-                    place = self._prepare_geoplace(data)
+                    place, category = self._prepare_geoplace(data)
                     geoplaces_to_create.append(place)
+                    categories_to_create.append(category)
 
                     # Prepare AmenityDetail (without geo_place reference yet)
                     detail = AmenityDetail(
@@ -3598,6 +3609,16 @@ class Command(BaseCommand):
 
                 # Bulk create GeoPlaces
                 created_geoplaces = GeoPlace.objects.bulk_create(geoplaces_to_create)
+
+                # Bulk create GeoPlaceCategory associations
+                associations = [
+                    GeoPlaceCategory(geo_place=place, category=category)
+                    for place, category in zip(created_geoplaces, categories_to_create)
+                ]
+                if associations:
+                    GeoPlaceCategory.objects.bulk_create(
+                        associations, ignore_conflicts=True
+                    )
 
                 # Now create details with proper references
                 for place, detail in zip(created_geoplaces, amenity_details_to_create):
@@ -3667,7 +3688,7 @@ class Command(BaseCommand):
 
         return (created_count, updated_count, skipped_count, 0)
 
-    def _prepare_geoplace(self, data: dict) -> GeoPlace:
+    def _prepare_geoplace(self, data: dict) -> tuple[GeoPlace, Category]:
         """Prepare GeoPlace instance from amenity data."""
         from server.apps.geometries.models import OperatingStatus
 
@@ -3678,7 +3699,6 @@ class Command(BaseCommand):
         place = GeoPlace(
             name=data.get("name", ""),
             location=Point(data["lon"], data["lat"], srid=4326),
-            place_type=category,
             country_code=self._guess_country_code(Point(data["lon"], data["lat"])),
             detail_type=OperatingStatus.OPEN.value,  # All amenities are open for now
             is_active=True,
@@ -3688,7 +3708,7 @@ class Command(BaseCommand):
         # Generate slug (skip DB check for speed)
         place.slug = GeoPlace.generate_unique_slug(place.name, skip_check=True)
 
-        return place
+        return place, category
 
     def _get_dedup_options(self):
         """Get deduplication options."""
@@ -3709,7 +3729,7 @@ class Command(BaseCommand):
             name=TranslationSchema(de=data.get("name", "")),
             location=LocationSchema(lon=data["lon"], lat=data["lat"]),
             country_code=self._guess_country_code(Point(data["lon"], data["lat"])),
-            place_type_identifier=data["category_slug"],
+            place_type_identifiers=[data["category_slug"]],
             operating_status="open",
         )
 

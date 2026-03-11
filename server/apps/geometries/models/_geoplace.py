@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from django.conf import settings
 from django.contrib.gis.db import models
 from django.contrib.postgres.indexes import GinIndex, GistIndex
+from django.db.models import Q
 from django.db.models.functions import Lower
 from django.utils.translation import gettext_lazy as _
 from modeltrans.fields import TranslationField
@@ -102,10 +103,13 @@ class GeoPlace(TimeStampedModel):
     )
 
     # Classification
-    place_type = models.ForeignKey(
+    categories = models.ManyToManyField(
         Category,
-        on_delete=models.RESTRICT,
-        related_name="places",
+        through="GeoPlaceCategory",
+        through_fields=("geo_place", "category"),
+        related_name="geo_places",
+        verbose_name=_("Categories"),
+        help_text=_("Category associations for this place"),
     )
 
     # Location
@@ -288,7 +292,12 @@ class GeoPlace(TimeStampedModel):
         )
 
     def __str__(self) -> str:
-        return f"{self.name_i18n} ({self.place_type.slug})"
+        if not self.pk:
+            return self.name_i18n
+
+        first_category = self.categories.order_by("order", "slug").first()
+        category_slug = first_category.slug if first_category else "uncategorized"
+        return f"{self.name_i18n} ({category_slug})"
 
     def save(
         self,
@@ -377,7 +386,6 @@ class GeoPlace(TimeStampedModel):
         simple_fields = [
             "elevation",
             "country_code",
-            "place_type",
             "importance",
             "parent",
             "location",
@@ -697,11 +705,11 @@ class GeoPlace(TimeStampedModel):
                 source_id="2658434",
                 name="Matterhorn",
                 location=Point(7.6588, 45.9763),
-                place_type=peak_category,
                 elevation=4478,
                 country_code="CH",
                 importance=95,
             )
+            place.categories.add(peak_category)
         """
         from ._associations import GeoPlaceSourceAssociation
 
@@ -781,7 +789,7 @@ class GeoPlace(TimeStampedModel):
                 name=TranslationSchema(de="Bäckerei", en="Bakery"),
                 location=LocationSchema(lon=7.7343, lat=46.0234),
                 country_code="CH",
-                place_type_identifier="shop.bakery",
+                place_type_identifiers=["shop.bakery"],
                 operating_status=OperatingStatus.OPEN,
                 brand=BrandInput(slug="volg"),
             )
@@ -806,6 +814,11 @@ class GeoPlace(TimeStampedModel):
         # Convert location to Point
         location = Point(schema.location.lon, schema.location.lat, srid=4326)
 
+        # Resolve categories (validate identifiers once)
+        categories = cls._resolve_categories_from_identifiers(
+            schema.place_type_identifiers
+        )
+
         # Resolve source organization
         source_obj = None
         if from_source is not None:
@@ -815,7 +828,7 @@ class GeoPlace(TimeStampedModel):
         existing_place = None
         if dedup_options.enabled:
             existing_place = cls._find_existing_place_by_schema(
-                schema, location, source_obj, from_source, dedup_options
+                schema, location, source_obj, from_source, dedup_options, categories
             )
 
         if existing_place:
@@ -823,6 +836,7 @@ class GeoPlace(TimeStampedModel):
             return cls._update_from_schema(
                 existing_place,
                 schema,
+                categories,
                 source_obj,
                 from_source,
             )
@@ -830,6 +844,7 @@ class GeoPlace(TimeStampedModel):
             # CREATE PATH
             return cls._create_from_schema(
                 schema,
+                categories,
                 location,
                 source_obj,
                 from_source,
@@ -843,6 +858,7 @@ class GeoPlace(TimeStampedModel):
         source_obj: Organization | None,
         from_source: "SourceInput | None",
         dedup_options: "DedupOptions",
+        categories: list[Category],
     ) -> "GeoPlace | None":
         """Find existing place using deduplication logic."""
         from django.contrib.gis.db.models.functions import Distance
@@ -909,13 +925,25 @@ class GeoPlace(TimeStampedModel):
             }
 
             # Add category filter if enabled
+            category_filter = Q()
             if dedup_options.check_category:
-                category_parent = schema.place_type_identifier.split(".")[0]
-                filters["place_type__slug__startswith"] = category_parent
+                parent_slugs = {cat.parent.slug for cat in categories if cat.parent}
+                root_slugs = {cat.slug for cat in categories if not cat.parent}
 
-            nearby = cls.objects.filter(**filters).annotate(
-                distance=Distance("location", location)
-            )
+                category_filter = Q()
+                if parent_slugs:
+                    category_filter |= Q(categories__parent__slug__in=parent_slugs)
+                if root_slugs:
+                    category_filter |= Q(
+                        categories__slug__in=root_slugs,
+                        categories__parent__isnull=True,
+                    )
+
+            nearby = cls.objects.filter(**filters)
+            if dedup_options.check_category and category_filter.children:
+                nearby = nearby.filter(category_filter)
+
+            nearby = nearby.annotate(distance=Distance("location", location)).distinct()
 
             # Filter by brand if enabled and provided
             if dedup_options.check_brand and schema.brand:
@@ -991,7 +1019,7 @@ class GeoPlace(TimeStampedModel):
     @staticmethod
     @lru_cache(maxsize=512)
     def _resolve_category_from_identifier(identifier: str) -> Category:
-        """Resolve Category for a place_type_identifier with fallbacks for legacy trees."""
+        """Resolve Category from identifier with fallbacks for legacy trees."""
         parts = identifier.split(".")
         if parts and parts[0] == "root":
             parts = parts[1:]
@@ -1019,9 +1047,27 @@ class GeoPlace(TimeStampedModel):
             return Category.objects.get(identifier=identifier)
 
     @classmethod
+    def _resolve_categories_from_identifiers(
+        cls, identifiers: list[str]
+    ) -> list[Category]:
+        if not identifiers:
+            raise Category.DoesNotExist("No category identifiers provided")
+
+        categories: list[Category] = []
+        seen_ids: set[int] = set()
+        for identifier in identifiers:
+            category = cls._resolve_category_from_identifier(identifier)
+            if category.id in seen_ids:
+                continue
+            categories.append(category)
+            seen_ids.add(category.id)
+        return categories
+
+    @classmethod
     def _create_from_schema(
         cls,
         schema: "GeoPlaceBaseInput",
+        categories: list[Category],
         location: "Point",
         source_obj: Organization | None,
         from_source: "SourceInput | None",
@@ -1033,9 +1079,7 @@ class GeoPlace(TimeStampedModel):
 
         from ._admin_detail import AdminDetail
         from ._amenity_detail import AmenityDetail
-        from ._associations import GeoPlaceSourceAssociation
-
-        category = cls._resolve_category_from_identifier(schema.place_type_identifier)
+        from ._associations import GeoPlaceCategory, GeoPlaceSourceAssociation
 
         # Prepare name translations
         name_dict = schema.get_name_dict()
@@ -1045,7 +1089,6 @@ class GeoPlace(TimeStampedModel):
         place_data = {
             "name": name_dict.get(settings.LANGUAGE_CODE, "Unnamed"),
             "location": location,
-            "place_type": category,
             "country_code": schema.country_code,
             "detail_type": schema.detail_type,
             "elevation": schema.elevation,
@@ -1112,6 +1155,15 @@ class GeoPlace(TimeStampedModel):
                     # Not a slug collision or max attempts exceeded
                     raise
 
+        if categories:
+            GeoPlaceCategory.objects.bulk_create(
+                [
+                    GeoPlaceCategory(geo_place=place, category=category)
+                    for category in categories
+                ],
+                ignore_conflicts=True,
+            )
+
         # Create detail model based on type (flattened structure)
         from ..schemas import DetailType
 
@@ -1166,6 +1218,7 @@ class GeoPlace(TimeStampedModel):
         cls,
         place: "GeoPlace",
         schema: "GeoPlaceBaseInput",
+        categories: list[Category],
         source_obj: Organization | None,
         from_source: "SourceInput | None",
     ) -> tuple["GeoPlace", "UpdateCreateStatus"]:
@@ -1178,7 +1231,11 @@ class GeoPlace(TimeStampedModel):
 
         from ._admin_detail import AdminDetail
         from ._amenity_detail import AmenityDetail
-        from ._associations import GeoPlaceSourceAssociation, UpdatePolicy
+        from ._associations import (
+            GeoPlaceCategory,
+            GeoPlaceSourceAssociation,
+            UpdatePolicy,
+        )
 
         # Get or create source association
         association = None
@@ -1225,17 +1282,26 @@ class GeoPlace(TimeStampedModel):
             pass  # TODO do something with it
 
         # Track if anything was updated
-        updated = False
+        place_updated = False
+        categories_updated = False
         update_fields = []
         i18n_dirty = False
 
-        category = cls._resolve_category_from_identifier(schema.place_type_identifier)
-
-        # Update place_type
-        if "place_type" not in protected and place.place_type != category:
-            place.place_type = category
-            update_fields.append("place_type")
-            updated = True
+        # Update categories (additive only for now)
+        if "categories" not in protected and categories:
+            existing_ids = set(place.categories.values_list("id", flat=True))
+            new_categories = [
+                category for category in categories if category.id not in existing_ids
+            ]
+            if new_categories:
+                GeoPlaceCategory.objects.bulk_create(
+                    [
+                        GeoPlaceCategory(geo_place=place, category=category)
+                        for category in new_categories
+                    ],
+                    ignore_conflicts=True,
+                )
+                categories_updated = True
 
         # Update name translations
         if "name" not in protected:
@@ -1245,14 +1311,14 @@ class GeoPlace(TimeStampedModel):
                     if place.name != name_value:
                         place.name = name_value
                         update_fields.append("name")
-                        updated = True
+                        place_updated = True
                 else:
                     field_name = f"name_{lang_code}"
                     current_value = getattr(place, field_name, None)
                     if current_value != name_value:
                         setattr(place, field_name, name_value)
                         i18n_dirty = True
-                        updated = True
+                        place_updated = True
 
         # Update description translations
         if "description" not in protected:
@@ -1262,14 +1328,14 @@ class GeoPlace(TimeStampedModel):
                     if place.description != desc_value:
                         place.description = desc_value
                         update_fields.append("description")
-                        updated = True
+                        place_updated = True
                 else:
                     field_name = f"description_{lang_code}"
                     current_value = getattr(place, field_name, None)
                     if current_value != desc_value:
                         setattr(place, field_name, desc_value)
                         i18n_dirty = True
-                        updated = True
+                        place_updated = True
 
         # Update other fields
         field_mapping = {
@@ -1284,7 +1350,7 @@ class GeoPlace(TimeStampedModel):
             if field not in protected and getattr(place, field) != value:
                 setattr(place, field, value)
                 update_fields.append(field)
-                updated = True
+                place_updated = True
 
         # Update shape if provided
         if "shape" not in protected and schema.shape:
@@ -1294,24 +1360,24 @@ class GeoPlace(TimeStampedModel):
             if place.shape != new_shape:
                 place.shape = new_shape
                 update_fields.append("shape")
-                updated = True
+                place_updated = True
 
         # Update OSM tags (merge strategy)
         if "osm_tags" not in protected and schema.osm_tags:
             if place.osm_tags != schema.osm_tags:
                 place.osm_tags = {**place.osm_tags, **schema.osm_tags}
                 update_fields.append("osm_tags")
-                updated = True
+                place_updated = True
 
         # Update extra data (merge strategy)
         if "extra" not in protected and schema.extra:
             if place.extra != schema.extra:
                 place.extra = {**place.extra, **schema.extra}
                 update_fields.append("extra")
-                updated = True
+                place_updated = True
 
         # Save place if updated (track_modifications=False for imports)
-        if updated:
+        if place_updated:
             if i18n_dirty and "i18n" not in update_fields:
                 update_fields.append("i18n")
             place.save(update_fields=update_fields, track_modifications=False)
@@ -1382,7 +1448,7 @@ class GeoPlace(TimeStampedModel):
                 detail_updated = True
 
         # Return appropriate status
-        if updated or detail_updated:
+        if place_updated or categories_updated or detail_updated:
             return place, UpdateCreateStatus.updated
         return place, UpdateCreateStatus.no_change
 
