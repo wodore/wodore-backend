@@ -458,6 +458,11 @@ AVAILABILITY_UPDATE_SETTINGS = {
 }
 
 
+# Bot/User-Agent Settings
+# Configuration for external API requests
+
+BOT_AGENT = config("BOT_AGENT", default="WodoreBackend/1.0 (+https://wodore.ch)")
+
 # Hut Categories Settings
 # Configuration for hut type categories
 

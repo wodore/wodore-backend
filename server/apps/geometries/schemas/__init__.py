@@ -3,6 +3,7 @@ GeoPlace schemas for API responses and data input.
 
 Output schemas (_output.py): Used for API responses
 Input schemas (_input.py): Used for creating/updating GeoPlace models
+Image schemas (_images.py): Used for image aggregation API
 """
 
 # Output schemas (for API responses)
@@ -18,6 +19,13 @@ from ._output import (
     PhoneSchema,
     SymbolSchema,
     WebsiteSchema,
+)
+
+# Image schemas (for image aggregation API)
+from ._images import (
+    ImageLicenseSchema,
+    ImageUrlsSchema,
+    ImagePropertiesSchema,
 )
 
 # Input schemas (for creating/updating models)
@@ -49,6 +57,10 @@ __all__ = [
     "PhoneSchema",
     "SymbolSchema",
     "WebsiteSchema",
+    # Image schemas
+    "ImageLicenseSchema",
+    "ImageUrlsSchema",
+    "ImagePropertiesSchema",
     # Input schemas
     "BrandInput",
     "DedupOptions",
