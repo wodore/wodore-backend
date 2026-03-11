@@ -182,6 +182,7 @@ class Command(BaseCommand):
         self._error_log_file = None
         self._error_count = 0
         self._thread_local = threading.local()
+        self._category_rank_map: dict[str, int] = {}
 
     def _get_cache(self, cache_name: str) -> dict:
         cache = getattr(self._thread_local, cache_name, None)
@@ -194,6 +195,98 @@ class Command(BaseCommand):
         cache = getattr(self._thread_local, cache_name, None)
         if cache is not None:
             cache.clear()
+
+    def _build_category_rank_map(self, category_names: list[str]) -> dict[str, int]:
+        categories = get_categories(category_names)
+        rank_map: dict[str, int] = {}
+        rank = 0
+        for category in categories:
+            for mapping in category.mappings:
+                if mapping.category_slug not in rank_map:
+                    rank_map[mapping.category_slug] = rank
+                    rank += 1
+        return rank_map
+
+    @staticmethod
+    def _get_category_slugs(data: dict) -> list[str]:
+        category_slugs = data.get("category_slugs")
+        if category_slugs:
+            return category_slugs
+        category_slug = data.get("category_slug")
+        return [category_slug] if category_slug else []
+
+    @staticmethod
+    def _matches_single_tag(tags: dict, tag_str: str) -> bool:
+        if "=" in tag_str:
+            key, value = tag_str.split("=", 1)
+            return tags.get(key) == value
+        return tag_str in tags
+
+    def _tags_match(self, tags: dict, osm_filters: list) -> bool:
+        for item in osm_filters:
+            if isinstance(item, tuple):
+                if not any(self._matches_single_tag(tags, t) for t in item):
+                    return False
+            elif isinstance(item, str):
+                if not self._matches_single_tag(tags, item):
+                    return False
+        return True
+
+    def _aggregate_amenities_by_element(self, amenities: list[dict]) -> list[dict]:
+        if not amenities:
+            return amenities
+
+        grouped: dict[tuple[str, int], dict[str, object]] = {}
+        for data in amenities:
+            key = (data["osm_type"], data["osm_id"])
+            entry = grouped.setdefault(
+                key,
+                {"items": [], "category_ranks": {}},
+            )
+            entry["items"].append(data)
+
+            for category_slug in self._get_category_slugs(data):
+                rank = self._category_rank_map.get(category_slug, 1_000_000)
+                current = entry["category_ranks"].get(category_slug)
+                if current is None or rank < current:
+                    entry["category_ranks"][category_slug] = rank
+
+        aggregated: list[dict] = []
+        for entry in grouped.values():
+            items = entry["items"]
+            delete_item = next(
+                (item for item in items if item.get("action") == "delete"), None
+            )
+
+            def _item_rank(item: dict) -> int:
+                category_slugs = self._get_category_slugs(item)
+                if not category_slugs:
+                    return 1_000_000
+                return min(
+                    self._category_rank_map.get(slug, 1_000_000)
+                    for slug in category_slugs
+                )
+
+            base = delete_item or min(items, key=_item_rank)
+            category_ranks: dict[str, int] = entry["category_ranks"]
+            if category_ranks:
+                per_parent: dict[str, dict[str, object]] = {}
+                for slug, rank in category_ranks.items():
+                    parent_slug = slug.split(".", 1)[0]
+                    existing = per_parent.get(parent_slug)
+                    if existing is None or rank < existing["rank"]:
+                        per_parent[parent_slug] = {"slug": slug, "rank": rank}
+
+                ordered = sorted(per_parent.values(), key=lambda item: item["rank"])
+                category_slugs = [item["slug"] for item in ordered]
+
+                base = base.copy()
+                base["category_slugs"] = category_slugs
+                base["category_slug"] = category_slugs[0]
+
+            aggregated.append(base)
+
+        return aggregated
 
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
@@ -362,6 +455,8 @@ class Command(BaseCommand):
         else:
             enabled = get_enabled_categories()
             category_names = [cat.category for cat in enabled]
+
+        self._category_rank_map = self._build_category_rank_map(category_names)
 
         # Show category details
         categories = get_categories(category_names)
@@ -577,6 +672,8 @@ class Command(BaseCommand):
         if limit:
             amenities = amenities[:limit]
             self.stdout.write(f"Limited to {limit} amenities")
+
+        amenities = self._aggregate_amenities_by_element(amenities)
 
         # 5. Get or create OSM organization
         osm_org, _ = Organization.objects.get_or_create(
@@ -936,9 +1033,12 @@ class Command(BaseCommand):
             phone_numbers = self._format_phones(data.get("phone"))
             phones = [PhoneSchema(**p) for p in phone_numbers]
 
-        # Get category identifier
-        category = self._get_or_create_category(data["category_slug"])
-        category_identifier = category.identifier
+        # Get category identifiers
+        category_slugs = self._get_category_slugs(data)
+        categories = [self._get_or_create_category(slug) for slug in category_slugs]
+        category_identifiers = [category.identifier for category in categories]
+        if not category_identifiers:
+            raise ValueError("No categories resolved for OSM element")
 
         # Build brand input if provided (only for chain brands, not product lists)
         brand_input = None
@@ -954,7 +1054,7 @@ class Command(BaseCommand):
             description=description_translations,
             location=LocationSchema(lon=data["lon"], lat=data["lat"]),
             country_code=self._guess_country_code(Point(data["lon"], data["lat"])),
-            place_type_identifier=category_identifier,
+            place_type_identifiers=category_identifiers,
             osm_tags=data["tags"],
             # Amenity fields (flattened)
             operating_status=OperatingStatus.OPEN,
@@ -988,8 +1088,11 @@ class Command(BaseCommand):
         cache_key = f"osm_{source_id}"
         cached_place = place_cache.get(cache_key)
         if cached_place:
+            categories = GeoPlace._resolve_categories_from_identifiers(
+                schema.place_type_identifiers
+            )
             place, status = GeoPlace._update_from_schema(
-                cached_place, schema, osm_org, source_input
+                cached_place, schema, categories, osm_org, source_input
             )
         else:
             place, status = GeoPlace.update_or_create(
@@ -1073,7 +1176,7 @@ class Command(BaseCommand):
         stale_place_ids = GeoPlaceSourceAssociation.objects.filter(
             organization=osm_org,
             modified_date__lt=run_start,
-            geo_place__place_type__in=categories,
+            geo_place__categories__in=categories,
             geo_place__country_code=country_code,
             geo_place__is_active=True,
         ).values_list("geo_place_id", flat=True)
@@ -1110,7 +1213,7 @@ class Command(BaseCommand):
         count = (
             GeoPlaceSourceAssociation.objects.filter(
                 organization=osm_org,
-                geo_place__place_type__in=categories,
+                geo_place__categories__in=categories,
             )
             .values("geo_place")
             .distinct()
@@ -1155,7 +1258,7 @@ class Command(BaseCommand):
         place_ids = (
             GeoPlaceSourceAssociation.objects.filter(
                 organization=osm_org,
-                geo_place__place_type__in=categories,
+                geo_place__categories__in=categories,
             )
             .values_list("geo_place_id", flat=True)
             .distinct()
@@ -1186,7 +1289,7 @@ class Command(BaseCommand):
         brands = set()
 
         for data in amenities:
-            category_slugs.add(data["category_slug"])
+            category_slugs.update(self._get_category_slugs(data))
             if data.get("brand") and ";" not in data["brand"]:
                 # Only cache chain brands, not product lists
                 brands.add(data["brand"].lower())
@@ -1611,6 +1714,7 @@ class Command(BaseCommand):
                 mapping=mapping,
                 category_names=category_names,
             )
+            amenities = self._aggregate_amenities_by_element(amenities)
             progress.update(task_id, completed=10)
 
             # Pre-cache data and existing associations for this mapping
@@ -2180,6 +2284,7 @@ class Command(BaseCommand):
                     mapping=mapping,
                     category_names=category_names,
                 )
+                amenities = self._aggregate_amenities_by_element(amenities)
                 progress.update(current_task, completed=2)
 
                 # Pre-cache data for this mapping
@@ -2608,8 +2713,6 @@ class Command(BaseCommand):
         Returns:
             List of amenity dicts with 'action' field from OSMElement
         """
-        from server.apps.geometries.config.osm_categories import match_tags_to_category
-
         amenities = []
 
         for element in elements:
@@ -2618,12 +2721,12 @@ class Command(BaseCommand):
             if mapping.pre_process:
                 tags = mapping.pre_process(tags)
 
-            # Check if tags match (for AND logic with multiple filter items)
-            match_result = match_tags_to_category(tags, category_names)
-            if not match_result:
+            if not self._tags_match(tags, mapping.osm_filters):
+                continue
+            if mapping.condition and not mapping.condition(tags):
                 continue
 
-            category_slug, _, _ = match_result
+            category_slug = mapping.category_slug
 
             # OSMElement already has lat/lon extracted
             lat = element.lat
@@ -2669,7 +2772,7 @@ class Command(BaseCommand):
         brands = set()
 
         for data in amenities:
-            category_slugs.add(data["category_slug"])
+            category_slugs.update(self._get_category_slugs(data))
             if data.get("brand") and ";" not in data["brand"]:
                 # Only cache chain brands, not product lists
                 brands.add(data["brand"].lower())
@@ -2756,6 +2859,8 @@ class Command(BaseCommand):
         deleted_count = 0
         error_count = 0
 
+        amenities = self._aggregate_amenities_by_element(amenities)
+
         total = total_count or len(amenities)
         for idx, data in enumerate(amenities, 1):
             # Check for shutdown request every 100 places
@@ -2771,9 +2876,11 @@ class Command(BaseCommand):
 
             if dry_run:
                 action_str = f"[{action}] " if action else ""
+                category_slugs = self._get_category_slugs(data)
+                category_display = ", ".join(category_slugs) if category_slugs else "-"
                 self.stdout.write(
                     f"    [DRY RUN] {action_str}Would upsert: {data['name'] or 'Unnamed'} "
-                    f"({data['category_slug']}) at ({data['lat']}, {data['lon']})"
+                    f"({category_display}) at ({data['lat']}, {data['lon']})"
                 )
                 continue
 
@@ -2839,9 +2946,11 @@ class Command(BaseCommand):
                     error_details = f"[{error_type}] {error_details}"
 
                 # Log error to file immediately (on-the-fly)
+                category_slugs = self._get_category_slugs(data)
+                category_display = ", ".join(category_slugs) if category_slugs else None
                 self._log_error_to_file(
                     name=data.get("name", "Unnamed"),
-                    category=data.get("category_slug"),
+                    category=category_display,
                     osm_type=data.get("osm_type"),
                     osm_id=data.get("osm_id"),
                     error=error_details,
@@ -3341,7 +3450,7 @@ class Command(BaseCommand):
         # Collect all unique category identifiers
         category_slugs = set()
         for amenity in amenities:
-            category_slugs.add(amenity["category_slug"])
+            category_slugs.update(self._get_category_slugs(amenity))
 
         # Initialize cache
         category_cache = self._get_cache("category_cache")
@@ -3408,9 +3517,11 @@ class Command(BaseCommand):
 
         if dry_run:
             for data in amenities:
+                category_slugs = self._get_category_slugs(data)
+                category_display = ", ".join(category_slugs) if category_slugs else "-"
                 self.stdout.write(
                     f"[DRY RUN] Would upsert: {data['name'] or 'Unnamed'} "
-                    f"({data['category_slug']}) at ({data['lat']}, {data['lon']})"
+                    f"({category_display}) at ({data['lat']}, {data['lon']})"
                 )
             return (0, 0, len(amenities), 0, 0)
 
@@ -3500,12 +3611,17 @@ class Command(BaseCommand):
                 GeoPlace as GeoPlaceModel,
             )
 
+            schema = self._data_to_schema(data)
+            categories = GeoPlaceModel._resolve_categories_from_identifiers(
+                schema.place_type_identifiers
+            )
             existing = GeoPlaceModel._find_existing_place_by_schema(
-                schema=self._data_to_schema(data),
+                schema=schema,
                 location=location,
                 source_obj=osm_org,
                 from_source=self._data_to_source(data, run_start),
                 dedup_options=self._get_dedup_options(),
+                categories=categories,
             )
 
             if existing is None:
@@ -3567,6 +3683,7 @@ class Command(BaseCommand):
         """
         from server.apps.geometries.models import (
             AmenityDetail,
+            GeoPlaceCategory,
             GeoPlaceSourceAssociation,
         )
 
@@ -3580,11 +3697,13 @@ class Command(BaseCommand):
                 geoplaces_to_create = []
                 amenity_details_to_create = []
                 source_ids = []
+                categories_to_create: list[list[Category]] = []
 
                 for data in new_places:
                     # Prepare GeoPlace
-                    place = self._prepare_geoplace(data)
+                    place, categories = self._prepare_geoplace(data)
                     geoplaces_to_create.append(place)
+                    categories_to_create.append(categories)
 
                     # Prepare AmenityDetail (without geo_place reference yet)
                     detail = AmenityDetail(
@@ -3598,6 +3717,18 @@ class Command(BaseCommand):
 
                 # Bulk create GeoPlaces
                 created_geoplaces = GeoPlace.objects.bulk_create(geoplaces_to_create)
+
+                # Bulk create GeoPlaceCategory associations
+                associations = []
+                for place, categories in zip(created_geoplaces, categories_to_create):
+                    for category in categories:
+                        associations.append(
+                            GeoPlaceCategory(geo_place=place, category=category)
+                        )
+                if associations:
+                    GeoPlaceCategory.objects.bulk_create(
+                        associations, ignore_conflicts=True
+                    )
 
                 # Now create details with proper references
                 for place, detail in zip(created_geoplaces, amenity_details_to_create):
@@ -3667,18 +3798,20 @@ class Command(BaseCommand):
 
         return (created_count, updated_count, skipped_count, 0)
 
-    def _prepare_geoplace(self, data: dict) -> GeoPlace:
+    def _prepare_geoplace(self, data: dict) -> tuple[GeoPlace, list[Category]]:
         """Prepare GeoPlace instance from amenity data."""
         from server.apps.geometries.models import OperatingStatus
 
-        # Get category
-        category = self._get_or_create_category(data["category_slug"])
+        # Get categories
+        categories = [
+            self._get_or_create_category(slug)
+            for slug in self._get_category_slugs(data)
+        ]
 
         # Build place data
         place = GeoPlace(
             name=data.get("name", ""),
             location=Point(data["lon"], data["lat"], srid=4326),
-            place_type=category,
             country_code=self._guess_country_code(Point(data["lon"], data["lat"])),
             detail_type=OperatingStatus.OPEN.value,  # All amenities are open for now
             is_active=True,
@@ -3688,7 +3821,7 @@ class Command(BaseCommand):
         # Generate slug (skip DB check for speed)
         place.slug = GeoPlace.generate_unique_slug(place.name, skip_check=True)
 
-        return place
+        return place, categories
 
     def _get_dedup_options(self):
         """Get deduplication options."""
@@ -3709,7 +3842,7 @@ class Command(BaseCommand):
             name=TranslationSchema(de=data.get("name", "")),
             location=LocationSchema(lon=data["lon"], lat=data["lat"]),
             country_code=self._guess_country_code(Point(data["lon"], data["lat"])),
-            place_type_identifier=data["category_slug"],
+            place_type_identifiers=self._get_category_slugs(data),
             operating_status="open",
         )
 

@@ -33,7 +33,7 @@ from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Cast, Coalesce, Greatest, Lower, RowNumber
 from django.db.models.functions import JSONObject
 from django.http import HttpRequest, HttpResponse
-from django.views.decorators.cache import cache_control
+from django.views.decorators.cache import cache_control, cache_page
 
 from server.apps.translations import LanguageParam, activate, with_language_param
 
@@ -66,6 +66,7 @@ class IncludeModeEnum(str, Enum):
     exclude_unset=True,
     operation_id="search_geoplaces",
 )
+@decorate_view(cache_page(60))
 @decorate_view(cache_control(max_age=60))
 @with_language_param("lang")
 def search_geoplaces(
@@ -81,7 +82,7 @@ def search_geoplaces(
     offset: int = Query(0, description="Number of results to skip for pagination"),
     types: list[str] | None = Query(
         None,
-        description="Filter by place type slugs (e.g., 'peak', 'pass', 'lake'). Use 'parent.child' format for child categories.",
+        description="Filter by category slugs (e.g., 'peak', 'pass', 'lake'). Use 'parent.child' format for child categories.",
     ),
     categories: list[str] | None = Query(
         None,
@@ -103,9 +104,9 @@ def search_geoplaces(
         False,
         description="Remove near-identical places that share a name and a very close location before pagination.",
     ),
-    include_place_type: IncludeModeEnum = Query(
+    include_categories: IncludeModeEnum = Query(
         IncludeModeEnum.all,
-        description="Include place type information: 'no' excludes field, 'slug' returns type slug only, 'all' returns full type details with name and description",
+        description="Include categories information: 'no' excludes field, 'slug' returns category slugs only, 'all' returns full category details with name and description",
     ),
     include_sources: IncludeModeEnum = Query(
         IncludeModeEnum.no,
@@ -145,7 +146,6 @@ def search_geoplaces(
         "elevation",
         "importance",
         "country_code",
-        "place_type",
     )
 
     # Filter by importance
@@ -158,9 +158,9 @@ def search_geoplaces(
 
     # Filter by parent categories
     if categories:
-        queryset = queryset.filter(place_type__parent__slug__in=categories)
+        queryset = queryset.filter(categories__parent__slug__in=categories)
 
-    # Filter by place types
+    # Filter by categories
     if types:
         type_conditions = Q()
         for type_slug in types:
@@ -168,23 +168,26 @@ def search_geoplaces(
             if "." in type_slug:
                 parent_slug, child_slug = type_slug.split(".", 1)
                 type_conditions |= Q(
-                    place_type__parent__slug=parent_slug, place_type__slug=child_slug
+                    categories__parent__slug=parent_slug, categories__slug=child_slug
                 )
             else:
                 # Could be either parent or child category
-                type_conditions |= Q(place_type__slug=type_slug) | Q(
-                    place_type__parent__slug=type_slug
+                type_conditions |= Q(categories__slug=type_slug) | Q(
+                    categories__parent__slug=type_slug
                 )
         queryset = queryset.filter(type_conditions)
 
-    # Only select_related if we need the place_type data
-    if include_place_type != IncludeModeEnum.no:
-        queryset = queryset.select_related(
-            "place_type",
-            "place_type__parent",
-            "place_type__symbol_detailed",
-            "place_type__symbol_simple",
-            "place_type__symbol_mono",
+    if categories or types:
+        queryset = queryset.distinct()
+
+    # Only prefetch if we need the category data
+    if include_categories != IncludeModeEnum.no:
+        queryset = queryset.prefetch_related(
+            "categories",
+            "categories__parent",
+            "categories__symbol_detailed",
+            "categories__symbol_simple",
+            "categories__symbol_mono",
         )
 
     # Add source annotations based on include_sources parameter
@@ -309,7 +312,6 @@ def search_geoplaces(
             partition_by=[
                 snapped_location,
                 normalized_name,
-                F("place_type"),
                 F("country_code"),
             ],
             order_by=[
@@ -354,28 +356,27 @@ def search_geoplaces(
             "score": place.rank_score,
         }
 
-        # Include place_type based on parameter
-        if include_place_type == IncludeModeEnum.slug:
-            result["place_type"] = place.place_type.slug if place.place_type else None
-        elif include_place_type == IncludeModeEnum.all:
-            if place.place_type:
-                # Build category schema manually
-                category_data = {
-                    "slug": place.place_type.slug,
-                    "name": place.place_type.name_i18n,
-                    "description": place.place_type.description_i18n,
-                }
-                # Add symbol if requested (using new Symbol FK fields)
-                from server.apps.symbols.utils import resolve_symbol_urls
+        # Include categories based on parameter
+        if include_categories == IncludeModeEnum.slug:
+            result["categories"] = [
+                category.slug for category in place.categories.all()
+            ]
+        elif include_categories == IncludeModeEnum.all:
+            categories_data = []
+            from server.apps.symbols.utils import resolve_symbol_urls
 
-                symbol_data = resolve_symbol_urls(
-                    place.place_type, {"request": request}
-                )
+            for category in place.categories.all():
+                category_data = {
+                    "slug": category.slug,
+                    "name": category.name_i18n,
+                    "description": category.description_i18n,
+                }
+                symbol_data = resolve_symbol_urls(category, {"request": request})
                 if symbol_data:
                     category_data["symbol"] = symbol_data
-                result["place_type"] = category_data
-            else:
-                result["place_type"] = None
+                categories_data.append(category_data)
+            if categories_data:
+                result["categories"] = categories_data
 
         # Include sources based on parameter
         if include_sources == IncludeModeEnum.slug:
@@ -424,6 +425,7 @@ def search_geoplaces(
     exclude_unset=True,
     operation_id="nearby_geoplaces",
 )
+@decorate_view(cache_page(60))
 @decorate_view(cache_control(max_age=60))
 @with_language_param("lang")
 def nearby_geoplaces(
@@ -439,15 +441,15 @@ def nearby_geoplaces(
     offset: int = Query(0, description="Number of results to skip for pagination"),
     types: list[str] | None = Query(
         None,
-        description="Filter by place type slugs (e.g., 'peak', 'pass'). Use 'parent.child' format for child categories.",
+        description="Filter by category slugs (e.g., 'peak', 'pass'). Use 'parent.child' format for child categories.",
     ),
     categories: list[str] | None = Query(
         None, description="Filter by parent category slugs"
     ),
     min_importance: int = Query(0, description="Minimum importance score (0-100)"),
-    include_place_type: IncludeModeEnum = Query(
+    include_categories: IncludeModeEnum = Query(
         IncludeModeEnum.all,
-        description="Include place type information: 'no' excludes field, 'slug' returns type slug only, 'all' returns full type details with name and description",
+        description="Include categories information: 'no' excludes field, 'slug' returns category slugs only, 'all' returns full category details with name and description",
     ),
     include_sources: IncludeModeEnum = Query(
         IncludeModeEnum.no,
@@ -461,23 +463,18 @@ def nearby_geoplaces(
 
     # Start with active, public places within radius
     # Use only() to reduce data transfer - only fetch fields we need
-    queryset = (
-        GeoPlace.objects.filter(
-            is_active=True,
-            is_public=True,
-            location__distance_lte=(point, D(m=radius)),
-        )
-        .only(
-            "id",
-            "name",
-            "i18n",
-            "location",
-            "elevation",
-            "importance",
-            "country_code",
-            "place_type",
-        )
-        .select_related("place_type")
+    queryset = GeoPlace.objects.filter(
+        is_active=True,
+        is_public=True,
+        location__distance_lte=(point, D(m=radius)),
+    ).only(
+        "id",
+        "name",
+        "i18n",
+        "location",
+        "elevation",
+        "importance",
+        "country_code",
     )
 
     # Filter by importance
@@ -486,31 +483,34 @@ def nearby_geoplaces(
 
     # Filter by parent categories
     if categories:
-        queryset = queryset.filter(place_type__parent__slug__in=categories)
+        queryset = queryset.filter(categories__parent__slug__in=categories)
 
-    # Filter by place types
+    # Filter by categories
     if types:
         type_conditions = Q()
         for type_slug in types:
             if "." in type_slug:
                 parent_slug, child_slug = type_slug.split(".", 1)
                 type_conditions |= Q(
-                    place_type__parent__slug=parent_slug, place_type__slug=child_slug
+                    categories__parent__slug=parent_slug, categories__slug=child_slug
                 )
             else:
-                type_conditions |= Q(place_type__slug=type_slug) | Q(
-                    place_type__parent__slug=type_slug
+                type_conditions |= Q(categories__slug=type_slug) | Q(
+                    categories__parent__slug=type_slug
                 )
         queryset = queryset.filter(type_conditions)
 
-    # Only select_related if we need the place_type data
-    if include_place_type != IncludeModeEnum.no:
-        queryset = queryset.select_related(
-            "place_type",
-            "place_type__parent",
-            "place_type__symbol_detailed",
-            "place_type__symbol_simple",
-            "place_type__symbol_mono",
+    if categories or types:
+        queryset = queryset.distinct()
+
+    # Only prefetch if we need the category data
+    if include_categories != IncludeModeEnum.no:
+        queryset = queryset.prefetch_related(
+            "categories",
+            "categories__parent",
+            "categories__symbol_detailed",
+            "categories__symbol_simple",
+            "categories__symbol_mono",
         )
 
     # Add source annotations based on include_sources parameter
@@ -563,28 +563,27 @@ def nearby_geoplaces(
             "distance": round(distance_m, 2) if distance_m else None,
         }
 
-        # Include place_type based on parameter
-        if include_place_type == IncludeModeEnum.slug:
-            result["place_type"] = place.place_type.slug if place.place_type else None
-        elif include_place_type == IncludeModeEnum.all:
-            if place.place_type:
-                # Build category schema manually
-                category_data = {
-                    "slug": place.place_type.slug,
-                    "name": place.place_type.name_i18n,
-                    "description": place.place_type.description_i18n,
-                }
-                # Add symbol if requested (using new Symbol FK fields)
-                from server.apps.symbols.utils import resolve_symbol_urls
+        # Include categories based on parameter
+        if include_categories == IncludeModeEnum.slug:
+            result["categories"] = [
+                category.slug for category in place.categories.all()
+            ]
+        elif include_categories == IncludeModeEnum.all:
+            categories_data = []
+            from server.apps.symbols.utils import resolve_symbol_urls
 
-                symbol_data = resolve_symbol_urls(
-                    place.place_type, {"request": request}
-                )
+            for category in place.categories.all():
+                category_data = {
+                    "slug": category.slug,
+                    "name": category.name_i18n,
+                    "description": category.description_i18n,
+                }
+                symbol_data = resolve_symbol_urls(category, {"request": request})
                 if symbol_data:
                     category_data["symbol"] = symbol_data
-                result["place_type"] = category_data
-            else:
-                result["place_type"] = None
+                categories_data.append(category_data)
+            if categories_data:
+                result["categories"] = categories_data
 
         # Include sources based on parameter
         if include_sources == IncludeModeEnum.slug:
@@ -633,6 +632,7 @@ def nearby_geoplaces(
     exclude_unset=True,
     operation_id="get_amenity",
 )
+@decorate_view(cache_page(60))
 @decorate_view(cache_control(max_age=60))
 @with_language_param("lang")
 def get_amenity(
@@ -661,12 +661,14 @@ def get_amenity(
                 detail_type="amenity",
             )
             .select_related(
-                "place_type",
-                "place_type__parent",
-                "place_type__symbol_detailed",
-                "place_type__symbol_simple",
-                "place_type__symbol_mono",
                 "amenity_detail",
+            )
+            .prefetch_related(
+                "categories",
+                "categories__parent",
+                "categories__symbol_detailed",
+                "categories__symbol_simple",
+                "categories__symbol_mono",
             )
             .only(
                 "id",
@@ -678,7 +680,6 @@ def get_amenity(
                 "elevation",
                 "importance",
                 "country_code",
-                "place_type",
                 "detail_type",
                 "review_status",
             )
@@ -724,19 +725,22 @@ def get_amenity(
         },
     }
 
-    # Add place_type
-    if place.place_type:
-        category_data = {
-            "slug": place.place_type.slug,
-            "name": place.place_type.name_i18n,
-            "description": place.place_type.description_i18n,
-        }
-        from server.apps.symbols.utils import resolve_symbol_urls
+    # Add categories
+    categories_data = []
+    from server.apps.symbols.utils import resolve_symbol_urls
 
-        symbol_data = resolve_symbol_urls(place.place_type, {"request": request})
+    for category in place.categories.all():
+        category_data = {
+            "slug": category.slug,
+            "name": category.name_i18n,
+            "description": category.description_i18n,
+        }
+        symbol_data = resolve_symbol_urls(category, {"request": request})
         if symbol_data:
             category_data["symbol"] = symbol_data
-        result["place_type"] = category_data
+        categories_data.append(category_data)
+    if categories_data:
+        result["categories"] = categories_data
 
     # Add amenity detail
     if place.amenity_detail:

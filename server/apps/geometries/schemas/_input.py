@@ -106,7 +106,7 @@ class GeoPlaceBaseInput(BaseModel):
     country_code: str
 
     # Classification
-    place_type_identifier: str  # Category identifier (e.g., "shop.bakery", "peak")
+    place_type_identifiers: list[str]  # Category identifiers (e.g., ["shop.bakery"])
     detail_type: DetailType = DetailType.NONE
 
     # Optional fields
