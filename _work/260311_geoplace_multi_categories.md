@@ -286,7 +286,7 @@ class GeoPlaceCategory(TimeStampedModel):
 - [x] Create `GeoPlaceCategory` through model with proper indexes
 - [x] Add M2M field to `GeoPlace` (keep `place_type` for migration)
 - [x] Create data migration: migrate existing `place_type` to `GeoPlaceCategory`
-- [ ] Add verification step to ensure all places have categories
+- [x] Add verification step to ensure all places have categories
 - [x] Drop `place_type` field
 - [ ] Run tests on development data
 
@@ -295,20 +295,20 @@ class GeoPlaceCategory(TimeStampedModel):
 - [x] Update admin list display with structured category format
 - [x] Replace `place_type` filters with `categories` filters
 - [x] Add inline editing for `GeoPlaceCategory`
-- [ ] Update admin search to work with categories
-- [ ] Test admin performance with prefetch_related
+- [x] Update admin search to work with categories
+- [x] Test admin performance with prefetch_related
 
 ### Phase 3: Import Logic (Week 2)
 
-- [ ] Update OSM import to aggregate categories per element
-- [ ] Implement "one per parent" enforcement during import
-- [ ] Update deduplication logic:
+- [x] Update OSM import to aggregate categories per element
+- [x] Implement "one per parent" enforcement during import
+- [x] Update deduplication logic:
   - Source_id matching first
   - Category parent matching (check associations)
   - Remove bbox proximity search
 - [x] Update `GeoPlace.update_or_create()` to handle category lists
 - [x] Add validation for empty category lists
-- [ ] Test import with parallel processing
+- [x] Test import with parallel processing
 
 ### Phase 4: API Changes (Week 1)
 
@@ -317,24 +317,24 @@ class GeoPlaceCategory(TimeStampedModel):
 - [x] Update helpers: `resolve_categories_from_identifiers()`
 - [x] Update filters: `place_type__*` → `categories__*`
 - [x] Add `.distinct()` to M2M filter queries
-- [ ] Update API documentation
+- [x] Update API documentation
 
 ### Phase 5: Performance Optimization (Week 1)
 
 - [x] Add indexes before migration
-- [ ] Update all list views to use `prefetch_related('categories__parent')`
-- [ ] Update detail views with full prefetch
-- [ ] Implement caching for GeoPlace queries
-- [ ] Benchmark query performance before/after
-- [ ] Add monitoring for slow queries
+- [x] Update all list views to use `prefetch_related('categories__parent')`
+- [x] Update detail views with full prefetch
+- [x] Implement caching for GeoPlace queries
+- [x] Benchmark query performance before/after
+- [x] Add monitoring for slow queries
 
 ### Phase 6: Testing & Validation (Week 1)
 
-- [ ] Unit tests for through model
-- [ ] Integration tests for import with multiple categories
-- [ ] Performance tests for M2M queries
-- [ ] Load test with 10k+ places
-- [ ] Verify N+1 query prevention
+- [x] Unit tests for through model
+- [x] Integration tests for import with multiple categories
+- [x] Performance tests for M2M queries
+- [x] Load test with 10k+ places
+- [x] Verify N+1 query prevention
 
 **Total Estimated Time**: 6-7 weeks
 

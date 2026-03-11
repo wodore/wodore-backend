@@ -960,35 +960,6 @@ class GeoPlace(TimeStampedModel):
             if first_match:
                 return first_match
 
-        # 3. Check very close proximity (any place) using BBox
-        if dedup_options.distance_any > 0:
-            delta_lat, delta_lon = meters_to_degrees(
-                location.y, dedup_options.distance_any
-            )
-
-            bbox = Polygon.from_bbox(
-                (
-                    location.x - delta_lon,
-                    location.y - delta_lat,
-                    location.x + delta_lon,
-                    location.y + delta_lat,
-                )
-            )
-
-            # CRITICAL FIX: Use first() instead of list() to avoid memory leak
-            very_nearby = (
-                cls.objects.filter(
-                    is_active=True,
-                    location__contained=bbox,  # BBox filter: 10x faster
-                )
-                .annotate(distance=Distance("location", location))
-                .order_by("distance")
-                .first()
-            )
-
-            if very_nearby:
-                return very_nearby
-
         return None
 
     @staticmethod

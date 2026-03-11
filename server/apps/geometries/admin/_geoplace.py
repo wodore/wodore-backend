@@ -212,7 +212,13 @@ class GeoPlaceAdmin(ModelAdmin):
         "country_code",
     )
 
-    search_fields = ("name", "name_i18n", "slug")
+    search_fields = (
+        "name",
+        "name_i18n",
+        "slug",
+        "categories__name_i18n",
+        "categories__slug",
+    )
 
     autocomplete_fields = ("parent",)
 
@@ -332,6 +338,8 @@ class AmenityDetailAdmin(ModelAdmin):
         "geo_place__name",
         "geo_place__name_i18n",
         "geo_place__slug",
+        "geo_place__categories__name_i18n",
+        "geo_place__categories__slug",
     )
 
     autocomplete_fields = ("geo_place", "brand")

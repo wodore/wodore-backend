@@ -32,7 +32,7 @@ from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Cast, Coalesce, Greatest, Lower, RowNumber
 from django.db.models.functions import JSONObject
 from django.http import HttpRequest, HttpResponse
-from django.views.decorators.cache import cache_control
+from django.views.decorators.cache import cache_control, cache_page
 
 from server.apps.translations import LanguageParam, activate, with_language_param
 
@@ -64,6 +64,7 @@ class IncludeModeEnum(str, Enum):
     exclude_unset=True,
     operation_id="search_geoplaces",
 )
+@decorate_view(cache_page(60))
 @decorate_view(cache_control(max_age=60))
 @with_language_param("lang")
 def search_geoplaces(
@@ -79,7 +80,7 @@ def search_geoplaces(
     offset: int = Query(0, description="Number of results to skip for pagination"),
     types: list[str] | None = Query(
         None,
-        description="Filter by place type slugs (e.g., 'peak', 'pass', 'lake'). Use 'parent.child' format for child categories.",
+        description="Filter by category slugs (e.g., 'peak', 'pass', 'lake'). Use 'parent.child' format for child categories.",
     ),
     categories: list[str] | None = Query(
         None,
@@ -157,7 +158,7 @@ def search_geoplaces(
     if categories:
         queryset = queryset.filter(categories__parent__slug__in=categories)
 
-    # Filter by place types
+    # Filter by categories
     if types:
         type_conditions = Q()
         for type_slug in types:
@@ -422,6 +423,7 @@ def search_geoplaces(
     exclude_unset=True,
     operation_id="nearby_geoplaces",
 )
+@decorate_view(cache_page(60))
 @decorate_view(cache_control(max_age=60))
 @with_language_param("lang")
 def nearby_geoplaces(
@@ -437,7 +439,7 @@ def nearby_geoplaces(
     offset: int = Query(0, description="Number of results to skip for pagination"),
     types: list[str] | None = Query(
         None,
-        description="Filter by place type slugs (e.g., 'peak', 'pass'). Use 'parent.child' format for child categories.",
+        description="Filter by category slugs (e.g., 'peak', 'pass'). Use 'parent.child' format for child categories.",
     ),
     categories: list[str] | None = Query(
         None, description="Filter by parent category slugs"
@@ -481,7 +483,7 @@ def nearby_geoplaces(
     if categories:
         queryset = queryset.filter(categories__parent__slug__in=categories)
 
-    # Filter by place types
+    # Filter by categories
     if types:
         type_conditions = Q()
         for type_slug in types:
@@ -628,6 +630,7 @@ def nearby_geoplaces(
     exclude_unset=True,
     operation_id="get_amenity",
 )
+@decorate_view(cache_page(60))
 @decorate_view(cache_control(max_age=60))
 @with_language_param("lang")
 def get_amenity(

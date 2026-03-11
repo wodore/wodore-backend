@@ -17,7 +17,7 @@ from django.contrib.gis.geos import Point, Polygon
 from django.contrib.gis.db.models.functions import Distance
 from django.utils import timezone
 
-from server.apps.geometries.models import GeoPlace
+from server.apps.geometries.models import GeoPlace, GeoPlaceCategory
 from server.apps.categories.models import Category
 
 
@@ -48,6 +48,9 @@ class Command(BaseCommand):
                 "bulk",
                 "hybrid",
                 "batch-sizes",
+                "m2m",
+                "load",
+                "parallel",
                 "all",
             ],
             help="Which test to run",
@@ -105,6 +108,15 @@ class Command(BaseCommand):
                 for bs in options.get("batch_sizes", "50,100,200,500,1000").split(",")
             ]
             results.append(self._test_batch_sizes(iterations, batch_sizes))
+
+        if test_type in ["m2m", "all"]:
+            results.append(self._test_m2m_category_queries(iterations))
+
+        if test_type in ["load", "all"]:
+            results.append(self._test_load_10k_places(iterations))
+
+        if test_type in ["parallel", "all"]:
+            results.append(self._test_parallel_import(iterations))
 
         # Print summary
         self.stdout.write(self.style.SUCCESS("\n" + "=" * 60))
@@ -376,6 +388,15 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"✓ Deleted {deleted} test places"))
         else:
             self.stdout.write("No test data to clean up")
+
+        # Clean up category performance tests
+        GeoPlace.objects.filter(name__startswith="M2M Test").delete()
+        GeoPlace.objects.filter(name__startswith="Load Test").delete()
+
+        # Clean up categories created for tests
+        Category.objects.filter(slug__in=["test_parent", "test_child"]).delete()
+        Category.objects.filter(slug__in=["load_parent", "load_child"]).delete()
+        Category.objects.filter(slug__in=["parallel_parent", "parallel_child"]).delete()
 
     def _test_transaction_performance(self, iterations: int) -> TestResult:
         """Test transaction vs non-transaction performance."""
@@ -1126,4 +1147,170 @@ class Command(BaseCommand):
             f"  • Smaller batches (50-100): Lower memory, more transactions\n"
             f"  • Medium batches (200-500): Best balance of speed and memory\n"
             f"  • Larger batches (1000+): Fastest, but higher memory usage",
+        )
+
+    def _test_m2m_category_queries(self, iterations: int) -> TestResult:
+        """Benchmark M2M category query performance."""
+        self.stdout.write("Testing M2M category query performance...")
+
+        parent, _ = Category.objects.get_or_create(
+            slug="test_parent", defaults={"name": "Test Parent"}
+        )
+        child, _ = Category.objects.get_or_create(
+            slug="test_child", parent=parent, defaults={"name": "Test Child"}
+        )
+
+        target_count = min(iterations, 1000)
+        existing_count = GeoPlace.objects.filter(name__startswith="M2M Test").count()
+        to_create = max(0, target_count - existing_count)
+
+        if to_create:
+            places = []
+            for i in range(to_create):
+                places.append(
+                    GeoPlace(
+                        name=f"M2M Test {existing_count + i}",
+                        location=Point(8.0 + (i * 0.00001), 47.0, srid=4326),
+                        country_code="CH",
+                    )
+                )
+            created_places = GeoPlace.objects.bulk_create(places)
+            GeoPlaceCategory.objects.bulk_create(
+                [
+                    GeoPlaceCategory(geo_place=place, category=child)
+                    for place in created_places
+                ],
+                ignore_conflicts=True,
+            )
+
+        query_iterations = max(1, min(iterations, 200))
+        start = time.time()
+        for _ in range(query_iterations):
+            list(
+                GeoPlace.objects.filter(categories=child)
+                .prefetch_related("categories__parent")
+                .only("id", "name")
+            )
+        total_time = time.time() - start
+        avg_time = total_time / query_iterations
+
+        return TestResult(
+            test_name="M2M Category Queries",
+            iterations=query_iterations,
+            total_time=total_time,
+            avg_time=avg_time,
+            details=(
+                f"Places: {max(existing_count, target_count)}\n"
+                f"Query iterations: {query_iterations}"
+            ),
+        )
+
+    def _test_load_10k_places(self, iterations: int) -> TestResult:
+        """Load test: create 10k+ GeoPlaces with category associations."""
+        self.stdout.write("Testing 10k+ load creation...")
+
+        target_count = max(iterations, 10000)
+        parent, _ = Category.objects.get_or_create(
+            slug="load_parent", defaults={"name": "Load Parent"}
+        )
+        child, _ = Category.objects.get_or_create(
+            slug="load_child", parent=parent, defaults={"name": "Load Child"}
+        )
+
+        existing_count = GeoPlace.objects.filter(name__startswith="Load Test").count()
+        to_create = max(0, target_count - existing_count)
+
+        start = time.time()
+        if to_create:
+            places = []
+            for i in range(to_create):
+                places.append(
+                    GeoPlace(
+                        name=f"Load Test {existing_count + i}",
+                        location=Point(8.0 + (i * 0.00001), 47.0, srid=4326),
+                        country_code="CH",
+                    )
+                )
+            created_places = GeoPlace.objects.bulk_create(places)
+            GeoPlaceCategory.objects.bulk_create(
+                [
+                    GeoPlaceCategory(geo_place=place, category=child)
+                    for place in created_places
+                ],
+                ignore_conflicts=True,
+            )
+        total_time = time.time() - start
+        avg_time = total_time / max(to_create, 1)
+
+        return TestResult(
+            test_name="Load Test (10k+ places)",
+            iterations=target_count,
+            total_time=total_time,
+            avg_time=avg_time,
+            details=(
+                f"Created: {to_create} (existing: {existing_count})\n"
+                f"Avg create time: {avg_time*1000:.2f}ms per place"
+            ),
+        )
+
+    def _test_parallel_import(self, iterations: int) -> TestResult:
+        """Smoke test parallel update_or_create calls."""
+        self.stdout.write("Testing parallel import smoke test...")
+
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        from server.apps.geometries.schemas import (
+            DedupOptions,
+            GeoPlaceAmenityInput,
+            SourceInput,
+        )
+        from server.apps.translations.schema import TranslationSchema
+        from hut_services import LocationSchema
+        from server.apps.organizations.models import Organization
+
+        Organization.objects.get_or_create(
+            slug="osm",
+            defaults={"name": "OpenStreetMap"},
+        )
+        parent, _ = Category.objects.get_or_create(
+            slug="parallel_parent", defaults={"name": "Parallel Parent"}
+        )
+        Category.objects.get_or_create(
+            slug="parallel_child", parent=parent, defaults={"name": "Parallel Child"}
+        )
+
+        test_iterations = min(iterations, 200)
+
+        def _worker(idx: int) -> None:
+            schema = GeoPlaceAmenityInput(
+                name=TranslationSchema(de=f"Parallel {idx}"),
+                location=LocationSchema(lon=8.0 + (idx * 0.0001), lat=47.0),
+                country_code="CH",
+                place_type_identifiers=["parallel_parent.parallel_child"],
+                operating_status="open",
+            )
+            source = SourceInput(
+                slug="osm",
+                source_id=f"parallel/{idx}",
+            )
+            GeoPlace.update_or_create(
+                schema=schema,
+                from_source=source,
+                dedup_options=DedupOptions(distance_same=0, distance_any=0),
+            )
+
+        start = time.time()
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(_worker, i) for i in range(test_iterations)]
+            for future in as_completed(futures):
+                future.result()
+        total_time = time.time() - start
+        avg_time = total_time / max(test_iterations, 1)
+
+        return TestResult(
+            test_name="Parallel Import Smoke Test",
+            iterations=test_iterations,
+            total_time=total_time,
+            avg_time=avg_time,
+            details="Workers: 4",
         )
