@@ -2,7 +2,6 @@
 
 from .osm_base import CategoryMappings, OSMMapping
 
-
 TRANSPORT = CategoryMappings(
     category="transport",
     detail_type="transport",  # Uses TransportDetail
@@ -13,18 +12,36 @@ TRANSPORT = CategoryMappings(
             category_slug="transport.bus_stop",
             mapcomplete_theme="transit",
             priority=0,
+            default_name={
+                "en": "Bus Stop",
+                "de": "Bushaltestelle",
+                "fr": "Arrêt de bus",
+                "it": "Fermata autobus",
+            },
         ),
         OSMMapping(
             osm_filters=["amenity=bus_station"],
             category_slug="transport.bus_station",
             mapcomplete_theme="transit",
             priority=0,
+            default_name={
+                "en": "Bus Station",
+                "de": "Busbahnhof",
+                "fr": "Gare routière",
+                "it": "Stazione autobus",
+            },
         ),
         OSMMapping(
             osm_filters=["railway=station"],
             category_slug="transport.train_station",
             mapcomplete_theme="transit",
             priority=0,
+            default_name={
+                "en": "Train Station",
+                "de": "Bahnhof",
+                "fr": "Gare",
+                "it": "Stazione ferroviaria",
+            },
         ),
         OSMMapping(
             osm_filters=["railway=halt"],
@@ -37,24 +54,48 @@ TRANSPORT = CategoryMappings(
             category_slug="transport.cable_car",
             mapcomplete_theme="transit",
             priority=0,
+            default_name={
+                "en": "Cable Car Station",
+                "de": "Seilbahnstation",
+                "fr": "Station de téléphérique",
+                "it": "Stazione funivia",
+            },
         ),
         OSMMapping(
             osm_filters=["aerialway=gondola"],
             category_slug="transport.gondola",
             mapcomplete_theme="transit",
             priority=0,
+            default_name={
+                "en": "Gondola",
+                "de": "Gondelbahn",
+                "fr": "Télécabine",
+                "it": "Funivia",
+            },
         ),
         OSMMapping(
             osm_filters=["aerialway=chair_lift"],
             category_slug="transport.chairlift",
             mapcomplete_theme="transit",
             priority=0,
+            default_name={
+                "en": "Chairlift",
+                "de": "Sessellift",
+                "fr": "Télésiège",
+                "it": "Seggiovia",
+            },
         ),
         OSMMapping(
             osm_filters=["railway=funicular"],
             category_slug="transport.funicular",
             mapcomplete_theme="transit",
             priority=0,
+            default_name={
+                "en": "Funicular",
+                "de": "Standseilbahn",
+                "fr": "Funiculaire",
+                "it": "Funicolare",
+            },
         ),
     ],
 )

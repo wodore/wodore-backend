@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import sys
+import threading
+from collections import OrderedDict
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from django.conf import settings
@@ -24,6 +28,42 @@ if TYPE_CHECKING:
         SourceInput,
     )
     from ._associations import GeoPlaceSourceAssociation
+
+
+class _LRUCacheBytes:
+    def __init__(self, max_bytes: int) -> None:
+        self._max_bytes = max_bytes
+        self._cache: OrderedDict[str, tuple[object, int]] = OrderedDict()
+        self._size_bytes = 0
+
+    def _estimate_size(self, key: str, value: object) -> int:
+        return sys.getsizeof(key) + sys.getsizeof(value)
+
+    def get(self, key: str) -> object | None:
+        item = self._cache.pop(key, None)
+        if item is None:
+            return None
+        value, size_bytes = item
+        self._cache[key] = (value, size_bytes)
+        return value
+
+    def set(self, key: str, value: object) -> None:
+        size_bytes = self._estimate_size(key, value)
+        if size_bytes > self._max_bytes:
+            return
+        existing = self._cache.pop(key, None)
+        if existing is not None:
+            self._size_bytes -= existing[1]
+        self._cache[key] = (value, size_bytes)
+        self._size_bytes += size_bytes
+        while self._size_bytes > self._max_bytes and self._cache:
+            _, evicted = self._cache.popitem(last=False)
+            self._size_bytes -= evicted[1]
+
+
+_BRAND_CATEGORY_CACHE = _LRUCacheBytes(max_bytes=50 * 1024 * 1024)
+_BRAND_CATEGORY_CACHE_LOCK = threading.Lock()
+_BRAND_CATEGORY_CACHE_MISS = object()
 
 
 class DetailType(models.TextChoices):
@@ -769,7 +809,7 @@ class GeoPlace(TimeStampedModel):
         # Resolve source organization
         source_obj = None
         if from_source is not None:
-            source_obj = Organization.objects.get(slug=from_source.slug)
+            source_obj = cls._get_organization_by_slug(from_source.slug)
 
         # Check for existing place (deduplication)
         existing_place = None
@@ -879,20 +919,18 @@ class GeoPlace(TimeStampedModel):
 
             # Filter by brand if enabled and provided
             if dedup_options.check_brand and schema.brand:
-                from server.apps.categories.models import Category
-
-                try:
-                    brand_cat = Category.objects.get(slug=schema.brand.slug)
+                brand_cat = cls._get_brand_category_by_slug(schema.brand.slug)
+                if brand_cat:
                     nearby = nearby.filter(amenity_detail__brand=brand_cat)
-                except Category.DoesNotExist:
-                    pass
             elif dedup_options.check_brand:
                 # No brand specified - only match places without brand
                 nearby = nearby.filter(amenity_detail__brand__isnull=True)
 
-            nearby_list = list(nearby.order_by("distance")[:2])
-            if len(nearby_list) == 1:
-                return nearby_list[0]
+            # CRITICAL FIX: Use first() instead of list() to avoid memory leak
+            # list() creates temporary list objects that aren't garbage collected
+            first_match = nearby.order_by("distance").first()
+            if first_match:
+                return first_match
 
         # 3. Check very close proximity (any place) using BBox
         if dedup_options.distance_any > 0:
@@ -909,18 +947,76 @@ class GeoPlace(TimeStampedModel):
                 )
             )
 
-            very_nearby = list(
+            # CRITICAL FIX: Use first() instead of list() to avoid memory leak
+            very_nearby = (
                 cls.objects.filter(
                     is_active=True,
                     location__contained=bbox,  # BBox filter: 10x faster
                 )
                 .annotate(distance=Distance("location", location))
-                .order_by("distance")[:2]
+                .order_by("distance")
+                .first()
             )
-            if len(very_nearby) == 1:
-                return very_nearby[0]
+
+            if very_nearby:
+                return very_nearby
 
         return None
+
+    @staticmethod
+    @lru_cache(maxsize=32)
+    def _get_organization_by_slug(slug: str) -> Organization:
+        return Organization.objects.get(slug=slug)
+
+    @classmethod
+    def _get_brand_category_by_slug(cls, slug: str) -> Category | None:
+        with _BRAND_CATEGORY_CACHE_LOCK:
+            cached = _BRAND_CATEGORY_CACHE.get(slug)
+        if cached is _BRAND_CATEGORY_CACHE_MISS:
+            return None
+        if cached is not None:
+            return cached  # type: ignore[return-value]
+
+        try:
+            category = Category.objects.get(slug=slug)
+        except Category.DoesNotExist:
+            with _BRAND_CATEGORY_CACHE_LOCK:
+                _BRAND_CATEGORY_CACHE.set(slug, _BRAND_CATEGORY_CACHE_MISS)
+            return None
+
+        with _BRAND_CATEGORY_CACHE_LOCK:
+            _BRAND_CATEGORY_CACHE.set(slug, category)
+        return category
+
+    @staticmethod
+    @lru_cache(maxsize=512)
+    def _resolve_category_from_identifier(identifier: str) -> Category:
+        """Resolve Category for a place_type_identifier with fallbacks for legacy trees."""
+        parts = identifier.split(".")
+        if parts and parts[0] == "root":
+            parts = parts[1:]
+
+        if not parts:
+            raise Category.DoesNotExist("Empty category identifier")
+
+        if len(parts) == 1:
+            slug = parts[0]
+            try:
+                return Category.objects.get(slug=slug, parent=None)
+            except Category.DoesNotExist:
+                return Category.objects.get(identifier=identifier)
+
+        parent_slug, child_slug = parts[0], parts[1]
+        try:
+            parent = Category.objects.get(slug=parent_slug, parent=None)
+            return Category.objects.get(slug=child_slug, parent=parent)
+        except Category.DoesNotExist:
+            category = Category.objects.filter(
+                slug=child_slug, parent__slug=parent_slug
+            ).first()
+            if category:
+                return category
+            return Category.objects.get(identifier=identifier)
 
     @classmethod
     def _create_from_schema(
@@ -939,8 +1035,7 @@ class GeoPlace(TimeStampedModel):
         from ._amenity_detail import AmenityDetail
         from ._associations import GeoPlaceSourceAssociation
 
-        # Get category
-        category = Category.objects.get(identifier=schema.place_type_identifier)
+        category = cls._resolve_category_from_identifier(schema.place_type_identifier)
 
         # Prepare name translations
         name_dict = schema.get_name_dict()
@@ -1033,8 +1128,11 @@ class GeoPlace(TimeStampedModel):
             }
             # Add brand if provided
             if schema.brand:
-                brand = Category.objects.get(slug=schema.brand.slug)
-                amenity_kwargs["brand"] = brand
+                try:
+                    brand = Category.objects.get(slug=schema.brand.slug)
+                    amenity_kwargs["brand"] = brand
+                except Category.DoesNotExist:
+                    pass
 
             AmenityDetail.objects.create(**amenity_kwargs)
 
@@ -1129,9 +1227,9 @@ class GeoPlace(TimeStampedModel):
         # Track if anything was updated
         updated = False
         update_fields = []
+        i18n_dirty = False
 
-        # Get category
-        category = Category.objects.get(identifier=schema.place_type_identifier)
+        category = cls._resolve_category_from_identifier(schema.place_type_identifier)
 
         # Update place_type
         if "place_type" not in protected and place.place_type != category:
@@ -1153,7 +1251,7 @@ class GeoPlace(TimeStampedModel):
                     current_value = getattr(place, field_name, None)
                     if current_value != name_value:
                         setattr(place, field_name, name_value)
-                        update_fields.append(field_name)
+                        i18n_dirty = True
                         updated = True
 
         # Update description translations
@@ -1170,7 +1268,7 @@ class GeoPlace(TimeStampedModel):
                     current_value = getattr(place, field_name, None)
                     if current_value != desc_value:
                         setattr(place, field_name, desc_value)
-                        update_fields.append(field_name)
+                        i18n_dirty = True
                         updated = True
 
         # Update other fields
@@ -1214,6 +1312,8 @@ class GeoPlace(TimeStampedModel):
 
         # Save place if updated (track_modifications=False for imports)
         if updated:
+            if i18n_dirty and "i18n" not in update_fields:
+                update_fields.append("i18n")
             place.save(update_fields=update_fields, track_modifications=False)
 
         # Update or create detail model (flattened structure)
@@ -1255,8 +1355,11 @@ class GeoPlace(TimeStampedModel):
                     detail_updated = True
 
             if "brand" not in protected and schema.brand:
-                brand = Category.objects.get(slug=schema.brand.slug)
-                if amenity_detail.brand != brand:
+                try:
+                    brand = Category.objects.get(slug=schema.brand.slug)
+                except Category.DoesNotExist:
+                    brand = None
+                if brand and amenity_detail.brand != brand:
                     amenity_detail.brand = brand
                     update_fields.append("brand")
                     detail_updated = True
@@ -1324,256 +1427,3 @@ class GeoPlace(TimeStampedModel):
         )
 
         return association
-
-    @classmethod
-    def create_amenity(
-        cls,
-        source: Organization | int | str,
-        source_id: str | None = None,
-        amenity_data: dict | None = None,
-        **kwargs,
-    ) -> "GeoPlace":
-        """
-        Create a new GeoPlace with AmenityDetail.
-
-        Args:
-            source: Organization instance, ID, or slug
-            source_id: External ID used by the source
-            amenity_data: Data for AmenityDetail model (operating_status, opening_hours, phones, etc.)
-            **kwargs: Fields for GeoPlace creation (name, location, websites, etc.)
-
-        Returns:
-            Created GeoPlace instance with AmenityDetail and source association
-
-        Example:
-            place = GeoPlace.create_amenity(
-                source="osm",
-                source_id="n123456",
-                name="Mountain Bakery",
-                location=Point(8.1234, 46.7890),
-                place_type=bakery_category,
-                country_code="CH",
-                websites=[{"url": "https://bakery.example.com", "label": "Official"}],
-                amenity_data={
-                    "operating_status": "open",
-                    "opening_hours": {"mon": [["07:00", "12:00"]]},
-                },
-            )
-        """
-        from ._amenity_detail import AmenityDetail
-        from ._associations import GeoPlaceSourceAssociation
-
-        # Set detail_type
-        kwargs["detail_type"] = DetailType.AMENITY
-
-        # Resolve source to Organization instance
-        if isinstance(source, str):
-            source_obj = Organization.objects.get(slug=source)
-        elif isinstance(source, int):
-            source_obj = Organization.objects.get(pk=source)
-        else:
-            source_obj = source
-
-        # Create the place
-        place = cls.objects.create(**kwargs)
-
-        # Create amenity detail
-        if amenity_data:
-            AmenityDetail.objects.create(
-                geo_place=place,
-                **amenity_data,
-            )
-
-        # Create source association
-        GeoPlaceSourceAssociation.objects.create(
-            geo_place=place,
-            organization=source_obj,
-            source_id=source_id or "",
-        )
-
-        return place
-
-    @classmethod
-    def create_transport(
-        cls,
-        source: Organization | int | str,
-        source_id: str | None = None,
-        **kwargs,
-    ) -> "GeoPlace":
-        """
-        Create a new GeoPlace with TransportDetail.
-
-        Note: TransportDetail model not yet implemented - this is a placeholder
-        for future use as per WEP008.
-
-        Args:
-            source: Organization instance, ID, or slug
-            source_id: External ID used by the source
-            **kwargs: Fields for GeoPlace creation (name, location, etc.)
-
-        Returns:
-            Created GeoPlace instance with source association
-
-        Example:
-            place = GeoPlace.create_transport(
-                source="osm",
-                source_id="n789012",
-                name="Zermatt Station",
-                location=Point(7.7343, 46.0234),
-                place_type=train_station_category,
-                country_code="CH",
-            )
-        """
-        from ._associations import GeoPlaceSourceAssociation
-
-        # Set detail_type
-        kwargs["detail_type"] = DetailType.TRANSPORT
-
-        # Resolve source to Organization instance
-        if isinstance(source, str):
-            source_obj = Organization.objects.get(slug=source)
-        elif isinstance(source, int):
-            source_obj = Organization.objects.get(pk=source)
-        else:
-            source_obj = source
-
-        # Create the place
-        place = cls.objects.create(**kwargs)
-
-        # TransportDetail will be created here in the future
-
-        # Create source association
-        GeoPlaceSourceAssociation.objects.create(
-            geo_place=place,
-            organization=source_obj,
-            source_id=source_id or "",
-        )
-
-        return place
-
-    @classmethod
-    def create_admin(
-        cls,
-        source: Organization | int | str,
-        source_id: str | None = None,
-        admin_data: dict | None = None,
-        **kwargs,
-    ) -> "GeoPlace":
-        """
-        Create a new GeoPlace with AdminDetail.
-
-        Args:
-            source: Organization instance, ID, or slug
-            source_id: External ID used by the source
-            admin_data: Data for AdminDetail model (admin_level, population, etc.)
-            **kwargs: Fields for GeoPlace creation (name, location, etc.)
-
-        Returns:
-            Created GeoPlace instance with AdminDetail and source association
-
-        Example:
-            place = GeoPlace.create_admin(
-                source="geonames",
-                source_id="2658434",
-                name="Zermatt",
-                location=Point(7.7343, 46.0234),
-                place_type=village_category,
-                country_code="CH",
-                admin_data={
-                    "admin_level": 10,
-                    "population": 5700,
-                    "postal_code": "3920",
-                },
-            )
-        """
-        from ._admin_detail import AdminDetail
-        from ._associations import GeoPlaceSourceAssociation
-
-        # Set detail_type
-        kwargs["detail_type"] = DetailType.ADMIN
-
-        # Resolve source to Organization instance
-        if isinstance(source, str):
-            source_obj = Organization.objects.get(slug=source)
-        elif isinstance(source, int):
-            source_obj = Organization.objects.get(pk=source)
-        else:
-            source_obj = source
-
-        # Create the place
-        place = cls.objects.create(**kwargs)
-
-        # Create admin detail
-        if admin_data:
-            AdminDetail.objects.create(
-                geo_place=place,
-                **admin_data,
-            )
-
-        # Create source association
-        GeoPlaceSourceAssociation.objects.create(
-            geo_place=place,
-            organization=source_obj,
-            source_id=source_id or "",
-        )
-
-        return place
-
-    @classmethod
-    def create_natural(
-        cls,
-        source: Organization | int | str,
-        source_id: str | None = None,
-        **kwargs,
-    ) -> "GeoPlace":
-        """
-        Create a new GeoPlace for natural features.
-
-        Natural features (peaks, passes, lakes, glaciers) have detail_type=natural
-        but no detail model - the category slug and existing GeoPlace fields
-        (location, elevation, name, parent) are sufficient.
-
-        Args:
-            source: Organization instance, ID, or slug
-            source_id: External ID used by the source
-            **kwargs: Fields for GeoPlace creation (name, location, etc.)
-
-        Returns:
-            Created GeoPlace instance with source association
-
-        Example:
-            place = GeoPlace.create_natural(
-                source="geonames",
-                source_id="2658434",
-                name="Matterhorn",
-                location=Point(7.6588, 45.9763),
-                place_type=peak_category,
-                elevation=4478,
-                country_code="CH",
-                importance=95,
-            )
-        """
-        from ._associations import GeoPlaceSourceAssociation
-
-        # Set detail_type
-        kwargs["detail_type"] = DetailType.NATURAL
-
-        # Resolve source to Organization instance
-        if isinstance(source, str):
-            source_obj = Organization.objects.get(slug=source)
-        elif isinstance(source, int):
-            source_obj = Organization.objects.get(pk=source)
-        else:
-            source_obj = source
-
-        # Create the place
-        place = cls.objects.create(**kwargs)
-
-        # Create source association
-        GeoPlaceSourceAssociation.objects.create(
-            geo_place=place,
-            organization=source_obj,
-            source_id=source_id or "",
-        )
-
-        return place

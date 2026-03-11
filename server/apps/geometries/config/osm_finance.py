@@ -13,12 +13,19 @@ FINANCE = CategoryMappings(
             category_slug="finance.bank",
             mapcomplete_theme="banks",
             priority=0,
+            default_name={"en": "Bank", "de": "Bank", "fr": "Banque", "it": "Banca"},
         ),
         OSMMapping(
             osm_filters=["amenity=atm"],
             category_slug="finance.atm",
             mapcomplete_theme="banks",
             priority=0,
+            default_name={
+                "en": "ATM",
+                "de": "Geldautomat",
+                "fr": "DAB",
+                "it": "Bancomat",
+            },
         ),
     ],
 )
