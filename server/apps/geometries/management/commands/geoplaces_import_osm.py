@@ -945,7 +945,8 @@ class Command(BaseCommand):
         if data.get("brand"):
             # Skip if brand is a list (contains semicolons) - these are product brands, not chain brands
             if ";" not in data["brand"]:
-                brand_input = BrandInput(slug=data["brand"])
+                brand_category = self._get_or_create_brand_category(data["brand"])
+                brand_input = BrandInput(slug=brand_category.slug, name=data["brand"])
 
         # Build flattened GeoPlace schema
         schema = GeoPlaceAmenityInput(
@@ -1208,7 +1209,7 @@ class Command(BaseCommand):
 
             # Pre-create all brand categories and organizations
             for brand_name in brands:
-                brand_slug = brand_name.replace(" ", "_")
+                brand_slug = self._normalize_brand_slug(brand_name)
                 try:
                     brand_category, _ = Category.objects.get_or_create(
                         slug=brand_slug,
@@ -1242,7 +1243,7 @@ class Command(BaseCommand):
             },
         )
 
-        brand_slug = brand_name_lower.replace(" ", "_")[:50]  # Limit to 50 chars
+        brand_slug = self._normalize_brand_slug(brand_name)
 
         brand_category, _ = Category.objects.get_or_create(
             slug=brand_slug,
@@ -1257,11 +1258,15 @@ class Command(BaseCommand):
 
         return brand_category
 
+    def _normalize_brand_slug(self, brand_name: str) -> str:
+        """Normalize brand name to a consistent slug."""
+        return brand_name.lower().replace(" ", "_")[:50]
+
     def _get_or_create_brand_organization(
         self, brand_name: str, website: str | None
     ) -> Organization:
         """Get or create organization for brand (cached)."""
-        brand_slug = brand_name.lower().replace(" ", "_")[:50]  # Limit to 50 chars
+        brand_slug = self._normalize_brand_slug(brand_name)
         brand_org_cache = self._get_cache("brand_org_cache")
 
         # Check cache first
@@ -1524,14 +1529,27 @@ class Command(BaseCommand):
         # Calculate server start index based on worker_id
         server_start_index = worker_id % len(OVERPASS_SERVERS)
 
+        def _hide_task_later(task_to_hide: int) -> None:
+            def _hide() -> None:
+                try:
+                    progress.update(task_to_hide, visible=False)
+                except Exception:
+                    pass
+
+            threading.Timer(30, _hide).start()
+
         # Create task for this mapping
         server_letter = OVERPASS_SERVERS[server_start_index][0]
         task_id = progress.add_task(
             f"worker_{worker_id}",
-            total=3,  # 3 stages: fetch, process, import
+            total=100,
             mapping=f"{mapping.category_slug}",
-            status=f"[yellow]fetching from {server_letter}...[/yellow]",
+            status=(
+                f"[yellow]fetching from {server_letter}...[/yellow] "
+                f"[yellow][fetching][/yellow]"
+            ),
         )
+        progress.update(task_id, completed=5)
 
         try:
             # PIPELINE STAGE 1: FETCH
@@ -1549,10 +1567,13 @@ class Command(BaseCommand):
                 )
             )
             # Show download stats immediately after fetch
-            fetch_status = f"[dim]↓{element_count} ({download_size // 1024}KB)[/dim]"
+            fetch_status = (
+                f"[dim]↓{element_count} ({download_size // 1024}KB)[/dim] "
+                f"[yellow][fetching][/yellow]"
+            )
             progress.update(
                 task_id,
-                completed=1,
+                completed=10,
                 server=f"[dim][{server_label}][/dim]",
                 status=fetch_status,
             )
@@ -1560,12 +1581,12 @@ class Command(BaseCommand):
             if elements is None:
                 progress.update(
                     task_id,
-                    completed=3,
+                    completed=100,
                     mapping=f"{mapping.category_slug}",
-                    status="[red]✗ FAILED[/red]",
+                    status="[red]✗ FAILED[/red] [red][finished][/red]",
                 )
                 progress.stop_task(task_id)
-                progress.update(task_id, visible=False)
+                _hide_task_later(task_id)
                 return {
                     "created": 0,
                     "updated": 0,
@@ -1578,7 +1599,10 @@ class Command(BaseCommand):
                 }
 
             # PIPELINE STAGE 2: PROCESS
-            processing_status = f"[cyan]processing...[/cyan] [dim]↓{element_count} ({download_size // 1024}KB)[/dim]"
+            processing_status = (
+                f"[cyan]processing...[/cyan] [dim]↓{element_count} "
+                f"({download_size // 1024}KB)[/dim]"
+            )
             progress.update(
                 task_id, status=processing_status, server=""
             )  # Clear server label
@@ -1587,7 +1611,7 @@ class Command(BaseCommand):
                 mapping=mapping,
                 category_names=category_names,
             )
-            progress.update(task_id, completed=2)
+            progress.update(task_id, completed=10)
 
             # Pre-cache data and existing associations for this mapping
             self._clear_cache("place_cache")
@@ -1598,15 +1622,23 @@ class Command(BaseCommand):
             self._preload_place_cache(amenities, osm_org)
 
             # PIPELINE STAGE 3: IMPORT
-            importing_status = f"[magenta]importing...[/magenta] [dim]↓{element_count} ({download_size // 1024}KB)[/dim]"
+            importing_status = (
+                f"[magenta]importing...[/magenta] [dim]↓{element_count} "
+                f"({download_size // 1024}KB)[/dim] [magenta][importing][/magenta]"
+            )
             progress.update(task_id, status=importing_status)
             created, updated, skipped, deleted, errors = self._import_amenities(
                 amenities=amenities,
                 osm_org=osm_org,
                 run_start=run_start,
                 dry_run=dry_run,
+                progress=progress,
+                task_id=task_id,
+                total_count=len(amenities),
+                downloaded_count=element_count,
+                downloaded_bytes=download_size,
             )
-            progress.update(task_id, completed=3)
+            progress.update(task_id, completed=100)
 
             # Update final status (element_count already set from fetch)
             status_parts = []
@@ -1630,9 +1662,10 @@ class Command(BaseCommand):
                 if status_parts
                 else "[green]✓[/green]"
             )
+            status = f"{status} [green][finished][/green]"
             progress.update(task_id, status=status, server="")  # Clear server label
             progress.stop_task(task_id)
-            progress.update(task_id, visible=False)
+            _hide_task_later(task_id)
 
             # Calculate duration
             mapping_duration = time_module.time() - mapping_start
@@ -1683,13 +1716,13 @@ class Command(BaseCommand):
 
             progress.update(
                 task_id,
-                completed=3,
+                completed=100,
                 mapping=f"{mapping.category_slug}",
-                status=f"[red]✗ ERROR: {str(e)[:30]}[/red]",
+                status=f"[red]✗ ERROR: {str(e)[:30]}[/red] [red][finished][/red]",
                 server="",
             )
             progress.stop_task(task_id)
-            progress.update(task_id, visible=False)
+            _hide_task_later(task_id)
             return {
                 "created": 0,
                 "updated": 0,
@@ -1816,7 +1849,7 @@ class Command(BaseCommand):
             Progress(
                 SpinnerColumn(),
                 TextColumn("[bold blue]{task.fields[mapping]:<35}", justify="left"),
-                BarColumn(bar_width=30, complete_style="cyan", finished_style="green"),
+                BarColumn(bar_width=20, complete_style="cyan", finished_style="green"),
                 TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
                 TimeElapsedColumn(),
                 TextColumn("•"),
@@ -1900,8 +1933,12 @@ class Command(BaseCommand):
                         progress.update(
                             overall_task,
                             status=(
-                                f"+{total_created} ~{total_updated} ·{total_skipped} "
-                                f"-{total_deleted} !{total_errors}"
+                                f"[green]+{total_created}[/green] "
+                                f"[yellow]~{total_updated}[/yellow] "
+                                f"[dim]·{total_skipped}[/dim] "
+                                f"[red]-{total_deleted}[/red] "
+                                f"[red]!{total_errors}[/red] "
+                                f"[magenta][importing][/magenta]"
                             ),
                         )
 
@@ -1927,10 +1964,26 @@ class Command(BaseCommand):
                         progress.update(
                             overall_task,
                             status=(
-                                f"+{total_created} ~{total_updated} ·{total_skipped} "
-                                f"-{total_deleted} !{total_errors}"
+                                f"[green]+{total_created}[/green] "
+                                f"[yellow]~{total_updated}[/yellow] "
+                                f"[dim]·{total_skipped}[/dim] "
+                                f"[red]-{total_deleted}[/red] "
+                                f"[red]!{total_errors}[/red] "
+                                f"[magenta][importing][/magenta]"
                             ),
                         )
+
+            progress.update(
+                overall_task,
+                status=(
+                    f"[green]+{total_created}[/green] "
+                    f"[yellow]~{total_updated}[/yellow] "
+                    f"[dim]·{total_skipped}[/dim] "
+                    f"[red]-{total_deleted}[/red] "
+                    f"[red]!{total_errors}[/red] "
+                    f"[green][finished][/green]"
+                ),
+            )
 
         # Show error log location if errors occurred
         if total_errors > 0 and self._error_log_file:
@@ -2644,7 +2697,7 @@ class Command(BaseCommand):
 
             for brand_name in brands:
                 if brand_name not in brand_cache:
-                    brand_slug = brand_name.replace(" ", "_")[:50]
+                    brand_slug = self._normalize_brand_slug(brand_name)
                     try:
                         brand_category, _ = Category.objects.get_or_create(
                             slug=brand_slug,
@@ -2685,6 +2738,12 @@ class Command(BaseCommand):
         osm_org: Organization,
         run_start: datetime,
         dry_run: bool,
+        progress=None,
+        task_id: int | None = None,
+        total_count: int | None = None,
+        downloaded_count: int | None = None,
+        downloaded_bytes: int | None = None,
+        update_every: int = 100,
     ) -> tuple[int, int, int, int, int]:
         """Import amenities to database.
 
@@ -2697,7 +2756,8 @@ class Command(BaseCommand):
         deleted_count = 0
         error_count = 0
 
-        for idx, data in enumerate(amenities):
+        total = total_count or len(amenities)
+        for idx, data in enumerate(amenities, 1):
             # Check for shutdown request every 100 places
             if (
                 idx % 100 == 0
@@ -2787,6 +2847,30 @@ class Command(BaseCommand):
                     error=error_details,
                     osm_tags=data.get("tags"),
                 )
+
+            if (
+                progress
+                and task_id
+                and total
+                and (idx == 1 or idx == total or idx % update_every == 0)
+            ):
+                completed = 10 + int((idx / total) * 90)
+                download_bits = ""
+                if downloaded_count is not None and downloaded_bytes is not None:
+                    download_bits = (
+                        f"[cyan]↓{downloaded_count} "
+                        f"({downloaded_bytes // 1024}KB)[/cyan] "
+                    )
+                status = (
+                    f"[green]+{created_count}[/green] "
+                    f"[yellow]~{updated_count}[/yellow] "
+                    f"[dim]·{skipped_count}[/dim] "
+                    f"[red]-{deleted_count}[/red] "
+                    f"[red]!{error_count}[/red] "
+                    f"{download_bits}"
+                    f"[magenta][import][/magenta]"
+                )
+                progress.update(task_id, completed=completed, status=status)
 
             # MEMORY FIX: Clear caches periodically to prevent unbounded growth
             # Clear every 500 places to keep memory usage stable

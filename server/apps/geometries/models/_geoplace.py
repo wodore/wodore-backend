@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import sys
+import threading
+from collections import OrderedDict
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from django.conf import settings
@@ -24,6 +28,42 @@ if TYPE_CHECKING:
         SourceInput,
     )
     from ._associations import GeoPlaceSourceAssociation
+
+
+class _LRUCacheBytes:
+    def __init__(self, max_bytes: int) -> None:
+        self._max_bytes = max_bytes
+        self._cache: OrderedDict[str, tuple[object, int]] = OrderedDict()
+        self._size_bytes = 0
+
+    def _estimate_size(self, key: str, value: object) -> int:
+        return sys.getsizeof(key) + sys.getsizeof(value)
+
+    def get(self, key: str) -> object | None:
+        item = self._cache.pop(key, None)
+        if item is None:
+            return None
+        value, size_bytes = item
+        self._cache[key] = (value, size_bytes)
+        return value
+
+    def set(self, key: str, value: object) -> None:
+        size_bytes = self._estimate_size(key, value)
+        if size_bytes > self._max_bytes:
+            return
+        existing = self._cache.pop(key, None)
+        if existing is not None:
+            self._size_bytes -= existing[1]
+        self._cache[key] = (value, size_bytes)
+        self._size_bytes += size_bytes
+        while self._size_bytes > self._max_bytes and self._cache:
+            _, evicted = self._cache.popitem(last=False)
+            self._size_bytes -= evicted[1]
+
+
+_BRAND_CATEGORY_CACHE = _LRUCacheBytes(max_bytes=50 * 1024 * 1024)
+_BRAND_CATEGORY_CACHE_LOCK = threading.Lock()
+_BRAND_CATEGORY_CACHE_MISS = object()
 
 
 class DetailType(models.TextChoices):
@@ -769,7 +809,7 @@ class GeoPlace(TimeStampedModel):
         # Resolve source organization
         source_obj = None
         if from_source is not None:
-            source_obj = Organization.objects.get(slug=from_source.slug)
+            source_obj = cls._get_organization_by_slug(from_source.slug)
 
         # Check for existing place (deduplication)
         existing_place = None
@@ -879,13 +919,9 @@ class GeoPlace(TimeStampedModel):
 
             # Filter by brand if enabled and provided
             if dedup_options.check_brand and schema.brand:
-                from server.apps.categories.models import Category
-
-                try:
-                    brand_cat = Category.objects.get(slug=schema.brand.slug)
+                brand_cat = cls._get_brand_category_by_slug(schema.brand.slug)
+                if brand_cat:
                     nearby = nearby.filter(amenity_detail__brand=brand_cat)
-                except Category.DoesNotExist:
-                    pass
             elif dedup_options.check_brand:
                 # No brand specified - only match places without brand
                 nearby = nearby.filter(amenity_detail__brand__isnull=True)
@@ -927,6 +963,61 @@ class GeoPlace(TimeStampedModel):
 
         return None
 
+    @staticmethod
+    @lru_cache(maxsize=32)
+    def _get_organization_by_slug(slug: str) -> Organization:
+        return Organization.objects.get(slug=slug)
+
+    @classmethod
+    def _get_brand_category_by_slug(cls, slug: str) -> Category | None:
+        with _BRAND_CATEGORY_CACHE_LOCK:
+            cached = _BRAND_CATEGORY_CACHE.get(slug)
+        if cached is _BRAND_CATEGORY_CACHE_MISS:
+            return None
+        if cached is not None:
+            return cached  # type: ignore[return-value]
+
+        try:
+            category = Category.objects.get(slug=slug)
+        except Category.DoesNotExist:
+            with _BRAND_CATEGORY_CACHE_LOCK:
+                _BRAND_CATEGORY_CACHE.set(slug, _BRAND_CATEGORY_CACHE_MISS)
+            return None
+
+        with _BRAND_CATEGORY_CACHE_LOCK:
+            _BRAND_CATEGORY_CACHE.set(slug, category)
+        return category
+
+    @staticmethod
+    @lru_cache(maxsize=512)
+    def _resolve_category_from_identifier(identifier: str) -> Category:
+        """Resolve Category for a place_type_identifier with fallbacks for legacy trees."""
+        parts = identifier.split(".")
+        if parts and parts[0] == "root":
+            parts = parts[1:]
+
+        if not parts:
+            raise Category.DoesNotExist("Empty category identifier")
+
+        if len(parts) == 1:
+            slug = parts[0]
+            try:
+                return Category.objects.get(slug=slug, parent=None)
+            except Category.DoesNotExist:
+                return Category.objects.get(identifier=identifier)
+
+        parent_slug, child_slug = parts[0], parts[1]
+        try:
+            parent = Category.objects.get(slug=parent_slug, parent=None)
+            return Category.objects.get(slug=child_slug, parent=parent)
+        except Category.DoesNotExist:
+            category = Category.objects.filter(
+                slug=child_slug, parent__slug=parent_slug
+            ).first()
+            if category:
+                return category
+            return Category.objects.get(identifier=identifier)
+
     @classmethod
     def _create_from_schema(
         cls,
@@ -944,24 +1035,7 @@ class GeoPlace(TimeStampedModel):
         from ._amenity_detail import AmenityDetail
         from ._associations import GeoPlaceSourceAssociation
 
-        # CRITICAL FIX: Parse identifier and query by slug/parent instead of computed field
-        # The identifier field is computed and may not be populated immediately
-        # Format: "groceries.bakery" or "root.restaurant"
-        identifier = schema.place_type_identifier
-        parts = identifier.split(".")
-
-        # Remove "root" prefix if present
-        if parts and parts[0] == "root":
-            parts = parts[1:]
-
-        if len(parts) == 1:
-            # Root category: "restaurant"
-            category = Category.objects.get(slug=parts[0], parent=None)
-        else:
-            # Child category: "groceries.bakery"
-            parent_slug, child_slug = parts[0], parts[1]
-            parent = Category.objects.get(slug=parent_slug, parent=None)
-            category = Category.objects.get(slug=child_slug, parent=parent)
+        category = cls._resolve_category_from_identifier(schema.place_type_identifier)
 
         # Prepare name translations
         name_dict = schema.get_name_dict()
@@ -1054,8 +1128,11 @@ class GeoPlace(TimeStampedModel):
             }
             # Add brand if provided
             if schema.brand:
-                brand = Category.objects.get(slug=schema.brand.slug)
-                amenity_kwargs["brand"] = brand
+                try:
+                    brand = Category.objects.get(slug=schema.brand.slug)
+                    amenity_kwargs["brand"] = brand
+                except Category.DoesNotExist:
+                    pass
 
             AmenityDetail.objects.create(**amenity_kwargs)
 
@@ -1150,25 +1227,9 @@ class GeoPlace(TimeStampedModel):
         # Track if anything was updated
         updated = False
         update_fields = []
+        i18n_dirty = False
 
-        # CRITICAL FIX: Parse identifier and query by slug/parent instead of computed field
-        # The identifier field is computed and may not be populated immediately
-        # Format: "groceries.bakery" or "root.restaurant"
-        identifier = schema.place_type_identifier
-        parts = identifier.split(".")
-
-        # Remove "root" prefix if present
-        if parts and parts[0] == "root":
-            parts = parts[1:]
-
-        if len(parts) == 1:
-            # Root category: "restaurant"
-            category = Category.objects.get(slug=parts[0], parent=None)
-        else:
-            # Child category: "groceries.bakery"
-            parent_slug, child_slug = parts[0], parts[1]
-            parent = Category.objects.get(slug=parent_slug, parent=None)
-            category = Category.objects.get(slug=child_slug, parent=parent)
+        category = cls._resolve_category_from_identifier(schema.place_type_identifier)
 
         # Update place_type
         if "place_type" not in protected and place.place_type != category:
@@ -1190,7 +1251,7 @@ class GeoPlace(TimeStampedModel):
                     current_value = getattr(place, field_name, None)
                     if current_value != name_value:
                         setattr(place, field_name, name_value)
-                        update_fields.append(field_name)
+                        i18n_dirty = True
                         updated = True
 
         # Update description translations
@@ -1207,7 +1268,7 @@ class GeoPlace(TimeStampedModel):
                     current_value = getattr(place, field_name, None)
                     if current_value != desc_value:
                         setattr(place, field_name, desc_value)
-                        update_fields.append(field_name)
+                        i18n_dirty = True
                         updated = True
 
         # Update other fields
@@ -1251,6 +1312,8 @@ class GeoPlace(TimeStampedModel):
 
         # Save place if updated (track_modifications=False for imports)
         if updated:
+            if i18n_dirty and "i18n" not in update_fields:
+                update_fields.append("i18n")
             place.save(update_fields=update_fields, track_modifications=False)
 
         # Update or create detail model (flattened structure)
@@ -1292,8 +1355,11 @@ class GeoPlace(TimeStampedModel):
                     detail_updated = True
 
             if "brand" not in protected and schema.brand:
-                brand = Category.objects.get(slug=schema.brand.slug)
-                if amenity_detail.brand != brand:
+                try:
+                    brand = Category.objects.get(slug=schema.brand.slug)
+                except Category.DoesNotExist:
+                    brand = None
+                if brand and amenity_detail.brand != brand:
                     amenity_detail.brand = brand
                     update_fields.append("brand")
                     detail_updated = True
