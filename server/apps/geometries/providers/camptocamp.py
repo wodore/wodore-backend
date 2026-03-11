@@ -4,6 +4,7 @@ Fetches images from Camptocamp API using bbox queries.
 """
 
 import logging
+from datetime import datetime
 from typing import Any
 
 
@@ -357,13 +358,27 @@ class CamptocampProvider(ImageProvider):
                 title = locale.get("title", "")
                 description = locale.get("description", "")
 
-            # Author information
-            creator = image_details.get("creator")
-            # Creator is a dict with 'name' and 'user_id', extract just the name
-            if isinstance(creator, dict):
-                author = creator.get("name", "camptocamp.org")
-            else:
-                author = creator if creator else "camptocamp.org"
+            # Author information - prioritize 'author' field over 'creator'
+            author = image_details.get("author")
+            if not author:
+                creator = image_details.get("creator")
+                # Creator is a dict with 'name' and 'user_id', extract just the name
+                if isinstance(creator, dict):
+                    author = creator.get("name", "camptocamp.org")
+                else:
+                    author = creator if creator else "camptocamp.org"
+
+            # Parse date_time if available
+            captured_at = None
+            date_time_str = image_details.get("date_time")
+            if date_time_str and date_time_str != "1970-01-01T00:00:00+00:00":
+                try:
+                    # Parse ISO 8601 format
+                    captured_at = datetime.fromisoformat(
+                        date_time_str.replace("Z", "+00:00")
+                    )
+                except (ValueError, AttributeError):
+                    pass
 
             # Image type for license determination
             image_type = image_details.get("image_type")  # collaborative, personal
@@ -398,6 +413,7 @@ class CamptocampProvider(ImageProvider):
                 radius,
                 has_title=bool(title),
                 has_description=bool(description),
+                captured_at=captured_at,
             )
 
             # Extract dimensions (not available in Camptocamp API)
@@ -411,7 +427,7 @@ class CamptocampProvider(ImageProvider):
                 source_id=f"waypoint_{waypoint_id}_{filename}",
                 source_url=source_url,
                 image_type="flat",
-                captured_at=None,  # Not available in API
+                captured_at=captured_at,
                 location=Point(geom_lon, geom_lat, srid=4326),
                 distance_m=distance_m,
                 license_slug=license_slug,
@@ -437,6 +453,7 @@ class CamptocampProvider(ImageProvider):
         radius: float,
         has_title: bool = False,
         has_description: bool = False,
+        captured_at: datetime | None = None,
     ) -> int:
         """
         Score Camptocamp image (0-100).
@@ -448,9 +465,10 @@ class CamptocampProvider(ImageProvider):
             radius: Search radius in meters
             has_title: Image has title
             has_description: Image has description
+            captured_at: Image capture date (if available)
 
         Returns:
-            Score from 0-100
+            Score from 0-100 (can be negative for very old/low-quality images)
         """
         score = 0
 
@@ -473,15 +491,34 @@ class CamptocampProvider(ImageProvider):
         score += score_distance_relevance(distance_m, radius)
 
         # Metadata completeness (0-25)
-        has_author = bool(image_details.get("creator"))
+        has_author = bool(image_details.get("author") or image_details.get("creator"))
+        has_date = captured_at is not None
         has_license = True  # Always has license
 
         score += score_metadata_completeness(
             has_description=has_description,
             has_author=has_author,
             has_license=has_license,
-            has_date=False,  # Not available
+            has_date=has_date,
         )
+
+        # Age penalty (0 to -40 points)
+        # Penalize old images heavily - older than 10 years gets negative scores
+        from datetime import timezone
+
+        if captured_at:
+            age_years = (datetime.now(timezone.utc) - captured_at).days / 365.25
+            if age_years > 15:
+                score -= 40  # Very old images
+            elif age_years > 10:
+                score -= 30  # Old images
+            elif age_years > 5:
+                score -= 20  # Somewhat old images
+            elif age_years > 2:
+                score -= 10  # Recent but not new
+        else:
+            # No date available or default epoch date - assume very old
+            score -= 40  # Maximum penalty for unknown/very old images
 
         # Image type bonus (0-5)
         image_type = image_details.get("image_type")

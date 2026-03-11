@@ -534,11 +534,16 @@ def _build_attribution(
 
     # Build author part
     author_html = ""
+    author_display = ""
     if author:
+        # Truncate long author names for short attribution (max 16 chars)
+        author_display = author if len(author) <= 16 else author[:13] + "..."
         if author_url:
             author_html = (
                 f'<a href="{author_url}" target="_blank" rel="nofollow">{author}</a>'
             )
+            # Also create linked version with truncated text for short attribution
+            author_display = f'<a href="{author_url}" target="_blank" rel="nofollow">{author_display}</a>'
         else:
             author_html = author
         parts.append(author_html)
@@ -557,7 +562,7 @@ def _build_attribution(
         license_short_html = license_slug.upper()
         license_full_html = license_name
 
-    parts.append(license_full_html)
+    parts.append(license_short_html)
 
     # Build provider part - use source_url if available, otherwise provider_url
     provider_html = ""
@@ -568,7 +573,7 @@ def _build_attribution(
             provider_html = f'<a href="{link_url}" target="_blank" rel="nofollow">{provider_name}</a>'
         else:
             provider_html = provider_name
-        parts.append(f"on {provider_html}")
+        parts.append(f"via {provider_html}")
 
     # Join for full attribution
     full_attribution = ", ".join(parts) if parts else "Unknown"
@@ -603,10 +608,10 @@ def _build_attribution(
     if author_html:
         if provider_icon:
             short_parts.append(
-                f'{author_html} <img src="{provider_icon}" alt="{provider_name}" style="height:15px; vertical-align: middle;">'
+                f'{author_display} <img src="{provider_icon}" alt="{provider_name}" style="height:15px; vertical-align: middle;">'
             )
         else:
-            short_parts.append(author_html)
+            short_parts.append(author_display)
     elif provider_html:
         short_parts.append(provider_html)
 

@@ -124,8 +124,47 @@ class WodoreProvider(ImageProvider):
                         else place.distance
                     )
 
-                    # Generate attribution
-                    attribution = self._build_attribution(img)
+                    # Generate attribution using base helper
+                    from .base import _build_attribution, _get_license_info
+
+                    # Get license info from database
+                    license_info = _get_license_info(img.license.slug)
+
+                    # Get provider info from source_org
+                    provider_slug = "wodore"  # Default fallback
+                    provider_name = "wodore"
+                    provider_url = None
+                    provider_icon = None
+                    if img.source_org:
+                        provider_slug = (
+                            img.source_org.slug
+                        )  # Use slug for provider field
+                        provider_name = (
+                            img.source_org.name_i18n or img.source_org.slug
+                        )  # Use name for attribution
+                        provider_url = img.source_org.url
+                        # Generate provider icon URL if logo exists
+                        if img.source_org.logo:
+                            from server.apps.images.transfomer import ImagorImage
+
+                            imagor_img = ImagorImage(img.source_org.logo)
+                            provider_icon = imagor_img.transform(
+                                size="128x128", quality=85
+                            ).get_full_url()
+
+                    attribution_data = _build_attribution(
+                        author=img.author,
+                        author_url=img.author_url,
+                        license_slug=img.license.slug,
+                        license_name=license_info["name"],
+                        license_url=license_info["url"],
+                        provider_name=provider_name,
+                        provider_url=provider_url,
+                        source_url=img.source_url,
+                        provider_icon=provider_icon,
+                        license_icons=license_info.get("icons"),
+                    )
+                    attribution = attribution_data["short"]
 
                     # Extract dimensions from image_meta
                     width = None
@@ -139,7 +178,7 @@ class WodoreProvider(ImageProvider):
                     crop_area = self._extract_crop_area(img)
 
                     result = ImageResult(
-                        provider="wodore",
+                        provider=provider_slug,  # Use source_org slug (e.g., "sac", "wikimedia")
                         source_id=str(img.id),
                         source_url=img.source_url,
                         image_type="flat",  # Default for wodore images
@@ -273,8 +312,47 @@ class WodoreProvider(ImageProvider):
                         hut.distance.m if hasattr(hut.distance, "m") else hut.distance
                     )
 
-                    # Generate attribution
-                    attribution = self._build_attribution(img)
+                    # Generate attribution using base helper
+                    from .base import _build_attribution, _get_license_info
+
+                    # Get license info from database
+                    license_info = _get_license_info(img.license.slug)
+
+                    # Get provider info from source_org
+                    provider_slug = "wodore"  # Default fallback
+                    provider_name = "wodore"
+                    provider_url = None
+                    provider_icon = None
+                    if img.source_org:
+                        provider_slug = (
+                            img.source_org.slug
+                        )  # Use slug for provider field
+                        provider_name = (
+                            img.source_org.name_i18n or img.source_org.slug
+                        )  # Use name for attribution
+                        provider_url = img.source_org.url
+                        # Generate provider icon URL if logo exists
+                        if img.source_org.logo:
+                            from server.apps.images.transfomer import ImagorImage
+
+                            imagor_img = ImagorImage(img.source_org.logo)
+                            provider_icon = imagor_img.transform(
+                                size="128x128", quality=85
+                            ).get_full_url()
+
+                    attribution_data = _build_attribution(
+                        author=img.author,
+                        author_url=img.author_url,
+                        license_slug=img.license.slug,
+                        license_name=license_info["name"],
+                        license_url=license_info["url"],
+                        provider_name=provider_name,
+                        provider_url=provider_url,
+                        source_url=img.source_url,
+                        provider_icon=provider_icon,
+                        license_icons=license_info.get("icons"),
+                    )
+                    attribution = attribution_data["short"]
 
                     # Extract dimensions from image_meta
                     width = None
@@ -288,7 +366,7 @@ class WodoreProvider(ImageProvider):
                     crop_area = self._extract_crop_area(img)
 
                     result = ImageResult(
-                        provider="wodore",
+                        provider=provider_slug,  # Use source_org slug (e.g., "sac", "wikimedia")
                         source_id=str(img.id),
                         source_url=img.source_url,
                         image_type="flat",  # Default for wodore images
@@ -323,27 +401,6 @@ class WodoreProvider(ImageProvider):
                 f"WodoreProvider ({self.place_type}): Found {len(results)} images from {len(huts)} huts"
             )
             return results
-
-    def _build_attribution(self, image: Any) -> str:
-        """Build HTML attribution string for an image."""
-        parts = []
-
-        if image.author:
-            if image.author_url:
-                parts.append(
-                    f'<a href="{image.author_url}" rel="nofollow">{image.author}</a>'
-                )
-            else:
-                parts.append(image.author)
-
-        if image.license:
-            license_name = image.license.fullname_i18n or image.license.name_i18n
-            if image.license.url_i18n:
-                parts.append(f'<a href="{image.license.url_i18n}">{license_name}</a>')
-            else:
-                parts.append(license_name)
-
-        return ", ".join(parts) if parts else "Unknown"
 
     def _extract_focal_area(self, image: Any) -> ImageArea | None:
         """

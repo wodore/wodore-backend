@@ -372,7 +372,7 @@ def get_huts(  # type: ignore  # noqa: PGH003
                     fullname="image_set__source_org__fullname_i18n",
                     slug="image_set__source_org__slug",
                     name="image_set__source_org__name_i18n",
-                    link="image_set__source_org__url",  # get link
+                    url="image_set__source_org__url",  # get url
                     # source_id="orgs_source__source_id",
                     # public="image_set__source_org__is_public",
                     # active="image_set__source_org__is_active",
@@ -740,7 +740,7 @@ def get_hut(
                     fullname="image_set__source_org__fullname_i18n",
                     slug="image_set__source_org__slug",
                     name="image_set__source_org__name_i18n",
-                    link="image_set__source_org__url",  # get link
+                    url="image_set__source_org__url",  # get url
                     # source_id="orgs_source__source_id",
                     # public="image_set__source_org__is_public",
                     # active="image_set__source_org__is_active",
