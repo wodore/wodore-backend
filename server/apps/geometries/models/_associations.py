@@ -129,6 +129,12 @@ class GeoPlaceSourceAssociation(TimeStampedModel, ComputedFieldsModel):
             models.Index(fields=["priority"]),
         ]
         constraints = (
+            # Unique constraint on organization + source_id prevents duplicate imports
+            models.UniqueConstraint(
+                name="%(app_label)s_%(class)s_unique_org_source",
+                fields=["organization", "source_id"],
+                condition=models.Q(source_id__isnull=False) & ~models.Q(source_id=""),
+            ),
             models.UniqueConstraint(
                 name="%(app_label)s_%(class)s_unique_relationships",
                 fields=["organization", "geo_place"],

@@ -13,6 +13,7 @@ Usage:
 """
 
 import tempfile
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -180,6 +181,19 @@ class Command(BaseCommand):
         super().__init__(*args, **kwargs)
         self._error_log_file = None
         self._error_count = 0
+        self._thread_local = threading.local()
+
+    def _get_cache(self, cache_name: str) -> dict:
+        cache = getattr(self._thread_local, cache_name, None)
+        if cache is None:
+            cache = {}
+            setattr(self._thread_local, cache_name, cache)
+        return cache
+
+    def _clear_cache(self, cache_name: str) -> None:
+        cache = getattr(self._thread_local, cache_name, None)
+        if cache is not None:
+            cache.clear()
 
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
@@ -291,7 +305,7 @@ class Command(BaseCommand):
         data_dir = options.get("data_dir")
         drop = options.get("drop", False)
         force = options.get("force", False)
-        use_overpass = options.get("overpass", False)
+        use_overpass = True  # Always use Overpass API
         overpass_server = options.get("overpass_server")
         overpass_queries_file = options.get("overpass_queries")
         since = options.get("since")
@@ -407,45 +421,28 @@ class Command(BaseCommand):
                     },
                 )
 
-                # Initialize place lookup cache for deduplication performance
-                self._place_cache = {}
+                # Initialize per-thread place cache for deduplication performance
+                self._clear_cache("place_cache")
 
                 # Get workers parameter
                 workers = options.get("workers", 1)
 
                 # Process each category/mapping in a pipeline (fetch → process → import)
-                if workers > 1:
-                    # Use parallel processing
-                    self._process_overpass_parallel(
-                        region=region,
-                        category_names=category_names,
-                        osm_org=osm_org,
-                        run_start=run_start,
-                        workers=workers,
-                        limit=limit,
-                        overpass_server=overpass_server,
-                        overpass_queries_file=overpass_queries_file,
-                        since=since,
-                        dry_run=dry_run,
-                        state=state,
-                        state_file=state_file,
-                    )
-                    success = True
-                else:
-                    # Use sequential processing
-                    success = self._process_overpass_pipeline(
-                        region=region,
-                        category_names=category_names,
-                        osm_org=osm_org,
-                        run_start=run_start,
-                        limit=limit,
-                        overpass_server=overpass_server,
-                        overpass_queries_file=overpass_queries_file,
-                        since=since,
-                        dry_run=dry_run,
-                        state=state,
-                        state_file=state_file,
-                    )
+                self._process_overpass_parallel(
+                    region=region,
+                    category_names=category_names,
+                    osm_org=osm_org,
+                    run_start=run_start,
+                    workers=workers,
+                    limit=limit,
+                    overpass_server=overpass_server,
+                    overpass_queries_file=overpass_queries_file,
+                    since=since,
+                    dry_run=dry_run,
+                    state=state,
+                    state_file=state_file,
+                )
+                success = True
 
                 if not success:
                     self.stdout.write(
@@ -599,22 +596,12 @@ class Command(BaseCommand):
         self._precache_categories_batch(amenities)  # NEW: Batch category pre-fetch
 
         # Initialize place lookup cache for deduplication performance
-        self._place_cache = {}
+        place_cache = self._get_cache("place_cache")
+        place_cache.clear()
 
         # PERFORMANCE: Pre-load all existing OSM associations for this region
-        from server.apps.geometries.models import GeoPlaceSourceAssociation
-
-        # Build source_ids in OSM_TYPE/OSM_ID format for lookup
-        osm_source_ids = {f"{data['osm_type']}/{data['osm_id']}" for data in amenities}
-        existing_associations = GeoPlaceSourceAssociation.objects.filter(
-            organization=osm_org, source_id__in=osm_source_ids
-        ).select_related("geo_place")
-
-        for assoc in existing_associations:
-            cache_key = f"osm_{assoc.source_id}"
-            self._place_cache[cache_key] = assoc.geo_place
-
-        self.stdout.write(f"Pre-loaded {len(self._place_cache)} existing associations")
+        self._preload_place_cache(amenities, osm_org)
+        self.stdout.write(f"Pre-loaded {len(place_cache)} existing associations")
 
         # 7. Upsert amenities using hybrid bulk approach
         self.stdout.write("Upserting amenities to database (hybrid bulk approach)...")
@@ -958,7 +945,8 @@ class Command(BaseCommand):
         if data.get("brand"):
             # Skip if brand is a list (contains semicolons) - these are product brands, not chain brands
             if ";" not in data["brand"]:
-                brand_input = BrandInput(slug=data["brand"])
+                brand_category = self._get_or_create_brand_category(data["brand"])
+                brand_input = BrandInput(slug=brand_category.slug, name=data["brand"])
 
         # Build flattened GeoPlace schema
         schema = GeoPlaceAmenityInput(
@@ -995,17 +983,23 @@ class Command(BaseCommand):
             distance_any=4,
         )
 
-        # Use update_or_create with schema
-        place, status = GeoPlace.update_or_create(
-            schema=schema,
-            from_source=source_input,
-            dedup_options=dedup_options,
-        )
+        # Use cached source association when available to avoid extra lookup
+        place_cache = self._get_cache("place_cache")
+        cache_key = f"osm_{source_id}"
+        cached_place = place_cache.get(cache_key)
+        if cached_place:
+            place, status = GeoPlace._update_from_schema(
+                cached_place, schema, osm_org, source_input
+            )
+        else:
+            place, status = GeoPlace.update_or_create(
+                schema=schema,
+                from_source=source_input,
+                dedup_options=dedup_options,
+            )
 
         # Cache the place for subsequent lookups
-        if hasattr(self, "_place_cache"):
-            cache_key = f"osm_{source_id}"
-            self._place_cache[cache_key] = place
+        place_cache[cache_key] = place
 
         # Map UpdateCreateStatus to string for backwards compatibility
         if status == UpdateCreateStatus.created:
@@ -1084,16 +1078,9 @@ class Command(BaseCommand):
             geo_place__is_active=True,
         ).values_list("geo_place_id", flat=True)
 
-        stale_place_ids_list = list(stale_place_ids)
-
-        if stale_place_ids_list:
-            count = GeoPlace.objects.filter(id__in=stale_place_ids_list).update(
-                is_active=False, review_status="review"
-            )
-        else:
-            count = 0
-
-        return count
+        return GeoPlace.objects.filter(id__in=stale_place_ids).update(
+            is_active=False, review_status="review"
+        )
 
     def _count_places(self, category_names: list[str]) -> int:
         """Count existing places with specified categories from OSM."""
@@ -1174,23 +1161,25 @@ class Command(BaseCommand):
             .distinct()
         )
 
-        place_ids_list = list(place_ids)
-        count = len(place_ids_list)
+        count = place_ids.count()
 
         if count == 0:
             return 0
 
         # Delete the places using bulk delete (cascade will handle associations)
-        deleted, _ = GeoPlace.objects.filter(id__in=place_ids_list).delete()
+        deleted, _ = GeoPlace.objects.filter(id__in=place_ids).delete()
 
         return count
 
     def _precache_data(self, amenities: list[dict]):
         """Pre-cache categories, brands, and organizations to reduce DB queries."""
         # Cache for categories
-        self._category_cache = {}
-        self._brand_cache = {}
-        self._brand_org_cache = {}
+        category_cache = self._get_cache("category_cache")
+        brand_cache = self._get_cache("brand_cache")
+        brand_org_cache = self._get_cache("brand_org_cache")
+        category_cache.clear()
+        brand_cache.clear()
+        brand_org_cache.clear()
 
         # Collect unique category slugs and brands
         category_slugs = set()
@@ -1205,7 +1194,7 @@ class Command(BaseCommand):
         # Pre-create all categories
         for category_slug in category_slugs:
             try:
-                self._category_cache[category_slug] = self._get_or_create_category(
+                category_cache[category_slug] = self._get_or_create_category(
                     category_slug
                 )
             except Exception:
@@ -1220,7 +1209,7 @@ class Command(BaseCommand):
 
             # Pre-create all brand categories and organizations
             for brand_name in brands:
-                brand_slug = brand_name.replace(" ", "_")
+                brand_slug = self._normalize_brand_slug(brand_name)
                 try:
                     brand_category, _ = Category.objects.get_or_create(
                         slug=brand_slug,
@@ -1229,21 +1218,22 @@ class Command(BaseCommand):
                             "parent": brand_parent,
                         },
                     )
-                    self._brand_cache[brand_name] = brand_category
+                    brand_cache[brand_name] = brand_category
                 except Exception:
                     pass
 
         self.stdout.write(
-            f"Cached {len(self._category_cache)} categories and {len(self._brand_cache)} brands"
+            f"Cached {len(category_cache)} categories and {len(brand_cache)} brands"
         )
 
     def _get_or_create_brand_category(self, brand_name: str) -> Category:
         """Get or create brand category (cached)."""
         brand_name_lower = brand_name.lower()
+        brand_cache = self._get_cache("brand_cache")
 
         # Check cache first
-        if hasattr(self, "_brand_cache") and brand_name_lower in self._brand_cache:
-            return self._brand_cache[brand_name_lower]
+        if brand_name_lower in brand_cache:
+            return brand_cache[brand_name_lower]
 
         # Fallback to DB query if not cached
         parent, _ = Category.objects.get_or_create(
@@ -1253,7 +1243,7 @@ class Command(BaseCommand):
             },
         )
 
-        brand_slug = brand_name_lower.replace(" ", "_")[:50]  # Limit to 50 chars
+        brand_slug = self._normalize_brand_slug(brand_name)
 
         brand_category, _ = Category.objects.get_or_create(
             slug=brand_slug,
@@ -1264,20 +1254,24 @@ class Command(BaseCommand):
         )
 
         # Cache for future use
-        if hasattr(self, "_brand_cache"):
-            self._brand_cache[brand_name_lower] = brand_category
+        brand_cache[brand_name_lower] = brand_category
 
         return brand_category
+
+    def _normalize_brand_slug(self, brand_name: str) -> str:
+        """Normalize brand name to a consistent slug."""
+        return brand_name.lower().replace(" ", "_")[:50]
 
     def _get_or_create_brand_organization(
         self, brand_name: str, website: str | None
     ) -> Organization:
         """Get or create organization for brand (cached)."""
-        brand_slug = brand_name.lower().replace(" ", "_")[:50]  # Limit to 50 chars
+        brand_slug = self._normalize_brand_slug(brand_name)
+        brand_org_cache = self._get_cache("brand_org_cache")
 
         # Check cache first
-        if hasattr(self, "_brand_org_cache") and brand_slug in self._brand_org_cache:
-            return self._brand_org_cache[brand_slug]
+        if brand_slug in brand_org_cache:
+            return brand_org_cache[brand_slug]
 
         # Extract base URL from website if available
         url = None
@@ -1303,16 +1297,17 @@ class Command(BaseCommand):
             org.save(update_fields=["url"])
 
         # Cache for future use
-        if hasattr(self, "_brand_org_cache"):
-            self._brand_org_cache[brand_slug] = org
+        brand_org_cache[brand_slug] = org
 
         return org
 
     def _get_or_create_category(self, category_slug: str) -> Category:
         """Get or create category by identifier (parent.slug format)."""
+        category_cache = self._get_cache("category_cache")
+
         # Check cache first
-        if hasattr(self, "_category_cache") and category_slug in self._category_cache:
-            return self._category_cache[category_slug]
+        if category_slug in category_cache:
+            return category_cache[category_slug]
 
         # Use identifier field for lookup - much simpler!
         # identifier format: "root.slug" or "parent.slug"
@@ -1353,8 +1348,7 @@ class Command(BaseCommand):
             category = Category.objects.filter(identifier=identifier).first()
 
         # Cache for future use
-        if hasattr(self, "_category_cache"):
-            self._category_cache[category_slug] = category
+        category_cache[category_slug] = category
 
         return category
 
@@ -1535,14 +1529,27 @@ class Command(BaseCommand):
         # Calculate server start index based on worker_id
         server_start_index = worker_id % len(OVERPASS_SERVERS)
 
+        def _hide_task_later(task_to_hide: int) -> None:
+            def _hide() -> None:
+                try:
+                    progress.update(task_to_hide, visible=False)
+                except Exception:
+                    pass
+
+            threading.Timer(30, _hide).start()
+
         # Create task for this mapping
         server_letter = OVERPASS_SERVERS[server_start_index][0]
         task_id = progress.add_task(
             f"worker_{worker_id}",
-            total=3,  # 3 stages: fetch, process, import
+            total=100,
             mapping=f"{mapping.category_slug}",
-            status=f"[yellow]fetching from {server_letter}...[/yellow]",
+            status=(
+                f"[yellow]fetching from {server_letter}...[/yellow] "
+                f"[yellow][fetching][/yellow]"
+            ),
         )
+        progress.update(task_id, completed=5)
 
         try:
             # PIPELINE STAGE 1: FETCH
@@ -1560,10 +1567,13 @@ class Command(BaseCommand):
                 )
             )
             # Show download stats immediately after fetch
-            fetch_status = f"[dim]↓{element_count} ({download_size // 1024}KB)[/dim]"
+            fetch_status = (
+                f"[dim]↓{element_count} ({download_size // 1024}KB)[/dim] "
+                f"[yellow][fetching][/yellow]"
+            )
             progress.update(
                 task_id,
-                completed=1,
+                completed=10,
                 server=f"[dim][{server_label}][/dim]",
                 status=fetch_status,
             )
@@ -1571,12 +1581,12 @@ class Command(BaseCommand):
             if elements is None:
                 progress.update(
                     task_id,
-                    completed=3,
+                    completed=100,
                     mapping=f"{mapping.category_slug}",
-                    status="[red]✗ FAILED[/red]",
+                    status="[red]✗ FAILED[/red] [red][finished][/red]",
                 )
                 progress.stop_task(task_id)
-                progress.advance(overall_task)
+                _hide_task_later(task_id)
                 return {
                     "created": 0,
                     "updated": 0,
@@ -1589,7 +1599,10 @@ class Command(BaseCommand):
                 }
 
             # PIPELINE STAGE 2: PROCESS
-            processing_status = f"[cyan]processing...[/cyan] [dim]↓{element_count} ({download_size // 1024}KB)[/dim]"
+            processing_status = (
+                f"[cyan]processing...[/cyan] [dim]↓{element_count} "
+                f"({download_size // 1024}KB)[/dim]"
+            )
             progress.update(
                 task_id, status=processing_status, server=""
             )  # Clear server label
@@ -1598,18 +1611,34 @@ class Command(BaseCommand):
                 mapping=mapping,
                 category_names=category_names,
             )
-            progress.update(task_id, completed=2)
+            progress.update(task_id, completed=10)
+
+            # Pre-cache data and existing associations for this mapping
+            self._clear_cache("place_cache")
+            self._clear_cache("category_cache")
+            self._clear_cache("brand_cache")
+            self._clear_cache("brand_org_cache")
+            self._precache_mapping_data(amenities)
+            self._preload_place_cache(amenities, osm_org)
 
             # PIPELINE STAGE 3: IMPORT
-            importing_status = f"[magenta]importing...[/magenta] [dim]↓{element_count} ({download_size // 1024}KB)[/dim]"
+            importing_status = (
+                f"[magenta]importing...[/magenta] [dim]↓{element_count} "
+                f"({download_size // 1024}KB)[/dim] [magenta][importing][/magenta]"
+            )
             progress.update(task_id, status=importing_status)
             created, updated, skipped, deleted, errors = self._import_amenities(
                 amenities=amenities,
                 osm_org=osm_org,
                 run_start=run_start,
                 dry_run=dry_run,
+                progress=progress,
+                task_id=task_id,
+                total_count=len(amenities),
+                downloaded_count=element_count,
+                downloaded_bytes=download_size,
             )
-            progress.update(task_id, completed=3)
+            progress.update(task_id, completed=100)
 
             # Update final status (element_count already set from fetch)
             status_parts = []
@@ -1633,9 +1662,10 @@ class Command(BaseCommand):
                 if status_parts
                 else "[green]✓[/green]"
             )
+            status = f"{status} [green][finished][/green]"
             progress.update(task_id, status=status, server="")  # Clear server label
             progress.stop_task(task_id)
-            progress.advance(overall_task)
+            _hide_task_later(task_id)
 
             # Calculate duration
             mapping_duration = time_module.time() - mapping_start
@@ -1686,13 +1716,13 @@ class Command(BaseCommand):
 
             progress.update(
                 task_id,
-                completed=3,
+                completed=100,
                 mapping=f"{mapping.category_slug}",
-                status=f"[red]✗ ERROR: {str(e)[:30]}[/red]",
+                status=f"[red]✗ ERROR: {str(e)[:30]}[/red] [red][finished][/red]",
                 server="",
             )
             progress.stop_task(task_id)
-            progress.advance(overall_task)
+            _hide_task_later(task_id)
             return {
                 "created": 0,
                 "updated": 0,
@@ -1815,12 +1845,11 @@ class Command(BaseCommand):
         total_download_bytes = 0
 
         # Create progress display
-        # Note: Tasks remain visible after completion for debugging/review
         with (
             Progress(
                 SpinnerColumn(),
                 TextColumn("[bold blue]{task.fields[mapping]:<35}", justify="left"),
-                BarColumn(bar_width=30, complete_style="cyan", finished_style="green"),
+                BarColumn(bar_width=20, complete_style="cyan", finished_style="green"),
                 TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
                 TimeElapsedColumn(),
                 TextColumn("•"),
@@ -1900,6 +1929,18 @@ class Command(BaseCommand):
                         total_deleted += result.get("deleted", 0)
                         total_errors += result.get("errors", 0)
                         total_download_bytes += result["download_bytes"]
+                        progress.advance(overall_task)
+                        progress.update(
+                            overall_task,
+                            status=(
+                                f"[green]+{total_created}[/green] "
+                                f"[yellow]~{total_updated}[/yellow] "
+                                f"[dim]·{total_skipped}[/dim] "
+                                f"[red]-{total_deleted}[/red] "
+                                f"[red]!{total_errors}[/red] "
+                                f"[magenta][importing][/magenta]"
+                            ),
+                        )
 
                         # Update state for this mapping
                         if state is not None and result.get("success"):
@@ -1919,6 +1960,30 @@ class Command(BaseCommand):
                     except Exception as e:
                         console.log(f"[red]Worker exception: {e}[/red]")
                         total_errors += 1
+                        progress.advance(overall_task)
+                        progress.update(
+                            overall_task,
+                            status=(
+                                f"[green]+{total_created}[/green] "
+                                f"[yellow]~{total_updated}[/yellow] "
+                                f"[dim]·{total_skipped}[/dim] "
+                                f"[red]-{total_deleted}[/red] "
+                                f"[red]!{total_errors}[/red] "
+                                f"[magenta][importing][/magenta]"
+                            ),
+                        )
+
+            progress.update(
+                overall_task,
+                status=(
+                    f"[green]+{total_created}[/green] "
+                    f"[yellow]~{total_updated}[/yellow] "
+                    f"[dim]·{total_skipped}[/dim] "
+                    f"[red]-{total_deleted}[/red] "
+                    f"[red]!{total_errors}[/red] "
+                    f"[green][finished][/green]"
+                ),
+            )
 
         # Show error log location if errors occurred
         if total_errors > 0 and self._error_log_file:
@@ -2037,7 +2102,7 @@ class Command(BaseCommand):
         # Create progress bars
         with Progress(
             SpinnerColumn(),
-            TextColumn("[bold blue]{task.fields[mapping]:<35}", justify="left"),
+            TextColumn("[blue]{task.fields[mapping]:<35}", justify="left"),
             BarColumn(bar_width=30),
             TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
             TimeElapsedColumn(),
@@ -2119,6 +2184,7 @@ class Command(BaseCommand):
 
                 # Pre-cache data for this mapping
                 self._precache_mapping_data(amenities)
+                self._preload_place_cache(amenities, osm_org)
 
                 # PIPELINE STAGE 3: IMPORT
                 progress.update(current_task, status="[magenta]importing...[/magenta]")
@@ -2131,14 +2197,10 @@ class Command(BaseCommand):
                 progress.update(current_task, completed=3)
 
                 # MEMORY FIX: Clear all caches after each mapping to prevent accumulation
-                if hasattr(self, "_place_cache"):
-                    self._place_cache.clear()
-                if hasattr(self, "_category_cache"):
-                    self._category_cache.clear()
-                if hasattr(self, "_brand_cache"):
-                    self._brand_cache.clear()
-                if hasattr(self, "_brand_org_cache"):
-                    self._brand_org_cache.clear()
+                self._clear_cache("place_cache")
+                self._clear_cache("category_cache")
+                self._clear_cache("brand_cache")
+                self._clear_cache("brand_org_cache")
 
                 self._pipeline_created += created
                 self._pipeline_updated += updated
@@ -2181,9 +2243,16 @@ class Command(BaseCommand):
                     status=f"[green]✓[/green] {changes_str} {downloaded_str} │ {mapping_time:.1f}s",
                 )
 
-                # Stop the spinner for completed task
+                # Stop the spinner and hide the task from display
                 progress.stop_task(current_task)
+                progress.update(current_task, visible=False)
                 completed_tasks.append(current_task)
+
+                # Update overall progress with statistics
+                progress.update(
+                    overall_task,
+                    status=f"+{self._pipeline_created} ~{self._pipeline_updated} ·{self._pipeline_skipped} !{self._pipeline_errors}",
+                )
 
                 progress.advance(overall_task)
 
@@ -2606,21 +2675,19 @@ class Command(BaseCommand):
                 brands.add(data["brand"].lower())
 
         # Pre-create categories if not cached
-        if not hasattr(self, "_category_cache"):
-            self._category_cache = {}
+        category_cache = self._get_cache("category_cache")
 
         for category_slug in category_slugs:
-            if category_slug not in self._category_cache:
+            if category_slug not in category_cache:
                 try:
-                    self._category_cache[category_slug] = self._get_or_create_category(
+                    category_cache[category_slug] = self._get_or_create_category(
                         category_slug
                     )
                 except Exception:
                     pass
 
         # Pre-create brand categories if not cached
-        if not hasattr(self, "_brand_cache"):
-            self._brand_cache = {}
+        brand_cache = self._get_cache("brand_cache")
 
         if brands:
             brand_parent, _ = Category.objects.get_or_create(
@@ -2629,8 +2696,8 @@ class Command(BaseCommand):
             )
 
             for brand_name in brands:
-                if brand_name not in self._brand_cache:
-                    brand_slug = brand_name.replace(" ", "_")[:50]
+                if brand_name not in brand_cache:
+                    brand_slug = self._normalize_brand_slug(brand_name)
                     try:
                         brand_category, _ = Category.objects.get_or_create(
                             slug=brand_slug,
@@ -2639,9 +2706,31 @@ class Command(BaseCommand):
                                 "parent": brand_parent,
                             },
                         )
-                        self._brand_cache[brand_name] = brand_category
+                        brand_cache[brand_name] = brand_category
                     except Exception:
                         pass
+
+    def _preload_place_cache(
+        self, amenities: list[dict], osm_org: Organization
+    ) -> None:
+        """Pre-load GeoPlace associations for a mapping's amenities."""
+        if not amenities:
+            return
+
+        from server.apps.geometries.models import GeoPlaceSourceAssociation
+
+        place_cache = self._get_cache("place_cache")
+        osm_source_ids = {f"{data['osm_type']}/{data['osm_id']}" for data in amenities}
+        if not osm_source_ids:
+            return
+
+        existing_associations = GeoPlaceSourceAssociation.objects.filter(
+            organization=osm_org, source_id__in=osm_source_ids
+        ).select_related("geo_place")
+
+        for assoc in existing_associations:
+            cache_key = f"osm_{assoc.source_id}"
+            place_cache[cache_key] = assoc.geo_place
 
     def _import_amenities(
         self,
@@ -2649,6 +2738,12 @@ class Command(BaseCommand):
         osm_org: Organization,
         run_start: datetime,
         dry_run: bool,
+        progress=None,
+        task_id: int | None = None,
+        total_count: int | None = None,
+        downloaded_count: int | None = None,
+        downloaded_bytes: int | None = None,
+        update_every: int = 100,
     ) -> tuple[int, int, int, int, int]:
         """Import amenities to database.
 
@@ -2661,7 +2756,8 @@ class Command(BaseCommand):
         deleted_count = 0
         error_count = 0
 
-        for idx, data in enumerate(amenities):
+        total = total_count or len(amenities)
+        for idx, data in enumerate(amenities, 1):
             # Check for shutdown request every 100 places
             if (
                 idx % 100 == 0
@@ -2752,17 +2848,37 @@ class Command(BaseCommand):
                     osm_tags=data.get("tags"),
                 )
 
+            if (
+                progress
+                and task_id
+                and total
+                and (idx == 1 or idx == total or idx % update_every == 0)
+            ):
+                completed = 10 + int((idx / total) * 90)
+                download_bits = ""
+                if downloaded_count is not None and downloaded_bytes is not None:
+                    download_bits = (
+                        f"[cyan]↓{downloaded_count} "
+                        f"({downloaded_bytes // 1024}KB)[/cyan] "
+                    )
+                status = (
+                    f"[green]+{created_count}[/green] "
+                    f"[yellow]~{updated_count}[/yellow] "
+                    f"[dim]·{skipped_count}[/dim] "
+                    f"[red]-{deleted_count}[/red] "
+                    f"[red]!{error_count}[/red] "
+                    f"{download_bits}"
+                    f"[magenta][import][/magenta]"
+                )
+                progress.update(task_id, completed=completed, status=status)
+
             # MEMORY FIX: Clear caches periodically to prevent unbounded growth
             # Clear every 500 places to keep memory usage stable
             if idx > 0 and idx % 500 == 0:
-                if hasattr(self, "_place_cache"):
-                    self._place_cache.clear()
-                if hasattr(self, "_category_cache"):
-                    self._category_cache.clear()
-                if hasattr(self, "_brand_cache"):
-                    self._brand_cache.clear()
-                if hasattr(self, "_brand_org_cache"):
-                    self._brand_org_cache.clear()
+                self._clear_cache("place_cache")
+                self._clear_cache("category_cache")
+                self._clear_cache("brand_cache")
+                self._clear_cache("brand_org_cache")
 
         return created_count, updated_count, skipped_count, deleted_count, error_count
 
@@ -3217,7 +3333,7 @@ class Command(BaseCommand):
 
         This is much faster than looking up categories individually during import.
         Creates missing categories if needed.
-        Populates self._category_cache with category_slug -> Category mappings.
+        Populates the category cache with category_slug -> Category mappings.
         """
         if not amenities:
             return
@@ -3228,16 +3344,15 @@ class Command(BaseCommand):
             category_slugs.add(amenity["category_slug"])
 
         # Initialize cache
-        if not hasattr(self, "_category_cache"):
-            self._category_cache = {}
+        category_cache = self._get_cache("category_cache")
 
         # Process each category slug
         for category_slug in category_slugs:
-            if category_slug not in self._category_cache:
+            if category_slug not in category_cache:
                 # Use the existing _get_or_create_category method
                 # This handles identifier transformation and creation
                 try:
-                    self._category_cache[category_slug] = self._get_or_create_category(
+                    category_cache[category_slug] = self._get_or_create_category(
                         category_slug
                     )
                 except Exception as e:
@@ -3246,7 +3361,7 @@ class Command(BaseCommand):
                         f"Warning: Failed to create category '{category_slug}': {e}"
                     )
 
-        self.stdout.write(f"Pre-cached {len(self._category_cache)} categories")
+        self.stdout.write(f"Pre-cached {len(category_cache)} categories")
 
     def _upsert_amenities_hybrid_bulk(
         self,
@@ -3365,6 +3480,8 @@ class Command(BaseCommand):
         new_places = []
         existing_places = []
 
+        place_cache = self._get_cache("place_cache")
+
         for data in batch:
             location = Point(data["lon"], data["lat"], srid=4326)
 
@@ -3372,9 +3489,9 @@ class Command(BaseCommand):
             source_id = f"{data['osm_type']}/{data['osm_id']}"
             cache_key = f"osm_{source_id}"
 
-            if hasattr(self, "_place_cache") and cache_key in self._place_cache:
+            if cache_key in place_cache:
                 # Found in cache - this is an update
-                existing = self._place_cache[cache_key]
+                existing = place_cache[cache_key]
                 existing_places.append((existing, data))
                 continue
 
@@ -3396,7 +3513,7 @@ class Command(BaseCommand):
             else:
                 existing_places.append((existing, data))
                 # Add to cache for future lookups
-                self._place_cache[cache_key] = existing
+                place_cache[cache_key] = existing
 
         # Step 2: Retry logic for batch processing
         for attempt in range(max_retries):
@@ -3462,7 +3579,7 @@ class Command(BaseCommand):
             if new_places:
                 geoplaces_to_create = []
                 amenity_details_to_create = []
-                associations_to_create = []
+                source_ids = []
 
                 for data in new_places:
                     # Prepare GeoPlace
@@ -3477,15 +3594,7 @@ class Command(BaseCommand):
                     )
                     amenity_details_to_create.append(detail)
 
-                    # Prepare source association
-                    associations_to_create.append(
-                        GeoPlaceSourceAssociation(
-                            organization=osm_org,
-                            source_id=f"{data['osm_type']}/{data['osm_id']}",
-                            import_date=run_start,
-                            modified_date=run_start,
-                        )
-                    )
+                    source_ids.append(f"{data['osm_type']}/{data['osm_id']}")
 
                 # Bulk create GeoPlaces
                 created_geoplaces = GeoPlace.objects.bulk_create(geoplaces_to_create)
@@ -3493,18 +3602,22 @@ class Command(BaseCommand):
                 # Now create details with proper references
                 for place, detail in zip(created_geoplaces, amenity_details_to_create):
                     detail.geo_place = place
-                    # Set operating_status based on data
-                    if detail.phones:
-                        detail.phones = detail.phones
 
-                # Bulk create AmenityDetails and Associations
+                # Bulk create AmenityDetails
                 AmenityDetail.objects.bulk_create(amenity_details_to_create)
-                GeoPlaceSourceAssociation.objects.bulk_create(associations_to_create)
 
-                # Link associations to places
-                for place, assoc in zip(created_geoplaces, associations_to_create):
-                    assoc.geo_place = place
-                    assoc.save(update_fields=["geo_place"])
+                # Bulk create Associations with GeoPlace set
+                associations_to_create = [
+                    GeoPlaceSourceAssociation(
+                        geo_place=place,
+                        organization=osm_org,
+                        source_id=source_id,
+                        import_date=run_start,
+                        modified_date=run_start,
+                    )
+                    for place, source_id in zip(created_geoplaces, source_ids)
+                ]
+                GeoPlaceSourceAssociation.objects.bulk_create(associations_to_create)
 
                 created_count += len(new_places)
 
@@ -3512,6 +3625,16 @@ class Command(BaseCommand):
             if existing_places:
                 places_to_update = []
                 details_to_update = []
+                detail_by_place_id = {}
+
+                place_ids = [existing.id for existing, _ in existing_places]
+                if place_ids:
+                    detail_by_place_id = {
+                        detail.geo_place_id: detail
+                        for detail in AmenityDetail.objects.filter(
+                            geo_place_id__in=place_ids
+                        )
+                    }
 
                 for existing, data in existing_places:
                     # Update GeoPlace fields
@@ -3521,16 +3644,13 @@ class Command(BaseCommand):
                     places_to_update.append(existing)
 
                     # Update AmenityDetail if exists
-                    if hasattr(existing, "amenity_detail"):
+                    detail = detail_by_place_id.get(existing.id)
+                    if detail:
                         if data.get("opening_hours"):
-                            existing.amenity_detail.opening_hours = data[
-                                "opening_hours"
-                            ]
+                            detail.opening_hours = data["opening_hours"]
                         if data.get("phone"):
-                            existing.amenity_detail.phones = self._format_phones(
-                                data["phone"]
-                            )
-                        details_to_update.append(existing.amenity_detail)
+                            detail.phones = self._format_phones(data["phone"])
+                        details_to_update.append(detail)
 
                 # Bulk update
                 if places_to_update:
