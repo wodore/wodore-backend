@@ -18,8 +18,8 @@ class MapillaryProvider(ImageProvider):
     """
 
     source = "mapillary"
-    cache_ttl = 12 * 60 * 60  # 12 hours
-    priority = 4
+    cache_ttl = 7 * 24 * 3600  # 7 days
+    priority = 5
 
     async def fetch(
         self,
@@ -28,6 +28,7 @@ class MapillaryProvider(ImageProvider):
         lon: float,
         radius: float,
         limit: int = 100,
+        update_cache: bool = False,
     ) -> list[ImageResult]:
         """Fetch images from Mapillary - TODO: Not yet implemented."""
         logger.info("MapillaryProvider: Not yet implemented")

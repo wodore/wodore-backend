@@ -44,6 +44,7 @@ class WodoreProvider(ImageProvider):
         lon: float,
         radius: float,
         limit: int = 100,
+        update_cache: bool = False,
     ) -> list[ImageResult]:
         """
         Fetch images from internal Wodore database.
@@ -53,8 +54,8 @@ class WodoreProvider(ImageProvider):
             lat: Query latitude
             lon: Query longitude
             radius: Search radius in meters
-
             limit: Maximum number of results to return
+            update_cache: If True, bypass cache (not used by WodoreProvider - always live)
 
         Returns:
             List of ImageResult objects

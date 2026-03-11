@@ -25,8 +25,8 @@ class CamptocampProvider(ImageProvider):
     """
 
     source = "camptocamp"
-    cache_ttl = 24 * 60 * 60  # 24 hours
-    priority = 6  # Lower priority than wodore/wikidata
+    cache_ttl = 31 * 24 * 3600  # 31 days
+    priority = 3  # Lower priority than wodore/wikidata
 
     def __init__(self, lang: str = "de"):
         """
@@ -47,6 +47,7 @@ class CamptocampProvider(ImageProvider):
         lon: float,
         radius: float,
         limit: int = 100,
+        update_cache: bool = False,
     ) -> list[ImageResult]:
         """
         Fetch images from Camptocamp using bbox query.
@@ -56,13 +57,24 @@ class CamptocampProvider(ImageProvider):
             lat: Query latitude (center point)
             lon: Query longitude (center point)
             radius: Search radius in meters
-
             limit: Maximum number of results to return
+            update_cache: If True, bypass cache and refresh cached data
 
         Returns:
             List of ImageResult objects
         """
         try:
+            # 1. Check cache first
+            cache_key = self._get_cache_key(lat, lon, radius, "precise")
+            if not update_cache:
+                cached = await self._get_cached_results(cache_key)
+                if cached is not None:
+                    logger.info(f"⛰️  CamptocampProvider: Cache HIT for {cache_key}")
+                    return cached
+
+            logger.info("⛰️  CamptocampProvider: Cache MISS - fetching from API")
+
+            # 2. Fetch from API
             import httpx
             from django.conf import settings
 
@@ -111,6 +123,11 @@ class CamptocampProvider(ImageProvider):
                         continue
 
                 logger.info(f"CamptocampProvider: Total images found: {len(results)}")
+
+                # 3. Store in cache
+                logger.info(f"⛰️  CamptocampProvider: Caching {len(results)} results")
+                self._set_cached_results(cache_key, results)
+
                 return results
 
         except Exception as e:

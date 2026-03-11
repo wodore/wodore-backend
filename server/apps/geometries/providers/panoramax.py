@@ -26,8 +26,8 @@ class PanoramaxProvider(ImageProvider):
     """
 
     source = "panoramax"
-    cache_ttl = 6 * 60 * 60  # 6 hours - Panoramax updates frequently
-    priority = 3  # After camptocamp, before wikidata
+    cache_ttl = 7 * 24 * 3600  # 7 days
+    priority = 4  # After camptocamp, before wikidata
 
     def __init__(self, api_base: str = "https://api.panoramax.xyz"):
         """
@@ -46,6 +46,7 @@ class PanoramaxProvider(ImageProvider):
         lon: float,
         radius: float,
         limit: int = 100,
+        update_cache: bool = False,
     ) -> list[ImageResult]:
         """
         Fetch images from Panoramax using /api/search endpoint.
@@ -56,11 +57,23 @@ class PanoramaxProvider(ImageProvider):
             lon: Query longitude (center point)
             radius: Search radius in meters
             limit: Maximum number of results to return
+            update_cache: If True, bypass cache and refresh cached data
 
         Returns:
             List of ImageResult objects
         """
         try:
+            # 1. Check cache first
+            cache_key = self._get_cache_key(lat, lon, radius, "precise")
+            if not update_cache:
+                cached = await self._get_cached_results(cache_key)
+                if cached is not None:
+                    logger.info(f"📷 PanoramaxProvider: Cache HIT for {cache_key}")
+                    return cached
+
+            logger.info("📷 PanoramaxProvider: Cache MISS - fetching from API")
+
+            # 2. Fetch from API
             import httpx
             from django.conf import settings
 
@@ -110,6 +123,11 @@ class PanoramaxProvider(ImageProvider):
                 logger.info(
                     f"PanoramaxProvider: Successfully parsed {len(results)} images"
                 )
+
+                # 3. Store in cache
+                logger.info(f"📷 PanoramaxProvider: Caching {len(results)} results")
+                self._set_cached_results(cache_key, results)
+
                 return results
 
         except Exception as e:

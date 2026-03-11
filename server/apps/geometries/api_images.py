@@ -31,6 +31,7 @@ from .providers import (
     MapillaryProvider,
     PanoramaxProvider,
     CamptocampProvider,
+    # FlickrProvider - Requires premium API key, not available
 )
 
 router = Router(tags=["geoimages"])
@@ -81,6 +82,10 @@ def nearby_images(
         description="Maximum number of images to return",
         ge=1,
         le=500,
+    ),
+    update_cache: bool = Query(
+        False,
+        description="Force cache refresh - bypass cache and update all cached data from providers",
     ),
 ) -> ImageCollectionResponse:
     """
@@ -190,6 +195,7 @@ def nearby_images(
                 sources=sources_list,
                 precision=precision,
                 limit=limit,  # Pass limit to providers
+                update_cache=update_cache,  # Pass update_cache flag
             )
         )
         logger.debug(f"📊 Total raw results from all providers: {len(results)} images")
@@ -259,6 +265,10 @@ def images_for_place(
         ge=1,
         le=500,
     ),
+    update_cache: bool = Query(
+        False,
+        description="Force cache refresh - bypass cache and update all cached data from providers",
+    ),
 ) -> ImageCollectionResponse:
     """
     Get images for a specific GeoPlace from multiple sources.
@@ -289,6 +299,7 @@ def images_for_place(
                 radius=radius,
                 sources=sources_list,
                 limit=limit,
+                update_cache=update_cache,  # Pass update_cache flag
             )
         )
         logger.debug(f"📊 Total raw results from all providers: {len(results)} images")
@@ -361,6 +372,10 @@ def images_for_hut(
         ge=1,
         le=500,
     ),
+    update_cache: bool = Query(
+        False,
+        description="Force cache refresh - bypass cache and update all cached data from providers",
+    ),
 ) -> ImageCollectionResponse:
     """
     Get images for a specific Hut from multiple sources.
@@ -391,6 +406,7 @@ def images_for_hut(
                 radius=radius,
                 sources=sources_list,
                 limit=limit,
+                update_cache=update_cache,  # Pass update_cache flag
             )
         )
         logger.debug(f"📊 Total raw results from all providers: {len(results)} images")
