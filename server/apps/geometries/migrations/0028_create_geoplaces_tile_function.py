@@ -230,23 +230,55 @@ def create_geoplaces_tile_function(forwards_sql):
             4096, 64, true
           ) AS geom,
 
-          -- Always include core fields
-          fp.slug,
-          fp.importance,
-          fp.detail_type,
-          fp.elevation,
-          fp.country_code,
-          fp.name,
+          -- Fields: use defaults if fields_array IS NULL, otherwise use requested fields
+          -- Default fields: slug, name, importance, categories, sources
+          CASE
+            WHEN fields_array IS NULL OR 'slug' = ANY(fields_array)
+            THEN fp.slug
+            ELSE NULL::text
+          END as slug,
 
-          -- Conditionally include fields based on fields_array
+          CASE
+            WHEN fields_array IS NULL OR 'name' = ANY(fields_array)
+            THEN fp.name
+            ELSE NULL::text
+          END as name,
+
+          CASE
+            WHEN fields_array IS NULL OR 'importance' = ANY(fields_array)
+            THEN fp.importance
+            ELSE NULL::integer
+          END as importance,
+
+          -- Optional fields (only if explicitly requested)
+          CASE
+            WHEN fields_array IS NOT NULL AND 'detail_type' = ANY(fields_array)
+            THEN fp.detail_type
+            ELSE NULL::text
+          END as detail_type,
+
+          CASE
+            WHEN fields_array IS NOT NULL AND 'elevation' = ANY(fields_array)
+            THEN fp.elevation
+            ELSE NULL::integer
+          END as elevation,
+
+          CASE
+            WHEN fields_array IS NOT NULL AND 'country_code' = ANY(fields_array)
+            THEN fp.country_code
+            ELSE NULL::text
+          END as country_code,
+
+          -- Categories and sources (included in defaults)
           CASE
             WHEN fields_array IS NULL OR 'categories' = ANY(fields_array)
             THEN fp.categories
             ELSE NULL::jsonb
           END as categories,
 
+          -- Extra (optional, not in defaults)
           CASE
-            WHEN fields_array IS NULL OR 'extra' = ANY(fields_array)
+            WHEN fields_array IS NOT NULL AND 'extra' = ANY(fields_array)
             THEN fp.extra
             ELSE NULL::jsonb
           END as extra,
