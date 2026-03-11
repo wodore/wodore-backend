@@ -155,6 +155,10 @@ class WodoreProvider(ImageProvider):
                             "id": place.id,
                             "slug": place.slug,
                             "name": place.name_i18n,
+                            "location": {
+                                "lat": place.location.y,
+                                "lon": place.location.x,
+                            },
                         }
                         if place
                         else None,
@@ -300,6 +304,10 @@ class WodoreProvider(ImageProvider):
                             "id": hut.id,
                             "slug": hut.slug,
                             "name": hut.name_i18n,
+                            "location": {
+                                "lat": hut.location.y,
+                                "lon": hut.location.x,
+                            },
                         }
                         if hut
                         else None,

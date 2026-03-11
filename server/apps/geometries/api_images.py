@@ -4,7 +4,6 @@ Separate router to allow mounting at /geo/images/
 """
 
 import logging
-from typing import Any
 
 from django.contrib.gis.geos import Point
 from ninja import Query, Router
@@ -17,6 +16,10 @@ from django.views.decorators.cache import cache_control
 from server.apps.translations import LanguageParam, activate, with_language_param
 
 from .models import GeoPlace
+from .schemas import (
+    ImageCollectionResponse,
+    ImageMetadataSchema,
+)
 from .providers import (
     fetch_images_from_providers,
     provider_registry,
@@ -24,7 +27,6 @@ from .providers import (
     post_process_images,
     WodoreProvider,
     WikimediaCommonsProvider,
-    FlickrProvider,
     MapillaryProvider,
     PanoramaxProvider,
     CamptocampProvider,
@@ -38,7 +40,7 @@ logger = logging.getLogger(__name__)
 provider_registry.register(WodoreProvider(place_type="geoplace"))
 provider_registry.register(WodoreProvider(place_type="hut"))
 provider_registry.register(WikimediaCommonsProvider())  # Replaces WikidataProvider
-provider_registry.register(FlickrProvider())
+# provider_registry.register(FlickrProvider())
 provider_registry.register(MapillaryProvider())
 provider_registry.register(PanoramaxProvider())
 provider_registry.register(CamptocampProvider())
@@ -46,7 +48,7 @@ provider_registry.register(CamptocampProvider())
 
 @router.get(
     "nearby",
-    response={200: dict},
+    response=ImageCollectionResponse,
     exclude_unset=True,
     operation_id="nearby_images",
 )
@@ -79,7 +81,7 @@ def nearby_images(
         ge=1,
         le=500,
     ),
-) -> Any:
+) -> ImageCollectionResponse:
     """
     Get images near a location from multiple sources as a GeoJSON FeatureCollection.
 
@@ -210,16 +212,17 @@ def nearby_images(
     logger.debug(f"🎨 Post-processing {len(results)} results...")
     features = post_process_images(results)
 
-    return {
-        "type": "FeatureCollection",
-        "features": features,
-        "metadata": {
-            "total": len(features),
-            "sources_queried": sources_list
-            or [p.source for p in provider_registry.get_all_providers()],
-            "query_radius_m": radius,
-            "center": {"lat": lat, "lon": lon},
-            "geoplaces_found": len(geoplaces),
-            "huts_found": len(huts),
-        },
-    }
+    # Construct metadata
+    metadata = ImageMetadataSchema(
+        total=len(features),
+        sources_queried=sources_list
+        or [p.source for p in provider_registry.get_all_providers()],
+        query_radius_m=radius,
+        center={"lat": lat, "lon": lon},
+        geoplaces_found=len(geoplaces),
+        huts_found=len(huts),
+    )
+
+    return ImageCollectionResponse(
+        type="FeatureCollection", features=features, metadata=metadata
+    )

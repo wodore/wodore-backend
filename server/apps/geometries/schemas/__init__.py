@@ -23,9 +23,15 @@ from ._output import (
 
 # Image schemas (for image aggregation API)
 from ._images import (
+    ImageCollectionResponse,
+    ImageFeature,
+    ImageFeatureCollection,
     ImageLicenseSchema,
-    ImageUrlsSchema,
+    ImageMetadataSchema,
+    ImagePlaceReferenceSchema,
     ImagePropertiesSchema,
+    ImageProviderSchema,
+    ImageUrlsSchema,
 )
 
 # Input schemas (for creating/updating models)
@@ -58,9 +64,15 @@ __all__ = [
     "SymbolSchema",
     "WebsiteSchema",
     # Image schemas
+    "ImageCollectionResponse",
+    "ImageFeature",
+    "ImageFeatureCollection",
     "ImageLicenseSchema",
-    "ImageUrlsSchema",
+    "ImageMetadataSchema",
+    "ImagePlaceReferenceSchema",
     "ImagePropertiesSchema",
+    "ImageProviderSchema",
+    "ImageUrlsSchema",
     # Input schemas
     "BrandInput",
     "DedupOptions",

@@ -4,9 +4,11 @@ Defines the unified image schema returned by all providers.
 """
 
 from datetime import datetime
-from typing import Any
 
+from geojson_pydantic import Feature, FeatureCollection, Point
 from pydantic import BaseModel, Field
+
+from hut_services import LocationSchema
 
 
 class ImageLicenseSchema(BaseModel):
@@ -20,19 +22,41 @@ class ImageLicenseSchema(BaseModel):
 class ImageUrlsSchema(BaseModel):
     """Image URLs for different sizes and orientations."""
 
-    original: str = Field(..., description="Original unproxied source URL")
-    placeholder: str | None = Field(
-        None, description="Low-res placeholder for lazy loading"
+    original: dict[str, str] = Field(
+        ..., description="Original image URLs (raw, proxy)"
+    )
+    square: dict[str, str] | None = Field(
+        None,
+        description="Square-cropped image URLs (avatar, thumb, preview, placeholder, medium, large with @2x variants)",
     )
     portrait: dict[str, str] | None = Field(
-        None, description="Portrait-oriented image URLs"
+        None,
+        description="Portrait-oriented image URLs (thumb, preview, placeholder, medium, large with @2x variants)",
     )
     landscape: dict[str, str] | None = Field(
-        None, description="Landscape-oriented image URLs"
+        None,
+        description="Landscape-oriented image URLs (thumb, preview, placeholder, medium, large with @2x variants)",
     )
     preferred: str | None = Field(
         None, description="Preferred orientation URL based on image dimensions"
     )
+
+
+class ImageProviderSchema(BaseModel):
+    """Provider/organization information for an image."""
+
+    slug: str = Field(..., description="Provider/organization slug")
+    name: str | None = Field(None, description="Provider/organization name")
+    logo: str | None = Field(None, description="Provider/organization logo URL")
+
+
+class ImagePlaceReferenceSchema(BaseModel):
+    """Brief reference to a GeoPlace or Hut associated with an image."""
+
+    id: int = Field(..., description="Place database ID")
+    slug: str = Field(..., description="Place slug identifier")
+    name: str = Field(..., description="Place name")
+    location: LocationSchema = Field(..., description="Place coordinates")
 
 
 class ImagePropertiesSchema(BaseModel):
@@ -63,7 +87,7 @@ class ImagePropertiesSchema(BaseModel):
     author: str | None = Field(None, description="Image author name")
 
     # URLs
-    urls: dict[str, str] = Field(..., description="Image URLs for different sizes")
+    urls: ImageUrlsSchema = Field(..., description="Image URLs for different sizes")
 
     # Quality score
     score: int = Field(
@@ -77,16 +101,71 @@ class ImagePropertiesSchema(BaseModel):
         None, description="True if image is portrait-oriented (height > width)"
     )
 
+    # Focal and crop areas
+    focal: dict[str, float] | None = Field(
+        None,
+        description="Focal point area coordinates (x1, y1, x2, y2) for smart cropping",
+    )
+    crop: dict[str, float] | None = Field(
+        None,
+        description="Crop area coordinates (x1, y1, x2, y2) for specific region extraction",
+    )
+
     # Source tracking
     source_found: list[str] | None = Field(
         None,
         description="Sources where this image was found (e.g., ['osm', 'wikidata'])",
     )
-    source_organization: dict[str, Any] | None = Field(
-        None, description="Organization information if available"
+    provider: ImageProviderSchema | None = Field(
+        None, description="Provider/organization information"
     )
 
     # Optional: Link back to GeoPlace (if image is associated with a place)
-    place: dict[str, Any] | None = Field(
-        None, description="Associated GeoPlace reference"
+    place: ImagePlaceReferenceSchema | None = Field(
+        None, description="Associated GeoPlace or Hut reference"
+    )
+
+
+# GeoJSON types for nearby_images endpoint
+ImageFeature = Feature[Point, ImagePropertiesSchema]
+
+
+class ImageMetadataSchema(BaseModel):
+    """Metadata for the image collection response."""
+
+    total: int = Field(
+        ..., description="Total number of images returned in the collection"
+    )
+    sources_queried: list[str] = Field(
+        ..., description="List of provider sources that were queried"
+    )
+    query_radius_m: float = Field(
+        ..., description="Search radius used for the query in meters"
+    )
+    center: dict[str, float] = Field(
+        ..., description="Center point of the query as {lat, lon}"
+    )
+    geoplaces_found: int = Field(
+        ..., description="Number of GeoPlaces found within search radius"
+    )
+    huts_found: int = Field(
+        ..., description="Number of Huts found within search radius"
+    )
+
+
+class ImageFeatureCollection(FeatureCollection[ImageFeature]):
+    """GeoJSON FeatureCollection of images from multiple providers."""
+
+    pass
+
+
+class ImageCollectionResponse(BaseModel):
+    """Complete response for nearby_images endpoint including metadata."""
+
+    type: str = Field(default="FeatureCollection", description="GeoJSON type")
+    features: list[ImageFeature] = Field(
+        ..., description="List of image features as GeoJSON"
+    )
+    metadata: ImageMetadataSchema = Field(
+        ..., description="Metadata about the image collection"
     )

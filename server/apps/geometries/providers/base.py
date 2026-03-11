@@ -28,15 +28,15 @@ class ImageArea:
     x2: float  # Right coordinate (0-1)
     y2: float  # Bottom coordinate (0-1)
 
-    def to_imagor_crop(self) -> str:
+    def to_imagor_area(self) -> str:
         """
-        Convert to Imagor crop format (x1,y1:x2,y2).
+        Convert to Imagor area format (x1,y1:x2,y2).
 
         Returns normalized coordinates as a string for Imagor.
         """
-        return f"{self.x1:.2f},{self.y1:.2f}:{self.x2:.2f},{self.y2:.2f}"
+        return f"{self.x1:.2f}x{self.y1:.2f}:{self.x2:.2f}x{self.y2:.2f}"
 
-    def to_imagor_focal(self) -> str:
+    def to_imagor_point(self) -> str:
         """
         Convert to Imagor focal point format (center_x,center_y).
 
@@ -45,6 +45,10 @@ class ImageArea:
         center_x = (self.x1 + self.x2) / 2
         center_y = (self.y1 + self.y2) / 2
         return f"{center_x:.2f},{center_y:.2f}"
+
+    def to_imagor_crop(self) -> tuple[str, str]:
+        x, y = self.to_imagor_area().split(":")
+        return x, y
 
 
 logger = logging.getLogger(__name__)
@@ -229,6 +233,41 @@ def _get_provider_info(provider_name: str) -> dict:
     return provider_info
 
 
+def _get_license_name(slug: str | None) -> str | None:
+    """Get human-readable license name from slug."""
+    if not slug:
+        return None
+    license_names = {
+        "cc-by-sa-4.0": "Creative Commons Attribution-ShareAlike 4.0",
+        "cc-by-4.0": "Creative Commons Attribution 4.0",
+        "cc-by-nc-sa-4.0": "Creative Commons Attribution-NonCommercial-ShareAlike 4.0",
+        "cc-by-nc-nd-4.0": "Creative Commons Attribution-NonCommercial-NoDerivs 4.0",
+        "cc-by-nd-4.0": "Creative Commons Attribution-NoDerivs 4.0",
+        "cc-by-nc-4.0": "Creative Commons Attribution-NonCommercial 4.0",
+        "cc0": "Creative Commons CC0",
+        "pdm": "Public Domain Mark",
+        "copyright": "All Rights Reserved",
+    }
+    return license_names.get(slug, slug)
+
+
+def _get_license_url(slug: str | None) -> str | None:
+    """Get license URL from slug."""
+    if not slug:
+        return None
+    license_urls = {
+        "cc-by-sa-4.0": "https://creativecommons.org/licenses/by-sa/4.0/",
+        "cc-by-4.0": "https://creativecommons.org/licenses/by/4.0/",
+        "cc-by-nc-sa-4.0": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+        "cc-by-nc-nd-4.0": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+        "cc-by-nd-4.0": "https://creativecommons.org/licenses/by-nd/4.0/",
+        "cc-by-nc-4.0": "https://creativecommons.org/licenses/by-nc/4.0/",
+        "cc0": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "pdm": "https://creativecommons.org/publicdomain/mark/1.0/",
+    }
+    return license_urls.get(slug)
+
+
 def post_process_images(
     results: list[ImageResult],
 ) -> list[dict]:
@@ -255,11 +294,9 @@ def post_process_images(
         try:
             # Determine orientation
             is_portrait = None
-            preferred_mode = "unknown"
 
             if result.width and result.height:
                 is_portrait = result.height > result.width
-                preferred_mode = "portrait" if is_portrait else "landscape"
 
             # Use url_medium if available, otherwise url_large
             original_url = result.url_medium or result.url_large
@@ -267,23 +304,21 @@ def post_process_images(
 
             # Determine focal point for transforms
             # Use focal area if available, otherwise default to smart detection
-            focal_point = result.focal.to_imagor_focal() if result.focal else "smart"
+            focal_point = result.focal.to_imagor_area() if result.focal else "smart"
 
             # Determine crop parameters
             # If result.crop is defined, use it for all crops
             # Otherwise, use result.focal for avatar/thumb if focal_point is not smart
             crop_start = None
             crop_stop = None
+            focal_start = None
+            focal_stop = None
             if result.crop:
                 # Parse crop string "x1,y1:x2,y2" into start and stop
-                crop_str = result.crop.to_imagor_crop()
-                if ":" in crop_str:
-                    crop_start, crop_stop = crop_str.split(":")
+                crop_start, crop_stop = result.crop.to_imagor_area()
             elif focal_point != "smart" and result.focal:
                 # If no explicit crop but focal exists, use focal area for avatar/thumb only
-                focal_str = result.focal.to_imagor_crop()
-                if ":" in focal_str:
-                    crop_start, crop_stop = focal_str.split(":")
+                focal_start, focal_stop = result.focal.to_imagor_area()
 
             # Generate URLs with @2x variants
             quality = 85
@@ -297,29 +332,29 @@ def post_process_images(
                         size="96x96",
                         quality=quality,
                         focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
+                        crop_start=focal_start,
+                        crop_stop=focal_stop,
                     ).get_full_url(),
                     "avatar@2x": imagor_img.transform(
                         size="192x192",
                         quality=quality,
                         focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
+                        crop_start=focal_start,
+                        crop_stop=focal_stop,
                     ).get_full_url(),
                     "thumb": imagor_img.transform(
                         size="200x200",
                         quality=quality,
                         focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
+                        crop_start=focal_start,
+                        crop_stop=focal_stop,
                     ).get_full_url(),
                     "thumb@2x": imagor_img.transform(
                         size="400x400",
                         quality=quality,
                         focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
+                        crop_start=focal_start,
+                        crop_stop=focal_stop,
                     ).get_full_url(),
                     "preview": imagor_img.transform(
                         size="400x400",
@@ -389,15 +424,15 @@ def post_process_images(
                         size="200x133",
                         quality=quality,
                         focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
+                        crop_start=focal_start,
+                        crop_stop=focal_stop,
                     ).get_full_url(),
                     "thumb@2x": imagor_img.transform(
                         size="400x266",
                         quality=quality,
                         focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
+                        crop_start=focal_start,
+                        crop_stop=focal_stop,
                     ).get_full_url(),
                     "preview": imagor_img.transform(
                         size="400x267",
@@ -467,14 +502,14 @@ def post_process_images(
                         size="133x200",
                         quality=quality,
                         focal=focal_point,
-                        crop_start=crop_start,
+                        crop_start=focal_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
                     "thumb@2x": imagor_img.transform(
                         size="266x400",
                         quality=quality,
                         focal=focal_point,
-                        crop_start=crop_start,
+                        crop_start=focal_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
                     "preview": imagor_img.transform(
@@ -573,8 +608,7 @@ def post_process_images(
                     "coordinates": [result.location.x, result.location.y],
                 },
                 "properties": {
-                    "provider": result.provider,
-                    "provider_info": provider_info,
+                    "source": result.provider,
                     "source_id": result.source_id,
                     "source_url": result.source_url,
                     "image_type": result.image_type,
@@ -582,17 +616,22 @@ def post_process_images(
                     if result.captured_at
                     else None,
                     "distance_m": result.distance_m,
-                    "license_slug": result.license_slug,
+                    "license": {
+                        "slug": result.license_slug,
+                        "name": _get_license_name(result.license_slug),
+                        "url": _get_license_url(result.license_slug),
+                    },
                     "attribution": result.attribution,
                     "author": result.author,
                     "urls": urls,
                     "width": result.width,
                     "height": result.height,
-                    "preferred_mode": preferred_mode,
+                    "is_portrait": is_portrait,
+                    "score": result.score,
                     "focal": focal_metadata,
                     "crop": crop_metadata,
+                    "provider": provider_info,
                     "place": result.place,
-                    "score": result.score,
                 },
             }
 

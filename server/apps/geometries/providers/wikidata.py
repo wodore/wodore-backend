@@ -349,6 +349,10 @@ class WikidataProvider(ImageProvider):
                     "id": place.id,
                     "slug": place.slug,
                     "name": place.name_i18n,
+                    "location": {
+                        "lat": place.location.y,
+                        "lon": place.location.x,
+                    },
                 }
                 if place
                 else None,
