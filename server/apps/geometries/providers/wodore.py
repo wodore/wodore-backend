@@ -35,7 +35,7 @@ class WodoreProvider(ImageProvider):
             place_type: Type of place ('geoplace' or 'hut')
         """
         self.place_type = place_type
-        logger.info(f"Initialized WodoreProvider for {place_type}")
+        logger.debug(f"Initialized WodoreProvider for {place_type}")
 
     async def fetch(
         self,
@@ -61,7 +61,7 @@ class WodoreProvider(ImageProvider):
             List of ImageResult objects
         """
         try:
-            logger.debug(f"🏔️  WodoreProvider: Fetching with {len(geoplaces)} geoplaces")
+            logger.debug(f"WodoreProvider: Fetching with {len(geoplaces)} geoplaces")
 
             # Wrap the synchronous fetch in sync_to_async
             return await sync_to_async(self._fetch_sync)(geoplaces, lat, lon, radius)
@@ -104,7 +104,7 @@ class WodoreProvider(ImageProvider):
                 if hasattr(place, "osm_tags") and place.osm_tags:
                     place_qid = place.osm_tags.get("wikidata")
 
-                logger.info(
+                logger.debug(
                     f"WodoreProvider: Processing place '{place.slug}' (QID: {place_qid})"
                 )
 
@@ -210,7 +210,7 @@ class WodoreProvider(ImageProvider):
                     )
                     results.append(result)
 
-            logger.info(
+            logger.debug(
                 f"WodoreProvider ({self.place_type}): Found {len(results)} images from {len(places)} places"
             )
             return results
@@ -254,8 +254,8 @@ class WodoreProvider(ImageProvider):
                             if isinstance(tags, dict):
                                 qid = tags.get("wikidata")
                                 if qid:
-                                    logger.info(
-                                        f"    ✓ WIKIDATA QID in {source.organization.slug}: {qid}"
+                                    logger.debug(
+                                        f"WIKIDATA QID in {source.organization.slug}: {qid}"
                                     )
 
                 try:
@@ -273,15 +273,15 @@ class WodoreProvider(ImageProvider):
                         if tags and isinstance(tags, dict):
                             hut_qid = tags.get("wikidata")
                             if hut_qid:
-                                logger.info(
-                                    f"✓ Extracted QID {hut_qid} from OSM source for '{hut.slug}'"
+                                logger.debug(
+                                    f"Extracted QID {hut_qid} from OSM source for '{hut.slug}'"
                                 )
                 except Exception as e:
                     logger.debug(
                         f"Could not extract QID from OSM source for {hut.slug}: {e}"
                     )
 
-                logger.info(
+                logger.debug(
                     f"WodoreProvider: Processing hut '{hut.slug}' (QID: {hut_qid})"
                 )
 
@@ -398,7 +398,7 @@ class WodoreProvider(ImageProvider):
                     )
                     results.append(result)
 
-            logger.info(
+            logger.debug(
                 f"WodoreProvider ({self.place_type}): Found {len(results)} images from {len(huts)} huts"
             )
             return results

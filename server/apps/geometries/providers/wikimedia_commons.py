@@ -59,7 +59,7 @@ class WikimediaCommonsProvider(ImageProvider):
         """
         self.wikidata_endpoint = wikidata_endpoint
         self.commons_api = commons_api
-        logger.info("Initialized WikimediaCommonsProvider")
+        logger.debug("Initialized WikimediaCommonsProvider")
 
     async def fetch(
         self,
@@ -90,12 +90,10 @@ class WikimediaCommonsProvider(ImageProvider):
             if not update_cache:
                 cached = await self._get_cached_results(cache_key)
                 if cached is not None:
-                    logger.info(
-                        f"🌍 WikimediaCommonsProvider: Cache HIT for {cache_key}"
-                    )
+                    logger.debug(f"WikimediaCommonsProvider: Cache HIT for {cache_key}")
                     return cached
 
-            logger.info("🌍 WikimediaCommonsProvider: Cache MISS - fetching from API")
+            logger.debug("WikimediaCommonsProvider: Cache MISS - fetching from API")
 
             # 2. Fetch from API
             import httpx
@@ -134,10 +132,12 @@ class WikimediaCommonsProvider(ImageProvider):
                 except Exception as e:
                     logger.warning(f"Commons geosearch failed: {e}")
 
-            logger.info(f"WikimediaCommonsProvider: Found {len(results)} unique images")
+            logger.debug(
+                f"WikimediaCommonsProvider: Found {len(results)} unique images"
+            )
 
             # 3. Store in cache
-            logger.info(f"🌍 WikimediaCommonsProvider: Caching {len(results)} results")
+            logger.debug(f"WikimediaCommonsProvider: Caching {len(results)} results")
             self._set_cached_results(cache_key, results)
 
             return results
@@ -243,7 +243,7 @@ class WikimediaCommonsProvider(ImageProvider):
                     logger.warning(f"Error parsing Wikidata result: {e}")
                     continue
 
-            logger.info(f"Wikidata spatial query: {len(results)} images")
+            logger.debug(f"Wikidata spatial query: {len(results)} images")
             return results
 
     async def _fetch_commons_geosearch(
@@ -325,7 +325,7 @@ class WikimediaCommonsProvider(ImageProvider):
                     logger.warning(f"Error parsing geosearch result: {e}")
                     continue
 
-            logger.info(f"Commons geosearch: {len(results)} images")
+            logger.debug(f"Commons geosearch: {len(results)} images")
             return results
 
     async def _fetch_commons_metadata(

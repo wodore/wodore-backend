@@ -31,5 +31,5 @@ class MapillaryProvider(ImageProvider):
         update_cache: bool = False,
     ) -> list[ImageResult]:
         """Fetch images from Mapillary - TODO: Not yet implemented."""
-        logger.info("MapillaryProvider: Not yet implemented")
+        logger.debug("MapillaryProvider: Not yet implemented")
         return []

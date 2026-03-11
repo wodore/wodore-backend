@@ -276,7 +276,7 @@ class ImageProvider(ABC):
         cache_instance = self.get_cache()
         deleted = cache_instance.delete(cache_key)
         if deleted:
-            logger.info(f"Invalidated cache: {cache_key}")
+            logger.debug(f"Invalidated cache: {cache_key}")
         return deleted
 
     @classmethod
@@ -298,27 +298,46 @@ class ImageProvider(ABC):
         current_version = cache_instance.get(version_key, 1)
         new_version = current_version + 1
         cache_instance.set(version_key, new_version)
-        logger.info(
+        logger.debug(
             f"Invalidated all cache for provider '{provider}': v{current_version} -> v{new_version}"
         )
         return new_version
 
 
-def _get_provider_info(provider_name: str) -> dict:
+def _invalidate_provider_metadata_cache(provider_name: str) -> None:
+    """
+    Invalidate cached provider metadata (including icons).
+
+    This forces the provider information to be refetched from the database,
+    which will regenerate Imagor URLs with current environment settings.
+
+    Args:
+        provider_name: Name of the provider (e.g., "camptocamp", "panoramax")
+    """
+    cache = get_persistent_cache()
+    cache_key = f"{CACHE_KEY_PREFIX}:provider:{provider_name}"
+    cache.delete(cache_key)
+    logger.info(f"Invalidated provider metadata cache for '{provider_name}'")
+
+
+def _get_provider_info(provider_name: str, force_refresh: bool = False) -> dict:
     """
     Get provider information from database.
 
     Args:
         provider_name: Name of the provider (e.g., "camptocamp", "panoramax")
+        force_refresh: If True, bypass cache and refetch from database
 
     Returns:
         Dictionary with provider information
     """
     cache = get_persistent_cache()
     cache_key = f"{CACHE_KEY_PREFIX}:provider:{provider_name}"
-    cached = cache.get(cache_key)
-    if cached:
-        return cached
+
+    if not force_refresh:
+        cached = cache.get(cache_key)
+        if cached:
+            return cached
 
     # Fallback provider information for known providers
     provider_fallbacks = {
@@ -529,7 +548,7 @@ def _get_license_info(slug: str | None) -> dict[str, str | None]:
 
         # Auto-create license if not found
         if not license_obj:
-            logger.info(f"License '{slug}' not found in database, auto-creating...")
+            logger.debug(f"License '{slug}' not found in database, auto-creating...")
 
             # Generate reasonable defaults from slug
             generated_slug = _generate_license_slug(slug)
@@ -562,7 +581,7 @@ def _get_license_info(slug: str | None) -> dict[str, str | None]:
                 is_active=True,
                 order=License.get_next_order_number(),
             )
-            logger.info(
+            logger.debug(
                 f"Created new license '{generated_slug}' with review_status='new'"
             )
 
@@ -891,6 +910,7 @@ async def fetch_images_for_place(
 
 def post_process_images(
     results: list[ImageResult],
+    force_provider_refresh: bool = False,
 ) -> list[dict]:
     """
     Post-process image results to generate final output format.
@@ -903,6 +923,7 @@ def post_process_images(
 
     Args:
         results: List of ImageResult objects from providers
+        force_provider_refresh: If True, bypass provider metadata cache
 
     Returns:
         List of GeoJSON Feature dictionaries
@@ -1205,7 +1226,9 @@ def post_process_images(
             }
 
             # Get provider and license information from database
-            provider_info = _get_provider_info(result.provider)
+            provider_info = _get_provider_info(
+                result.provider, force_refresh=force_provider_refresh
+            )
             license_info = _get_license_info(result.license_slug)
 
             # Build focal and crop metadata
@@ -1320,7 +1343,7 @@ class ProviderRegistry:
     def register(self, provider: ImageProvider) -> None:
         """Register a new provider."""
         self._providers[provider.source] = provider
-        logger.info(f"Registered image provider: {provider.source}")
+        logger.debug(f"Registered image provider: {provider.source}")
 
     def get_provider(self, source: str) -> ImageProvider | None:
         """Get provider by source name."""
@@ -1394,9 +1417,7 @@ async def fetch_images_from_providers(
 
     # Log cache update mode
     if update_cache:
-        logger.info(
-            "🔄 UPDATE_CACHE mode: Bypassing cache and refreshing all providers"
-        )
+        logger.debug("UPDATE_CACHE mode: Bypassing cache and refreshing all providers")
 
     # Run all providers in parallel
     tasks = [
@@ -1418,7 +1439,7 @@ async def fetch_images_from_providers(
                 f"Provider {provider.source} returned {len(result_list)} images"
             )
 
-    logger.info(f"Total images fetched: {len(all_results)}")
+    logger.debug(f"Total images fetched: {len(all_results)}")
     return all_results
 
 
@@ -1487,7 +1508,7 @@ def deduplicate_images(results: list[ImageResult]) -> list[ImageResult]:
         seen_source_id[key] = result
         deduped.append(result)
 
-    logger.info(f"Deduplication: {len(results)} -> {len(deduped)} images")
+    logger.debug(f"Deduplication: {len(results)} -> {len(deduped)} images")
     return deduped
 
 

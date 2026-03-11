@@ -38,7 +38,7 @@ class CamptocampProvider(ImageProvider):
         self.lang = lang
         self.api_base = "https://api.camptocamp.org"
         self.media_base = "https://media.camptocamp.org/c2corg-active"
-        logger.info(f"Initialized CamptocampProvider with lang={lang}")
+        logger.debug(f"Initialized CamptocampProvider with lang={lang}")
 
     async def fetch(
         self,
@@ -69,10 +69,10 @@ class CamptocampProvider(ImageProvider):
             if not update_cache:
                 cached = await self._get_cached_results(cache_key)
                 if cached is not None:
-                    logger.info(f"⛰️  CamptocampProvider: Cache HIT for {cache_key}")
+                    logger.debug(f"CamptocampProvider: Cache HIT for {cache_key}")
                     return cached
 
-            logger.info("⛰️  CamptocampProvider: Cache MISS - fetching from API")
+            logger.debug("CamptocampProvider: Cache MISS - fetching from API")
 
             # 2. Fetch from API
             import httpx
@@ -81,7 +81,7 @@ class CamptocampProvider(ImageProvider):
             # Calculate bbox from center point and radius
             bbox = self._calculate_bbox(lat, lon, radius / 1000)  # Convert to km
 
-            logger.debug(f"⛰️  CamptocampProvider: Fetching waypoints in bbox {bbox}")
+            logger.debug(f"CamptocampProvider: Fetching waypoints in bbox {bbox}")
 
             headers = {
                 "User-Agent": getattr(
@@ -96,7 +96,7 @@ class CamptocampProvider(ImageProvider):
                     logger.warning("CamptocampProvider: No waypoints found in bbox")
                     return []
 
-                logger.info(f"CamptocampProvider: Found {len(waypoints)} waypoints")
+                logger.debug(f"CamptocampProvider: Found {len(waypoints)} waypoints")
 
                 # Step 2: Get details for each waypoint and extract images
                 results = []
@@ -122,10 +122,10 @@ class CamptocampProvider(ImageProvider):
                         )
                         continue
 
-                logger.info(f"CamptocampProvider: Total images found: {len(results)}")
+                logger.debug(f"CamptocampProvider: Total images found: {len(results)}")
 
                 # 3. Store in cache
-                logger.info(f"⛰️  CamptocampProvider: Caching {len(results)} results")
+                logger.debug(f"CamptocampProvider: Caching {len(results)} results")
                 self._set_cached_results(cache_key, results)
 
                 return results
