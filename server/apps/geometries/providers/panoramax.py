@@ -26,8 +26,8 @@ class PanoramaxProvider(ImageProvider):
     """
 
     source = "panoramax"
-    cache_ttl = 6 * 60 * 60  # 6 hours - Panoramax updates frequently
-    priority = 3  # After camptocamp, before wikidata
+    cache_ttl = 7 * 24 * 3600  # 7 days
+    priority = 4  # After camptocamp, before wikidata
 
     def __init__(self, api_base: str = "https://api.panoramax.xyz"):
         """
@@ -37,7 +37,7 @@ class PanoramaxProvider(ImageProvider):
             api_base: Panoramax API base URL
         """
         self.api_base = api_base
-        logger.info(f"Initialized PanoramaxProvider with {api_base}")
+        logger.debug(f"Initialized PanoramaxProvider with {api_base}")
 
     async def fetch(
         self,
@@ -46,6 +46,7 @@ class PanoramaxProvider(ImageProvider):
         lon: float,
         radius: float,
         limit: int = 100,
+        update_cache: bool = False,
     ) -> list[ImageResult]:
         """
         Fetch images from Panoramax using /api/search endpoint.
@@ -56,18 +57,30 @@ class PanoramaxProvider(ImageProvider):
             lon: Query longitude (center point)
             radius: Search radius in meters
             limit: Maximum number of results to return
+            update_cache: If True, bypass cache and refresh cached data
 
         Returns:
             List of ImageResult objects
         """
         try:
+            # 1. Check cache first
+            cache_key = self._get_cache_key(lat, lon, radius, "precise")
+            if not update_cache:
+                cached = await self._get_cached_results(cache_key)
+                if cached is not None:
+                    logger.debug(f"PanoramaxProvider: Cache HIT for {cache_key}")
+                    return cached
+
+            logger.debug("PanoramaxProvider: Cache MISS - fetching from API")
+
+            # 2. Fetch from API
             import httpx
             from django.conf import settings
 
             # Calculate bbox from center point and radius
             bbox = self._calculate_bbox(lat, lon, radius)
 
-            logger.debug(f"📷 PanoramaxProvider: Searching in bbox {bbox}")
+            logger.debug(f"PanoramaxProvider: Searching in bbox {bbox}")
 
             headers = {
                 "User-Agent": getattr(
@@ -94,7 +107,7 @@ class PanoramaxProvider(ImageProvider):
                 data = response.json()
                 features = data.get("features", [])
 
-                logger.info(f"PanoramaxProvider: Found {len(features)} items")
+                logger.debug(f"PanoramaxProvider: Found {len(features)} items")
 
                 # Parse all features
                 results = []
@@ -107,9 +120,14 @@ class PanoramaxProvider(ImageProvider):
                         logger.warning(f"Error parsing STAC item: {e}")
                         continue
 
-                logger.info(
+                logger.debug(
                     f"PanoramaxProvider: Successfully parsed {len(results)} images"
                 )
+
+                # 3. Store in cache
+                logger.debug(f"PanoramaxProvider: Caching {len(results)} results")
+                self._set_cached_results(cache_key, results)
+
                 return results
 
         except Exception as e:
