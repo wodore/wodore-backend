@@ -10,8 +10,12 @@ postgres:
   # Default SRID for spatial queries
   default_srid: 4326
 
+  max_feature_count: 5000 # either a positive integer, or null=unlimited (default)
+
   # Automatically compute bounds for tables
   auto_bounds: quick
+
+  auto_publish: false
 
   # Explicitly define tables/views to serve as vector tiles
   tables:
@@ -23,6 +27,7 @@ postgres:
       # Schema and table/view name
       schema: public
       table: huts_for_tiles
+      id_columns: slug
 
       # Geometry column (PostGIS)
       geometry_column: location
@@ -79,57 +84,97 @@ postgres:
       clip_geom: true
 
       # Support all zoom levels (0-20+)
+      minzoom: 7
+      maxzoom: 20
+
+    # GeoPlaces vector tiles (using view with precomputed JOINs)
+    # This source serves all data without dynamic filtering
+    # Recommended for: Simple use cases, backward compatibility
+    # Alternative: Use geoplaces_fn for advanced filtering (language, categories, fields)
+    geoplaces_view:
+      # Layer ID (used in vector tiles)
+      layer_id: geoplaces
+      id_columns: slug
+
+      # Schema and table/view name
+      schema: public
+      table: geoplaces_for_tiles
+
+      # Geometry column (PostGIS)
+      geometry_column: location
+      srid: 4326
+      geometry_type: POINT
+
+      # Properties to include in vector tiles
+      # All fields from the geoplaces_for_tiles view
+      properties:
+        # Core fields
+        slug: text
+        elevation: int4
+        country_code: text
+        importance: int2
+
+        # Default language name with fallbacks
+        name: text
+
+        # Multilingual names (with fallbacks)
+        name_de: text
+        name_en: text
+        name_fr: text
+        name_it: text
+
+        # Categories (JSON array)
+        categories: jsonb
+
+        # Detail type
+        detail_type: text
+
+        # Extra data
+        extra: jsonb
+
+        # Organization sources (JSON array)
+        sources: jsonb
+
+      # Note: View automatically filters to is_public=true AND is_active=true
+
+      # Tile extent in tile coordinate space (default: 4096)
+      extent: 4096
+
+      # Buffer size in pixels (helps prevent label/line clipping at tile edges)
+      buffer: 64
+
+      # Clip geometries to tile bounds (recommended for points)
+      clip_geom: true
+
+      minzoom: 7 # ~ 2x swiss
+      maxzoom: 20
+
+  functions:
+    # GeoPlaces vector tiles (using function with dynamic filtering)
+    # This source supports advanced filtering via URL query parameters
+    # Recommended for: Production use with dynamic tile optimization
+    # See: server/apps/geometries/models/tiles_view.py for documentation
+    #
+    # Usage examples (all parameters use comma-separated strings):
+    #   /geoplaces_fn/{z}/{x}/{y}                                    # All defaults (German)
+    #   /geoplaces_fn/{z}/{x}/{y}?lang=en                            # English labels
+    #   /geoplaces_fn/{z}/{x}/{y}?categories=hut,hotel               # Only huts and hotels
+    #   /geoplaces_fn/{z}/{x}/{y}?categories_all=hut,parking         # Huts with parking
+    #   /geoplaces_fn/{z}/{x}/{y}?fields=slug,name,importance        # Minimal fields
+    #   /geoplaces_fn/{z}/{x}/{y}?lang=en&categories=hut&fields=slug,name,elevation
+    #
+    # Function: get_geoplaces_for_tiles(z, x, y, query_params)
+    # Migration: server/apps/geometries/migrations/0028_create_geoplaces_tile_function.py
+    geoplaces:
+      # Schema and function name
+      schema: public
+      function: get_geoplaces_for_tiles
+      id_columns: slug
+
+      # Zoom levels (function handles importance filtering automatically)
       minzoom: 0
       maxzoom: 20
 
-    ## # Ski routes (test data from Alps.sqlite)
-    ## test_ski_routes:
-    ##   layer_id: ski_routes
-
-    ##   schema: public
-    ##   table: test_ski_routes
-
-    ##   geometry_column: geometry
-    ##   srid: 4326
-    ##   geometry_type: LINESTRING
-
-    ##   properties:
-    ##     id: int4
-    ##     start: text
-    ##     stop: text
-    ##     diff: int4
-    ##     length: float8
-    ##     skitour: int8
-    ##     pop: int4
-    ##     adiff: text
-
-    ##   extent: 4096
-    ##   buffer: 64
-    ##   clip_geom: true
-
-    ##   minzoom: 0
-    ##   maxzoom: 14
-
-    ## # Swiss ski segments (test data from Switzerland_Segments.geojson)
-    ## test_ski_routes_geojson:
-    ##   layer_id: ski_segments
-
-    ##   schema: public
-    ##   table: test_ski_routes_geojson
-
-    ##   geometry_column: geometry
-    ##   srid: 4326
-    ##   geometry_type: LINESTRING
-
-    ##   properties:
-    ##     id: int4
-
-    ##   extent: 4096
-    ##   buffer: 64
-    ##   clip_geom: true
-
-    ##   minzoom: 0
-    ##   maxzoom: 14
 sprites:
   # Size of the sprite cache (in MB).
   # Defaults to cache_size_mb / 8

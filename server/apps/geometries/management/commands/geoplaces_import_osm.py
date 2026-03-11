@@ -2752,6 +2752,7 @@ class Command(BaseCommand):
                 "website": tags.get("website") or tags.get("contact:website"),
                 "brand": tags.get("brand"),
                 "action": element.action,  # Include action for diff mode handling
+                "mapping": mapping,  # Include mapping for importance calculation
             }
 
             # Post-process data if hook exists
@@ -3798,6 +3799,83 @@ class Command(BaseCommand):
 
         return (created_count, updated_count, skipped_count, 0)
 
+    def _calculate_osm_importance(self, tags: dict, mapping) -> int:
+        """
+        Calculate importance for OSM-imported places based on tags and category.
+
+        Uses importance_range from the mapping if available, otherwise defaults to 25.
+
+        Calculation:
+        1. Start with base value from mapping's importance_range
+        2. Add/subtract based on tag completeness
+        3. Clamp to [min, max] range
+
+        Args:
+            tags: OSM tags dictionary
+            mapping: OSMMapping instance (already matched, no need to look up again)
+
+        Returns:
+            Importance score (0-100)
+        """
+        # Default values if no importance_range set
+        min_importance = 10
+        base_importance = 25
+        max_importance = 50
+
+        if mapping and mapping.importance_range:
+            min_importance, base_importance, max_importance = mapping.importance_range
+
+        # Start with base (should be low-middle of range to allow both positive and negative adjustments)
+        importance = base_importance
+
+        # === POSITIVE BONUSES ===
+
+        # 1. Name presence (critical - no name = likely minor POI)
+        if tags.get("name"):
+            importance += 5
+        else:
+            importance -= 10  # Penalize unnamed places
+
+        # 2. Brand/Chain bonus (indicates established business)
+        if tags.get("brand") and ";" not in tags.get("brand", ""):
+            importance += 5
+
+        # 3. Operator (e.g., "Migros", "Volg" - indicates chain)
+        if tags.get("operator"):
+            importance += 3
+
+        # 4. Tag completeness (more info = more important)
+        info_tags = {
+            "website": 8,  # Significant - has web presence
+            "phone": 4,  # Contact info
+            "opening_hours": 3,  # Active business
+            "image": 2,  # Visual documentation
+            "wikipedia": 12,  # Notable/landmark
+        }
+        for tag, bonus in info_tags.items():
+            if tags.get(tag):
+                importance += bonus
+
+        # 5. Cuisine (for restaurants - more specific = better)
+        if tags.get("cuisine"):
+            importance += 3
+
+        # 6. Email (additional contact)
+        if tags.get("email"):
+            importance += 2
+
+        # === NEGATIVE PENALTIES ===
+
+        # 7. Missing essential tags for business type
+        # (unnamed places without contact info are likely low-quality)
+        if not tags.get("name"):
+            importance -= 10
+        if not tags.get("phone") and not tags.get("website"):
+            importance -= 5
+
+        # Clamp to range
+        return max(min_importance, min(importance, max_importance))
+
     def _prepare_geoplace(self, data: dict) -> tuple[GeoPlace, list[Category]]:
         """Prepare GeoPlace instance from amenity data."""
         from server.apps.geometries.models import OperatingStatus
@@ -3808,12 +3886,17 @@ class Command(BaseCommand):
             for slug in self._get_category_slugs(data)
         ]
 
+        # Calculate importance based on OSM tags and mapping (already in data)
+        mapping = data.get("mapping")
+        importance = self._calculate_osm_importance(data.get("tags", {}), mapping)
+
         # Build place data
         place = GeoPlace(
             name=data.get("name", ""),
             location=Point(data["lon"], data["lat"], srid=4326),
             country_code=self._guess_country_code(Point(data["lon"], data["lat"])),
             detail_type=OperatingStatus.OPEN.value,  # All amenities are open for now
+            importance=importance,  # Use calculated importance
             is_active=True,
             is_public=True,
         )

@@ -1127,7 +1127,9 @@ def post_process_images(
                     "distance_m": result.distance_m,
                     "license": {
                         "slug": result.license_slug,
-                        "name": license_info.get("fullname"),
+                        "name": license_info.get("fullname")
+                        or license_info.get("name")
+                        or result.license_slug.upper(),
                         "url": license_info.get("url"),
                         "icon": license_info.get("icon"),
                     },
