@@ -1154,9 +1154,15 @@ class Command(BaseCommand):
     ) -> int:
         """Deactivate places not seen in this import run.
 
+        Uses batched processing to avoid timeouts with large datasets.
+
         Args:
             region: Country code (e.g., "CH", "FR") to limit cleanup to specific country
+
+        Returns:
+            Number of places deactivated
         """
+        from django.db.models import Exists, OuterRef
         from server.apps.geometries.models import GeoPlaceSourceAssociation
 
         # Get categories for this import
@@ -1170,20 +1176,59 @@ class Command(BaseCommand):
         # Get all categories with these parent slugs
         categories = Category.objects.filter(slug__in=category_slugs)
 
-        # PERFORMANCE: Use bulk update instead of iterating
+        # PERFORMANCE: Use batched processing to avoid timeout with large datasets
         # Filter by country code to only deactivate places in the imported region
         country_code = region.upper()
-        stale_place_ids = GeoPlaceSourceAssociation.objects.filter(
+
+        # Build subquery for stale associations
+        stale_associations = GeoPlaceSourceAssociation.objects.filter(
             organization=osm_org,
             modified_date__lt=run_start,
+            geo_place=OuterRef("pk"),
             geo_place__categories__in=categories,
-            geo_place__country_code=country_code,
-            geo_place__is_active=True,
-        ).values_list("geo_place_id", flat=True)
-
-        return GeoPlace.objects.filter(id__in=stale_place_ids).update(
-            is_active=False, review_status="review"
         )
+
+        # Find places with stale associations using iterator() for memory efficiency
+        stale_places = GeoPlace.objects.annotate(
+            has_stale_association=Exists(stale_associations)
+        ).filter(
+            has_stale_association=True,
+            is_active=True,
+            country_code=country_code,
+            categories__in=categories,
+        )
+
+        # Process in batches to avoid timeout
+        batch_size = 1000
+        total_count = 0
+        place_ids = []
+
+        self.stdout.write(
+            f"  Batch processing stale places (batch size: {batch_size})..."
+        )
+
+        for place in stale_places.iterator(chunk_size=500):
+            place_ids.append(place.id)
+
+            if len(place_ids) >= batch_size:
+                count = GeoPlace.objects.filter(id__in=place_ids).update(
+                    is_active=False, review_status="review"
+                )
+                total_count += count
+                self.stdout.write(
+                    f"    Deactivated {count} places (total: {total_count})"
+                )
+                place_ids = []
+
+        # Process remaining places in final batch
+        if place_ids:
+            count = GeoPlace.objects.filter(id__in=place_ids).update(
+                is_active=False, review_status="review"
+            )
+            total_count += count
+            self.stdout.write(f"    Deactivated {count} places (total: {total_count})")
+
+        return total_count
 
     def _count_places(self, category_names: list[str]) -> int:
         """Count existing places with specified categories from OSM."""
