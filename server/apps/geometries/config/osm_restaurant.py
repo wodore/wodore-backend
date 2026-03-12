@@ -1,4 +1,7 @@
-"""OSM mappings for restaurant category."""
+"""OSM mappings for restaurant category.
+
+See: https://wiki.openstreetmap.org/wiki/Key:amenity#Food_and_drink
+"""
 
 from .osm_base import CategoryMappings, OSMMapping
 
@@ -11,6 +14,7 @@ RESTAURANT = CategoryMappings(
             category_slug="restaurant.restaurant",
             mapcomplete_theme="food",
             priority=0,
+            importance_range=(30, 45, 60),
             default_name={
                 "en": "Restaurant",
                 "de": "Restaurant",
@@ -23,6 +27,7 @@ RESTAURANT = CategoryMappings(
             category_slug="restaurant.cafe",
             mapcomplete_theme="food",
             priority=0,
+            importance_range=(25, 40, 55),
             default_name={"en": "Cafe", "de": "Café", "fr": "Café", "it": "Caffè"},
         ),
         OSMMapping(
@@ -32,6 +37,7 @@ RESTAURANT = CategoryMappings(
             category_slug="restaurant.pub",
             mapcomplete_theme="food",
             priority=0,
+            importance_range=(25, 40, 55),
             default_name={"en": "Bar", "de": "Bar", "fr": "Bar", "it": "Bar"},
         ),
         OSMMapping(
@@ -39,6 +45,7 @@ RESTAURANT = CategoryMappings(
             category_slug="restaurant.fast_food",
             mapcomplete_theme="food",
             priority=0,
+            importance_range=(20, 30, 45),
             default_name={
                 "en": "Fast Food",
                 "de": "Fast Food",
@@ -51,6 +58,7 @@ RESTAURANT = CategoryMappings(
             category_slug="restaurant.food_court",
             mapcomplete_theme="food",
             priority=0,
+            importance_range=(20, 30, 45),
             default_name={
                 "en": "Food Court",
                 "de": "Food Court",
@@ -63,6 +71,7 @@ RESTAURANT = CategoryMappings(
             category_slug="restaurant.ice_cream",
             mapcomplete_theme="food",
             priority=0,
+            importance_range=(20, 30, 45),
             default_name={
                 "en": "Ice Cream",
                 "de": "Eis",

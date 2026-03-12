@@ -22,6 +22,7 @@ from ..models import (
     GeoPlaceExternalLink,
     AmenityDetail,
 )
+from ..utils import get_progress_bar
 
 
 ## Custom Admin Forms
@@ -194,11 +195,12 @@ class GeoPlaceAdmin(ModelAdmin):
         "categories_display",
         "country_code",
         "elevation_display",
+        "sources_display",
+        "importance_display",
         "review_status_display",
         "is_public",
         "is_active",
-        "created",
-        "modified",
+        "timestamps_display",
     )
 
     list_display_links = ("name",)
@@ -208,7 +210,7 @@ class GeoPlaceAdmin(ModelAdmin):
         "is_public",
         "is_active",
         "categories__parent",  # Filter by category parent (e.g., terrain, transport)
-        "categories",
+        # "categories",
         "country_code",
     )
 
@@ -239,6 +241,7 @@ class GeoPlaceAdmin(ModelAdmin):
         "review_status",
         "is_public",
         "is_active",
+        "importance",
         "created",
         "modified",
     )
@@ -272,6 +275,67 @@ class GeoPlaceAdmin(ModelAdmin):
         if obj.elevation is not None:
             return f"{obj.elevation} m"
         return "-"
+
+    @display(description=_("Sources"))
+    def sources_display(self, obj: GeoPlace) -> str:
+        """Display source organizations as icons."""
+
+        sources = obj.source_associations.select_related("organization").all()
+        if not sources:
+            return "-"
+
+        imgs = []
+        for source in sources:
+            org = source.organization
+            if org.logo:
+                # Create link to source if available
+                if source.source_id:
+                    # For OSM, create a link to the OSM page
+                    if org.slug == "osm":
+                        osm_type, osm_id = source.source_id.split("/")
+                        if osm_type == "node":
+                            osm_url = f"https://www.openstreetmap.org/node/{osm_id}"
+                        elif osm_type == "way":
+                            osm_url = f"https://www.openstreetmap.org/way/{osm_id}"
+                        else:
+                            osm_url = (
+                                f"https://www.openstreetmap.org/{osm_type}/{osm_id}"
+                            )
+                        img_html = f'<a href="{osm_url}" target="_blank" title="{org.name_i18n}"><img class="inline pr-1" src="{org.logo.url}" width="20px" alt="{org.slug}"/></a>'
+                    else:
+                        img_html = f'<span title="{org.name_i18n}"><img class="inline pr-1" src="{org.logo.url}" width="20px" alt="{org.slug}"/></span>'
+                else:
+                    img_html = f'<span title="{org.name_i18n}"><img class="inline pr-1" src="{org.logo.url}" width="20px" alt="{org.slug}"/></span>'
+                imgs.append(img_html)
+
+        return mark_safe(f"<span>{''.join(imgs)}</span>")
+
+    @display(description=_("Importance"), ordering="importance")
+    def importance_display(self, obj: GeoPlace) -> str:
+        """Display importance as a progress bar with blue color range."""
+        # Use blue color gradient
+        return get_progress_bar(
+            value=obj.importance,
+            max_value=100,
+            color="#2196F3",  # Blue color
+            show_text=True,
+            active=True,
+        )
+
+    @display(description=_("Created/Modified"), ordering="modified")
+    def timestamps_display(self, obj: GeoPlace) -> str:
+        """Display created and modified timestamps in one column with small font."""
+        created = obj.created.strftime("%Y-%m-%d %H:%M") if obj.created else "-"
+        modified = obj.modified.strftime("%Y-%m-%d %H:%M") if obj.modified else "-"
+
+        return format_html(
+            '<div style="font-size: 11px; line-height: 1.4;">'
+            '<div style="color: #6b7280;">Created: {}</div>'
+            '<div style="color: #6b7280;">Modified: {}</div>'
+            "</div>",
+            created,
+            modified,
+        )
 
     @display(description=_("Review"))
     def review_status_display(self, obj: GeoPlace) -> str:
