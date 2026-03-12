@@ -78,7 +78,10 @@ apk add --no-cache \
   linux-headers \
   cargo \
   cargo-auditable \
-	libgit2-dev
+	libgit2-dev \
+	expat-dev \
+	bz2-dev \
+	lz4-dev
 EOF
 
 COPY --from=ghcr.io/astral-sh/uv:0.7.2 /uv /usr/local/bin/uv
