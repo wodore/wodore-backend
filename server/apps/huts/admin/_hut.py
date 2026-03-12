@@ -15,6 +15,10 @@ from django.urls import reverse, reverse_lazy
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
+from unfold.contrib.filters.admin import (
+    AutocompleteSelectMultipleFilter,
+    ChoicesCheckboxFilter,
+)
 from unfold.decorators import action, display
 
 from server.apps.images.transfomer import ImagorImage
@@ -47,6 +51,7 @@ class HutsAdmin(ModelAdmin):
     search_fields = ("name",)
     # list_select_related = ()  # ( "type", "owner")
     form = required_i18n_fields_form_factory("name")
+    list_filter_submit = True  # Add submit button for filters
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
     # list_select_related = ("org_set", "org_set__details")
     # list_select_related = ["org_set__source"]
@@ -68,10 +73,22 @@ class HutsAdmin(ModelAdmin):
         "is_active",
         "is_public",
         "is_modified",
-        "review_status",
-        "hut_type_open",
-        "hut_type_closed",
-        "org_set",
+        (
+            "review_status",
+            ChoicesCheckboxFilter,
+        ),  # Filter by review status with checkboxes
+        (
+            "hut_type_open",
+            AutocompleteSelectMultipleFilter,
+        ),  # Filter by hut type open with autocomplete
+        (
+            "hut_type_closed",
+            AutocompleteSelectMultipleFilter,
+        ),  # Filter by hut type closed with autocomplete
+        (
+            "org_set",
+            AutocompleteSelectMultipleFilter,
+        ),  # Filter by sources (organizations) with autocomplete
     )
     fieldsets = HutAdminFieldsets
     autocomplete_fields = ("hut_owner",)

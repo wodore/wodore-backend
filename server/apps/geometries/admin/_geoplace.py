@@ -8,6 +8,11 @@ from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 
 from unfold import admin as unfold_admin
+from unfold.contrib.filters.admin import (
+    AutocompleteSelectMultipleFilter,
+    ChoicesCheckboxFilter,
+    ChoicesDropdownFilter,
+)
 from unfold.decorators import display
 
 from server.apps.manager.admin import ModelAdmin
@@ -187,6 +192,7 @@ class GeoPlaceAdmin(ModelAdmin):
     """
 
     form = required_i18n_fields_form_factory("name")
+    list_filter_submit = True  # Add submit button for filters
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
 
     list_display = (
@@ -206,12 +212,20 @@ class GeoPlaceAdmin(ModelAdmin):
     list_display_links = ("name",)
 
     list_filter = (
-        "review_status",
+        (
+            "review_status",
+            ChoicesCheckboxFilter,
+        ),  # Filter by review status with checkboxes
         "is_public",
         "is_active",
-        "categories__parent",  # Filter by category parent (e.g., terrain, transport)
-        # "categories",
-        "country_code",
+        (
+            "categories",
+            AutocompleteSelectMultipleFilter,
+        ),  # Filter by categories with autocomplete
+        (
+            "country_code",
+            ChoicesDropdownFilter,
+        ),  # Filter by country with dropdown
     )
 
     search_fields = (

@@ -13,45 +13,13 @@ from django.utils.translation import gettext_lazy as _
 with contextlib.suppress(ModuleNotFoundError):
     from django_stubs_ext import QuerySetAny
 
+from unfold.contrib.filters.admin import AutocompleteSelectMultipleFilter
 from unfold.decorators import display
 
 from server.apps.manager.admin import ModelAdmin
 
 from .forms import category_admin_form_factory
 from .models import Category
-
-
-class ParentCategoryFilter(admin.RelatedFieldListFilter):
-    """Custom filter for parent categories that shows clean names without 'root.' prefix."""
-
-    def field_choices(self, field, request, model_admin):
-        """Override field_choices to show cleaner category names and sort NULL parents first."""
-        # Get original choices from parent
-        choices = super().field_choices(field, request, model_admin)
-
-        # Pre-fetch all root category IDs in a single query to avoid N+1
-        root_category_ids = set(
-            Category.objects.filter(parent__isnull=True).values_list("pk", flat=True)
-        )
-
-        # Clean up the display names and separate into two groups
-        null_parent_choices = []
-        with_parent_choices = []
-
-        for pk, displ in choices:
-            # Clean up the display name
-            if displ and str(displ).startswith("root."):
-                displ = str(displ)[5:]  # Remove 'root.' prefix
-
-            # Separate NULL parents from non-NULL using pre-fetched IDs
-            if pk is not None:
-                if pk in root_category_ids:
-                    null_parent_choices.append((pk, displ))
-                else:
-                    with_parent_choices.append((pk, displ))
-
-        # Return NULL parents first, then others
-        return null_parent_choices + with_parent_choices
 
 
 class ChildCategoryInline(admin.TabularInline):
@@ -78,6 +46,7 @@ class ChildCategoryInline(admin.TabularInline):
     can_delete = False  # Prevent deletion from inline
     verbose_name = _("Child Category")
     verbose_name_plural = _("Child Categories")
+    autocomplete_fields = ("symbol_detailed", "symbol_simple", "symbol_mono")
 
     def get_queryset(self, request: HttpRequest):
         """Optimize queryset for inline display."""
@@ -112,6 +81,7 @@ class ChildCategoryInline(admin.TabularInline):
 class CategoryAdmin(ModelAdmin):
     form = category_admin_form_factory()
     change_list_template = "admin/categories_change_list.html"
+    list_filter_submit = True  # Add submit button for filters
 
     class Media:
         css = {"all": ("css/admin-categories.css",)}
@@ -133,7 +103,7 @@ class CategoryAdmin(ModelAdmin):
 
     list_filter = (
         "is_active",
-        ("parent", ParentCategoryFilter),
+        ("parent", AutocompleteSelectMultipleFilter),
     )
 
     list_editable = ("order", "color")
@@ -141,6 +111,15 @@ class CategoryAdmin(ModelAdmin):
     ordering = ("-parent", "order")  # Order by parent (NULL first, then by parent ID)
 
     actions = ["auto_set_color_from_svg"]
+
+    # Add autocomplete for parent field to make selection easier with many categories
+    autocomplete_fields = (
+        "parent",
+        "default",
+        "symbol_detailed",
+        "symbol_simple",
+        "symbol_mono",
+    )
 
     readonly_fields = ("identifier", "name_i18n", "description_i18n")
 
