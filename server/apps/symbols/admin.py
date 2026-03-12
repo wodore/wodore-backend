@@ -10,6 +10,7 @@ from django.http import HttpRequest
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
+from unfold.contrib.filters.admin import ChoicesCheckboxFilter
 from unfold.decorators import display
 
 from server.apps.manager.admin import ModelAdmin
@@ -39,7 +40,10 @@ class SymbolAdmin(ModelAdmin):
         "style",
         "source_org",
         "license",
-        "review_status",
+        (
+            "review_status",
+            ChoicesCheckboxFilter,
+        ),  # Filter by review status with checkboxes
         "uploaded_by_user",
         "is_active",
     )

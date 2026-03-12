@@ -1,4 +1,8 @@
-"""OSM mappings for sport category (Phase 2)."""
+"""OSM mappings for sport category (Phase 2).
+
+See: https://wiki.openstreetmap.org/wiki/Key:sport
+See: https://wiki.openstreetmap.org/wiki/Key:leisure
+"""
 
 from .osm_base import CategoryMappings, OSMMapping
 
@@ -12,6 +16,7 @@ SPORT = CategoryMappings(
             category_slug="sport.climbing_gym",
             mapcomplete_theme="sport",
             priority=1,  # Generic, lower priority
+            importance_range=(25, 35, 50),
             default_name={
                 "en": "Sports Centre",
                 "de": "Sportzentrum",
@@ -24,6 +29,7 @@ SPORT = CategoryMappings(
             category_slug="sport.climbing_gym",
             mapcomplete_theme="climbing",
             priority=0,
+            importance_range=(30, 40, 55),
             default_name={
                 "en": "Climbing Gym",
                 "de": "Kletterhalle",
@@ -36,6 +42,7 @@ SPORT = CategoryMappings(
             category_slug="sport.swimming_pool",
             mapcomplete_theme="sport",
             priority=0,
+            importance_range=(30, 40, 55),
             default_name={
                 "en": "Swimming Pool",
                 "de": "Schwimmbad",
@@ -48,6 +55,7 @@ SPORT = CategoryMappings(
             category_slug="sport.fitness_center",
             mapcomplete_theme="sport",
             priority=0,
+            importance_range=(25, 35, 50),
             default_name={
                 "en": "Fitness Center",
                 "de": "Fitnessstudio",
@@ -60,6 +68,7 @@ SPORT = CategoryMappings(
             category_slug="sport.ski_school",
             mapcomplete_theme="sport",
             priority=0,
+            importance_range=(30, 40, 55),
             default_name={
                 "en": "Ski School",
                 "de": "Skischule",
@@ -72,6 +81,7 @@ SPORT = CategoryMappings(
             category_slug="sport.playground",
             mapcomplete_theme="playgrounds",
             priority=0,
+            importance_range=(20, 30, 45),
             default_name={
                 "en": "Playground",
                 "de": "Spielplatz",
@@ -84,6 +94,7 @@ SPORT = CategoryMappings(
             category_slug="sport.mountain_guide",
             mapcomplete_theme="tourism",
             priority=0,
+            importance_range=(35, 45, 60),
             default_name={
                 "en": "Mountain Guide",
                 "de": "Bergführer",
@@ -98,6 +109,7 @@ SPORT = CategoryMappings(
             category_slug="sport.skate_park",
             mapcomplete_theme="sport",
             priority=0,
+            importance_range=(20, 30, 45),
             default_name={
                 "en": "Skate Park",
                 "de": "Skatepark",

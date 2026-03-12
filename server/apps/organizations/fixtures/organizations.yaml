@@ -334,3 +334,118 @@
     config: {}
     props_schema: {}
     order: 50
+- model: organizations.organization
+  pk: 10
+  fields:
+    i18n:
+      name_en: Weather Icons
+      name_fr: Weather Icons
+      name_it: Weather Icons
+      fullname_en: Weather Icons by Basmilius
+      fullname_fr: Weather Icons par Basmilius
+      fullname_it: Weather Icons di Basmilius
+      attribution_en: Weather icon set by Basmilius
+      attribution_fr: Jeux d'icônes météo par Basmilius
+      attribution_it: Set di icone meteo di Basmilius
+      description_en: ""
+      description_fr: ""
+      description_it: ""
+    slug: weather-icons
+    is_active: true
+    is_public: true
+    name: Weather Icons
+    fullname: Weather Icons by Basmilius
+    description: Weather icon set by Basmilius.
+    url: https://github.com/basmilius/weather-icons
+    attribution: Weather icon set by Basmilius
+    link_hut_pattern: ""
+    logo: organizations/logos/weather_icons_icon.png
+    color_light: "#5dade2"
+    color_dark: "#2e86c1"
+    config: {}
+    props_schema: {}
+    order: 82
+- model: organizations.organization
+  pk: 11
+  fields:
+    i18n:
+      name_en: MeteoSwiss
+      name_fr: MeteoSuisse
+      name_it: MeteoSvizzera
+      fullname_en: MeteoSwiss
+      fullname_fr: MeteoSuisse
+      fullname_it: MeteoSvizzera
+      description_en: ""
+      description_fr: ""
+      description_it: ""
+    slug: meteoswiss
+    is_active: true
+    is_public: true
+    name: MeteoSwiss
+    fullname: MeteoSchweiz
+    description: Der meteorologische und geophysikalische Dienst der Schweiz.
+    url: https://www.meteoschweiz.admin.ch
+    attribution: ""
+    link_hut_pattern: ""
+    logo: organizations/logos/meteoswiss_icon.png
+    color_light: "#ff6b6b"
+    color_dark: "#c92a2a"
+    config: {}
+    props_schema: {}
+    order: 84
+- model: organizations.organization
+  pk: 12
+  fields:
+    i18n:
+      name_en: Panoramax
+      name_fr: Panoramax
+      name_it: Panoramax
+      fullname_en: Panoramax
+      fullname_fr: Panoramax
+      fullname_it: Panoramax
+      description_en: ""
+      description_fr: ""
+      description_it: ""
+    slug: panoramax
+    is_active: true
+    is_public: true
+    name: Panoramax
+    fullname: Panoramax
+    description: Free and open-source panoramic photo platform.
+    url: https://panoramax.openstreetmap.fr
+    attribution: ""
+    link_hut_pattern: ""
+    logo: organizations/logos/panoramax_icon.png
+    color_light: "#f7b731"
+    color_dark: "#d35400"
+    config: {}
+    props_schema: {}
+    order: 86
+- model: organizations.organization
+  pk: 13
+  fields:
+    i18n:
+      name_en: MapComplete
+      name_fr: MapComplete
+      name_it: MapComplete
+      fullname_en: MapComplete
+      fullname_fr: MapComplete
+      fullname_it: MapComplete
+      description_en: ""
+      description_fr: ""
+      description_it: ""
+    slug: mapcomplete
+    is_active: true
+    is_public: true
+    name: MapComplete
+    fullname: MapComplete
+    description: A platform showing and editing OpenStreetMap data.
+    url: https://mapcomplete.org
+    attribution: ""
+    link_hut_pattern: ""
+    logo: organizations/logos/mapcomplete_icon.png
+    color_light: "#20bf6b"
+    color_dark: "#0f9d58"
+    config: {}
+    props_schema: {}
+    order: 88

@@ -1,4 +1,7 @@
-"""OSM mappings for services category (Phase 3)."""
+"""OSM mappings for services category (Phase 3).
+
+See: https://wiki.openstreetmap.org/wiki/Key:amenity
+"""
 
 from .osm_base import CategoryMappings, OSMMapping
 
@@ -12,6 +15,7 @@ SERVICES = CategoryMappings(
             category_slug="services.hairdresser",
             mapcomplete_theme="shops",
             priority=0,
+            importance_range=(20, 30, 45),
             default_name={
                 "en": "Hairdresser",
                 "de": "Friseur",
@@ -24,6 +28,7 @@ SERVICES = CategoryMappings(
             category_slug="services.tailor",
             mapcomplete_theme="shops",
             priority=0,
+            importance_range=(20, 30, 45),
             default_name={
                 "en": "Tailor",
                 "de": "Schneider",
@@ -36,6 +41,7 @@ SERVICES = CategoryMappings(
             category_slug="services.computer_repair",
             mapcomplete_theme="shops",
             priority=1,  # Might be sales, lower priority
+            importance_range=(15, 25, 40),
             default_name={
                 "en": "Computer Repair",
                 "de": "Computerreparatur",
@@ -48,6 +54,7 @@ SERVICES = CategoryMappings(
             category_slug="services.veterinary",
             mapcomplete_theme="healthcare",
             priority=0,
+            importance_range=(25, 35, 50),
             default_name={
                 "en": "Veterinary",
                 "de": "Tierarzt",
@@ -60,6 +67,7 @@ SERVICES = CategoryMappings(
             category_slug="services.laundry",
             mapcomplete_theme="shops",
             priority=0,
+            importance_range=(20, 30, 45),
             default_name={
                 "en": "Laundry",
                 "de": "Wäscherei",

@@ -1,4 +1,7 @@
-"""OSM mappings for outdoor_services category."""
+"""OSM mappings for outdoor_services category.
+
+See: https://wiki.openstreetmap.org/wiki/Key:leisure
+"""
 
 from .osm_base import CategoryMappings, OSMMapping
 

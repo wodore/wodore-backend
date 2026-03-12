@@ -158,6 +158,12 @@ class OSMHandler(osmium.SimpleHandler):
         mapping,
     ) -> dict:
         """Extract amenity data from OSM element."""
+        # Use default_name from mapping if no name tag exists
+        name = tags.get("name", "")
+        if not name and mapping.default_name:
+            # Get the German default name as fallback, or English if not available
+            name = mapping.default_name.get("de") or mapping.default_name.get("en", "")
+
         return {
             "osm_type": osm_type,
             "osm_id": osm_id,
@@ -166,7 +172,7 @@ class OSMHandler(osmium.SimpleHandler):
             "tags": tags,
             "category_slug": category_slug,
             "mapcomplete_theme": mapping.mapcomplete_theme,
-            "name": tags.get("name", ""),
+            "name": name,
             "opening_hours": tags.get("opening_hours"),
             "phone": tags.get("phone") or tags.get("contact:phone"),
             "website": tags.get("website") or tags.get("contact:website"),
@@ -474,7 +480,7 @@ class Command(BaseCommand):
         # 1. Drop existing places if requested (standalone operation)
         if drop:
             self.stdout.write("Counting existing places...")
-            count = self._count_places(category_names)
+            count = self._count_places(category_names, region)
 
             if count == 0:
                 self.stdout.write(self.style.SUCCESS("No places found to delete"))
@@ -496,7 +502,7 @@ class Command(BaseCommand):
                     return
 
             self.stdout.write("Dropping existing places...")
-            deleted_count = self._drop_existing_places(category_names)
+            deleted_count = self._drop_existing_places(category_names, region)
             self.stdout.write(
                 self.style.SUCCESS(f"Successfully deleted {deleted_count} places")
             )
@@ -1048,6 +1054,10 @@ class Command(BaseCommand):
                 brand_category = self._get_or_create_brand_category(data["brand"])
                 brand_input = BrandInput(slug=brand_category.slug, name=data["brand"])
 
+        # Calculate importance based on OSM tags and mapping
+        mapping = data.get("mapping")
+        importance = self._calculate_osm_importance(data.get("tags", {}), mapping)
+
         # Build flattened GeoPlace schema
         schema = GeoPlaceAmenityInput(
             name=name_translations,
@@ -1056,6 +1066,7 @@ class Command(BaseCommand):
             country_code=self._guess_country_code(Point(data["lon"], data["lat"])),
             place_type_identifiers=category_identifiers,
             osm_tags=data["tags"],
+            importance=importance,
             # Amenity fields (flattened)
             operating_status=OperatingStatus.OPEN,
             opening_hours=opening_hours_data,
@@ -1154,9 +1165,15 @@ class Command(BaseCommand):
     ) -> int:
         """Deactivate places not seen in this import run.
 
+        Uses batched processing to avoid timeouts with large datasets.
+
         Args:
             region: Country code (e.g., "CH", "FR") to limit cleanup to specific country
+
+        Returns:
+            Number of places deactivated
         """
+        from django.db.models import Exists, OuterRef
         from server.apps.geometries.models import GeoPlaceSourceAssociation
 
         # Get categories for this import
@@ -1170,24 +1187,73 @@ class Command(BaseCommand):
         # Get all categories with these parent slugs
         categories = Category.objects.filter(slug__in=category_slugs)
 
-        # PERFORMANCE: Use bulk update instead of iterating
+        # PERFORMANCE: Use batched processing to avoid timeout with large datasets
         # Filter by country code to only deactivate places in the imported region
         country_code = region.upper()
-        stale_place_ids = GeoPlaceSourceAssociation.objects.filter(
+
+        # Build subquery for stale associations
+        stale_associations = GeoPlaceSourceAssociation.objects.filter(
             organization=osm_org,
             modified_date__lt=run_start,
+            geo_place=OuterRef("pk"),
             geo_place__categories__in=categories,
-            geo_place__country_code=country_code,
-            geo_place__is_active=True,
-        ).values_list("geo_place_id", flat=True)
-
-        return GeoPlace.objects.filter(id__in=stale_place_ids).update(
-            is_active=False, review_status="review"
         )
 
-    def _count_places(self, category_names: list[str]) -> int:
-        """Count existing places with specified categories from OSM."""
-        from server.apps.geometries.models import GeoPlaceSourceAssociation
+        # Find places with stale associations using iterator() for memory efficiency
+        stale_places = GeoPlace.objects.annotate(
+            has_stale_association=Exists(stale_associations)
+        ).filter(
+            has_stale_association=True,
+            is_active=True,
+            country_code=country_code,
+            categories__in=categories,
+        )
+
+        # Process in batches to avoid timeout
+        batch_size = 1000
+        total_count = 0
+        place_ids = []
+
+        self.stdout.write(
+            f"  Batch processing stale places (batch size: {batch_size})..."
+        )
+
+        for place in stale_places.iterator(chunk_size=500):
+            place_ids.append(place.id)
+
+            if len(place_ids) >= batch_size:
+                count = GeoPlace.objects.filter(id__in=place_ids).update(
+                    is_active=False, review_status="review"
+                )
+                total_count += count
+                self.stdout.write(
+                    f"    Deactivated {count} places (total: {total_count})"
+                )
+                place_ids = []
+
+        # Process remaining places in final batch
+        if place_ids:
+            count = GeoPlace.objects.filter(id__in=place_ids).update(
+                is_active=False, review_status="review"
+            )
+            total_count += count
+            self.stdout.write(f"    Deactivated {count} places (total: {total_count})")
+
+        return total_count
+
+    def _count_places(self, category_names: list[str], region: str) -> int:
+        """Count existing places with specified categories from OSM for a specific region.
+
+        Uses raw SQL for efficient counting to avoid timeouts with large datasets.
+
+        Args:
+            category_names: List of category names to filter by
+            region: Country code (e.g., "LI", "CH") to limit counting to specific country
+
+        Returns:
+            Number of places found
+        """
+        from django.db import connection
 
         # Get OSM organization
         try:
@@ -1203,28 +1269,58 @@ class Command(BaseCommand):
                 child_slug = parts[1] if len(parts) > 1 else parts[0]
                 category_slugs.add(child_slug)
 
-        # Find all categories with these slugs
-        categories = Category.objects.filter(slug__in=category_slugs)
-
-        if not categories.exists():
+        if not category_slugs:
             return 0
 
-        # Count places with these categories from OSM source
-        count = (
-            GeoPlaceSourceAssociation.objects.filter(
-                organization=osm_org,
-                geo_place__categories__in=categories,
-            )
-            .values("geo_place")
-            .distinct()
-            .count()
-        )
+        # Use raw SQL for efficient counting
+        # This avoids the ORM's expensive many-to-many join handling
+        with connection.cursor() as cursor:
+            # Set a longer timeout for this specific query (60 seconds)
+            cursor.execute("SET statement_timeout TO 60000")
+
+            # Count distinct places that:
+            # 1. Have an OSM source association
+            # 2. Are in the specified country/region
+            # 3. Have at least one of the target categories
+            query = """
+                SELECT COUNT(DISTINCT gsa.geo_place_id)
+                FROM geometries_geoplacesourceassociation gsa
+                INNER JOIN geometries_geoplace gp
+                    ON gp.id = gsa.geo_place_id
+                INNER JOIN geometries_geoplace_category gpc
+                    ON gpc.geo_place_id = gsa.geo_place_id
+                WHERE gsa.organization_id = %s
+                AND gp.country_code = %s
+                AND gpc.category_id IN (
+                    SELECT id FROM categories_category WHERE slug = ANY(%s)
+                )
+            """
+
+            # Convert category_slugs set to list for PostgreSQL ANY clause
+            category_slugs_list = list(category_slugs)
+
+            # Execute the query with parameters
+            cursor.execute(query, [osm_org.id, region.upper(), category_slugs_list])
+
+            # Fetch the result
+            result = cursor.fetchone()
+            count = result[0] if result else 0
 
         return count
 
-    def _drop_existing_places(self, category_names: list[str]) -> int:
-        """Drop all existing places with specified categories."""
-        from server.apps.geometries.models import GeoPlaceSourceAssociation
+    def _drop_existing_places(self, category_names: list[str], region: str) -> int:
+        """Drop all existing places with specified categories for a specific region.
+
+        Uses batched deletion with raw SQL to avoid timeouts with large datasets.
+
+        Args:
+            category_names: List of category names to filter by
+            region: Country code (e.g., "LI", "CH") to limit deletion to specific country
+
+        Returns:
+            Number of places deleted
+        """
+        from django.db import connection
 
         # Get OSM organization
         try:
@@ -1241,38 +1337,103 @@ class Command(BaseCommand):
                 child_slug = parts[1] if len(parts) > 1 else parts[0]
                 category_slugs.add(child_slug)
 
-        # Find all categories with these slugs
-        categories = Category.objects.filter(slug__in=category_slugs)
-
-        if not categories.exists():
-            self.stdout.write(
-                self.style.WARNING(
-                    f"No categories found with slugs: {', '.join(category_slugs)}"
-                )
-            )
+        if not category_slugs:
             return 0
 
-        self.stdout.write(f"Found {categories.count()} categories to filter by")
+        # Use raw SQL for efficient batched deletion
+        # This avoids the ORM's expensive many-to-many join handling
+        with connection.cursor() as cursor:
+            # Set a longer timeout for deletion operations (120 seconds)
+            cursor.execute("SET statement_timeout TO 120000")
 
-        # Find all places with these categories from OSM source
-        place_ids = (
-            GeoPlaceSourceAssociation.objects.filter(
-                organization=osm_org,
-                geo_place__categories__in=categories,
-            )
-            .values_list("geo_place_id", flat=True)
-            .distinct()
-        )
+            # Delete in batches to avoid locking issues
+            batch_size = 10000
+            total_deleted = 0
 
-        count = place_ids.count()
+            while True:
+                # Start a transaction for each batch
+                with transaction.atomic():
+                    # Find places to delete in this batch
+                    # IMPORTANT: Filter by country_code to only delete places from the specified region
+                    find_query = """
+                        SELECT DISTINCT gsa.geo_place_id
+                        FROM geometries_geoplacesourceassociation gsa
+                        INNER JOIN geometries_geoplace_category gpc
+                            ON gpc.geo_place_id = gsa.geo_place_id
+                        INNER JOIN geometries_geoplace gp
+                            ON gp.id = gsa.geo_place_id
+                        WHERE gsa.organization_id = %s
+                        AND gp.country_code = %s
+                        AND gpc.category_id IN (
+                            SELECT id FROM categories_category WHERE slug = ANY(%s)
+                        )
+                        LIMIT %s
+                    """
 
-        if count == 0:
-            return 0
+                    cursor.execute(
+                        find_query,
+                        [osm_org.id, region.upper(), list(category_slugs), batch_size],
+                    )
 
-        # Delete the places using bulk delete (cascade will handle associations)
-        deleted, _ = GeoPlace.objects.filter(id__in=place_ids).delete()
+                    # Fetch the place IDs to delete
+                    place_ids = [row[0] for row in cursor.fetchall()]
 
-        return count
+                    if not place_ids:
+                        # No more places to delete
+                        break
+
+                    # Delete all associations for these places (from any organization)
+                    # This must happen first due to foreign key constraints
+                    delete_associations_query = """
+                        DELETE FROM geometries_geoplacesourceassociation
+                        WHERE geo_place_id = ANY(%s)
+                    """
+                    cursor.execute(delete_associations_query, [place_ids])
+
+                    # Delete category associations for these places
+                    delete_categories_query = """
+                        DELETE FROM geometries_geoplace_category
+                        WHERE geo_place_id = ANY(%s)
+                    """
+                    cursor.execute(delete_categories_query, [place_ids])
+
+                    # Delete image associations for these places
+                    delete_images_query = """
+                        DELETE FROM geometries_geoplaceimageassociation
+                        WHERE geo_place_id = ANY(%s)
+                    """
+                    cursor.execute(delete_images_query, [place_ids])
+
+                    # Delete external link associations for these places
+                    delete_links_query = """
+                        DELETE FROM geometries_geoplaceexternallink
+                        WHERE geo_place_id = ANY(%s)
+                    """
+                    cursor.execute(delete_links_query, [place_ids])
+
+                    # Delete amenity details for these places
+                    delete_amenity_details_query = """
+                        DELETE FROM geometries_amenitydetail
+                        WHERE geo_place_id = ANY(%s)
+                    """
+                    cursor.execute(delete_amenity_details_query, [place_ids])
+
+                    # Delete the places themselves
+                    delete_places_query = """
+                        DELETE FROM geometries_geoplace
+                        WHERE id = ANY(%s)
+                    """
+                    cursor.execute(delete_places_query, [place_ids])
+
+                    deleted_count = len(place_ids)
+                    total_deleted += deleted_count
+
+                    # Report progress
+                    self.stdout.write(
+                        f"  Deleted {deleted_count} places (total: {total_deleted})"
+                    )
+
+        return total_deleted
 
     def _precache_data(self, amenities: list[dict]):
         """Pre-cache categories, brands, and organizations to reduce DB queries."""
@@ -2738,6 +2899,14 @@ class Command(BaseCommand):
             osm_id = int(osm_id_str)
 
             # Extract amenity data
+            # Use default_name from mapping if no name tag exists
+            name = tags.get("name", "")
+            if not name and mapping.default_name:
+                # Get the German default name as fallback, or English if not available
+                name = mapping.default_name.get("de") or mapping.default_name.get(
+                    "en", ""
+                )
+
             data = {
                 "osm_type": osm_type,
                 "osm_id": osm_id,
@@ -2746,7 +2915,7 @@ class Command(BaseCommand):
                 "tags": tags,
                 "category_slug": category_slug,
                 "mapcomplete_theme": mapping.mapcomplete_theme,
-                "name": tags.get("name", ""),
+                "name": name,
                 "opening_hours": tags.get("opening_hours"),
                 "phone": tags.get("phone") or tags.get("contact:phone"),
                 "website": tags.get("website") or tags.get("contact:website"),
@@ -3211,6 +3380,14 @@ class Command(BaseCommand):
                             continue
 
                         # Extract amenity data
+                        # Use default_name from mapping if no name tag exists
+                        name = tags.get("name", "")
+                        if not name and mapping.default_name:
+                            # Get the German default name as fallback, or English if not available
+                            name = mapping.default_name.get(
+                                "de"
+                            ) or mapping.default_name.get("en", "")
+
                         data = {
                             "osm_type": element["type"],
                             "osm_id": element["id"],
@@ -3219,7 +3396,7 @@ class Command(BaseCommand):
                             "tags": tags,
                             "category_slug": category_slug,
                             "mapcomplete_theme": mapping.mapcomplete_theme,
-                            "name": tags.get("name", ""),
+                            "name": name,
                             "opening_hours": tags.get("opening_hours"),
                             "phone": tags.get("phone") or tags.get("contact:phone"),
                             "website": tags.get("website")
@@ -3880,7 +4057,7 @@ class Command(BaseCommand):
         """Prepare GeoPlace instance from amenity data."""
         from server.apps.geometries.models import OperatingStatus
 
-        # Get categories
+        # Get categories first (needed for slug fallback)
         categories = [
             self._get_or_create_category(slug)
             for slug in self._get_category_slugs(data)
@@ -3890,9 +4067,12 @@ class Command(BaseCommand):
         mapping = data.get("mapping")
         importance = self._calculate_osm_importance(data.get("tags", {}), mapping)
 
+        # Get name (may be empty string if no name and no default_name)
+        name = data.get("name", "")
+
         # Build place data
         place = GeoPlace(
-            name=data.get("name", ""),
+            name=name,
             location=Point(data["lon"], data["lat"], srid=4326),
             country_code=self._guess_country_code(Point(data["lon"], data["lat"])),
             detail_type=OperatingStatus.OPEN.value,  # All amenities are open for now
@@ -3902,7 +4082,9 @@ class Command(BaseCommand):
         )
 
         # Generate slug (skip DB check for speed)
-        place.slug = GeoPlace.generate_unique_slug(place.name, skip_check=True)
+        # If name is empty, use the first category's name as fallback for slug
+        slug_name = name if name else (categories[0].name if categories else "")
+        place.slug = GeoPlace.generate_unique_slug(slug_name, skip_check=True)
 
         return place, categories
 

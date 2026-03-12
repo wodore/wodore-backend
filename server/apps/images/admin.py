@@ -14,6 +14,7 @@ from django.urls import reverse
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
+from unfold.contrib.filters.admin import ChoicesCheckboxFilter
 from unfold.decorators import display
 
 from server.apps.manager.admin import ModelAdmin
@@ -80,7 +81,10 @@ class ImageAdmin(ModelAdmin):
     list_filter = (
         "source_org",
         "license",
-        "review_status",
+        (
+            "review_status",
+            ChoicesCheckboxFilter,
+        ),  # Filter by review status with checkboxes
         "tags",
         "uploaded_by_user",
         "uploaded_by_anonym",
