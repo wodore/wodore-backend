@@ -82,7 +82,9 @@ class ChildCategoryInline(admin.TabularInline):
     def get_queryset(self, request: HttpRequest):
         """Optimize queryset for inline display."""
         qs = super().get_queryset(request)
-        return qs.order_by("order", "slug")
+        return qs.select_related(
+            "symbol_detailed", "symbol_simple", "symbol_mono"
+        ).order_by("order", "slug")
 
     @display(description="")
     def symbol_preview(self, obj):
@@ -123,10 +125,9 @@ class CategoryAdmin(ModelAdmin):
         # "identifier_display",
         "slug",
         "children_count",
-        # "parent_display",
+        "parent_display",
         "order",
         "color",
-        "parent",
         "is_active",
     )
 
@@ -135,8 +136,8 @@ class CategoryAdmin(ModelAdmin):
         ("parent", ParentCategoryFilter),
     )
 
-    list_editable = ("order", "parent", "color")
-    list_per_page = 25
+    list_editable = ("order", "color")
+    list_per_page = 15
     ordering = ("-parent", "order")  # Order by parent (NULL first, then by parent ID)
 
     actions = ["auto_set_color_from_svg"]
@@ -249,29 +250,28 @@ class CategoryAdmin(ModelAdmin):
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         """Optimize queryset with parent selection and annotate children count."""
         qs = super().get_queryset(request)
-        # Use select_related for parent and default to avoid N+1 queries
+        # Use select_related for parent, default, and symbols to avoid N+1 queries
         # Annotate children count efficiently in a single query
-        return qs.select_related("parent", "default").annotate(
-            children_count_annotated=Count("children")
-        )
+        return qs.select_related(
+            "parent",
+            "default",
+            "symbol_detailed",
+            "symbol_simple",
+            "symbol_mono",
+        ).annotate(children_count_annotated=Count("children"))
 
     @display(
         header=True, description=_("Name and Description"), ordering=Lower("name_i18n")
     )
     def title(self, obj):
-        """Display name, description, and small symbol."""
-        # level_indent = "　" * obj.get_level()  # Japanese space for indentation
+        """Display name and description."""
         level_indent = ""
         name = f"{level_indent}{obj.name_i18n}" if obj.name_i18n else obj.slug
         description = (
             f"{level_indent}{obj.description_i18n}" if obj.description_i18n else ""
         )
-        avatar = (
-            self.avatar(obj.symbol_simple.svg_file.url)
-            if obj.symbol_simple and obj.symbol_simple.svg_file
-            else ""
-        )
-        return (name, description, avatar)
+        # Remove avatar to avoid FileField.url access (symbols shown in other columns)
+        return (name, description, "")
 
     @display(description=_("Symbol"))
     def symbol_img(self, obj):

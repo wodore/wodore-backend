@@ -67,15 +67,14 @@ class Category(ComputedFieldsModel, models.Model):
         ],
     )
     def identifier(self):
-        """Generate identifier as parent.slug or root if no parent."""
-        if self.parent_id:
-            # Need to fetch parent slug from database
-            parent = (
-                Category.objects.filter(id=self.parent_id)
-                .values_list("slug", flat=True)
-                .first()
-            )
-            return f"{parent}.{self.slug}" if parent else f"root.{self.slug}"
+        """Generate identifier as parent.slug or root if no parent.
+
+        Assumes parent is pre-fetched via select_related when needed.
+        """
+        if self.parent_id and self.parent:
+            # Direct access - relies on select_related in queryset
+            parent_slug = self.parent.slug
+            return f"{parent_slug}.{self.slug}"
         return f"root.{self.slug}"
 
     # Translated fields
