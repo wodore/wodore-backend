@@ -11,7 +11,6 @@ from rich import print
 from django.apps import apps
 from django.conf import settings
 from django.core import serializers
-from django.core.files.base import ContentFile
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandParser
 from django.core.management.commands.loaddata import Command as LoadDataCommand
@@ -25,6 +24,18 @@ from django.db.models.deletion import RestrictedError
 def add_fixture_function(
     obj: "CRUDCommand", force: bool, model: models.Model, **kwargs: Any
 ) -> None:
+    """
+    Load data from fixture file into database.
+
+    Supports two modes:
+    1. Legacy mode: Uses compare_fields for update_or_create (can cause PK conflicts)
+    2. Lookup field mode: Uses a single lookup_field (e.g., 'slug') for identification,
+       ignoring fixture PKs entirely (safer, works with slugs/natural keys)
+
+    Media files are properly uploaded using Django's storage system (S3 compatible).
+    """
+    from django.core.files import File as DjangoFile
+
     ignore_media = kwargs.get("ignore_media", False)
     compare_fields = getattr(
         obj,
@@ -33,8 +44,11 @@ def add_fixture_function(
             "id",
         ],
     )
+    # New parameter: use a single field for lookup instead of compare_fields
+    lookup_field = getattr(obj, "lookup_field", None)
     fixture_name = getattr(obj, "fixture_name", "")
     obj.stdout.write(f"Load data from '{fixture_name}.yaml' fixtures")
+
     if not force and model.objects.all().count() > 0:
         try:
             force = click.confirm(
@@ -44,9 +58,9 @@ def add_fixture_function(
         except click.Abort:
             print()
             sys.exit(0)
+
     if force or model.objects.all().count() == 0:
         try:
-            # fixture_file = obj.fixture_dir / f"{fixture_name}.yaml"
             loaddata_command = LoadDataCommand()
             loaddata_command.verbosity = 0
             loaddata_command.app_label = obj.app_label
@@ -58,7 +72,6 @@ def add_fixture_function(
                 serializers.get_public_serializer_formats()
             )
 
-            # fixture_file = loaddata_command.find_fixture_files_in_dir(fixture_name, obj.app_label)
             fixture_files = loaddata_command.find_fixtures(fixture_name)
             if not fixture_files:
                 obj.stdout.write(
@@ -66,12 +79,22 @@ def add_fixture_function(
                         f"Could not find fixture '{fixture_name}' for model '{obj.model}'."
                     )
                 )
+                return
             fixture_file = fixture_files[0][0]  # Get the first fixture file
             obj.stdout.write(obj.style.NOTICE(f"Fixture file: {fixture_file}"))
+
             with open(fixture_file) as f:
                 fixture_data = yaml.safe_load(f)
+
             for item in fixture_data:
+                if "model" not in item or "fields" not in item:
+                    obj.stdout.write(
+                        obj.style.WARNING(f"Skipping invalid fixture item: {item}")
+                    )
+                    continue
+
                 item_fields = item["fields"]
+
                 try:
                     fixture_model = apps.get_model(*item["model"].split("."))
                 except LookupError:
@@ -81,27 +104,33 @@ def add_fixture_function(
                         )
                     )
                     continue
+
+                # Handle media files with proper storage upload (S3 compatible)
                 if not ignore_media:
                     for field in fixture_model._meta.get_fields():
                         if field.name in item_fields and isinstance(
                             field, (models.FileField, models.ImageField)
                         ):
                             img_path = item_fields[field.name]
+                            if not img_path or img_path == "":
+                                continue
+
                             file_path = os.path.realpath(
                                 os.path.join(
                                     obj.media_src if obj.media_src is not None else "",
                                     img_path,
                                 )
                             )
-                            # obj.stdout.write(obj.style.NOTICE(f"Upload image: {file_path}"))
+
                             if os.path.exists(file_path):
-                                with open(file_path, "rb") as file:
-                                    item["fields"][field.name] = ContentFile(
-                                        file.read(),
-                                        name=img_path.replace(
-                                            field.upload_to, ""
-                                        ).strip("/"),
-                                    )
+                                # Store the file path for later use during model save
+                                # We'll open it when the model saves to avoid "seek of closed file"
+                                item_fields[f"{field.name}_path"] = file_path
+                                item_fields[f"{field.name}_name"] = os.path.basename(
+                                    img_path
+                                )
+                                # Remove the original field value so Django doesn't try to use it
+                                del item_fields[field.name]
                             else:
                                 obj.stdout.write(
                                     obj.style.ERROR(
@@ -109,28 +138,122 @@ def add_fixture_function(
                                     )
                                 )
 
-                compare_dict = {
-                    k: v
-                    for k, v in item_fields.items()
-                    if k in compare_fields and k not in ["id", "pk"]
-                }
-                if "id" in compare_fields or "pk" in compare_fields:
-                    compare_dict["id"] = item["pk"]
+                # Handle record identification and PK assignment
+                if lookup_field:
+                    # New mode: Use single lookup field (e.g., 'slug') to find existing entry
+                    lookup_value = item_fields.get(lookup_field)
+                    if not lookup_value:
+                        obj.stdout.write(
+                            obj.style.ERROR(
+                                f"Item missing lookup field '{lookup_field}', skipping: {item}"
+                            )
+                        )
+                        continue
+
+                    try:
+                        # Check if record exists by lookup field
+                        lookup_kwargs = {lookup_field: lookup_value}
+                        existing_obj = model.objects.get(**lookup_kwargs)
+                        # Use existing object's ID
+                        item_fields["id"] = existing_obj.id
+                    except model.DoesNotExist:
+                        # New record: get next available ID
+                        last_id = (
+                            model.objects.all()
+                            .order_by("-id")
+                            .values_list("id", flat=True)
+                            .first()
+                        )
+                        if last_id is not None:
+                            item_fields["id"] = last_id + 1
+                        else:
+                            item_fields["id"] = 1  # First record
+
+                # Build comparison dict for update_or_create
+                if lookup_field:
+                    # Use lookup field for comparison
+                    compare_dict = {lookup_field: item_fields[lookup_field]}
+                else:
+                    # Legacy mode: Use compare_fields
+                    compare_dict = {
+                        k: v
+                        for k, v in item_fields.items()
+                        if k in compare_fields and k not in ["id", "pk"]
+                    }
+                    if "id" in compare_fields or "pk" in compare_fields:
+                        compare_dict["id"] = item.get("pk", item_fields.get("id"))
+
+                # Handle file uploads before saving model
+                # We need to process files that were stored as paths
+                file_fields_to_process = {}
+                if not ignore_media:
+                    for field in fixture_model._meta.get_fields():
+                        if isinstance(field, (models.FileField, models.ImageField)):
+                            path_key = f"{field.name}_path"
+                            name_key = f"{field.name}_name"
+
+                            if path_key in item_fields and name_key in item_fields:
+                                file_fields_to_process[field.name] = {
+                                    "path": item_fields[path_key],
+                                    "name": item_fields[name_key],
+                                }
+                                # Remove the temp keys
+                                del item_fields[path_key]
+                                del item_fields[name_key]
+
+                # Use update_or_create for both modes
                 m, created = model.objects.update_or_create(
-                    **compare_dict, defaults=item["fields"]
+                    **compare_dict, defaults=item_fields
                 )
+
+                # Now handle the file uploads if there are any
+                if file_fields_to_process:
+                    for field_name, file_info in file_fields_to_process.items():
+                        try:
+                            field = fixture_model._meta.get_field(field_name)
+                            # Delete old file if updating
+                            if (
+                                not created
+                                and hasattr(m, field_name)
+                                and getattr(m, field_name)
+                            ):
+                                getattr(m, field_name).delete(save=False)
+
+                            # Upload new file using Django's storage backend
+                            with open(file_info["path"], "rb") as f:
+                                django_file = DjangoFile(f, name=file_info["name"])
+                                getattr(m, field_name).save(
+                                    file_info["name"], django_file, save=True
+                                )
+
+                            obj.stdout.write(
+                                obj.style.SUCCESS(
+                                    f"  Uploaded file '{file_info['name']}' to field '{field_name}'"
+                                )
+                            )
+                        except Exception as e:
+                            obj.stdout.write(
+                                obj.style.ERROR(
+                                    f"Failed to upload file '{file_info['path']}': {e}"
+                                )
+                            )
+
                 if created:
                     obj.stdout.write(
-                        f"Created new entry '{m}' in {fixture_model._meta.db_table} db"
+                        f"Created new entry '{m}' in {fixture_model._meta.db_table}"
                     )
                 else:
                     obj.stdout.write(
-                        f"Updated entry '{m}' in {fixture_model._meta.db_table} db"
+                        f"Updated entry '{m}' in {fixture_model._meta.db_table}"
                     )
+
             obj.stdout.write("Fixture loaded successfully")
+
         except Exception as e:
             obj.stdout.write(f"Error loading fixture: {e}")
-            # obj.stdout.write(obj.style.NOTICE(e.args[1]))
+            import traceback
+
+            obj.stdout.write(traceback.format_exc())
             sys.exit(1)
 
 
@@ -313,6 +436,9 @@ class CRUDCommand(BaseCommand, Generic[TModel]):
     compare_fields: Sequence[str] = [
         "id"
     ]  # compare on this fields, if it exists it is only update
+    lookup_field: str | None = (
+        None  # use single field for lookup (e.g., 'slug'), ignores fixture PKs
+    )
 
     # drop settings
     drop_function: None | CRUDFunction[TModel] = (
