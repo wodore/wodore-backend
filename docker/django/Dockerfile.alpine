@@ -80,7 +80,7 @@ apk add --no-cache \
   cargo-auditable \
 	libgit2-dev \
 	expat-dev \
-	bz2-dev \
+	bzip2-dev \
 	lz4-dev
 EOF
 
