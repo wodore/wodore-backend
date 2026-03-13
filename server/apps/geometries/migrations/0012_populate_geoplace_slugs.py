@@ -100,6 +100,17 @@ def populate_slugs_fast(apps, schema_editor):
         GeoPlace.objects.using(db_alias).bulk_update(batch, ['slug'], batch_size=1000)
 
 
+def cleanup_partial_state(apps, schema_editor):
+    """Clean up any partial state from a previous failed migration attempt."""
+    # Drop the partial index if it exists
+    try:
+        with schema_editor.connection.cursor() as cursor:
+            cursor.execute("DROP INDEX IF EXISTS geometries_geoplace_slug_0664ea7f_like;")
+    except Exception:
+        # Index doesn't exist or other error, continue
+        pass
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -107,29 +118,34 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        # First, clean up any partial state
+        migrations.RunPython(cleanup_partial_state, migrations.RunPython.noop),
+
         # Add slug field as nullable first (fast operation)
-        migrations.AddField(
-            model_name="geoplace",
-            name="slug",
-            field=models.SlugField(
-                null=True,
-                blank=True,
-                max_length=15,
-                verbose_name="Slug",
-                help_text="Unique URL identifier (max 15 chars)",
-            ),
+        # Use RunSQL if table to avoid conflicts
+        migrations.RunSQL(
+            "ALTER TABLE geometries_geoplace ADD COLUMN IF NOT EXISTS slug VARCHAR(15) NULL;",
+            reverse_sql="ALTER TABLE geometries_geoplace DROP COLUMN IF EXISTS slug;"
         ),
+
         # Populate slugs using optimized bulk operations (runs in seconds, not hours)
         migrations.RunPython(populate_slugs_fast, migrations.RunPython.noop),
+
         # Make the field not null and unique (fast because slug is already populated)
-        migrations.AlterField(
-            model_name="geoplace",
-            name="slug",
-            field=models.SlugField(
-                max_length=15,
-                unique=True,
-                verbose_name="Slug",
-                help_text="Unique URL identifier (max 15 chars)",
-            ),
+        migrations.RunSQL(
+            [
+                # Update any remaining NULL slugs
+                """UPDATE geometries_geoplace
+                   SET slug = SUBSTRING(MD5(RANDOM()::text), 1, 15)
+                   WHERE slug IS NULL;""",
+                # Make column NOT NULL
+                "ALTER TABLE geometries_geoplace ALTER COLUMN slug SET NOT NULL;",
+                # Add unique constraint
+                "ALTER TABLE geometries_geoplace ADD CONSTRAINT geometries_geoplace_slug_key UNIQUE (slug);",
+            ],
+            reverse_sql=[
+                "ALTER TABLE geometries_geoplace DROP CONSTRAINT IF EXISTS geometries_geoplace_slug_key;",
+                "ALTER TABLE geometries_geoplace ALTER COLUMN slug DROP NOT NULL;",
+            ]
         ),
     ]
