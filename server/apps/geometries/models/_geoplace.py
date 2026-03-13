@@ -471,6 +471,11 @@ class GeoPlace(TimeStampedModel):
             current_protected.update(modified_fields)
             self.protected_fields = list(current_protected)
 
+            # Auto-transition review_status from "new" to "done"
+            # If it was new and we're making manual changes, we're happy with it
+            if self.review_status == "new":
+                self.review_status = "done"
+
     @classmethod
     def generate_unique_slug(
         cls,
@@ -547,15 +552,13 @@ class GeoPlace(TimeStampedModel):
 
                 base_slug = "".join(word_parts)
 
-                # If we have space left, add more chars from first word
+                # If we have space left, extend the first word
                 remaining = target_base_length - len(base_slug)
                 if remaining > 0 and len(selected_words[0]) > chars_per_word:
-                    extra = selected_words[0][
-                        chars_per_word : chars_per_word + remaining
-                    ]
-                    base_slug = (
-                        extra + base_slug[1:]
-                    )  # Replace first word with extended version
+                    # Take more chars from first word
+                    extended_first = selected_words[0][: chars_per_word + remaining]
+                    # Rebuild base_slug with extended first word
+                    base_slug = extended_first + "".join(word_parts[1:])
 
                 base_slug = base_slug[
                     :target_base_length

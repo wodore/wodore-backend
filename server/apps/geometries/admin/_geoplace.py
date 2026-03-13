@@ -204,7 +204,7 @@ class GeoPlaceAdmin(ModelAdmin):
         "elevation_display",
         "sources_display",
         "importance_display",
-        "review_status_display",
+        "review_tag",
         "is_public",
         "is_active",
         "timestamps_display",
@@ -243,6 +243,7 @@ class GeoPlaceAdmin(ModelAdmin):
     autocomplete_fields = ("parent",)
 
     readonly_fields = (
+        "slug",
         "name_i18n",
         "description_i18n",
         "location_display",
@@ -378,21 +379,18 @@ class GeoPlaceAdmin(ModelAdmin):
             modified,
         )
 
-    @display(description=_("Review"))
-    def review_status_display(self, obj: GeoPlace) -> str:
-        """Display review status with color indicator."""
-        status_colors = {
-            "new": "green",
-            "review": "orange",
-            "work": "blue",
-            "done": "green",
-        }
-        color = status_colors.get(obj.review_status, "gray")
-        return format_html(
-            '<span style="color: {};">{}</span>',
-            color,
-            obj.get_review_status_display(),
-        )
+    @display(
+        description=_("Review"),
+        label={
+            "new": "warning",
+            "review": "info",
+            "work": "danger",
+            "done": "success",
+        },
+    )
+    def review_tag(self, obj: GeoPlace) -> str:
+        """Display review status as colored label."""
+        return obj.review_status
 
     @display(description=_("Location"))
     def location_display(self, obj: GeoPlace) -> str:
