@@ -341,11 +341,12 @@ class Migration(migrations.Migration):
         # First, clean up any partial state
         migrations.RunPython(cleanup_partial_state, migrations.RunPython.noop),
 
-        # Step 1: Add slug field as nullable with db_index (will create both B-tree and _like indexes)
+        # Step 1: Add slug field as nullable WITHOUT db_index to prevent duplicate indexes
+        # The AlterField operation will create the UNIQUE constraint which provides both indexes
         migrations.AddField(
             model_name="geoplace",
             name="slug",
-            field=models.SlugField(max_length=15, null=True, blank=True),
+            field=models.SlugField(max_length=15, null=True, blank=True, db_index=False),
         ),
 
         # Step 2: Populate slugs using optimized bulk operations
@@ -357,10 +358,13 @@ class Migration(migrations.Migration):
         # Step 4: Ensure all slugs are unique before adding constraint
         migrations.RunPython(ensure_unique_slugs, migrations.RunPython.noop),
 
-        # Step 5: Make slug NOT NULL and UNIQUE with db_index (will update both B-tree and _like indexes)
+        # Step 5: Make slug NOT NULL and UNIQUE
+        # CRITICAL: db_index=False prevents Django from creating duplicate _like indexes
+        # The UNIQUE constraint already provides a B-tree index, and Django automatically
+        # creates the varchar_pattern_ops index for the unique constraint
         migrations.AlterField(
             model_name="geoplace",
             name="slug",
-            field=models.SlugField(max_length=15, unique=True),
+            field=models.SlugField(max_length=15, unique=True, db_index=False),
         ),
     ]
