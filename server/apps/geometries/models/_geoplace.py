@@ -15,6 +15,7 @@ from django.utils.translation import gettext_lazy as _
 from modeltrans.fields import TranslationField
 from django_countries.fields import CountryField
 from django.contrib.gis.geos import Point
+from server.apps.translations import activate
 
 from server.apps.categories.models import Category
 from server.apps.images.models import Image
@@ -88,16 +89,16 @@ class GeoPlace(TimeStampedModel):
     # Translation support
     i18n = TranslationField(fields=("name", "description"))
 
-    name = models.CharField(max_length=200, verbose_name=_("Name"))
+    name = models.CharField(max_length=200, blank=True, verbose_name=_("Name"))
     name_i18n: str  # for typing
 
     # Identification
     slug = models.SlugField(
-        max_length=200,
+        max_length=15,
         unique=True,
         db_index=True,
         verbose_name=_("Slug"),
-        help_text=_("Unique URL identifier"),
+        help_text=_("Unique URL identifier (max 15 chars)"),
         null=True,  # Temporarily nullable for migration
         blank=True,
     )
@@ -303,7 +304,7 @@ class GeoPlace(TimeStampedModel):
         self,
         *args,
         track_modifications=True,
-        skip_slug_check=True,
+        fallback_slug=None,
         max_retries=3,
         **kwargs,
     ):
@@ -312,17 +313,44 @@ class GeoPlace(TimeStampedModel):
         Args:
             track_modifications: If True, track field changes and mark as modified.
                                 Set to False during imports to avoid marking as manually edited.
-            skip_slug_check: If True, skip DB uniqueness check for slug (default True for performance).
-                             Set to False for manual edits to ensure uniqueness.
+            fallback_slug: Optional fallback slug string (used during imports to avoid DB queries).
+                          If None and name is empty, will query categories (for admin edits).
             max_retries: Maximum retry attempts for database lock errors (default 3).
 
         Raises:
             IntegrityError: If max retries exceeded and operation still fails.
         """
         # Auto-generate slug from name if not provided
-        if not self.slug and self.name_i18n:
+        # Always use English for slug generation (for international consistency)
+        if not self.slug:
+            # Temporarily activate English to get English name for slug
+            activate("en")
+
+            # Determine the name to use for slug generation
+            # First try name_i18n (which returns English name after activate("en"))
+            # If empty (e.g., during first save before i18n fields are populated), fall back to self.name
+            name_for_slug = (
+                self.name_i18n if self.name_i18n else (self.name if self.name else "")
+            )
+
+            # Use fallback_slug if provided (import path - no DB query)
+            # Otherwise query categories for fallback (admin edit path)
+            category_slug = fallback_slug
+            if (
+                not name_for_slug
+                and category_slug is None
+                and self.pk  # Only query if object has been saved (has an ID)
+                and hasattr(self, "categories")
+            ):
+                # Only query DB if we're in admin, name is empty, no fallback was provided,
+                # and the object has already been saved
+                if self.categories.exists():
+                    first_category = self.categories.first()
+                    if first_category:
+                        category_slug = first_category.slug
+
             self.slug = self.generate_unique_slug(
-                self.name_i18n, exclude_id=self.id, skip_check=skip_slug_check
+                name_for_slug, category_slug=category_slug
             )
 
         # Track modifications if this is a manual edit (not an import)
@@ -443,243 +471,111 @@ class GeoPlace(TimeStampedModel):
             current_protected.update(modified_fields)
             self.protected_fields = list(current_protected)
 
+            # Auto-transition review_status from "new" to "done"
+            # If it was new and we're making manual changes, we're happy with it
+            if self.review_status == "new":
+                self.review_status = "done"
+
     @classmethod
     def generate_unique_slug(
         cls,
         name: str,
-        max_length: int = 50,
-        min_length: int = 3,
-        exclude_id: int | None = None,
-        skip_check: bool = True,
+        category_slug: str | None = None,
+        max_length: int = 15,
     ) -> str:
         """
-        Generate a unique slug using hut-style filtering with short UUID suffix.
+        Generate unique slug without DB check.
 
-        This approach:
-        1. Filters out common/unhelpful words (similar to guess_slug_name for huts)
-        2. Creates a base slug from the meaningful parts of the name
-        3. Adds a smart UUID suffix based on base slug length:
-           - No slug or slug < 3: 8-char UUID (e.g., "a3b2c4d9")
-           - 3 ≤ slug < 6: 5-char UUID (e.g., "abc-a3b2k")
-           - 6 ≤ slug < 14: 4-char UUID (e.g., "bellevue-a3f9")
-           - slug ≥ 14: 3-char UUID (e.g., "berggasthaus-z2m")
-        4. Keeps slugs readable while ensuring uniqueness
+        Format: {base_slug}-{uuid}
+        - base_slug: 4-11 chars, no hyphens
+        - uuid: 4-8 chars based on base length (shorter base = longer UUID)
+        - Final slug: max 15 chars (enforced by slug[:15])
 
         Args:
             name: The place name to generate slug from
-            max_length: Maximum length for the slug (default 50)
-            min_length: Minimum length for the slug (default 3)
-            exclude_id: ID to exclude from uniqueness check (for updates)
-            skip_check: If True, skip DB uniqueness check (default True for bulk imports)
+            category_slug: Optional category slug for fallback when name is empty
+            max_length: Maximum length for the slug (default 15)
 
         Returns:
-            Unique slug string
+            Unique slug string (max 15 chars)
 
         Examples:
-            "" (unnamed) → "a3b2c4d9"
-            "XY" → "xy-a3b2c4d9"
-            "Bäckerei" → "baeckerei-a3b2k"
-            "Hotel Bellevue" → "bellevue-a3f9"
-            "Berggasthaus Zermatt" → "berggasthaus-z2m"
-        """
-        # Common words to filter out (amenity-specific)
-        NOT_IN_SLUG = [
-            # Amenity types
-            "restaurant",
-            "ristorante",
-            "beizli",
-            "gasthaus",
-            "gasthof",
-            "hotel",
-            "hostel",
-            "jugendherberg",
-            "berghotel",
-            "berggasthaus",
-            "cafe",
-            "cafeteria",
-            "bar",
-            "pub",
-            "camping",
-            "zelt",
-            "campground",
-            # Common filler words
-            "alp",
-            "alpe",
-            "la",
-            "le",
-            "les",
-            "del",
-            "des",
-            "sous",
-            "sur",
-            # Place types
-            "berghaus",
-            "berghuette",
-            "waldhuette",
-            "huette",
-            "hütte",
-            "cabane",
-            "capanna",
-            "rifugio",
-            "refuge",
-            "rif",
-            # Articles/prepositions
-            "am",
-            "an",
-            "im",
-            "in",
-            "zum",
-            "zur",
-            "bei",
-            "ob",
-            "unter",
-            # Operators/organizations
-            "sac",
-            "cai",
-            "dac",
-            "cas",
-        ]
-
-        # Additional words to replace (remove if resulting word > 4 chars)
-        REPLACE_IN_SLUG = [
-            "restaurant",
-            "hotel",
-            "hostel",
-            "camping",
-            "berghaus",
-            "berggasthaus",
-            "gasthaus",
-            "gasthof",
-        ]
-
-        import re
-        from slugify import slugify as pyslugify
-
-        # Replace umlauts
-        for r in ("ä", "ae"), ("ü", "ue"), ("ö", "oe"), ("é", "e"):
-            name = name.lower().replace(r[0], r[1])
-
-        # Create base slug
-        slug = pyslugify(name, word_boundary=True)
-        slug = re.sub(r"[0-9]", "", slug)  # Remove numbers
-        slug = slug.strip(" -")
-
-        # Filter and clean
-        slugs = slug.split("-")
-        slugl = [s for s in slugs if (s not in NOT_IN_SLUG and len(s) >= 3)]
-
-        # Try replacing common words
-        for _replace in REPLACE_IN_SLUG:
-            slugl = [
-                v.replace(_replace, "") if len(v.replace(_replace, "")) > 4 else v
-                for v in slugl
-                if v.replace(_replace, "")
-            ]
-
-        # Fallback to original if too short
-        if not slugl or len("-".join(slugl)) < min_length:
-            slugl = pyslugify(name).split("-")
-
-        base_slug = pyslugify(" ".join(slugl), word_boundary=True)
-
-        # Truncate if needed, leave room for UUID suffix
-        # Smart UUID sizing based on base slug length
-        if not base_slug or len(base_slug) < 3:
-            # No slug or very short: use 8-char UUID for uniqueness
-            actual_uuid_length = 8
-            base_slug = "place"  # Use generic base for very short names
-        elif len(base_slug) < 6:
-            # 3 ≤ slug < 6: use 5-char UUID
-            actual_uuid_length = 5
-        elif len(base_slug) < 14:
-            # 6 ≤ slug < 14: use 4-char UUID
-            actual_uuid_length = 4
-        else:
-            # slug ≥ 14: use 3-char UUID
-            actual_uuid_length = 3
-
-        uuid_space = actual_uuid_length + 1  # +1 for the hyphen
-        max_base_length = max_length - uuid_space
-        if len(base_slug) > max_base_length:
-            base_slug = base_slug[:max_base_length]
-
-        # Ensure minimum length
-        if len(base_slug) < min_length:
-            base_slug = (
-                base_slug[:min_length] if len(base_slug) >= min_length else "place"
-            )
-
-        # Add UUID suffix
-        if skip_check:
-            # Generate without DB check (fast for bulk imports)
-            import secrets
-            import string
-
-            charset = string.ascii_lowercase + string.digits
-            suffix = "".join(secrets.choice(charset) for _ in range(actual_uuid_length))
-            return f"{base_slug}-{suffix}"
-
-        # Original logic with DB check (for manual edits)
-        return cls._add_unique_suffix(base_slug, actual_uuid_length, exclude_id)
-
-    @classmethod
-    def _slug_exists(cls, slug: str, exclude_id: int | None = None) -> bool:
-        """Check if a slug already exists in the database."""
-        queryset = cls.objects.filter(slug=slug)
-        if exclude_id is not None:
-            queryset = queryset.exclude(id=exclude_id)
-        return queryset.exists()
-
-    @classmethod
-    def _add_unique_suffix(
-        cls,
-        base_slug: str,
-        uuid_length: int = 3,
-        exclude_id: int | None = None,
-        max_attempts: int = 10,
-    ) -> str:
-        """
-        Add a short UUID suffix to a base slug, expanding length if needed.
-
-        Tries UUID suffixes of increasing length until a unique slug is found:
-        1. Try 3-character UUID (62^3 = 238,328 combinations)
-        2. Expand to 4 characters (62^4 = 14,776,336 combinations)
-        3. Expand to 5 characters if still not unique (rare)
-
-        Args:
-            base_slug: The base slug to add suffix to
-            uuid_length: Starting length for UUID suffix (default 3)
-            exclude_id: ID to exclude from uniqueness check (for updates)
-            max_attempts: Maximum attempts per UUID length (default 10)
-
-        Returns:
-            Unique slug with UUID suffix
-
-        Examples:
-            base_slug="bellevue" → "bellevue-a3f"
-            If collision: → "bellevue-b2k"
-            If all 3-char taken: → "bellevue-a3f9"
+            "Liechtensteinisches Landesspital" → "liechtenst-dne4"
+            "Gemeindepolizei Schellenberg" → "gemeindepo-wz9j"
+            "Adolf Bike Shop" → "adolfbike-uabf"
+            "Lio" → "lio-3k8m9x4"
+            "" (category: "drinkwater") → "drinkwater-ito4"
+            "" (no category) → "place-vn191wad"
         """
         import secrets
         import string
+        from slugify import slugify as pyslugify
 
-        # Character set: lowercase letters + digits (no vowels to avoid words)
+        # 1. Fallback to category if name is empty
+        if not name or len(name.strip()) < 2:
+            base_slug = category_slug or "place"
+        else:
+            # 2. Create base slug
+            slug = pyslugify(name, word_boundary=True)
+            slug = slug.strip("-")
+
+            # 3. Filter common words (amenity types only)
+            SLUG_IGNORE = [
+                "hotel",
+                "restaurant",
+                "gasthaus",
+                "gasthof",
+                "berghaus",
+                "berggasthaus",
+                "hostel",
+                "cafeteria",
+                "campground",
+            ]
+            words = [w for w in slug.split("-") if w not in SLUG_IGNORE and len(w) >= 3]
+
+            if not words:
+                base_slug = category_slug or "place"
+            else:
+                # 4. Smart word splitting: take up to 3 words, distribute space equally
+                # Target: 9 chars for base slug (leaves room for 5-char UUID)
+                target_base_length = 9
+                selected_words = words[:3]
+                num_words = len(selected_words)
+
+                # Calculate chars per word (minimum 3 chars per word)
+                chars_per_word = max(3, target_base_length // num_words)
+
+                # Build base slug by taking chars_per_word from each word
+                word_parts = []
+                for word in selected_words:
+                    word_parts.append(word[:chars_per_word])
+
+                base_slug = "".join(word_parts)
+
+                # If we have space left, extend the first word
+                remaining = target_base_length - len(base_slug)
+                if remaining > 0 and len(selected_words[0]) > chars_per_word:
+                    # Take more chars from first word
+                    extended_first = selected_words[0][: chars_per_word + remaining]
+                    # Rebuild base_slug with extended first word
+                    base_slug = extended_first + "".join(word_parts[1:])
+
+                base_slug = base_slug[
+                    :target_base_length
+                ]  # Ensure we don't exceed target
+
+        # 5. Smart UUID sizing (min 5, max 8)
+        # Calculate available space for UUID: max_length - base_length - 1 (for hyphen)
+        available_space = max_length - len(base_slug) - 1
+        uuid_len = max(5, min(8, available_space))
+
+        # 6. Generate UUID suffix
         charset = string.ascii_lowercase + string.digits
+        suffix = "".join(secrets.choice(charset) for _ in range(uuid_len))
 
-        for current_length in [uuid_length, uuid_length + 1, uuid_length + 2]:
-            for _attempt in range(max_attempts):
-                # Generate random suffix
-                suffix = "".join(secrets.choice(charset) for _ in range(current_length))
-                slug = f"{base_slug}-{suffix}"
-
-                # Check uniqueness
-                if not cls._slug_exists(slug, exclude_id):
-                    return slug
-
-        # Ultimate fallback: use timestamp
-        import time
-
-        return f"{base_slug}-{int(time.time())}"
+        # 7. Combine and enforce max length
+        slug = f"{base_slug}-{suffix}"
+        return slug[:max_length]
 
     @classmethod
     def create_with_source(
@@ -1058,7 +954,7 @@ class GeoPlace(TimeStampedModel):
 
         # Build place data
         place_data = {
-            "name": name_dict.get(settings.LANGUAGE_CODE, "Unnamed"),
+            "name": name_dict.get(settings.LANGUAGE_CODE, ""),
             "location": location,
             "country_code": schema.country_code,
             "detail_type": schema.detail_type,
@@ -1102,29 +998,11 @@ class GeoPlace(TimeStampedModel):
                 place_data[f"description_{lang_code}"] = desc_value
 
         # Create the place (track_modifications=False for imports)
-        # Handle slug collisions with retry logic
+        # Slug is auto-generated in save() with UUID-based uniqueness (no DB check needed)
+        # Pass first category slug as fallback for empty names
+        fallback_slug = categories[0].slug if categories else None
         place = cls(**place_data)
-        max_slug_attempts = 2  # Try with skip_check=True, then with skip_check=False
-
-        for slug_attempt in range(max_slug_attempts):
-            try:
-                # First attempt: skip DB check (fast)
-                # Second attempt (if collision): use DB check
-                place.save(
-                    track_modifications=False, skip_slug_check=(slug_attempt == 0)
-                )
-                break  # Success
-            except Exception as e:
-                error_str = str(e).lower()
-                is_slug_collision = "unique" in error_str and "slug" in error_str
-
-                if is_slug_collision and slug_attempt < max_slug_attempts - 1:
-                    # Regenerate slug with DB check on next attempt
-                    place.slug = None  # Will trigger regeneration in save()
-                    continue
-                else:
-                    # Not a slug collision or max attempts exceeded
-                    raise
+        place.save(track_modifications=False, fallback_slug=fallback_slug)
 
         if categories:
             GeoPlaceCategory.objects.bulk_create(

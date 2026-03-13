@@ -150,22 +150,16 @@ class Command(BaseCommand):
             "Berggasthaus Zermatt",  # 21 chars → 3-char UUID
         ]
 
-        # Test with skip_check=True (optimized)
+        # Test with new UUID-based method (no DB check needed)
         start = time.time()
         for i in range(iterations):
             name = test_names[i % len(test_names)]
-            GeoPlace.generate_unique_slug(name, skip_check=True)
+            GeoPlace.generate_unique_slug(name, category_slug=None)
         fast_time = time.time() - start
 
-        # Test with skip_check=False (old method)
-        start = time.time()
-        for i in range(iterations):
-            name = test_names[i % len(test_names)]
-            # Note: This will be slow due to DB checks
-            # Only test with 10 iterations to avoid excessive time
-            if i < 10:
-                GeoPlace.generate_unique_slug(name, skip_check=False)
-        slow_time_per_iter = (time.time() - start) / 10
+        # Old method with DB checks is no longer supported
+        # All slug generation now uses UUID-based uniqueness
+        slow_time_per_iter = fast_time / iterations
 
         speedup = slow_time_per_iter / (fast_time / iterations)
 
@@ -806,9 +800,9 @@ class Command(BaseCommand):
                         is_active=schema.is_active,
                         is_public=schema.is_public,
                     )
-                    # Generate slug (skip DB check)
+                    # Generate slug (uses UUID-based uniqueness)
                     place.slug = GeoPlace.generate_unique_slug(
-                        place.name, skip_check=True
+                        place.name, category_slug=None
                     )
                     geoplaces_to_create.append(place)
                     categories_to_create.append(category)
@@ -1022,7 +1016,7 @@ class Command(BaseCommand):
                             is_public=schema.is_public,
                         )
                         place.slug = GeoPlace.generate_unique_slug(
-                            place.name, skip_check=True
+                            place.name, category_slug=None
                         )
                         geoplaces_to_create.append(place)
                         categories_to_create.append(category)

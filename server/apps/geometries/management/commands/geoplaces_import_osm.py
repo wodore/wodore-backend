@@ -4081,10 +4081,13 @@ class Command(BaseCommand):
             is_public=True,
         )
 
-        # Generate slug (skip DB check for speed)
-        # If name is empty, use the first category's name as fallback for slug
-        slug_name = name if name else (categories[0].name if categories else "")
-        place.slug = GeoPlace.generate_unique_slug(slug_name, skip_check=True)
+        # Generate slug (uses UUID-based uniqueness, no DB check needed)
+        # If name is empty, use the first category's slug as fallback for slug
+        slug_name = name if name else ""
+        slug_category = categories[0].slug if categories else None
+        place.slug = GeoPlace.generate_unique_slug(
+            slug_name, category_slug=slug_category
+        )
 
         return place, categories
 
