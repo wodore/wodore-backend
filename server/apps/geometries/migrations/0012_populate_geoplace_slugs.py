@@ -18,8 +18,15 @@ def generate_slug_simple(name, category_slug=None, max_length=15):
     from slugify import slugify
 
     SLUG_IGNORE = [
-        "hotel", "restaurant", "gasthaus", "gasthof", "berghaus",
-        "berggasthaus", "hostel", "cafeteria", "campground",
+        "hotel",
+        "restaurant",
+        "gasthaus",
+        "gasthof",
+        "berghaus",
+        "berggasthaus",
+        "hostel",
+        "cafeteria",
+        "campground",
     ]
 
     # Slugify the name
@@ -51,7 +58,7 @@ def generate_slug_simple(name, category_slug=None, max_length=15):
             # Extend first word if space remains
             remaining = target_base_length - len(base_slug)
             if remaining > 0 and len(selected_words[0]) > chars_per_word:
-                extended_first = selected_words[0][:chars_per_word + remaining]
+                extended_first = selected_words[0][: chars_per_word + remaining]
                 base_slug = extended_first + "".join(word_parts[1:])
 
             base_slug = base_slug[:target_base_length]
@@ -66,10 +73,14 @@ def generate_slug_simple(name, category_slug=None, max_length=15):
 
 def cleanup_partial_state(apps, schema_editor):
     """Clean up any partial state from a previous failed migration attempt."""
-    # Drop the partial index if it exists
+    # Drop all possible slug-related indexes that might exist from previous attempts
     try:
         with schema_editor.connection.cursor() as cursor:
+            # Try to drop any indexes that might have been created
+            cursor.execute("DROP INDEX IF EXISTS geometries_geoplace_slug_hash;")
+            cursor.execute("DROP INDEX IF EXISTS geometries_geoplace_slug_idx;")
             cursor.execute("DROP INDEX IF EXISTS geometries_geoplace_slug_0664ea7f_like;")
+            cursor.execute("DROP INDEX IF EXISTS geometries_geoplace_slug_key;")
     except Exception:
         # Index doesn't exist or other error, continue
         pass
@@ -87,7 +98,7 @@ def populate_slugs_fast(apps, schema_editor):
     places = (
         GeoPlace.objects.using(db_alias)
         .filter(slug__isnull=True)
-        .order_by('id')
+        .order_by("id")
         .iterator(chunk_size=1000)
     )
 
@@ -100,19 +111,52 @@ def populate_slugs_fast(apps, schema_editor):
         batch.append(place)
 
         if len(batch) >= batch_size:
-            GeoPlace.objects.using(db_alias).bulk_update(
-                batch,
-                ['slug'],
-                batch_size=1000
-            )
+            GeoPlace.objects.using(db_alias).bulk_update(batch, ["slug"], batch_size=1000)
             batch = []
 
     if batch:
-        GeoPlace.objects.using(db_alias).bulk_update(batch, ['slug'], batch_size=1000)
+        GeoPlace.objects.using(db_alias).bulk_update(batch, ["slug"], batch_size=1000)
+
+
+def update_null_slugs(apps, schema_editor):
+    """Update any remaining NULL slugs using MD5 hash."""
+    from django.db import connection
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            UPDATE geometries_geoplace
+            SET slug = SUBSTRING(MD5(RANDOM()::text), 1, 15)
+            WHERE slug IS NULL;
+        """
+        )
+
+
+def ensure_unique_slugs(apps, schema_editor):
+    """Ensure all slugs are unique before adding unique constraint."""
+    from django.db import connection
+
+    with connection.cursor() as cursor:
+        # Find and fix any duplicate slugs by appending ID
+        cursor.execute(
+            """
+            WITH duplicates AS (
+                SELECT slug, ARRAY_AGG(id ORDER BY id) as ids
+                FROM geometries_geoplace
+                WHERE slug IS NOT NULL
+                GROUP BY slug
+                HAVING COUNT(*) > 1
+            )
+            UPDATE geometries_geoplace
+            SET slug = LEFT(slug || '-' || id::text, 15)
+            WHERE id IN (
+                SELECT UNNEST(ids[1:ARRAY_LENGTH(ids, 1)-1]) FROM duplicates
+            );
+        """
+        )
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("geometries", "0011_update_source_id_field_and_indexes"),
     ]
@@ -120,31 +164,22 @@ class Migration(migrations.Migration):
     operations = [
         # First, clean up any partial state
         migrations.RunPython(cleanup_partial_state, migrations.RunPython.noop),
-
-        # Add slug field as nullable using RunSQL (idempotent)
-        migrations.RunSQL(
-            sql="ALTER TABLE geometries_geoplace ADD COLUMN IF NOT EXISTS slug VARCHAR(15) NULL;",
-            reverse_sql="ALTER TABLE geometries_geoplace DROP COLUMN IF EXISTS slug;"
+        # Step 1: Add slug field as nullable (updates both DB and Django state)
+        migrations.AddField(
+            model_name="geoplace",
+            name="slug",
+            field=models.SlugField(max_length=15, null=True, blank=True),
         ),
-
-        # Populate slugs using optimized bulk operations
+        # Step 2: Populate slugs using optimized bulk operations
         migrations.RunPython(populate_slugs_fast, migrations.RunPython.noop),
-
-        # Update any remaining NULL slugs and make column NOT NULL and UNIQUE
-        migrations.RunSQL(
-            sql=[
-                # Update any remaining NULL slugs (fallback MD5-based)
-                """UPDATE geometries_geoplace
-                   SET slug = SUBSTRING(MD5(RANDOM()::text), 1, 15)
-                   WHERE slug IS NULL;""",
-                # Make column NOT NULL
-                "ALTER TABLE geometries_geoplace ALTER COLUMN slug SET NOT NULL;",
-                # Add unique constraint
-                "ALTER TABLE geometries_geoplace ADD CONSTRAINT geometries_geoplace_slug_key UNIQUE (slug);",
-            ],
-            reverse_sql=[
-                "ALTER TABLE geometries_geoplace DROP CONSTRAINT IF EXISTS geometries_geoplace_slug_key;",
-                "ALTER TABLE geometries_geoplace ALTER COLUMN slug DROP NOT NULL;",
-            ]
+        # Step 3: Update any remaining NULL slugs
+        migrations.RunPython(update_null_slugs, migrations.RunPython.noop),
+        # Step 4: Ensure all slugs are unique before adding constraint
+        migrations.RunPython(ensure_unique_slugs, migrations.RunPython.noop),
+        # Step 5: Make slug NOT NULL and add unique constraint
+        migrations.AlterField(
+            model_name="geoplace",
+            name="slug",
+            field=models.SlugField(max_length=15, unique=True, null=False, blank=False),
         ),
     ]
