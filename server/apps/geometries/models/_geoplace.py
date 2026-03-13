@@ -531,9 +531,8 @@ class GeoPlace(TimeStampedModel):
             if not words:
                 base_slug = category_slug or "place"
             else:
-                # 4. Take up to 3 words (prioritize longer words), concatenate without hyphens, max 11 chars
-                words_sorted = sorted(words, key=len, reverse=True)
-                base_slug = "".join(words_sorted[:3])[:11]
+                # 4. Take up to 3 words in original order, concatenate without hyphens, max 11 chars
+                base_slug = "".join(words[:3])[:11]
 
         # 5. Smart UUID sizing (min 4, max 8)
         # Calculate available space for UUID: max_length - base_length - 1 (for hyphen)
@@ -970,8 +969,10 @@ class GeoPlace(TimeStampedModel):
 
         # Create the place (track_modifications=False for imports)
         # Slug is auto-generated in save() with UUID-based uniqueness (no DB check needed)
+        # Pass first category slug as fallback for empty names
+        fallback_slug = categories[0].slug if categories else None
         place = cls(**place_data)
-        place.save(track_modifications=False)
+        place.save(track_modifications=False, fallback_slug=fallback_slug)
 
         if categories:
             GeoPlaceCategory.objects.bulk_create(
