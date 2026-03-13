@@ -64,6 +64,17 @@ def generate_slug_simple(name, category_slug=None, max_length=15):
     return f"{base_slug}-{uuid_suffix}"[:max_length]
 
 
+def cleanup_partial_state(apps, schema_editor):
+    """Clean up any partial state from a previous failed migration attempt."""
+    # Drop the partial index if it exists
+    try:
+        with schema_editor.connection.cursor() as cursor:
+            cursor.execute("DROP INDEX IF EXISTS geometries_geoplace_slug_0664ea7f_like;")
+    except Exception:
+        # Index doesn't exist or other error, continue
+        pass
+
+
 def populate_slugs_fast(apps, schema_editor):
     """Populate slugs for existing GeoPlace records using bulk operations."""
     GeoPlace = apps.get_model("geometries", "GeoPlace")
@@ -100,17 +111,6 @@ def populate_slugs_fast(apps, schema_editor):
         GeoPlace.objects.using(db_alias).bulk_update(batch, ['slug'], batch_size=1000)
 
 
-def cleanup_partial_state(apps, schema_editor):
-    """Clean up any partial state from a previous failed migration attempt."""
-    # Drop the partial index if it exists
-    try:
-        with schema_editor.connection.cursor() as cursor:
-            cursor.execute("DROP INDEX IF EXISTS geometries_geoplace_slug_0664ea7f_like;")
-    except Exception:
-        # Index doesn't exist or other error, continue
-        pass
-
-
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -121,20 +121,19 @@ class Migration(migrations.Migration):
         # First, clean up any partial state
         migrations.RunPython(cleanup_partial_state, migrations.RunPython.noop),
 
-        # Add slug field as nullable first (fast operation)
-        # Use RunSQL if table to avoid conflicts
+        # Add slug field as nullable using RunSQL (idempotent)
         migrations.RunSQL(
-            "ALTER TABLE geometries_geoplace ADD COLUMN IF NOT EXISTS slug VARCHAR(15) NULL;",
+            sql="ALTER TABLE geometries_geoplace ADD COLUMN IF NOT EXISTS slug VARCHAR(15) NULL;",
             reverse_sql="ALTER TABLE geometries_geoplace DROP COLUMN IF EXISTS slug;"
         ),
 
-        # Populate slugs using optimized bulk operations (runs in seconds, not hours)
+        # Populate slugs using optimized bulk operations
         migrations.RunPython(populate_slugs_fast, migrations.RunPython.noop),
 
-        # Make the field not null and unique (fast because slug is already populated)
+        # Update any remaining NULL slugs and make column NOT NULL and UNIQUE
         migrations.RunSQL(
-            [
-                # Update any remaining NULL slugs
+            sql=[
+                # Update any remaining NULL slugs (fallback MD5-based)
                 """UPDATE geometries_geoplace
                    SET slug = SUBSTRING(MD5(RANDOM()::text), 1, 15)
                    WHERE slug IS NULL;""",
