@@ -1,28 +1,73 @@
 # Generated manually for WEP008 - Optimized slug generation
+# This migration uses a simplified slug generator that doesn't depend on
+# model relationships, which may not exist at this point in migration history.
 
 from django.db import migrations, models
+import secrets
+
+
+def generate_slug_simple(name, category_slug=None, max_length=15):
+    """
+    Simple slug generator for migrations (no DB queries, no model dependencies).
+
+    Format: {base_slug}-{uuid}
+    - base_slug: 9 chars max
+    - uuid: 5-6 chars
+    - Total: max 15 chars
+    """
+    from slugify import slugify
+
+    SLUG_IGNORE = [
+        "hotel", "restaurant", "gasthaus", "gasthof", "berghaus",
+        "berggasthaus", "hostel", "cafeteria", "campground",
+    ]
+
+    # Slugify the name
+    if not name:
+        base_slug = category_slug or "place"
+    else:
+        slug = slugify(name, separator="-")
+        # Split into words and filter
+        words = [w for w in slug.split("-") if w not in SLUG_IGNORE and len(w) >= 3]
+
+        if not words:
+            base_slug = category_slug or "place"
+        else:
+            # Take up to 3 words in original order
+            selected_words = words[:3]
+            num_words = len(selected_words)
+
+            # Distribute space equally (target 9 chars)
+            target_base_length = 9
+            chars_per_word = max(3, target_base_length // num_words)
+
+            # Build base slug
+            word_parts = []
+            for word in selected_words:
+                word_parts.append(word[:chars_per_word])
+
+            base_slug = "".join(word_parts)
+
+            # Extend first word if space remains
+            remaining = target_base_length - len(base_slug)
+            if remaining > 0 and len(selected_words[0]) > chars_per_word:
+                extended_first = selected_words[0][:chars_per_word + remaining]
+                base_slug = extended_first + "".join(word_parts[1:])
+
+            base_slug = base_slug[:target_base_length]
+
+    # Add UUID suffix (5-6 chars for migration)
+    available_space = max_length - len(base_slug) - 1
+    uuid_len = max(5, min(6, available_space))
+    uuid_suffix = secrets.token_urlsafe(uuid_len)[:uuid_len]
+
+    return f"{base_slug}-{uuid_suffix}"[:max_length]
 
 
 def populate_slugs_fast(apps, schema_editor):
     """Populate slugs for existing GeoPlace records using bulk operations."""
     GeoPlace = apps.get_model("geometries", "GeoPlace")
-    Category = apps.get_model("categories", "Category")
-    GeoPlaceCategory = apps.get_model("geometries", "GeoPlaceCategory")
     db_alias = schema_editor.connection.alias
-
-    # Build a mapping of place_id -> category_slug
-    # Use the first category for each place as fallback
-    category_map = {}
-    if hasattr(GeoPlaceCategory, 'objects'):
-        category_links = (
-            GeoPlaceCategory.objects.using(db_alias)
-            .select_related('category')
-            .all()
-            .iterator()
-        )
-        for link in category_links:
-            if link.geo_place_id not in category_map:
-                category_map[link.geo_place_id] = link.category.slug if link.category else None
 
     batch = []
     batch_size = 1000
@@ -36,14 +81,9 @@ def populate_slugs_fast(apps, schema_editor):
     )
 
     for place in places:
-        # Get category slug for fallback
-        category_slug = category_map.get(place.id)
-
-        # Generate slug without DB check (UUID-based uniqueness)
-        slug = GeoPlace.generate_unique_slug(
-            name=place.name,
-            category_slug=category_slug
-        )
+        # Generate slug using simple function (no category fallback in migration)
+        # At migration time, we had a single category FK, not many-to-many
+        slug = generate_slug_simple(name=place.name)
 
         place.slug = slug
         batch.append(place)
