@@ -6,6 +6,7 @@ from django.forms import ModelForm
 from django.utils.translation import gettext_lazy as _
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
+from django.db.models.functions import Lower
 
 from unfold import admin as unfold_admin
 from unfold.contrib.filters.admin import (
@@ -196,8 +197,8 @@ class GeoPlaceAdmin(ModelAdmin):
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
 
     list_display = (
-        "name",
-        "slug",
+        "category_icon",
+        "title",
         "categories_display",
         "country_code",
         "elevation_display",
@@ -209,7 +210,10 @@ class GeoPlaceAdmin(ModelAdmin):
         "timestamps_display",
     )
 
-    list_display_links = ("name",)
+    list_display_links = (
+        "category_icon",
+        "title",
+    )
 
     list_filter = (
         (
@@ -276,6 +280,29 @@ class GeoPlaceAdmin(ModelAdmin):
         ]
 
     # Display methods
+
+    @display(description="")
+    def category_icon(self, obj):
+        """Display the first category's symbol icon with priority: detailed → simple → mono."""
+        # Get first category (ordered by the through model's order field)
+        first_category = obj.categories.order_by("order", "slug").first()
+        if not first_category:
+            return ""
+
+        # Try symbols in priority order: detailed → simple → mono
+        for symbol_attr in ["symbol_detailed", "symbol_simple", "symbol_mono"]:
+            symbol = getattr(first_category, symbol_attr, None)
+            if symbol and symbol.svg_file and symbol.svg_file.name:
+                return mark_safe(
+                    f'<img src="{symbol.svg_file.url}" width="25px" '
+                    f'alt="{first_category.slug}" title="{first_category.name_i18n}"/>'
+                )
+        return ""
+
+    @display(header=True, ordering=Lower("name"))
+    def title(self, obj):
+        """Display name and slug in the same column, like Hut admin."""
+        return (obj.name_i18n, mark_safe(f"<small><code>{obj.slug}</code></small>"))
 
     @display(description=_("Categories"))
     def categories_display(self, obj: GeoPlace) -> str:
