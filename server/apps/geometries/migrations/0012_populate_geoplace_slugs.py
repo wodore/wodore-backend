@@ -332,6 +332,7 @@ def ensure_unique_slugs(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+
     dependencies = [
         ("geometries", "0011_update_source_id_field_and_indexes"),
     ]
