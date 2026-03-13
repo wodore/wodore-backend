@@ -138,7 +138,7 @@ class WikimediaCommonsProvider(ImageProvider):
 
             # 3. Store in cache
             logger.debug(f"WikimediaCommonsProvider: Caching {len(results)} results")
-            self._set_cached_results(cache_key, results)
+            await self._set_cached_results(cache_key, results)
 
             return results
 

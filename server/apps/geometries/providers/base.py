@@ -9,6 +9,7 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 from typing import Any, Literal
 
+from asgiref.sync import sync_to_async
 from django.contrib.gis.geos import Point
 from django.core.cache import cache
 
@@ -238,7 +239,8 @@ class ImageProvider(ABC):
     ) -> list[ImageResult] | None:
         """Get cached results if available and fresh."""
         cache_instance = self.get_cache()
-        data = cache_instance.get(cache_key)
+        # Use sync_to_async to call the synchronous cache backend from async context
+        data = await sync_to_async(cache_instance.get)(cache_key)
         if data is not None:
             logger.debug(f"Cache HIT: {cache_key}")
             # Deserialize - stored as list of dicts
@@ -246,7 +248,7 @@ class ImageProvider(ABC):
         logger.debug(f"Cache MISS: {cache_key}")
         return None
 
-    def _set_cached_results(
+    async def _set_cached_results(
         self,
         cache_key: str,
         results: list[ImageResult],
@@ -255,7 +257,8 @@ class ImageProvider(ABC):
         cache_instance = self.get_cache()
         # Serialize - convert to list of dicts using dataclasses.asdict
         data = [asdict(result) for result in results]
-        cache_instance.set(cache_key, data, self.cache_ttl)
+        # Use sync_to_async to call the synchronous cache backend from async context
+        await sync_to_async(cache_instance.set)(cache_key, data, self.cache_ttl)
 
     def invalidate_cache(
         self, lat: float, lon: float, radius: float, precision: str = "precise"
