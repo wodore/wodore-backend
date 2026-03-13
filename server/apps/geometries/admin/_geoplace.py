@@ -6,6 +6,7 @@ from django.forms import ModelForm
 from django.utils.translation import gettext_lazy as _
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
+from django.db.models.functions import Lower
 
 from unfold import admin as unfold_admin
 from unfold.contrib.filters.admin import (
@@ -196,20 +197,23 @@ class GeoPlaceAdmin(ModelAdmin):
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
 
     list_display = (
-        "name",
-        "slug",
+        "category_icon",
+        "title",
         "categories_display",
         "country_code",
         "elevation_display",
         "sources_display",
         "importance_display",
-        "review_status_display",
+        "review_tag",
         "is_public",
         "is_active",
         "timestamps_display",
     )
 
-    list_display_links = ("name",)
+    list_display_links = (
+        "category_icon",
+        "title",
+    )
 
     list_filter = (
         (
@@ -239,6 +243,7 @@ class GeoPlaceAdmin(ModelAdmin):
     autocomplete_fields = ("parent",)
 
     readonly_fields = (
+        "slug",
         "name_i18n",
         "description_i18n",
         "location_display",
@@ -276,6 +281,29 @@ class GeoPlaceAdmin(ModelAdmin):
         ]
 
     # Display methods
+
+    @display(description="")
+    def category_icon(self, obj):
+        """Display the first category's symbol icon with priority: detailed → simple → mono."""
+        # Get first category (ordered by the through model's order field)
+        first_category = obj.categories.order_by("order", "slug").first()
+        if not first_category:
+            return ""
+
+        # Try symbols in priority order: detailed → simple → mono
+        for symbol_attr in ["symbol_detailed", "symbol_simple", "symbol_mono"]:
+            symbol = getattr(first_category, symbol_attr, None)
+            if symbol and symbol.svg_file and symbol.svg_file.name:
+                return mark_safe(
+                    f'<img src="{symbol.svg_file.url}" width="25px" '
+                    f'alt="{first_category.slug}" title="{first_category.name_i18n}"/>'
+                )
+        return ""
+
+    @display(header=True, ordering=Lower("name"))
+    def title(self, obj):
+        """Display name and slug in the same column, like Hut admin."""
+        return (obj.name_i18n, mark_safe(f"<small><code>{obj.slug}</code></small>"))
 
     @display(description=_("Categories"))
     def categories_display(self, obj: GeoPlace) -> str:
@@ -351,21 +379,18 @@ class GeoPlaceAdmin(ModelAdmin):
             modified,
         )
 
-    @display(description=_("Review"))
-    def review_status_display(self, obj: GeoPlace) -> str:
-        """Display review status with color indicator."""
-        status_colors = {
-            "new": "green",
-            "review": "orange",
-            "work": "blue",
-            "done": "green",
-        }
-        color = status_colors.get(obj.review_status, "gray")
-        return format_html(
-            '<span style="color: {};">{}</span>',
-            color,
-            obj.get_review_status_display(),
-        )
+    @display(
+        description=_("Review"),
+        label={
+            "new": "warning",
+            "review": "info",
+            "work": "danger",
+            "done": "success",
+        },
+    )
+    def review_tag(self, obj: GeoPlace) -> str:
+        """Display review status as colored label."""
+        return obj.review_status
 
     @display(description=_("Location"))
     def location_display(self, obj: GeoPlace) -> str:
