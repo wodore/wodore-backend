@@ -531,13 +531,40 @@ class GeoPlace(TimeStampedModel):
             if not words:
                 base_slug = category_slug or "place"
             else:
-                # 4. Take up to 3 words in original order, concatenate without hyphens, max 11 chars
-                base_slug = "".join(words[:3])[:11]
+                # 4. Smart word splitting: take up to 3 words, distribute space equally
+                # Target: 9 chars for base slug (leaves room for 5-char UUID)
+                target_base_length = 9
+                selected_words = words[:3]
+                num_words = len(selected_words)
 
-        # 5. Smart UUID sizing (min 4, max 8)
+                # Calculate chars per word (minimum 3 chars per word)
+                chars_per_word = max(3, target_base_length // num_words)
+
+                # Build base slug by taking chars_per_word from each word
+                word_parts = []
+                for word in selected_words:
+                    word_parts.append(word[:chars_per_word])
+
+                base_slug = "".join(word_parts)
+
+                # If we have space left, add more chars from first word
+                remaining = target_base_length - len(base_slug)
+                if remaining > 0 and len(selected_words[0]) > chars_per_word:
+                    extra = selected_words[0][
+                        chars_per_word : chars_per_word + remaining
+                    ]
+                    base_slug = (
+                        extra + base_slug[1:]
+                    )  # Replace first word with extended version
+
+                base_slug = base_slug[
+                    :target_base_length
+                ]  # Ensure we don't exceed target
+
+        # 5. Smart UUID sizing (min 5, max 8)
         # Calculate available space for UUID: max_length - base_length - 1 (for hyphen)
         available_space = max_length - len(base_slug) - 1
-        uuid_len = max(4, min(8, available_space))
+        uuid_len = max(5, min(8, available_space))
 
         # 6. Generate UUID suffix
         charset = string.ascii_lowercase + string.digits
