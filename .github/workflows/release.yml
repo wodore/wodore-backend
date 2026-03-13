@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup token for Python installation
         run: git config --global url."https://${{ secrets.MY_USERNAME }}:${{ secrets.MY_TOKEN }}@github.com".insteadOf ssh://git@github.com # replace with whatever authentication method you're currently using
