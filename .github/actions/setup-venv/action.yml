@@ -14,7 +14,7 @@ runs:
   using: "composite"
   steps:
     - name: Cache uv binary
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       id: cache-uv-binary
       with:
         path: /opt/hostedtoolcache/uv
@@ -30,7 +30,7 @@ runs:
         github-token: ${{ inputs.github-token }}
 
     - name: "Set up Python"
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version-file: ".python-version"
 
@@ -41,7 +41,7 @@ runs:
 
     - name: Cache virtual environment
       id: cache-venv
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: .venv
         key: venv-${{ runner.os }}-${{ hashFiles('uv.lock') }}

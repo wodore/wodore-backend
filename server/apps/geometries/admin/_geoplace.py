@@ -6,8 +6,14 @@ from django.forms import ModelForm
 from django.utils.translation import gettext_lazy as _
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
+from django.db.models.functions import Lower
 
 from unfold import admin as unfold_admin
+from unfold.contrib.filters.admin import (
+    AutocompleteSelectMultipleFilter,
+    ChoicesCheckboxFilter,
+    ChoicesDropdownFilter,
+)
 from unfold.decorators import display
 
 from server.apps.manager.admin import ModelAdmin
@@ -22,6 +28,7 @@ from ..models import (
     GeoPlaceExternalLink,
     AmenityDetail,
 )
+from ..utils import get_progress_bar
 
 
 ## Custom Admin Forms
@@ -186,30 +193,43 @@ class GeoPlaceAdmin(ModelAdmin):
     """
 
     form = required_i18n_fields_form_factory("name")
+    list_filter_submit = True  # Add submit button for filters
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
 
     list_display = (
-        "name",
-        "slug",
+        "category_icon",
+        "title",
         "categories_display",
         "country_code",
         "elevation_display",
-        "review_status_display",
+        "sources_display",
+        "importance_display",
+        "review_tag",
         "is_public",
         "is_active",
-        "created",
-        "modified",
+        "timestamps_display",
     )
 
-    list_display_links = ("name",)
+    list_display_links = (
+        "category_icon",
+        "title",
+    )
 
     list_filter = (
-        "review_status",
+        (
+            "review_status",
+            ChoicesCheckboxFilter,
+        ),  # Filter by review status with checkboxes
         "is_public",
         "is_active",
-        "categories__parent",  # Filter by category parent (e.g., terrain, transport)
-        "categories",
-        "country_code",
+        (
+            "categories",
+            AutocompleteSelectMultipleFilter,
+        ),  # Filter by categories with autocomplete
+        (
+            "country_code",
+            ChoicesDropdownFilter,
+        ),  # Filter by country with dropdown
     )
 
     search_fields = (
@@ -223,6 +243,7 @@ class GeoPlaceAdmin(ModelAdmin):
     autocomplete_fields = ("parent",)
 
     readonly_fields = (
+        "slug",
         "name_i18n",
         "description_i18n",
         "location_display",
@@ -239,6 +260,7 @@ class GeoPlaceAdmin(ModelAdmin):
         "review_status",
         "is_public",
         "is_active",
+        "importance",
         "created",
         "modified",
     )
@@ -260,6 +282,29 @@ class GeoPlaceAdmin(ModelAdmin):
 
     # Display methods
 
+    @display(description="")
+    def category_icon(self, obj):
+        """Display the first category's symbol icon with priority: detailed → simple → mono."""
+        # Get first category (ordered by the through model's order field)
+        first_category = obj.categories.order_by("order", "slug").first()
+        if not first_category:
+            return ""
+
+        # Try symbols in priority order: detailed → simple → mono
+        for symbol_attr in ["symbol_detailed", "symbol_simple", "symbol_mono"]:
+            symbol = getattr(first_category, symbol_attr, None)
+            if symbol and symbol.svg_file and symbol.svg_file.name:
+                return mark_safe(
+                    f'<img src="{symbol.svg_file.url}" width="25px" '
+                    f'alt="{first_category.slug}" title="{first_category.name_i18n}"/>'
+                )
+        return ""
+
+    @display(header=True, ordering=Lower("name"))
+    def title(self, obj):
+        """Display name and slug in the same column, like Hut admin."""
+        return (obj.name_i18n, mark_safe(f"<small><code>{obj.slug}</code></small>"))
+
     @display(description=_("Categories"))
     def categories_display(self, obj: GeoPlace) -> str:
         """Display categories with parents if available."""
@@ -273,21 +318,79 @@ class GeoPlaceAdmin(ModelAdmin):
             return f"{obj.elevation} m"
         return "-"
 
-    @display(description=_("Review"))
-    def review_status_display(self, obj: GeoPlace) -> str:
-        """Display review status with color indicator."""
-        status_colors = {
-            "new": "green",
-            "review": "orange",
-            "work": "blue",
-            "done": "green",
-        }
-        color = status_colors.get(obj.review_status, "gray")
-        return format_html(
-            '<span style="color: {};">{}</span>',
-            color,
-            obj.get_review_status_display(),
+    @display(description=_("Sources"))
+    def sources_display(self, obj: GeoPlace) -> str:
+        """Display source organizations as icons."""
+
+        sources = obj.source_associations.select_related("organization").all()
+        if not sources:
+            return "-"
+
+        imgs = []
+        for source in sources:
+            org = source.organization
+            if org.logo:
+                # Create link to source if available
+                if source.source_id:
+                    # For OSM, create a link to the OSM page
+                    if org.slug == "osm":
+                        osm_type, osm_id = source.source_id.split("/")
+                        if osm_type == "node":
+                            osm_url = f"https://www.openstreetmap.org/node/{osm_id}"
+                        elif osm_type == "way":
+                            osm_url = f"https://www.openstreetmap.org/way/{osm_id}"
+                        else:
+                            osm_url = (
+                                f"https://www.openstreetmap.org/{osm_type}/{osm_id}"
+                            )
+                        img_html = f'<a href="{osm_url}" target="_blank" title="{org.name_i18n}"><img class="inline pr-1" src="{org.logo.url}" width="20px" alt="{org.slug}"/></a>'
+                    else:
+                        img_html = f'<span title="{org.name_i18n}"><img class="inline pr-1" src="{org.logo.url}" width="20px" alt="{org.slug}"/></span>'
+                else:
+                    img_html = f'<span title="{org.name_i18n}"><img class="inline pr-1" src="{org.logo.url}" width="20px" alt="{org.slug}"/></span>'
+                imgs.append(img_html)
+
+        return mark_safe(f"<span>{''.join(imgs)}</span>")
+
+    @display(description=_("Importance"), ordering="importance")
+    def importance_display(self, obj: GeoPlace) -> str:
+        """Display importance as a progress bar with blue color range."""
+        # Use blue color gradient
+        return get_progress_bar(
+            value=obj.importance,
+            max_value=100,
+            color="#2196F3",  # Blue color
+            show_text=True,
+            active=True,
         )
+
+    @display(description=_("Created/Modified"), ordering="modified")
+    def timestamps_display(self, obj: GeoPlace) -> str:
+        """Display created and modified timestamps in one column with small font."""
+        created = obj.created.strftime("%Y-%m-%d %H:%M") if obj.created else "-"
+        modified = obj.modified.strftime("%Y-%m-%d %H:%M") if obj.modified else "-"
+
+        return format_html(
+            '<div style="font-size: 11px; line-height: 1.4;">'
+            '<div style="color: #6b7280;">Created: {}</div>'
+            '<div style="color: #6b7280;">Modified: {}</div>'
+            "</div>",
+            created,
+            modified,
+        )
+
+    @display(
+        description=_("Review"),
+        label={
+            "new": "warning",
+            "review": "info",
+            "work": "danger",
+            "done": "success",
+        },
+    )
+    def review_tag(self, obj: GeoPlace) -> str:
+        """Display review status as colored label."""
+        return obj.review_status
 
     @display(description=_("Location"))
     def location_display(self, obj: GeoPlace) -> str:

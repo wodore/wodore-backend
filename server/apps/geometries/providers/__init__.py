@@ -15,8 +15,6 @@ from .base import (
 )
 
 from .wodore import WodoreProvider
-from .wikidata import WikidataProvider
-from .flickr import FlickrProvider
 from .mapillary import MapillaryProvider
 from .panoramax import PanoramaxProvider
 from .camptocamp import CamptocampProvider
@@ -34,11 +32,12 @@ __all__ = [
     "post_process_images",
     "PRECISION_LEVELS",
     "WodoreProvider",
-    "WikidataProvider",
-    "FlickrProvider",
     "MapillaryProvider",
     "PanoramaxProvider",
     "CamptocampProvider",
     "WikimediaCommonsProvider",
     "RefugesInfoProvider",
 ]
+
+# Note: WikidataProvider replaced by WikimediaCommonsProvider (more comprehensive)
+# Note: FlickrProvider removed (requires premium API key)

@@ -12,6 +12,7 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
+from unfold.contrib.filters.admin import AutocompleteSelectMultipleFilter
 from unfold.decorators import display
 
 from server.apps.manager.admin import ModelAdmin
@@ -319,9 +320,13 @@ class HutAvailabilityViewInline(admin.TabularInline):
 
     @display(description=_("Type"))
     def hut_type_icon(self, obj):
-        if obj.hut_type and obj.hut_type.symbol_simple:
+        if (
+            obj.hut_type
+            and obj.hut_type.symbol_simple
+            and obj.hut_type.symbol_simple.svg_file
+        ):
             return mark_safe(
-                f'<img src="{obj.hut_type.symbol_simple.url}" alt="{obj.hut_type.name}" style="width: 20px; height: 20px;" />'
+                f'<img src="{obj.hut_type.symbol_simple.svg_file.url}" alt="{obj.hut_type.name}" style="width: 20px; height: 20px;" />'
             )
         return "-"
 
@@ -352,7 +357,10 @@ class HutAvailabilityAdmin(ModelAdmin):
         "occupancy_status",
         "reservation_status",
         "hut_type",
-        "source_organization",
+        (
+            "source_organization",
+            AutocompleteSelectMultipleFilter,
+        ),  # Filter by organization with autocomplete
     )
     search_fields = ("hut__name", "hut__slug")
     readonly_fields = (
@@ -435,9 +443,13 @@ class HutAvailabilityAdmin(ModelAdmin):
 
     @display(description=_("Type"))
     def hut_type_icon(self, obj):
-        if obj.hut_type and obj.hut_type.symbol_simple:
+        if (
+            obj.hut_type
+            and obj.hut_type.symbol_simple
+            and obj.hut_type.symbol_simple.svg_file
+        ):
             return mark_safe(
-                f'<img src="{obj.hut_type.symbol_simple.url}" alt="{obj.hut_type.name}" style="width: 20px; height: 20px;" />'
+                f'<img src="{obj.hut_type.symbol_simple.svg_file.url}" alt="{obj.hut_type.name}" style="width: 20px; height: 20px;" />'
             )
         return "-"
 
@@ -589,9 +601,13 @@ class HutAvailabilityHistoryAdmin(ModelAdmin):
 
     @display(description=_("Type"))
     def hut_type_icon(self, obj):
-        if obj.hut_type and obj.hut_type.symbol_simple:
+        if (
+            obj.hut_type
+            and obj.hut_type.symbol_simple
+            and obj.hut_type.symbol_simple.svg_file
+        ):
             return mark_safe(
-                f'<img src="{obj.hut_type.symbol_simple.url}" alt="{obj.hut_type.name}" style="width: 20px; height: 20px;" />'
+                f'<img src="{obj.hut_type.symbol_simple.svg_file.url}" alt="{obj.hut_type.name}" style="width: 20px; height: 20px;" />'
             )
         return "-"
 

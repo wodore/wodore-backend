@@ -1,4 +1,7 @@
-"""OSM mappings for outdoor_services category."""
+"""OSM mappings for outdoor_services category.
+
+See: https://wiki.openstreetmap.org/wiki/Key:leisure
+"""
 
 from .osm_base import CategoryMappings, OSMMapping
 
@@ -17,6 +20,7 @@ OUTDOOR_SERVICES = CategoryMappings(
                 "fr": "Location de ski",
                 "it": "Noleggio sci",
             },
+            importance_range=(30, 50, 75),  # Min, base, max
         ),
         OSMMapping(
             osm_filters=["shop=bicycle"],
@@ -29,6 +33,7 @@ OUTDOOR_SERVICES = CategoryMappings(
                 "fr": "Magasin de vélos",
                 "it": "Negozio di biciclette",
             },
+            importance_range=(35, 55, 80),
         ),
         OSMMapping(
             osm_filters=["amenity=bicycle_rental"],
@@ -41,6 +46,7 @@ OUTDOOR_SERVICES = CategoryMappings(
                 "fr": "Location de vélos",
                 "it": "Noleggio biciclette",
             },
+            importance_range=(35, 60, 85),
         ),
         OSMMapping(
             osm_filters=["amenity=bicycle_repair_station"],
@@ -53,6 +59,7 @@ OUTDOOR_SERVICES = CategoryMappings(
                 "fr": "Réparation vélos",
                 "it": "Riparazione biciclette",
             },
+            importance_range=(20, 40, 60),
         ),
         OSMMapping(
             osm_filters=[
@@ -67,6 +74,7 @@ OUTDOOR_SERVICES = CategoryMappings(
                 "fr": "Magasin de sports",
                 "it": "Negozio sportivo",
             },
+            importance_range=(40, 60, 85),
         ),
     ],
 )

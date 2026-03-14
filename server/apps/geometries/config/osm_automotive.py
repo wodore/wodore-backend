@@ -1,4 +1,8 @@
-"""OSM mappings for automotive category (Phase 2)."""
+"""OSM mappings for automotive category (Phase 2).
+
+See: https://wiki.openstreetmap.org/wiki/Key:highway
+See: https://wiki.openstreetmap.org/wiki/Key:amenity#Car-related_amenities
+"""
 
 from .osm_base import CategoryMappings, OSMMapping
 
@@ -12,6 +16,7 @@ AUTOMOTIVE = CategoryMappings(
             category_slug="automotive.parking",
             mapcomplete_theme="parking",
             priority=0,
+            importance_range=(10, 20, 35),
             default_name={
                 "en": "Parking",
                 "de": "Parkplatz",
@@ -24,6 +29,7 @@ AUTOMOTIVE = CategoryMappings(
             category_slug="automotive.fuel",
             mapcomplete_theme="charging_station",
             priority=0,
+            importance_range=(25, 35, 50),
             default_name={
                 "en": "Fuel Station",
                 "de": "Tankstelle",
@@ -36,6 +42,7 @@ AUTOMOTIVE = CategoryMappings(
             category_slug="automotive.charging_station",
             mapcomplete_theme="charging_station",
             priority=0,
+            importance_range=(25, 35, 50),
             default_name={
                 "en": "Charging Station",
                 "de": "Ladestation",
@@ -48,6 +55,7 @@ AUTOMOTIVE = CategoryMappings(
             category_slug="automotive.car_wash",
             mapcomplete_theme="shops",
             priority=0,
+            importance_range=(15, 25, 40),
             default_name={
                 "en": "Car Wash",
                 "de": "Autowaschanlage",
@@ -60,6 +68,7 @@ AUTOMOTIVE = CategoryMappings(
             category_slug="automotive.car_rental",
             mapcomplete_theme="shops",
             priority=0,
+            importance_range=(25, 35, 50),
             default_name={
                 "en": "Car Rental",
                 "de": "Autovermietung",

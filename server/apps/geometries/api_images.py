@@ -84,6 +84,10 @@ def nearby_images(
         ge=1,
         le=500,
     ),
+    update_cache: bool = Query(
+        False,
+        description="Force cache refresh - bypass cache and update all cached data from providers",
+    ),
 ) -> ImageCollectionResponse:
     """
     Get images near a location from multiple sources as a GeoJSON FeatureCollection.
@@ -160,7 +164,7 @@ def nearby_images(
             for hut in huts:
                 logger.debug(f"  - Hut: {hut.slug}")
 
-            logger.info(
+            logger.debug(
                 f"Found {len(geoplaces)} GeoPlaces and {len(huts)} Huts within {current_radius}m"
             )
             break
@@ -192,28 +196,29 @@ def nearby_images(
                 sources=sources_list,
                 precision=precision,
                 limit=limit,  # Pass limit to providers
+                update_cache=update_cache,  # Pass update_cache flag
             )
         )
-        logger.debug(f"📊 Total raw results from all providers: {len(results)} images")
+        logger.debug(f"Total raw results from all providers: {len(results)} images")
     except Exception as e:
         logger.error(f"Error fetching images from providers: {e}")
         results = []
 
     # Step 3: Deduplicate results
-    logger.debug(f"🔄 Deduplicating {len(results)} images...")
+    logger.debug(f"Deduplicating {len(results)} images...")
     results = deduplicate_images(results)
-    logger.debug(f"✓ After deduplication: {len(results)} unique images")
+    logger.debug(f"After deduplication: {len(results)} unique images")
 
     # Step 4: Sort by score (primary), then by distance (secondary)
     results.sort(key=lambda r: (-r.score, r.distance_m))
 
     # Step 5: Limit results
-    logger.debug(f"✂️  Limiting to {limit} results (had {len(results)})")
+    logger.debug(f"Limiting to {limit} results (had {len(results)})")
     results = results[:limit]
 
     # Step 6: Post-process results (generate URLs, convert to GeoJSON)
-    logger.debug(f"🎨 Post-processing {len(results)} results...")
-    features = post_process_images(results)
+    logger.debug(f"Post-processing {len(results)} results...")
+    features = post_process_images(results, force_provider_refresh=update_cache)
 
     # Construct metadata
     metadata = ImageMetadataSchema(
@@ -261,6 +266,10 @@ def images_for_place(
         ge=1,
         le=500,
     ),
+    update_cache: bool = Query(
+        False,
+        description="Force cache refresh - bypass cache and update all cached data from providers",
+    ),
 ) -> ImageCollectionResponse:
     """
     Get images for a specific GeoPlace from multiple sources.
@@ -279,7 +288,7 @@ def images_for_place(
     if sources:
         sources_list = [s.strip() for s in sources.split(",")]
 
-    logger.debug(f"🔍 Fetching images for GeoPlace '{place_slug}'")
+    logger.debug(f"Fetching images for GeoPlace '{place_slug}'")
     logger.debug(f"Radius: {radius}m, Sources: {sources_list}")
 
     try:
@@ -291,28 +300,29 @@ def images_for_place(
                 radius=radius,
                 sources=sources_list,
                 limit=limit,
+                update_cache=update_cache,  # Pass update_cache flag
             )
         )
-        logger.debug(f"📊 Total raw results from all providers: {len(results)} images")
+        logger.debug(f"Total raw results from all providers: {len(results)} images")
     except Exception as e:
         logger.error(f"Error fetching images for place '{place_slug}': {e}")
         raise
 
     # Deduplicate results
-    logger.debug(f"🔄 Deduplicating {len(results)} images...")
+    logger.debug(f"Deduplicating {len(results)} images...")
     results = deduplicate_images(results)
-    logger.debug(f"✓ After deduplication: {len(results)} unique images")
+    logger.debug(f"After deduplication: {len(results)} unique images")
 
     # Sort by score (primary), then by distance (secondary)
     results.sort(key=lambda r: (-r.score, r.distance_m))
 
     # Limit results
-    logger.debug(f"✂️  Limiting to {limit} results (had {len(results)})")
+    logger.debug(f"Limiting to {limit} results (had {len(results)})")
     results = results[:limit]
 
     # Post-process results (generate URLs, convert to GeoJSON)
-    logger.debug(f"🎨 Post-processing {len(results)} results...")
-    features = post_process_images(results)
+    logger.debug(f"Post-processing {len(results)} results...")
+    features = post_process_images(results, force_provider_refresh=update_cache)
 
     # Construct metadata (same format as nearby_images)
     metadata = ImageMetadataSchema(
@@ -363,6 +373,10 @@ def images_for_hut(
         ge=1,
         le=500,
     ),
+    update_cache: bool = Query(
+        False,
+        description="Force cache refresh - bypass cache and update all cached data from providers",
+    ),
 ) -> ImageCollectionResponse:
     """
     Get images for a specific Hut from multiple sources.
@@ -381,7 +395,7 @@ def images_for_hut(
     if sources:
         sources_list = [s.strip() for s in sources.split(",")]
 
-    logger.debug(f"🔍 Fetching images for Hut '{hut_slug}'")
+    logger.debug(f"Fetching images for Hut '{hut_slug}'")
     logger.debug(f"Radius: {radius}m, Sources: {sources_list}")
 
     try:
@@ -393,28 +407,29 @@ def images_for_hut(
                 radius=radius,
                 sources=sources_list,
                 limit=limit,
+                update_cache=update_cache,  # Pass update_cache flag
             )
         )
-        logger.debug(f"📊 Total raw results from all providers: {len(results)} images")
+        logger.debug(f"Total raw results from all providers: {len(results)} images")
     except Exception as e:
         logger.error(f"Error fetching images for hut '{hut_slug}': {e}")
         raise
 
     # Deduplicate results
-    logger.debug(f"🔄 Deduplicating {len(results)} images...")
+    logger.debug(f"Deduplicating {len(results)} images...")
     results = deduplicate_images(results)
-    logger.debug(f"✓ After deduplication: {len(results)} unique images")
+    logger.debug(f"After deduplication: {len(results)} unique images")
 
     # Sort by score (primary), then by distance (secondary)
     results.sort(key=lambda r: (-r.score, r.distance_m))
 
     # Limit results
-    logger.debug(f"✂️  Limiting to {limit} results (had {len(results)})")
+    logger.debug(f"Limiting to {limit} results (had {len(results)})")
     results = results[:limit]
 
     # Post-process results (generate URLs, convert to GeoJSON)
-    logger.debug(f"🎨 Post-processing {len(results)} results...")
-    features = post_process_images(results)
+    logger.debug(f"Post-processing {len(results)} results...")
+    features = post_process_images(results, force_provider_refresh=update_cache)
 
     # Construct metadata (same format as nearby_images)
     metadata = ImageMetadataSchema(

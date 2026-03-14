@@ -248,7 +248,11 @@ def get_category_tree(
             ]
         else:
             # No slug - return all roots
-            qs = Category.objects.prefetch_related("children")
+            qs = Category.objects.select_related(
+                "symbol_detailed",
+                "symbol_simple",
+                "symbol_mono",
+            ).prefetch_related("children")
             if is_active:
                 qs = qs.active()
 
@@ -389,7 +393,11 @@ def get_category_map(
             return result
         else:
             # No slug - return all roots as map
-            qs = Category.objects.prefetch_related("children")
+            qs = Category.objects.select_related(
+                "symbol_detailed",
+                "symbol_simple",
+                "symbol_mono",
+            ).prefetch_related("children")
             if is_active:
                 qs = qs.active()
 

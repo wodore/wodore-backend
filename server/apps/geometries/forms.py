@@ -7,10 +7,8 @@ GeoPlaceAdminFieldsets = [
         {
             "classes": ["tab"],
             "fields": [
-                ("slug", "name_i18n"),
-                ("is_public", "is_active", "importance"),
-                "parent",
-                ("review_status", "detail_type"),
+                ("review_status", "is_public", "is_active"),
+                ("slug", "name_i18n", "importance", "detail_type"),
                 "review_comment",
                 "description_i18n",
             ],

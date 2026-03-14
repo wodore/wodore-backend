@@ -1,4 +1,8 @@
-"""OSM mappings for utilities category (Phase 2)."""
+"""OSM mappings for utilities category (Phase 2).
+
+See: https://wiki.openstreetmap.org/wiki/Key:utility
+See: https://wiki.openstreetmap.org/wiki/Key:man_made
+"""
 
 from .osm_base import CategoryMappings, OSMMapping
 
@@ -12,6 +16,7 @@ UTILITIES = CategoryMappings(
             category_slug="utilities.toilets",
             mapcomplete_theme="toilets",
             priority=0,
+            importance_range=(20, 35, 50),
             default_name={
                 "en": "Toilets",
                 "de": "Toiletten",
@@ -24,6 +29,7 @@ UTILITIES = CategoryMappings(
             category_slug="utilities.drinking_water",
             mapcomplete_theme="drinking_water",
             priority=0,
+            importance_range=(30, 45, 60),
             default_name={"en": "Water", "de": "Wasser", "fr": "Eau", "it": "Acqua"},
         ),
         OSMMapping(
@@ -31,6 +37,7 @@ UTILITIES = CategoryMappings(
             category_slug="utilities.shower",
             mapcomplete_theme="shops",
             priority=0,
+            importance_range=(25, 35, 50),
             default_name={
                 "en": "Shower",
                 "de": "Dusche",
@@ -43,6 +50,7 @@ UTILITIES = CategoryMappings(
             category_slug="utilities.waste_disposal",
             mapcomplete_theme="waste",
             priority=0,
+            importance_range=(15, 25, 40),
             default_name={
                 "en": "Waste Disposal",
                 "de": "Müllentsorgung",
@@ -55,6 +63,7 @@ UTILITIES = CategoryMappings(
             category_slug="utilities.picnic_area",
             mapcomplete_theme="tourism",
             priority=0,
+            importance_range=(25, 40, 55),
             default_name={
                 "en": "Picnic Area",
                 "de": "Picknickplatz",
@@ -67,6 +76,7 @@ UTILITIES = CategoryMappings(
             category_slug="utilities.firepit",
             mapcomplete_theme="tourism",
             priority=0,
+            importance_range=(25, 40, 55),
             default_name={
                 "en": "Firepit",
                 "de": "Feuerstelle",

@@ -5,6 +5,10 @@ from django.contrib import admin
 from django.utils.safestring import mark_safe
 
 from server.apps.geometries.schemas import ReviewStatus
+from unfold.contrib.filters.admin import (
+    AutocompleteSelectMultipleFilter,
+    ChoicesCheckboxFilter,
+)
 from unfold.decorators import display
 from django.utils.translation import gettext_lazy as _
 
@@ -29,6 +33,7 @@ class LicenseAdmin(ModelAdmin):
     form = required_i18n_fields_form_factory("name", "fullname")
     fieldsets = LicenseAdminFieldsets
     view_on_site = True
+    list_filter_submit = True  # Add submit button for filters
     autocomplete_fields = ("category",)
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
     list_display = (
@@ -45,7 +50,14 @@ class LicenseAdmin(ModelAdmin):
         "order_small",
     )
     list_display_links = ("slug", "name_i18n")
-    list_filter = ("review_status", "is_active", "category")
+    list_filter = (
+        (
+            "review_status",
+            ChoicesCheckboxFilter,
+        ),  # Filter by review status with checkboxes
+        "is_active",
+        ("category", AutocompleteSelectMultipleFilter),
+    )
     search_fields = ("slug", "name_i18n", "fullname_i18n", "review_comment")
     readonly_fields = (
         "name_i18n",

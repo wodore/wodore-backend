@@ -1,4 +1,7 @@
-"""OSM mappings for groceries category."""
+"""OSM mappings for groceries category.
+
+See: https://wiki.openstreetmap.org/wiki/Key:shop
+"""
 
 from .osm_base import CategoryMappings, OSMMapping
 
@@ -18,6 +21,7 @@ GROCERIES = CategoryMappings(
             category_slug="groceries.supermarket",
             mapcomplete_theme="shops",
             priority=0,
+            importance_range=(30, 45, 60),
             default_name={
                 "en": "Supermarket",
                 "de": "Supermarkt",
@@ -30,6 +34,7 @@ GROCERIES = CategoryMappings(
             category_slug="groceries.convenience",
             mapcomplete_theme="shops",
             priority=0,
+            importance_range=(20, 35, 50),
             default_name={
                 "en": "Grocery",
                 "de": "Nahrungsmittel",
@@ -42,6 +47,7 @@ GROCERIES = CategoryMappings(
             category_slug="groceries.bakery",
             mapcomplete_theme="shops",
             priority=0,
+            importance_range=(20, 35, 50),
             default_name={
                 "en": "Bakery",
                 "de": "Bäckerei",
@@ -54,6 +60,7 @@ GROCERIES = CategoryMappings(
             category_slug="groceries.butcher",
             mapcomplete_theme="shops",
             priority=0,
+            importance_range=(20, 30, 45),
             default_name={
                 "en": "Butcher",
                 "de": "Metzgerei",
@@ -66,6 +73,7 @@ GROCERIES = CategoryMappings(
             category_slug="groceries.farm",
             mapcomplete_theme="shops",
             priority=0,
+            importance_range=(25, 35, 50),
             default_name={
                 "en": "Farm",
                 "de": "Hofladen",
@@ -80,6 +88,7 @@ GROCERIES = CategoryMappings(
             category_slug="groceries.dairy",
             mapcomplete_theme="shops",
             priority=0,
+            importance_range=(20, 30, 45),
             default_name={
                 "en": "Deli",
                 "de": "Feinkost",
@@ -92,6 +101,7 @@ GROCERIES = CategoryMappings(
             category_slug="groceries.beverages",
             mapcomplete_theme="shops",
             priority=0,
+            importance_range=(20, 30, 45),
             default_name={
                 "en": "Beverages",
                 "de": "Getränke",
@@ -105,6 +115,7 @@ GROCERIES = CategoryMappings(
             condition=_vending_machine_condition,
             mapcomplete_theme="vending_machine",
             priority=0,
+            importance_range=(5, 10, 20),
             default_name={
                 "en": "Vending Machine",
                 "de": "Automat",

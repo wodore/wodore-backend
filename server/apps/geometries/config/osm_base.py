@@ -64,6 +64,13 @@ class OSMMapping:
             priority=0,
             default_name={"en": "Bank", "de": "Bank", "fr": "Banque", "it": "Banca"},
         )
+
+        # With importance range for dynamic calculation
+        OSMMapping(
+            osm_filters=["shop=bakery"],
+            category_slug="groceries.bakery",
+            importance_range=(30, 50, 70),  # (min, base, max)
+        )
     """
 
     osm_filters: list[Union[str, tuple[str, ...]]]
@@ -100,6 +107,24 @@ class OSMMapping:
 
     If empty (default), no default name will be added - only use OSM name/brand/operator tags.
     This prevents adding names to places that genuinely shouldn't have them.
+    """
+
+    importance_range: Optional[tuple[int, int, int]] = None
+    """
+    Optional importance range for OSM-imported places (min, base, max).
+
+    Used by the import script to calculate dynamic importance based on OSM tags.
+    The final importance is calculated as:
+    - Start with base value
+    - Add points for: name presence, tag completeness, brand, wikipedia
+    - Clamp to [min, max] range
+
+    Example: (30, 50, 70) means:
+    - Minimum: 30 (unnamed, no extra tags)
+    - Base: 50 (named place with basic info)
+    - Maximum: 70 (named, full tags, brand, wikipedia)
+
+    If not set, uses default importance (25).
     """
 
 

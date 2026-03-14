@@ -31,7 +31,7 @@ services:
       - ./media/imagor_data/result:/mnt/data/result
     environment:
       PORT: 8079
-      DEBUG: 1
+      DEBUG: 0
       IMAGOR_UNSAFE: 1 # unsafe URL for testing
       IMAGOR_SECRET: ${IMAGOR_KEY:-my_key}
       IMAGOR_AUTO_WEBP: 1

@@ -13,45 +13,13 @@ from django.utils.translation import gettext_lazy as _
 with contextlib.suppress(ModuleNotFoundError):
     from django_stubs_ext import QuerySetAny
 
+from unfold.contrib.filters.admin import AutocompleteSelectMultipleFilter
 from unfold.decorators import display
 
 from server.apps.manager.admin import ModelAdmin
 
 from .forms import category_admin_form_factory
 from .models import Category
-
-
-class ParentCategoryFilter(admin.RelatedFieldListFilter):
-    """Custom filter for parent categories that shows clean names without 'root.' prefix."""
-
-    def field_choices(self, field, request, model_admin):
-        """Override field_choices to show cleaner category names and sort NULL parents first."""
-        # Get original choices from parent
-        choices = super().field_choices(field, request, model_admin)
-
-        # Pre-fetch all root category IDs in a single query to avoid N+1
-        root_category_ids = set(
-            Category.objects.filter(parent__isnull=True).values_list("pk", flat=True)
-        )
-
-        # Clean up the display names and separate into two groups
-        null_parent_choices = []
-        with_parent_choices = []
-
-        for pk, displ in choices:
-            # Clean up the display name
-            if displ and str(displ).startswith("root."):
-                displ = str(displ)[5:]  # Remove 'root.' prefix
-
-            # Separate NULL parents from non-NULL using pre-fetched IDs
-            if pk is not None:
-                if pk in root_category_ids:
-                    null_parent_choices.append((pk, displ))
-                else:
-                    with_parent_choices.append((pk, displ))
-
-        # Return NULL parents first, then others
-        return null_parent_choices + with_parent_choices
 
 
 class ChildCategoryInline(admin.TabularInline):
@@ -78,11 +46,14 @@ class ChildCategoryInline(admin.TabularInline):
     can_delete = False  # Prevent deletion from inline
     verbose_name = _("Child Category")
     verbose_name_plural = _("Child Categories")
+    autocomplete_fields = ("symbol_detailed", "symbol_simple", "symbol_mono")
 
     def get_queryset(self, request: HttpRequest):
         """Optimize queryset for inline display."""
         qs = super().get_queryset(request)
-        return qs.order_by("order", "slug")
+        return qs.select_related(
+            "symbol_detailed", "symbol_simple", "symbol_mono"
+        ).order_by("order", "slug")
 
     @display(description="")
     def symbol_preview(self, obj):
@@ -110,6 +81,7 @@ class ChildCategoryInline(admin.TabularInline):
 class CategoryAdmin(ModelAdmin):
     form = category_admin_form_factory()
     change_list_template = "admin/categories_change_list.html"
+    list_filter_submit = True  # Add submit button for filters
 
     class Media:
         css = {"all": ("css/admin-categories.css",)}
@@ -123,23 +95,31 @@ class CategoryAdmin(ModelAdmin):
         # "identifier_display",
         "slug",
         "children_count",
-        # "parent_display",
+        "parent_display",
         "order",
         "color",
-        "parent",
         "is_active",
     )
 
     list_filter = (
         "is_active",
-        ("parent", ParentCategoryFilter),
+        ("parent", AutocompleteSelectMultipleFilter),
     )
 
-    list_editable = ("order", "parent", "color")
-    list_per_page = 25
+    list_editable = ("order", "color")
+    list_per_page = 15
     ordering = ("-parent", "order")  # Order by parent (NULL first, then by parent ID)
 
     actions = ["auto_set_color_from_svg"]
+
+    # Add autocomplete for parent field to make selection easier with many categories
+    autocomplete_fields = (
+        "parent",
+        "default",
+        "symbol_detailed",
+        "symbol_simple",
+        "symbol_mono",
+    )
 
     readonly_fields = ("identifier", "name_i18n", "description_i18n")
 
@@ -249,29 +229,28 @@ class CategoryAdmin(ModelAdmin):
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         """Optimize queryset with parent selection and annotate children count."""
         qs = super().get_queryset(request)
-        # Use select_related for parent and default to avoid N+1 queries
+        # Use select_related for parent, default, and symbols to avoid N+1 queries
         # Annotate children count efficiently in a single query
-        return qs.select_related("parent", "default").annotate(
-            children_count_annotated=Count("children")
-        )
+        return qs.select_related(
+            "parent",
+            "default",
+            "symbol_detailed",
+            "symbol_simple",
+            "symbol_mono",
+        ).annotate(children_count_annotated=Count("children"))
 
     @display(
         header=True, description=_("Name and Description"), ordering=Lower("name_i18n")
     )
     def title(self, obj):
-        """Display name, description, and small symbol."""
-        # level_indent = "　" * obj.get_level()  # Japanese space for indentation
+        """Display name and description."""
         level_indent = ""
         name = f"{level_indent}{obj.name_i18n}" if obj.name_i18n else obj.slug
         description = (
             f"{level_indent}{obj.description_i18n}" if obj.description_i18n else ""
         )
-        avatar = (
-            self.avatar(obj.symbol_simple.svg_file.url)
-            if obj.symbol_simple and obj.symbol_simple.svg_file
-            else ""
-        )
-        return (name, description, avatar)
+        # Remove avatar to avoid FileField.url access (symbols shown in other columns)
+        return (name, description, "")
 
     @display(description=_("Symbol"))
     def symbol_img(self, obj):

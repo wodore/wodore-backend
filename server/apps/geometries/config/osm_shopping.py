@@ -1,4 +1,7 @@
-"""OSM mappings for shopping category (Phase 3)."""
+"""OSM mappings for shopping category (Phase 3).
+
+See: https://wiki.openstreetmap.org/wiki/Key:shop
+"""
 
 from .osm_base import CategoryMappings, OSMMapping
 
@@ -12,6 +15,7 @@ SHOPPING = CategoryMappings(
             category_slug="shopping.clothes",
             mapcomplete_theme="shops",
             priority=0,
+            importance_range=(20, 30, 45),
             default_name={
                 "en": "Clothing Store",
                 "de": "Kleidung",
@@ -24,6 +28,7 @@ SHOPPING = CategoryMappings(
             category_slug="shopping.shoe",
             mapcomplete_theme="shops",
             priority=0,
+            importance_range=(20, 30, 45),
             default_name={
                 "en": "Shoe Store",
                 "de": "Schuhe",
@@ -36,6 +41,7 @@ SHOPPING = CategoryMappings(
             category_slug="shopping.hardware",
             mapcomplete_theme="shops",
             priority=0,
+            importance_range=(20, 30, 45),
             default_name={
                 "en": "Hardware Store",
                 "de": "Baumarkt",
@@ -48,6 +54,7 @@ SHOPPING = CategoryMappings(
             category_slug="shopping.books",
             mapcomplete_theme="shops",
             priority=0,
+            importance_range=(20, 30, 45),
             default_name={
                 "en": "Bookstore",
                 "de": "Bücherhandlung",
@@ -60,6 +67,7 @@ SHOPPING = CategoryMappings(
             category_slug="shopping.electronics",
             mapcomplete_theme="shops",
             priority=0,
+            importance_range=(20, 30, 45),
             default_name={
                 "en": "Electronics",
                 "de": "Elektronik",
@@ -72,6 +80,7 @@ SHOPPING = CategoryMappings(
             category_slug="shopping.jewelry",
             mapcomplete_theme="shops",
             priority=0,
+            importance_range=(20, 30, 45),
             default_name={
                 "en": "Jewelry",
                 "de": "Juwelier",
@@ -84,6 +93,7 @@ SHOPPING = CategoryMappings(
             category_slug="shopping.toys",
             mapcomplete_theme="shops",
             priority=0,
+            importance_range=(20, 30, 45),
             default_name={
                 "en": "Toy Store",
                 "de": "Spielwaren",
@@ -96,6 +106,7 @@ SHOPPING = CategoryMappings(
             category_slug="shopping.gift",
             mapcomplete_theme="shops",
             priority=0,
+            importance_range=(20, 30, 45),
             default_name={
                 "en": "Gift Shop",
                 "de": "Geschenkeladen",
@@ -110,6 +121,7 @@ SHOPPING = CategoryMappings(
             category_slug="shopping.store",
             mapcomplete_theme="shops",
             priority=0,
+            importance_range=(20, 30, 45),
             default_name={
                 "en": "Store",
                 "de": "Geschäft",
@@ -122,6 +134,7 @@ SHOPPING = CategoryMappings(
             category_slug="shopping.mall",
             mapcomplete_theme="shops",
             priority=0,
+            importance_range=(35, 50, 65),
             default_name={
                 "en": "Mall",
                 "de": "Einkaufszentrum",

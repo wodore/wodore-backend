@@ -8,6 +8,10 @@ from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
 from unfold import admin as unfold_admin
+from unfold.contrib.filters.admin import (
+    AutocompleteSelectMultipleFilter,
+    ChoicesCheckboxFilter,
+)
 from unfold.decorators import action, display
 
 from server.apps.manager.admin import ModelAdmin
@@ -70,8 +74,14 @@ class HutsSourceAdmin(ModelAdmin):
         "review_tag",
     )
     list_filter = (
-        "organization",
-        "review_status",
+        (
+            "organization",
+            AutocompleteSelectMultipleFilter,
+        ),  # Filter by organization with autocomplete
+        (
+            "review_status",
+            ChoicesCheckboxFilter,
+        ),  # Filter by review status with checkboxes
         "is_active",
         "is_current",
         "version",
