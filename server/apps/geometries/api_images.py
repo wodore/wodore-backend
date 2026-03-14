@@ -149,7 +149,11 @@ def nearby_images(
                 is_active=True,
                 is_public=True,
                 location__distance_lte=(query_point, D(m=current_radius)),
-            ).only("id", "slug", "name", "i18n", "location")[:50]
+            )
+            .prefetch_related(
+                "hut_sources__organization"
+            )  # Prefetch sources for QID extraction
+            .only("id", "slug", "name", "i18n", "location")[:50]
         )
 
         logger.debug(
