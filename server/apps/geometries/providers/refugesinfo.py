@@ -4,11 +4,11 @@ Uses source_id from GeoPlace source associations with organization slug 'refuges
 """
 
 import logging
-from typing import Any
 
 from django.contrib.gis.geos import Point
 
 from .base import ImageProvider, ImageResult
+from .schemas import GeoPlaceSchema
 
 logger = logging.getLogger(__name__)
 
@@ -20,62 +20,82 @@ class RefugesInfoProvider(ImageProvider):
     """
 
     source = "refugesinfo"
-    cache_ttl = 7 * 24 * 60 * 60  # 7 days
+    cache_ttl = 7 * 24 * 3600  # 7 days
     priority = 3  # Third highest priority
 
     async def fetch(
         self,
-        geoplaces: list[Any],
+        places: list[GeoPlaceSchema],
         lat: float,
         lon: float,
         radius: float,
         limit: int = 100,
+        update_cache: bool = False,
     ) -> list[ImageResult]:
         """
         Fetch images from refuges.info using source IDs.
 
         Args:
-            geoplaces: List of GeoPlace objects within radius
+            places: List of GeoPlaceSchema objects (with source information)
             lat: Query latitude
             lon: Query longitude
             radius: Search radius in meters
             limit: Maximum number of results to return
+            update_cache: If True, bypass cache and refresh cached data
 
         Returns:
             List of ImageResult objects
         """
+        logger.debug(
+            f"RefugesInfoProvider.fetch() called with update_cache={update_cache}"
+        )
+
         try:
             import httpx
-            from asgiref.sync import sync_to_async
             from django.conf import settings
 
+            # 1. Check cache first
+            cache_key = self._get_cache_key(lat, lon, radius, "precise")
             logger.debug(
-                f"🏔️  RefugesInfoProvider: Checking {len(geoplaces)} geoplaces for refuges source IDs"
+                f"RefugesInfoProvider: update_cache={update_cache}, checking cache key {cache_key}"
             )
 
-            # Collect refuges.info source IDs from all geoplaces
-            async def collect_source_ids():
-                place_map = {}  # source_id -> GeoPlace
+            if not update_cache:
+                cached = await self._get_cached_results(cache_key)
+                if cached is not None:
+                    logger.debug(f"RefugesInfoProvider: Cache HIT for {cache_key}")
+                    return cached
+            else:
+                logger.debug(
+                    "RefugesInfoProvider: Bypassing cache due to update_cache=True"
+                )
 
-                for place in geoplaces:
-                    source_id = await sync_to_async(self._extract_refuges_source_id)(
-                        place
+            logger.debug("RefugesInfoProvider: Cache MISS - fetching from API")
+
+            # 2. Fetch from API
+            logger.debug(
+                f"RefugesInfoProvider: Checking {len(places)} places for refuges source IDs"
+            )
+
+            # Collect refuges.info source IDs from all places using the unified schema
+            place_map = {}  # source_id -> GeoPlaceSchema
+
+            for place in places:
+                logger.debug(
+                    f"  Checking place: {place.slug}, id={place.id}, sources={len(place.sources)}"
+                )
+                source_id = place.get_source_id("refuges")
+                if source_id:
+                    place_map[source_id] = place
+                    logger.debug(
+                        f"  Found refuges.info source ID {source_id} for place '{place.slug}' (id={place.id})"
                     )
-                    if source_id:
-                        place_map[source_id] = place
-                        logger.debug(
-                            f"  ✓ Found refuges.info source ID {source_id} for place '{place.slug}'"
-                        )
-
-                return place_map
-
-            place_map = await collect_source_ids()
 
             if not place_map:
-                logger.warning("RefugesInfoProvider: No refuges.info source IDs found")
+                logger.debug("RefugesInfoProvider: No refuges.info source IDs found")
                 return []
 
-            logger.info(
+            logger.debug(
                 f"RefugesInfoProvider: Found {len(place_map)} places with refuges.info source IDs"
             )
 
@@ -90,12 +110,12 @@ class RefugesInfoProvider(ImageProvider):
                 for source_id, place in place_map.items():
                     try:
                         logger.debug(
-                            f"  🔎 Fetching images from refuges.info for {source_id}..."
+                            f"  Fetching images from refuges.info for {source_id}..."
                         )
                         images = await self._fetch_refuges_images(
                             client, source_id, place
                         )
-                        logger.debug(f"  → Found {len(images)} images for {source_id}")
+                        logger.debug(f"  Found {len(images)} images for {source_id}")
                         results.extend(images)
                     except Exception as e:
                         logger.error(
@@ -103,53 +123,23 @@ class RefugesInfoProvider(ImageProvider):
                         )
                         continue
 
-            logger.info(f"RefugesInfoProvider: Total images found: {len(results)}")
+            logger.debug(f"RefugesInfoProvider: Found {len(results)} unique images")
+
+            # 3. Store in cache
+            logger.debug(f"RefugesInfoProvider: Caching {len(results)} results")
+            await self._set_cached_results(cache_key, results)
+
             return results
 
         except Exception as e:
             logger.error(f"RefugesInfoProvider error: {e}")
             return []
 
-    def _extract_refuges_source_id(self, place: Any) -> str | None:
-        """
-        Extract refuges.info source ID from GeoPlace source associations.
-
-        Args:
-            place: GeoPlace object
-
-        Returns:
-            Source ID string or None
-        """
-        place_type = place.__class__.__name__
-        logger.debug(f"  _extract_refuges_source_id for {place_type}: {place.slug}")
-
-        # Check if place has source_associations (GeoPlace)
-        if hasattr(place, "source_associations"):
-            try:
-                # Filter for organization with slug 'refuges'
-                refuges_source = place.source_associations.filter(
-                    organization__slug="refuges"
-                ).first()
-
-                if refuges_source and refuges_source.source_id:
-                    logger.debug(
-                        f"    ✓ Found refuges.info source ID: {refuges_source.source_id}"
-                    )
-                    return refuges_source.source_id
-                else:
-                    logger.debug(f"    ✗ No refuges.info source found for {place.slug}")
-
-            except Exception as e:
-                logger.error(f"    ✗ Error accessing source_associations: {e}")
-
-        logger.debug(f"    ✗ No refuges.info source ID found for {place.slug}")
-        return None
-
     async def _fetch_refuges_images(
         self,
         client,
         source_id: str,
-        place: Any,
+        place: GeoPlaceSchema,
     ) -> list[ImageResult]:
         """
         Fetch images from refuges.info for a single source ID.
@@ -157,7 +147,7 @@ class RefugesInfoProvider(ImageProvider):
         Args:
             client: HTTP client
             source_id: refuges.info source ID (hut ID)
-            place: Associated GeoPlace
+            place: Associated GeoPlaceSchema
 
         Returns:
             List of ImageResult objects
@@ -221,13 +211,21 @@ class RefugesInfoProvider(ImageProvider):
                     # Build attribution
                     attribution = f'via <a href="{src_url}" target="_blank" rel="nofollow">refuges.info</a>'
 
+                    # Create Point from GeoPlaceSchema lat/lon
+                    location = Point(place.lon, place.lat, srid=4326)
+
+                    # Debug: Log place object
+                    logger.debug(
+                        f"  Building ImageResult with place: id={place.id}, slug={place.slug}, name={place.name}"
+                    )
+
                     result = ImageResult(
                         provider="refugesinfo",
                         source_id=src_ident,
                         source_url=src_url,
                         image_type="flat",
                         captured_at=capture_date,
-                        location=place.location if place else Point(0, 0, srid=4326),
+                        location=location,
                         distance_m=0,
                         license_slug="copyright",  # refuges.info images are generally copyrighted
                         attribution=attribution,
@@ -237,10 +235,10 @@ class RefugesInfoProvider(ImageProvider):
                         place={
                             "id": place.id,
                             "slug": place.slug,
-                            "name": place.name_i18n,
+                            "name": place.name,
                             "location": {
-                                "lat": place.location.y,
-                                "lon": place.location.x,
+                                "lat": place.lat,
+                                "lon": place.lon,
                             },
                         }
                         if place

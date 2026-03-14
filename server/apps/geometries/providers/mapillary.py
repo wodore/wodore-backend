@@ -4,9 +4,9 @@ TODO: Implement full Mapillary API integration.
 """
 
 import logging
-from typing import Any
 
 from .base import ImageProvider, ImageResult
+from .schemas import GeoPlaceSchema
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ class MapillaryProvider(ImageProvider):
 
     async def fetch(
         self,
-        geoplaces: list[Any],
+        places: list[GeoPlaceSchema],
         lat: float,
         lon: float,
         radius: float,

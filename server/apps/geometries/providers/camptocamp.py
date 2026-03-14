@@ -5,10 +5,10 @@ Fetches images from Camptocamp API using bbox queries.
 
 import logging
 from datetime import datetime
-from typing import Any
 
 
 from .base import ImageProvider, ImageResult
+from .schemas import GeoPlaceSchema
 from .scoring import (
     score_metadata_completeness,
 )
@@ -42,7 +42,7 @@ class CamptocampProvider(ImageProvider):
 
     async def fetch(
         self,
-        geoplaces: list[Any],
+        places: list[GeoPlaceSchema],
         lat: float,
         lon: float,
         radius: float,

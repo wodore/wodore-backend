@@ -15,11 +15,11 @@ import re
 from datetime import datetime
 from typing import Any
 
-from asgiref.sync import sync_to_async
 from django.contrib.gis.geos import Point
 from django.conf import settings
 
 from .base import ImageProvider, ImageResult
+from .schemas import GeoPlaceSchema
 from .scoring import (
     score_metadata_completeness,
     score_technical_quality,
@@ -64,7 +64,7 @@ class WikimediaCommonsProvider(ImageProvider):
 
     async def fetch(
         self,
-        geoplaces: list[Any],
+        places: list[GeoPlaceSchema],
         lat: float,
         lon: float,
         radius: float,
@@ -75,7 +75,7 @@ class WikimediaCommonsProvider(ImageProvider):
         Fetch images from Wikimedia Commons.
 
         Args:
-            geoplaces: List of GeoPlace objects (may contain wikidata_qid)
+            places: List of GeoPlaceSchema objects (with source information)
             lat: Query latitude
             lon: Query longitude
             radius: Search radius in meters
@@ -102,88 +102,12 @@ class WikimediaCommonsProvider(ImageProvider):
             results = []
             seen_titles = set()
 
-            # Extract QIDs from geoplaces if available
+            # Extract QIDs from places using the unified schema
             place_qids = set()
-            for place in geoplaces:
-                # Try direct attribute first (GeoPlace)
-                if hasattr(place, "wikidata_qid") and place.wikidata_qid:
-                    place_qids.add(place.wikidata_qid)
-                    continue
-
-                # Try extracting from Wikidata source (Hut objects)
-                # Use the same approach as WodoreProvider - query via sync_to_async
-                if hasattr(place, "hut_sources"):
-                    try:
-                        # Try Wikidata source first
-                        wikidata_source = await sync_to_async(
-                            place.hut_sources.filter(
-                                organization__slug="wikidata"
-                            ).first
-                        )()
-
-                        if wikidata_source:
-                            # Try multiple places where QID might be stored
-                            qid = None
-
-                            # 1. Check source_id first
-                            if wikidata_source.source_id:
-                                qid = wikidata_source.source_id
-                                logger.debug(
-                                    f"✓ Extracted QID {qid} from Wikidata source.source_id for '{place.slug}'"
-                                )
-
-                            # 2. Check source_data['id']
-                            elif wikidata_source.source_data and isinstance(
-                                wikidata_source.source_data, dict
-                            ):
-                                if wikidata_source.source_data.get("id"):
-                                    qid = wikidata_source.source_data.get("id")
-                                    logger.debug(
-                                        f"✓ Extracted QID {qid} from Wikidata source.source_data['id'] for '{place.slug}'"
-                                    )
-
-                            # 3. Check source_data['attributes']
-                            elif wikidata_source.source_data and isinstance(
-                                wikidata_source.source_data, dict
-                            ):
-                                attrs = wikidata_source.source_data.get(
-                                    "attributes", {}
-                                )
-                                if isinstance(attrs, dict) and attrs.get("wikidata"):
-                                    qid = attrs.get("wikidata")
-                                    logger.debug(
-                                        f"✓ Extracted QID {qid} from Wikidata source.source_data['attributes']['wikidata'] for '{place.slug}'"
-                                    )
-
-                            if qid:
-                                place_qids.add(qid)
-                                continue
-
-                        # Fallback to OSM source (same approach as WodoreProvider)
-                        osm_source = await sync_to_async(
-                            place.hut_sources.filter(
-                                organization__slug__in=["osm", "openstreetmap"]
-                            ).first
-                        )()
-
-                        if (
-                            osm_source
-                            and osm_source.source_data
-                            and isinstance(osm_source.source_data, dict)
-                        ):
-                            tags = osm_source.source_data.get("tags")
-                            if tags and isinstance(tags, dict):
-                                qid = tags.get("wikidata")
-                                if qid:
-                                    place_qids.add(qid)
-                                    logger.debug(
-                                        f"✓ Extracted QID {qid} from OSM source for '{place.slug}'"
-                                    )
-
-                    except Exception as e:
-                        logger.debug(
-                            f"Could not extract QID from sources for {place.slug}: {e}"
-                        )
+            for place in places:
+                qid = place.get_wikidata_qid()
+                if qid:
+                    place_qids.add(qid)
 
             logger.debug(
                 f"WikimediaCommonsProvider: Found {len(place_qids)} QIDs: {place_qids}"

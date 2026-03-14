@@ -139,7 +139,11 @@ def nearby_images(
                 is_active=True,
                 is_public=True,
                 location__distance_lte=(query_point, D(m=current_radius)),
-            ).only("id", "slug", "name", "i18n", "location", "osm_tags")[:50]
+            )
+            .prefetch_related(
+                "source_associations__organization"  # Prefetch sources for schema conversion
+            )
+            .only("id", "slug", "name", "i18n", "location", "osm_tags")[:50]
         )
 
         # Search for Huts
@@ -152,8 +156,8 @@ def nearby_images(
                 location__distance_lte=(query_point, D(m=current_radius)),
             )
             .prefetch_related(
-                "hut_sources__organization"
-            )  # Prefetch sources for QID extraction
+                "hut_sources__organization"  # Prefetch sources for schema conversion
+            )
             .only("id", "slug", "name", "i18n", "location")[:50]
         )
 
