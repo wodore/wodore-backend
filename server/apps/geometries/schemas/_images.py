@@ -84,7 +84,7 @@ class ImageUrlsSchema(BaseModel):
 class ImagePlaceReferenceSchema(BaseModel):
     """Brief reference to a GeoPlace or Hut associated with an image."""
 
-    id: int = Field(..., description="Place database ID")
+    id: int | None = Field(None, description="Place database ID")
     slug: str = Field(..., description="Place slug identifier")
     name: str = Field(..., description="Place name")
     location: LocationSchema = Field(..., description="Place coordinates")

@@ -31,7 +31,7 @@ from .providers import (
     MapillaryProvider,
     PanoramaxProvider,
     CamptocampProvider,
-    # FlickrProvider - Requires premium API key, not available
+    RefugesInfoProvider,
 )
 
 router = Router(tags=["geoimages"])
@@ -42,6 +42,7 @@ logger = logging.getLogger(__name__)
 provider_registry.register(WodoreProvider(place_type="geoplace"))
 provider_registry.register(WodoreProvider(place_type="hut"))
 provider_registry.register(WikimediaCommonsProvider())  # Replaces WikidataProvider
+provider_registry.register(RefugesInfoProvider())  # Add refuges.info provider
 # provider_registry.register(FlickrProvider())
 provider_registry.register(MapillaryProvider())
 provider_registry.register(PanoramaxProvider())
@@ -138,7 +139,11 @@ def nearby_images(
                 is_active=True,
                 is_public=True,
                 location__distance_lte=(query_point, D(m=current_radius)),
-            ).only("id", "slug", "name", "i18n", "location", "osm_tags")[:50]
+            )
+            .prefetch_related(
+                "source_associations__organization"  # Prefetch sources for schema conversion
+            )
+            .only("id", "slug", "name", "i18n", "location", "osm_tags")[:50]
         )
 
         # Search for Huts
@@ -149,7 +154,11 @@ def nearby_images(
                 is_active=True,
                 is_public=True,
                 location__distance_lte=(query_point, D(m=current_radius)),
-            ).only("id", "slug", "name", "i18n", "location")[:50]
+            )
+            .prefetch_related(
+                "hut_sources__organization"  # Prefetch sources for schema conversion
+            )
+            .only("id", "slug", "name", "i18n", "location")[:50]
         )
 
         logger.debug(

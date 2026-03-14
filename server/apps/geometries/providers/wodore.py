@@ -13,6 +13,7 @@ from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.measure import D
 
 from .base import ImageProvider, ImageResult, ImageArea
+from .schemas import GeoPlaceSchema
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ class WodoreProvider(ImageProvider):
 
     async def fetch(
         self,
-        geoplaces: list[Any],
+        places: list[GeoPlaceSchema],
         lat: float,
         lon: float,
         radius: float,
@@ -61,17 +62,17 @@ class WodoreProvider(ImageProvider):
             List of ImageResult objects
         """
         try:
-            logger.debug(f"WodoreProvider: Fetching with {len(geoplaces)} geoplaces")
+            logger.debug(f"WodoreProvider: Fetching with {len(places)} places")
 
             # Wrap the synchronous fetch in sync_to_async
-            return await sync_to_async(self._fetch_sync)(geoplaces, lat, lon, radius)
+            return await sync_to_async(self._fetch_sync)(places, lat, lon, radius)
         except Exception as e:
             logger.error(f"WodoreProvider ({self.place_type}) error: {e}")
             return []
 
     def _fetch_sync(
         self,
-        geoplaces: list[Any],
+        places: list[GeoPlaceSchema],
         lat: float,
         lon: float,
         radius: float,

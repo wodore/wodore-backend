@@ -19,6 +19,7 @@ from django.contrib.gis.geos import Point
 from django.conf import settings
 
 from .base import ImageProvider, ImageResult
+from .schemas import GeoPlaceSchema
 from .scoring import (
     score_metadata_completeness,
     score_technical_quality,
@@ -63,7 +64,7 @@ class WikimediaCommonsProvider(ImageProvider):
 
     async def fetch(
         self,
-        geoplaces: list[Any],
+        places: list[GeoPlaceSchema],
         lat: float,
         lon: float,
         radius: float,
@@ -74,7 +75,7 @@ class WikimediaCommonsProvider(ImageProvider):
         Fetch images from Wikimedia Commons.
 
         Args:
-            geoplaces: List of GeoPlace objects (may contain wikidata_qid)
+            places: List of GeoPlaceSchema objects (with source information)
             lat: Query latitude
             lon: Query longitude
             radius: Search radius in meters
@@ -101,25 +102,47 @@ class WikimediaCommonsProvider(ImageProvider):
             results = []
             seen_titles = set()
 
-            # Extract QIDs from geoplaces if available
+            # Extract QIDs from places using the unified schema
             place_qids = set()
-            for place in geoplaces:
-                if hasattr(place, "wikidata_qid") and place.wikidata_qid:
-                    place_qids.add(place.wikidata_qid)
+            for place in places:
+                qid = place.get_wikidata_qid()
+                if qid:
+                    place_qids.add(qid)
 
-            # Strategy 1: Wikidata spatial query (highest priority)
-            try:
-                wd_results = await self._fetch_wikidata_spatial(
-                    lat, lon, radius, limit, place_qids, httpx
-                )
-                for result in wd_results:
-                    if result.source_id not in seen_titles:
-                        seen_titles.add(result.source_id)
-                        results.append(result)
-            except Exception as e:
-                logger.warning(f"Wikidata spatial query failed: {e}")
+            logger.debug(
+                f"WikimediaCommonsProvider: Found {len(place_qids)} QIDs: {place_qids}"
+            )
 
-            # Strategy 2: Commons geosearch (fallback if low results)
+            # Strategy 1: Direct QID query (highest priority) - if we have QIDs
+            if place_qids:
+                try:
+                    qid_results = await self._fetch_wikidata_by_qids(
+                        place_qids, limit, httpx
+                    )
+                    for result in qid_results:
+                        if result.source_id not in seen_titles:
+                            seen_titles.add(result.source_id)
+                            results.append(result)
+                    logger.debug(
+                        f"WikimediaCommonsProvider: Direct QID query found {len(qid_results)} images"
+                    )
+                except Exception as e:
+                    logger.warning(f"Wikidata direct QID query failed: {e}")
+
+            # Strategy 2: Wikidata spatial query (if we still need more results)
+            if len(results) < limit:
+                try:
+                    wd_results = await self._fetch_wikidata_spatial(
+                        lat, lon, radius, limit, place_qids, httpx
+                    )
+                    for result in wd_results:
+                        if result.source_id not in seen_titles:
+                            seen_titles.add(result.source_id)
+                            results.append(result)
+                except Exception as e:
+                    logger.warning(f"Wikidata spatial query failed: {e}")
+
+            # Strategy 3: Commons geosearch (fallback if low results)
             if len(results) < 10:
                 try:
                     geo_results = await self._fetch_commons_geosearch(
@@ -245,6 +268,110 @@ class WikimediaCommonsProvider(ImageProvider):
 
             logger.debug(f"Wikidata spatial query: {len(results)} images")
             return results
+
+    async def _fetch_wikidata_by_qids(
+        self,
+        qids: set[str],
+        limit: int,
+        httpx,
+    ) -> list[ImageResult]:
+        """
+        Fetch images via Wikidata SPARQL using QIDs.
+
+        This is the most reliable method when we have specific QIDs.
+        We query Wikidata for the P18 (image) property for each QID.
+
+        Args:
+            qids: Set of Wikidata QIDs to query
+            limit: Maximum number of results to return
+            httpx: HTTP client module
+
+        Returns:
+            List of ImageResult objects
+        """
+        if not qids:
+            return []
+
+        # Build SPARQL query with VALUES clause for specific QIDs
+        # P18 is the "image" property - the main image for a Wikidata entity
+        qid_list = " ".join([f"wd:{qid}" for qid in list(qids)[:limit]])
+
+        sparql = f"""
+        SELECT ?item ?itemLabel ?image WHERE {{
+          VALUES ?item {{ {qid_list} }}
+          OPTIONAL {{ ?item wdt:P18 ?image }}
+          SERVICE wikibase:label {{
+            bd:serviceParam wikibase:language "de,fr,it,en"
+          }}
+        }}
+        """
+
+        headers = {
+            "User-Agent": getattr(settings, "BOT_AGENT", "WodoreBackend/1.0"),
+            "Accept": "application/json",
+        }
+
+        results = []
+
+        async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+            response = await client.get(
+                self.wikidata_endpoint, params={"query": sparql, "format": "json"}
+            )
+            response.raise_for_status()
+
+            data = response.json()
+            bindings = data.get("results", {}).get("bindings", [])
+
+            for binding in bindings:
+                try:
+                    image_uri = binding.get("image", {}).get("value")
+                    if not image_uri:
+                        item_uri = binding.get("item", {}).get("value", "")
+                        qid = self._extract_qid_from_uri(item_uri)
+                        logger.debug(f"QID {qid} has no P18 image")
+                        continue
+
+                    # Extract QID from URI
+                    item_uri = binding.get("item", {}).get("value", "")
+                    qid = self._extract_qid_from_uri(item_uri)
+
+                    # Get Commons title from image URI
+                    commons_title = self._extract_commons_title_from_uri(image_uri)
+                    if not commons_title:
+                        continue
+
+                    # Fetch full metadata from Commons API
+                    img_data = await self._fetch_commons_metadata(commons_title, client)
+                    if not img_data:
+                        continue
+
+                    # Calculate score - direct QID match gets highest score
+                    score = self._score_commons_image(
+                        img_data,
+                        source_type=WikimediaCommonsProvider.WIKIDATA_P18,
+                        has_qid=True,
+                        matches_place_qid=True,  # Direct match!
+                    )
+
+                    # Create ImageResult with distance 0 (exact match)
+                    result = self._create_image_result(
+                        commons_title,
+                        img_data,
+                        qid,
+                        score,
+                        0.0,
+                        0.0,  # Coordinates don't matter for exact match
+                        distance_m=0.0,  # Exact QID match
+                    )
+                    if result:
+                        results.append(result)
+
+                except Exception as e:
+                    logger.warning(f"Error parsing direct QID result: {e}")
+                    continue
+
+        logger.debug(f"Direct QID query: {len(results)} images from {len(qids)} QIDs")
+        return results
 
     async def _fetch_commons_geosearch(
         self,
@@ -473,6 +600,7 @@ class WikimediaCommonsProvider(ImageProvider):
         score: int,
         query_lat: float,
         query_lon: float,
+        distance_m: float | None = None,
     ) -> ImageResult | None:
         """
         Create ImageResult from Commons metadata.
@@ -484,6 +612,7 @@ class WikimediaCommonsProvider(ImageProvider):
             score: Calculated score
             query_lat: Query latitude (for distance)
             query_lon: Query longitude (for distance)
+            distance_m: Pre-calculated distance in meters (optional)
 
         Returns:
             ImageResult or None
@@ -503,7 +632,11 @@ class WikimediaCommonsProvider(ImageProvider):
                 c = 2 * asin(sqrt(a))
                 return R * c
 
-            distance_m = haversine_distance(query_lat, query_lon, query_lat, query_lon)
+            # Use pre-calculated distance if provided, otherwise calculate it
+            if distance_m is None:
+                distance_m = haversine_distance(
+                    query_lat, query_lon, query_lat, query_lon
+                )
 
             # Parse date
             captured_at = None
