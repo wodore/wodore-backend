@@ -3,6 +3,11 @@ Provider for refuges.info images.
 Uses source_id from GeoPlace source associations with organization slug 'refuges'.
 """
 
+# Test urls:
+# abri-de-Beauregard
+#   https://www.refuges.info/point/6069/cabane-non-gardee/abri-de-Beauregard
+#   http://192.168.1.50:8000/v1/geo/images/hut/beauregard?lang=de&radius=50&limit=20
+
 import logging
 
 from django.contrib.gis.geos import Point
@@ -20,7 +25,7 @@ class RefugesInfoProvider(ImageProvider):
     """
 
     source = "refugesinfo"
-    cache_ttl = 7 * 24 * 3600  # 7 days
+    cache_ttl = 14 * 24 * 3600  # 7 days
     priority = 3  # Third highest priority
 
     async def fetch(
@@ -204,6 +209,24 @@ class RefugesInfoProvider(ImageProvider):
                     if blockquote:
                         caption = blockquote.text.strip()
 
+                    # Extract author information from commentaire_metainfo div
+                    author = None
+                    author_url = None
+                    metainfo_div = comment.find("div", class_="commentaire_metainfo")
+                    if metainfo_div:
+                        author_link = metainfo_div.find("a")
+                        if author_link:
+                            author_name = author_link.text.strip()
+                            # Clean up whitespace from the author name
+                            author_name = " ".join(author_name.split())
+                            if author_name:
+                                author = author_name
+                            # Extract author URL (profile link)
+                            if author_link.get("href"):
+                                author_url = (
+                                    f"https://www.refuges.info{author_link['href']}"
+                                )
+
                     # Get source info
                     src_ident = f"C{image_url.split('/')[-1].split('-')[0]}"  # Extract ID from image URL
                     src_url = f"https://www.refuges.info/point/{source_id}#{src_ident}"
@@ -213,11 +236,6 @@ class RefugesInfoProvider(ImageProvider):
 
                     # Create Point from GeoPlaceSchema lat/lon
                     location = Point(place.lon, place.lat, srid=4326)
-
-                    # Debug: Log place object
-                    logger.debug(
-                        f"  Building ImageResult with place: id={place.id}, slug={place.slug}, name={place.name}"
-                    )
 
                     result = ImageResult(
                         provider="refugesinfo",
@@ -229,7 +247,8 @@ class RefugesInfoProvider(ImageProvider):
                         distance_m=0,
                         license_slug="copyright",  # refuges.info images are generally copyrighted
                         attribution=attribution,
-                        author=None,  # Author info not available in current structure
+                        author=author,
+                        author_url=author_url,
                         url_large=image_url,
                         url_medium=None,
                         place={

@@ -27,7 +27,7 @@ class PanoramaxProvider(ImageProvider):
     """
 
     source = "panoramax"
-    cache_ttl = 30  #  minute
+    cache_ttl = 60  #  minute
     priority = 4  # After camptocamp, before wikidata
 
     def __init__(self, api_base: str = "https://api.panoramax.xyz"):
@@ -343,6 +343,7 @@ class PanoramaxProvider(ImageProvider):
                 license_slug=license_slug,
                 attribution=attribution,
                 author=author,
+                author_url=None,
                 url_large=hd_url or sd_url or default_url,
                 url_medium=sd_url,
                 width=width,

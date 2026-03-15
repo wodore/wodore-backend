@@ -190,6 +190,7 @@ class WodoreProvider(ImageProvider):
                         license_slug=img.license.slug,
                         attribution=attribution,
                         author=img.author,
+                        author_url=None,
                         url_large=img.source_url_raw or str(img.image),
                         url_medium=None,
                         place={
@@ -378,6 +379,7 @@ class WodoreProvider(ImageProvider):
                         license_slug=img.license.slug,
                         attribution=attribution,
                         author=img.author,
+                        author_url=None,
                         url_large=img.source_url_raw or str(img.image),
                         url_medium=None,
                         place={

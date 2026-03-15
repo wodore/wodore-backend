@@ -110,6 +110,7 @@ class ImageResult:
     license_slug: str  # e.g., "cc-by-sa-4.0"
     attribution: str  # HTML attribution string
     author: str | None
+    author_url: str | None  # Author profile URL
 
     # Image URLs (minimal - post-processing will generate others)
     url_large: str  # High-quality original URL
@@ -1301,7 +1302,7 @@ def post_process_images(
                     },
                     "attribution": _build_attribution(
                         author=result.author,
-                        author_url=None,  # TODO: Extract from result if available
+                        author_url=result.author_url,
                         license_slug=result.license_slug,
                         license_name=license_info.get("fullname")
                         or result.license_slug,
@@ -1313,8 +1314,8 @@ def post_process_images(
                         license_icons=license_info.get("icons"),
                     ),
                     "author": {
-                        "name": result.author or "Unknown",
-                        "url": None,  # TODO: Extract from result if available
+                        "name": result.author if result.author else None,
+                        "url": result.author_url if result.author_url else None,
                     },
                     "urls": urls,
                     "width": result.width,
