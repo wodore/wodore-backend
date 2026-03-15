@@ -458,6 +458,7 @@ def _generate_license_slug(input_string: str) -> str:
 
     Examples:
     - "CC-BY-SA-4.0" -> "cc-by-sa-4.0"
+    - "CC-BY-SA-2.0-FR" -> "cc-by-sa-2.0-fr"
     - "Creative Commons Attribution-ShareAlike 4.0" -> "cc-by-sa-4.0"
     - "MIT License" -> "mit"
 
@@ -475,10 +476,14 @@ def _generate_license_slug(input_string: str) -> str:
     # Convert to lowercase
     slug = input_string.lower().strip()
 
+    # Extract country code if present (e.g., -fr, -de, -at)
+    country_match = re.search(r"[-\s]([a-z]{2})$", slug)
+    country_suffix = f"-{country_match.group(1)}" if country_match else ""
+
     # Common mappings from various formats to standard slugs
     # Format: "pattern": "replacement_slug"
     common_licenses = {
-        # Creative Commons
+        # Creative Commons (preserves country code if present)
         r"cc[-\s]?by[-\s]?sa[-\s]?4\.0": "cc-by-sa-4.0",
         r"cc[-\s]?by[-\s]?4\.0": "cc-by-4.0",
         r"cc[-\s]?by[-\s]?nc[-\s]?sa[-\s]?4\.0": "cc-by-nc-sa-4.0",
@@ -487,8 +492,18 @@ def _generate_license_slug(input_string: str) -> str:
         r"cc[-\s]?by[-\s]?nc[-\s]?4\.0": "cc-by-nc-4.0",
         r"cc[-\s]?by[-\s]?sa[-\s]?3\.0": "cc-by-sa-3.0",
         r"cc[-\s]?by[-\s]?3\.0": "cc-by-3.0",
+        r"cc[-\s]?by[-\s]?sa[-\s]?2\.5": "cc-by-sa-2.5",
+        r"cc[-\s]?by[-\s]?2\.5": "cc-by-2.5",
+        r"cc[-\s]?by[-\s]?nc[-\s]?sa[-\s]?2\.5": "cc-by-nc-sa-2.5",
+        r"cc[-\s]?by[-\s]?nc[-\s]?2\.5": "cc-by-nc-2.5",
+        r"cc[-\s]?by[-\s]?nd[-\s]?2\.5": "cc-by-nd-2.5",
+        r"cc[-\s]?by[-\s]?nc[-\s]?nd[-\s]?2\.5": "cc-by-nc-nd-2.5",
         r"cc[-\s]?by[-\s]?sa[-\s]?2\.0": "cc-by-sa-2.0",
         r"cc[-\s]?by[-\s]?2\.0": "cc-by-2.0",
+        r"cc[-\s]?by[-\s]?nc[-\s]?sa[-\s]?2\.0": "cc-by-nc-sa-2.0",
+        r"cc[-\s]?by[-\s]?nc[-\s]?2\.0": "cc-by-nc-2.0",
+        r"cc[-\s]?by[-\s]?nd[-\s]?2\.0": "cc-by-nd-2.0",
+        r"cc[-\s]?by[-\s]?nc[-\s]?nd[-\s]?2\.0": "cc-by-nc-nd-2.0",
         r"cc[-\s]?by[-\s]?sa[-\s]?1\.0": "cc-by-sa-1.0",
         r"cc[-\s]?by[-\s]?1\.0": "cc-by-1.0",
         r"cc0": "cc0",
@@ -514,7 +529,7 @@ def _generate_license_slug(input_string: str) -> str:
     # Try to match against common licenses
     for pattern, replacement in common_licenses.items():
         if re.search(pattern, slug, re.IGNORECASE):
-            return replacement
+            return replacement + country_suffix
 
     # If no match, generate a simple slug
     # Remove special characters, keep alphanumerics, dots, hyphens
