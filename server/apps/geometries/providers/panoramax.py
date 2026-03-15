@@ -343,6 +343,7 @@ class PanoramaxProvider(ImageProvider):
                 license_slug=license_slug,
                 attribution=attribution,
                 author=author,
+                author_url=None,
                 url_large=hd_url or sd_url or default_url,
                 url_medium=sd_url,
                 width=width,

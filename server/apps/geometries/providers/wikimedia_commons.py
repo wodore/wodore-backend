@@ -675,6 +675,7 @@ class WikimediaCommonsProvider(ImageProvider):
                 license_slug=license_slug,
                 attribution=attribution,
                 author=author,
+                author_url=None,
                 url_large=img_data.get("url", ""),
                 url_medium=img_data.get("thumb_url"),
                 width=width,

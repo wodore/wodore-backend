@@ -450,6 +450,7 @@ class CamptocampProvider(ImageProvider):
                 license_slug=license_slug,
                 attribution=attribution,
                 author=author,
+                author_url=None,
                 url_large=original_url,
                 url_medium=None,  # Camptocamp doesn't provide medium URLs
                 width=width,
