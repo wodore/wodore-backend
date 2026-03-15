@@ -35,7 +35,7 @@ class ImageProviderSchema(BaseModel):
 class ImageAuthorSchema(BaseModel):
     """Author information for an image."""
 
-    name: str = Field(..., description="Author name")
+    name: str | None = Field(None, description="Author name")
     url: str | None = Field(None, description="Author profile URL")
 
 
