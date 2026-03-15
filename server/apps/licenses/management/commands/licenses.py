@@ -9,6 +9,7 @@ class Command(CRUDCommand):
     model = License
     model_names = "licenses"
     compare_fields = ("slug",)
+    lookup_field = "slug"  # Use slug for identification, ignore fixture PKs
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

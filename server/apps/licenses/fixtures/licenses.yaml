@@ -739,18 +739,37 @@
   pk: 131
   fields:
     i18n:
-      name_en: CC-BY-SA-2.0-FR
-      fullname_en: CC-BY-SA-2.0-FR
-      description_en: ""
-      description_fr: ""
-      description_it: ""
+      url_en: https://creativecommons.org/licenses/by-sa/2.0/fr/deed.en
+      name_en: ""
+      fullname_en: Creative Commons Attribution-ShareAlike 2.0 France
+      description_en:
+        This license lets others remix, adapt, and build upon your work
+        even for commercial purposes, as long as they credit you and license their
+        new creations under the identical terms.
+      url_fr: https://creativecommons.org/licenses/by-sa/2.0/fr/
+      name_fr: ""
+      fullname_fr: Creative Commons Paternité-Partage des Conditions Initiales à l'Identique 2.0 France
+      description_fr:
+        Cette licence permet aux autres de remixer, arranger, et adapter
+        votre œuvre, même à des fins commerciales, tant qu'ils vous créditent et
+        licencient leurs nouvelles créations selon des conditions identiques.
+      url_it: https://creativecommons.org/licenses/by-sa/2.0/fr/deed.it
+      name_it: ""
+      fullname_it: Creative Commons Attribuzione-Condividi allo stesso modo 2.0 Francia
+      description_it:
+        Questa licenza permette ad altri di remixare, adattare e costruire
+        sul tuo lavoro anche per scopi commerciali, purché ti accreditino e licenzino
+        le loro nuove creazioni secondo condizioni identiche.
     slug: cc-by-sa-2.0-fr
-    name: null
-    fullname: null
-    description: ""
-    url: null
-    is_active: false
-    order: 390
+    name: CC BY-SA 2.0 FR
+    fullname: Creative Commons Namensnennung-Weitergabe unter gleichen Bedingungen 2.0 Frankreich
+    description:
+      Diese Lizenz erlaubt anderen, Ihr Werk auch für kommerzielle Zwecke
+      zu remixen, anzupassen und darauf aufzubauen, solange sie Sie nennen und ihre
+      neuen Kreationen unter identischen Bedingungen lizenzieren.
+    url: https://creativecommons.org/licenses/by-sa/2.0/fr/deed.de
+    is_active: true
+    order: 365
     attribution_required: true
     no_commercial: false
     no_modifying: false
@@ -758,7 +777,7 @@
     no_publication: false
     category: null
     review_status: done
-    review_comment: null
+    review_comment: Refuges.info license - CC BY-SA 2.0 France
 - model: licenses.license
   pk: 132
   fields:
