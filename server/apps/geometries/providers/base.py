@@ -546,7 +546,8 @@ def _get_license_info(slug: str | None) -> dict[str, str | None]:
             "description": None,
         }
 
-    cache = get_persistent_cache()
+    from django.core.cache import cache
+
     cache_key = f"{CACHE_KEY_PREFIX}:license:{slug}"
     cached = cache.get(cache_key)
     if cached:
@@ -628,8 +629,8 @@ def _get_license_info(slug: str | None) -> dict[str, str | None]:
             "description": license_obj.description,
         }
 
-        # Cache indefinitely (license info rarely changes)
-        cache.set(cache_key, license_info, CACHE_INDEFINITE)
+        # Cache for 30 minutes (license info changes are rare but should be reflected)
+        cache.set(cache_key, license_info, 1800)  # 30 minutes
         return license_info
 
     except Exception as e:
