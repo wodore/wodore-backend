@@ -25,7 +25,7 @@ class CamptocampProvider(ImageProvider):
     """
 
     source = "camptocamp"
-    cache_ttl = 31 * 24 * 3600  # 31 days
+    cache_ttl = 30 * 24 * 3600  # 31 days
     priority = 3  # Lower priority than wodore/wikidata
 
     def __init__(self, lang: str = "de"):

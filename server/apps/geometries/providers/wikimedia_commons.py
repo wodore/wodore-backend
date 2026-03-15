@@ -38,7 +38,7 @@ class WikimediaCommonsProvider(ImageProvider):
     """
 
     source = "wikimedia_commons"
-    cache_ttl = 14 * 24 * 3600  # 14 days
+    cache_ttl = 7 * 24 * 3600  # 14 days
     priority = 2  # Same as wikidata, before panoramax
 
     # Source type constants

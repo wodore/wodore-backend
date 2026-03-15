@@ -25,7 +25,7 @@ class RefugesInfoProvider(ImageProvider):
     """
 
     source = "refugesinfo"
-    cache_ttl = 7 * 24 * 3600  # 7 days
+    cache_ttl = 14 * 24 * 3600  # 7 days
     priority = 3  # Third highest priority
 
     async def fetch(
