@@ -9,8 +9,10 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 from typing import Any, Literal
 
+from asgiref.sync import sync_to_async
 from django.contrib.gis.geos import Point
 from django.core.cache import cache
+from .schemas import GeoPlaceSchema
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +149,7 @@ class ImageProvider(ABC):
     @abstractmethod
     async def fetch(
         self,
-        geoplaces: list[Any],
+        places: list[GeoPlaceSchema],
         lat: float,
         lon: float,
         radius: float,
@@ -155,10 +157,10 @@ class ImageProvider(ABC):
         update_cache: bool = False,
     ) -> list[ImageResult]:
         """
-        Fetch images for the given GeoPlaces.
+        Fetch images for the given places.
 
         Args:
-            geoplaces: List of GeoPlace objects within radius
+            places: List of GeoPlaceSchema objects with source information
             lat: Query latitude
             lon: Query longitude
             radius: Search radius in meters
@@ -238,7 +240,8 @@ class ImageProvider(ABC):
     ) -> list[ImageResult] | None:
         """Get cached results if available and fresh."""
         cache_instance = self.get_cache()
-        data = cache_instance.get(cache_key)
+        # Use sync_to_async to call the synchronous cache backend from async context
+        data = await sync_to_async(cache_instance.get)(cache_key)
         if data is not None:
             logger.debug(f"Cache HIT: {cache_key}")
             # Deserialize - stored as list of dicts
@@ -246,7 +249,7 @@ class ImageProvider(ABC):
         logger.debug(f"Cache MISS: {cache_key}")
         return None
 
-    def _set_cached_results(
+    async def _set_cached_results(
         self,
         cache_key: str,
         results: list[ImageResult],
@@ -255,7 +258,8 @@ class ImageProvider(ABC):
         cache_instance = self.get_cache()
         # Serialize - convert to list of dicts using dataclasses.asdict
         data = [asdict(result) for result in results]
-        cache_instance.set(cache_key, data, self.cache_ttl)
+        # Use sync_to_async to call the synchronous cache backend from async context
+        await sync_to_async(cache_instance.set)(cache_key, data, self.cache_ttl)
 
     def invalidate_cache(
         self, lat: float, lon: float, radius: float, precision: str = "precise"
@@ -368,6 +372,13 @@ def _get_provider_info(provider_name: str, force_refresh: bool = False) -> dict:
             "url": "https://commons.wikimedia.org",
             "icon": None,
             "description": "Wikimedia Commons free media repository",
+        },
+        "refugesinfo": {
+            "name": "Refuges.info",
+            "slug": "refugesinfo",
+            "url": "https://www.refuges.info",
+            "icon": None,
+            "description": "Refuges.info mountain huts database",
         },
         "mapillary": {
             "name": "Mapillary",
@@ -851,9 +862,16 @@ async def fetch_images_for_place(
         if place_type == "geoplace":
             from server.apps.geometries.models import GeoPlace
 
-            place = GeoPlace.objects.filter(
-                slug=place_slug, is_active=True, is_public=True
-            ).first()
+            place = (
+                GeoPlace.objects.filter(slug=place_slug, is_active=True, is_public=True)
+                .prefetch_related(
+                    "source_associations__organization",  # For schema conversion
+                    "image_associations__image__license",  # For WodoreProvider
+                    "image_associations__image__source_org",  # For WodoreProvider
+                )
+                .select_related("parent")  # Optimize FK access
+                .first()
+            )
 
             if place is None:
                 raise HttpError(404, f"GeoPlace '{place_slug}' not found")
@@ -871,9 +889,15 @@ async def fetch_images_for_place(
         else:  # hut
             from server.apps.huts.models import Hut
 
-            place = Hut.objects.filter(
-                slug=place_slug, is_active=True, is_public=True
-            ).first()
+            place = (
+                Hut.objects.filter(slug=place_slug, is_active=True, is_public=True)
+                .prefetch_related(
+                    "hut_sources__organization",  # For schema conversion
+                    "image_set__license",  # For WodoreProvider
+                    "image_set__source_org",  # For WodoreProvider
+                )
+                .first()
+            )
 
             if place is None:
                 raise HttpError(404, f"Hut '{place_slug}' not found")
@@ -1404,16 +1428,24 @@ async def fetch_images_from_providers(
     Returns:
         List of ImageResult objects from all providers
     """
+    from .schemas import convert_places_to_schemas
+
     providers = provider_registry.get_enabled_providers(sources)
 
     if not providers:
         logger.warning("No enabled providers found")
         return []
 
-    # Combine geoplaces and huts for providers
-    all_places = list(geoplaces)
-    if huts:
-        all_places.extend(huts)
+    # Convert GeoPlaces and Huts to unified GeoPlaceSchema objects
+    # This allows providers to access source IDs consistently
+    place_schemas = await convert_places_to_schemas(
+        geoplaces=geoplaces,
+        huts=huts,
+    )
+
+    logger.debug(
+        f"Converted {len(geoplaces)} GeoPlaces and {len(huts) if huts else 0} Huts to {len(place_schemas)} GeoPlaceSchema objects"
+    )
 
     # Log cache update mode
     if update_cache:
@@ -1421,7 +1453,9 @@ async def fetch_images_from_providers(
 
     # Run all providers in parallel
     tasks = [
-        provider.fetch(all_places, lat, lon, radius, limit, update_cache=update_cache)
+        provider.fetch(
+            place_schemas, lat, lon, radius, limit, update_cache=update_cache
+        )
         for provider in providers
     ]
     results_lists = await asyncio.gather(*tasks, return_exceptions=True)
@@ -1464,6 +1498,8 @@ def deduplicate_images(results: list[ImageResult]) -> list[ImageResult]:
         "wodore": 1,
         "camptocamp": 2,
         "wikidata": 3,
+        "wikimedia_commons": 2,  # Same as wikidata
+        "refugesinfo": 3,
         "panoramax": 4,
         "mapillary": 5,
         "flickr": 6,

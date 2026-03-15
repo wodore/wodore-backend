@@ -4,11 +4,12 @@ Uses Panoramax STAC API to find geolocated 360° images.
 """
 
 import logging
-from typing import Any
 from datetime import datetime, timezone
+from typing import Any
 
 
 from .base import ImageProvider, ImageResult
+from .schemas import GeoPlaceSchema
 from .scoring import (
     score_metadata_completeness,
     calculate_recency_bonus,
@@ -26,7 +27,7 @@ class PanoramaxProvider(ImageProvider):
     """
 
     source = "panoramax"
-    cache_ttl = 7 * 24 * 3600  # 7 days
+    cache_ttl = 30  #  minute
     priority = 4  # After camptocamp, before wikidata
 
     def __init__(self, api_base: str = "https://api.panoramax.xyz"):
@@ -41,7 +42,7 @@ class PanoramaxProvider(ImageProvider):
 
     async def fetch(
         self,
-        geoplaces: list[Any],
+        places: list[GeoPlaceSchema],
         lat: float,
         lon: float,
         radius: float,
@@ -126,7 +127,7 @@ class PanoramaxProvider(ImageProvider):
 
                 # 3. Store in cache
                 logger.debug(f"PanoramaxProvider: Caching {len(results)} results")
-                self._set_cached_results(cache_key, results)
+                await self._set_cached_results(cache_key, results)
 
                 return results
 
