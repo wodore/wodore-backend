@@ -22,7 +22,7 @@ CACHE_INDEFINITE = 365 * 24 * 60 * 60  # 1 year (~indefinite)
 CACHE_LONGTERM = 30 * 24 * 60 * 60  # 30 days
 CACHE_MEDIUM = 7 * 24 * 60 * 60  # 7 days
 CACHE_SHORT = 24 * 60 * 60  # 24 hours
-CACHE_VERY_SHORT = 6 * 60 * 60  # 6 hours
+CACHE_VERY_SHORT = 3600  # 1 hours
 
 
 # Cache key prefix for all geoimages caching
@@ -319,7 +319,7 @@ def _invalidate_provider_metadata_cache(provider_name: str) -> None:
     Args:
         provider_name: Name of the provider (e.g., "camptocamp", "panoramax")
     """
-    cache = get_persistent_cache()
+
     cache_key = f"{CACHE_KEY_PREFIX}:provider:{provider_name}"
     cache.delete(cache_key)
     logger.info(f"Invalidated provider metadata cache for '{provider_name}'")
@@ -336,7 +336,7 @@ def _get_provider_info(provider_name: str, force_refresh: bool = False) -> dict:
     Returns:
         Dictionary with provider information
     """
-    cache = get_persistent_cache()
+
     cache_key = f"{CACHE_KEY_PREFIX}:provider:{provider_name}"
 
     if not force_refresh:
@@ -446,8 +446,8 @@ def _get_provider_info(provider_name: str, force_refresh: bool = False) -> dict:
     except Exception as e:
         logger.warning(f"Could not fetch provider info from database: {e}")
 
-    # Cache indefinitely (provider info rarely changes)
-    cache.set(cache_key, provider_info, CACHE_INDEFINITE)
+    # Cache for 2 hours (organization info should reflect updates)
+    cache.set(cache_key, provider_info, CACHE_VERY_SHORT)
 
     return provider_info
 
@@ -561,8 +561,6 @@ def _get_license_info(slug: str | None) -> dict[str, str | None]:
             "description": None,
         }
 
-    from django.core.cache import cache
-
     cache_key = f"{CACHE_KEY_PREFIX}:license:{slug}"
     cached = cache.get(cache_key)
     if cached:
@@ -645,7 +643,7 @@ def _get_license_info(slug: str | None) -> dict[str, str | None]:
         }
 
         # Cache for 30 minutes (license info changes are rare but should be reflected)
-        cache.set(cache_key, license_info, 1800)  # 30 minutes
+        cache.set(cache_key, license_info, CACHE_VERY_SHORT)  # 30 minutes
         return license_info
 
     except Exception as e:
@@ -1355,16 +1353,6 @@ def post_process_images(
             continue
 
     return final_results
-
-    def _set_cached_results(
-        self,
-        cache_key: str,
-        results: list[ImageResult],
-    ) -> None:
-        """Cache results for this provider."""
-        # Serialize - convert to list of dicts
-        data = [result.__dict__ for result in results]
-        cache.set(cache_key, data, self.cache_ttl)
 
 
 class ProviderRegistry:
