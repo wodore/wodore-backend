@@ -1,5 +1,12 @@
 # Martin Vector Tile Server Configuration
 # Documentation: https://maplibre.org/martin/
+# # TODO: must run `app martin_sync` for changes to apply!
+
+# CORS configuration
+cors:
+  origin:
+    - "*"
+  max_age: 7200
 
 # PostgreSQL connection
 postgres:
@@ -146,33 +153,53 @@ postgres:
       # Clip geometries to tile bounds (recommended for points)
       clip_geom: true
 
-      minzoom: 7 # ~ 2x swiss
+      minzoom: 5 # ~ 2x swiss
       maxzoom: 20
 
   functions:
-    # GeoPlaces vector tiles (using function with dynamic filtering)
+    # GeoPlaces vector tiles (using function with dynamic filtering and clustering)
     # This source supports advanced filtering via URL query parameters
     # Recommended for: Production use with dynamic tile optimization
     # See: server/apps/geometries/models/tiles_view.py for documentation
+    # See: docs/weps/board/WEP009_poi_clustering.md for clustering details
+    #
+    # USAGE (with caching):
+    #   All parameters below are supported PLUS:
+    #   cache_ttl=3600     # Cache time in seconds (default: 3600 = 1 hour)
+    #   cache_ttl=0        # Disable caching (generate fresh tiles)
     #
     # Usage examples (all parameters use comma-separated strings):
-    #   /geoplaces_fn/{z}/{x}/{y}                                    # All defaults (German)
-    #   /geoplaces_fn/{z}/{x}/{y}?lang=en                            # English labels
-    #   /geoplaces_fn/{z}/{x}/{y}?categories=hut,hotel               # Only huts and hotels
-    #   /geoplaces_fn/{z}/{x}/{y}?categories_all=hut,parking         # Huts with parking
-    #   /geoplaces_fn/{z}/{x}/{y}?fields=slug,name,importance        # Minimal fields
-    #   /geoplaces_fn/{z}/{x}/{y}?lang=en&categories=hut&fields=slug,name,elevation
+    #   /geoplaces/{z}/{x}/{y}                                              # All defaults (German, clustering enabled, 1hr cache)
+    #   /geoplaces/{z}/{x}/{y}?cache_ttl=7200                                 # 2 hour cache
+    #   /geoplaces/{z}/{x}/{y}?cache_ttl=0                                    # No caching (fresh tiles)
+    #   /geoplaces/{z}/{x}/{y}?lang=en                                      # English labels
+    #   /geoplaces/{z}/{x}/{y}?cluster_max_zoom=10                         # Extend clustering to z10
+    #   /geoplaces/{z}/{x}/{y}?cluster_max_zoom=null                        # Disable clustering
+    #   /geoplaces/{z}/{x}/{y}?cluster_radius_m=10000                       # Larger clusters (10km at z8)
     #
-    # Function: get_geoplaces_for_tiles(z, x, y, query_params)
-    # Migration: server/apps/geometries/migrations/0028_create_geoplaces_tile_function.py
+    # Clustering behavior (defaults):
+    #   z0-8: All POIs clustered by (category, grid_cell)
+    #   z9-10: High-importance POIs (≥50) raw, low-importance clustered
+    #   z11+: All POIs raw (no clustering)
+    #
+    # Caching behavior:
+    #   - Tiles are cached in geometries_tile_cache table
+    #   - Cache key: (z, x, y, params_hash)
+    #   - Cache invalidated by TTL (default 1 hour)
+    #   - Cache hits tracked (hits counter)
+    #   - First request: ~1.8s (generates tile)
+    #   - Subsequent requests: ~10ms (cache hit)
+    #
+    # Function: get_geoplaces_for_tiles_cached(z, x, y, query_params)
+    # Migration: server/apps/geometries/migrations/0036_add_tile_caching.py
     geoplaces:
       # Schema and function name
       schema: public
       function: get_geoplaces_for_tiles
       id_columns: slug
 
-      # Zoom levels (function handles importance filtering automatically)
-      minzoom: 0
+      # Zoom levels (function handles importance filtering and clustering automatically)
+      minzoom: 3
       maxzoom: 20
 
 sprites:

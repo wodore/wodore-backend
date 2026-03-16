@@ -55,6 +55,14 @@ class Command(BaseCommand):
             "Default: all available variants",
         )
         parser.add_argument(
+            "--merge",
+            type=str,
+            default="",
+            help="Path to YAML file to merge with martin.yaml config. "
+            "Useful for environment-specific overrides (e.g., martin_test.yaml for debug settings). "
+            "The merge file's settings will override the base config.",
+        )
+        parser.add_argument(
             "--dry-run",
             action="store_true",
             help="Show what would be copied without making changes",
@@ -74,6 +82,7 @@ class Command(BaseCommand):
         validate = options.get("validate", False)
         include_slugs = options.get("include", "").strip()
         variants_param = options.get("category_variants", "").strip()
+        merge_file_path = options.get("merge", "").strip()
 
         if dry_run:
             self.stdout.write(
@@ -156,7 +165,7 @@ class Command(BaseCommand):
         self._sync_styles(target_path, dry_run, stats)
 
         # 3. Generate and copy martin.yaml config with sprite paths
-        self._sync_config(target_path, dry_run, stats)
+        self._sync_config(target_path, dry_run, stats, merge_file_path)
 
         # Validation
         if validate and not dry_run:
@@ -319,7 +328,7 @@ class Command(BaseCommand):
                 label=f"style: {style_file.stem}",
             )
 
-    def _sync_config(self, target_path, dry_run, stats):
+    def _sync_config(self, target_path, dry_run, stats, merge_file_path=""):
         """Generate and copy martin.yaml config file with sprite paths."""
         self.stdout.write("\n[3/3] Generating config file...")
 
@@ -342,6 +351,46 @@ class Command(BaseCommand):
             self.stderr.write(self.style.ERROR(f"  ✗ Failed to parse config YAML: {e}"))
             stats["errors"] += 1
             return
+
+        # Merge additional YAML file if specified
+        if merge_file_path:
+            merge_file = Path(merge_file_path)
+            if not merge_file.exists():
+                self.stderr.write(
+                    self.style.WARNING(f"  ⚠ Merge file not found: {merge_file}")
+                )
+            else:
+                try:
+                    with open(merge_file, "r") as f:
+                        merge_config = yaml.safe_load(f)
+
+                    if merge_config:
+                        # Deep merge the configs
+                        def deep_merge(base, override):
+                            """Recursively merge override dict into base dict."""
+                            result = base.copy()
+                            for key, value in override.items():
+                                if (
+                                    key in result
+                                    and isinstance(result[key], dict)
+                                    and isinstance(value, dict)
+                                ):
+                                    result[key] = deep_merge(result[key], value)
+                                else:
+                                    result[key] = value
+                            return result
+
+                        config = deep_merge(config, merge_config)
+                        self.stdout.write(
+                            self.style.SUCCESS(f"  ✓ Merged config from: {merge_file}")
+                        )
+                except Exception as e:
+                    self.stderr.write(
+                        self.style.ERROR(
+                            f"  ✗ Failed to merge config from {merge_file}: {e}"
+                        )
+                    )
+                    stats["errors"] += 1
 
         # Generate sprite paths based on synced directories
         sprite_dirs = stats.get("sprite_dirs", [])
