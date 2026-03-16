@@ -98,6 +98,7 @@ class RefugesInfoProvider(ImageProvider):
 
             if not place_map:
                 logger.debug("RefugesInfoProvider: No refuges.info source IDs found")
+                await self._set_cached_results(cache_key, [])
                 return []
 
             logger.debug(
@@ -238,14 +239,14 @@ class RefugesInfoProvider(ImageProvider):
                     location = Point(place.lon, place.lat, srid=4326)
 
                     result = ImageResult(
-                        provider="refugesinfo",
+                        provider="refuges",  # Match organization slug in database
                         source_id=src_ident,
                         source_url=src_url,
                         image_type="flat",
                         captured_at=capture_date,
                         location=location,
                         distance_m=0,
-                        license_slug="copyright",  # refuges.info images are generally copyrighted
+                        license_slug="cc-by-sa-2.0-fr",  # refuges.info uses CC-BY-SA-2.0-FR
                         attribution=attribution,
                         author=author,
                         author_url=author_url,

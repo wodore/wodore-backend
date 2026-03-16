@@ -367,8 +367,11 @@ TEMPLATES = [
 # (see development.py and production.py).
 # https://docs.djangoproject.com/en/4.2/topics/files/
 
-MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR.joinpath("media")
+MEDIA_URL = str(config("MEDIA_URL", "/media/"))
+MEDIA_ROOT = config("MEDIA_ROOT", BASE_DIR.joinpath(MEDIA_URL.strip("/")))
+IMAGOR_MEDIA_URL = str(
+    config("IMAGOR_MEDIA_URL", MEDIA_URL)
+)  # imagor can use a different "base", e.g. `wd/path-to-file` instead of `media/path-to-file`
 
 
 # Django authentication system

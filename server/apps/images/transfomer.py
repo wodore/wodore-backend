@@ -11,6 +11,7 @@ from django.conf import settings
 from django.db.models.fields.files import ImageFieldFile
 from django.utils.html import format_html
 
+
 # https://github.com/cshum/imagor
 
 # Load environment variables for Imagor configurations
@@ -83,6 +84,10 @@ class ImagorImage:
         if self.image_url.startswith("https://commons.wikimedia"):
             # this is needed because redirect do not work with imagor, return correct redirected image
             self.image_url = get_redirect_url(self.image_url)
+        if self.image_url.startswith(settings.MEDIA_URL):
+            self.image_url = self.image_url.replace(
+                settings.MEDIA_URL, settings.IMAGOR_MEDIA_URL
+            )
 
         self._key = _key
         self._url = _url

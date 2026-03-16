@@ -94,6 +94,7 @@ class CamptocampProvider(ImageProvider):
 
                 if not waypoints:
                     logger.warning("CamptocampProvider: No waypoints found in bbox")
+                    await self._set_cached_results(cache_key, [])
                     return []
 
                 logger.debug(f"CamptocampProvider: Found {len(waypoints)} waypoints")
