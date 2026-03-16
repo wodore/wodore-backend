@@ -367,8 +367,8 @@ TEMPLATES = [
 # (see development.py and production.py).
 # https://docs.djangoproject.com/en/4.2/topics/files/
 
-MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR.joinpath("media")
+MEDIA_URL = str(config("MEDIA_URL", "/media/"))
+MEDIA_ROOT = config("MEDIA_ROOT", BASE_DIR.joinpath(MEDIA_URL.strip("/")))
 
 
 # Django authentication system
