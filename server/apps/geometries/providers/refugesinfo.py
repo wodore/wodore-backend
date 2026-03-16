@@ -98,6 +98,7 @@ class RefugesInfoProvider(ImageProvider):
 
             if not place_map:
                 logger.debug("RefugesInfoProvider: No refuges.info source IDs found")
+                await self._set_cached_results(cache_key, [])
                 return []
 
             logger.debug(
