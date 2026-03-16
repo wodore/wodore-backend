@@ -202,78 +202,6 @@ class GeoPlaceRelation(TimeStampedModel):
         return f"{self.from_place.name_i18n} → {self.relation.slug} → {self.to_place.name_i18n}"
 ```
 
-**File:** `server/apps/geometries/models/_associations.py` (new section)
-
-```python
-class GeoPlaceRelation(TimeStampedModel):
-    """
-    Semantic relationships between GeoPlaces.
-
-    Uses Category for relation types (part_of, near, serves).
-    Stores only one direction.
-
-    Examples:
-        Hut → part_of → Municipality
-        Bus Stop → serves → Village
-    """
-
-    from_place = models.ForeignKey(
-        "GeoPlace",
-        on_delete=models.CASCADE,
-        db_index=True,
-        related_name="outgoing_relations",
-        verbose_name=_("From Place"),
-    )
-
-    to_place = models.ForeignKey(
-        "GeoPlace",
-        on_delete=models.CASCADE,
-        db_index=True,
-        related_name="incoming_relations",
-        verbose_name=_("To Place"),
-    )
-
-    relation = models.ForeignKey(
-        Category,
-        on_delete=models.RESTRICT,
-        db_index=True,
-        related_name="geoplace_relations",
-        verbose_name=_("Relation Type"),
-        limit_choices_to=models.Q(parent__slug="relations"),
-    )
-
-    confidence = models.FloatField(
-        default=1.0,
-        verbose_name=_("Confidence"),
-        help_text=_("Confidence score for auto-generated relations (0.0-1.0)"),
-    )
-
-    extra = models.JSONField(default=dict, blank=True)
-    is_active = models.BooleanField(default=True, db_index=True)
-
-    class Meta:
-        verbose_name = _("Geo Place Relation")
-        verbose_name_plural = _("Geo Place Relations")
-        ordering = ["from_place", "relation__order"]
-        indexes = [
-            models.Index(fields=["from_place", "relation"], name="gpr_from_rel_idx"),
-            models.Index(fields=["to_place", "relation"], name="gpr_to_rel_idx"),
-        ]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["from_place", "to_place", "relation"],
-                name="geoplace_relation_unique_triple",
-            ),
-            models.CheckConstraint(
-                check=~models.Q(from_place=models.F("to_place")),
-                name="geoplace_relation_no_self_loop",
-            ),
-        ]
-
-    def __str__(self):
-        return f"{self.from_place.name_i18n} → {self.relation.slug} → {self.to_place.name_i18n}"
-```
-
 ---
 
 ## 3. GeoPlaceOperation Model (NEW)
@@ -626,191 +554,82 @@ __all__ = [
 
 ---
 
-## 9. Category Fixtures
+## 9. Category Structure
 
-**File:** `server/apps/categories/fixtures/relation_categories.json`
+### Relation Categories
 
-```json
-[
-  {
-    "model": "categories.category",
-    "pk": 1000,
-    "fields": {
-      "slug": "relations",
-      "name": "Relations",
-      "description": "Semantic relationship types between places",
-      "order": 999,
-      "is_active": true,
-      "parent": null,
-      "color": "#999999"
-    }
-  },
-  {
-    "model": "categories.category",
-    "pk": 1010,
-    "fields": {
-      "slug": "part_of",
-      "name": "Part Of",
-      "description": "Universal containment hierarchy",
-      "order": 10,
-      "is_active": true,
-      "parent": 1000,
-      "color": "#4B8E43"
-    }
-  },
-  {
-    "model": "categories.category",
-    "pk": 1011,
-    "fields": {
-      "slug": "near",
-      "name": "Near",
-      "description": "Proximity (symmetric)",
-      "order": 11,
-      "is_active": true,
-      "parent": 1000,
-      "color": "#4B8E43"
-    }
-  },
-  {
-    "model": "categories.category",
-    "pk": 1020,
-    "fields": {
-      "slug": "serves",
-      "name": "Serves",
-      "description": "Infrastructure service",
-      "order": 20,
-      "is_active": true,
-      "parent": 1000,
-      "color": "#E67E22"
-    }
-  },
-  {
-    "model": "categories.category",
-    "pk": 2000,
-    "fields": {
-      "slug": "operating",
-      "name": "Operating Modes",
-      "description": "Operating/service modes for places",
-      "order": 100,
-      "is_active": true,
-      "parent": null,
-      "color": "#3498DB"
-    }
-  },
-  {
-    "model": "categories.category",
-    "pk": 2010,
-    "fields": {
-      "slug": "standard",
-      "name": "Standard Operation",
-      "description": "Main operation mode (e.g., summer, full service)",
-      "order": 10,
-      "is_active": true,
-      "parent": 2000,
-      "color": "#3498DB"
-    }
-  },
-  {
-    "model": "categories.category",
-    "pk": 2020,
-    "fields": {
-      "slug": "reduced",
-      "name": "Reduced Operation",
-      "description": "Reduced operation (e.g., winter, limited service)",
-      "order": 20,
-      "is_active": true,
-      "parent": 2000,
-      "color": "#95A5A6"
-    }
-  },
-  {
-    "model": "categories.category",
-    "pk": 2030,
-    "fields": {
-      "slug": "emergency",
-      "name": "Emergency Only",
-      "description": "Emergency access only",
-      "order": 30,
-      "is_active": true,
-      "parent": 2000,
-      "color": "#E74C3C"
-    }
-  },
-  {
-    "model": "categories.category",
-    "pk": 3000,
-    "fields": {
-      "slug": "link_types",
-      "name": "Link Types",
-      "order": 200,
-      "is_active": true,
-      "parent": null,
-      "color": "#9B59B6"
-    }
-  },
-  {
-    "model": "categories.category",
-    "pk": 3010,
-    "fields": {
-      "slug": "website",
-      "name": "Website",
-      "order": 10,
-      "is_active": true,
-      "parent": 3000,
-      "color": "#9B59B6"
-    }
-  },
-  {
-    "model": "categories.category",
-    "pk": 3020,
-    "fields": {
-      "slug": "booking",
-      "name": "Booking",
-      "order": 20,
-      "is_active": true,
-      "parent": 3000,
-      "color": "#9B59B6"
-    }
-  },
-  {
-    "model": "categories.category",
-    "pk": 3030,
-    "fields": {
-      "slug": "social",
-      "name": "Social Media",
-      "order": 30,
-      "is_active": true,
-      "parent": 3000,
-      "color": "#9B59B6"
-    }
-  },
-  {
-    "model": "categories.category",
-    "pk": 3040,
-    "fields": {
-      "slug": "phone",
-      "name": "Phone",
-      "order": 40,
-      "is_active": true,
-      "parent": 3000,
-      "color": "#9B59B6"
-    }
-  },
-  {
-    "model": "categories.category",
-    "pk": 4000,
-    "fields": {
-      "slug": "brand",
-      "name": "Brand",
-      "description": "Brand or operator identifier (independent of operating mode)",
-      "order": 300,
-      "is_active": true,
-      "parent": null,
-      "color": "#F39C12"
-    }
-  }
-]
+**Semantic relationships between GeoPlaces**
+
 ```
+relation/
+├── part_of          - Universal containment hierarchy
+├── near             - Proximity relationships (symmetric)
+├── serves           - Infrastructure service (e.g., bus stop serves village)
+└── access_point     - Infrastructure access to places (e.g., parking for hut)
+```
+
+### Service Mode Categories
+
+**Service availability and operating modes for places**
+
+```
+service/
+├── standard         - Main/primary service offering
+└── reduced          - Limited/secondary service offering
+```
+
+### Link Categories
+
+**External links and contact information**
+
+```
+link/
+├── website          - Official website
+├── booking          - Booking/reservation system
+├── social           - Social media profiles
+└── phone            - Telephone contacts (tel: URIs)
+```
+
+### Brand Category
+
+**Brand or operator identification**
+
+```
+brand/               - Brand or operator identifier (e.g., SAC, CAF)
+```
+
+### Future Extensions
+
+Additional categories can be added incrementally when needed:
+
+- `relation/located_in` - If distinction from `part_of` becomes necessary
+- `relation/owned_by` - When organizations are migrated to categories
+- `relation/starts_at` / `relation/ends_at` / `relation/passes` - For route relationships
+- `service/emergency` - Emergency-only service mode
+- Subcategories under `relation/` (spatial/, infrastructure/) - If query complexity requires grouping
+
+### Migration Strategy
+
+**Phase 1 (Current):** Core categories
+
+- `relation/` (part_of, near, serves, access_point)
+- `service/` (standard, reduced)
+- `link/` (website, booking, social, phone)
+- `brand/`
+
+**Phase 2:** Add organization relations when organizations migrate to categories
+**Phase 3:** Add route relations when route model is integrated
+**Phase 4:** Add hierarchical grouping if query patterns benefit from it
+
+This keeps the initial implementation simple while allowing incremental growth as requirements evolve.
+
+### Organization Integration
+
+**Future Work:** Organizations will be migrated to use the Category system for brand/operator classification. Once complete, `owned_by` relations can be added to connect places to their operating organizations (e.g., SAC, CAF).
+
+### Routes Integration
+
+**Note:** Routes are handled separately and will have their own relation model (`RouteRelation`) to connect routes to GeoPlaces. Routes are not covered in this implementation document as they are managed in a different context.
 
 ---
 
