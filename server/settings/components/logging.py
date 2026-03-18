@@ -273,7 +273,7 @@ def configure_structlog() -> None:
                 },
                 "django.server": {
                     "handlers": [],  # Suppress Django dev server logs (they use custom formatter)
-                    "level": "WARNING",
+                    "level": "ERROR",  # Suppress INFO/WARNING (like broken pipe messages)
                     "propagate": False,
                 },
                 "django.request": {
