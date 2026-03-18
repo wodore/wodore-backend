@@ -8,7 +8,7 @@ Uses source_id from GeoPlace source associations with organization slug 'refuges
 #   https://www.refuges.info/point/6069/cabane-non-gardee/abri-de-Beauregard
 #   http://192.168.1.50:8000/v1/geo/images/hut/beauregard?lang=de&radius=50&limit=20
 
-import logging
+import structlog
 from datetime import datetime, timezone
 
 from django.contrib.gis.geos import Point
@@ -20,7 +20,7 @@ from .scoring import (
     calculate_age_penalty,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 class RefugesInfoProvider(ImageProvider):
@@ -56,9 +56,7 @@ class RefugesInfoProvider(ImageProvider):
         Returns:
             List of ImageResult objects
         """
-        logger.debug(
-            f"RefugesInfoProvider.fetch() called with update_cache={update_cache}"
-        )
+        logger.debug("RefugesInfoProvider.fetch() called", update_cache=update_cache)
 
         try:
             import httpx
@@ -67,24 +65,22 @@ class RefugesInfoProvider(ImageProvider):
             # 1. Check cache first
             cache_key = self._get_cache_key(lat, lon, radius, "precise")
             logger.debug(
-                f"RefugesInfoProvider: update_cache={update_cache}, checking cache key {cache_key}"
+                "Checking cache key", update_cache=update_cache, cache_key=cache_key
             )
 
             if not update_cache:
                 cached = await self._get_cached_results(cache_key)
                 if cached is not None:
-                    logger.debug(f"RefugesInfoProvider: Cache HIT for {cache_key}")
+                    logger.debug("Cache HIT", cache_key=cache_key)
                     return cached
             else:
-                logger.debug(
-                    "RefugesInfoProvider: Bypassing cache due to update_cache=True"
-                )
+                logger.debug("Bypassing cache", reason="update_cache=True")
 
-            logger.debug("RefugesInfoProvider: Cache MISS - fetching from API")
+            logger.debug("Cache MISS - fetching from API")
 
             # 2. Fetch from API
             logger.debug(
-                f"RefugesInfoProvider: Checking {len(places)} places for refuges source IDs"
+                "Checking places for refuges source IDs", places_count=len(places)
             )
 
             # Collect refuges.info source IDs from all places using the unified schema
@@ -92,22 +88,28 @@ class RefugesInfoProvider(ImageProvider):
 
             for place in places:
                 logger.debug(
-                    f"  Checking place: {place.slug}, id={place.id}, sources={len(place.sources)}"
+                    "Checking place",
+                    slug=place.slug,
+                    id=place.id,
+                    sources_count=len(place.sources),
                 )
                 source_id = place.get_source_id("refuges")
                 if source_id:
                     place_map[source_id] = place
                     logger.debug(
-                        f"  Found refuges.info source ID {source_id} for place '{place.slug}' (id={place.id})"
+                        "Found refuges.info source ID",
+                        source_id=source_id,
+                        place_slug=place.slug,
+                        place_id=place.id,
                     )
 
             if not place_map:
-                logger.debug("RefugesInfoProvider: No refuges.info source IDs found")
+                logger.debug("No refuges.info source IDs found")
                 await self._set_cached_results(cache_key, [])
                 return []
 
             logger.debug(
-                f"RefugesInfoProvider: Found {len(place_map)} places with refuges.info source IDs"
+                "Found places with refuges.info source IDs", places_count=len(place_map)
             )
 
             # Fetch images from refuges.info for each source_id
@@ -121,29 +123,33 @@ class RefugesInfoProvider(ImageProvider):
                 for source_id, place in place_map.items():
                     try:
                         logger.debug(
-                            f"  Fetching images from refuges.info for {source_id}..."
+                            "Fetching images from refuges.info", source_id=source_id
                         )
                         images = await self._fetch_refuges_images(
                             client, source_id, place
                         )
-                        logger.debug(f"  Found {len(images)} images for {source_id}")
+                        logger.debug(
+                            "Found images", count=len(images), source_id=source_id
+                        )
                         results.extend(images)
                     except Exception as e:
                         logger.error(
-                            f"Error fetching refuges.info images for {source_id}: {e}"
+                            "Error fetching refuges.info images",
+                            source_id=source_id,
+                            error=str(e),
                         )
                         continue
 
-            logger.debug(f"RefugesInfoProvider: Found {len(results)} unique images")
+            logger.debug("Found unique images", count=len(results))
 
             # 3. Store in cache
-            logger.debug(f"RefugesInfoProvider: Caching {len(results)} results")
+            logger.debug("Caching results", count=len(results))
             await self._set_cached_results(cache_key, results)
 
             return results
 
         except Exception as e:
-            logger.error(f"RefugesInfoProvider error: {e}")
+            logger.error("RefugesInfoProvider error", error=str(e))
             return []
 
     async def _fetch_refuges_images(
@@ -167,7 +173,7 @@ class RefugesInfoProvider(ImageProvider):
             from bs4 import BeautifulSoup
 
             url = f"https://www.refuges.info/point/{source_id}"
-            logger.debug(f"  Fetching {url}...")
+            logger.debug("Fetching URL", url=url)
 
             response = await client.get(url)
             response.raise_for_status()
@@ -222,7 +228,10 @@ class RefugesInfoProvider(ImageProvider):
                                     )
                         except Exception as e:
                             logger.warning(
-                                f"Could not parse date: {capture_date_str_fr} for hut {source_id}: {e}"
+                                "Could not parse date",
+                                date_str=capture_date_str_fr,
+                                source_id=source_id,
+                                error=str(e),
                             )
 
                     # Get caption from blockquote if it exists
@@ -302,14 +311,18 @@ class RefugesInfoProvider(ImageProvider):
                     results.append(result)
 
                 except Exception as e:
-                    logger.warning(f"Error processing image from refuges.info: {e}")
+                    logger.warning(
+                        "Error processing image from refuges.info", error=str(e)
+                    )
                     continue
 
             return results
 
         except Exception as e:
             logger.error(
-                f"HTTP error fetching refuges.info images for {source_id}: {e}"
+                "HTTP error fetching refuges.info images",
+                source_id=source_id,
+                error=str(e),
             )
             return []
 

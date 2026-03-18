@@ -3,7 +3,7 @@ Provider for Panoramax images.
 Uses Panoramax STAC API to find geolocated 360° images.
 """
 
-import logging
+import structlog
 from datetime import datetime, timezone
 from typing import Any
 
@@ -16,7 +16,7 @@ from .scoring import (
     calculate_age_penalty,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 class PanoramaxProvider(ImageProvider):
@@ -39,7 +39,7 @@ class PanoramaxProvider(ImageProvider):
             api_base: Panoramax API base URL
         """
         self.api_base = api_base
-        logger.debug(f"Initialized PanoramaxProvider with {api_base}")
+        logger.debug("Initialized PanoramaxProvider", api_base=api_base)
 
     async def fetch(
         self,
@@ -70,10 +70,10 @@ class PanoramaxProvider(ImageProvider):
             if not update_cache:
                 cached = await self._get_cached_results(cache_key)
                 if cached is not None:
-                    logger.debug(f"PanoramaxProvider: Cache HIT for {cache_key}")
+                    logger.debug("Cache HIT", cache_key=cache_key, provider="panoramax")
                     return cached
 
-            logger.debug("PanoramaxProvider: Cache MISS - fetching from API")
+            logger.debug("Cache MISS - fetching from API", provider="panoramax")
 
             # 2. Fetch from API
             import httpx
@@ -82,7 +82,7 @@ class PanoramaxProvider(ImageProvider):
             # Calculate bbox from center point and radius
             bbox = self._calculate_bbox(lat, lon, radius)
 
-            logger.debug(f"PanoramaxProvider: Searching in bbox {bbox}")
+            logger.debug("Searching in bbox", bbox=bbox, provider="panoramax")
 
             headers = {
                 "User-Agent": getattr(
@@ -99,9 +99,7 @@ class PanoramaxProvider(ImageProvider):
                     "limit": limit,  # Use requested limit
                 }
 
-                logger.debug(
-                    f"Fetching Panoramax search from: {url} with params {params}"
-                )
+                logger.debug("Fetching Panoramax search", url=url, params=params)
 
                 response = await client.get(url, params=params)
                 response.raise_for_status()
@@ -109,7 +107,7 @@ class PanoramaxProvider(ImageProvider):
                 data = response.json()
                 features = data.get("features", [])
 
-                logger.debug(f"PanoramaxProvider: Found {len(features)} items")
+                logger.debug("Found items", count=len(features), provider="panoramax")
 
                 # Parse all features
                 results = []
@@ -119,21 +117,31 @@ class PanoramaxProvider(ImageProvider):
                         if result:
                             results.append(result)
                     except Exception as e:
-                        logger.warning(f"Error parsing STAC item: {e}")
+                        logger.warning(
+                            "Error parsing STAC item",
+                            error=str(e),
+                            provider="panoramax",
+                        )
                         continue
 
                 logger.debug(
-                    f"PanoramaxProvider: Successfully parsed {len(results)} images"
+                    "Successfully parsed images",
+                    count=len(results),
+                    provider="panoramax",
                 )
 
                 # 3. Store in cache
-                logger.debug(f"PanoramaxProvider: Caching {len(results)} results")
+                logger.debug(
+                    "Caching results", count=len(results), provider="panoramax"
+                )
                 await self._set_cached_results(cache_key, results)
 
                 return results
 
         except Exception as e:
-            logger.error(f"PanoramaxProvider error: {e}")
+            logger.error(
+                "Provider error", error=str(e), provider="panoramax", exc_info=True
+            )
             return []
 
     def _calculate_bbox(self, lat: float, lon: float, radius: float) -> str:
@@ -257,7 +265,9 @@ class PanoramaxProvider(ImageProvider):
             default_url = sd_url if sd_url else hd_url
 
             if not default_url:
-                logger.debug("No image URL found in STAC item")
+                logger.debug(
+                    "No image URL found in STAC item", feature_id=feature.get("id")
+                )
                 return None
 
             # Get metadata
@@ -356,7 +366,7 @@ class PanoramaxProvider(ImageProvider):
             return result
 
         except Exception as e:
-            logger.warning(f"Error parsing STAC item: {e}")
+            logger.warning("Error parsing STAC item", error=str(e), exc_info=True)
             return None
 
     def _normalize_license(self, license_data: Any) -> str:
