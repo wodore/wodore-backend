@@ -24,7 +24,6 @@ from .providers import (
     fetch_images_for_place,
     fetch_images_from_providers,
     provider_registry,
-    deduplicate_images,
     post_process_images,
     WodoreProvider,
     WikimediaCommonsProvider,
@@ -212,12 +211,7 @@ def nearby_images(
         logger.error(f"Error fetching images from providers: {e}")
         results = []
 
-    # Step 3: Deduplicate results
-    logger.debug(f"Deduplicating {len(results)} images...")
-    results = deduplicate_images(results)
-    logger.debug(f"After deduplication: {len(results)} unique images")
-
-    # Step 4: Sort by score (primary), then by distance (secondary)
+    # Step 3: Sort by score (primary), then by distance (secondary)
     results.sort(key=lambda r: (-r.score, r.distance_m))
 
     # Step 5: Limit results
@@ -315,11 +309,6 @@ def images_for_place(
     except Exception as e:
         logger.error(f"Error fetching images for place '{place_slug}': {e}")
         raise
-
-    # Deduplicate results
-    logger.debug(f"Deduplicating {len(results)} images...")
-    results = deduplicate_images(results)
-    logger.debug(f"After deduplication: {len(results)} unique images")
 
     # Sort by score (primary), then by distance (secondary)
     results.sort(key=lambda r: (-r.score, r.distance_m))
@@ -424,10 +413,6 @@ def images_for_hut(
         raise
 
     # Deduplicate results
-    logger.debug(f"Deduplicating {len(results)} images...")
-    results = deduplicate_images(results)
-    logger.debug(f"After deduplication: {len(results)} unique images")
-
     # Sort by score (primary), then by distance (secondary)
     results.sort(key=lambda r: (-r.score, r.distance_m))
 

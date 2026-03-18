@@ -364,8 +364,14 @@ class CamptocampProvider(ImageProvider):
             if not filename:
                 return None
 
-            # Build original image URL
-            original_url = f"{self.media_base}/{filename}"
+            # Use the URL with file extension from API response (urls.original.raw)
+            # This ensures dimension fetching works correctly
+            urls = image_details.get("urls", {})
+            original_url = urls.get("original", {}).get("raw")
+
+            # Fallback to manually constructed URL if urls.original.raw not available
+            if not original_url:
+                original_url = f"{self.media_base}/{filename}"
 
             # Extract metadata
             locales = image_details.get("locales", [])
@@ -406,13 +412,13 @@ class CamptocampProvider(ImageProvider):
 
             # Determine license based on image type
             if image_type == "personal":
-                license_slug = "cc-by-nc-nd-4.0"
-                license_name = "CC BY-NC-ND 4.0"
-                license_url = "https://creativecommons.org/licenses/by-nc-nd/4.0/"
+                license_slug = "cc-by-nc-nd-3.0"
+                license_name = "CC BY-NC-ND 3.0"
+                license_url = "https://creativecommons.org/licenses/by-nc-nd/3.0/"
             else:  # collaborative
-                license_slug = "cc-by-sa-4.0"
-                license_name = "CC BY-SA 4.0"
-                license_url = "https://creativecommons.org/licenses/by-sa/4.0/"
+                license_slug = "cc-by-sa-3.0"
+                license_name = "CC BY-SA 3.0"
+                license_url = "https://creativecommons.org/licenses/by-sa/3.0/"
 
             # Build attribution
             if author and author != "camptocamp.org":
@@ -440,6 +446,21 @@ class CamptocampProvider(ImageProvider):
 
             from django.contrib.gis.geos import Point
 
+            # Build raw author string for deduplication
+            # Concatenate all source info without formatting
+            author_raw_parts = []
+            if author:
+                author_raw_parts.append(str(author))
+            if image_details.get("creator"):
+                creator = image_details.get("creator")
+                if isinstance(creator, dict):
+                    author_raw_parts.append(str(creator.get("name", "")))
+                    author_raw_parts.append(str(creator.get("user_id", "")))
+                else:
+                    author_raw_parts.append(str(creator))
+            author_raw_parts.append(source_url)  # Add source URL
+            author_raw = " ".join(filter(None, author_raw_parts))
+
             return ImageResult(
                 provider="camptocamp",
                 source_id=f"waypoint_{waypoint_id}_{filename}",
@@ -452,11 +473,13 @@ class CamptocampProvider(ImageProvider):
                 attribution=attribution,
                 author=author,
                 author_url=None,
+                author_raw=author_raw,  # Raw concatenated author info for deduplication
                 url_large=original_url,
                 url_medium=None,  # Camptocamp doesn't provide medium URLs
                 width=width,
                 height=height,
                 place=None,
+                extra=None,
                 score=score,
             )
 

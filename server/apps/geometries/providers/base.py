@@ -116,6 +116,9 @@ class ImageResult:
     url_large: str  # High-quality original URL
     url_medium: str | None = None  # Medium quality URL (if different from large)
 
+    # Raw author info for deduplication (optional)
+    author_raw: str | None = None  # Raw concatenated author info for deduplication
+
     # Dimensions (optional - for orientation detection)
     width: int | None = None
     height: int | None = None
@@ -973,14 +976,36 @@ def post_process_images(
 
     for result in results:
         try:
+            # Filter out images with insufficient dimensions
+            # Landscape: width must be >= 1000px
+            # Portrait: height must be >= 1000px
+            if result.width and result.height:
+                is_portrait = result.height > result.width
+                if is_portrait:
+                    # Portrait: check height
+                    if result.height < 1000:
+                        logger.debug(
+                            f"Skipping {result.provider}/{result.source_id}: "
+                            f"portrait height {result.height}px < 1000px minimum"
+                        )
+                        continue
+                else:
+                    # Landscape: check width
+                    if result.width < 1000:
+                        logger.debug(
+                            f"Skipping {result.provider}/{result.source_id}: "
+                            f"landscape width {result.width}px < 1000px minimum"
+                        )
+                        continue
+
             # Determine orientation
             is_portrait = None
-
             if result.width and result.height:
                 is_portrait = result.height > result.width
 
-            # Use url_medium if available, otherwise url_large
-            original_url = result.url_medium or result.url_large
+            # Always use url_large for generating proxy URLs (not url_medium/thumb_url)
+            # This ensures we use the original high-quality image, not thumbnails
+            original_url = result.url_large
             imagor_img = ImagorImage(original_url)
 
             # Determine focal point for transforms
@@ -1330,6 +1355,7 @@ def post_process_images(
                     "author": {
                         "name": result.author if result.author else None,
                         "url": result.author_url if result.author_url else None,
+                        "raw": result.author_raw if result.author_raw else None,
                     },
                     "urls": urls,
                     "width": result.width,
@@ -1479,15 +1505,24 @@ async def fetch_images_from_providers(
             )
 
     logger.debug(f"Total images fetched: {len(all_results)}")
+
+    # Deduplicate and fetch missing dimensions
+    all_results = await deduplicate_images(all_results)
+
     return all_results
 
 
-def deduplicate_images(results: list[ImageResult]) -> list[ImageResult]:
+async def deduplicate_images(results: list[ImageResult]) -> list[ImageResult]:
     """
     Deduplicate images from multiple providers.
 
-    Level 1: Exact match by (source, source_id) and Commons filename
-    - Keeps image from highest-priority source
+    Level 1: Exact match by (source, source_id)
+    Level 2: Source-based cross-source duplicate detection
+    - Check if provider name or source URL appears in attribution/author fields
+    - This prevents showing the same image from both wikicommons and camptocamp, etc.
+    Level 3: Datetime-based duplicate detection
+    - If images from different providers have similar capture dates (within 6 hours)
+    - Remove the one with the lower score
 
     Args:
         results: List of ImageResult objects from all providers
@@ -1498,23 +1533,35 @@ def deduplicate_images(results: list[ImageResult]) -> list[ImageResult]:
     if not results:
         return []
 
-    # Provider priority for deduplication
+    # Provider priority for deduplication (lower = higher priority)
     PRIORITY = {
         "wodore": 1,
-        "camptocamp": 2,
-        "wikidata": 3,
-        "wikimedia_commons": 2,  # Same as wikidata
-        "refugesinfo": 3,
-        "panoramax": 4,
-        "mapillary": 5,
-        "flickr": 6,
+        "wikicommons": 2,
+        "camptocamp": 3,
+        "refugesinfo": 4,
+        "panoramax": 5,
+        "mapillary": 6,
+        "flickr": 7,
+    }
+
+    # Known source domains for detection (provider names + URLs)
+    SOURCE_PATTERNS = {
+        "wikicommons": [
+            "wikicommons",
+            "wikimedia commons",
+            "commons.wikimedia.org",
+            "wikipedia",
+        ],
+        "camptocamp": ["camptocamp", "camptocamp.org", "www.camptocamp.org"],
+        "refugesinfo": ["refuges.info", "www.refuges.info", "refugesinfo"],
+        "wodore": ["wodore", "wodore.org", "sac-cas.ch", "www.sac-cas.ch", "sac"],
     }
 
     # Track seen images
     seen_source_id: dict[
         tuple[str, str], ImageResult
     ] = {}  # (provider, source_id) -> result
-    seen_commons: dict[str, ImageResult] = {}  # normalized filename -> result
+    seen_source_urls: dict[str, ImageResult] = {}  # source URL -> result
 
     deduped = []
 
@@ -1526,31 +1573,430 @@ def deduplicate_images(results: list[ImageResult]) -> list[ImageResult]:
             if PRIORITY.get(result.provider, 99) < PRIORITY.get(existing.provider, 99):
                 # Replace with higher priority provider
                 seen_source_id[key] = result
-                # Also update seen_commons if applicable
-                commons_key = _normalize_commons_filename(result.source_url or "")
-                if commons_key and commons_key in seen_commons:
-                    seen_commons[commons_key] = result
             continue
 
-        # Check Commons filename for Wikidata duplicates
-        commons_key = _normalize_commons_filename(result.source_url or "")
-        if commons_key:
-            if commons_key in seen_commons:
-                existing = seen_commons[commons_key]
-                if PRIORITY.get(result.provider, 99) < PRIORITY.get(
-                    existing.provider, 99
-                ):
-                    # Replace with higher priority provider
-                    seen_commons[commons_key] = result
-                    seen_source_id[key] = result
-                continue
-            seen_commons[commons_key] = result
+        # Check for cross-source duplicates via attribution/author
+        detected_source = _detect_source_in_attribution(result, SOURCE_PATTERNS)
+        if detected_source:
+            # Get the source URL if available in extra field
+            result_source_url = result.extra.get("source_url") if result.extra else None
+
+            if result_source_url:
+                if result_source_url in seen_source_urls:
+                    existing = seen_source_urls[result_source_url]
+                    result_priority = PRIORITY.get(result.provider, 99)
+                    existing_priority = PRIORITY.get(existing.provider, 99)
+
+                    if result_priority < existing_priority:
+                        # Higher priority - replace
+                        seen_source_urls[result_source_url] = result
+                        seen_source_id[key] = result
+                        logger.debug(
+                            f"Replacing lower priority duplicate: {existing.provider}/{existing.source_id} "
+                            f"with {result.provider}/{result.source_id} (source: {detected_source})"
+                        )
+                    else:
+                        # Lower priority - skip
+                        logger.debug(
+                            f"Skipping lower priority duplicate: {result.provider}/{result.source_id} "
+                            f"(same source as {existing.provider}/{existing.source_id})"
+                        )
+                    continue
+                else:
+                    # First time seeing this source URL
+                    seen_source_urls[result_source_url] = result
 
         seen_source_id[key] = result
         deduped.append(result)
 
     logger.debug(f"Deduplication: {len(results)} -> {len(deduped)} images")
+
+    # Level 3: Datetime-based deduplication
+    # Remove images with similar capture dates from different providers, keeping higher scored ones
+    deduped = _deduplicate_by_datetime(deduped)
+
+    # Fetch missing dimensions from image headers (after deduplication to avoid duplicate work)
+    deduped = await _fetch_missing_dimensions(deduped)
+
     return deduped
+
+
+def _deduplicate_by_datetime(results: list[ImageResult]) -> list[ImageResult]:
+    """
+    Remove duplicate images based on similar capture dates.
+
+    If two images from different providers have capture dates within 6 hours of each other,
+    remove the one with the lower score.
+
+    Args:
+        results: List of ImageResult objects
+
+    Returns:
+        Deduplicated list of ImageResult objects
+    """
+    from datetime import timedelta, timezone
+
+    if len(results) < 2:
+        return results
+
+    # Filter to only images with capture dates
+    with_captures = [r for r in results if r.captured_at]
+    if len(with_captures) < 2:
+        return results
+
+    # Normalize all datetimes to timezone-aware UTC for comparison
+    # This prevents errors when comparing naive and aware datetimes
+    def normalize_datetime(dt):
+        """Convert datetime to UTC timezone-aware if naive, or keep as-is if aware."""
+        if dt.tzinfo is None:
+            # Naive datetime - assume UTC
+            return dt.replace(tzinfo=timezone.utc)
+        else:
+            # Aware datetime - convert to UTC
+            return dt.astimezone(timezone.utc)
+
+    # Sort by captured_at for efficient comparison
+    with_captures.sort(key=lambda r: normalize_datetime(r.captured_at))
+
+    # Time window for considering images as duplicates (6 hours)
+    TIME_WINDOW = timedelta(hours=6)
+
+    to_remove = []
+
+    # Compare each image with others within the time window
+    for i, img1 in enumerate(with_captures):
+        # Skip if already marked for removal
+        if any(r is img1 for r in to_remove):
+            continue
+
+        for j in range(i + 1, len(with_captures)):
+            img2 = with_captures[j]
+
+            # Skip if already marked for removal
+            if any(r is img2 for r in to_remove):
+                continue
+
+            # Stop if time difference exceeds window (use normalized datetimes)
+            time_diff = normalize_datetime(img2.captured_at) - normalize_datetime(
+                img1.captured_at
+            )
+            if time_diff > TIME_WINDOW:
+                break
+
+            # Only compare images from different providers
+            if img1.provider == img2.provider:
+                continue
+
+            # Mark the one with lower score for removal
+            if img1.distance_m > img2.distance_m:  # Higher distance = lower score
+                to_remove.append(img1)
+                logger.debug(
+                    f"Datetime dedup: removing {img1.provider}/{img1.source_id} "
+                    f"(score: {img1.distance_m:.1f}m) in favor of {img2.provider}/{img2.source_id} "
+                    f"(score: {img2.distance_m:.1f}m) - capture times: {img1.captured_at} vs {img2.captured_at}"
+                )
+            else:
+                to_remove.append(img2)
+                logger.debug(
+                    f"Datetime dedup: removing {img2.provider}/{img2.source_id} "
+                    f"(score: {img2.distance_m:.1f}m) in favor of {img1.provider}/{img1.source_id} "
+                    f"(score: {img1.distance_m:.1f}m) - capture times: {img1.captured_at} vs {img2.captured_at}"
+                )
+
+    # Filter out removed images
+    final_results = [r for r in results if not any(r is item for item in to_remove)]
+
+    if to_remove:
+        logger.info(
+            f"Datetime-based deduplication: removed {len(to_remove)} images with similar capture dates"
+        )
+
+    return final_results
+
+
+async def _fetch_missing_dimensions(results: list[ImageResult]) -> list[ImageResult]:
+    """
+    Fetch image dimensions from HTTP headers for images missing width/height.
+
+    Only fetches the first 8KB of each image to read dimensions from headers.
+    Supports JPEG, PNG, GIF, WebP formats.
+    Results are cached indefinitely in persistent cache.
+
+    Args:
+        results: List of ImageResult objects
+
+    Returns:
+        List of ImageResult objects with dimensions filled in
+    """
+
+    updated_results = []
+
+    for result in results:
+        # Skip if dimensions already known
+        if result.width and result.height:
+            updated_results.append(result)
+            continue
+
+        # Check cache first
+        cache = get_persistent_cache()
+        cache_key = f"{CACHE_KEY_PREFIX}:dimensions:{_hash_url(result.url_large)}"
+
+        # Try to get from cache
+        cached = await sync_to_async(cache.get)(cache_key)
+        if cached:
+            result.width = cached.get("width")
+            result.height = cached.get("height")
+            updated_results.append(result)
+            continue
+
+        # Fetch dimensions from image headers
+        try:
+            dimensions = await _get_image_dimensions_from_headers(result.url_large)
+            if dimensions:
+                result.width, result.height = dimensions
+
+                # Cache indefinitely
+                await sync_to_async(cache.set)(
+                    cache_key,
+                    {"width": dimensions[0], "height": dimensions[1]},
+                    CACHE_INDEFINITE,
+                )
+
+                logger.debug(
+                    f"Fetched dimensions for {result.provider}/{result.source_id}: {dimensions}"
+                )
+        except Exception as e:
+            logger.debug(f"Could not fetch dimensions for {result.url_large}: {e}")
+
+        updated_results.append(result)
+
+    return updated_results
+
+
+def _hash_url(url: str) -> str:
+    """Create a hash from URL for cache key."""
+    import hashlib
+
+    return hashlib.md5(url.encode()).hexdigest()[:16]
+
+
+async def _get_image_dimensions_from_headers(url: str) -> tuple[int, int] | None:
+    """
+    Fetch image dimensions by reading only the first few KB of the image.
+    Uses streaming to handle JPEGs with large EXIF data (common in Camptocamp images).
+
+    Args:
+        url: Image URL
+
+    Returns:
+        Tuple of (width, height) or None if could not determine
+    """
+    import httpx
+    import struct
+
+    # Valid SOF markers for dimension extraction
+    # Excludes: 0xC4 (DHT), 0xC8 (JPEG-LS), 0xCC (Reserved)
+    SOF_MARKERS = {
+        0xC0,
+        0xC1,
+        0xC2,
+        0xC3,
+        0xC5,
+        0xC6,
+        0xC7,
+        0xC9,
+        0xCA,
+        0xCB,
+        0xCD,
+        0xCE,
+        0xCF,
+    }
+
+    try:
+        # Fetch first chunk and stream more if needed (for JPEGs with large EXIF)
+        from django.conf import settings
+
+        headers = {
+            "User-Agent": getattr(
+                settings, "BOT_AGENT", "WodoreBackend/1.0 (+https://wodore.ch)"
+            )
+        }
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Use streaming to handle large EXIF headers
+            async with client.stream("GET", url, headers=headers) as response:
+                if response.status_code not in [200, 206]:
+                    return None
+
+                # Read initial chunk (up to 200KB to handle large EXIF)
+                data = b""
+                chunks_read = 0
+                max_chunks = 25  # 25 * 8KB = ~200KB
+                sof_found = False
+
+                while chunks_read < max_chunks and not sof_found:
+                    chunk = await response.aread()
+                    if not chunk:
+                        break
+                    data += chunk
+                    chunks_read += 1
+
+                    # Check if we have enough data to detect format
+                    if len(data) >= 100:
+                        # JPEG: FF D8 FF
+                        if data[0:2] == b"\xff\xd8":
+                            # Parse JPEG SOF marker
+                            i = 2
+
+                            while i < len(data) - 9:
+                                # Check for marker (FF XX)
+                                if data[i] != 0xFF:
+                                    break  # Invalid JPEG
+
+                                marker = data[i + 1]
+
+                                # Check if it's a valid SOF marker
+                                if marker in SOF_MARKERS:
+                                    # SOF marker found - extract dimensions
+                                    height = struct.unpack(">H", data[i + 5 : i + 7])[0]
+                                    width = struct.unpack(">H", data[i + 7 : i + 9])[0]
+                                    return (width, height)
+
+                                # Skip FF padding byte
+                                if marker == 0xFF:
+                                    i += 1
+                                    continue
+
+                                # Skip non-SOF markers using marker length field
+                                if i + 4 > len(data):
+                                    break  # Not enough data for marker length
+
+                                try:
+                                    marker_len = struct.unpack(
+                                        ">H", data[i + 2 : i + 4]
+                                    )[0]
+                                    i += 2 + marker_len
+                                except (struct.error, ValueError):
+                                    break
+
+                            # If we haven't found SOF marker yet and have more chunks to read, continue
+                            if chunks_read < max_chunks:
+                                continue
+                            break
+
+                        # PNG: 89 50 4E 47
+                        elif len(data) >= 24 and data[0:8] == b"\x89PNG\r\n\x1a\n":
+                            width = struct.unpack(">I", data[16:20])[0]
+                            height = struct.unpack(">I", data[20:24])[0]
+                            return (width, height)
+
+                        # GIF: 47 49 46 38
+                        elif len(data) >= 10 and data[0:6] in [b"GIF87a", b"GIF89a"]:
+                            width = struct.unpack("<H", data[6:8])[0]
+                            height = struct.unpack("<H", data[8:10])[0]
+                            return (width, height)
+
+                        # WebP: RIFF....WEBP
+                        elif (
+                            len(data) >= 16
+                            and data[0:4] == b"RIFF"
+                            and data[8:12] == b"WEBP"
+                        ):
+                            # Simple VP8/VP8L detection
+                            if b"VP8 " in data[12:30]:
+                                # VP8
+                                vp8_offset = data.index(b"VP8 ") + 4
+                                width = (
+                                    struct.unpack(
+                                        "<H", data[vp8_offset + 6 : vp8_offset + 8]
+                                    )[0]
+                                    & 0x3FFF
+                                )
+                                height = (
+                                    struct.unpack(
+                                        "<H", data[vp8_offset + 8 : vp8_offset + 10]
+                                    )[0]
+                                    & 0x3FFF
+                                )
+                                return (width, height * 2)
+                            elif b"VP8L" in data[12:30]:
+                                # VP8L (lossless)
+                                vp8l_offset = data.index(b"VP8L") + 4
+                                # bits = data[vp8l_offset + 4]  # Not needed for dimension extraction
+                                width = (data[vp8l_offset + 7] << 8) | data[
+                                    vp8l_offset + 6
+                                ]
+                                height = (data[vp8l_offset + 10] << 8) | data[
+                                    vp8l_offset + 9
+                                ]
+                                return ((width + 1) * 2, (height + 1) * 2)
+
+                        # If we detected a format but couldn't find dimensions in current data, read more
+                        if chunks_read < max_chunks:
+                            continue
+                        break
+
+                logger.debug(f"Could not determine image format for: {url[:50]}")
+                return None
+
+    except Exception as e:
+        logger.debug(f"Error fetching image dimensions: {e}")
+        return None
+
+
+def _detect_source_in_attribution(
+    result: ImageResult, source_patterns: dict[str, list[str]]
+) -> str | None:
+    """
+    Detect if attribution/author/source fields contain a known source.
+
+    Args:
+        result: ImageResult to check
+        source_patterns: Mapping of provider name -> list of patterns to match
+
+    Returns:
+        Provider name if found, None otherwise
+    """
+    # Combine all fields to check
+    text_to_check = f"{result.attribution} {result.author or ''} {result.author_url or ''} {result.extra.get('source_url', '') if result.extra else ''}".lower()
+
+    # Check each provider's patterns
+    for provider, patterns in source_patterns.items():
+        for pattern in patterns:
+            if pattern.lower() in text_to_check:
+                return provider
+
+    return None
+
+
+def _normalize_image_url(url: str) -> str | None:
+    """
+    Normalize image URL for deduplication comparison.
+
+    Args:
+        url: Image URL to normalize
+
+    Returns:
+        Normalized URL or None if not a valid URL
+    """
+    if not url:
+        return None
+
+    from urllib.parse import urlparse
+
+    try:
+        # Parse URL to validate it
+        urlparse(url)
+
+        # Convert to lowercase
+        url_lower = url.lower()
+
+        # Remove common query parameters that don't change the image
+        # (but keep important ones like version IDs)
+
+        return url_lower
+    except Exception:
+        return None
 
 
 def _normalize_commons_filename(url: str) -> str | None:
