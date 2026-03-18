@@ -9,11 +9,16 @@ Uses source_id from GeoPlace source associations with organization slug 'refuges
 #   http://192.168.1.50:8000/v1/geo/images/hut/beauregard?lang=de&radius=50&limit=20
 
 import logging
+from datetime import datetime, timezone
 
 from django.contrib.gis.geos import Point
 
 from .base import ImageProvider, ImageResult
 from .schemas import GeoPlaceSchema
+from .scoring import (
+    score_metadata_completeness,
+    calculate_age_penalty,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +240,14 @@ class RefugesInfoProvider(ImageProvider):
                     # Build attribution
                     attribution = f'via <a href="{src_url}" target="_blank" rel="nofollow">refuges.info</a>'
 
+                    # Calculate score
+                    score = self._score_refugesinfo_image(
+                        has_caption=bool(caption),
+                        has_author=bool(author),
+                        has_date=capture_date is not None,
+                        captured_at=capture_date,
+                    )
+
                     # Create Point from GeoPlaceSchema lat/lon
                     location = Point(place.lon, place.lat, srid=4326)
 
@@ -263,6 +276,7 @@ class RefugesInfoProvider(ImageProvider):
                         }
                         if place
                         else None,
+                        score=score,
                         extra={
                             "caption": caption,
                             "refuges_id": source_id,
@@ -282,3 +296,46 @@ class RefugesInfoProvider(ImageProvider):
                 f"HTTP error fetching refuges.info images for {source_id}: {e}"
             )
             return []
+
+    def _score_refugesinfo_image(
+        self,
+        has_caption: bool,
+        has_author: bool,
+        has_date: bool,
+        captured_at: datetime | None = None,
+    ) -> int:
+        """
+        Score refuges.info image (0-100).
+
+        Args:
+            has_caption: Image has caption/description
+            has_author: Image has author information
+            has_date: Image has capture date
+            captured_at: Image capture date (if available)
+
+        Returns:
+            Score from 0-100
+        """
+        score = 0
+
+        # Source origin (0-50)
+        # refuges.info is a curated hut database
+        score += 30
+
+        # Metadata completeness (0-25)
+        score += score_metadata_completeness(
+            has_description=has_caption,
+            has_author=has_author,
+            has_license=True,  # Always has CC-BY-SA-2.0-FR
+            has_date=has_date,
+        )
+
+        # Age penalty (0 to -40) - using global function
+        if captured_at:
+            days_old = (datetime.now(timezone.utc) - captured_at).days
+            score += calculate_age_penalty(days_old)
+        else:
+            # No date available - assume moderately old
+            score -= 25  # Penalty for unknown date
+
+        return max(0, min(score, 100))

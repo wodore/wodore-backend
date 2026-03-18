@@ -12,7 +12,8 @@ from .base import ImageProvider, ImageResult
 from .schemas import GeoPlaceSchema
 from .scoring import (
     score_metadata_completeness,
-    calculate_recency_bonus,
+    score_technical_quality,
+    calculate_age_penalty,
 )
 
 logger = logging.getLogger(__name__)
@@ -472,20 +473,31 @@ class PanoramaxProvider(ImageProvider):
             has_date=has_date,
         )
 
-        # Technical quality (0-10)
-        has_hd = "hd" in assets
-        has_sd = "sd" in assets
+        # Technical quality (0-30) - using enhanced scoring
+        # Get image dimensions from assets if available
+        width = None
+        height = None
 
-        if has_hd:
-            score += 5  # HD quality available
-        elif has_sd:
-            score += 3  # SD quality available
+        for asset_name in ["hd", "sd", "thumbnail"]:
+            if asset_name in assets:
+                asset = assets[asset_name]
+                # Try to get width/height from asset properties
+                width = asset.get("width") or width
+                height = asset.get("height") or height
+                if width and height:
+                    break
 
-        # Check for preferred format
-        if has_hd and assets["hd"].get("type") == "image/jpeg":
-            score += 2
-        elif has_sd and assets["sd"].get("type") == "image/jpeg":
-            score += 2
+        # Get file size from hd asset if available
+        file_size = None
+        if "hd" in assets:
+            file_size = assets["hd"].get("file:size")
+
+        score += score_technical_quality(
+            width=width,
+            height=height,
+            mime_type=None,  # Not scored anymore
+            file_size=file_size,
+        )
 
         # Individual panorama bonus (0-15)
         # If the image has a specific title/description, it's likely a standalone panorama
@@ -495,7 +507,7 @@ class PanoramaxProvider(ImageProvider):
         else:
             score -= 5  # Likely automated street view (penalty)
 
-        # Recency bonus (0-15)
+        # Age penalty (0 to -40) - replaced recency bonus
         if properties.get("datetime"):
             try:
                 captured_dt = datetime.fromisoformat(
@@ -505,8 +517,8 @@ class PanoramaxProvider(ImageProvider):
                     captured_dt = captured_dt.replace(tzinfo=timezone.utc)
 
                 days_old = (datetime.now(timezone.utc) - captured_dt).days
-                score += calculate_recency_bonus(days_old)
+                score += calculate_age_penalty(days_old)
             except Exception:
-                pass  # If date parsing fails, no bonus
+                pass  # If date parsing fails, no penalty
 
         return min(score, 100)

@@ -11,6 +11,8 @@ from .base import ImageProvider, ImageResult
 from .schemas import GeoPlaceSchema
 from .scoring import (
     score_metadata_completeness,
+    score_distance_relevance,
+    calculate_age_penalty,
 )
 
 logger = logging.getLogger(__name__)
@@ -510,12 +512,12 @@ class CamptocampProvider(ImageProvider):
             captured_at: Image capture date (if available)
 
         Returns:
-            Score from 0-100 (can be negative for very old/low-quality images)
+            Score from 0-100
         """
         score = 0
 
         # Source origin (0-50)
-        # Camptocamp is a curated outdoor community
+        # Camptocamp is a curated outdoor community - stays at 40
         score += 40
 
         # Quality rating (0-20)
@@ -528,8 +530,6 @@ class CamptocampProvider(ImageProvider):
 
         # Distance relevance (0-20)
         # Images from closer waypoints get higher scores
-        from .scoring import score_distance_relevance
-
         score += score_distance_relevance(distance_m, radius)
 
         # Metadata completeness (0-25)
@@ -544,30 +544,22 @@ class CamptocampProvider(ImageProvider):
             has_date=has_date,
         )
 
-        # Age penalty (0 to -40 points)
-        # Penalize old images heavily - older than 10 years gets negative scores
+        # Age penalty (0 to -40) - using global function
         from datetime import timezone
 
         if captured_at:
-            age_years = (datetime.now(timezone.utc) - captured_at).days / 365.25
-            if age_years > 15:
-                score -= 40  # Very old images
-            elif age_years > 10:
-                score -= 30  # Old images
-            elif age_years > 5:
-                score -= 20  # Somewhat old images
-            elif age_years > 2:
-                score -= 10  # Recent but not new
+            days_old = (datetime.now(timezone.utc) - captured_at).days
+            score += calculate_age_penalty(days_old)
         else:
-            # No date available or default epoch date - assume very old
-            score -= 40  # Maximum penalty for unknown/very old images
+            # No date available - assume moderately old
+            score -= 25  # Penalty for unknown date
 
         # Image type bonus (0-5)
         image_type = image_details.get("image_type")
         if image_type == "collaborative":
             score += 5  # Community-vetted content
 
-        return min(score, 100)
+        return max(0, min(score, 100))
 
 
 if __name__ == "__main__":

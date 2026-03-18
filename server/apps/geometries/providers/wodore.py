@@ -204,7 +204,7 @@ class WodoreProvider(ImageProvider):
                         }
                         if place
                         else None,
-                        score=90,  # Wodore images are highest quality (internal, curated)
+                        score=50,  # Wodore images are high quality (internal, curated)
                         width=width,
                         height=height,
                         focal=focal_area,
@@ -393,7 +393,7 @@ class WodoreProvider(ImageProvider):
                         }
                         if hut
                         else None,
-                        score=90,  # Wodore images are highest quality (internal, curated)
+                        score=50,  # Wodore images are high quality (internal, curated)
                         width=width,
                         height=height,
                         focal=focal_area,

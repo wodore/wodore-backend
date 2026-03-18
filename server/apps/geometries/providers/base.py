@@ -134,7 +134,7 @@ class ImageResult:
     place: dict[str, Any] | None = None
 
     # Scoring (0-100)
-    score: int = 0
+    score: int = 20  # Default score for uncurated providers
 
 
 class ImageProvider(ABC):

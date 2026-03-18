@@ -24,6 +24,7 @@ from .scoring import (
     score_metadata_completeness,
     score_technical_quality,
     score_qid_match,
+    calculate_age_penalty,
 )
 
 logger = logging.getLogger(__name__)
@@ -751,8 +752,8 @@ class WikimediaCommonsProvider(ImageProvider):
 
         # Source origin (0-50)
         source_scores = {
-            WikimediaCommonsProvider.WIKIDATA_P18: 45,  # Main image from Wikidata (+5)
-            WikimediaCommonsProvider.WIKIDATA_CATEGORY: 35,  # From Wikidata category (-5)
+            WikimediaCommonsProvider.WIKIDATA_P18: 45,  # Main image from Wikidata
+            WikimediaCommonsProvider.WIKIDATA_CATEGORY: 30,  # From Wikidata category (reduced from 35)
             WikimediaCommonsProvider.GEOSEARCH: 20,  # Commons geosearch (lower quality)
         }
         score += source_scores.get(source_type, 10)
@@ -769,7 +770,7 @@ class WikimediaCommonsProvider(ImageProvider):
             has_wikidata=has_qid,
         )
 
-        # Technical quality (0-10)
+        # Technical quality (0-30) - increased from 0-10
         score += score_technical_quality(
             width=img_data.get("width"),
             height=img_data.get("height"),
@@ -777,7 +778,15 @@ class WikimediaCommonsProvider(ImageProvider):
             file_size=img_data.get("size"),
         )
 
-        return min(score, 100)
+        # Age penalty (0 to -40) - replaced recency bonus
+        date_taken = img_data.get("date_taken")
+        if date_taken:
+            from datetime import timezone
+
+            days_old = (datetime.now(timezone.utc) - date_taken).days
+            score += calculate_age_penalty(days_old)
+
+        return max(0, min(score, 100))
 
     def _create_image_result(
         self,
