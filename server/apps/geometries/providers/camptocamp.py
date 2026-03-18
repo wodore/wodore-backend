@@ -3,6 +3,14 @@ Provider for Camptocamp.org images.
 Fetches images from Camptocamp API using bbox queries.
 """
 
+# Test urls:
+# Hollandiahütte SAC
+#   https://api.camptocamp.org/waypoints/110216 (hut info)
+#   https://api.camptocamp.org/images/452082 (direct image info)
+#   https://www.camptocamp.org/images/452082/fr/hollandiahutte (image info page)
+# Result api:
+#   http://localhost:8000/v1/geo/images/hut/hollandia?lang=de&radius=50&limit=20&update_cache=1
+
 import logging
 from datetime import datetime
 
@@ -422,14 +430,17 @@ class CamptocampProvider(ImageProvider):
                 license_name = "CC BY-SA 3.0"
                 license_url = "https://creativecommons.org/licenses/by-sa/3.0/"
 
+            # Build source URL to image page
+            # Format: https://www.camptocamp.org/images/{image_id}
+            source_url = (
+                f"https://www.camptocamp.org/images/{image_details.get('document_id')}"
+            )
+
             # Build attribution
             if author and author != "camptocamp.org":
-                attribution = f'{author} on <a href="https://www.camptocamp.org">camptocamp.org</a>, <a href="{license_url}">{license_name}</a>'
+                attribution = f'{author} on <a href="{source_url}">camptocamp.org</a>, <a href="{license_url}">{license_name}</a>'
             else:
-                attribution = f'<a href="https://www.camptocamp.org">camptocamp.org</a> (collaborative), <a href="{license_url}">{license_name}</a>'
-
-            # Source URL
-            source_url = f"https://www.camptocamp.org/waypoints/{waypoint_id}"
+                attribution = f'<a href="{source_url}">camptocamp.org</a> (collaborative), <a href="{license_url}">{license_name}</a>'
 
             # Calculate score
             score = self._score_camptocamp_image(
