@@ -12,7 +12,7 @@ score boost.
 
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from django.contrib.gis.geos import Point
@@ -800,8 +800,20 @@ class WikimediaCommonsProvider(ImageProvider):
                     # Try other common formats
                     import dateparser
 
-                    parsed = dateparser.parse(date_taken_str)
+                    parsed = dateparser.parse(
+                        date_taken_str,
+                        settings={
+                            "TO_TIMEZONE": "UTC",
+                            "PREFER_DATES_FROM": "past",
+                        },
+                    )
                     if parsed:
+                        # Ensure timezone-aware datetime and set default time to 12:00
+                        if parsed.tzinfo is None:
+                            parsed = parsed.replace(tzinfo=timezone.utc)
+                        # If time is 00:00, assume no time was specified and use 12:00
+                        if parsed.hour == 0 and parsed.minute == 0:
+                            parsed = parsed.replace(hour=12, minute=0)
                         captured_at = parsed
                     else:
                         # If parsing fails, treat as no date
@@ -882,8 +894,20 @@ class WikimediaCommonsProvider(ImageProvider):
                         # Try other common formats
                         import dateparser
 
-                        parsed = dateparser.parse(date_str)
+                        parsed = dateparser.parse(
+                            date_str,
+                            settings={
+                                "TO_TIMEZONE": "UTC",
+                                "PREFER_DATES_FROM": "past",
+                            },
+                        )
                         if parsed:
+                            # Ensure timezone-aware datetime and set default time to 12:00
+                            if parsed.tzinfo is None:
+                                parsed = parsed.replace(tzinfo=timezone.utc)
+                            # If time is 00:00, assume no time was specified and use 12:00
+                            if parsed.hour == 0 and parsed.minute == 0:
+                                parsed = parsed.replace(hour=12, minute=0)
                             captured_at = parsed
 
                 except Exception as e:

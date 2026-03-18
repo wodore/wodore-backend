@@ -202,8 +202,24 @@ class RefugesInfoProvider(ImageProvider):
                             import dateparser
 
                             capture_date = dateparser.parse(
-                                capture_date_str_fr, languages=["fr"]
+                                capture_date_str_fr,
+                                languages=["fr"],
+                                settings={
+                                    "TO_TIMEZONE": "UTC",
+                                    "PREFER_DATES_FROM": "past",
+                                },
                             )
+                            # Ensure timezone-aware datetime and set default time to 12:00
+                            if capture_date:
+                                if capture_date.tzinfo is None:
+                                    capture_date = capture_date.replace(
+                                        tzinfo=timezone.utc
+                                    )
+                                # If time is 00:00, assume no time was specified and use 12:00
+                                if capture_date.hour == 0 and capture_date.minute == 0:
+                                    capture_date = capture_date.replace(
+                                        hour=12, minute=0
+                                    )
                         except Exception as e:
                             logger.warning(
                                 f"Could not parse date: {capture_date_str_fr} for hut {source_id}: {e}"
