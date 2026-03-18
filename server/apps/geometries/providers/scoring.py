@@ -147,19 +147,23 @@ def score_usage_signals(
     return score
 
 
-def calculate_age_penalty(days_old: int) -> int:
+def calculate_age_penalty(days_old: Optional[int] = None) -> int:
     """
     Calculate age penalty score (-50 to +5).
 
     Older images receive penalties to ensure fresh content. Recent images
-    (<=2 years) get a small bonus.
+    (<=2 years) get a small bonus. Images with no date receive maximum penalty.
 
     Args:
-        days_old: Age of image in days (must be positive)
+        days_old: Age of image in days, or None if date is unknown
 
     Returns:
         Score from -50 to +5
     """
+    # No date available - maximum penalty
+    if days_old is None:
+        return -50
+
     age_years = days_old / 365.25
 
     if age_years > 30:

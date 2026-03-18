@@ -701,6 +701,13 @@ class WikimediaCommonsProvider(ImageProvider):
         license_data = extmetadata.get("License", {})
         license_slug = license_data.get("value", "")
 
+        # Extract date - try multiple fields in order of preference
+        # DateTimeOriginal: EXIF date from camera (most accurate for capture date)
+        # DateTime: Date/time metadata (can be upload date or other)
+        date_taken = extmetadata.get("DateTimeOriginal", {}).get(
+            "value", ""
+        ) or extmetadata.get("DateTime", {}).get("value", "")
+
         metadata = {
             "url": imageinfo.get("url"),
             "thumb_url": imageinfo.get("thumburl"),
@@ -715,7 +722,7 @@ class WikimediaCommonsProvider(ImageProvider):
             "description": self._clean_html(
                 extmetadata.get("ImageDescription", {}).get("value", "")
             ),
-            "date_taken": extmetadata.get("DateTimeOriginal", {}).get("value", ""),
+            "date_taken": date_taken,
             "categories": [cat.get("title", "") for cat in categories],
         }
 
@@ -778,13 +785,40 @@ class WikimediaCommonsProvider(ImageProvider):
             file_size=img_data.get("size"),
         )
 
-        # Age penalty (0 to -40) - replaced recency bonus
-        date_taken = img_data.get("date_taken")
-        if date_taken:
-            from datetime import timezone
+        # Age penalty (-50 to +5) - using global function
+        date_taken_str = img_data.get("date_taken")
+        if date_taken_str:
+            try:
+                # Parse the date string to datetime object
+                # Common formats: "2023-08-15 12:34:56", "15 August 2023", "2023-08-15"
+                from datetime import timezone
 
-            days_old = (datetime.now(timezone.utc) - date_taken).days
-            score += calculate_age_penalty(days_old)
+                # Try ISO 8601 format first
+                try:
+                    captured_at = datetime.fromisoformat(date_taken_str)
+                except ValueError:
+                    # Try other common formats
+                    import dateparser
+
+                    parsed = dateparser.parse(date_taken_str)
+                    if parsed:
+                        captured_at = parsed
+                    else:
+                        # If parsing fails, treat as no date
+                        score += calculate_age_penalty(None)
+                        return max(0, min(score, 100))
+
+                # Calculate days old
+                days_old = (datetime.now(timezone.utc) - captured_at).days
+                score += calculate_age_penalty(days_old)
+            except Exception as e:
+                logger.debug(
+                    f"Could not parse date '{date_taken_str}' for scoring: {e}"
+                )
+                score += calculate_age_penalty(None)
+        else:
+            # No date available - use global penalty
+            score += calculate_age_penalty(None)
 
         return max(0, min(score, 100))
 
@@ -834,11 +868,28 @@ class WikimediaCommonsProvider(ImageProvider):
                     query_lat, query_lon, query_lat, query_lon
                 )
 
-            # Parse date
+            # Parse date - Wikimedia Commons uses various date formats
+            # Common formats: "2023-08-15 12:34:56", "15 August 2023", "2023-08-15"
             captured_at = None
             if img_data.get("date_taken"):
                 try:
-                    captured_at = datetime.fromisoformat(img_data["date_taken"])
+                    date_str = img_data["date_taken"]
+
+                    # Try ISO 8601 format first
+                    try:
+                        captured_at = datetime.fromisoformat(date_str)
+                    except ValueError:
+                        # Try other common formats
+                        import dateparser
+
+                        parsed = dateparser.parse(date_str)
+                        if parsed:
+                            captured_at = parsed
+
+                except Exception as e:
+                    logger.debug(
+                        f"Could not parse date '{img_data.get('date_taken')}': {e}"
+                    )
                 except (ValueError, TypeError):
                     pass
 

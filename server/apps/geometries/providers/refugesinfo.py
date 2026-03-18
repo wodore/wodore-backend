@@ -330,12 +330,12 @@ class RefugesInfoProvider(ImageProvider):
             has_date=has_date,
         )
 
-        # Age penalty (0 to -40) - using global function
+        # Age penalty (-50 to +5) - using global function
         if captured_at:
             days_old = (datetime.now(timezone.utc) - captured_at).days
             score += calculate_age_penalty(days_old)
         else:
-            # No date available - assume moderately old
-            score -= 25  # Penalty for unknown date
+            # No date available - use global penalty
+            score += calculate_age_penalty(None)
 
         return max(0, min(score, 100))
