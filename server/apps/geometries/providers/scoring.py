@@ -52,39 +52,66 @@ def score_technical_quality(
     file_size: Optional[int] = None,
 ) -> int:
     """
-    Score technical image quality (0-10).
+    Score technical image quality (0-30).
 
-    Higher score indicates better technical quality (resolution, format, etc.).
+    Higher score indicates better technical quality. Penalties for small images
+    and low file sizes. No score for file format (removed).
 
     Args:
         width: Image width in pixels
         height: Image height in pixels
-        mime_type: MIME type (e.g., "image/jpeg")
+        mime_type: MIME type (e.g., "image/jpeg") - NOT SCORED
         file_size: File size in bytes
 
     Returns:
-        Score from 0-10
+        Score from 0-30
     """
     score = 0
 
-    # Resolution score
     if width and height:
-        megapixels = (width * height) / 1_000_000
-        score += min(int(megapixels), 5)
+        is_portrait = height > width
 
-        # Landscape orientation preferred for hut display
-        if width >= height:
-            score += 2
+        # Resolution score (0-20 points)
+        # Orientation-aware thresholds (portrait: height≥1000px, landscape: width≥1333px)
+        if is_portrait:
+            # Portrait: height is more important
+            if height >= 2250:  # >=5MP portrait
+                score += 20
+            elif height >= 1500:  # >=2.25MP portrait
+                score += 15
+            elif height >= 1000:  # >=1MP portrait
+                score += 10
+            elif height >= 720:  # HD minimum
+                score += 5
+            else:
+                score -= 10  # Too small (<720px height)
+        else:
+            # Landscape: width is more important
+            if width >= 2666:  # >=5MP landscape
+                score += 20
+            elif width >= 2000:  # >=2.5MP landscape
+                score += 15
+            elif width >= 1333:  # >=1MP landscape
+                score += 10
+            elif width >= 1280:  # HD minimum
+                score += 5
+            else:
+                score -= 10  # Too small (<1280px width)
 
-    # Format preference
-    if mime_type == "image/jpeg":
-        score += 1  # JPEG preferred over SVG/TIF for display
+    # File size as quality indicator (0-10 points)
+    if file_size:
+        if file_size > 2_000_000:  # >2MB
+            score += 10
+        elif file_size > 1_000_000:  # >1MB
+            score += 7
+        elif file_size > 500_000:  # >500KB
+            score += 5
+        elif file_size < 100_000:  # <100KB - likely low quality
+            score -= 5
 
-    # File size as quality indicator
-    if file_size and file_size > 500_000:
-        score += 2  # Larger file likely higher quality
+    # No file format score (removed as requested)
 
-    return score
+    return max(score, 0)  # Minimum 0
 
 
 def score_usage_signals(
@@ -120,24 +147,35 @@ def score_usage_signals(
     return score
 
 
-def calculate_recency_bonus(days_old: int) -> int:
+def calculate_age_penalty(days_old: Optional[int] = None) -> int:
     """
-    Calculate recency bonus score (0-15).
+    Calculate age penalty score (-50 to +5).
 
-    Newer images may be more relevant for some use cases.
+    Older images receive penalties to ensure fresh content. Recent images
+    (<=2 years) get a small bonus. Images with no date receive maximum penalty.
 
     Args:
-        days_old: Age of image in days
+        days_old: Age of image in days, or None if date is unknown
 
     Returns:
-        Score from 0-15
+        Score from -50 to +5
     """
-    if days_old < 365:
-        return 10  # Less than 1 year old
-    elif days_old < 1095:  # ~3 years
-        return 5  # 1-3 years old
+    # No date available - maximum penalty
+    if days_old is None:
+        return -50
+
+    age_years = days_old / 365.25
+
+    if age_years > 30:
+        return -50  # Very old images (>30 years)
+    elif age_years > 15:
+        return -30  # Old images (>15 years)
+    elif age_years > 2:
+        # Linear penalty from -5 to -25 for 2-15 years
+        ratio = (age_years - 2) / (15 - 2)  # 0 to 1
+        return int(-5 + (ratio * -20))  # -5 to -25
     else:
-        return 0  # Older than 3 years
+        return 5  # Recent images (<=2 years): small bonus
 
 
 def score_qid_match(has_qid: bool = False, matches_place_qid: bool = False) -> int:

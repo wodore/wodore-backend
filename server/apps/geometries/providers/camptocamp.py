@@ -3,6 +3,14 @@ Provider for Camptocamp.org images.
 Fetches images from Camptocamp API using bbox queries.
 """
 
+# Test urls:
+# Hollandiahütte SAC
+#   https://api.camptocamp.org/waypoints/110216 (hut info)
+#   https://api.camptocamp.org/images/452082 (direct image info)
+#   https://www.camptocamp.org/images/452082/fr/hollandiahutte (image info page)
+# Result api:
+#   http://localhost:8000/v1/geo/images/hut/hollandia?lang=de&radius=50&limit=20&update_cache=1
+
 import logging
 from datetime import datetime
 
@@ -11,6 +19,8 @@ from .base import ImageProvider, ImageResult
 from .schemas import GeoPlaceSchema
 from .scoring import (
     score_metadata_completeness,
+    score_distance_relevance,
+    calculate_age_penalty,
 )
 
 logger = logging.getLogger(__name__)
@@ -420,14 +430,17 @@ class CamptocampProvider(ImageProvider):
                 license_name = "CC BY-SA 3.0"
                 license_url = "https://creativecommons.org/licenses/by-sa/3.0/"
 
+            # Build source URL to image page
+            # Format: https://www.camptocamp.org/images/{image_id}
+            source_url = (
+                f"https://www.camptocamp.org/images/{image_details.get('document_id')}"
+            )
+
             # Build attribution
             if author and author != "camptocamp.org":
-                attribution = f'{author} on <a href="https://www.camptocamp.org">camptocamp.org</a>, <a href="{license_url}">{license_name}</a>'
+                attribution = f'{author} on <a href="{source_url}">camptocamp.org</a>, <a href="{license_url}">{license_name}</a>'
             else:
-                attribution = f'<a href="https://www.camptocamp.org">camptocamp.org</a> (collaborative), <a href="{license_url}">{license_name}</a>'
-
-            # Source URL
-            source_url = f"https://www.camptocamp.org/waypoints/{waypoint_id}"
+                attribution = f'<a href="{source_url}">camptocamp.org</a> (collaborative), <a href="{license_url}">{license_name}</a>'
 
             # Calculate score
             score = self._score_camptocamp_image(
@@ -510,12 +523,12 @@ class CamptocampProvider(ImageProvider):
             captured_at: Image capture date (if available)
 
         Returns:
-            Score from 0-100 (can be negative for very old/low-quality images)
+            Score from 0-100
         """
         score = 0
 
         # Source origin (0-50)
-        # Camptocamp is a curated outdoor community
+        # Camptocamp is a curated outdoor community - stays at 40
         score += 40
 
         # Quality rating (0-20)
@@ -528,8 +541,6 @@ class CamptocampProvider(ImageProvider):
 
         # Distance relevance (0-20)
         # Images from closer waypoints get higher scores
-        from .scoring import score_distance_relevance
-
         score += score_distance_relevance(distance_m, radius)
 
         # Metadata completeness (0-25)
@@ -544,30 +555,22 @@ class CamptocampProvider(ImageProvider):
             has_date=has_date,
         )
 
-        # Age penalty (0 to -40 points)
-        # Penalize old images heavily - older than 10 years gets negative scores
+        # Age penalty (-50 to +5) - using global function
         from datetime import timezone
 
         if captured_at:
-            age_years = (datetime.now(timezone.utc) - captured_at).days / 365.25
-            if age_years > 15:
-                score -= 40  # Very old images
-            elif age_years > 10:
-                score -= 30  # Old images
-            elif age_years > 5:
-                score -= 20  # Somewhat old images
-            elif age_years > 2:
-                score -= 10  # Recent but not new
+            days_old = (datetime.now(timezone.utc) - captured_at).days
+            score += calculate_age_penalty(days_old)
         else:
-            # No date available or default epoch date - assume very old
-            score -= 40  # Maximum penalty for unknown/very old images
+            # No date available - use global penalty
+            score += calculate_age_penalty(None)
 
         # Image type bonus (0-5)
         image_type = image_details.get("image_type")
         if image_type == "collaborative":
             score += 5  # Community-vetted content
 
-        return min(score, 100)
+        return max(0, min(score, 100))
 
 
 if __name__ == "__main__":
