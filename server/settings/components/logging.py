@@ -87,6 +87,59 @@ class CustomConsoleRenderer(structlog.dev.ConsoleRenderer):
         return result
 
 
+class StructlogFormatter(logging.Formatter):
+    """Custom formatter that processes Django logs through structlog."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.renderer = None
+        self.processors = None
+
+    def format(self, record):
+        """Format a logging record using structlog."""
+        # Build event dict from log record
+        event_dict = {
+            "event": record.getMessage(),
+            "logger": record.name,
+            "level": record.levelname.lower(),
+        }
+
+        # Add extra fields if present
+        if hasattr(record, "status_code"):
+            event_dict["status_code"] = record.status_code
+        if hasattr(record, "request"):
+            # Parse request info from message
+            msg = record.getMessage()
+            if '"' in msg:
+                parts = msg.split('"')
+                if len(parts) >= 2:
+                    event_dict["request"] = parts[1]
+                if len(parts) >= 3 and parts[2].strip():
+                    status_parts = parts[2].strip().split()
+                    if status_parts:
+                        event_dict["status"] = status_parts[0]
+
+        # Use the configured renderer if available
+        if not self.renderer:
+            # Get the configured renderer from structlog
+            self.renderer = (
+                structlog.get_config().get("processors", [])[-1]
+                if structlog.is_configured()
+                else None
+            )
+
+        # Format using structlog's processor
+        try:
+            if self.renderer and callable(self.renderer):
+                result = self.renderer(None, record.levelname.lower(), event_dict)
+                return result if isinstance(result, str) else str(result)
+        except Exception:
+            pass
+
+        # Fallback to standard formatting
+        return super().format(record)
+
+
 def configure_structlog() -> None:
     """
     Configure structlog with Django integration.
@@ -119,8 +172,21 @@ def configure_structlog() -> None:
     # Add development processors if in debug mode
     if is_debug:
         shared_processors.extend(dev_processors)
-        # Format callsite as "filename:line" for cleaner output
+        # Format callsite as "logger:line" for cleaner output
         shared_processors.append(_format_callsite)
+        # Create a separate chain for foreign (stdlib) loggers that includes callsite
+        foreign_pre_chain = [
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.add_logger_name,
+            structlog.processors.TimeStamper(fmt="%H:%M:%S", utc=False),
+            structlog.processors.CallsiteParameterAdder(
+                parameters=[
+                    structlog.processors.CallsiteParameter.MODULE,
+                    structlog.processors.CallsiteParameter.LINENO,
+                ]
+            ),
+            _format_callsite,
+        ]
     else:
         # Production: add full callsite info for debugging
         shared_processors.append(
@@ -135,6 +201,8 @@ def configure_structlog() -> None:
         )
         # Add timestamp only in production (dev shows relative time)
         shared_processors.insert(0, structlog.processors.TimeStamper(fmt="iso"))
+        # Use same chain for foreign loggers in production
+        foreign_pre_chain = shared_processors
 
     # Choose renderer based on environment
     if is_debug:
@@ -178,7 +246,7 @@ def configure_structlog() -> None:
                 "structlog": {
                     "()": structlog.stdlib.ProcessorFormatter,
                     "processor": renderer,
-                    "foreign_pre_chain": shared_processors,
+                    "foreign_pre_chain": foreign_pre_chain,
                 },
             },
             "handlers": {
@@ -201,6 +269,16 @@ def configure_structlog() -> None:
                     "handlers": ["console"],
                     "level": "WARNING",
                     "filters": ["slow_queries"],
+                    "propagate": False,
+                },
+                "django.server": {
+                    "handlers": [],  # Suppress Django dev server logs (they use custom formatter)
+                    "level": "WARNING",
+                    "propagate": False,
+                },
+                "django.request": {
+                    "handlers": ["console"],
+                    "level": "WARNING",  # Show warnings and errors (including 404s if configured)
                     "propagate": False,
                 },
                 "security": {
