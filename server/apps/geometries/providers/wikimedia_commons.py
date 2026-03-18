@@ -10,7 +10,7 @@ and usage signals. Images matching the GeoPlace's QID get a significant
 score boost.
 """
 
-import logging
+import structlog
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -27,7 +27,7 @@ from .scoring import (
     calculate_age_penalty,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 class WikimediaCommonsProvider(ImageProvider):
@@ -64,7 +64,7 @@ class WikimediaCommonsProvider(ImageProvider):
         """
         self.wikidata_endpoint = wikidata_endpoint
         self.commons_api = commons_api
-        logger.debug("Initialized WikimediaCommonsProvider")
+        logger.debug("initialized_provider", provider="WikimediaCommonsProvider")
 
     async def fetch(
         self,
@@ -95,10 +95,12 @@ class WikimediaCommonsProvider(ImageProvider):
             if not update_cache:
                 cached = await self._get_cached_results(cache_key)
                 if cached is not None:
-                    logger.debug(f"WikimediaCommonsProvider: Cache HIT for {cache_key}")
+                    logger.debug(
+                        "cache_hit", provider="wikicommons", cache_key=cache_key
+                    )
                     return cached
 
-            logger.debug("WikimediaCommonsProvider: Cache MISS - fetching from API")
+            logger.debug("cache_miss_fetching", provider="wikicommons")
 
             # 2. Fetch from API
             import httpx
@@ -114,7 +116,10 @@ class WikimediaCommonsProvider(ImageProvider):
                     place_qids.add(qid)
 
             logger.debug(
-                f"WikimediaCommonsProvider: Found {len(place_qids)} QIDs: {place_qids}"
+                "found_place_qids",
+                provider="wikicommons",
+                qid_count=len(place_qids),
+                qids=list(place_qids),
             )
 
             # Strategy 1: Direct QID query (highest priority) - if we have QIDs
@@ -128,17 +133,26 @@ class WikimediaCommonsProvider(ImageProvider):
                             seen_titles.add(result.source_id)
                             results.append(result)
                     logger.debug(
-                        f"WikimediaCommonsProvider: Direct QID query found {len(qid_results)} images"
+                        "direct_qid_query_complete",
+                        provider="wikicommons",
+                        image_count=len(qid_results),
                     )
                 except Exception as e:
-                    logger.warning(f"Wikidata direct QID query failed: {e}")
+                    logger.warning(
+                        "wikidata_qid_query_failed",
+                        provider="wikicommons",
+                        error=str(e),
+                    )
 
             # Strategy 2: Wikidata spatial query (only if no results OR (radius > 80m AND len(results) < limit))
             # Don't run spatial query if we already have good results from direct QID lookup
             if len(results) == 0 or (radius > 80 and len(results) < limit):
                 try:
                     logger.debug(
-                        f"Running spatial query: radius={radius}m, current_results={len(results)}"
+                        "running_spatial_query",
+                        provider="wikicommons",
+                        radius_m=radius,
+                        current_result_count=len(results),
                     )
                     wd_results = await self._fetch_wikidata_spatial(
                         lat, lon, radius, limit, place_qids, httpx
@@ -148,13 +162,17 @@ class WikimediaCommonsProvider(ImageProvider):
                             seen_titles.add(result.source_id)
                             results.append(result)
                 except Exception as e:
-                    logger.warning(f"Wikidata spatial query failed: {e}")
+                    logger.warning(
+                        "wikidata_spatial_query_failed",
+                        provider="wikicommons",
+                        error=str(e),
+                    )
 
             # Strategy 3: Commons geosearch (only if no results AND len(results) < limit)
             # Only run as fallback if we have NO images at all
             if len(results) == 0 and len(results) < limit:
                 try:
-                    logger.debug("No results yet, running Commons geosearch fallback")
+                    logger.debug("running_geosearch_fallback", provider="wikicommons")
                     geo_results = await self._fetch_commons_geosearch(
                         lat, lon, radius, limit, place_qids, httpx
                     )
@@ -163,20 +181,26 @@ class WikimediaCommonsProvider(ImageProvider):
                             seen_titles.add(result.source_id)
                             results.append(result)
                 except Exception as e:
-                    logger.warning(f"Commons geosearch failed: {e}")
+                    logger.warning(
+                        "commons_geosearch_failed", provider="wikicommons", error=str(e)
+                    )
 
             logger.debug(
-                f"WikimediaCommonsProvider: Found {len(results)} unique images"
+                "fetch_complete",
+                provider="wikicommons",
+                unique_image_count=len(results),
             )
 
             # 3. Store in cache
-            logger.debug(f"WikimediaCommonsProvider: Caching {len(results)} results")
+            logger.debug(
+                "caching_results", provider="wikicommons", result_count=len(results)
+            )
             await self._set_cached_results(cache_key, results)
 
             return results
 
         except Exception as e:
-            logger.error(f"WikimediaCommonsProvider error: {e}")
+            logger.error("provider_error", provider="wikicommons", error=str(e))
             return []
 
     async def _fetch_wikidata_spatial(
@@ -273,10 +297,10 @@ class WikimediaCommonsProvider(ImageProvider):
                         results.append(result)
 
                 except Exception as e:
-                    logger.warning(f"Error parsing Wikidata result: {e}")
+                    logger.warning("error_parsing_wikidata_result", error=str(e))
                     continue
 
-            logger.debug(f"Wikidata spatial query: {len(results)} images")
+            logger.debug("wikidata_spatial_query_complete", image_count=len(results))
             return results
 
     async def _fetch_wikidata_by_qids(
@@ -380,14 +404,15 @@ class WikimediaCommonsProvider(ImageProvider):
                         categories_to_fetch.add(category_name)
 
                 except Exception as e:
-                    logger.warning(f"Error parsing direct QID result: {e}")
+                    logger.warning("error_parsing_direct_qid_result", error=str(e))
                     continue
 
             # Now fetch all category images
             for category_name in categories_to_fetch:
                 try:
                     logger.debug(
-                        f"Fetching images from Commons category: {category_name}"
+                        "fetching_commons_category",
+                        category_name=category_name,
                     )
                     category_results = await self._fetch_commons_category_images(
                         category_name,
@@ -401,11 +426,17 @@ class WikimediaCommonsProvider(ImageProvider):
                         if result.source_id not in [r.source_id for r in results]:
                             results.append(result)
                 except Exception as e:
-                    logger.warning(f"Error fetching category {category_name}: {e}")
+                    logger.warning(
+                        "error_fetching_category",
+                        category_name=category_name,
+                        error=str(e),
+                    )
                     continue
 
         logger.debug(
-            f"Direct QID query: {len(results)} images from {len(qids)} QIDs (including categories)"
+            "direct_qid_query_complete_with_categories",
+            image_count=len(results),
+            qid_count=len(qids),
         )
         return results
 
@@ -485,10 +516,10 @@ class WikimediaCommonsProvider(ImageProvider):
                         results.append(result)
 
                 except Exception as e:
-                    logger.warning(f"Error parsing geosearch result: {e}")
+                    logger.warning("error_parsing_geosearch_result", error=str(e))
                     continue
 
-            logger.debug(f"Commons geosearch: {len(results)} images")
+            logger.debug("commons_geosearch_complete", image_count=len(results))
             return results
 
     async def _fetch_commons_metadata(
@@ -529,7 +560,11 @@ class WikimediaCommonsProvider(ImageProvider):
                 return self._parse_commons_api_response(page_data)
 
         except Exception as e:
-            logger.warning(f"Error fetching Commons metadata: {e}")
+            logger.warning(
+                "error_fetching_commons_metadata",
+                commons_title=commons_title,
+                error=str(e),
+            )
 
         return None
 
@@ -581,7 +616,9 @@ class WikimediaCommonsProvider(ImageProvider):
             members = data.get("query", {}).get("categorymembers", [])
 
             logger.debug(
-                f"Commons category '{category_name}' has {len(members)} images"
+                "commons_category_members",
+                category_name=category_name,
+                member_count=len(members),
             )
 
             for member in members[:limit]:
@@ -611,10 +648,10 @@ class WikimediaCommonsProvider(ImageProvider):
                         results.append(result)
 
                 except Exception as e:
-                    logger.warning(f"Error parsing category image: {e}")
+                    logger.warning("error_parsing_category_image", error=str(e))
                     continue
 
-            logger.debug(f"Commons category query: {len(results)} images")
+            logger.debug("commons_category_query_complete", image_count=len(results))
             return results
 
     def _parse_commons_api_response(self, page_data: dict) -> dict[str, Any]:
@@ -825,7 +862,9 @@ class WikimediaCommonsProvider(ImageProvider):
                 score += calculate_age_penalty(days_old)
             except Exception as e:
                 logger.debug(
-                    f"Could not parse date '{date_taken_str}' for scoring: {e}"
+                    "could_not_parse_date_for_scoring",
+                    date_taken=date_taken_str,
+                    error=str(e),
                 )
                 score += calculate_age_penalty(None)
         else:
@@ -912,7 +951,9 @@ class WikimediaCommonsProvider(ImageProvider):
 
                 except Exception as e:
                     logger.debug(
-                        f"Could not parse date '{img_data.get('date_taken')}': {e}"
+                        "could_not_parse_date",
+                        date_taken=img_data.get("date_taken"),
+                        error=str(e),
                     )
                 except (ValueError, TypeError):
                     pass
@@ -973,7 +1014,7 @@ class WikimediaCommonsProvider(ImageProvider):
             )
 
         except Exception as e:
-            logger.warning(f"Error creating ImageResult: {e}")
+            logger.warning("error_creating_image_result", error=str(e))
             return None
 
     def _extract_qid_from_uri(self, uri: str) -> str | None:

@@ -3,12 +3,12 @@ Provider for Mapillary images.
 TODO: Implement full Mapillary API integration.
 """
 
-import logging
+import structlog
 
 from .base import ImageProvider, ImageResult
 from .schemas import GeoPlaceSchema
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 class MapillaryProvider(ImageProvider):
@@ -31,5 +31,5 @@ class MapillaryProvider(ImageProvider):
         update_cache: bool = False,
     ) -> list[ImageResult]:
         """Fetch images from Mapillary - TODO: Not yet implemented."""
-        logger.debug("MapillaryProvider: Not yet implemented")
+        logger.debug("Provider not yet implemented", provider="mapillary")
         return []

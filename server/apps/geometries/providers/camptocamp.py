@@ -11,7 +11,7 @@ Fetches images from Camptocamp API using bbox queries.
 # Result api:
 #   http://localhost:8000/v1/geo/images/hut/hollandia?lang=de&radius=50&limit=20&update_cache=1
 
-import logging
+import structlog
 from datetime import datetime
 
 
@@ -23,7 +23,7 @@ from .scoring import (
     calculate_age_penalty,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 class CamptocampProvider(ImageProvider):
@@ -48,7 +48,7 @@ class CamptocampProvider(ImageProvider):
         self.lang = lang
         self.api_base = "https://api.camptocamp.org"
         self.media_base = "https://media.camptocamp.org/c2corg-active"
-        logger.debug(f"Initialized CamptocampProvider with lang={lang}")
+        logger.debug("Initialized CamptocampProvider", lang=lang)
 
     async def fetch(
         self,
@@ -79,10 +79,12 @@ class CamptocampProvider(ImageProvider):
             if not update_cache:
                 cached = await self._get_cached_results(cache_key)
                 if cached is not None:
-                    logger.debug(f"CamptocampProvider: Cache HIT for {cache_key}")
+                    logger.debug(
+                        "Cache HIT", provider="camptocamp", cache_key=cache_key
+                    )
                     return cached
 
-            logger.debug("CamptocampProvider: Cache MISS - fetching from API")
+            logger.debug("Cache MISS - fetching from API", provider="camptocamp")
 
             # 2. Fetch from API
             import httpx
@@ -91,7 +93,7 @@ class CamptocampProvider(ImageProvider):
             # Calculate bbox from center point and radius
             bbox = self._calculate_bbox(lat, lon, radius / 1000)  # Convert to km
 
-            logger.debug(f"CamptocampProvider: Fetching waypoints in bbox {bbox}")
+            logger.debug("Fetching waypoints in bbox", provider="camptocamp", bbox=bbox)
 
             headers = {
                 "User-Agent": getattr(
@@ -103,11 +105,15 @@ class CamptocampProvider(ImageProvider):
                 waypoints = await self._fetch_waypoints(client, bbox)
 
                 if not waypoints:
-                    logger.warning("CamptocampProvider: No waypoints found in bbox")
+                    logger.warning(
+                        "No waypoints found in bbox", provider="camptocamp", bbox=bbox
+                    )
                     await self._set_cached_results(cache_key, [])
                     return []
 
-                logger.debug(f"CamptocampProvider: Found {len(waypoints)} waypoints")
+                logger.debug(
+                    "Found waypoints", provider="camptocamp", count=len(waypoints)
+                )
 
                 # Step 2: Get details for each waypoint and extract images
                 results = []
@@ -119,30 +125,44 @@ class CamptocampProvider(ImageProvider):
                 ]:  # Limit waypoints based on desired result count
                     try:
                         waypoint_id = waypoint.get("document_id")
-                        logger.debug(f"  🔎 Fetching waypoint {waypoint_id}...")
+                        logger.debug(
+                            "Fetching waypoint",
+                            provider="camptocamp",
+                            waypoint_id=waypoint_id,
+                        )
                         images = await self._fetch_waypoint_images(
                             client, waypoint_id, lat, lon, radius, limit
                         )
                         logger.debug(
-                            f"  → Found {len(images)} images for waypoint {waypoint_id}"
+                            "Found images for waypoint",
+                            provider="camptocamp",
+                            waypoint_id=waypoint_id,
+                            count=len(images),
                         )
                         results.extend(images)
                     except Exception as e:
                         logger.warning(
-                            f"Error processing waypoint {waypoint.get('document_id')}: {e}"
+                            "Error processing waypoint",
+                            provider="camptocamp",
+                            waypoint_id=waypoint.get("document_id"),
+                            error=str(e),
                         )
                         continue
 
-                logger.debug(f"CamptocampProvider: Total images found: {len(results)}")
+                logger.debug(
+                    "Total images found", provider="camptocamp", count=len(results)
+                )
 
                 # 3. Store in cache
-                logger.debug(f"CamptocampProvider: Caching {len(results)} results")
+                logger.debug(
+                    "Caching results", provider="camptocamp", count=len(results)
+                )
                 await self._set_cached_results(cache_key, results)
 
                 return results
 
         except Exception as e:
-            logger.error(f"CamptocampProvider error: {e}")
+            logger.error("Provider error", provider="camptocamp", error=str(e))
             return []
 
     def _calculate_bbox(self, lat: float, lon: float, radius_km: float) -> str:
@@ -263,11 +283,18 @@ class CamptocampProvider(ImageProvider):
                     geom_lat = lat
                 else:
                     logger.debug(
-                        f"Waypoint {waypoint_id} geometry has invalid coordinates"
+                        "Waypoint geometry has invalid coordinates",
+                        provider="camptocamp",
+                        waypoint_id=waypoint_id,
                     )
                     return []
             except (json.JSONDecodeError, ValueError, TypeError) as e:
-                logger.debug(f"Waypoint {waypoint_id} failed to parse geometry: {e}")
+                logger.debug(
+                    "Failed to parse waypoint geometry",
+                    provider="camptocamp",
+                    waypoint_id=waypoint_id,
+                    error=str(e),
+                )
                 return []
         else:
             # Fallback to main coordinates if no geometry
@@ -275,7 +302,11 @@ class CamptocampProvider(ImageProvider):
             geom_lon = data.get("lon")
 
             if not geom_lat or not geom_lon:
-                logger.debug(f"Waypoint {waypoint_id} has no coordinates")
+                logger.debug(
+                    "Waypoint has no coordinates",
+                    provider="camptocamp",
+                    waypoint_id=waypoint_id,
+                )
                 return []
 
         # Calculate distance
@@ -301,7 +332,12 @@ class CamptocampProvider(ImageProvider):
         images = associations.get("images", [])
         results = []
 
-        logger.debug(f"Waypoint {waypoint_id} has {len(images)} images in associations")
+        logger.debug(
+            "Waypoint has images in associations",
+            provider="camptocamp",
+            waypoint_id=waypoint_id,
+            count=len(images),
+        )
 
         max_images = min(len(images), limit)  # Respect overall limit
         for img in images[:max_images]:  # Limit to requested limit
@@ -323,7 +359,12 @@ class CamptocampProvider(ImageProvider):
                     results.append(result)
 
             except Exception as e:
-                logger.warning(f"Error processing image {image_id}: {e}")
+                logger.warning(
+                    "Error processing image",
+                    provider="camptocamp",
+                    image_id=image_id,
+                    error=str(e),
+                )
                 continue
 
         return results
@@ -497,7 +538,7 @@ class CamptocampProvider(ImageProvider):
             )
 
         except Exception as e:
-            logger.warning(f"Error parsing Camptocamp image: {e}")
+            logger.warning("Error parsing image", provider="camptocamp", error=str(e))
             return None
 
     def _score_camptocamp_image(

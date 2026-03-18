@@ -3,7 +3,7 @@ Base classes and utilities for image providers.
 """
 
 import asyncio
-import logging
+import structlog
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, asdict
 from datetime import datetime
@@ -14,7 +14,7 @@ from django.contrib.gis.geos import Point
 from django.core.cache import cache
 from .schemas import GeoPlaceSchema
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 # Cache duration constants (in seconds)
@@ -75,9 +75,6 @@ class ImageArea:
     def to_imagor_crop(self) -> tuple[str, str]:
         x, y = self.to_imagor_area().split(":")
         return x, y
-
-
-logger = logging.getLogger(__name__)
 
 
 # Precision levels for cache key rounding
@@ -247,10 +244,10 @@ class ImageProvider(ABC):
         # Use sync_to_async to call the synchronous cache backend from async context
         data = await sync_to_async(cache_instance.get)(cache_key)
         if data is not None:
-            logger.debug(f"Cache HIT: {cache_key}")
+            logger.debug("Cache HIT", cache_key=cache_key, provider=self.source)
             # Deserialize - stored as list of dicts
             return [ImageResult(**item) for item in data]
-        logger.debug(f"Cache MISS: {cache_key}")
+        logger.debug("Cache MISS", cache_key=cache_key, provider=self.source)
         return None
 
     async def _set_cached_results(
@@ -284,7 +281,7 @@ class ImageProvider(ABC):
         cache_instance = self.get_cache()
         deleted = cache_instance.delete(cache_key)
         if deleted:
-            logger.debug(f"Invalidated cache: {cache_key}")
+            logger.debug("Cache invalidated", cache_key=cache_key, provider=self.source)
         return deleted
 
     @classmethod
@@ -307,7 +304,10 @@ class ImageProvider(ABC):
         new_version = current_version + 1
         cache_instance.set(version_key, new_version)
         logger.debug(
-            f"Invalidated all cache for provider '{provider}': v{current_version} -> v{new_version}"
+            "Provider cache invalidated",
+            provider=provider,
+            old_version=current_version,
+            new_version=new_version,
         )
         return new_version
 
@@ -325,7 +325,11 @@ def _invalidate_provider_metadata_cache(provider_name: str) -> None:
 
     cache_key = f"{CACHE_KEY_PREFIX}:provider:{provider_name}"
     cache.delete(cache_key)
-    logger.info(f"Invalidated provider metadata cache for '{provider_name}'")
+    logger.info(
+        "Provider metadata cache invalidated",
+        provider=provider_name,
+        cache_key=cache_key,
+    )
 
 
 def _get_provider_info(provider_name: str, force_refresh: bool = False) -> dict:
@@ -442,12 +446,21 @@ def _get_provider_info(provider_name: str, force_refresh: bool = False) -> dict:
                 "description": org.description,
             }
             logger.debug(
-                f"Found organization for {provider_name}: url={org.url}, logo={org.logo}"
+                "Found organization",
+                provider=provider_name,
+                url=org.url,
+                logo=str(org.logo) if org.logo else None,
             )
         else:
-            logger.debug(f"No organization found for {provider_name}, using fallback")
+            logger.debug(
+                "No organization found, using fallback", provider=provider_name
+            )
     except Exception as e:
-        logger.warning(f"Could not fetch provider info from database: {e}")
+        logger.warning(
+            "Could not fetch provider info from database",
+            provider=provider_name,
+            error=str(e),
+        )
 
     # Cache for 2 hours (organization info should reflect updates)
     cache.set(cache_key, provider_info, CACHE_VERY_SHORT)
@@ -577,7 +590,7 @@ def _get_license_info(slug: str | None) -> dict[str, str | None]:
 
         # Auto-create license if not found
         if not license_obj:
-            logger.debug(f"License '{slug}' not found in database, auto-creating...")
+            logger.debug("License not found in database, auto-creating", slug=slug)
 
             # Generate reasonable defaults from slug
             generated_slug = _generate_license_slug(slug)
@@ -611,7 +624,7 @@ def _get_license_info(slug: str | None) -> dict[str, str | None]:
                 order=License.get_next_order_number(),
             )
             logger.debug(
-                f"Created new license '{generated_slug}' with review_status='new'"
+                "Created new license", slug=generated_slug, review_status="new"
             )
 
         # Get symbol icons for this license from category (with full URLs)
@@ -633,7 +646,9 @@ def _get_license_info(slug: str | None) -> dict[str, str | None]:
                     if symbol and symbol.svg_file:
                         icons[style] = symbol.svg_file.url
             except Exception as e:
-                logger.debug(f"Could not fetch license symbols from category: {e}")
+                logger.debug(
+                    "Could not fetch license symbols from category", error=str(e)
+                )
 
         license_info = {
             "slug": license_obj.slug,
@@ -650,7 +665,7 @@ def _get_license_info(slug: str | None) -> dict[str, str | None]:
         return license_info
 
     except Exception as e:
-        logger.error(f"Error fetching/creating license '{slug}': {e}")
+        logger.error("Error fetching/creating license", slug=slug, error=str(e))
 
         # Return minimal info on error
         return {
@@ -985,16 +1000,22 @@ def post_process_images(
                     # Portrait: check height
                     if result.height < 1000:
                         logger.debug(
-                            f"Skipping {result.provider}/{result.source_id}: "
-                            f"portrait height {result.height}px < 1000px minimum"
+                            "Skipping portrait image (insufficient height)",
+                            provider=result.provider,
+                            source_id=result.source_id,
+                            height=result.height,
+                            minimum=1000,
                         )
                         continue
                 else:
                     # Landscape: check width
                     if result.width < 1000:
                         logger.debug(
-                            f"Skipping {result.provider}/{result.source_id}: "
-                            f"landscape width {result.width}px < 1000px minimum"
+                            "Skipping landscape image (insufficient width)",
+                            provider=result.provider,
+                            source_id=result.source_id,
+                            width=result.width,
+                            minimum=1000,
                         )
                         continue
 
@@ -1375,7 +1396,9 @@ def post_process_images(
             final_results.append(feature)
 
         except Exception as e:
-            logger.warning(f"Error post-processing result {result.source_id}: {e}")
+            logger.warning(
+                "Error post-processing result", source_id=result.source_id, error=str(e)
+            )
             continue
 
     return final_results
@@ -1398,7 +1421,11 @@ class ProviderRegistry:
     def register(self, provider: ImageProvider) -> None:
         """Register a new provider."""
         self._providers[provider.source] = provider
-        logger.debug(f"Registered image provider: {provider.source}")
+        logger.debug(
+            "Registered image provider",
+            provider=provider.source,
+            priority=provider.priority,
+        )
 
     def get_provider(self, source: str) -> ImageProvider | None:
         """Get provider by source name."""
@@ -1475,12 +1502,15 @@ async def fetch_images_from_providers(
     )
 
     logger.debug(
-        f"Converted {len(geoplaces)} GeoPlaces and {len(huts) if huts else 0} Huts to {len(place_schemas)} GeoPlaceSchema objects"
+        "Converted places to schemas",
+        geoplaces_count=len(geoplaces),
+        huts_count=len(huts) if huts else 0,
+        schemas_count=len(place_schemas),
     )
 
     # Log cache update mode
     if update_cache:
-        logger.debug("UPDATE_CACHE mode: Bypassing cache and refreshing all providers")
+        logger.debug("Cache update mode enabled", action="bypassing_cache")
 
     # Run all providers in parallel
     tasks = [
@@ -1496,15 +1526,21 @@ async def fetch_images_from_providers(
     for i, result_list in enumerate(results_lists):
         provider = providers[i]
         if isinstance(result_list, Exception):
-            logger.error(f"Provider {provider.source} failed: {result_list}")
+            logger.error(
+                "Provider fetch failed",
+                provider=provider.source,
+                error=str(result_list),
+            )
             continue
         if result_list:
             all_results.extend(result_list)
             logger.debug(
-                f"Provider {provider.source} returned {len(result_list)} images"
+                "Provider returned images",
+                provider=provider.source,
+                count=len(result_list),
             )
 
-    logger.debug(f"Total images fetched: {len(all_results)}")
+    logger.debug("Total images fetched", total_count=len(all_results))
 
     # Deduplicate and fetch missing dimensions
     all_results = await deduplicate_images(all_results)
@@ -1592,14 +1628,21 @@ async def deduplicate_images(results: list[ImageResult]) -> list[ImageResult]:
                         seen_source_urls[result_source_url] = result
                         seen_source_id[key] = result
                         logger.debug(
-                            f"Replacing lower priority duplicate: {existing.provider}/{existing.source_id} "
-                            f"with {result.provider}/{result.source_id} (source: {detected_source})"
+                            "Replacing lower priority duplicate",
+                            old_provider=existing.provider,
+                            old_source_id=existing.source_id,
+                            new_provider=result.provider,
+                            new_source_id=result.source_id,
+                            detected_source=detected_source,
                         )
                     else:
                         # Lower priority - skip
                         logger.debug(
-                            f"Skipping lower priority duplicate: {result.provider}/{result.source_id} "
-                            f"(same source as {existing.provider}/{existing.source_id})"
+                            "Skipping lower priority duplicate",
+                            provider=result.provider,
+                            source_id=result.source_id,
+                            same_as_provider=existing.provider,
+                            same_as_source_id=existing.source_id,
                         )
                     continue
                 else:
@@ -1609,7 +1652,11 @@ async def deduplicate_images(results: list[ImageResult]) -> list[ImageResult]:
         seen_source_id[key] = result
         deduped.append(result)
 
-    logger.debug(f"Deduplication: {len(results)} -> {len(deduped)} images")
+    logger.debug(
+        "Deduplication complete",
+        original_count=len(results),
+        deduped_count=len(deduped),
+    )
 
     # Level 3: Datetime-based deduplication
     # Remove images with similar capture dates from different providers, keeping higher scored ones
@@ -1691,16 +1738,26 @@ def _deduplicate_by_datetime(results: list[ImageResult]) -> list[ImageResult]:
             if img1.distance_m > img2.distance_m:  # Higher distance = lower score
                 to_remove.append(img1)
                 logger.debug(
-                    f"Datetime dedup: removing {img1.provider}/{img1.source_id} "
-                    f"(score: {img1.distance_m:.1f}m) in favor of {img2.provider}/{img2.source_id} "
-                    f"(score: {img2.distance_m:.1f}m) - capture times: {img1.captured_at} vs {img2.captured_at}"
+                    "Datetime dedup: removing image",
+                    removed_provider=img1.provider,
+                    removed_source_id=img1.source_id,
+                    removed_distance_m=round(img1.distance_m, 1),
+                    kept_provider=img2.provider,
+                    kept_source_id=img2.source_id,
+                    kept_distance_m=round(img2.distance_m, 1),
+                    time_diff_hours=round(time_diff.total_seconds() / 3600, 1),
                 )
             else:
                 to_remove.append(img2)
                 logger.debug(
-                    f"Datetime dedup: removing {img2.provider}/{img2.source_id} "
-                    f"(score: {img2.distance_m:.1f}m) in favor of {img1.provider}/{img1.source_id} "
-                    f"(score: {img1.distance_m:.1f}m) - capture times: {img1.captured_at} vs {img2.captured_at}"
+                    "Datetime dedup: removing image",
+                    removed_provider=img2.provider,
+                    removed_source_id=img2.source_id,
+                    removed_distance_m=round(img2.distance_m, 1),
+                    kept_provider=img1.provider,
+                    kept_source_id=img1.source_id,
+                    kept_distance_m=round(img1.distance_m, 1),
+                    time_diff_hours=round(time_diff.total_seconds() / 3600, 1),
                 )
 
     # Filter out removed images
@@ -1708,7 +1765,7 @@ def _deduplicate_by_datetime(results: list[ImageResult]) -> list[ImageResult]:
 
     if to_remove:
         logger.info(
-            f"Datetime-based deduplication: removed {len(to_remove)} images with similar capture dates"
+            "Datetime-based deduplication complete", removed_count=len(to_remove)
         )
 
     return final_results
@@ -1763,10 +1820,16 @@ async def _fetch_missing_dimensions(results: list[ImageResult]) -> list[ImageRes
                 )
 
                 logger.debug(
-                    f"Fetched dimensions for {result.provider}/{result.source_id}: {dimensions}"
+                    "Fetched dimensions",
+                    provider=result.provider,
+                    source_id=result.source_id,
+                    width=dimensions[0],
+                    height=dimensions[1],
                 )
         except Exception as e:
-            logger.debug(f"Could not fetch dimensions for {result.url_large}: {e}")
+            logger.debug(
+                "Could not fetch dimensions", url=result.url_large[:50], error=str(e)
+            )
 
         updated_results.append(result)
 
@@ -1936,11 +1999,11 @@ async def _get_image_dimensions_from_headers(url: str) -> tuple[int, int] | None
                             continue
                         break
 
-                logger.debug(f"Could not determine image format for: {url[:50]}")
+                logger.debug("Could not determine image format", url=url[:80])
                 return None
 
     except Exception as e:
-        logger.debug(f"Error fetching image dimensions: {e}")
+        logger.debug("Error fetching image dimensions", error=str(e))
         return None
 
 
