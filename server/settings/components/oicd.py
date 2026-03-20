@@ -10,6 +10,7 @@ Docs: https://github.com/mozilla/django-csp
 
 import json
 import logging
+import re
 from urllib.parse import urlparse
 
 import requests
@@ -106,6 +107,16 @@ OIDC_RENEW_ID_TOKEN_EXPIRY_SECONDS = 60 * 60 * 24  # 24 hours
 # Whether to store access token and refresh token in session (default: True)
 OIDC_STORE_ACCESS_TOKEN = True
 OIDC_STORE_ID_TOKEN = True
+
+# Exempt public API routes from SessionRefresh middleware
+# This prevents the middleware from returning 403 errors on public endpoints
+# when the user's OIDC session has expired. API endpoints can still be
+# selectively protected using Django Ninja's auth=AuthBearer(...) decorator.
+OIDC_EXEMPT_URLS = [
+    re.compile(r"^/v\d+/.*"),  # Exempt all API routes (any version)
+    "/static/",  # Exempt static files
+    "/media/",  # Exempt media files (development only)
+]
 
 # Discover OpenID Connect endpoints
 discovery_info = discover_oidc(OIDC_OP_DISCOVERY_ENDPOINT, OIDC_ISSUER_INTERNAL_URL)

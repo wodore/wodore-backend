@@ -3,7 +3,7 @@ Base classes and utilities for image providers.
 """
 
 import asyncio
-import logging
+import structlog
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, asdict
 from datetime import datetime
@@ -14,7 +14,7 @@ from django.contrib.gis.geos import Point
 from django.core.cache import cache
 from .schemas import GeoPlaceSchema
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 # Cache duration constants (in seconds)
@@ -77,9 +77,6 @@ class ImageArea:
         return x, y
 
 
-logger = logging.getLogger(__name__)
-
-
 # Precision levels for cache key rounding
 PRECISION_LEVELS = {
     "broad": 3,  # ~111m grid
@@ -116,6 +113,9 @@ class ImageResult:
     url_large: str  # High-quality original URL
     url_medium: str | None = None  # Medium quality URL (if different from large)
 
+    # Raw author info for deduplication (optional)
+    author_raw: str | None = None  # Raw concatenated author info for deduplication
+
     # Dimensions (optional - for orientation detection)
     width: int | None = None
     height: int | None = None
@@ -131,7 +131,7 @@ class ImageResult:
     place: dict[str, Any] | None = None
 
     # Scoring (0-100)
-    score: int = 0
+    score: int = 20  # Default score for uncurated providers
 
 
 class ImageProvider(ABC):
@@ -244,10 +244,10 @@ class ImageProvider(ABC):
         # Use sync_to_async to call the synchronous cache backend from async context
         data = await sync_to_async(cache_instance.get)(cache_key)
         if data is not None:
-            logger.debug(f"Cache HIT: {cache_key}")
+            logger.debug("Cache HIT", cache_key=cache_key, provider=self.source)
             # Deserialize - stored as list of dicts
             return [ImageResult(**item) for item in data]
-        logger.debug(f"Cache MISS: {cache_key}")
+        logger.debug("Cache MISS", cache_key=cache_key, provider=self.source)
         return None
 
     async def _set_cached_results(
@@ -281,7 +281,7 @@ class ImageProvider(ABC):
         cache_instance = self.get_cache()
         deleted = cache_instance.delete(cache_key)
         if deleted:
-            logger.debug(f"Invalidated cache: {cache_key}")
+            logger.debug("Cache invalidated", cache_key=cache_key, provider=self.source)
         return deleted
 
     @classmethod
@@ -304,7 +304,10 @@ class ImageProvider(ABC):
         new_version = current_version + 1
         cache_instance.set(version_key, new_version)
         logger.debug(
-            f"Invalidated all cache for provider '{provider}': v{current_version} -> v{new_version}"
+            "Provider cache invalidated",
+            provider=provider,
+            old_version=current_version,
+            new_version=new_version,
         )
         return new_version
 
@@ -322,7 +325,11 @@ def _invalidate_provider_metadata_cache(provider_name: str) -> None:
 
     cache_key = f"{CACHE_KEY_PREFIX}:provider:{provider_name}"
     cache.delete(cache_key)
-    logger.info(f"Invalidated provider metadata cache for '{provider_name}'")
+    logger.info(
+        "Provider metadata cache invalidated",
+        provider=provider_name,
+        cache_key=cache_key,
+    )
 
 
 def _get_provider_info(provider_name: str, force_refresh: bool = False) -> dict:
@@ -439,12 +446,21 @@ def _get_provider_info(provider_name: str, force_refresh: bool = False) -> dict:
                 "description": org.description,
             }
             logger.debug(
-                f"Found organization for {provider_name}: url={org.url}, logo={org.logo}"
+                "Found organization",
+                provider=provider_name,
+                url=org.url,
+                logo=str(org.logo) if org.logo else None,
             )
         else:
-            logger.debug(f"No organization found for {provider_name}, using fallback")
+            logger.debug(
+                "No organization found, using fallback", provider=provider_name
+            )
     except Exception as e:
-        logger.warning(f"Could not fetch provider info from database: {e}")
+        logger.warning(
+            "Could not fetch provider info from database",
+            provider=provider_name,
+            error=str(e),
+        )
 
     # Cache for 2 hours (organization info should reflect updates)
     cache.set(cache_key, provider_info, CACHE_VERY_SHORT)
@@ -574,7 +590,7 @@ def _get_license_info(slug: str | None) -> dict[str, str | None]:
 
         # Auto-create license if not found
         if not license_obj:
-            logger.debug(f"License '{slug}' not found in database, auto-creating...")
+            logger.debug("License not found in database, auto-creating", slug=slug)
 
             # Generate reasonable defaults from slug
             generated_slug = _generate_license_slug(slug)
@@ -608,7 +624,7 @@ def _get_license_info(slug: str | None) -> dict[str, str | None]:
                 order=License.get_next_order_number(),
             )
             logger.debug(
-                f"Created new license '{generated_slug}' with review_status='new'"
+                "Created new license", slug=generated_slug, review_status="new"
             )
 
         # Get symbol icons for this license from category (with full URLs)
@@ -630,7 +646,9 @@ def _get_license_info(slug: str | None) -> dict[str, str | None]:
                     if symbol and symbol.svg_file:
                         icons[style] = symbol.svg_file.url
             except Exception as e:
-                logger.debug(f"Could not fetch license symbols from category: {e}")
+                logger.debug(
+                    "Could not fetch license symbols from category", error=str(e)
+                )
 
         license_info = {
             "slug": license_obj.slug,
@@ -647,7 +665,7 @@ def _get_license_info(slug: str | None) -> dict[str, str | None]:
         return license_info
 
     except Exception as e:
-        logger.error(f"Error fetching/creating license '{slug}': {e}")
+        logger.error("Error fetching/creating license", slug=slug, error=str(e))
 
         # Return minimal info on error
         return {
@@ -973,14 +991,42 @@ def post_process_images(
 
     for result in results:
         try:
+            # Filter out images with insufficient dimensions
+            # Landscape: width must be >= 1000px
+            # Portrait: height must be >= 1000px
+            if result.width and result.height:
+                is_portrait = result.height > result.width
+                if is_portrait:
+                    # Portrait: check height
+                    if result.height < 500:
+                        logger.debug(
+                            "Skipping portrait image (insufficient height)",
+                            provider=result.provider,
+                            source_id=result.source_id,
+                            height=result.height,
+                            minimum=500,
+                        )
+                        continue
+                else:
+                    # Landscape: check width
+                    if result.width < 500:
+                        logger.debug(
+                            "Skipping landscape image (insufficient width)",
+                            provider=result.provider,
+                            source_id=result.source_id,
+                            width=result.width,
+                            minimum=500,
+                        )
+                        continue
+
             # Determine orientation
             is_portrait = None
-
             if result.width and result.height:
                 is_portrait = result.height > result.width
 
-            # Use url_medium if available, otherwise url_large
-            original_url = result.url_medium or result.url_large
+            # Always use url_large for generating proxy URLs (not url_medium/thumb_url)
+            # This ensures we use the original high-quality image, not thumbnails
+            original_url = result.url_large
             imagor_img = ImagorImage(original_url)
 
             # Determine focal point for transforms
@@ -1330,6 +1376,7 @@ def post_process_images(
                     "author": {
                         "name": result.author if result.author else None,
                         "url": result.author_url if result.author_url else None,
+                        "raw": result.author_raw if result.author_raw else None,
                     },
                     "urls": urls,
                     "width": result.width,
@@ -1349,7 +1396,9 @@ def post_process_images(
             final_results.append(feature)
 
         except Exception as e:
-            logger.warning(f"Error post-processing result {result.source_id}: {e}")
+            logger.warning(
+                "Error post-processing result", source_id=result.source_id, error=str(e)
+            )
             continue
 
     return final_results
@@ -1372,7 +1421,11 @@ class ProviderRegistry:
     def register(self, provider: ImageProvider) -> None:
         """Register a new provider."""
         self._providers[provider.source] = provider
-        logger.debug(f"Registered image provider: {provider.source}")
+        logger.debug(
+            "Registered image provider",
+            provider=provider.source,
+            priority=provider.priority,
+        )
 
     def get_provider(self, source: str) -> ImageProvider | None:
         """Get provider by source name."""
@@ -1449,12 +1502,15 @@ async def fetch_images_from_providers(
     )
 
     logger.debug(
-        f"Converted {len(geoplaces)} GeoPlaces and {len(huts) if huts else 0} Huts to {len(place_schemas)} GeoPlaceSchema objects"
+        "Converted places to schemas",
+        geoplaces_count=len(geoplaces),
+        huts_count=len(huts) if huts else 0,
+        schemas_count=len(place_schemas),
     )
 
     # Log cache update mode
     if update_cache:
-        logger.debug("UPDATE_CACHE mode: Bypassing cache and refreshing all providers")
+        logger.debug("Cache update mode enabled", action="bypassing_cache")
 
     # Run all providers in parallel
     tasks = [
@@ -1470,24 +1526,39 @@ async def fetch_images_from_providers(
     for i, result_list in enumerate(results_lists):
         provider = providers[i]
         if isinstance(result_list, Exception):
-            logger.error(f"Provider {provider.source} failed: {result_list}")
+            logger.error(
+                "Provider fetch failed",
+                provider=provider.source,
+                error=str(result_list),
+            )
             continue
         if result_list:
             all_results.extend(result_list)
             logger.debug(
-                f"Provider {provider.source} returned {len(result_list)} images"
+                "Provider returned images",
+                provider=provider.source,
+                count=len(result_list),
             )
 
-    logger.debug(f"Total images fetched: {len(all_results)}")
+    logger.debug("Total images fetched", total_count=len(all_results))
+
+    # Deduplicate and fetch missing dimensions
+    all_results = await deduplicate_images(all_results)
+
     return all_results
 
 
-def deduplicate_images(results: list[ImageResult]) -> list[ImageResult]:
+async def deduplicate_images(results: list[ImageResult]) -> list[ImageResult]:
     """
     Deduplicate images from multiple providers.
 
-    Level 1: Exact match by (source, source_id) and Commons filename
-    - Keeps image from highest-priority source
+    Level 1: Exact match by (source, source_id)
+    Level 2: Source-based cross-source duplicate detection
+    - Check if provider name or source URL appears in attribution/author fields
+    - This prevents showing the same image from both wikicommons and camptocamp, etc.
+    Level 3: Datetime-based duplicate detection
+    - If images from different providers have similar capture dates (within 6 hours)
+    - Remove the one with the lower score
 
     Args:
         results: List of ImageResult objects from all providers
@@ -1498,23 +1569,35 @@ def deduplicate_images(results: list[ImageResult]) -> list[ImageResult]:
     if not results:
         return []
 
-    # Provider priority for deduplication
+    # Provider priority for deduplication (lower = higher priority)
     PRIORITY = {
         "wodore": 1,
-        "camptocamp": 2,
-        "wikidata": 3,
-        "wikimedia_commons": 2,  # Same as wikidata
-        "refugesinfo": 3,
-        "panoramax": 4,
-        "mapillary": 5,
-        "flickr": 6,
+        "wikicommons": 2,
+        "camptocamp": 3,
+        "refugesinfo": 4,
+        "panoramax": 5,
+        "mapillary": 6,
+        "flickr": 7,
+    }
+
+    # Known source domains for detection (provider names + URLs)
+    SOURCE_PATTERNS = {
+        "wikicommons": [
+            "wikicommons",
+            "wikimedia commons",
+            "commons.wikimedia.org",
+            "wikipedia",
+        ],
+        "camptocamp": ["camptocamp", "camptocamp.org", "www.camptocamp.org"],
+        "refugesinfo": ["refuges.info", "www.refuges.info", "refugesinfo"],
+        "wodore": ["wodore", "wodore.org", "sac-cas.ch", "www.sac-cas.ch", "sac"],
     }
 
     # Track seen images
     seen_source_id: dict[
         tuple[str, str], ImageResult
     ] = {}  # (provider, source_id) -> result
-    seen_commons: dict[str, ImageResult] = {}  # normalized filename -> result
+    seen_source_urls: dict[str, ImageResult] = {}  # source URL -> result
 
     deduped = []
 
@@ -1526,67 +1609,424 @@ def deduplicate_images(results: list[ImageResult]) -> list[ImageResult]:
             if PRIORITY.get(result.provider, 99) < PRIORITY.get(existing.provider, 99):
                 # Replace with higher priority provider
                 seen_source_id[key] = result
-                # Also update seen_commons if applicable
-                commons_key = _normalize_commons_filename(result.source_url or "")
-                if commons_key and commons_key in seen_commons:
-                    seen_commons[commons_key] = result
             continue
 
-        # Check Commons filename for Wikidata duplicates
-        commons_key = _normalize_commons_filename(result.source_url or "")
-        if commons_key:
-            if commons_key in seen_commons:
-                existing = seen_commons[commons_key]
-                if PRIORITY.get(result.provider, 99) < PRIORITY.get(
-                    existing.provider, 99
-                ):
-                    # Replace with higher priority provider
-                    seen_commons[commons_key] = result
-                    seen_source_id[key] = result
-                continue
-            seen_commons[commons_key] = result
+        # Check for cross-source duplicates via attribution/author
+        detected_source = _detect_source_in_attribution(result, SOURCE_PATTERNS)
+        if detected_source:
+            # Get the source URL if available in extra field
+            result_source_url = result.extra.get("source_url") if result.extra else None
+
+            if result_source_url:
+                if result_source_url in seen_source_urls:
+                    existing = seen_source_urls[result_source_url]
+                    result_priority = PRIORITY.get(result.provider, 99)
+                    existing_priority = PRIORITY.get(existing.provider, 99)
+
+                    if result_priority < existing_priority:
+                        # Higher priority - replace
+                        seen_source_urls[result_source_url] = result
+                        seen_source_id[key] = result
+                        logger.debug(
+                            "Replacing lower priority duplicate",
+                            old_provider=existing.provider,
+                            old_source_id=existing.source_id,
+                            new_provider=result.provider,
+                            new_source_id=result.source_id,
+                            detected_source=detected_source,
+                        )
+                    else:
+                        # Lower priority - skip
+                        logger.debug(
+                            "Skipping lower priority duplicate",
+                            provider=result.provider,
+                            source_id=result.source_id,
+                            same_as_provider=existing.provider,
+                            same_as_source_id=existing.source_id,
+                        )
+                    continue
+                else:
+                    # First time seeing this source URL
+                    seen_source_urls[result_source_url] = result
 
         seen_source_id[key] = result
         deduped.append(result)
 
-    logger.debug(f"Deduplication: {len(results)} -> {len(deduped)} images")
+    logger.debug(
+        "Deduplication complete",
+        original_count=len(results),
+        deduped_count=len(deduped),
+    )
+
+    # Level 3: Datetime-based deduplication
+    # Remove images with similar capture dates from different providers, keeping higher scored ones
+    deduped = _deduplicate_by_datetime(deduped)
+
+    # Fetch missing dimensions from image headers (after deduplication to avoid duplicate work)
+    deduped = await _fetch_missing_dimensions(deduped)
+
     return deduped
 
 
-def _normalize_commons_filename(url: str) -> str | None:
+def _deduplicate_by_datetime(results: list[ImageResult]) -> list[ImageResult]:
     """
-    Normalize Wikimedia Commons URL to canonical filename.
+    Remove duplicate images based on similar capture dates.
+
+    If two images from different providers have capture dates within 6 hours of each other,
+    remove the one with the lower score.
+
+    Args:
+        results: List of ImageResult objects
+
+    Returns:
+        Deduplicated list of ImageResult objects
+    """
+    from datetime import timedelta, timezone
+
+    if len(results) < 2:
+        return results
+
+    # Filter to only images with capture dates
+    with_captures = [r for r in results if r.captured_at]
+    if len(with_captures) < 2:
+        return results
+
+    # Normalize all datetimes to timezone-aware UTC for comparison
+    # This prevents errors when comparing naive and aware datetimes
+    def normalize_datetime(dt):
+        """Convert datetime to UTC timezone-aware if naive, or keep as-is if aware."""
+        if dt.tzinfo is None:
+            # Naive datetime - assume UTC
+            return dt.replace(tzinfo=timezone.utc)
+        else:
+            # Aware datetime - convert to UTC
+            return dt.astimezone(timezone.utc)
+
+    # Sort by captured_at for efficient comparison
+    with_captures.sort(key=lambda r: normalize_datetime(r.captured_at))
+
+    # Time window for considering images as duplicates (6 hours)
+    TIME_WINDOW = timedelta(hours=6)
+
+    to_remove = []
+
+    # Compare each image with others within the time window
+    for i, img1 in enumerate(with_captures):
+        # Skip if already marked for removal
+        if any(r is img1 for r in to_remove):
+            continue
+
+        for j in range(i + 1, len(with_captures)):
+            img2 = with_captures[j]
+
+            # Skip if already marked for removal
+            if any(r is img2 for r in to_remove):
+                continue
+
+            # Stop if time difference exceeds window (use normalized datetimes)
+            time_diff = normalize_datetime(img2.captured_at) - normalize_datetime(
+                img1.captured_at
+            )
+            if time_diff > TIME_WINDOW:
+                break
+
+            # Only compare images from different providers
+            if img1.provider == img2.provider:
+                continue
+
+            # Mark the one with lower score for removal
+            if img1.distance_m > img2.distance_m:  # Higher distance = lower score
+                to_remove.append(img1)
+                logger.debug(
+                    "Datetime dedup: removing image",
+                    removed_provider=img1.provider,
+                    removed_source_id=img1.source_id,
+                    removed_distance_m=round(img1.distance_m, 1),
+                    kept_provider=img2.provider,
+                    kept_source_id=img2.source_id,
+                    kept_distance_m=round(img2.distance_m, 1),
+                    time_diff_hours=round(time_diff.total_seconds() / 3600, 1),
+                )
+            else:
+                to_remove.append(img2)
+                logger.debug(
+                    "Datetime dedup: removing image",
+                    removed_provider=img2.provider,
+                    removed_source_id=img2.source_id,
+                    removed_distance_m=round(img2.distance_m, 1),
+                    kept_provider=img1.provider,
+                    kept_source_id=img1.source_id,
+                    kept_distance_m=round(img1.distance_m, 1),
+                    time_diff_hours=round(time_diff.total_seconds() / 3600, 1),
+                )
+
+    # Filter out removed images
+    final_results = [r for r in results if not any(r is item for item in to_remove)]
+
+    if to_remove:
+        logger.info(
+            "Datetime-based deduplication complete", removed_count=len(to_remove)
+        )
+
+    return final_results
+
+
+async def _fetch_missing_dimensions(results: list[ImageResult]) -> list[ImageResult]:
+    """
+    Fetch image dimensions from HTTP headers for images missing width/height.
+
+    Only fetches the first 8KB of each image to read dimensions from headers.
+    Supports JPEG, PNG, GIF, WebP formats.
+    Results are cached indefinitely in persistent cache.
+
+    Args:
+        results: List of ImageResult objects
+
+    Returns:
+        List of ImageResult objects with dimensions filled in
+    """
+
+    updated_results = []
+
+    for result in results:
+        # Skip if dimensions already known
+        if result.width and result.height:
+            updated_results.append(result)
+            continue
+
+        # Check cache first
+        cache = get_persistent_cache()
+        cache_key = f"{CACHE_KEY_PREFIX}:dimensions:{_hash_url(result.url_large)}"
+
+        # Try to get from cache
+        cached = await sync_to_async(cache.get)(cache_key)
+        if cached:
+            result.width = cached.get("width")
+            result.height = cached.get("height")
+            updated_results.append(result)
+            continue
+
+        # Fetch dimensions from image headers
+        try:
+            dimensions = await _get_image_dimensions_from_headers(result.url_large)
+            if dimensions:
+                result.width, result.height = dimensions
+
+                # Cache indefinitely
+                await sync_to_async(cache.set)(
+                    cache_key,
+                    {"width": dimensions[0], "height": dimensions[1]},
+                    CACHE_INDEFINITE,
+                )
+
+                logger.debug(
+                    "Fetched dimensions",
+                    provider=result.provider,
+                    source_id=result.source_id,
+                    width=dimensions[0],
+                    height=dimensions[1],
+                )
+        except Exception as e:
+            logger.debug(
+                "Could not fetch dimensions", url=result.url_large[:50], error=str(e)
+            )
+
+        updated_results.append(result)
+
+    return updated_results
+
+
+def _hash_url(url: str) -> str:
+    """Create a hash from URL for cache key."""
+    import hashlib
+
+    return hashlib.md5(url.encode()).hexdigest()[:16]
+
+
+async def _get_image_dimensions_from_headers(url: str) -> tuple[int, int] | None:
+    """
+    Fetch image dimensions by reading only the first few KB of the image.
+    Uses streaming to handle JPEGs with large EXIF data (common in Camptocamp images).
 
     Args:
         url: Image URL
 
     Returns:
-        Canonical filename or None if not a Commons URL
+        Tuple of (width, height) or None if could not determine
     """
-    if not url:
+    import httpx
+    import struct
+
+    # Valid SOF markers for dimension extraction
+    # Excludes: 0xC4 (DHT), 0xC8 (JPEG-LS), 0xCC (Reserved)
+    SOF_MARKERS = {
+        0xC0,
+        0xC1,
+        0xC2,
+        0xC3,
+        0xC5,
+        0xC6,
+        0xC7,
+        0xC9,
+        0xCA,
+        0xCB,
+        0xCD,
+        0xCE,
+        0xCF,
+    }
+
+    try:
+        # Fetch first chunk and stream more if needed (for JPEGs with large EXIF)
+        from django.conf import settings
+
+        headers = {
+            "User-Agent": getattr(
+                settings, "BOT_AGENT", "WodoreBackend/1.0 (+https://wodore.ch)"
+            )
+        }
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Use streaming to handle large EXIF headers
+            async with client.stream("GET", url, headers=headers) as response:
+                if response.status_code not in [200, 206]:
+                    return None
+
+                # Read initial chunk (up to 200KB to handle large EXIF)
+                data = b""
+                chunks_read = 0
+                max_chunks = 25  # 25 * 8KB = ~200KB
+                sof_found = False
+
+                while chunks_read < max_chunks and not sof_found:
+                    chunk = await response.aread()
+                    if not chunk:
+                        break
+                    data += chunk
+                    chunks_read += 1
+
+                    # Check if we have enough data to detect format
+                    if len(data) >= 100:
+                        # JPEG: FF D8 FF
+                        if data[0:2] == b"\xff\xd8":
+                            # Parse JPEG SOF marker
+                            i = 2
+
+                            while i < len(data) - 9:
+                                # Check for marker (FF XX)
+                                if data[i] != 0xFF:
+                                    break  # Invalid JPEG
+
+                                marker = data[i + 1]
+
+                                # Check if it's a valid SOF marker
+                                if marker in SOF_MARKERS:
+                                    # SOF marker found - extract dimensions
+                                    height = struct.unpack(">H", data[i + 5 : i + 7])[0]
+                                    width = struct.unpack(">H", data[i + 7 : i + 9])[0]
+                                    return (width, height)
+
+                                # Skip FF padding byte
+                                if marker == 0xFF:
+                                    i += 1
+                                    continue
+
+                                # Skip non-SOF markers using marker length field
+                                if i + 4 > len(data):
+                                    break  # Not enough data for marker length
+
+                                try:
+                                    marker_len = struct.unpack(
+                                        ">H", data[i + 2 : i + 4]
+                                    )[0]
+                                    i += 2 + marker_len
+                                except (struct.error, ValueError):
+                                    break
+
+                            # If we haven't found SOF marker yet and have more chunks to read, continue
+                            if chunks_read < max_chunks:
+                                continue
+                            break
+
+                        # PNG: 89 50 4E 47
+                        elif len(data) >= 24 and data[0:8] == b"\x89PNG\r\n\x1a\n":
+                            width = struct.unpack(">I", data[16:20])[0]
+                            height = struct.unpack(">I", data[20:24])[0]
+                            return (width, height)
+
+                        # GIF: 47 49 46 38
+                        elif len(data) >= 10 and data[0:6] in [b"GIF87a", b"GIF89a"]:
+                            width = struct.unpack("<H", data[6:8])[0]
+                            height = struct.unpack("<H", data[8:10])[0]
+                            return (width, height)
+
+                        # WebP: RIFF....WEBP
+                        elif (
+                            len(data) >= 16
+                            and data[0:4] == b"RIFF"
+                            and data[8:12] == b"WEBP"
+                        ):
+                            # Simple VP8/VP8L detection
+                            if b"VP8 " in data[12:30]:
+                                # VP8
+                                vp8_offset = data.index(b"VP8 ") + 4
+                                width = (
+                                    struct.unpack(
+                                        "<H", data[vp8_offset + 6 : vp8_offset + 8]
+                                    )[0]
+                                    & 0x3FFF
+                                )
+                                height = (
+                                    struct.unpack(
+                                        "<H", data[vp8_offset + 8 : vp8_offset + 10]
+                                    )[0]
+                                    & 0x3FFF
+                                )
+                                return (width, height * 2)
+                            elif b"VP8L" in data[12:30]:
+                                # VP8L (lossless)
+                                vp8l_offset = data.index(b"VP8L") + 4
+                                # bits = data[vp8l_offset + 4]  # Not needed for dimension extraction
+                                width = (data[vp8l_offset + 7] << 8) | data[
+                                    vp8l_offset + 6
+                                ]
+                                height = (data[vp8l_offset + 10] << 8) | data[
+                                    vp8l_offset + 9
+                                ]
+                                return ((width + 1) * 2, (height + 1) * 2)
+
+                        # If we detected a format but couldn't find dimensions in current data, read more
+                        if chunks_read < max_chunks:
+                            continue
+                        break
+
+                logger.debug("Could not determine image format", url=url[:80])
+                return None
+
+    except Exception as e:
+        logger.debug("Error fetching image dimensions", error=str(e))
         return None
 
-    url_lower = url.lower()
 
-    if (
-        "commons.wikimedia.org" not in url_lower
-        and "upload.wikimedia.org" not in url_lower
-    ):
-        return None
+def _detect_source_in_attribution(
+    result: ImageResult, source_patterns: dict[str, list[str]]
+) -> str | None:
+    """
+    Detect if attribution/author/source fields contain a known source.
 
-    # Extract filename from various Commons URL formats
-    import re
+    Args:
+        result: ImageResult to check
+        source_patterns: Mapping of provider name -> list of patterns to match
 
-    # Try to extract filename from upload.wikimedia.org URL
-    upload_match = re.search(
-        r"/[a-f0-9]/[a-f0-9]/([^/]+\.(?:jpg|jpeg|png|gif))", url, re.IGNORECASE
-    )
-    if upload_match:
-        return upload_match.group(1)
+    Returns:
+        Provider name if found, None otherwise
+    """
+    # Combine all fields to check
+    text_to_check = f"{result.attribution} {result.author or ''} {result.author_url or ''} {result.extra.get('source_url', '') if result.extra else ''}".lower()
 
-    # Try to extract filename from wiki/File: URL
-    wiki_match = re.search(r"/wiki/File:([^#]+)", url, re.IGNORECASE)
-    if wiki_match:
-        return wiki_match.group(1).replace("_", " ")
+    # Check each provider's patterns
+    for provider, patterns in source_patterns.items():
+        for pattern in patterns:
+            if pattern.lower() in text_to_check:
+                return provider
 
     return None

@@ -3,7 +3,15 @@ Provider for Camptocamp.org images.
 Fetches images from Camptocamp API using bbox queries.
 """
 
-import logging
+# Test urls:
+# Hollandiahütte SAC
+#   https://api.camptocamp.org/waypoints/110216 (hut info)
+#   https://api.camptocamp.org/images/452082 (direct image info)
+#   https://www.camptocamp.org/images/452082/fr/hollandiahutte (image info page)
+# Result api:
+#   http://localhost:8000/v1/geo/images/hut/hollandia?lang=de&radius=50&limit=20&update_cache=1
+
+import structlog
 from datetime import datetime
 
 
@@ -11,9 +19,11 @@ from .base import ImageProvider, ImageResult
 from .schemas import GeoPlaceSchema
 from .scoring import (
     score_metadata_completeness,
+    score_distance_relevance,
+    calculate_age_penalty,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 class CamptocampProvider(ImageProvider):
@@ -38,7 +48,7 @@ class CamptocampProvider(ImageProvider):
         self.lang = lang
         self.api_base = "https://api.camptocamp.org"
         self.media_base = "https://media.camptocamp.org/c2corg-active"
-        logger.debug(f"Initialized CamptocampProvider with lang={lang}")
+        logger.debug("Initialized CamptocampProvider", lang=lang)
 
     async def fetch(
         self,
@@ -69,10 +79,12 @@ class CamptocampProvider(ImageProvider):
             if not update_cache:
                 cached = await self._get_cached_results(cache_key)
                 if cached is not None:
-                    logger.debug(f"CamptocampProvider: Cache HIT for {cache_key}")
+                    logger.debug(
+                        "Cache HIT", provider="camptocamp", cache_key=cache_key
+                    )
                     return cached
 
-            logger.debug("CamptocampProvider: Cache MISS - fetching from API")
+            logger.debug("Cache MISS - fetching from API", provider="camptocamp")
 
             # 2. Fetch from API
             import httpx
@@ -81,7 +93,7 @@ class CamptocampProvider(ImageProvider):
             # Calculate bbox from center point and radius
             bbox = self._calculate_bbox(lat, lon, radius / 1000)  # Convert to km
 
-            logger.debug(f"CamptocampProvider: Fetching waypoints in bbox {bbox}")
+            logger.debug("Fetching waypoints in bbox", provider="camptocamp", bbox=bbox)
 
             headers = {
                 "User-Agent": getattr(
@@ -93,11 +105,15 @@ class CamptocampProvider(ImageProvider):
                 waypoints = await self._fetch_waypoints(client, bbox)
 
                 if not waypoints:
-                    logger.warning("CamptocampProvider: No waypoints found in bbox")
+                    logger.debug(
+                        "No waypoints found in bbox", provider="camptocamp", bbox=bbox
+                    )
                     await self._set_cached_results(cache_key, [])
                     return []
 
-                logger.debug(f"CamptocampProvider: Found {len(waypoints)} waypoints")
+                logger.debug(
+                    "Found waypoints", provider="camptocamp", count=len(waypoints)
+                )
 
                 # Step 2: Get details for each waypoint and extract images
                 results = []
@@ -109,30 +125,44 @@ class CamptocampProvider(ImageProvider):
                 ]:  # Limit waypoints based on desired result count
                     try:
                         waypoint_id = waypoint.get("document_id")
-                        logger.debug(f"  🔎 Fetching waypoint {waypoint_id}...")
+                        logger.debug(
+                            "Fetching waypoint",
+                            provider="camptocamp",
+                            waypoint_id=waypoint_id,
+                        )
                         images = await self._fetch_waypoint_images(
                             client, waypoint_id, lat, lon, radius, limit
                         )
                         logger.debug(
-                            f"  → Found {len(images)} images for waypoint {waypoint_id}"
+                            "Found images for waypoint",
+                            provider="camptocamp",
+                            waypoint_id=waypoint_id,
+                            count=len(images),
                         )
                         results.extend(images)
                     except Exception as e:
                         logger.warning(
-                            f"Error processing waypoint {waypoint.get('document_id')}: {e}"
+                            "Error processing waypoint",
+                            provider="camptocamp",
+                            waypoint_id=waypoint.get("document_id"),
+                            error=str(e),
                         )
                         continue
 
-                logger.debug(f"CamptocampProvider: Total images found: {len(results)}")
+                logger.debug(
+                    "Total images found", provider="camptocamp", count=len(results)
+                )
 
                 # 3. Store in cache
-                logger.debug(f"CamptocampProvider: Caching {len(results)} results")
+                logger.debug(
+                    "Caching results", provider="camptocamp", count=len(results)
+                )
                 await self._set_cached_results(cache_key, results)
 
                 return results
 
         except Exception as e:
-            logger.error(f"CamptocampProvider error: {e}")
+            logger.error("Provider error", provider="camptocamp", error=str(e))
             return []
 
     def _calculate_bbox(self, lat: float, lon: float, radius_km: float) -> str:
@@ -253,11 +283,18 @@ class CamptocampProvider(ImageProvider):
                     geom_lat = lat
                 else:
                     logger.debug(
-                        f"Waypoint {waypoint_id} geometry has invalid coordinates"
+                        "Waypoint geometry has invalid coordinates",
+                        provider="camptocamp",
+                        waypoint_id=waypoint_id,
                     )
                     return []
             except (json.JSONDecodeError, ValueError, TypeError) as e:
-                logger.debug(f"Waypoint {waypoint_id} failed to parse geometry: {e}")
+                logger.debug(
+                    "Failed to parse waypoint geometry",
+                    provider="camptocamp",
+                    waypoint_id=waypoint_id,
+                    error=str(e),
+                )
                 return []
         else:
             # Fallback to main coordinates if no geometry
@@ -265,7 +302,11 @@ class CamptocampProvider(ImageProvider):
             geom_lon = data.get("lon")
 
             if not geom_lat or not geom_lon:
-                logger.debug(f"Waypoint {waypoint_id} has no coordinates")
+                logger.debug(
+                    "Waypoint has no coordinates",
+                    provider="camptocamp",
+                    waypoint_id=waypoint_id,
+                )
                 return []
 
         # Calculate distance
@@ -291,7 +332,12 @@ class CamptocampProvider(ImageProvider):
         images = associations.get("images", [])
         results = []
 
-        logger.debug(f"Waypoint {waypoint_id} has {len(images)} images in associations")
+        logger.debug(
+            "Waypoint has images in associations",
+            provider="camptocamp",
+            waypoint_id=waypoint_id,
+            count=len(images),
+        )
 
         max_images = min(len(images), limit)  # Respect overall limit
         for img in images[:max_images]:  # Limit to requested limit
@@ -313,7 +359,12 @@ class CamptocampProvider(ImageProvider):
                     results.append(result)
 
             except Exception as e:
-                logger.warning(f"Error processing image {image_id}: {e}")
+                logger.warning(
+                    "Error processing image",
+                    provider="camptocamp",
+                    image_id=image_id,
+                    error=str(e),
+                )
                 continue
 
         return results
@@ -364,8 +415,14 @@ class CamptocampProvider(ImageProvider):
             if not filename:
                 return None
 
-            # Build original image URL
-            original_url = f"{self.media_base}/{filename}"
+            # Use the URL with file extension from API response (urls.original.raw)
+            # This ensures dimension fetching works correctly
+            urls = image_details.get("urls", {})
+            original_url = urls.get("original", {}).get("raw")
+
+            # Fallback to manually constructed URL if urls.original.raw not available
+            if not original_url:
+                original_url = f"{self.media_base}/{filename}"
 
             # Extract metadata
             locales = image_details.get("locales", [])
@@ -406,22 +463,25 @@ class CamptocampProvider(ImageProvider):
 
             # Determine license based on image type
             if image_type == "personal":
-                license_slug = "cc-by-nc-nd-4.0"
-                license_name = "CC BY-NC-ND 4.0"
-                license_url = "https://creativecommons.org/licenses/by-nc-nd/4.0/"
+                license_slug = "cc-by-nc-nd-3.0"
+                license_name = "CC BY-NC-ND 3.0"
+                license_url = "https://creativecommons.org/licenses/by-nc-nd/3.0/"
             else:  # collaborative
-                license_slug = "cc-by-sa-4.0"
-                license_name = "CC BY-SA 4.0"
-                license_url = "https://creativecommons.org/licenses/by-sa/4.0/"
+                license_slug = "cc-by-sa-3.0"
+                license_name = "CC BY-SA 3.0"
+                license_url = "https://creativecommons.org/licenses/by-sa/3.0/"
+
+            # Build source URL to image page
+            # Format: https://www.camptocamp.org/images/{image_id}
+            source_url = (
+                f"https://www.camptocamp.org/images/{image_details.get('document_id')}"
+            )
 
             # Build attribution
             if author and author != "camptocamp.org":
-                attribution = f'{author} on <a href="https://www.camptocamp.org">camptocamp.org</a>, <a href="{license_url}">{license_name}</a>'
+                attribution = f'{author} on <a href="{source_url}">camptocamp.org</a>, <a href="{license_url}">{license_name}</a>'
             else:
-                attribution = f'<a href="https://www.camptocamp.org">camptocamp.org</a> (collaborative), <a href="{license_url}">{license_name}</a>'
-
-            # Source URL
-            source_url = f"https://www.camptocamp.org/waypoints/{waypoint_id}"
+                attribution = f'<a href="{source_url}">camptocamp.org</a> (collaborative), <a href="{license_url}">{license_name}</a>'
 
             # Calculate score
             score = self._score_camptocamp_image(
@@ -440,6 +500,21 @@ class CamptocampProvider(ImageProvider):
 
             from django.contrib.gis.geos import Point
 
+            # Build raw author string for deduplication
+            # Concatenate all source info without formatting
+            author_raw_parts = []
+            if author:
+                author_raw_parts.append(str(author))
+            if image_details.get("creator"):
+                creator = image_details.get("creator")
+                if isinstance(creator, dict):
+                    author_raw_parts.append(str(creator.get("name", "")))
+                    author_raw_parts.append(str(creator.get("user_id", "")))
+                else:
+                    author_raw_parts.append(str(creator))
+            author_raw_parts.append(source_url)  # Add source URL
+            author_raw = " ".join(filter(None, author_raw_parts))
+
             return ImageResult(
                 provider="camptocamp",
                 source_id=f"waypoint_{waypoint_id}_{filename}",
@@ -452,16 +527,18 @@ class CamptocampProvider(ImageProvider):
                 attribution=attribution,
                 author=author,
                 author_url=None,
+                author_raw=author_raw,  # Raw concatenated author info for deduplication
                 url_large=original_url,
                 url_medium=None,  # Camptocamp doesn't provide medium URLs
                 width=width,
                 height=height,
                 place=None,
+                extra=None,
                 score=score,
             )
 
         except Exception as e:
-            logger.warning(f"Error parsing Camptocamp image: {e}")
+            logger.warning("Error parsing image", provider="camptocamp", error=str(e))
             return None
 
     def _score_camptocamp_image(
@@ -487,12 +564,12 @@ class CamptocampProvider(ImageProvider):
             captured_at: Image capture date (if available)
 
         Returns:
-            Score from 0-100 (can be negative for very old/low-quality images)
+            Score from 0-100
         """
         score = 0
 
         # Source origin (0-50)
-        # Camptocamp is a curated outdoor community
+        # Camptocamp is a curated outdoor community - stays at 40
         score += 40
 
         # Quality rating (0-20)
@@ -505,8 +582,6 @@ class CamptocampProvider(ImageProvider):
 
         # Distance relevance (0-20)
         # Images from closer waypoints get higher scores
-        from .scoring import score_distance_relevance
-
         score += score_distance_relevance(distance_m, radius)
 
         # Metadata completeness (0-25)
@@ -521,30 +596,22 @@ class CamptocampProvider(ImageProvider):
             has_date=has_date,
         )
 
-        # Age penalty (0 to -40 points)
-        # Penalize old images heavily - older than 10 years gets negative scores
+        # Age penalty (-50 to +5) - using global function
         from datetime import timezone
 
         if captured_at:
-            age_years = (datetime.now(timezone.utc) - captured_at).days / 365.25
-            if age_years > 15:
-                score -= 40  # Very old images
-            elif age_years > 10:
-                score -= 30  # Old images
-            elif age_years > 5:
-                score -= 20  # Somewhat old images
-            elif age_years > 2:
-                score -= 10  # Recent but not new
+            days_old = (datetime.now(timezone.utc) - captured_at).days
+            score += calculate_age_penalty(days_old)
         else:
-            # No date available or default epoch date - assume very old
-            score -= 40  # Maximum penalty for unknown/very old images
+            # No date available - use global penalty
+            score += calculate_age_penalty(None)
 
         # Image type bonus (0-5)
         image_type = image_details.get("image_type")
         if image_type == "collaborative":
             score += 5  # Community-vetted content
 
-        return min(score, 100)
+        return max(0, min(score, 100))
 
 
 if __name__ == "__main__":

@@ -10,9 +10,9 @@ and usage signals. Images matching the GeoPlace's QID get a significant
 score boost.
 """
 
-import logging
+import structlog
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from django.contrib.gis.geos import Point
@@ -24,9 +24,10 @@ from .scoring import (
     score_metadata_completeness,
     score_technical_quality,
     score_qid_match,
+    calculate_age_penalty,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 class WikimediaCommonsProvider(ImageProvider):
@@ -37,14 +38,17 @@ class WikimediaCommonsProvider(ImageProvider):
     Commons API geosearch as fallback.
     """
 
-    source = "wikimedia_commons"
-    cache_ttl = 7 * 24 * 3600  # 14 days
+    source = "wikicommons"
+    cache_ttl = 7 * 24 * 3600  # 7 days for results
+    metadata_cache_ttl = (
+        30 * 24 * 3600
+    )  # 30 days for image metadata (dimensions, license, author)
     priority = 2  # Same as wikidata, before panoramax
 
     # Source type constants
-    WIKIDATA_P18 = "wd_p18"  # Main image from Wikidata
-    WIKIDATA_CATEGORY = "wd_cat"  # From Wikidata category
-    GEOSEARCH = "geo"  # Commons geosearch
+    WIKIDATA_P18 = "wd_p18"  # Main image from Wikidata (highest score)
+    WIKIDATA_CATEGORY = "wd_cat"  # From Wikidata category (medium score)
+    GEOSEARCH = "geo"  # Commons geosearch (lowest score)
 
     def __init__(
         self,
@@ -60,7 +64,7 @@ class WikimediaCommonsProvider(ImageProvider):
         """
         self.wikidata_endpoint = wikidata_endpoint
         self.commons_api = commons_api
-        logger.debug("Initialized WikimediaCommonsProvider")
+        logger.debug("initialized_provider", provider="WikimediaCommonsProvider")
 
     async def fetch(
         self,
@@ -91,10 +95,12 @@ class WikimediaCommonsProvider(ImageProvider):
             if not update_cache:
                 cached = await self._get_cached_results(cache_key)
                 if cached is not None:
-                    logger.debug(f"WikimediaCommonsProvider: Cache HIT for {cache_key}")
+                    logger.debug(
+                        "cache_hit", provider="wikicommons", cache_key=cache_key
+                    )
                     return cached
 
-            logger.debug("WikimediaCommonsProvider: Cache MISS - fetching from API")
+            logger.debug("cache_miss_fetching", provider="wikicommons")
 
             # 2. Fetch from API
             import httpx
@@ -110,7 +116,10 @@ class WikimediaCommonsProvider(ImageProvider):
                     place_qids.add(qid)
 
             logger.debug(
-                f"WikimediaCommonsProvider: Found {len(place_qids)} QIDs: {place_qids}"
+                "found_place_qids",
+                provider="wikicommons",
+                qid_count=len(place_qids),
+                qids=list(place_qids),
             )
 
             # Strategy 1: Direct QID query (highest priority) - if we have QIDs
@@ -124,14 +133,27 @@ class WikimediaCommonsProvider(ImageProvider):
                             seen_titles.add(result.source_id)
                             results.append(result)
                     logger.debug(
-                        f"WikimediaCommonsProvider: Direct QID query found {len(qid_results)} images"
+                        "direct_qid_query_complete",
+                        provider="wikicommons",
+                        image_count=len(qid_results),
                     )
                 except Exception as e:
-                    logger.warning(f"Wikidata direct QID query failed: {e}")
+                    logger.warning(
+                        "wikidata_qid_query_failed",
+                        provider="wikicommons",
+                        error=str(e),
+                    )
 
-            # Strategy 2: Wikidata spatial query (if we still need more results)
-            if len(results) < limit:
+            # Strategy 2: Wikidata spatial query (only if no results OR (radius > 80m AND len(results) < limit))
+            # Don't run spatial query if we already have good results from direct QID lookup
+            if len(results) == 0 or (radius > 80 and len(results) < limit):
                 try:
+                    logger.debug(
+                        "running_spatial_query",
+                        provider="wikicommons",
+                        radius_m=radius,
+                        current_result_count=len(results),
+                    )
                     wd_results = await self._fetch_wikidata_spatial(
                         lat, lon, radius, limit, place_qids, httpx
                     )
@@ -140,11 +162,17 @@ class WikimediaCommonsProvider(ImageProvider):
                             seen_titles.add(result.source_id)
                             results.append(result)
                 except Exception as e:
-                    logger.warning(f"Wikidata spatial query failed: {e}")
+                    logger.warning(
+                        "wikidata_spatial_query_failed",
+                        provider="wikicommons",
+                        error=str(e),
+                    )
 
-            # Strategy 3: Commons geosearch (fallback if low results)
-            if len(results) < 10:
+            # Strategy 3: Commons geosearch (only if no results AND len(results) < limit)
+            # Only run as fallback if we have NO images at all
+            if len(results) == 0 and len(results) < limit:
                 try:
+                    logger.debug("running_geosearch_fallback", provider="wikicommons")
                     geo_results = await self._fetch_commons_geosearch(
                         lat, lon, radius, limit, place_qids, httpx
                     )
@@ -153,20 +181,26 @@ class WikimediaCommonsProvider(ImageProvider):
                             seen_titles.add(result.source_id)
                             results.append(result)
                 except Exception as e:
-                    logger.warning(f"Commons geosearch failed: {e}")
+                    logger.warning(
+                        "commons_geosearch_failed", provider="wikicommons", error=str(e)
+                    )
 
             logger.debug(
-                f"WikimediaCommonsProvider: Found {len(results)} unique images"
+                "fetch_complete",
+                provider="wikicommons",
+                unique_image_count=len(results),
             )
 
             # 3. Store in cache
-            logger.debug(f"WikimediaCommonsProvider: Caching {len(results)} results")
+            logger.debug(
+                "caching_results", provider="wikicommons", result_count=len(results)
+            )
             await self._set_cached_results(cache_key, results)
 
             return results
 
         except Exception as e:
-            logger.error(f"WikimediaCommonsProvider error: {e}")
+            logger.error("provider_error", provider="wikicommons", error=str(e))
             return []
 
     async def _fetch_wikidata_spatial(
@@ -263,10 +297,10 @@ class WikimediaCommonsProvider(ImageProvider):
                         results.append(result)
 
                 except Exception as e:
-                    logger.warning(f"Error parsing Wikidata result: {e}")
+                    logger.warning("error_parsing_wikidata_result", error=str(e))
                     continue
 
-            logger.debug(f"Wikidata spatial query: {len(results)} images")
+            logger.debug("wikidata_spatial_query_complete", image_count=len(results))
             return results
 
     async def _fetch_wikidata_by_qids(
@@ -294,12 +328,14 @@ class WikimediaCommonsProvider(ImageProvider):
 
         # Build SPARQL query with VALUES clause for specific QIDs
         # P18 is the "image" property - the main image for a Wikidata entity
+        # P373 is the "Commons category" property - category name on Wikimedia Commons
         qid_list = " ".join([f"wd:{qid}" for qid in list(qids)[:limit]])
 
         sparql = f"""
-        SELECT ?item ?itemLabel ?image WHERE {{
+        SELECT ?item ?itemLabel ?image ?category WHERE {{
           VALUES ?item {{ {qid_list} }}
           OPTIONAL {{ ?item wdt:P18 ?image }}
+          OPTIONAL {{ ?item wdt:P373 ?category }}
           SERVICE wikibase:label {{
             bd:serviceParam wikibase:language "de,fr,it,en"
           }}
@@ -312,6 +348,7 @@ class WikimediaCommonsProvider(ImageProvider):
         }
 
         results = []
+        categories_to_fetch = set()  # Track categories we need to fetch
 
         async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
             response = await client.get(
@@ -324,53 +361,83 @@ class WikimediaCommonsProvider(ImageProvider):
 
             for binding in bindings:
                 try:
-                    image_uri = binding.get("image", {}).get("value")
-                    if not image_uri:
-                        item_uri = binding.get("item", {}).get("value", "")
-                        qid = self._extract_qid_from_uri(item_uri)
-                        logger.debug(f"QID {qid} has no P18 image")
-                        continue
-
                     # Extract QID from URI
                     item_uri = binding.get("item", {}).get("value", "")
                     qid = self._extract_qid_from_uri(item_uri)
 
-                    # Get Commons title from image URI
-                    commons_title = self._extract_commons_title_from_uri(image_uri)
-                    if not commons_title:
-                        continue
+                    # Check for P18 (main image)
+                    image_uri = binding.get("image", {}).get("value")
+                    if image_uri:
+                        # Get Commons title from image URI
+                        commons_title = self._extract_commons_title_from_uri(image_uri)
+                        if commons_title:
+                            # Fetch full metadata from Commons API
+                            img_data = await self._fetch_commons_metadata(
+                                commons_title, client
+                            )
+                            if img_data:
+                                # Calculate score - direct QID match gets highest score
+                                score = self._score_commons_image(
+                                    img_data,
+                                    source_type=WikimediaCommonsProvider.WIKIDATA_P18,
+                                    has_qid=True,
+                                    matches_place_qid=True,  # Direct match!
+                                )
 
-                    # Fetch full metadata from Commons API
-                    img_data = await self._fetch_commons_metadata(commons_title, client)
-                    if not img_data:
-                        continue
+                                # Create ImageResult with distance 0 (exact match)
+                                result = self._create_image_result(
+                                    commons_title,
+                                    img_data,
+                                    qid,
+                                    score,
+                                    0.0,
+                                    0.0,  # Coordinates don't matter for exact match
+                                    distance_m=0.0,  # Exact QID match
+                                )
+                                if result:
+                                    results.append(result)
 
-                    # Calculate score - direct QID match gets highest score
-                    score = self._score_commons_image(
-                        img_data,
-                        source_type=WikimediaCommonsProvider.WIKIDATA_P18,
-                        has_qid=True,
-                        matches_place_qid=True,  # Direct match!
-                    )
-
-                    # Create ImageResult with distance 0 (exact match)
-                    result = self._create_image_result(
-                        commons_title,
-                        img_data,
-                        qid,
-                        score,
-                        0.0,
-                        0.0,  # Coordinates don't matter for exact match
-                        distance_m=0.0,  # Exact QID match
-                    )
-                    if result:
-                        results.append(result)
+                    # Check for P373 (Commons category)
+                    category_binding = binding.get("category", {})
+                    if category_binding.get("value"):
+                        category_name = category_binding.get("value")
+                        categories_to_fetch.add(category_name)
 
                 except Exception as e:
-                    logger.warning(f"Error parsing direct QID result: {e}")
+                    logger.warning("error_parsing_direct_qid_result", error=str(e))
                     continue
 
-        logger.debug(f"Direct QID query: {len(results)} images from {len(qids)} QIDs")
+            # Now fetch all category images
+            for category_name in categories_to_fetch:
+                try:
+                    logger.debug(
+                        "fetching_commons_category",
+                        category_name=category_name,
+                    )
+                    category_results = await self._fetch_commons_category_images(
+                        category_name,
+                        0.0,  # lat (not used for category images)
+                        0.0,  # lon (not used)
+                        limit,
+                        httpx,
+                    )
+                    # Add category images (they'll have lower scores than P18)
+                    for result in category_results:
+                        if result.source_id not in [r.source_id for r in results]:
+                            results.append(result)
+                except Exception as e:
+                    logger.warning(
+                        "error_fetching_category",
+                        category_name=category_name,
+                        error=str(e),
+                    )
+                    continue
+
+        logger.debug(
+            "direct_qid_query_complete_with_categories",
+            image_count=len(results),
+            qid_count=len(qids),
+        )
         return results
 
     async def _fetch_commons_geosearch(
@@ -449,10 +516,10 @@ class WikimediaCommonsProvider(ImageProvider):
                         results.append(result)
 
                 except Exception as e:
-                    logger.warning(f"Error parsing geosearch result: {e}")
+                    logger.warning("error_parsing_geosearch_result", error=str(e))
                     continue
 
-            logger.debug(f"Commons geosearch: {len(results)} images")
+            logger.debug("commons_geosearch_complete", image_count=len(results))
             return results
 
     async def _fetch_commons_metadata(
@@ -493,9 +560,99 @@ class WikimediaCommonsProvider(ImageProvider):
                 return self._parse_commons_api_response(page_data)
 
         except Exception as e:
-            logger.warning(f"Error fetching Commons metadata: {e}")
+            logger.warning(
+                "error_fetching_commons_metadata",
+                commons_title=commons_title,
+                error=str(e),
+            )
 
         return None
+
+    async def _fetch_commons_category_images(
+        self,
+        category_name: str,
+        lat: float,
+        lon: float,
+        limit: int,
+        httpx,
+    ) -> list[ImageResult]:
+        """
+        Fetch images from a Wikimedia Commons category.
+
+        Uses P373 (Commons category) property from Wikidata to find all images
+        in a category, not just the main P18 image.
+
+        Args:
+            category_name: Category name (without "Category:" prefix)
+            lat: Query latitude (for distance calculation)
+            lon: Query longitude (for distance calculation)
+            limit: Maximum number of results to return
+            httpx: HTTP client module
+
+        Returns:
+            List of ImageResult objects
+        """
+        params = {
+            "action": "query",
+            "list": "categorymembers",
+            "cmtitle": f"Category:{category_name}",
+            "cmnamespace": 6,  # File namespace only
+            "cmlimit": min(limit, 50),
+            "format": "json",
+            "origin": "*",
+        }
+
+        headers = {
+            "User-Agent": getattr(settings, "BOT_AGENT", "WodoreBackend/1.0"),
+        }
+
+        results = []
+
+        async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+            response = await client.get(self.commons_api, params=params)
+            response.raise_for_status()
+
+            data = response.json()
+            members = data.get("query", {}).get("categorymembers", [])
+
+            logger.debug(
+                "commons_category_members",
+                category_name=category_name,
+                member_count=len(members),
+            )
+
+            for member in members[:limit]:
+                try:
+                    commons_title = member.get("title", "")
+                    if not commons_title.startswith("File:"):
+                        continue
+
+                    # Fetch full metadata
+                    img_data = await self._fetch_commons_metadata(commons_title, client)
+                    if not img_data:
+                        continue
+
+                    # Calculate score (lower than P18 main image)
+                    score = self._score_commons_image(
+                        img_data,
+                        source_type=WikimediaCommonsProvider.WIKIDATA_CATEGORY,
+                        has_qid=False,  # Category images don't have direct QID
+                        matches_place_qid=False,
+                    )
+
+                    # Create ImageResult
+                    result = self._create_image_result(
+                        commons_title, img_data, None, score, lat, lon
+                    )
+                    if result:
+                        results.append(result)
+
+                except Exception as e:
+                    logger.warning("error_parsing_category_image", error=str(e))
+                    continue
+
+            logger.debug("commons_category_query_complete", image_count=len(results))
+            return results
 
     def _parse_commons_api_response(self, page_data: dict) -> dict[str, Any]:
         """
@@ -511,23 +668,98 @@ class WikimediaCommonsProvider(ImageProvider):
         extmetadata = imageinfo.get("extmetadata", {})
         categories = page_data.get("categories", [])
 
+        # Extract author and clean HTML
+        author_raw = extmetadata.get("Artist", {}).get("value", "Unknown")
+
+        # Extract author URL from HTML links
+        author_url = None
+        import re
+
+        url_match = re.search(r'href=["\']([^"\']+)["\']', author_raw)
+        if url_match:
+            author_url = url_match.group(1)
+
+        # Clean HTML and extract nice author name
+        # Remove HTML tags
+        author_clean = re.sub(r"<[^>]+>", "", author_raw).strip()
+
+        # If the cleaned text looks like a URL, try to extract a nicer name
+        if author_clean.startswith("http"):
+            # Extract profile name from URL
+            # e.g., "https://www.camptocamp.org/profiles/377/fr/alex-saunier" -> "alex-saunier"
+            url_parts = author_clean.rstrip("/").split("/")
+            if url_parts:
+                # Get the last meaningful part
+                for part in reversed(url_parts):
+                    if (
+                        part
+                        and not part.isdigit()
+                        and part
+                        not in [
+                            "http:",
+                            "https:",
+                            "www.",
+                            "profiles",
+                            "fr",
+                            "de",
+                            "en",
+                            "it",
+                        ]
+                    ):
+                        author_clean = part.replace("-", " ").replace("_", " ")
+                        break
+
+        # If still empty or looks like URL, use a generic name
+        if not author_clean or author_clean.startswith("http"):
+            author_clean = "Wikimedia Commons contributor"
+
         # Extract metadata fields
+        # Get dimensions from extmetadata if available (more reliable)
+        dimensions = extmetadata.get("ObjectSize", {}).get("value", "")
+        width = None
+        height = None
+        if dimensions and "×" in dimensions:
+            try:
+                # Parse "1920 × 1080" format
+                parts = dimensions.split("×")
+                width = int(parts[0].strip())
+                height = int(parts[1].strip())
+            except (ValueError, IndexError):
+                # Fallback to imageinfo fields
+                width = imageinfo.get("width")
+                height = imageinfo.get("height")
+        else:
+            # Fallback to imageinfo fields
+            width = imageinfo.get("width")
+            height = imageinfo.get("height")
+
+        # Extract license from License.value field (not LicenseShortName)
+        # Format: {"value": "cc-by-sa-3.0", "source": "commons-templates", "hidden": ""}
+        license_data = extmetadata.get("License", {})
+        license_slug = license_data.get("value", "")
+
+        # Extract date - try multiple fields in order of preference
+        # DateTimeOriginal: EXIF date from camera (most accurate for capture date)
+        # DateTime: Date/time metadata (can be upload date or other)
+        date_taken = extmetadata.get("DateTimeOriginal", {}).get(
+            "value", ""
+        ) or extmetadata.get("DateTime", {}).get("value", "")
+
         metadata = {
             "url": imageinfo.get("url"),
             "thumb_url": imageinfo.get("thumburl"),
-            "width": imageinfo.get("width"),
-            "height": imageinfo.get("height"),
+            "width": width,
+            "height": height,
             "size": imageinfo.get("size"),
             "mime": imageinfo.get("mime"),
-            "author": self._clean_html(
-                extmetadata.get("Artist", {}).get("value", "Unknown")
-            ),
-            "license": extmetadata.get("LicenseShortName", {}).get("value", ""),
+            "author": author_clean,
+            "author_url": author_url,  # Extracted URL from author HTML
+            "license": license_slug,
             "license_url": extmetadata.get("LicenseUrl", {}).get("value", ""),
             "description": self._clean_html(
                 extmetadata.get("ImageDescription", {}).get("value", "")
             ),
-            "date_taken": extmetadata.get("DateTimeOriginal", {}).get("value", ""),
+            "date_taken": date_taken,
             "categories": [cat.get("title", "") for cat in categories],
         }
 
@@ -564,9 +796,9 @@ class WikimediaCommonsProvider(ImageProvider):
 
         # Source origin (0-50)
         source_scores = {
-            WikimediaCommonsProvider.WIKIDATA_P18: 50,
-            WikimediaCommonsProvider.WIKIDATA_CATEGORY: 30,
-            WikimediaCommonsProvider.GEOSEARCH: 10,
+            WikimediaCommonsProvider.WIKIDATA_P18: 45,  # Main image from Wikidata
+            WikimediaCommonsProvider.WIKIDATA_CATEGORY: 30,  # From Wikidata category (reduced from 35)
+            WikimediaCommonsProvider.GEOSEARCH: 20,  # Commons geosearch (lower quality)
         }
         score += source_scores.get(source_type, 10)
 
@@ -582,7 +814,7 @@ class WikimediaCommonsProvider(ImageProvider):
             has_wikidata=has_qid,
         )
 
-        # Technical quality (0-10)
+        # Technical quality (0-30) - increased from 0-10
         score += score_technical_quality(
             width=img_data.get("width"),
             height=img_data.get("height"),
@@ -590,7 +822,56 @@ class WikimediaCommonsProvider(ImageProvider):
             file_size=img_data.get("size"),
         )
 
-        return min(score, 100)
+        # Age penalty (-50 to +5) - using global function
+        date_taken_str = img_data.get("date_taken")
+        if date_taken_str:
+            try:
+                # Parse the date string to datetime object
+                # Common formats: "2023-08-15 12:34:56", "15 August 2023", "2023-08-15"
+                from datetime import timezone
+
+                # Try ISO 8601 format first
+                try:
+                    captured_at = datetime.fromisoformat(date_taken_str)
+                except ValueError:
+                    # Try other common formats
+                    import dateparser
+
+                    parsed = dateparser.parse(
+                        date_taken_str,
+                        settings={
+                            "TO_TIMEZONE": "UTC",
+                            "PREFER_DATES_FROM": "past",
+                        },
+                    )
+                    if parsed:
+                        # Ensure timezone-aware datetime and set default time to 12:00
+                        if parsed.tzinfo is None:
+                            parsed = parsed.replace(tzinfo=timezone.utc)
+                        # If time is 00:00, assume no time was specified and use 12:00
+                        if parsed.hour == 0 and parsed.minute == 0:
+                            parsed = parsed.replace(hour=12, minute=0)
+                        captured_at = parsed
+                    else:
+                        # If parsing fails, treat as no date
+                        score += calculate_age_penalty(None)
+                        return max(0, min(score, 100))
+
+                # Calculate days old
+                days_old = (datetime.now(timezone.utc) - captured_at).days
+                score += calculate_age_penalty(days_old)
+            except Exception as e:
+                logger.debug(
+                    "could_not_parse_date_for_scoring",
+                    date_taken=date_taken_str,
+                    error=str(e),
+                )
+                score += calculate_age_penalty(None)
+        else:
+            # No date available - use global penalty
+            score += calculate_age_penalty(None)
+
+        return max(0, min(score, 100))
 
     def _create_image_result(
         self,
@@ -638,11 +919,42 @@ class WikimediaCommonsProvider(ImageProvider):
                     query_lat, query_lon, query_lat, query_lon
                 )
 
-            # Parse date
+            # Parse date - Wikimedia Commons uses various date formats
+            # Common formats: "2023-08-15 12:34:56", "15 August 2023", "2023-08-15"
             captured_at = None
             if img_data.get("date_taken"):
                 try:
-                    captured_at = datetime.fromisoformat(img_data["date_taken"])
+                    date_str = img_data["date_taken"]
+
+                    # Try ISO 8601 format first
+                    try:
+                        captured_at = datetime.fromisoformat(date_str)
+                    except ValueError:
+                        # Try other common formats
+                        import dateparser
+
+                        parsed = dateparser.parse(
+                            date_str,
+                            settings={
+                                "TO_TIMEZONE": "UTC",
+                                "PREFER_DATES_FROM": "past",
+                            },
+                        )
+                        if parsed:
+                            # Ensure timezone-aware datetime and set default time to 12:00
+                            if parsed.tzinfo is None:
+                                parsed = parsed.replace(tzinfo=timezone.utc)
+                            # If time is 00:00, assume no time was specified and use 12:00
+                            if parsed.hour == 0 and parsed.minute == 0:
+                                parsed = parsed.replace(hour=12, minute=0)
+                            captured_at = parsed
+
+                except Exception as e:
+                    logger.debug(
+                        "could_not_parse_date",
+                        date_taken=img_data.get("date_taken"),
+                        error=str(e),
+                    )
                 except (ValueError, TypeError):
                     pass
 
@@ -660,14 +972,25 @@ class WikimediaCommonsProvider(ImageProvider):
             # Normalize license
             license_slug = self._normalize_license(img_data.get("license", ""))
 
+            # Build raw author string for deduplication
+            # Concatenate all source info without formatting
+            author_raw_parts = []
+            if author:
+                author_raw_parts.append(str(author))
+            if img_data.get("author_url"):
+                author_raw_parts.append(str(img_data.get("author_url")))
+            author_raw_parts.append(str(img_data.get("url", "")))  # Image URL
+            author_raw_parts.append(str(commons_title))  # File name
+            author_raw = " ".join(filter(None, author_raw_parts))
+
             # Extract dimensions
             width = img_data.get("width")
             height = img_data.get("height")
 
             return ImageResult(
-                provider="wikimedia_commons",
+                provider="wikicommons",
                 source_id=commons_title,
-                source_url=img_data.get("url"),
+                source_url=f"https://commons.wikimedia.org/wiki/{commons_title}",
                 image_type="flat",
                 captured_at=captured_at,
                 location=Point(query_lon, query_lat, srid=4326),
@@ -675,17 +998,23 @@ class WikimediaCommonsProvider(ImageProvider):
                 license_slug=license_slug,
                 attribution=attribution,
                 author=author,
-                author_url=None,
-                url_large=img_data.get("url", ""),
-                url_medium=img_data.get("thumb_url"),
+                author_url=img_data.get("author_url"),  # Use extracted author URL
+                author_raw=author_raw,  # Raw concatenated author info for deduplication
+                url_large=img_data.get("url", ""),  # Original URL only
+                # url_medium is not set - we always use the original high-quality image
                 width=width,
                 height=height,
-                place={"qid": qid} if qid else None,
+                place=None,  # TODO: Could look up place info from QID, but requires database query
+                extra={
+                    "source_url": img_data.get(
+                        "url"
+                    ),  # Add source URL for deduplication
+                },
                 score=score,
             )
 
         except Exception as e:
-            logger.warning(f"Error creating ImageResult: {e}")
+            logger.warning("error_creating_image_result", error=str(e))
             return None
 
     def _extract_qid_from_uri(self, uri: str) -> str | None:
@@ -694,10 +1023,39 @@ class WikimediaCommonsProvider(ImageProvider):
         return match.group(1) if match else None
 
     def _extract_commons_title_from_uri(self, uri: str) -> str | None:
-        """Extract Commons title from image URI."""
-        # URI format: https://commons.wikimedia.org/wiki/File:Example.jpg
-        match = re.search(r"File:(.+)$", uri)
-        return f"File:{match.group(1)}" if match else None
+        """Extract Commons title from image URI.
+
+        Handles two URI formats:
+        - Special:FilePath (returned by Wikidata SPARQL): http://commons.wikimedia.org/wiki/Special:FilePath/B%C3%A4chlitalh%C3%BCtte.jpg
+        - Wiki/File format: https://commons.wikimedia.org/wiki/File:Example.jpg
+
+        IMPORTANT: The Commons MediaWiki API expects unencoded titles, but Special:FilePath
+        returns URL-encoded filenames. We must decode them before passing to the API.
+
+        Args:
+            uri: Image URI from Wikidata
+
+        Returns:
+            Commons title (e.g., "File:Bächlitalhütte.jpg") or None
+        """
+        from urllib.parse import unquote
+
+        # Try Special:FilePath format first (returned by Wikidata SPARQL)
+        # Format: http://commons.wikimedia.org/wiki/Special:FilePath/B%C3%A4chlitalh%C3%BCtte.jpg
+        special_match = re.search(r"/Special:FilePath/(.+)$", uri)
+        if special_match:
+            # Decode URL-encoded filename (e.g., %C3%A4 -> ä)
+            filename = unquote(special_match.group(1))
+            return f"File:{filename}"
+
+        # Fallback to wiki/File format
+        # Format: https://commons.wikimedia.org/wiki/File:Example.jpg
+        wiki_match = re.search(r"/wiki/File:(.+)$", uri)
+        if wiki_match:
+            filename = unquote(wiki_match.group(1))
+            return f"File:{filename}"
+
+        return None
 
     def _clean_html(self, text: str) -> str:
         """Remove HTML tags from text."""
@@ -710,14 +1068,25 @@ class WikimediaCommonsProvider(ImageProvider):
         return clean.strip()
 
     def _normalize_license(self, license_str: str) -> str:
-        """Normalize license string to slug."""
+        """Normalize license string to slug.
+
+        The License field from Commons API returns values like:
+        - "cc-by-sa-3.0"
+        - "cc-by-4.0"
+        - "cc0"
+
+        We just pass these through directly, only normalizing if needed.
+        """
         license_lower = license_str.lower()
 
-        if "cc-by-sa-4.0" in license_lower or "by-sa/4.0" in license_lower:
-            return "cc-by-sa-4.0"
-        elif "cc-by-4.0" in license_lower or "by/4.0" in license_lower:
-            return "cc-by-4.0"
-        elif "public domain" in license_lower:
+        # If it's already in the correct format (e.g., "cc-by-sa-3.0"), use it as-is
+        # License field format: {type}-{version}.{minor-version}
+        if license_str and license_str.startswith("cc-"):
+            return license_str
+
+        # Fallback for public domain
+        if "public domain" in license_lower or "cc0" in license_lower:
             return "pd"
-        else:
-            return "unknown"
+
+        # Fallback: return the original string if we can't normalize it
+        return license_str if license_str else "unknown"

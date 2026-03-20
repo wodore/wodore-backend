@@ -3,7 +3,7 @@ Provider for Wodore internal database images.
 Works with both GeoPlaces and Huts.
 """
 
-import logging
+import structlog
 from typing import Any
 
 from asgiref.sync import sync_to_async
@@ -15,7 +15,7 @@ from django.contrib.gis.measure import D
 from .base import ImageProvider, ImageResult, ImageArea
 from .schemas import GeoPlaceSchema
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 class WodoreProvider(ImageProvider):
@@ -36,7 +36,7 @@ class WodoreProvider(ImageProvider):
             place_type: Type of place ('geoplace' or 'hut')
         """
         self.place_type = place_type
-        logger.debug(f"Initialized WodoreProvider for {place_type}")
+        logger.debug("Initialized WodoreProvider", place_type=place_type)
 
     async def fetch(
         self,
@@ -62,12 +62,19 @@ class WodoreProvider(ImageProvider):
             List of ImageResult objects
         """
         try:
-            logger.debug(f"WodoreProvider: Fetching with {len(places)} places")
+            logger.debug(
+                "Fetching images", num_places=len(places), provider="WodoreProvider"
+            )
 
             # Wrap the synchronous fetch in sync_to_async
             return await sync_to_async(self._fetch_sync)(places, lat, lon, radius)
         except Exception as e:
-            logger.error(f"WodoreProvider ({self.place_type}) error: {e}")
+            logger.error(
+                "WodoreProvider error",
+                place_type=self.place_type,
+                error=str(e),
+                exc_info=True,
+            )
             return []
 
     def _fetch_sync(
@@ -106,7 +113,10 @@ class WodoreProvider(ImageProvider):
                     place_qid = place.osm_tags.get("wikidata")
 
                 logger.debug(
-                    f"WodoreProvider: Processing place '{place.slug}' (QID: {place_qid})"
+                    "Processing place",
+                    provider="WodoreProvider",
+                    slug=place.slug,
+                    qid=place_qid,
                 )
 
                 # Get images through association model
@@ -204,7 +214,7 @@ class WodoreProvider(ImageProvider):
                         }
                         if place
                         else None,
-                        score=90,  # Wodore images are highest quality (internal, curated)
+                        score=50,  # Wodore images are high quality (internal, curated)
                         width=width,
                         height=height,
                         focal=focal_area,
@@ -213,7 +223,11 @@ class WodoreProvider(ImageProvider):
                     results.append(result)
 
             logger.debug(
-                f"WodoreProvider ({self.place_type}): Found {len(results)} images from {len(places)} places"
+                "Found images from places",
+                place_type=self.place_type,
+                num_images=len(results),
+                num_places=len(places),
+                provider="WodoreProvider",
             )
             return results
 
@@ -237,16 +251,20 @@ class WodoreProvider(ImageProvider):
                 hut_qid = None
 
                 # Debug: Log all sources
-                logger.debug(f"Hut '{hut.slug}' has {hut.hut_sources.count()} sources:")
+                logger.debug(
+                    "Hut sources", slug=hut.slug, num_sources=hut.hut_sources.count()
+                )
                 for source in hut.hut_sources.all():
-                    logger.debug(f"  - Source: {source.organization.slug}")
+                    logger.debug(
+                        "Processing source", organization_slug=source.organization.slug
+                    )
                     if source.source_data:
                         keys = (
                             list(source.source_data.keys())
                             if isinstance(source.source_data, dict)
                             else type(source.source_data)
                         )
-                        logger.debug(f"    source_data keys: {keys}")
+                        logger.debug("Source data", keys=keys)
                         # Log if tags exist
                         if (
                             isinstance(source.source_data, dict)
@@ -257,7 +275,9 @@ class WodoreProvider(ImageProvider):
                                 qid = tags.get("wikidata")
                                 if qid:
                                     logger.debug(
-                                        f"WIKIDATA QID in {source.organization.slug}: {qid}"
+                                        "Found Wikidata QID",
+                                        organization_slug=source.organization.slug,
+                                        qid=qid,
                                     )
 
                 try:
@@ -276,40 +296,63 @@ class WodoreProvider(ImageProvider):
                             hut_qid = tags.get("wikidata")
                             if hut_qid:
                                 logger.debug(
-                                    f"Extracted QID {hut_qid} from OSM source for '{hut.slug}'"
+                                    "Extracted QID from OSM source",
+                                    slug=hut.slug,
+                                    qid=hut_qid,
                                 )
                 except Exception as e:
                     logger.debug(
-                        f"Could not extract QID from OSM source for {hut.slug}: {e}"
+                        "Could not extract QID from OSM source",
+                        slug=hut.slug,
+                        error=str(e),
                     )
 
                 logger.debug(
-                    f"WodoreProvider: Processing hut '{hut.slug}' (QID: {hut_qid})"
+                    "Processing hut",
+                    provider="WodoreProvider",
+                    slug=hut.slug,
+                    qid=hut_qid,
                 )
 
                 # Get images through reverse relation
                 for img in hut.image_set.all():
                     logger.debug(
-                        f"  - Image {img.id}: is_active={img.is_active}, review_status={img.review_status}, license.no_publication={img.license.no_publication if img.license else 'No license'}"
+                        "Evaluating image",
+                        image_id=img.id,
+                        is_active=img.is_active,
+                        review_status=img.review_status,
+                        license_no_publication=img.license.no_publication
+                        if img.license
+                        else None,
+                        has_license=bool(img.license),
                     )
 
                     # Filter: must be active, approved, and not marked for no publication
                     if not img.is_active:
-                        logger.debug("    ✗ Skipped (not active)")
+                        logger.debug("Skipped image (not active)", image_id=img.id)
                         continue
                     if img.review_status != "approved":
                         logger.debug(
-                            f"    ✗ Skipped (review_status={img.review_status})"
+                            "Skipped image (not approved)",
+                            image_id=img.id,
+                            review_status=img.review_status,
                         )
                         continue
                     if img.license.no_publication:
                         logger.debug(
-                            f"    ✗ Skipped (license marked for no publication: {img.license.slug})"
+                            "Skipped image (no publication)",
+                            image_id=img.id,
+                            license_slug=img.license.slug,
                         )
                         continue
 
+                    caption_preview = (
+                        img.caption_i18n[:50] if img.caption_i18n else None
+                    )
                     logger.debug(
-                        f"    ✓ Included: {img.caption_i18n[:50] if img.caption_i18n else 'No caption'}"
+                        "Included image",
+                        image_id=img.id,
+                        caption_preview=caption_preview,
                     )
                     distance_m = (
                         hut.distance.m if hasattr(hut.distance, "m") else hut.distance
@@ -393,7 +436,7 @@ class WodoreProvider(ImageProvider):
                         }
                         if hut
                         else None,
-                        score=90,  # Wodore images are highest quality (internal, curated)
+                        score=50,  # Wodore images are high quality (internal, curated)
                         width=width,
                         height=height,
                         focal=focal_area,
@@ -402,7 +445,11 @@ class WodoreProvider(ImageProvider):
                     results.append(result)
 
             logger.debug(
-                f"WodoreProvider ({self.place_type}): Found {len(results)} images from {len(huts)} huts"
+                "Found images from huts",
+                place_type=self.place_type,
+                num_images=len(results),
+                num_huts=len(huts),
+                provider="WodoreProvider",
             )
             return results
 
@@ -431,7 +478,7 @@ class WodoreProvider(ImageProvider):
                 y2=float(focal.get("y2", 1)),
             )
         except (ValueError, TypeError) as e:
-            logger.warning(f"Invalid focal data for image {image.id}: {e}")
+            logger.warning("Invalid focal data", image_id=image.id, error=str(e))
             return None
 
     def _extract_crop_area(self, image: Any) -> ImageArea | None:
@@ -459,5 +506,5 @@ class WodoreProvider(ImageProvider):
                 y2=float(crop.get("y2", 1)),
             )
         except (ValueError, TypeError) as e:
-            logger.warning(f"Invalid crop data for image {image.id}: {e}")
+            logger.warning("Invalid crop data", image_id=image.id, error=str(e))
             return None

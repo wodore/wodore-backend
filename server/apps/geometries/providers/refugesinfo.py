@@ -8,14 +8,19 @@ Uses source_id from GeoPlace source associations with organization slug 'refuges
 #   https://www.refuges.info/point/6069/cabane-non-gardee/abri-de-Beauregard
 #   http://192.168.1.50:8000/v1/geo/images/hut/beauregard?lang=de&radius=50&limit=20
 
-import logging
+import structlog
+from datetime import datetime, timezone
 
 from django.contrib.gis.geos import Point
 
 from .base import ImageProvider, ImageResult
 from .schemas import GeoPlaceSchema
+from .scoring import (
+    score_metadata_completeness,
+    calculate_age_penalty,
+)
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 class RefugesInfoProvider(ImageProvider):
@@ -51,9 +56,7 @@ class RefugesInfoProvider(ImageProvider):
         Returns:
             List of ImageResult objects
         """
-        logger.debug(
-            f"RefugesInfoProvider.fetch() called with update_cache={update_cache}"
-        )
+        logger.debug("RefugesInfoProvider.fetch() called", update_cache=update_cache)
 
         try:
             import httpx
@@ -62,24 +65,22 @@ class RefugesInfoProvider(ImageProvider):
             # 1. Check cache first
             cache_key = self._get_cache_key(lat, lon, radius, "precise")
             logger.debug(
-                f"RefugesInfoProvider: update_cache={update_cache}, checking cache key {cache_key}"
+                "Checking cache key", update_cache=update_cache, cache_key=cache_key
             )
 
             if not update_cache:
                 cached = await self._get_cached_results(cache_key)
                 if cached is not None:
-                    logger.debug(f"RefugesInfoProvider: Cache HIT for {cache_key}")
+                    logger.debug("Cache HIT", cache_key=cache_key)
                     return cached
             else:
-                logger.debug(
-                    "RefugesInfoProvider: Bypassing cache due to update_cache=True"
-                )
+                logger.debug("Bypassing cache", reason="update_cache=True")
 
-            logger.debug("RefugesInfoProvider: Cache MISS - fetching from API")
+            logger.debug("Cache MISS - fetching from API")
 
             # 2. Fetch from API
             logger.debug(
-                f"RefugesInfoProvider: Checking {len(places)} places for refuges source IDs"
+                "Checking places for refuges source IDs", places_count=len(places)
             )
 
             # Collect refuges.info source IDs from all places using the unified schema
@@ -87,22 +88,28 @@ class RefugesInfoProvider(ImageProvider):
 
             for place in places:
                 logger.debug(
-                    f"  Checking place: {place.slug}, id={place.id}, sources={len(place.sources)}"
+                    "Checking place",
+                    slug=place.slug,
+                    id=place.id,
+                    sources_count=len(place.sources),
                 )
                 source_id = place.get_source_id("refuges")
                 if source_id:
                     place_map[source_id] = place
                     logger.debug(
-                        f"  Found refuges.info source ID {source_id} for place '{place.slug}' (id={place.id})"
+                        "Found refuges.info source ID",
+                        source_id=source_id,
+                        place_slug=place.slug,
+                        place_id=place.id,
                     )
 
             if not place_map:
-                logger.debug("RefugesInfoProvider: No refuges.info source IDs found")
+                logger.debug("No refuges.info source IDs found")
                 await self._set_cached_results(cache_key, [])
                 return []
 
             logger.debug(
-                f"RefugesInfoProvider: Found {len(place_map)} places with refuges.info source IDs"
+                "Found places with refuges.info source IDs", places_count=len(place_map)
             )
 
             # Fetch images from refuges.info for each source_id
@@ -116,29 +123,33 @@ class RefugesInfoProvider(ImageProvider):
                 for source_id, place in place_map.items():
                     try:
                         logger.debug(
-                            f"  Fetching images from refuges.info for {source_id}..."
+                            "Fetching images from refuges.info", source_id=source_id
                         )
                         images = await self._fetch_refuges_images(
                             client, source_id, place
                         )
-                        logger.debug(f"  Found {len(images)} images for {source_id}")
+                        logger.debug(
+                            "Found images", count=len(images), source_id=source_id
+                        )
                         results.extend(images)
                     except Exception as e:
                         logger.error(
-                            f"Error fetching refuges.info images for {source_id}: {e}"
+                            "Error fetching refuges.info images",
+                            source_id=source_id,
+                            error=str(e),
                         )
                         continue
 
-            logger.debug(f"RefugesInfoProvider: Found {len(results)} unique images")
+            logger.debug("Found unique images", count=len(results))
 
             # 3. Store in cache
-            logger.debug(f"RefugesInfoProvider: Caching {len(results)} results")
+            logger.debug("Caching results", count=len(results))
             await self._set_cached_results(cache_key, results)
 
             return results
 
         except Exception as e:
-            logger.error(f"RefugesInfoProvider error: {e}")
+            logger.error("RefugesInfoProvider error", error=str(e))
             return []
 
     async def _fetch_refuges_images(
@@ -162,7 +173,7 @@ class RefugesInfoProvider(ImageProvider):
             from bs4 import BeautifulSoup
 
             url = f"https://www.refuges.info/point/{source_id}"
-            logger.debug(f"  Fetching {url}...")
+            logger.debug("Fetching URL", url=url)
 
             response = await client.get(url)
             response.raise_for_status()
@@ -197,11 +208,30 @@ class RefugesInfoProvider(ImageProvider):
                             import dateparser
 
                             capture_date = dateparser.parse(
-                                capture_date_str_fr, languages=["fr"]
+                                capture_date_str_fr,
+                                languages=["fr"],
+                                settings={
+                                    "TO_TIMEZONE": "UTC",
+                                    "PREFER_DATES_FROM": "past",
+                                },
                             )
+                            # Ensure timezone-aware datetime and set default time to 12:00
+                            if capture_date:
+                                if capture_date.tzinfo is None:
+                                    capture_date = capture_date.replace(
+                                        tzinfo=timezone.utc
+                                    )
+                                # If time is 00:00, assume no time was specified and use 12:00
+                                if capture_date.hour == 0 and capture_date.minute == 0:
+                                    capture_date = capture_date.replace(
+                                        hour=12, minute=0
+                                    )
                         except Exception as e:
                             logger.warning(
-                                f"Could not parse date: {capture_date_str_fr} for hut {source_id}: {e}"
+                                "Could not parse date",
+                                date_str=capture_date_str_fr,
+                                source_id=source_id,
+                                error=str(e),
                             )
 
                     # Get caption from blockquote if it exists
@@ -235,6 +265,14 @@ class RefugesInfoProvider(ImageProvider):
                     # Build attribution
                     attribution = f'via <a href="{src_url}" target="_blank" rel="nofollow">refuges.info</a>'
 
+                    # Calculate score
+                    score = self._score_refugesinfo_image(
+                        has_caption=bool(caption),
+                        has_author=bool(author),
+                        has_date=capture_date is not None,
+                        captured_at=capture_date,
+                    )
+
                     # Create Point from GeoPlaceSchema lat/lon
                     location = Point(place.lon, place.lat, srid=4326)
 
@@ -263,6 +301,7 @@ class RefugesInfoProvider(ImageProvider):
                         }
                         if place
                         else None,
+                        score=score,
                         extra={
                             "caption": caption,
                             "refuges_id": source_id,
@@ -272,13 +311,60 @@ class RefugesInfoProvider(ImageProvider):
                     results.append(result)
 
                 except Exception as e:
-                    logger.warning(f"Error processing image from refuges.info: {e}")
+                    logger.warning(
+                        "Error processing image from refuges.info", error=str(e)
+                    )
                     continue
 
             return results
 
         except Exception as e:
             logger.error(
-                f"HTTP error fetching refuges.info images for {source_id}: {e}"
+                "HTTP error fetching refuges.info images",
+                source_id=source_id,
+                error=str(e),
             )
             return []
+
+    def _score_refugesinfo_image(
+        self,
+        has_caption: bool,
+        has_author: bool,
+        has_date: bool,
+        captured_at: datetime | None = None,
+    ) -> int:
+        """
+        Score refuges.info image (0-100).
+
+        Args:
+            has_caption: Image has caption/description
+            has_author: Image has author information
+            has_date: Image has capture date
+            captured_at: Image capture date (if available)
+
+        Returns:
+            Score from 0-100
+        """
+        score = 0
+
+        # Source origin (0-50)
+        # refuges.info is a curated hut database
+        score += 30
+
+        # Metadata completeness (0-25)
+        score += score_metadata_completeness(
+            has_description=has_caption,
+            has_author=has_author,
+            has_license=True,  # Always has CC-BY-SA-2.0-FR
+            has_date=has_date,
+        )
+
+        # Age penalty (-50 to +5) - using global function
+        if captured_at:
+            days_old = (datetime.now(timezone.utc) - captured_at).days
+            score += calculate_age_penalty(days_old)
+        else:
+            # No date available - use global penalty
+            score += calculate_age_penalty(None)
+
+        return max(0, min(score, 100))
