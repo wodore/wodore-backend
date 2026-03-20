@@ -31,7 +31,7 @@ services:
       - ./media/imagor_data/result:/mnt/data/result
     environment:
       PORT: 8079
-      DEBUG: 0
+      DEBUG: 1
       IMAGOR_UNSAFE: 1 # unsafe URL for testing
       IMAGOR_SECRET: ${IMAGOR_KEY:-my_key}
       IMAGOR_AUTO_WEBP: 1
@@ -52,6 +52,8 @@ services:
       FILE_RESULT_STORAGE_MKDIR_PERMISSION: 0755 # optional
       FILE_RESULT_STORAGE_WRITE_PERMISSION: 0666 # optional
       IMAGOR_RESULT_STORAGE_PATH_STYLE: size
+      SERVER_CORS: 1
+      SERVER_CORS_ALLOWED_ORIGINS: "*"
   martin:
     image: ghcr.io/maplibre/martin:latest
     container_name: django-local-martin
