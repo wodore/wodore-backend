@@ -21,7 +21,8 @@ ARG DJANGO_ENV \
   PYTHON_VERSION=3.12 \
   CONFIG_DIR="config" \
   WITH_DEV=0 \
-  GIT_HASH
+  GIT_HASH \
+  MARTIN_VERSION=1.4.0
 
 ENV DJANGO_ENV=${DJANGO_ENV} \
   # python:
@@ -65,8 +66,11 @@ apt-get install -y --no-install-recommends \
   git \
   openssh-client \
   libpq-dev \
-  binutils \
-  cargo \
+  binutils
+# Rust/Cargo can be installed later if needed by Python packages
+# Currently disabled due to installation issues
+# curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+# export PATH="\$HOME/.cargo/bin:\$PATH"
 # Installing `tini` utility:
 # https://github.com/krallin/tini
 # Get architecture to download appropriate tini release:
@@ -137,7 +141,14 @@ rm -f /etc/apt/apt.conf.d/docker-clean
 apt-get update && apt-get upgrade -y
 apt-get install -y --no-install-recommends \
   wait-for-it \
-  tzdata
+  tzdata \
+  wget
+# Martin tile server
+wget -qO /tmp/martin.deb "https://github.com/maplibre/martin/releases/download/martin-v${MARTIN_VERSION}/debian-x86_64.deb"
+dpkg -i /tmp/martin.deb
+rm /tmp/martin.deb
+# Commented out - may be needed later
+# apt-get install -y --no-install-recommends osmium-tool
 # Cleaning cache:
 apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false
 apt-get clean -y && rm -rf /var/lib/apt/lists/*

@@ -156,6 +156,31 @@ def add_database_caching_layer(forwards_sql):
       END IF;
 
       WITH
+      -- OPTIMIZATION: Step 1 - Random sample to prevent memory issues
+      sampled_pois AS (
+        SELECT
+          gp.id,
+          gp.slug,
+          gp.location,
+          gp.importance,
+          gp.elevation,
+          gp.country_code,
+          gp.detail_type,
+          gp.extra,
+          gp.name,
+          gp.i18n,
+          gpc.geo_place_id,
+          gpc.category_id
+        FROM geometries_geoplace gp
+        INNER JOIN geometries_geoplace_category gpc ON gp.id = gpc.geo_place_id
+        WHERE gp.is_public = true
+          AND gp.is_active = true
+          AND gp.location && tile_bbox_4326
+          AND ST_Intersects(gp.location, tile_bbox_4326)
+        ORDER BY RANDOM()
+        LIMIT 50000
+      ),
+
       poi_categories AS (
         SELECT
           gpc.geo_place_id,
@@ -189,22 +214,22 @@ def add_database_caching_layer(forwards_sql):
 
       geo_places_with_categories AS (
         SELECT
-          gp.slug,
-          gp.location,
-          gp.importance,
-          gp.elevation,
-          gp.country_code,
-          gp.detail_type,
-          gp.extra,
+          sp.slug,
+          sp.location,
+          sp.importance,
+          sp.elevation,
+          sp.country_code,
+          sp.detail_type,
+          sp.extra,
 
           -- Only compute name if needed and below max_label_zoom
           CASE WHEN need_name THEN
             CASE requested_language
-              WHEN 'de' THEN COALESCE(gp.i18n->>'name_de', gp.name, '')
-              WHEN 'en' THEN COALESCE(gp.i18n->>'name_en', gp.name, '')
-              WHEN 'fr' THEN COALESCE(gp.i18n->>'name_fr', gp.name, '')
-              WHEN 'it' THEN COALESCE(gp.i18n->>'name_it', gp.name, '')
-              ELSE COALESCE(gp.name, '')
+              WHEN 'de' THEN COALESCE(sp.i18n->>'name_de', sp.name, '')
+              WHEN 'en' THEN COALESCE(sp.i18n->>'name_en', sp.name, '')
+              WHEN 'fr' THEN COALESCE(sp.i18n->>'name_fr', sp.name, '')
+              WHEN 'it' THEN COALESCE(sp.i18n->>'name_it', sp.name, '')
+              ELSE COALESCE(sp.name, '')
             END
           ELSE ''::text
           END AS name,
@@ -226,22 +251,16 @@ def add_database_caching_layer(forwards_sql):
           -- Only include sources if requested
           CASE WHEN need_sources THEN ps.sources ELSE NULL::jsonb END AS sources
 
-        FROM geometries_geoplace gp
-        INNER JOIN geometries_geoplace_category gpc ON gp.id = gpc.geo_place_id
-        INNER JOIN categories_category cat ON gpc.category_id = cat.id
+        FROM sampled_pois sp
+        INNER JOIN categories_category cat ON sp.category_id = cat.id
         LEFT JOIN categories_category parent ON cat.parent_id = parent.id
 
         LEFT JOIN LATERAL (
-          SELECT categories_all FROM poi_categories WHERE geo_place_id = gp.id
+          SELECT categories_all FROM poi_categories WHERE geo_place_id = sp.geo_place_id
         ) pc ON true
         LEFT JOIN LATERAL (
-          SELECT sources FROM poi_sources WHERE geo_place_id = gp.id
+          SELECT sources FROM poi_sources WHERE geo_place_id = sp.geo_place_id
         ) ps ON true
-
-        WHERE gp.is_public = true
-          AND gp.is_active = true
-          AND gp.location && tile_bbox_4326
-          AND ST_Intersects(gp.location, tile_bbox_4326)
       ),
       clustered_features AS (
         SELECT
@@ -479,6 +498,31 @@ def revert_to_uncached_function(reverse_sql):
       END IF;
 
       WITH
+      -- OPTIMIZATION: Step 1 - Random sample to prevent memory issues
+      sampled_pois AS (
+        SELECT
+          gp.id,
+          gp.slug,
+          gp.location,
+          gp.importance,
+          gp.elevation,
+          gp.country_code,
+          gp.detail_type,
+          gp.extra,
+          gp.name,
+          gp.i18n,
+          gpc.geo_place_id,
+          gpc.category_id
+        FROM geometries_geoplace gp
+        INNER JOIN geometries_geoplace_category gpc ON gp.id = gpc.geo_place_id
+        WHERE gp.is_public = true
+          AND gp.is_active = true
+          AND gp.location && tile_bbox_4326
+          AND ST_Intersects(gp.location, tile_bbox_4326)
+        ORDER BY RANDOM()
+        LIMIT 50000
+      ),
+
       poi_categories AS (
         SELECT
           gpc.geo_place_id,
@@ -512,21 +556,21 @@ def revert_to_uncached_function(reverse_sql):
 
       geo_places_with_categories AS (
         SELECT
-          gp.slug,
-          gp.location,
-          gp.importance,
-          gp.elevation,
-          gp.country_code,
-          gp.detail_type,
-          gp.extra,
+          sp.slug,
+          sp.location,
+          sp.importance,
+          sp.elevation,
+          sp.country_code,
+          sp.detail_type,
+          sp.extra,
 
           CASE WHEN need_name THEN
             CASE requested_language
-              WHEN 'de' THEN COALESCE(gp.i18n->>'name_de', gp.name, '')
-              WHEN 'en' THEN COALESCE(gp.i18n->>'name_en', gp.name, '')
-              WHEN 'fr' THEN COALESCE(gp.i18n->>'name_fr', gp.name, '')
-              WHEN 'it' THEN COALESCE(gp.i18n->>'name_it', gp.name, '')
-              ELSE COALESCE(gp.name, '')
+              WHEN 'de' THEN COALESCE(sp.i18n->>'name_de', sp.name, '')
+              WHEN 'en' THEN COALESCE(sp.i18n->>'name_en', sp.name, '')
+              WHEN 'fr' THEN COALESCE(sp.i18n->>'name_fr', sp.name, '')
+              WHEN 'it' THEN COALESCE(sp.i18n->>'name_it', sp.name, '')
+              ELSE COALESCE(sp.name, '')
             END
           ELSE ''::text
           END AS name,
@@ -546,22 +590,16 @@ def revert_to_uncached_function(reverse_sql):
           CASE WHEN need_categories THEN pc.categories_all ELSE NULL::jsonb END AS categories_all,
           CASE WHEN need_sources THEN ps.sources ELSE NULL::jsonb END AS sources
 
-        FROM geometries_geoplace gp
-        INNER JOIN geometries_geoplace_category gpc ON gp.id = gpc.geo_place_id
-        INNER JOIN categories_category cat ON gpc.category_id = cat.id
+        FROM sampled_pois sp
+        INNER JOIN categories_category cat ON sp.category_id = cat.id
         LEFT JOIN categories_category parent ON cat.parent_id = parent.id
 
         LEFT JOIN LATERAL (
-          SELECT categories_all FROM poi_categories WHERE geo_place_id = gp.id
+          SELECT categories_all FROM poi_categories WHERE geo_place_id = sp.geo_place_id
         ) pc ON true
         LEFT JOIN LATERAL (
-          SELECT sources FROM poi_sources WHERE geo_place_id = gp.id
+          SELECT sources FROM poi_sources WHERE geo_place_id = sp.geo_place_id
         ) ps ON true
-
-        WHERE gp.is_public = true
-          AND gp.is_active = true
-          AND gp.location && tile_bbox_4326
-          AND ST_Intersects(gp.location, tile_bbox_4326)
       ),
       clustered_features AS (
         SELECT
@@ -665,7 +703,7 @@ def revert_to_uncached_function(reverse_sql):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("geometries", "0032_add_poi_clustering"),
+        ("geometries", "0036_add_tile_caching"),
     ]
 
     operations = [

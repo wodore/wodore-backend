@@ -14,7 +14,8 @@ ARG DJANGO_ENV \
   GID=1000 \
   CONFIG_DIR="config" \
   WITH_DEV=0 \
-  GIT_HASH
+  GIT_HASH \
+  MARTIN_VERSION=1.4.0
 
 ENV DJANGO_ENV=${DJANGO_ENV} \
   # python:
@@ -73,8 +74,10 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
   binutils \
   libproj-dev \
   gdal-bin \
-  osmium-tool \
-  libosmium2-dev \
+  # Commented out - may be needed later \
+  # osmium-tool \
+  # libosmium2-dev \
+  wget
   # Installing `tini` utility:
   # https://github.com/krallin/tini
   # Get architecture to download appropriate tini release:
@@ -144,7 +147,13 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
   && apt-get install -y --no-install-recommends \
   wait-for-it \
   gdal-bin \
-  osmium-tool \
+  wget \
+  # Martin tile server \
+  && wget -qO /tmp/martin.deb "https://github.com/maplibre/martin/releases/download/martin-v${MARTIN_VERSION}/debian-x86_64.deb" \
+  && dpkg -i /tmp/martin.deb \
+  && rm /tmp/martin.deb \
+  # Commented out - may be needed later \
+  # osmium-tool \
   #libproj-dev \
   # Cleaning cache:
   && rm -rf /var/lib/apt/lists/*
