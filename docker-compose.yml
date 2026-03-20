@@ -72,6 +72,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-wodore}
       DATABASE_URL: "postgresql://${POSTGRES_USER:-wodore}:${POSTGRES_PASSWORD:-wodore}@db:5432/${POSTGRES_DB:-wodore}"
       MARTIN_SYNC_MOUNT: /martin_sync
+      RUST_LOG: debug
     command: --config /martin_sync/config/martin.yaml --webui enable-for-all
     depends_on:
       - db

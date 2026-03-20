@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>POI Clustering Test - Wodore</title>
+    <script src="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/@maplibre/maplibre-gl-inspect@latest/dist/maplibre-gl-inspect.min.js"></script>
+    <link href="https://unpkg.com/@maplibre/maplibre-gl-inspect@latest/dist/maplibre-gl-inspect.css" rel="stylesheet" />
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { width: 100vw; height: 100vh; }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+            max-width: 400px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            z-index: 1000;
+        }
+        #info h3 { margin-top: 0; margin-bottom: 10px; }
+        .field { margin: 5px 0; }
+        .field-label { font-weight: bold; }
+        .zoom-info {
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 3px;
+            margin: 10px 0;
+        }
+        #settings-toggle {
+            background: #007cba;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        #settings-toggle:hover {
+            background: #005a87;
+        }
+        #settings {
+            display: none;
+            background: #f9f9f9;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        #settings.show {
+            display: block;
+        }
+        .setting-row {
+            margin: 8px 0;
+        }
+        .setting-row label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 3px;
+            font-size: 12px;
+        }
+        .setting-row input {
+            width: 100%;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            font-size: 13px;
+            box-sizing: border-box;
+        }
+        .setting-row input[type="number"] {
+            width: 80px;
+        }
+        #apply-settings {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+        #apply-settings:hover {
+            background: #218838;
+        }
+        .settings-help {
+            font-size: 11px;
+            color: #666;
+            margin-top: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h3>POI Clustering Test</h3>
+        <button id="settings-toggle">⚙️ Settings</button>
+
+        <div id="settings">
+            <div class="setting-row">
+                <label>Cluster Radius (meters)</label>
+                <input type="number" id="cluster-radius-m" value="5000" min="100" max="50000" step="100">
+                <div class="settings-help">Radius in meters at reference zoom. Max 100km cap at low zooms.</div>
+            </div>
+            <div class="setting-row">
+                <label>Cluster Max Zoom</label>
+                <input type="number" id="cluster-max-zoom" value="8" min="0" max="15" step="1">
+                <div class="settings-help">Maximum zoom level for clustering</div>
+            </div>
+            <div class="setting-row">
+                <label>Cluster Low Zoom Offset</label>
+                <input type="number" id="cluster-low-zoom-offset" value="2" min="0" max="5" step="1">
+                <div class="settings-help">Extra zoom levels for low-importance POIs</div>
+            </div>
+            <div class="setting-row">
+                <label>Importance Threshold</label>
+                <input type="number" id="importance-threshold" value="50" min="0" max="100" step="5">
+                <div class="settings-help">High-importance POIs (≥ this) graduate early</div>
+            </div>
+            <div class="setting-row">
+                <label>Cluster Reference Zoom</label>
+                <input type="number" id="cluster-ref-zoom" value="8" min="0" max="15" step="1">
+                <div class="settings-help">Reference zoom for radius calculation</div>
+            </div>
+            <div class="setting-row">
+                <label>Max Features (optional)</label>
+                <input type="number" id="max-features" value="" min="1" max="10000" step="100" placeholder="No limit">
+                <div class="settings-help">Limit features per tile (after clustering)</div>
+            </div>
+            <div class="setting-row" style="background: #fff3cd; padding: 8px; border-radius: 3px; margin-top: 10px;">
+                <label style="color: #856404;">Cache Version</label>
+                <input type="number" id="cache-version" value="1" min="0" max="100" step="1" style="width: 80px; padding: 5px;">
+                <div class="settings-help" style="color: #856404;">0 = disabled, 1 = default, 2+ = new cache (invalidates old)</div>
+            </div>
+            <div class="setting-row" style="background: #fff3cd; padding: 8px; border-radius: 3px; margin-top: 5px;">
+                <label style="color: #856404;">Cache TTL (days)</label>
+                <input type="number" id="cache-ttl-days" value="7" min="0" max="365" step="1" style="width: 80px; padding: 5px;">
+                <div class="settings-help" style="color: #856404;">How long to cache tiles in database (0 = no cache)</div>
+            </div>
+            <button id="apply-settings">Apply & Reload Tiles</button>
+        </div>
+
+        <div class="zoom-info">
+            <strong>Zoom:</strong> <span id="zoom">0</span><br>
+            <strong>Cluster Mode:</strong> <span id="cluster-mode" style="font-weight: bold;">ON</span><br>
+            <strong>Actual Cluster Radius:</strong> <span id="actual-radius">0</span><br>
+            <strong>Max Features (tile):</strong> <span id="max-features-display">0</span><br>
+            <details>
+                <summary style="cursor: pointer; font-weight: bold; margin-top: 5px;">By Parent Category</summary>
+                <div id="parent-category-counts" style="margin-left: 10px; font-size: 12px; color: #666;">
+                    Loading...
+                </div>
+            </details>
+        </div>
+
+        <div class="zoom-info" style="background: #fff3cd;">
+            <strong style="cursor: pointer;" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
+                🐛 Martin Debug (click to toggle)
+            </strong>
+            <div id="martin-debug" style="display: block; margin-top: 10px;">
+                <div style="font-size: 12px; margin: 5px 0;">
+                    <strong>Last Tile Load Time:</strong> <span id="tile-load-time">-</span>
+                </div>
+                <div style="font-size: 11px; color: #666; margin-top: 5px;">
+                    <strong>Recent Tiles:</strong>
+                    <div id="recent-tiles" style="max-height: 150px; overflow-y: auto; font-family: monospace; background: white; padding: 5px; border-radius: 3px; margin-top: 3px;">
+                        Loading tiles...
+                    </div>
+                </div>
+                <div style="font-size: 11px; color: #666; margin-top: 5px;">
+                    <strong style="color: #dc3545;">Recent Errors:</strong>
+                    <div id="tile-errors" style="max-height: 100px; overflow-y: auto; font-family: monospace; background: white; padding: 5px; border-radius: 3px; margin-top: 3px;">
+                        No errors
+                    </div>
+                </div>
+                <div style="font-size: 11px; color: #666; margin-top: 5px;">
+                    <strong style="color: #007cba;">Active Tiles:</strong>
+                    <div id="active-tiles" style="max-height: 100px; overflow-y: auto; font-family: monospace; background: white; padding: 5px; border-radius: 3px; margin-top: 3px;">
+                        No active tiles
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="popup-content"></div>
+    </div>
+    <div id="map"></div>
+
+    <script>
+        // Build tile URL with query parameters
+        function buildTileURL() {
+            const params = {};
+
+            // Always include fields (all available fields from migration 0032)
+            params.fields = 'category,color,parent_color,categories_all,sources,importance,count,name,slug';
+
+            // Only add non-empty parameters
+            const clusterRadiusM = document.getElementById('cluster-radius-m').value;
+            if (clusterRadiusM) params.cluster_radius_m = clusterRadiusM;
+
+            const clusterMaxZoom = document.getElementById('cluster-max-zoom').value;
+            if (clusterMaxZoom) params.cluster_max_zoom = clusterMaxZoom;
+
+            const clusterLowZoomOffset = document.getElementById('cluster-low-zoom-offset').value;
+            if (clusterLowZoomOffset) params.cluster_low_zoom_offset = clusterLowZoomOffset;
+
+            const importanceThreshold = document.getElementById('importance-threshold').value;
+            if (importanceThreshold) params.importance_threshold = importanceThreshold;
+
+            const clusterRefZoom = document.getElementById('cluster-ref-zoom').value;
+            if (clusterRefZoom) params.cluster_ref_zoom = clusterRefZoom;
+
+            const maxFeatures = document.getElementById('max-features').value;
+            if (maxFeatures) params.max_features = maxFeatures;
+
+            // Add cache version (0 = disabled, 1 = default)
+            const cacheVersion = document.getElementById('cache-version').value;
+            if (cacheVersion !== undefined) params.cache_version = cacheVersion;
+
+            // Add cache TTL days
+            const cacheTtlDays = document.getElementById('cache-ttl-days').value;
+            if (cacheTtlDays !== undefined) params.cache_ttl_days = cacheTtlDays;
+
+            const paramsStr = new URLSearchParams(params).toString();
+            return `http://localhost:8075/geoplaces/{z}/{x}/{y}${paramsStr ? '?' + paramsStr : ''}`;
+        }
+
+        // Load settings from localStorage
+        function loadSettings() {
+            const settings = JSON.parse(localStorage.getItem('poiClusteringSettings') || '{}');
+            if (settings.clusterRadiusM) document.getElementById('cluster-radius-m').value = settings.clusterRadiusM;
+            if (settings.clusterMaxZoom) document.getElementById('cluster-max-zoom').value = settings.clusterMaxZoom;
+            if (settings.clusterLowZoomOffset) document.getElementById('cluster-low-zoom-offset').value = settings.clusterLowZoomOffset;
+            if (settings.importanceThreshold) document.getElementById('importance-threshold').value = settings.importanceThreshold;
+            if (settings.clusterRefZoom) document.getElementById('cluster-ref-zoom').value = settings.clusterRefZoom;
+            if (settings.maxFeatures) document.getElementById('max-features').value = settings.maxFeatures;
+            if (settings.cacheVersion) document.getElementById('cache-version').value = settings.cacheVersion;
+            if (settings.cacheTtlDays) document.getElementById('cache-ttl-days').value = settings.cacheTtlDays;
+        }
+
+        // Save settings to localStorage
+        function saveSettings() {
+            const settings = {
+                clusterRadiusM: document.getElementById('cluster-radius-m').value,
+                clusterMaxZoom: document.getElementById('cluster-max-zoom').value,
+                clusterLowZoomOffset: document.getElementById('cluster-low-zoom-offset').value,
+                importanceThreshold: document.getElementById('importance-threshold').value,
+                clusterRefZoom: document.getElementById('cluster-ref-zoom').value,
+                maxFeatures: document.getElementById('max-features').value,
+                cacheVersion: document.getElementById('cache-version').value,
+                cacheTtlDays: document.getElementById('cache-ttl-days').value
+            };
+            localStorage.setItem('poiClusteringSettings', JSON.stringify(settings));
+        }
+
+        // Load settings on page load
+        loadSettings();
+
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: 'https://tiles.openfreemap.org/styles/bright',
+            center: [9.55, 47.15], // Eastern Switzerland/Western Austria
+            zoom: 8
+        });
+
+        // Add navigation controls (zoom + rotate)
+        map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+        // Add scale control
+        map.addControl(new maplibregl.ScaleControl({
+            maxWidth: 100,
+            unit: 'metric'
+        }));
+
+        // Add inspect control after map loads (when layers are available)
+        map.on('load', () => {
+            // Check if inspect plugin loaded
+            if (typeof maplibreglInspect !== 'undefined') {
+                try {
+                    const inspect = maplibreglInspect({
+                        popup: new maplibregl.Popup({
+                            closeButton: true,
+                            closeOnClick: false
+                        })
+                    });
+
+                    // Add inspect control to map
+                    map.addControl(inspect);
+
+                    console.log('Inspect plugin loaded successfully');
+                } catch (error) {
+                    console.warn('Inspect plugin failed to initialize:', error);
+                }
+            } else {
+                console.warn('MapLibre GL Inspect plugin not loaded');
+            }
+        });
+
+        // Add POI source and layers after map loads
+        map.on('load', () => {
+            // Add the POI tile source
+            map.addSource('pois', {
+                type: 'vector',
+                tiles: [buildTileURL()],
+                minzoom: 0,
+                maxzoom: 20,
+                attribution: '© Wodore'
+            });
+
+            // Add clustered POI layer (count > 1)
+            map.addLayer({
+                id: 'pois-clustered',
+                type: 'circle',
+                source: 'pois',
+                'source-layer': 'geoplaces',
+                filter: ['>', ['get', 'count'], 1],
+                paint: {
+                    'circle-radius': [
+                        'interpolate', ['linear'],
+                        ['get', 'count'],
+                        2, 10,
+                        10, 20,
+                        50, 30
+                    ],
+                    'circle-color': ['coalesce', ['get', 'color'], '#808080'],
+                    'circle-opacity': 0.7,
+                    'circle-stroke-width': 3,
+                    'circle-stroke-color': 'white',
+                    'circle-stroke-opacity': 1.0
+                }
+            });
+
+            // Add raw POI layer (count == 1)
+            map.addLayer({
+                id: 'pois-raw',
+                type: 'circle',
+                source: 'pois',
+                'source-layer': 'geoplaces',
+                filter: ['==', ['get', 'count'], 1],
+                paint: {
+                    'circle-radius': 6,
+                    'circle-color': ['coalesce', ['get', 'color'], '#808080'],
+                    'circle-opacity': 0.8,
+                    'circle-stroke-width': 2,
+                    'circle-stroke-color': 'white',
+                    'circle-stroke-opacity': 0.8
+                }
+            });
+
+            // Add text labels for raw POIs (only at higher zooms)
+            map.addLayer({
+                id: 'pois-labels',
+                type: 'symbol',
+                source: 'pois',
+                'source-layer': 'geoplaces',
+                filter: ['==', ['get', 'count'], 1],
+                minzoom: 14,
+                layout: {
+                    'text-field': ['coalesce', ['get', 'name'], ''],
+                    'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+                    'text-size': 12,
+                    'text-anchor': 'top',
+                    'text-offset': [0, 0.8],
+                    'text-optional': true
+                },
+                paint: {
+                    'text-color': '#000000',
+                    'text-halo-color': '#ffffff',
+                    'text-halo-width': 2
+                }
+            });
+
+            // Initial feature count
+            countVisibleFeatures();
+        });
+
+        // Calculate actual cluster radius at current zoom
+        function calculateActualRadius(zoomLevel) {
+            const clusterRadiusM = parseFloat(document.getElementById('cluster-radius-m').value) || 5000;
+            const clusterRefZoom = parseFloat(document.getElementById('cluster-ref-zoom').value) || 8;
+            const clusterMaxZoom = parseFloat(document.getElementById('cluster-max-zoom').value) || 8;
+            const clusterLowZoomOffset = parseFloat(document.getElementById('cluster-low-zoom-offset').value) || 2;
+
+            let actualRadius;
+
+            // NEW FORMULA: Cap at ~200km max, use 40km at z8 as baseline
+            if (zoomLevel <= clusterMaxZoom) {
+                // Below max clustering zoom: scale but cap at 200km
+                // At z8: 40km, At z0: min(40km × 2^8, 200km) = 200km
+                const scaledRadius = clusterRadiusM * Math.pow(2, clusterRefZoom - zoomLevel);
+                actualRadius = Math.min(scaledRadius, 200000); // Cap at 200km
+            } else if (zoomLevel <= clusterMaxZoom + clusterLowZoomOffset) {
+                // Transition zone: interpolate from 40km down to 50m
+                const progress = (zoomLevel - clusterMaxZoom) / clusterLowZoomOffset;
+                actualRadius = clusterRadiusM + (50 - clusterRadiusM) * progress;
+            } else {
+                // Above clustering: no clustering
+                actualRadius = 0;
+            }
+
+            return actualRadius;
+        }
+
+        // Determine cluster mode based on zoom level
+        function getClusterMode(zoomLevel) {
+            const clusterMaxZoom = parseFloat(document.getElementById('cluster-max-zoom').value) || 8;
+            const clusterLowZoomOffset = parseFloat(document.getElementById('cluster-low-zoom-offset').value) || 2;
+
+            if (zoomLevel <= clusterMaxZoom) {
+                return 'on';
+            } else if (zoomLevel <= clusterMaxZoom + clusterLowZoomOffset) {
+                return 'hybrid';
+            } else {
+                return 'off';
+            }
+        }
+
+        // Update zoom display, actual radius, and cluster mode
+        map.on('zoom', () => {
+            const zoom = map.getZoom();
+            document.getElementById('zoom').textContent = zoom.toFixed(1);
+
+            const actualRadius = calculateActualRadius(zoom);
+
+            // Display in km if > 1000m, otherwise in meters
+            if (actualRadius >= 1000) {
+                document.getElementById('actual-radius').textContent = (actualRadius / 1000).toFixed(1) + ' km';
+            } else {
+                document.getElementById('actual-radius').textContent = actualRadius.toFixed(0) + ' m';
+            }
+
+            const clusterMode = getClusterMode(zoom);
+            document.getElementById('cluster-mode').textContent = clusterMode.toUpperCase();
+
+            // Update cluster mode color
+            const modeElement = document.getElementById('cluster-mode');
+            if (clusterMode === 'on') {
+                modeElement.style.color = '#28a745'; // Green
+            } else if (clusterMode === 'hybrid') {
+                modeElement.style.color = '#ffc107'; // Yellow/Orange
+            } else {
+                modeElement.style.color = '#dc3545'; // Red
+            }
+
+            // Count features and update display
+            countVisibleFeatures();
+        });
+
+        // Count visible features in current view
+        function countVisibleFeatures() {
+            // Only count if layers exist
+            if (!map.getLayer('pois-clustered') || !map.getLayer('pois-raw')) {
+                return;
+            }
+
+            const features = map.queryRenderedFeatures({ layers: ['pois-clustered', 'pois-raw'] });
+
+            // Total count
+            document.getElementById('max-features-display').textContent = features.length;
+
+            // Count by parent category
+            const parentCounts = {};
+
+            features.forEach(f => {
+                const category = f.properties.category || {};
+                const identifier = category.identifier || '';
+                const parts = identifier.split('.');
+                const parentCategory = parts.length > 1 ? parts[0] : 'other';
+
+                if (!parentCounts[parentCategory]) {
+                    parentCounts[parentCategory] = 0;
+                }
+                parentCounts[parentCategory]++;
+            });
+
+            // Update parent category display
+            const parentDiv = document.getElementById('parent-category-counts');
+            if (Object.keys(parentCounts).length > 0) {
+                const sorted = Object.entries(parentCounts).sort((a, b) => b[1] - a[1]);
+                parentDiv.innerHTML = sorted.map(([cat, count]) =>
+                    `<div>${cat}: ${count}</div>`
+                ).join('');
+            } else {
+                parentDiv.innerHTML = 'No features visible';
+            }
+        }
+
+        // Also count features when map moves or data loads
+        map.on('moveend', countVisibleFeatures);
+        map.on('data', (e) => {
+            if (e.sourceId === 'pois' && e.isSourceLoaded) {
+                countVisibleFeatures();
+            }
+        });
+
+        // Click handler to show popup
+        map.on('click', 'pois-clustered', (e) => {
+            showPopup(e.features[0]);
+        });
+
+        map.on('click', 'pois-raw', (e) => {
+            showPopup(e.features[0]);
+        });
+
+        function showPopup(feature) {
+            const props = feature.properties;
+
+            let html = '<div style="max-height: 500px; overflow-y: auto;">';
+            html += '<h4>Feature Properties</h4>';
+            html += '<pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto;">';
+            html += JSON.stringify(props, null, 2);
+            html += '</pre>';
+            html += '</div>';
+
+            document.getElementById('popup-content').innerHTML = html;
+        }
+
+        // Change cursor on hover
+        map.on('mouseenter', 'pois-clustered', () => {
+            map.getCanvas().style.cursor = 'pointer';
+        });
+        map.on('mouseleave', 'pois-clustered', () => {
+            map.getCanvas().style.cursor = '';
+        });
+        map.on('mouseenter', 'pois-raw', () => {
+            map.getCanvas().style.cursor = 'pointer';
+        });
+        map.on('mouseleave', 'pois-raw', () => {
+            map.getCanvas().style.cursor = '';
+        });
+
+        // Settings panel toggle
+        document.getElementById('settings-toggle').addEventListener('click', () => {
+            const settings = document.getElementById('settings');
+            settings.classList.toggle('show');
+        });
+
+        // Apply settings and reload tiles
+        document.getElementById('apply-settings').addEventListener('click', () => {
+            // Save settings to localStorage
+            saveSettings();
+
+            const newURL = buildTileURL();
+            console.log('Updating tile URL:', newURL);
+
+            // Update the source using proper MapLibre API
+            const source = map.getSource('pois');
+            if (source) {
+                source.tiles = [newURL];
+                // Force reload by removing and re-adding source
+                const sourceCache = map.style.sourceCaches['pois'];
+                if (sourceCache) {
+                    sourceCache.clearTiles();
+                }
+            }
+
+            // Update radius display and cluster mode with current zoom
+            const zoom = map.getZoom();
+            const actualRadius = calculateActualRadius(zoom);
+
+            // Display in km if > 1000m, otherwise in meters
+            if (actualRadius >= 1000) {
+                document.getElementById('actual-radius').textContent = (actualRadius / 1000).toFixed(1) + ' km';
+            } else {
+                document.getElementById('actual-radius').textContent = actualRadius.toFixed(0) + ' m';
+            }
+
+            const clusterMode = getClusterMode(zoom);
+            document.getElementById('cluster-mode').textContent = clusterMode.toUpperCase();
+            const modeElement = document.getElementById('cluster-mode');
+            if (clusterMode === 'on') {
+                modeElement.style.color = '#28a745';
+            } else if (clusterMode === 'hybrid') {
+                modeElement.style.color = '#ffc107';
+            } else {
+                modeElement.style.color = '#dc3545';
+            }
+
+            alert('Settings applied! Tiles will reload with new parameters.');
+        });
+
+        // Track tile load times for Martin debug panel
+        const tileLoadTimes = [];
+        const tileErrors = [];
+        const activeTiles = new Map(); // Track loading tiles by coordinate
+        const maxRecentTiles = 10;
+        const maxRecentErrors = 5;
+
+        map.on('sourcedataloading', (e) => {
+            if (e.sourceId === 'pois' && e.tile) {
+                const startTime = performance.now();
+                e.tile._loadStartTime = startTime;
+
+                // Add to active tiles
+                const tileCoords = e.tile.tileID;
+                const key = `${tileCoords.canonical.z}/${tileCoords.canonical.x}/${tileCoords.canonical.y}`;
+                activeTiles.set(key, {
+                    z: tileCoords.canonical.z,
+                    x: tileCoords.canonical.x,
+                    y: tileCoords.canonical.y,
+                    startTime: startTime,
+                    status: 'loading'
+                });
+
+                updateActiveTilesDisplay();
+            }
+        });
+
+        map.on('sourcedata', (e) => {
+            if (e.sourceId === 'pois' && e.tile) {
+                const tile = e.tile;
+                const tileCoords = tile.tileID;
+                const key = `${tileCoords.canonical.z}/${tileCoords.canonical.x}/${tileCoords.canonical.y}`;
+
+                if (tile._loadStartTime) {
+                    const loadTime = performance.now() - tile._loadStartTime;
+
+                    // Update last tile load time display
+                    document.getElementById('tile-load-time').textContent = loadTime.toFixed(2) + ' ms';
+
+                    // Add to recent tiles list
+                    const tileInfo = {
+                        z: tileCoords.canonical.z,
+                        x: tileCoords.canonical.x,
+                        y: tileCoords.canonical.y,
+                        time: loadTime
+                    };
+
+                    tileLoadTimes.unshift(tileInfo);
+                    if (tileLoadTimes.length > maxRecentTiles) {
+                        tileLoadTimes.pop();
+                    }
+
+                    // Update recent tiles display
+                    const recentTilesDiv = document.getElementById('recent-tiles');
+                    recentTilesDiv.innerHTML = tileLoadTimes.map(t =>
+                        `<div style="padding: 2px; border-bottom: 1px solid #eee;">
+                            z:${t.z}/${t.x}/${t.y} - <strong>${t.time.toFixed(1)}ms</strong>
+                        </div>`
+                    ).join('');
+
+                    // Color code: < 100ms = green, < 500ms = yellow, >= 500ms = red
+                    const timeDisplay = document.getElementById('tile-load-time');
+                    if (loadTime < 100) {
+                        timeDisplay.style.color = '#28a745';
+                    } else if (loadTime < 500) {
+                        timeDisplay.style.color = '#ffc107';
+                    } else {
+                        timeDisplay.style.color = '#dc3545';
+                    }
+
+                    // Update active tile status
+                    if (activeTiles.has(key)) {
+                        const activeTile = activeTiles.get(key);
+                        activeTile.status = 'completed';
+                        activeTile.loadTime = loadTime;
+                        activeTiles.set(key, activeTile);
+                    }
+                }
+
+                // Check for tile loading errors
+                if (tile.state === 'errored' || tile.error) {
+                    const errorInfo = {
+                        z: tileCoords.canonical.z,
+                        x: tileCoords.canonical.x,
+                        y: tileCoords.canonical.y,
+                        error: tile.error || 'Unknown error',
+                        time: new Date().toLocaleTimeString()
+                    };
+
+                    tileErrors.unshift(errorInfo);
+                    if (tileErrors.length > maxRecentErrors) {
+                        tileErrors.pop();
+                    }
+
+                    // Update errors display
+                    const errorsDiv = document.getElementById('tile-errors');
+                    if (errorsDiv) {
+                        errorsDiv.innerHTML = tileErrors.map(e =>
+                            `<div style="padding: 4px; background: #fee; border-bottom: 1px solid #fcc; color: #c00;">
+                                <strong>ERROR ${e.time}:</strong> z:${e.z}/${e.x}/${e.y}<br>
+                                <span style="font-size: 10px;">${e.error}</span>
+                            </div>`
+                        ).join('');
+                    }
+
+                    console.error('Tile loading error:', errorInfo);
+
+                    // Mark as failed in active tiles
+                    if (activeTiles.has(key)) {
+                        const activeTile = activeTiles.get(key);
+                        activeTile.status = 'failed';
+                        activeTile.error = tile.error || 'Unknown error';
+                        activeTiles.set(key, activeTile);
+                    }
+                }
+
+                // Remove from active tiles after a delay
+                setTimeout(() => {
+                    activeTiles.delete(key);
+                    updateActiveTilesDisplay();
+                }, 2000);
+
+                updateActiveTilesDisplay();
+            }
+        });
+
+        function updateActiveTilesDisplay() {
+            const activeTilesDiv = document.getElementById('active-tiles');
+
+            if (activeTiles.size === 0) {
+                activeTilesDiv.innerHTML = 'No active tiles';
+                return;
+            }
+
+            activeTilesDiv.innerHTML = Array.from(activeTiles.values()).map(tile => {
+                const key = `${tile.z}/${tile.x}/${tile.y}`;
+                let className = '';
+                let statusText = '';
+                let extraStyle = '';
+
+                if (tile.status === 'loading') {
+                    className = 'color: #007cba;';
+                    statusText = '⏳';
+                } else if (tile.status === 'completed') {
+                    className = 'color: #28a745;';
+                    statusText = `✓ ${tile.loadTime.toFixed(1)}ms`;
+                } else if (tile.status === 'failed') {
+                    className = 'color: #dc3545; text-decoration: line-through;';
+                    statusText = '✗ Failed';
+                }
+
+                return `<div style="padding: 2px; border-bottom: 1px solid #eee; ${className}${extraStyle}">
+                    ${statusText} z:${tile.z}/${tile.x}/${tile.y}
+                </div>`;
+            }).join('');
+        }
+    </script>
+</body>
+</html>

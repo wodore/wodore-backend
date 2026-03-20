@@ -1,0 +1,49 @@
+# Martin test/debug configuration
+# This file is merged with the base martin.yaml config during martin_sync
+# Usage: app martin_sync --merge tile_server/config/martin_test.yaml
+
+# Disable database caching for testing (use cache_version=0 to bypass cache)
+# You can also disable caching by passing cache_version=0 in your tile requests
+# Example: http://localhost:8075/geoplaces/9/270/178?cache_version=0&...
+
+# Disable in-memory cache for testing database performance
+cache:
+  # Set to 0 to disable Martin's in-memory cache
+  max_size_mb: 0
+
+# CORS settings for testing (allow all origins, longer cache)
+cors:
+  origin:
+    - "*"
+  max_age: 0 # not browser caching
+
+# Keep database connection pool settings for testing
+postgres:
+  pool:
+    max_connections: 20
+    # Timeout for acquiring a connection from the pool
+    connection_timeout_sec: 30
+    # Keep connection alive for this many seconds
+    max_lifetime_sec: 1800
+    # Minimum number of connections in the pool
+    min_connections: 2
+    # If a connection is idle for this many seconds, close it
+    idle_timeout_sec: 600
+
+# PostGIS function options (for testing different clustering parameters)
+# These are default values that can be overridden in the tile URL
+postgis:
+  # Example: Set default function options for testing
+  # get_geoplaces_for_tiles:
+  #   cache_ttl_days: 0  # Disable caching by default
+  #   cache_version: 0    # Use cache version 0 for testing
+## Listen address and port (usually overridden by environment)
+#listen_addresses:
+#  - "0.0.0.0:3000"
+#
+## Keep alive settings
+#keep_alive:
+#  # Maximum number of requests allowed per connection
+#  max_requests: 1000
+#  # Maximum time a connection is kept alive (seconds)
+#  timeout_secs: 75

@@ -21,7 +21,8 @@ ARG DJANGO_ENV \
   PYTHON_VERSION=3.12 \
   CONFIG_DIR="config" \
   WITH_DEV=0 \
-  GIT_HASH
+  GIT_HASH \
+  MARTIN_VERSION=1.4.0
 
 ENV DJANGO_ENV=${DJANGO_ENV} \
   # python:
@@ -143,7 +144,15 @@ apk add --no-cache \
   geos \
   gettext \
   tini \
-  tzdata
+  tzdata \
+  wget
+# Martin tile server
+wget -qO /tmp/martin.tar.gz "https://github.com/maplibre/martin/releases/download/martin-v${MARTIN_VERSION}/martin-x86_64-unknown-linux-musl.tar.gz"
+tar -xzf /tmp/martin.tar.gz -C /usr/local/bin martin
+chmod +x /usr/local/bin/martin
+rm /tmp/martin.tar.gz
+# Commented out - may be needed later
+# apk add --no-cache osmium-tool
 cp /usr/share/zoneinfo/Europe/Zurich /etc/localtime
 echo "Europe/Zurich" > /etc/timezone
 chmod +x /usr/local/bin/wait-for-it

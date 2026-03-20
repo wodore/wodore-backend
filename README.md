@@ -94,6 +94,7 @@ spec:
 #### Cache Management
 
 Django provides built-in cache management:
+
 ```bash
 # Create cache table
 app createcachetable
@@ -108,6 +109,7 @@ app shell -c "from django.core.cache import caches; print(caches['persistent'])"
 #### Force Cache Refresh
 
 To bypass cache and refresh data from external APIs:
+
 ```bash
 # Use update_cache parameter in API requests
 curl "http://localhost:8000/v1/geo/images/hut/gelmer?update_cache=true"
@@ -389,6 +391,7 @@ Required development tools:
 - `uv` ([installation guide](https://docs.astral.sh/uv/getting-started/installation/))
 - `node` and `npm` for Tailwind CSS
 - `make` (optional)
+- `martin` tile server ([installation guide](https://maplibre.org/martin/installation/))
 
 ## TODOs
 
