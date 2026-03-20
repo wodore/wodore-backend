@@ -998,24 +998,24 @@ def post_process_images(
                 is_portrait = result.height > result.width
                 if is_portrait:
                     # Portrait: check height
-                    if result.height < 1000:
+                    if result.height < 500:
                         logger.debug(
                             "Skipping portrait image (insufficient height)",
                             provider=result.provider,
                             source_id=result.source_id,
                             height=result.height,
-                            minimum=1000,
+                            minimum=500,
                         )
                         continue
                 else:
                     # Landscape: check width
-                    if result.width < 1000:
+                    if result.width < 500:
                         logger.debug(
                             "Skipping landscape image (insufficient width)",
                             provider=result.provider,
                             source_id=result.source_id,
                             width=result.width,
-                            minimum=1000,
+                            minimum=500,
                         )
                         continue
 
@@ -2028,74 +2028,5 @@ def _detect_source_in_attribution(
         for pattern in patterns:
             if pattern.lower() in text_to_check:
                 return provider
-
-    return None
-
-
-def _normalize_image_url(url: str) -> str | None:
-    """
-    Normalize image URL for deduplication comparison.
-
-    Args:
-        url: Image URL to normalize
-
-    Returns:
-        Normalized URL or None if not a valid URL
-    """
-    if not url:
-        return None
-
-    from urllib.parse import urlparse
-
-    try:
-        # Parse URL to validate it
-        urlparse(url)
-
-        # Convert to lowercase
-        url_lower = url.lower()
-
-        # Remove common query parameters that don't change the image
-        # (but keep important ones like version IDs)
-
-        return url_lower
-    except Exception:
-        return None
-
-
-def _normalize_commons_filename(url: str) -> str | None:
-    """
-    Normalize Wikimedia Commons URL to canonical filename.
-
-    Args:
-        url: Image URL
-
-    Returns:
-        Canonical filename or None if not a Commons URL
-    """
-    if not url:
-        return None
-
-    url_lower = url.lower()
-
-    if (
-        "commons.wikimedia.org" not in url_lower
-        and "upload.wikimedia.org" not in url_lower
-    ):
-        return None
-
-    # Extract filename from various Commons URL formats
-    import re
-
-    # Try to extract filename from upload.wikimedia.org URL
-    upload_match = re.search(
-        r"/[a-f0-9]/[a-f0-9]/([^/]+\.(?:jpg|jpeg|png|gif))", url, re.IGNORECASE
-    )
-    if upload_match:
-        return upload_match.group(1)
-
-    # Try to extract filename from wiki/File: URL
-    wiki_match = re.search(r"/wiki/File:([^#]+)", url, re.IGNORECASE)
-    if wiki_match:
-        return wiki_match.group(1).replace("_", " ")
 
     return None
