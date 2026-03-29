@@ -214,7 +214,15 @@ class HutAvailabilityManager(BaseManager):
         new_huts = all_bookable_huts.exclude(id__in=checked_hut_ids)
 
         # Combine all three groups
-        return (huts_with_data | huts_needing_recheck | new_huts).distinct()
+        all_huts = (huts_with_data | huts_needing_recheck | new_huts).distinct()
+
+        # Order by consecutive_failures DESC (most failures first), then by last_checked ASC
+        # This ensures huts with repeated failures get prioritized for rechecking
+        # Note: availability_status is a OneToOneField, so we can order directly
+        return all_huts.order_by(
+            "-availability_status__consecutive_failures",
+            "availability_status__last_checked",
+        )
 
 
 class HutAvailabilityHistoryManager(BaseManager):

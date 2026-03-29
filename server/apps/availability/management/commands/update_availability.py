@@ -18,7 +18,7 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from server.apps.huts.models import Hut
@@ -389,3 +389,26 @@ class Command(BaseCommand):
 
         if dry_run:
             click.secho("\n[DRY RUN - No changes were made]", fg="yellow")
+            return
+
+        # Determine exit code based on failures
+        # Exit code 0: All huts succeeded
+        # Exit code 1: Some huts failed (partial failure)
+        # Exit code 2: All huts failed (complete failure)
+        if (
+            stats["huts_processed"] > 0
+            and stats["huts_failed"] == stats["huts_processed"]
+        ):
+            # All huts failed
+            raise CommandError(f"All {stats['huts_failed']} hut(s) failed to update")
+        elif stats["huts_failed"] > 0:
+            # Partial failure - some huts succeeded
+            click.secho(
+                f"\nWarning: {stats['huts_failed']} of {stats['huts_processed']} hut(s) failed",
+                fg="yellow",
+                bold=True,
+            )
+            # Exit with code 1 for monitoring systems
+            raise CommandError(
+                f"{stats['huts_failed']} of {stats['huts_processed']} hut(s) failed"
+            )
