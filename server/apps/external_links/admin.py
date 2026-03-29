@@ -166,7 +166,7 @@ class ExternalLinkAdmin(ModelAdmin):
     def health_status_display(self, obj: ExternalLink) -> str:
         """Display health status with color indicator."""
         if not obj.last_checked:
-            return format_html('<span style="color: gray;">Not checked</span>')
+            return format_html('<span style="color: gray;">{}</span>', "Not checked")
 
         if obj.failure_count == 0 and obj.response_code and obj.response_code < 400:
             return format_html(

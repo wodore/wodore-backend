@@ -154,11 +154,11 @@ class Symbol(TimeStampedModel):
                 name="symbols_symbol_slug_style_unique",
             ),
             models.CheckConstraint(
-                check=models.Q(review_status__in=_ReviewStatusChoices.values),
+                condition=models.Q(review_status__in=_ReviewStatusChoices.values),
                 name="symbols_symbol_review_status_valid",
             ),
             models.CheckConstraint(
-                check=models.Q(style__in=_SymbolStyleChoices.values),
+                condition=models.Q(style__in=_SymbolStyleChoices.values),
                 name="symbols_symbol_style_valid",
             ),
         )

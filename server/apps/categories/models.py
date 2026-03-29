@@ -195,7 +195,7 @@ class Category(ComputedFieldsModel, models.Model):
                 fields=["slug", "parent"], name="unique_slug_per_parent"
             ),
             models.CheckConstraint(
-                check=~models.Q(default=models.F("id")), name="default_not_self"
+                condition=~models.Q(default=models.F("id")), name="default_not_self"
             ),
         ]
 
