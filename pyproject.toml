@@ -148,6 +148,7 @@ hut-services = { git = "ssh://git@github.com/wodore/hut-services", branch = "mai
 
 [tool.pytest.ini_options]
 minversion = "7.0"
+DJANGO_SETTINGS_MODULE = "server.settings"
 addopts = ""
 testpaths = ["tests"]
 

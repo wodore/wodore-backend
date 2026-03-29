@@ -8,6 +8,7 @@ old/
 slim.report.json
 .env.*
 !.env.template
+!.env.test
 SUMMARY_*.md
 AGENT/
 tmp/
