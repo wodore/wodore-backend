@@ -69,7 +69,7 @@ class OrganizationAdmin(ModelAdmin):
         view = f'<span><a class="text-sm" href="{url}"> <span class="material-symbols-outlined"> visibility </span> </a>'
         url = reverse("admin:organizations_organization_change", args=[obj.pk])
         edit = f'<a class="text-sm" href="{url}"> <span class="material-symbols-outlined"> edit </span> </a><span>'
-        return format_html(view + edit)
+        return format_html("{}", mark_safe(view + edit))
 
     @display(header=True)
     def organization(self, obj):

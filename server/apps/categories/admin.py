@@ -304,7 +304,7 @@ class CategoryAdmin(ModelAdmin):
         """Display parent category if exists."""
         if obj.parent:
             return obj.parent.name_i18n or obj.parent.slug
-        return format_html('<span style="color: #999;">Root</span>')
+        return format_html('<span style="color: #999;">{}</span>', "Root")
 
     def avatar(self, url):
         """Helper to create small avatar image."""
