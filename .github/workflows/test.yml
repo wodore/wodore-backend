@@ -65,14 +65,17 @@ jobs:
             rm -rf /tmp/pgdata
             mkdir -p /tmp/pgdata
           fi
+          # Run as current user to avoid permission issues with actions/cache
           docker run -d \
             --name postgis \
             -e POSTGRES_DB=wodore \
             -e POSTGRES_USER=wodore \
             -e POSTGRES_PASSWORD=wodore \
+            -e PGDATA=/var/lib/postgresql/data/pgdata \
             -v /tmp/pgdata:/var/lib/postgresql/data \
             -p 5432:5432 \
-            postgis/postgis:16-3.4-alpine
+            postgis/postgis:16-3.4-alpine \
+            -c "listen_addresses=*"
           # Wait for PostgreSQL to be ready
           for i in $(seq 1 30); do
             if docker exec postgis pg_isready -U wodore >/dev/null 2>&1; then
@@ -89,11 +92,15 @@ jobs:
       - name: Cache GDAL apt packages
         uses: actions/cache@v5
         with:
-          path: /var/cache/apt/archives
+          path: ~/apt-cache
           key: apt-gdal-${{ runner.os }}-v1
 
       - name: Install GDAL
-        run: sudo apt-get install -y --no-install-recommends gdal-bin libgdal-dev
+        run: |
+          mkdir -p ~/apt-cache
+          sudo apt-get install -y --no-install-recommends -o Dir::Cache::Archives=$HOME/apt-cache gdal-bin libgdal-dev
+          # Fix permissions so actions/cache can save the cache
+          sudo chmod -R a+r ~/apt-cache
 
       - name: Set up the environment
         uses: ./.github/actions/setup-venv
@@ -109,3 +116,7 @@ jobs:
             # Cached database: reuse existing, --reuse-db is default in pyproject.toml
             uv run pytest --no-header -q
           fi
+
+      - name: Fix PG data dir permissions for caching
+        if: always() && steps.cache-db.outputs.cache-hit != 'true' && steps.db-cache-decision.outputs.force_recreate != 'true'
+        run: sudo chmod -R a+rw /tmp/pgdata
