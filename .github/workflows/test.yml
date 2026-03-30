@@ -40,12 +40,13 @@ jobs:
       - name: Generate migration cache key
         id: migration-hash
         run: |
-          # Hash all migration files to detect schema changes
           MIGRATION_HASH=$(find server/apps -path '*/migrations/*.py' \
             ! -name '__init__.py' \
             -exec md5sum {} \; | sort | md5sum | cut -d' ' -f1)
           echo "hash=${MIGRATION_HASH}" >> "$GITHUB_OUTPUT"
           echo "Migration hash: ${MIGRATION_HASH}"
+
+      # ── Cache checks (instant, establish cache-hit outputs) ─────────────
 
       - name: Cache PostgreSQL data directory
         id: cache-db
@@ -54,36 +55,6 @@ jobs:
           path: /tmp/pgdata
           key: testdb-postgis16-v${{ steps.version.outputs.version }}-${{ steps.migration-hash.outputs.hash }}
 
-      - name: Start PostgreSQL
-        run: |
-          # If cache hit: reuse existing data; if cache miss: start with empty dir
-          if [[ "${{ steps.cache-db.outputs.cache-hit }}" != "true" ]]; then
-            rm -rf /tmp/pgdata
-            mkdir -p /tmp/pgdata
-          fi
-          docker run -d \
-            --name postgis \
-            -e POSTGRES_DB=wodore \
-            -e POSTGRES_USER=wodore \
-            -e POSTGRES_PASSWORD=wodore \
-            -e PGDATA=/var/lib/postgresql/data/pgdata \
-            -v /tmp/pgdata:/var/lib/postgresql/data \
-            -p 5432:5432 \
-            postgis/postgis:16-3.4-alpine \
-            -c "listen_addresses=*"
-          # Wait for PostgreSQL to be ready
-          for i in $(seq 1 30); do
-            if docker exec postgis pg_isready -U wodore >/dev/null 2>&1; then
-              echo "PostgreSQL is ready"
-              break
-            fi
-            echo "Waiting for PostgreSQL... ($i/30)"
-            sleep 1
-          done
-
-      - name: Setup token for Python installation
-        run: git config --global url."https://${{ secrets.MY_USERNAME }}:${{ secrets.MY_TOKEN }}@github.com".insteadOf ssh://git@github.com
-
       - name: Cache GDAL installation
         id: cache-gdal
         uses: actions/cache@v5
@@ -91,53 +62,96 @@ jobs:
           path: ~/gdal-installed
           key: gdal-${{ runner.os }}-v${{ steps.version.outputs.version }}
 
-      - name: Install GDAL
-        if: steps.cache-gdal.outputs.cache-hit != 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gdal-bin libgdal-dev
-          # List all packages that were just installed
-          grep "install " /var/log/apt/history.log | tail -1 | sed 's/.*install //' | tr ',' '\n' > ~/gdal-packages.txt
-          # Copy all files from installed packages to cacheable location
-          mkdir -p ~/gdal-installed
-          while read pkg; do
-            pkg=$(echo $pkg | tr -d ' ')
-            dpkg -L "$pkg" 2>/dev/null | while read file; do
-              if [ -f "$file" ]; then
-                sudo mkdir -p ~/gdal-installed"$(dirname "$file")"
-                sudo cp -a "$file" ~/gdal-installed"$file"
-              fi
-            done
-          done < ~/gdal-packages.txt
-          sudo chown -R $USER:$USER ~/gdal-installed
+      - name: Cache Allure (npm)
+        uses: actions/cache@v5
+        with:
+          path: ~/.npm
+          key: allure-${{ runner.os }}
 
-      - name: Restore GDAL from cache
-        if: steps.cache-gdal.outputs.cache-hit == 'true'
+      # ── Start PostgreSQL + Install GDAL in parallel ─────────────────────
+      # PostgreSQL starts as a background process. GDAL apt-get runs in the
+      # foreground. Both complete before this step finishes.
+
+      - name: Start PostgreSQL + Install GDAL (parallel)
         run: |
-          # Copy all cached files back to their original locations
-          cd ~/gdal-installed
-          sudo find . -type f -exec sh -c 'sudo cp "$1" "/$1"' _ {} \;
+          # --- Start PostgreSQL in background ---
+          (
+            if [[ "${{ steps.cache-db.outputs.cache-hit }}" != "true" ]]; then
+              rm -rf /tmp/pgdata
+              mkdir -p /tmp/pgdata
+            fi
+            docker run -d \
+              --name postgis \
+              -e POSTGRES_DB=wodore \
+              -e POSTGRES_USER=wodore \
+              -e POSTGRES_PASSWORD=wodore \
+              -e PGDATA=/var/lib/postgresql/data/pgdata \
+              -v /tmp/pgdata:/var/lib/postgresql/data \
+              -p 5432:5432 \
+              postgis/postgis:16-3.4-alpine \
+              -c "listen_addresses=*"
+            # Wait for PostgreSQL to be ready
+            for i in $(seq 1 30); do
+              if docker exec postgis pg_isready -U wodore >/dev/null 2>&1; then
+                echo "PostgreSQL is ready"
+                exit 0
+              fi
+              sleep 1
+            done
+            echo "ERROR: PostgreSQL failed to start"
+            exit 1
+          ) &
+          PG_PID=$!
+
+          # --- GDAL: restore from cache or install fresh ---
+          if [[ "${{ steps.cache-gdal.outputs.cache-hit }}" == "true" ]]; then
+            echo "Restoring GDAL from cache..."
+            cd ~/gdal-installed
+            sudo find . -type f -exec sh -c 'sudo cp "$1" "/$1"' _ {} \;
+          else
+            echo "Installing GDAL..."
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends gdal-bin libgdal-dev
+            # Cache installed files
+            grep "install " /var/log/apt/history.log | tail -1 | sed 's/.*install //' | tr ',' '\n' > ~/gdal-packages.txt
+            mkdir -p ~/gdal-installed
+            while read pkg; do
+              pkg=$(echo $pkg | tr -d ' ')
+              dpkg -L "$pkg" 2>/dev/null | while read file; do
+                if [ -f "$file" ]; then
+                  sudo mkdir -p ~/gdal-installed"$(dirname "$file")"
+                  sudo cp -a "$file" ~/gdal-installed"$file"
+                fi
+              done
+            done < ~/gdal-packages.txt
+            sudo chown -R $USER:$USER ~/gdal-installed
+          fi
+
+          # Wait for PostgreSQL background process to finish
+          echo "Waiting for PostgreSQL startup to complete..."
+          wait $PG_PID
+
+      # ── Setup Python environment ────────────────────────────────────────
+
+      - name: Setup token for Python installation
+        run: git config --global url."https://${{ secrets.MY_USERNAME }}:${{ secrets.MY_TOKEN }}@github.com".insteadOf ssh://git@github.com
 
       - name: Set up the environment
         uses: ./.github/actions/setup-venv
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # ── Run tests ───────────────────────────────────────────────────────
+
       - name: Run tests
         run: |
           if [[ "${{ steps.cache-db.outputs.cache-hit }}" != "true" ]]; then
-            # Fresh database: create from scratch with all migrations
             uv run pytest --no-header -q --create-db -v --alluredir allure-results --clean-alluredir
           else
-            # Cached database: reuse existing, --reuse-db is default in pyproject.toml
             uv run pytest --no-header -q -v --alluredir allure-results --clean-alluredir
           fi
 
-      - name: Cache Allure (npm)
-        uses: actions/cache@v5
-        with:
-          path: ~/.npm
-          key: allure-${{ runner.os }}
+      # ── Report ──────────────────────────────────────────────────────────
 
       - name: Generate Allure report
         if: always()
@@ -154,10 +168,7 @@ jobs:
       - name: Fix PG data dir permissions for caching
         if: always() && steps.cache-db.outputs.cache-hit != 'true'
         run: |
-          # Stop PostgreSQL cleanly so data is consistent
           docker stop postgis || true
-          # Fix permissions using a plain Alpine container running as root
-          # (postgis image entrypoint runs as postgres user, which can't chmod)
           docker run --rm \
             --entrypoint sh \
             -v /tmp/pgdata:/data \
