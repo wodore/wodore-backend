@@ -13,6 +13,7 @@ AGENT/
 tmp/
 .geoplaces_osm_import.json
 .pre-commit-cache
+allure-*/
 
 
 
