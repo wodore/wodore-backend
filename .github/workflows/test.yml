@@ -26,19 +26,12 @@ jobs:
       - name: Check out
         uses: actions/checkout@v6
 
-      - name: Check if database should be recreated
-        id: db-cache-decision
+      - name: Get project version
+        id: version
         run: |
-          # Force recreate on release tags or when RECREATE_DB label is set
-          FORCE_RECREATE="false"
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            FORCE_RECREATE="true"
-          fi
-          if [[ "${{ contains(github.event.pull_request.labels.*.name, 'RECREATE_DB') }}" == "true" ]]; then
-            FORCE_RECREATE="true"
-          fi
-          echo "force_recreate=${FORCE_RECREATE}" >> "$GITHUB_OUTPUT"
-          echo "Force recreate DB: ${FORCE_RECREATE}"
+          VERSION=$(grep '^current_version' .bumpversion.cfg | cut -d' ' -f3)
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Version: ${VERSION}"
 
       - name: Generate migration cache key
         id: migration-hash
@@ -52,16 +45,15 @@ jobs:
 
       - name: Cache PostgreSQL data directory
         id: cache-db
-        if: steps.db-cache-decision.outputs.force_recreate != 'true'
         uses: actions/cache@v5
         with:
           path: /tmp/pgdata
-          key: testdb-postgis16-${{ steps.migration-hash.outputs.hash }}
+          key: testdb-postgis16-v${{ steps.version.outputs.version }}-${{ steps.migration-hash.outputs.hash }}
 
       - name: Start PostgreSQL
         run: |
-          # If cache hit: reuse existing data; if cache miss or force recreate: start with empty dir
-          if [[ "${{ steps.db-cache-decision.outputs.force_recreate }}" == "true" ]] || [[ "${{ steps.cache-db.outputs.cache-hit }}" != "true" ]]; then
+          # If cache hit: reuse existing data; if cache miss: start with empty dir
+          if [[ "${{ steps.cache-db.outputs.cache-hit }}" != "true" ]]; then
             rm -rf /tmp/pgdata
             mkdir -p /tmp/pgdata
           fi
@@ -93,7 +85,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/apt-cache
-          key: apt-gdal-${{ runner.os }}-v1
+          key: apt-gdal-${{ runner.os }}-v${{ steps.version.outputs.version }}
 
       - name: Install GDAL
         run: |
@@ -109,16 +101,16 @@ jobs:
 
       - name: Run tests
         run: |
-          if [[ "${{ steps.db-cache-decision.outputs.force_recreate }}" == "true" ]] || [[ "${{ steps.cache-db.outputs.cache-hit }}" != "true" ]]; then
+          if [[ "${{ steps.cache-db.outputs.cache-hit }}" != "true" ]]; then
             # Fresh database: create from scratch with all migrations
-            uv run pytest --no-header -q -v --create-db
+            uv run pytest --no-header -q --create-db
           else
             # Cached database: reuse existing, --reuse-db is default in pyproject.toml
-            uv run pytest --no-header -q -v
+            uv run pytest --no-header -q
           fi
 
       - name: Fix PG data dir permissions for caching
-        if: always() && steps.cache-db.outputs.cache-hit != 'true' && steps.db-cache-decision.outputs.force_recreate != 'true'
+        if: always() && steps.cache-db.outputs.cache-hit != 'true'
         run: |
           # Stop PostgreSQL cleanly so data is consistent
           docker stop postgis || true
