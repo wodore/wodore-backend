@@ -89,7 +89,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/gdal-installed
-          key: gdal-${{ runner.os }}-3.9-alpine
+          key: gdal-${{ runner.os }}-v${{ steps.version.outputs.version }}
 
       - name: Install GDAL
         if: steps.cache-gdal.outputs.cache-hit != 'true'
