@@ -120,7 +120,7 @@ jobs:
 
       - name: Post Allure summary
         if: always()
-        uses: allure-framework/allure-report@v0.6.6
+        uses: allure-framework/allure-action@v0.6.6
         with:
           report-directory: "./allure-report"
           github-token: ${{ secrets.GITHUB_TOKEN }}
