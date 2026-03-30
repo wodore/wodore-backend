@@ -96,22 +96,27 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends gdal-bin libgdal-dev
-          # Copy installed files to cacheable location
+          # List all packages that were just installed
+          grep "install " /var/log/apt/history.log | tail -1 | sed 's/.*install //' | tr ',' '\n' > ~/gdal-packages.txt
+          # Copy all files from installed packages to cacheable location
           mkdir -p ~/gdal-installed
-          sudo cp -r /usr/lib/x86_64-linux-gnu/libgdal* ~/gdal-installed/
-          sudo cp -r /usr/lib/x86_64-linux-gnu/libproj* ~/gdal-installed/
-          sudo cp -r /usr/lib/x86_64-linux-gnu/libgeos* ~/gdal-installed/
-          sudo cp /usr/bin/gdal* ~/gdal-installed/
-          sudo cp /usr/bin/ogr* ~/gdal-installed/
-          sudo cp -r /usr/include/gdal ~/gdal-installed/
+          while read pkg; do
+            pkg=$(echo $pkg | tr -d ' ')
+            dpkg -L "$pkg" 2>/dev/null | while read file; do
+              if [ -f "$file" ]; then
+                sudo mkdir -p ~/gdal-installed"$(dirname "$file")"
+                sudo cp -a "$file" ~/gdal-installed"$file"
+              fi
+            done
+          done < ~/gdal-packages.txt
           sudo chown -R $USER:$USER ~/gdal-installed
 
       - name: Restore GDAL from cache
         if: steps.cache-gdal.outputs.cache-hit == 'true'
         run: |
-          sudo cp ~/gdal-installed/lib* /usr/lib/x86_64-linux-gnu/
-          find ~/gdal-installed -maxdepth 1 -type f -exec sudo cp {} /usr/bin/ \;
-          sudo cp -r ~/gdal-installed/gdal /usr/include/
+          # Copy all cached files back to their original locations
+          cd ~/gdal-installed
+          sudo find . -type f -exec sh -c 'sudo cp "$1" "/$1"' _ {} \;
 
       - name: Set up the environment
         uses: ./.github/actions/setup-venv
