@@ -122,8 +122,10 @@ jobs:
         run: |
           # Stop PostgreSQL cleanly so data is consistent
           docker stop postgis || true
-          # Fix permissions from inside the container where the postgres user owns the files
+          # Fix permissions using a plain Alpine container running as root
+          # (postgis image entrypoint runs as postgres user, which can't chmod)
           docker run --rm \
-            -v /tmp/pgdata:/var/lib/postgresql/data \
-            postgis/postgis:16-3.4-alpine \
-            sh -c "chmod -R a+rw /var/lib/postgresql/data/pgdata"
+            --entrypoint sh \
+            -v /tmp/pgdata:/data \
+            alpine:3 \
+            -c "chmod -R 0777 /data"
