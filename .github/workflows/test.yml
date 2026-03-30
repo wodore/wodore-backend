@@ -65,7 +65,6 @@ jobs:
             rm -rf /tmp/pgdata
             mkdir -p /tmp/pgdata
           fi
-          # Run as current user to avoid permission issues with actions/cache
           docker run -d \
             --name postgis \
             -e POSTGRES_DB=wodore \
@@ -90,6 +89,7 @@ jobs:
         run: git config --global url."https://${{ secrets.MY_USERNAME }}:${{ secrets.MY_TOKEN }}@github.com".insteadOf ssh://git@github.com
 
       - name: Cache GDAL apt packages
+        id: cache-gdal
         uses: actions/cache@v5
         with:
           path: ~/apt-cache
@@ -119,4 +119,11 @@ jobs:
 
       - name: Fix PG data dir permissions for caching
         if: always() && steps.cache-db.outputs.cache-hit != 'true' && steps.db-cache-decision.outputs.force_recreate != 'true'
-        run: sudo chmod -R a+rw /tmp/pgdata
+        run: |
+          # Stop PostgreSQL cleanly so data is consistent
+          docker stop postgis || true
+          # Fix permissions from inside the container where the postgres user owns the files
+          docker run --rm \
+            -v /tmp/pgdata:/var/lib/postgresql/data \
+            postgis/postgis:16-3.4-alpine \
+            sh -c "chmod -R a+rw /var/lib/postgresql/data/pgdata"
