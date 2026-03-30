@@ -84,19 +84,34 @@ jobs:
       - name: Setup token for Python installation
         run: git config --global url."https://${{ secrets.MY_USERNAME }}:${{ secrets.MY_TOKEN }}@github.com".insteadOf ssh://git@github.com
 
-      - name: Cache GDAL apt packages
+      - name: Cache GDAL installation
         id: cache-gdal
         uses: actions/cache@v5
         with:
-          path: ~/apt-cache
-          key: apt-gdal-${{ runner.os }}-v${{ steps.version.outputs.version }}
+          path: ~/gdal-installed
+          key: gdal-${{ runner.os }}-3.9-alpine
 
       - name: Install GDAL
+        if: steps.cache-gdal.outputs.cache-hit != 'true'
         run: |
-          mkdir -p ~/apt-cache
-          sudo apt-get install -y --no-install-recommends -o Dir::Cache::Archives=$HOME/apt-cache gdal-bin libgdal-dev
-          # Fix permissions so actions/cache can save the cache
-          sudo chmod -R a+r ~/apt-cache
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gdal-bin libgdal-dev
+          # Copy installed files to cacheable location
+          mkdir -p ~/gdal-installed
+          sudo cp -r /usr/lib/x86_64-linux-gnu/libgdal* ~/gdal-installed/
+          sudo cp -r /usr/lib/x86_64-linux-gnu/libproj* ~/gdal-installed/
+          sudo cp -r /usr/lib/x86_64-linux-gnu/libgeos* ~/gdal-installed/
+          sudo cp /usr/bin/gdal* ~/gdal-installed/
+          sudo cp /usr/bin/ogr* ~/gdal-installed/
+          sudo cp -r /usr/include/gdal ~/gdal-installed/
+          sudo chown -R $USER:$USER ~/gdal-installed
+
+      - name: Restore GDAL from cache
+        if: steps.cache-gdal.outputs.cache-hit == 'true'
+        run: |
+          sudo cp ~/gdal-installed/lib* /usr/lib/x86_64-linux-gnu/
+          sudo cp ~/gdal-installed/gdal* ~/gdal-installed/ogr* /usr/bin/
+          sudo cp -r ~/gdal-installed/gdal /usr/include/
 
       - name: Set up the environment
         uses: ./.github/actions/setup-venv
