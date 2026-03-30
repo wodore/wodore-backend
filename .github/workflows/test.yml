@@ -1,0 +1,138 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+env:
+  DJANGO_ENV: test
+  DJANGO_SECRET_KEY: test-secret-key-ci
+  DJANGO_TRUSTED_DOMAINS: localhost
+  POSTGRES_DB: wodore
+  POSTGRES_USER: wodore
+  POSTGRES_PASSWORD: wodore
+  DJANGO_DATABASE_HOST: localhost
+  DJANGO_DATABASE_PORT: 5432
+  OIDC_OP_BASE_URL: "https://notset"
+
+permissions:
+  pull-requests: write
+  checks: write
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v6
+
+      - name: Compute cache keys
+        id: cache-keys
+        run: |
+          VERSION=$(grep '^current_version' .bumpversion.cfg | cut -d' ' -f3)
+          MIGRATION_HASH=$(find server/apps -path '*/migrations/*.py' \
+            ! -name '__init__.py' \
+            -exec md5sum {} \; | sort | md5sum | cut -d' ' -f1)
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "migration-hash=${MIGRATION_HASH}" >> "$GITHUB_OUTPUT"
+
+      # ── Caches ──────────────────────────────────────────────────────────
+
+      - name: Cache PostgreSQL data directory
+        id: cache-db
+        uses: actions/cache@v5
+        with:
+          path: /tmp/pgdata
+          key: testdb-postgis16-v${{ steps.cache-keys.outputs.version }}-${{ steps.cache-keys.outputs.migration-hash }}
+
+      - name: Cache Allure (npm)
+        uses: actions/cache@v5
+        with:
+          path: ~/.npm
+          key: allure-${{ runner.os }}
+
+      # ── Start PostgreSQL + Install GDAL in parallel ─────────────────────
+      # Both run as background processes within this step, wait blocks until
+      # both complete.
+
+      - name: Start PostgreSQL + Install GDAL (parallel)
+        run: |
+          # --- Start PostgreSQL in background ---
+          (
+            if [[ "${{ steps.cache-db.outputs.cache-hit }}" != "true" ]]; then
+              rm -rf /tmp/pgdata
+              mkdir -p /tmp/pgdata
+            fi
+            docker run -d \
+              --name postgis \
+              -e POSTGRES_DB=wodore \
+              -e POSTGRES_USER=wodore \
+              -e POSTGRES_PASSWORD=wodore \
+              -e PGDATA=/var/lib/postgresql/data/pgdata \
+              -v /tmp/pgdata:/var/lib/postgresql/data \
+              -p 5432:5432 \
+              postgis/postgis:16-3.4-alpine \
+              -c "listen_addresses=*"
+            for i in $(seq 1 30); do
+              if docker exec postgis pg_isready -U wodore >/dev/null 2>&1; then
+                echo "PostgreSQL is ready"
+                exit 0
+              fi
+              sleep 1
+            done
+            echo "ERROR: PostgreSQL failed to start"
+            exit 1
+          ) &
+
+          # --- Install GDAL in background ---
+          (
+            sudo apt-get install -y --no-install-recommends gdal-bin 2>/tmp/gdal-err.log || \
+              (sudo apt-get update && sudo apt-get install -y --no-install-recommends gdal-bin)
+            echo "GDAL install complete"
+          ) &
+
+          # Wait for both to finish within this step
+          wait
+
+      # ── Setup Python environment (runs while PG + GDAL install) ─────────
+
+      - name: Setup token for Python installation
+        run: git config --global url."https://${{ secrets.MY_USERNAME }}:${{ secrets.MY_TOKEN }}@github.com".insteadOf ssh://git@github.com
+
+      - name: Set up the environment
+        uses: ./.github/actions/setup-venv
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Run tests ───────────────────────────────────────────────────────
+
+      - name: Run tests
+        run: |
+          if [[ "${{ steps.cache-db.outputs.cache-hit }}" != "true" ]]; then
+            uv run pytest --no-header -q --create-db -v --alluredir allure-results --clean-alluredir
+          else
+            uv run pytest --no-header -q -v --alluredir allure-results --clean-alluredir
+          fi
+
+      # ── Report ──────────────────────────────────────────────────────────
+
+      - name: Generate Allure report
+        if: always()
+        run: npx -y allure generate
+
+      - name: Post Allure summary
+        if: always()
+        uses: allure-framework/allure-action@v0.6.6
+        with:
+          report-directory: "./allure-report"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fix PG data dir permissions for caching
+        if: always() && steps.cache-db.outputs.cache-hit != 'true'
+        run: |
+          docker exec postgis sh -c "chmod -R 0777 /var/lib/postgresql/data"
+          docker stop postgis || true
