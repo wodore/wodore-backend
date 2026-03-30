@@ -111,10 +111,10 @@ jobs:
         run: |
           if [[ "${{ steps.db-cache-decision.outputs.force_recreate }}" == "true" ]] || [[ "${{ steps.cache-db.outputs.cache-hit }}" != "true" ]]; then
             # Fresh database: create from scratch with all migrations
-            uv run pytest --no-header -q --create-db
+            uv run pytest --no-header -q -v --create-db
           else
             # Cached database: reuse existing, --reuse-db is default in pyproject.toml
-            uv run pytest --no-header -q
+            uv run pytest --no-header -q -v
           fi
 
       - name: Fix PG data dir permissions for caching
