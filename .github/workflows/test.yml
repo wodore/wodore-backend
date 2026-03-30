@@ -107,16 +107,16 @@ jobs:
         run: |
           if [[ "${{ steps.cache-db.outputs.cache-hit }}" != "true" ]]; then
             # Fresh database: create from scratch with all migrations
-            uv run pytest --no-header -q --create-db --alluredir allure-results
+            uv run pytest --no-header -q --create-db --alluredir allure-results --clean-alluredir
           else
             # Cached database: reuse existing, --reuse-db is default in pyproject.toml
-            uv run pytest --no-header -q --alluredir allure-results
+            uv run pytest --no-header -q --alluredir allure-results --clean-alluredir
           fi
 
       - name: Generate Allure report
         if: always()
         run: |
-          npx -y allure generate --clean || true
+          npx -y allure generate
 
       - name: Post Allure summary
         if: always()
