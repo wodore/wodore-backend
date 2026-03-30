@@ -30,44 +30,24 @@ jobs:
       - name: Check out
         uses: actions/checkout@v6
 
-      - name: Get project version
-        id: version
+      - name: Compute cache keys
+        id: cache-keys
         run: |
           VERSION=$(grep '^current_version' .bumpversion.cfg | cut -d' ' -f3)
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Version: ${VERSION}"
-
-      - name: Generate migration cache key
-        id: migration-hash
-        run: |
           MIGRATION_HASH=$(find server/apps -path '*/migrations/*.py' \
             ! -name '__init__.py' \
             -exec md5sum {} \; | sort | md5sum | cut -d' ' -f1)
-          echo "hash=${MIGRATION_HASH}" >> "$GITHUB_OUTPUT"
-          echo "Migration hash: ${MIGRATION_HASH}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "migration-hash=${MIGRATION_HASH}" >> "$GITHUB_OUTPUT"
 
-      # ── Cache checks (instant, establish cache-hit outputs) ─────────────
+      # ── Caches ──────────────────────────────────────────────────────────
 
       - name: Cache PostgreSQL data directory
         id: cache-db
         uses: actions/cache@v5
         with:
           path: /tmp/pgdata
-          key: testdb-postgis16-v${{ steps.version.outputs.version }}-${{ steps.migration-hash.outputs.hash }}
-
-      - name: Cache Docker image (postgis)
-        id: cache-docker
-        uses: actions/cache@v5
-        with:
-          path: /tmp/postgis-image.tar
-          key: docker-postgis16-3.4-alpine
-
-      - name: Cache apt packages
-        id: cache-apt
-        uses: actions/cache@v5
-        with:
-          path: /tmp/apt-cache
-          key: apt-gdal-${{ runner.os }}
+          key: testdb-postgis16-v${{ steps.cache-keys.outputs.version }}-${{ steps.cache-keys.outputs.migration-hash }}
 
       - name: Cache Allure (npm)
         uses: actions/cache@v5
@@ -75,17 +55,14 @@ jobs:
           path: ~/.npm
           key: allure-${{ runner.os }}
 
-      # ── Start PostgreSQL + Install GDAL in parallel ─────────────────────
-      # PostgreSQL starts as a background process. GDAL apt-get runs in the
-      # foreground. Both complete before this step finishes.
+      # ── Start PostgreSQL + GDAL in background ───────────────────────────
+      # Both run as background processes. Subsequent Python setup steps run
+      # while these finish, overlapping I/O-bound work.
 
-      - name: Start PostgreSQL + Install GDAL (parallel)
+      - name: Start PostgreSQL + GDAL install (background)
         run: |
           # --- Start PostgreSQL in background ---
           (
-            if [[ "${{ steps.cache-docker.outputs.cache-hit }}" == "true" ]]; then
-              docker load -i /tmp/postgis-image.tar
-            fi
             if [[ "${{ steps.cache-db.outputs.cache-hit }}" != "true" ]]; then
               rm -rf /tmp/pgdata
               mkdir -p /tmp/pgdata
@@ -100,10 +77,6 @@ jobs:
               -p 5432:5432 \
               postgis/postgis:16-3.4-alpine \
               -c "listen_addresses=*"
-            if [[ "${{ steps.cache-docker.outputs.cache-hit }}" != "true" ]]; then
-              docker save postgis/postgis:16-3.4-alpine -o /tmp/postgis-image.tar
-            fi
-            # Wait for PostgreSQL to be ready
             for i in $(seq 1 30); do
               if docker exec postgis pg_isready -U wodore >/dev/null 2>&1; then
                 echo "PostgreSQL is ready"
@@ -114,22 +87,17 @@ jobs:
             echo "ERROR: PostgreSQL failed to start"
             exit 1
           ) &
-          PG_PID=$!
+          echo "PG_PID=$!" >> "$GITHUB_ENV"
 
-          # --- Install GDAL ---
-          sudo mkdir -p /tmp/apt-cache
-          if [[ "${{ steps.cache-apt.outputs.cache-hit }}" == "true" ]]; then
-            sudo cp -a /tmp/apt-cache/. /var/cache/apt/archives/ 2>/dev/null || true
-          fi
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gdal-bin libgdal-dev
-          sudo cp -a /var/cache/apt/archives/. /tmp/apt-cache/ 2>/dev/null || true
+          # --- Install GDAL in background ---
+          (
+            sudo apt-get install -y --no-install-recommends gdal-bin || \
+              (sudo apt-get update && sudo apt-get install -y --no-install-recommends gdal-bin)
+            echo "GDAL install complete"
+          ) &
+          echo "GDAL_PID=$!" >> "$GITHUB_ENV"
 
-          # Wait for PostgreSQL background process to finish
-          echo "Waiting for PostgreSQL startup to complete..."
-          wait $PG_PID
-
-      # ── Setup Python environment ────────────────────────────────────────
+      # ── Setup Python environment (runs while PG + GDAL install) ─────────
 
       - name: Setup token for Python installation
         run: git config --global url."https://${{ secrets.MY_USERNAME }}:${{ secrets.MY_TOKEN }}@github.com".insteadOf ssh://git@github.com
@@ -138,6 +106,11 @@ jobs:
         uses: ./.github/actions/setup-venv
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Wait for PostgreSQL + GDAL
+        run: |
+          wait $PG_PID
+          wait $GDAL_PID
 
       # ── Run tests ───────────────────────────────────────────────────────
 
@@ -153,8 +126,7 @@ jobs:
 
       - name: Generate Allure report
         if: always()
-        run: |
-          npx -y allure generate
+        run: npx -y allure generate
 
       - name: Post Allure summary
         if: always()
@@ -166,9 +138,5 @@ jobs:
       - name: Fix PG data dir permissions for caching
         if: always() && steps.cache-db.outputs.cache-hit != 'true'
         run: |
+          docker exec postgis sh -c "chmod -R 0777 /var/lib/postgresql/data"
           docker stop postgis || true
-          docker run --rm \
-            --entrypoint sh \
-            -v /tmp/pgdata:/data \
-            alpine:3 \
-            -c "chmod -R 0777 /data"
