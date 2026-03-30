@@ -44,6 +44,9 @@ jobs:
       - name: Setup token for Python installation
         run: git config --global url."https://${{ secrets.MY_USERNAME }}:${{ secrets.MY_TOKEN }}@github.com".insteadOf ssh://git@github.com
 
+      - name: Install GDAL
+        run: sudo apt-get install -y --no-install-recommends gdal-bin libgdal-dev
+
       - name: Set up the environment
         uses: ./.github/actions/setup-venv
         with:
