@@ -55,13 +55,6 @@ jobs:
           path: /tmp/pgdata
           key: testdb-postgis16-v${{ steps.version.outputs.version }}-${{ steps.migration-hash.outputs.hash }}
 
-      - name: Cache GDAL installation
-        id: cache-gdal
-        uses: actions/cache@v5
-        with:
-          path: ~/gdal-installed
-          key: gdal-${{ runner.os }}-v${{ steps.version.outputs.version }}
-
       - name: Cache Allure (npm)
         uses: actions/cache@v5
         with:
@@ -103,29 +96,9 @@ jobs:
           ) &
           PG_PID=$!
 
-          # --- GDAL: restore from cache or install fresh ---
-          if [[ "${{ steps.cache-gdal.outputs.cache-hit }}" == "true" ]]; then
-            echo "Restoring GDAL from cache..."
-            cd ~/gdal-installed
-            sudo find . -type f -exec sh -c 'sudo cp "$1" "/$1"' _ {} \;
-          else
-            echo "Installing GDAL..."
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends gdal-bin libgdal-dev
-            # Cache installed files
-            grep "install " /var/log/apt/history.log | tail -1 | sed 's/.*install //' | tr ',' '\n' > ~/gdal-packages.txt
-            mkdir -p ~/gdal-installed
-            while read pkg; do
-              pkg=$(echo $pkg | tr -d ' ')
-              dpkg -L "$pkg" 2>/dev/null | while read file; do
-                if [ -f "$file" ]; then
-                  sudo mkdir -p ~/gdal-installed"$(dirname "$file")"
-                  sudo cp -a "$file" ~/gdal-installed"$file"
-                fi
-              done
-            done < ~/gdal-packages.txt
-            sudo chown -R $USER:$USER ~/gdal-installed
-          fi
+          # --- Install GDAL ---
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gdal-bin libgdal-dev
 
           # Wait for PostgreSQL background process to finish
           echo "Waiting for PostgreSQL startup to complete..."
