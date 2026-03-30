@@ -55,11 +55,11 @@ jobs:
           path: ~/.npm
           key: allure-${{ runner.os }}
 
-      # ── Start PostgreSQL + GDAL in background ───────────────────────────
-      # Both run as background processes. Subsequent Python setup steps run
-      # while these finish, overlapping I/O-bound work.
+      # ── Start PostgreSQL + Install GDAL in parallel ─────────────────────
+      # Both run as background processes within this step, wait blocks until
+      # both complete.
 
-      - name: Start PostgreSQL + GDAL install (background)
+      - name: Start PostgreSQL + Install GDAL (parallel)
         run: |
           # --- Start PostgreSQL in background ---
           (
@@ -87,15 +87,16 @@ jobs:
             echo "ERROR: PostgreSQL failed to start"
             exit 1
           ) &
-          echo "PG_PID=$!" >> "$GITHUB_ENV"
 
           # --- Install GDAL in background ---
           (
-            sudo apt-get install -y --no-install-recommends gdal-bin || \
+            sudo apt-get install -y --no-install-recommends gdal-bin 2>/tmp/gdal-err.log || \
               (sudo apt-get update && sudo apt-get install -y --no-install-recommends gdal-bin)
             echo "GDAL install complete"
           ) &
-          echo "GDAL_PID=$!" >> "$GITHUB_ENV"
+
+          # Wait for both to finish within this step
+          wait
 
       # ── Setup Python environment (runs while PG + GDAL install) ─────────
 
@@ -106,11 +107,6 @@ jobs:
         uses: ./.github/actions/setup-venv
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Wait for PostgreSQL + GDAL
-        run: |
-          wait $PG_PID
-          wait $GDAL_PID
 
       # ── Run tests ───────────────────────────────────────────────────────
 
