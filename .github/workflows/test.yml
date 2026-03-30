@@ -1,0 +1,52 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+env:
+  DJANGO_ENV: test
+  DJANGO_SECRET_KEY: test-secret-key-ci
+  DJANGO_TRUSTED_DOMAINS: localhost
+  POSTGRES_DB: wodore
+  POSTGRES_USER: wodore
+  POSTGRES_PASSWORD: wodore
+  DJANGO_DATABASE_HOST: localhost
+  DJANGO_DATABASE_PORT: 5432
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    services:
+      postgis:
+        image: postgis/postgis:16-3.4-alpine
+        env:
+          POSTGRES_DB: wodore
+          POSTGRES_USER: wodore
+          POSTGRES_PASSWORD: wodore
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v6
+
+      - name: Setup token for Python installation
+        run: git config --global url."https://${{ secrets.MY_USERNAME }}:${{ secrets.MY_TOKEN }}@github.com".insteadOf ssh://git@github.com
+
+      - name: Set up the environment
+        uses: ./.github/actions/setup-venv
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run tests
+        run: uv run pytest --no-header -q
