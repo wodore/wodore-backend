@@ -116,7 +116,7 @@ jobs:
       - name: Generate Allure report
         if: always()
         run: |
-          npx -y allure generate allure-results -o allure-report --clean || true
+          npx -y allure generate --clean || true
 
       - name: Post Allure summary
         if: always()
