@@ -180,12 +180,8 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "mozilla_django_oidc",  # Load after auth https://github.com/mozilla/mozilla-django-oidc
     "csp",
     # Health checks:
-    # You may want to enable other checks as well,
-    # see: https://github.com/KristianOellegaard/django-health-check
+    # Using view-based checks (v4 API)
     "health_check",
-    "health_check.db",
-    "health_check.cache",
-    "health_check.storage",
     "django_cleanup.apps.CleanupConfig",  # https://pypi.org/project/django-cleanup/
 )
 

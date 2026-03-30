@@ -9,7 +9,8 @@ This examples uses Django's default media
 files serving technique in development.
 """
 
-from health_check import urls as health_urls
+from health_check import Cache, Database, Storage
+from health_check.views import HealthCheckView
 
 from django.conf import settings
 from django.contrib import admin
@@ -31,7 +32,12 @@ urlpatterns = [
     # Apps:
     path("main/", include(django_admin_urls, namespace="main")),
     # Health checks:
-    path("health/", include(health_urls)),
+    path(
+        "health/",
+        HealthCheckView.as_view(
+            checks=[(Database, {}), (Cache, {"cache_key": None}), (Storage, {})]
+        ),
+    ),
     # Locale:
     path("i18n/", include("django.conf.urls.i18n")),
     # django-admin:
