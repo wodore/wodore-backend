@@ -16,7 +16,7 @@ env:
   POSTGRES_PASSWORD: wodore
   DJANGO_DATABASE_HOST: localhost
   DJANGO_DATABASE_PORT: 5432
-  OIDC_OP_BASE_URL: ""
+  OIDC_OP_BASE_URL: "https://notset"
 
 jobs:
   tests:
