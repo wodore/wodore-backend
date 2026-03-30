@@ -110,7 +110,7 @@ jobs:
         if: steps.cache-gdal.outputs.cache-hit == 'true'
         run: |
           sudo cp ~/gdal-installed/lib* /usr/lib/x86_64-linux-gnu/
-          sudo cp ~/gdal-installed/gdal* ~/gdal-installed/ogr* /usr/bin/
+          find ~/gdal-installed -maxdepth 1 -type f -exec sudo cp {} /usr/bin/ \;
           sudo cp -r ~/gdal-installed/gdal /usr/include/
 
       - name: Set up the environment
