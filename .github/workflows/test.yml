@@ -22,24 +22,66 @@ jobs:
   tests:
     runs-on: ubuntu-latest
 
-    services:
-      postgis:
-        image: postgis/postgis:16-3.4-alpine
-        env:
-          POSTGRES_DB: wodore
-          POSTGRES_USER: wodore
-          POSTGRES_PASSWORD: wodore
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
     steps:
       - name: Check out
         uses: actions/checkout@v6
+
+      - name: Check if database should be recreated
+        id: db-cache-decision
+        run: |
+          # Force recreate on release tags or when RECREATE_DB label is set
+          FORCE_RECREATE="false"
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            FORCE_RECREATE="true"
+          fi
+          if [[ "${{ contains(github.event.pull_request.labels.*.name, 'RECREATE_DB') }}" == "true" ]]; then
+            FORCE_RECREATE="true"
+          fi
+          echo "force_recreate=${FORCE_RECREATE}" >> "$GITHUB_OUTPUT"
+          echo "Force recreate DB: ${FORCE_RECREATE}"
+
+      - name: Generate migration cache key
+        id: migration-hash
+        run: |
+          # Hash all migration files to detect schema changes
+          MIGRATION_HASH=$(find server/apps -path '*/migrations/*.py' \
+            ! -name '__init__.py' \
+            -exec md5sum {} \; | sort | md5sum | cut -d' ' -f1)
+          echo "hash=${MIGRATION_HASH}" >> "$GITHUB_OUTPUT"
+          echo "Migration hash: ${MIGRATION_HASH}"
+
+      - name: Cache PostgreSQL data directory
+        id: cache-db
+        if: steps.db-cache-decision.outputs.force_recreate != 'true'
+        uses: actions/cache@v5
+        with:
+          path: /tmp/pgdata
+          key: testdb-postgis16-${{ steps.migration-hash.outputs.hash }}
+
+      - name: Start PostgreSQL
+        run: |
+          # If cache hit: reuse existing data; if cache miss or force recreate: start with empty dir
+          if [[ "${{ steps.db-cache-decision.outputs.force_recreate }}" == "true" ]] || [[ "${{ steps.cache-db.outputs.cache-hit }}" != "true" ]]; then
+            rm -rf /tmp/pgdata
+            mkdir -p /tmp/pgdata
+          fi
+          docker run -d \
+            --name postgis \
+            -e POSTGRES_DB=wodore \
+            -e POSTGRES_USER=wodore \
+            -e POSTGRES_PASSWORD=wodore \
+            -v /tmp/pgdata:/var/lib/postgresql/data \
+            -p 5432:5432 \
+            postgis/postgis:16-3.4-alpine
+          # Wait for PostgreSQL to be ready
+          for i in $(seq 1 30); do
+            if docker exec postgis pg_isready -U wodore >/dev/null 2>&1; then
+              echo "PostgreSQL is ready"
+              break
+            fi
+            echo "Waiting for PostgreSQL... ($i/30)"
+            sleep 1
+          done
 
       - name: Setup token for Python installation
         run: git config --global url."https://${{ secrets.MY_USERNAME }}:${{ secrets.MY_TOKEN }}@github.com".insteadOf ssh://git@github.com
@@ -59,4 +101,11 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run tests
-        run: uv run pytest --no-header -q
+        run: |
+          if [[ "${{ steps.db-cache-decision.outputs.force_recreate }}" == "true" ]] || [[ "${{ steps.cache-db.outputs.cache-hit }}" != "true" ]]; then
+            # Fresh database: create from scratch with all migrations
+            uv run pytest --no-header -q --create-db
+          else
+            # Cached database: reuse existing, --reuse-db is default in pyproject.toml
+            uv run pytest --no-header -q
+          fi
