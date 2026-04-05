@@ -6,8 +6,8 @@
     <title>POI Clustering Test - Wodore</title>
     <script src="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.js"></script>
     <link href="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.css" rel="stylesheet" />
-    <script src="https://unpkg.com/@maplibre/maplibre-gl-inspect@latest/dist/maplibre-gl-inspect.min.js"></script>
-    <link href="https://unpkg.com/@maplibre/maplibre-gl-inspect@latest/dist/maplibre-gl-inspect.css" rel="stylesheet" />
+    <script src='https://github.com/lukasmartinelli/mapbox-gl-inspect/releases/download/v1.3.1/mapbox-gl-inspect.js'></script>
+    <link href='https://github.com/lukasmartinelli/mapbox-gl-inspect/releases/download/v1.3.1/mapbox-gl-inspect.css' rel='stylesheet' />
     <style>
         body { margin: 0; padding: 0; }
         #map { width: 100vw; height: 100vh; }
@@ -96,6 +96,63 @@
             color: #666;
             margin-top: 2px;
         }
+        /* Overlay styles */
+        #overlay-panel {
+            margin-top: 10px;
+            border-top: 1px solid #ddd;
+            padding-top: 10px;
+        }
+        #overlay-panel h4 {
+            margin: 0 0 8px 0;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+        #overlay-panel h4:hover { color: #007cba; }
+        .overlay-list {
+            max-height: 250px;
+            overflow-y: auto;
+        }
+        .overlay-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 0;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .overlay-item input[type="checkbox"] {
+            margin: 0;
+            cursor: pointer;
+        }
+        .overlay-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            display: inline-block;
+            flex-shrink: 0;
+        }
+        .overlay-item label {
+            cursor: pointer;
+        }
+        .overlay-actions {
+            display: flex;
+            gap: 6px;
+            margin-top: 6px;
+        }
+        .overlay-actions button {
+            font-size: 11px;
+            padding: 3px 8px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            background: #f5f5f5;
+            cursor: pointer;
+        }
+        .overlay-actions button:hover {
+            background: #e0e0e0;
+        }
     </style>
 </head>
 <body>
@@ -111,7 +168,7 @@
             </div>
             <div class="setting-row">
                 <label>Cluster Max Zoom</label>
-                <input type="number" id="cluster-max-zoom" value="8" min="0" max="15" step="1">
+                <input type="number" id="cluster-max-zoom" value="6" min="0" max="15" step="1">
                 <div class="settings-help">Maximum zoom level for clustering</div>
             </div>
             <div class="setting-row">
@@ -136,7 +193,7 @@
             </div>
             <div class="setting-row" style="background: #fff3cd; padding: 8px; border-radius: 3px; margin-top: 10px;">
                 <label style="color: #856404;">Cache Version</label>
-                <input type="number" id="cache-version" value="1" min="0" max="100" step="1" style="width: 80px; padding: 5px;">
+                <input type="number" id="cache-version" value="2" min="0" max="100" step="1" style="width: 80px; padding: 5px;">
                 <div class="settings-help" style="color: #856404;">0 = disabled, 1 = default, 2+ = new cache (invalidates old)</div>
             </div>
             <div class="setting-row" style="background: #fff3cd; padding: 8px; border-radius: 3px; margin-top: 5px;">
@@ -145,6 +202,21 @@
                 <div class="settings-help" style="color: #856404;">How long to cache tiles in database (0 = no cache)</div>
             </div>
             <button id="apply-settings">Apply & Reload Tiles</button>
+        </div>
+
+        <div id="overlay-panel">
+            <h4 onclick="document.getElementById('overlay-list-container').style.display = document.getElementById('overlay-list-container').style.display === 'none' ? 'block' : 'none'">
+                🗺️ Overlays <span style="font-size: 11px; color: #666;" id="overlay-count"></span>
+            </h4>
+            <div id="overlay-list-container">
+                <div class="overlay-actions">
+                    <button onclick="document.querySelectorAll('.overlay-cb').forEach(cb => cb.checked = true); updateOverlays();">Select All</button>
+                    <button onclick="document.querySelectorAll('.overlay-cb').forEach(cb => cb.checked = false); updateOverlays();">Clear All</button>
+                </div>
+                <div class="overlay-list" id="overlay-list">
+                    <div style="color: #999; font-size: 11px; padding: 4px;">Loading...</div>
+                </div>
+            </div>
         </div>
 
         <div class="zoom-info">
@@ -197,34 +269,22 @@
         // Build tile URL with query parameters
         function buildTileURL() {
             const params = {};
-
-            // Always include fields (all available fields from migration 0032)
             params.fields = 'category,color,parent_color,categories_all,sources,importance,count,name,slug';
 
-            // Only add non-empty parameters
             const clusterRadiusM = document.getElementById('cluster-radius-m').value;
             if (clusterRadiusM) params.cluster_radius_m = clusterRadiusM;
-
             const clusterMaxZoom = document.getElementById('cluster-max-zoom').value;
             if (clusterMaxZoom) params.cluster_max_zoom = clusterMaxZoom;
-
             const clusterLowZoomOffset = document.getElementById('cluster-low-zoom-offset').value;
             if (clusterLowZoomOffset) params.cluster_low_zoom_offset = clusterLowZoomOffset;
-
             const importanceThreshold = document.getElementById('importance-threshold').value;
             if (importanceThreshold) params.importance_threshold = importanceThreshold;
-
             const clusterRefZoom = document.getElementById('cluster-ref-zoom').value;
             if (clusterRefZoom) params.cluster_ref_zoom = clusterRefZoom;
-
             const maxFeatures = document.getElementById('max-features').value;
             if (maxFeatures) params.max_features = maxFeatures;
-
-            // Add cache version (0 = disabled, 1 = default)
             const cacheVersion = document.getElementById('cache-version').value;
             if (cacheVersion !== undefined) params.cache_version = cacheVersion;
-
-            // Add cache TTL days
             const cacheTtlDays = document.getElementById('cache-ttl-days').value;
             if (cacheTtlDays !== undefined) params.cache_ttl_days = cacheTtlDays;
 
@@ -232,22 +292,94 @@
             return `http://localhost:8075/geoplaces/{z}/{x}/{y}${paramsStr ? '?' + paramsStr : ''}`;
         }
 
-        // Load settings from localStorage
-        function loadSettings() {
-            const settings = JSON.parse(localStorage.getItem('poiClusteringSettings') || '{}');
-            if (settings.clusterRadiusM) document.getElementById('cluster-radius-m').value = settings.clusterRadiusM;
-            if (settings.clusterMaxZoom) document.getElementById('cluster-max-zoom').value = settings.clusterMaxZoom;
-            if (settings.clusterLowZoomOffset) document.getElementById('cluster-low-zoom-offset').value = settings.clusterLowZoomOffset;
-            if (settings.importanceThreshold) document.getElementById('importance-threshold').value = settings.importanceThreshold;
-            if (settings.clusterRefZoom) document.getElementById('cluster-ref-zoom').value = settings.clusterRefZoom;
-            if (settings.maxFeatures) document.getElementById('max-features').value = settings.maxFeatures;
-            if (settings.cacheVersion) document.getElementById('cache-version').value = settings.cacheVersion;
-            if (settings.cacheTtlDays) document.getElementById('cache-ttl-days').value = settings.cacheTtlDays;
+        // Overlay management (client-side filtering via single source + layer filters)
+        const overlayCategories = [
+            { slug: 'groceries', name: 'Groceries', color: '#4B8E43' },
+            { slug: 'restaurant', name: 'Restaurant', color: '#D4A017' },
+            { slug: 'health_and_emergency', name: 'Health & Emergency', color: '#DC3545' },
+            { slug: 'transport', name: 'Transport', color: '#6C757D' },
+            { slug: 'outdoor_services', name: 'Outdoor Services', color: '#28A745' },
+            { slug: 'tourism', name: 'Tourism', color: '#17A2B8' },
+            { slug: 'automotive', name: 'Automotive', color: '#343A40' },
+            { slug: 'sport', name: 'Sport', color: '#FF851B' },
+            { slug: 'utilities', name: 'Utilities', color: '#0074D9' },
+            { slug: 'finance', name: 'Finance', color: '#B10DC9' },
+            { slug: 'shopping', name: 'Shopping', color: '#F012BE' },
+            { slug: 'services', name: 'Services', color: '#85144B' },
+        ];
+
+        function getSelectedOverlays() {
+            return Array.from(document.querySelectorAll('.overlay-cb:checked')).map(cb => cb.value);
         }
 
-        // Save settings to localStorage
+        function renderOverlays() {
+            const container = document.getElementById('overlay-list');
+            const savedOverlays = JSON.parse(localStorage.getItem('poiClusteringOverlays') || '[]');
+            const savedSet = new Set(savedOverlays);
+
+            container.innerHTML = overlayCategories.map(cat => `
+                <div class="overlay-item">
+                    <input type="checkbox" class="overlay-cb" id="overlay-${cat.slug}" value="${cat.slug}"
+                        ${savedSet.has(cat.slug) ? 'checked' : ''} onchange="updateOverlays()">
+                    <span class="overlay-color" style="background: ${cat.color}"></span>
+                    <label for="overlay-${cat.slug}">${cat.name || cat.slug}</label>
+                </div>
+            `).join('');
+
+            updateOverlayCount();
+        }
+
+        function applyOverlayFilter() {
+            if (!map.getLayer('pois-clustered') || !map.getLayer('pois-raw')) return;
+
+            const selected = getSelectedOverlays();
+
+            if (selected.length === 0) {
+                // No overlays selected - show all features (no category filter)
+                map.setFilter('pois-clustered', ['>', ['get', 'count'], 1]);
+                map.setFilter('pois-raw', ['==', ['get', 'count'], 1]);
+                map.setFilter('pois-labels', ['==', ['get', 'count'], 1]);
+            } else {
+                // MVT flattens JSONB: parent_slug is a top-level string property
+                const anyMatch = ['any',
+                    ...selected.map(slug => ['==', ['get', 'parent_slug'], slug])
+                ];
+                map.setFilter('pois-clustered', ['all', ['>', ['get', 'count'], 1], anyMatch]);
+                map.setFilter('pois-raw', ['all', ['==', ['get', 'count'], 1], anyMatch]);
+                map.setFilter('pois-labels', ['all', ['==', ['get', 'count'], 1], anyMatch]);
+            }
+        }
+
+        function updateOverlays() {
+            const selected = getSelectedOverlays();
+            localStorage.setItem('poiClusteringOverlays', JSON.stringify(selected));
+            updateOverlayCount();
+            applyOverlayFilter();
+        }
+
+        function updateOverlayCount() {
+            const selected = getSelectedOverlays();
+            const countEl = document.getElementById('overlay-count');
+            countEl.textContent = selected.length > 0
+                ? `(${selected.length}/${overlayCategories.length})`
+                : `(${overlayCategories.length})`;
+        }
+
+        // Load/save settings from localStorage
+        function loadSettings() {
+            const s = JSON.parse(localStorage.getItem('poiClusteringSettings') || '{}');
+            if (s.clusterRadiusM) document.getElementById('cluster-radius-m').value = s.clusterRadiusM;
+            if (s.clusterMaxZoom) document.getElementById('cluster-max-zoom').value = s.clusterMaxZoom;
+            if (s.clusterLowZoomOffset) document.getElementById('cluster-low-zoom-offset').value = s.clusterLowZoomOffset;
+            if (s.importanceThreshold) document.getElementById('importance-threshold').value = s.importanceThreshold;
+            if (s.clusterRefZoom) document.getElementById('cluster-ref-zoom').value = s.clusterRefZoom;
+            if (s.maxFeatures) document.getElementById('max-features').value = s.maxFeatures;
+            if (s.cacheVersion !== undefined) document.getElementById('cache-version').value = s.cacheVersion;
+            if (s.cacheTtlDays) document.getElementById('cache-ttl-days').value = s.cacheTtlDays;
+        }
+
         function saveSettings() {
-            const settings = {
+            localStorage.setItem('poiClusteringSettings', JSON.stringify({
                 clusterRadiusM: document.getElementById('cluster-radius-m').value,
                 clusterMaxZoom: document.getElementById('cluster-max-zoom').value,
                 clusterLowZoomOffset: document.getElementById('cluster-low-zoom-offset').value,
@@ -256,56 +388,33 @@
                 maxFeatures: document.getElementById('max-features').value,
                 cacheVersion: document.getElementById('cache-version').value,
                 cacheTtlDays: document.getElementById('cache-ttl-days').value
-            };
-            localStorage.setItem('poiClusteringSettings', JSON.stringify(settings));
+            }));
         }
 
-        // Load settings on page load
         loadSettings();
+        renderOverlays();
 
         const map = new maplibregl.Map({
             container: 'map',
             style: 'https://tiles.openfreemap.org/styles/bright',
-            center: [9.55, 47.15], // Eastern Switzerland/Western Austria
+            center: [9.55, 47.15],
             zoom: 8
         });
 
-        // Add navigation controls (zoom + rotate)
         map.addControl(new maplibregl.NavigationControl(), 'top-right');
+        map.addControl(new maplibregl.ScaleControl({ maxWidth: 100, unit: 'metric' }));
 
-        // Add scale control
-        map.addControl(new maplibregl.ScaleControl({
-            maxWidth: 100,
-            unit: 'metric'
-        }));
-
-        // Add inspect control after map loads (when layers are available)
         map.on('load', () => {
-            // Check if inspect plugin loaded
             if (typeof maplibreglInspect !== 'undefined') {
                 try {
-                    const inspect = maplibreglInspect({
-                        popup: new maplibregl.Popup({
-                            closeButton: true,
-                            closeOnClick: false
-                        })
-                    });
-
-                    // Add inspect control to map
-                    map.addControl(inspect);
-
-                    console.log('Inspect plugin loaded successfully');
-                } catch (error) {
-                    console.warn('Inspect plugin failed to initialize:', error);
-                }
-            } else {
-                console.warn('MapLibre GL Inspect plugin not loaded');
+                    map.addControl(maplibreglInspect({
+                        popup: new maplibregl.Popup({ closeButton: true, closeOnClick: false })
+                    }));
+                } catch (e) { console.warn('Inspect plugin failed:', e); }
             }
         });
 
-        // Add POI source and layers after map loads
         map.on('load', () => {
-            // Add the POI tile source
             map.addSource('pois', {
                 type: 'vector',
                 tiles: [buildTileURL()],
@@ -314,7 +423,6 @@
                 attribution: '© Wodore'
             });
 
-            // Add clustered POI layer (count > 1)
             map.addLayer({
                 id: 'pois-clustered',
                 type: 'circle',
@@ -322,13 +430,7 @@
                 'source-layer': 'geoplaces',
                 filter: ['>', ['get', 'count'], 1],
                 paint: {
-                    'circle-radius': [
-                        'interpolate', ['linear'],
-                        ['get', 'count'],
-                        2, 10,
-                        10, 20,
-                        50, 30
-                    ],
+                    'circle-radius': ['interpolate', ['linear'], ['get', 'count'], 2, 10, 10, 20, 50, 30],
                     'circle-color': ['coalesce', ['get', 'color'], '#808080'],
                     'circle-opacity': 0.7,
                     'circle-stroke-width': 3,
@@ -337,7 +439,6 @@
                 }
             });
 
-            // Add raw POI layer (count == 1)
             map.addLayer({
                 id: 'pois-raw',
                 type: 'circle',
@@ -354,7 +455,6 @@
                 }
             });
 
-            // Add text labels for raw POIs (only at higher zooms)
             map.addLayer({
                 id: 'pois-labels',
                 type: 'symbol',
@@ -377,369 +477,158 @@
                 }
             });
 
-            // Initial feature count
             countVisibleFeatures();
+            applyOverlayFilter();
         });
 
-        // Calculate actual cluster radius at current zoom
+        // Calculate actual cluster grid size at current zoom (mirrors SQL logic)
         function calculateActualRadius(zoomLevel) {
             const clusterRadiusM = parseFloat(document.getElementById('cluster-radius-m').value) || 5000;
             const clusterRefZoom = parseFloat(document.getElementById('cluster-ref-zoom').value) || 8;
-            const clusterMaxZoom = parseFloat(document.getElementById('cluster-max-zoom').value) || 8;
+            const clusterMaxZoom = parseFloat(document.getElementById('cluster-max-zoom').value) || 6;
             const clusterLowZoomOffset = parseFloat(document.getElementById('cluster-low-zoom-offset').value) || 2;
 
-            let actualRadius;
-
-            // NEW FORMULA: Cap at ~200km max, use 40km at z8 as baseline
-            if (zoomLevel <= clusterMaxZoom) {
-                // Below max clustering zoom: scale but cap at 200km
-                // At z8: 40km, At z0: min(40km × 2^8, 200km) = 200km
-                const scaledRadius = clusterRadiusM * Math.pow(2, clusterRefZoom - zoomLevel);
-                actualRadius = Math.min(scaledRadius, 200000); // Cap at 200km
-            } else if (zoomLevel <= clusterMaxZoom + clusterLowZoomOffset) {
-                // Transition zone: interpolate from 40km down to 50m
+            if (zoomLevel > clusterMaxZoom + clusterLowZoomOffset) {
+                return 0;
+            } else if (zoomLevel > clusterMaxZoom) {
+                // Transition: interpolate from full grid_size down to 50m
+                const gridAtMaxZoom = clusterRadiusM * Math.pow(2, clusterRefZoom - clusterMaxZoom);
                 const progress = (zoomLevel - clusterMaxZoom) / clusterLowZoomOffset;
-                actualRadius = clusterRadiusM + (50 - clusterRadiusM) * progress;
+                return Math.max(gridAtMaxZoom + (50 - gridAtMaxZoom) * progress, 50);
             } else {
-                // Above clustering: no clustering
-                actualRadius = 0;
+                // Full clustering: scale up, cap at 200km
+                return Math.min(clusterRadiusM * Math.pow(2, clusterRefZoom - zoomLevel), 200000);
             }
-
-            return actualRadius;
         }
 
-        // Determine cluster mode based on zoom level
         function getClusterMode(zoomLevel) {
-            const clusterMaxZoom = parseFloat(document.getElementById('cluster-max-zoom').value) || 8;
-            const clusterLowZoomOffset = parseFloat(document.getElementById('cluster-low-zoom-offset').value) || 2;
-
-            if (zoomLevel <= clusterMaxZoom) {
-                return 'on';
-            } else if (zoomLevel <= clusterMaxZoom + clusterLowZoomOffset) {
-                return 'hybrid';
-            } else {
-                return 'off';
-            }
+            const maxZoom = parseFloat(document.getElementById('cluster-max-zoom').value) || 6;
+            const offset = parseFloat(document.getElementById('cluster-low-zoom-offset').value) || 2;
+            if (zoomLevel <= maxZoom) return 'on';
+            if (zoomLevel <= maxZoom + offset) return 'hybrid';
+            return 'off';
         }
 
-        // Update zoom display, actual radius, and cluster mode
         map.on('zoom', () => {
             const zoom = map.getZoom();
             document.getElementById('zoom').textContent = zoom.toFixed(1);
 
-            const actualRadius = calculateActualRadius(zoom);
+            const r = calculateActualRadius(zoom);
+            document.getElementById('actual-radius').textContent = r >= 1000
+                ? (r / 1000).toFixed(1) + ' km'
+                : r.toFixed(0) + ' m';
 
-            // Display in km if > 1000m, otherwise in meters
-            if (actualRadius >= 1000) {
-                document.getElementById('actual-radius').textContent = (actualRadius / 1000).toFixed(1) + ' km';
-            } else {
-                document.getElementById('actual-radius').textContent = actualRadius.toFixed(0) + ' m';
-            }
+            const mode = getClusterMode(zoom);
+            const modeEl = document.getElementById('cluster-mode');
+            modeEl.textContent = mode.toUpperCase();
+            modeEl.style.color = mode === 'on' ? '#28a745' : mode === 'hybrid' ? '#ffc107' : '#dc3545';
 
-            const clusterMode = getClusterMode(zoom);
-            document.getElementById('cluster-mode').textContent = clusterMode.toUpperCase();
-
-            // Update cluster mode color
-            const modeElement = document.getElementById('cluster-mode');
-            if (clusterMode === 'on') {
-                modeElement.style.color = '#28a745'; // Green
-            } else if (clusterMode === 'hybrid') {
-                modeElement.style.color = '#ffc107'; // Yellow/Orange
-            } else {
-                modeElement.style.color = '#dc3545'; // Red
-            }
-
-            // Count features and update display
             countVisibleFeatures();
         });
 
-        // Count visible features in current view
         function countVisibleFeatures() {
-            // Only count if layers exist
-            if (!map.getLayer('pois-clustered') || !map.getLayer('pois-raw')) {
-                return;
-            }
-
+            if (!map.getLayer('pois-clustered') || !map.getLayer('pois-raw')) return;
             const features = map.queryRenderedFeatures({ layers: ['pois-clustered', 'pois-raw'] });
-
-            // Total count
             document.getElementById('max-features-display').textContent = features.length;
 
-            // Count by parent category
-            const parentCounts = {};
-
+            const counts = {};
             features.forEach(f => {
-                const category = f.properties.category || {};
-                const identifier = category.identifier || '';
-                const parts = identifier.split('.');
-                const parentCategory = parts.length > 1 ? parts[0] : 'other';
-
-                if (!parentCounts[parentCategory]) {
-                    parentCounts[parentCategory] = 0;
-                }
-                parentCounts[parentCategory]++;
+                const ps = f.properties.parent_slug || 'other';
+                counts[ps] = (counts[ps] || 0) + 1;
             });
 
-            // Update parent category display
-            const parentDiv = document.getElementById('parent-category-counts');
-            if (Object.keys(parentCounts).length > 0) {
-                const sorted = Object.entries(parentCounts).sort((a, b) => b[1] - a[1]);
-                parentDiv.innerHTML = sorted.map(([cat, count]) =>
-                    `<div>${cat}: ${count}</div>`
-                ).join('');
-            } else {
-                parentDiv.innerHTML = 'No features visible';
-            }
+            const div = document.getElementById('parent-category-counts');
+            div.innerHTML = Object.keys(counts).length > 0
+                ? Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([c, n]) => `<div>${c}: ${n}</div>`).join('')
+                : 'No features visible';
         }
 
-        // Also count features when map moves or data loads
         map.on('moveend', countVisibleFeatures);
-        map.on('data', (e) => {
-            if (e.sourceId === 'pois' && e.isSourceLoaded) {
-                countVisibleFeatures();
-            }
-        });
+        map.on('data', (e) => { if (e.sourceId === 'pois' && e.isSourceLoaded) countVisibleFeatures(); });
 
-        // Click handler to show popup
-        map.on('click', 'pois-clustered', (e) => {
-            showPopup(e.features[0]);
-        });
-
-        map.on('click', 'pois-raw', (e) => {
-            showPopup(e.features[0]);
-        });
+        map.on('click', 'pois-clustered', (e) => showPopup(e.features[0]));
+        map.on('click', 'pois-raw', (e) => showPopup(e.features[0]));
 
         function showPopup(feature) {
-            const props = feature.properties;
-
-            let html = '<div style="max-height: 500px; overflow-y: auto;">';
-            html += '<h4>Feature Properties</h4>';
-            html += '<pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto;">';
-            html += JSON.stringify(props, null, 2);
-            html += '</pre>';
-            html += '</div>';
-
-            document.getElementById('popup-content').innerHTML = html;
+            document.getElementById('popup-content').innerHTML =
+                '<pre style="background:#f5f5f5;padding:10px;border-radius:4px;overflow-x:auto;max-height:400px;">'
+                + JSON.stringify(feature.properties, null, 2) + '</pre>';
         }
 
-        // Change cursor on hover
-        map.on('mouseenter', 'pois-clustered', () => {
-            map.getCanvas().style.cursor = 'pointer';
-        });
-        map.on('mouseleave', 'pois-clustered', () => {
-            map.getCanvas().style.cursor = '';
-        });
-        map.on('mouseenter', 'pois-raw', () => {
-            map.getCanvas().style.cursor = 'pointer';
-        });
-        map.on('mouseleave', 'pois-raw', () => {
-            map.getCanvas().style.cursor = '';
-        });
+        map.on('mouseenter', 'pois-clustered', () => map.getCanvas().style.cursor = 'pointer');
+        map.on('mouseleave', 'pois-clustered', () => map.getCanvas().style.cursor = '');
+        map.on('mouseenter', 'pois-raw', () => map.getCanvas().style.cursor = 'pointer');
+        map.on('mouseleave', 'pois-raw', () => map.getCanvas().style.cursor = '');
 
-        // Settings panel toggle
         document.getElementById('settings-toggle').addEventListener('click', () => {
-            const settings = document.getElementById('settings');
-            settings.classList.toggle('show');
+            document.getElementById('settings').classList.toggle('show');
         });
 
-        // Apply settings and reload tiles
         document.getElementById('apply-settings').addEventListener('click', () => {
-            // Save settings to localStorage
             saveSettings();
-
             const newURL = buildTileURL();
-            console.log('Updating tile URL:', newURL);
-
-            // Update the source using proper MapLibre API
             const source = map.getSource('pois');
             if (source) {
                 source.tiles = [newURL];
-                // Force reload by removing and re-adding source
-                const sourceCache = map.style.sourceCaches['pois'];
-                if (sourceCache) {
-                    sourceCache.clearTiles();
-                }
+                const sc = map.style.sourceCaches['pois'];
+                if (sc) sc.clearTiles();
             }
-
-            // Update radius display and cluster mode with current zoom
-            const zoom = map.getZoom();
-            const actualRadius = calculateActualRadius(zoom);
-
-            // Display in km if > 1000m, otherwise in meters
-            if (actualRadius >= 1000) {
-                document.getElementById('actual-radius').textContent = (actualRadius / 1000).toFixed(1) + ' km';
-            } else {
-                document.getElementById('actual-radius').textContent = actualRadius.toFixed(0) + ' m';
-            }
-
-            const clusterMode = getClusterMode(zoom);
-            document.getElementById('cluster-mode').textContent = clusterMode.toUpperCase();
-            const modeElement = document.getElementById('cluster-mode');
-            if (clusterMode === 'on') {
-                modeElement.style.color = '#28a745';
-            } else if (clusterMode === 'hybrid') {
-                modeElement.style.color = '#ffc107';
-            } else {
-                modeElement.style.color = '#dc3545';
-            }
-
             alert('Settings applied! Tiles will reload with new parameters.');
         });
 
-        // Track tile load times for Martin debug panel
-        const tileLoadTimes = [];
-        const tileErrors = [];
-        const activeTiles = new Map(); // Track loading tiles by coordinate
-        const maxRecentTiles = 10;
-        const maxRecentErrors = 5;
+        // Martin debug panel
+        const tileLoadTimes = [], tileErrors = [], activeTiles = new Map();
 
         map.on('sourcedataloading', (e) => {
             if (e.sourceId === 'pois' && e.tile) {
-                const startTime = performance.now();
-                e.tile._loadStartTime = startTime;
-
-                // Add to active tiles
-                const tileCoords = e.tile.tileID;
-                const key = `${tileCoords.canonical.z}/${tileCoords.canonical.x}/${tileCoords.canonical.y}`;
-                activeTiles.set(key, {
-                    z: tileCoords.canonical.z,
-                    x: tileCoords.canonical.x,
-                    y: tileCoords.canonical.y,
-                    startTime: startTime,
-                    status: 'loading'
-                });
-
+                const t = performance.now();
+                e.tile._loadStartTime = t;
+                const c = e.tile.tileID.canonical;
+                activeTiles.set(`${c.z}/${c.x}/${c.y}`, { z: c.z, x: c.x, y: c.y, startTime: t, status: 'loading' });
                 updateActiveTilesDisplay();
             }
         });
 
         map.on('sourcedata', (e) => {
-            if (e.sourceId === 'pois' && e.tile) {
-                const tile = e.tile;
-                const tileCoords = tile.tileID;
-                const key = `${tileCoords.canonical.z}/${tileCoords.canonical.x}/${tileCoords.canonical.y}`;
+            if (e.sourceId !== 'pois' || !e.tile) return;
+            const tile = e.tile, c = tile.tileID.canonical, key = `${c.z}/${c.x}/${c.y}`;
 
-                if (tile._loadStartTime) {
-                    const loadTime = performance.now() - tile._loadStartTime;
+            if (tile._loadStartTime) {
+                const loadTime = performance.now() - tile._loadStartTime;
+                document.getElementById('tile-load-time').textContent = loadTime.toFixed(2) + ' ms';
+                document.getElementById('tile-load-time').style.color = loadTime < 100 ? '#28a745' : loadTime < 500 ? '#ffc107' : '#dc3545';
 
-                    // Update last tile load time display
-                    document.getElementById('tile-load-time').textContent = loadTime.toFixed(2) + ' ms';
+                tileLoadTimes.unshift({ z: c.z, x: c.x, y: c.y, time: loadTime });
+                if (tileLoadTimes.length > 10) tileLoadTimes.pop();
+                document.getElementById('recent-tiles').innerHTML = tileLoadTimes.map(t =>
+                    `<div style="padding:2px;border-bottom:1px solid #eee;">z:${t.z}/${t.x}/${t.y} - <strong>${t.time.toFixed(1)}ms</strong></div>`
+                ).join('');
 
-                    // Add to recent tiles list
-                    const tileInfo = {
-                        z: tileCoords.canonical.z,
-                        x: tileCoords.canonical.x,
-                        y: tileCoords.canonical.y,
-                        time: loadTime
-                    };
-
-                    tileLoadTimes.unshift(tileInfo);
-                    if (tileLoadTimes.length > maxRecentTiles) {
-                        tileLoadTimes.pop();
-                    }
-
-                    // Update recent tiles display
-                    const recentTilesDiv = document.getElementById('recent-tiles');
-                    recentTilesDiv.innerHTML = tileLoadTimes.map(t =>
-                        `<div style="padding: 2px; border-bottom: 1px solid #eee;">
-                            z:${t.z}/${t.x}/${t.y} - <strong>${t.time.toFixed(1)}ms</strong>
-                        </div>`
-                    ).join('');
-
-                    // Color code: < 100ms = green, < 500ms = yellow, >= 500ms = red
-                    const timeDisplay = document.getElementById('tile-load-time');
-                    if (loadTime < 100) {
-                        timeDisplay.style.color = '#28a745';
-                    } else if (loadTime < 500) {
-                        timeDisplay.style.color = '#ffc107';
-                    } else {
-                        timeDisplay.style.color = '#dc3545';
-                    }
-
-                    // Update active tile status
-                    if (activeTiles.has(key)) {
-                        const activeTile = activeTiles.get(key);
-                        activeTile.status = 'completed';
-                        activeTile.loadTime = loadTime;
-                        activeTiles.set(key, activeTile);
-                    }
-                }
-
-                // Check for tile loading errors
-                if (tile.state === 'errored' || tile.error) {
-                    const errorInfo = {
-                        z: tileCoords.canonical.z,
-                        x: tileCoords.canonical.x,
-                        y: tileCoords.canonical.y,
-                        error: tile.error || 'Unknown error',
-                        time: new Date().toLocaleTimeString()
-                    };
-
-                    tileErrors.unshift(errorInfo);
-                    if (tileErrors.length > maxRecentErrors) {
-                        tileErrors.pop();
-                    }
-
-                    // Update errors display
-                    const errorsDiv = document.getElementById('tile-errors');
-                    if (errorsDiv) {
-                        errorsDiv.innerHTML = tileErrors.map(e =>
-                            `<div style="padding: 4px; background: #fee; border-bottom: 1px solid #fcc; color: #c00;">
-                                <strong>ERROR ${e.time}:</strong> z:${e.z}/${e.x}/${e.y}<br>
-                                <span style="font-size: 10px;">${e.error}</span>
-                            </div>`
-                        ).join('');
-                    }
-
-                    console.error('Tile loading error:', errorInfo);
-
-                    // Mark as failed in active tiles
-                    if (activeTiles.has(key)) {
-                        const activeTile = activeTiles.get(key);
-                        activeTile.status = 'failed';
-                        activeTile.error = tile.error || 'Unknown error';
-                        activeTiles.set(key, activeTile);
-                    }
-                }
-
-                // Remove from active tiles after a delay
-                setTimeout(() => {
-                    activeTiles.delete(key);
-                    updateActiveTilesDisplay();
-                }, 2000);
-
-                updateActiveTilesDisplay();
+                if (activeTiles.has(key)) { const a = activeTiles.get(key); a.status = 'completed'; a.loadTime = loadTime; activeTiles.set(key, a); }
             }
+
+            if (tile.state === 'errored' || tile.error) {
+                tileErrors.unshift({ z: c.z, x: c.x, y: c.y, error: tile.error || 'Unknown error', time: new Date().toLocaleTimeString() });
+                if (tileErrors.length > 5) tileErrors.pop();
+                document.getElementById('tile-errors').innerHTML = tileErrors.map(e =>
+                    `<div style="padding:4px;background:#fee;border-bottom:1px solid #fcc;color:#c00;"><strong>ERROR ${e.time}:</strong> z:${e.z}/${e.x}/${e.y}<br><span style="font-size:10px;">${e.error}</span></div>`
+                ).join('');
+                if (activeTiles.has(key)) { const a = activeTiles.get(key); a.status = 'failed'; a.error = tile.error; activeTiles.set(key, a); }
+            }
+
+            setTimeout(() => { activeTiles.delete(key); updateActiveTilesDisplay(); }, 2000);
+            updateActiveTilesDisplay();
         });
 
         function updateActiveTilesDisplay() {
-            const activeTilesDiv = document.getElementById('active-tiles');
-
-            if (activeTiles.size === 0) {
-                activeTilesDiv.innerHTML = 'No active tiles';
-                return;
-            }
-
-            activeTilesDiv.innerHTML = Array.from(activeTiles.values()).map(tile => {
-                const key = `${tile.z}/${tile.x}/${tile.y}`;
-                let className = '';
-                let statusText = '';
-                let extraStyle = '';
-
-                if (tile.status === 'loading') {
-                    className = 'color: #007cba;';
-                    statusText = '⏳';
-                } else if (tile.status === 'completed') {
-                    className = 'color: #28a745;';
-                    statusText = `✓ ${tile.loadTime.toFixed(1)}ms`;
-                } else if (tile.status === 'failed') {
-                    className = 'color: #dc3545; text-decoration: line-through;';
-                    statusText = '✗ Failed';
-                }
-
-                return `<div style="padding: 2px; border-bottom: 1px solid #eee; ${className}${extraStyle}">
-                    ${statusText} z:${tile.z}/${tile.x}/${tile.y}
-                </div>`;
+            const div = document.getElementById('active-tiles');
+            if (activeTiles.size === 0) { div.innerHTML = 'No active tiles'; return; }
+            div.innerHTML = Array.from(activeTiles.values()).map(t => {
+                let style = '', text = '';
+                if (t.status === 'loading') { style = 'color:#007cba;'; text = '⏳'; }
+                else if (t.status === 'completed') { style = 'color:#28a745;'; text = `✓ ${t.loadTime.toFixed(1)}ms`; }
+                else if (t.status === 'failed') { style = 'color:#dc3545;text-decoration:line-through;'; text = '✗ Failed'; }
+                return `<div style="padding:2px;border-bottom:1px solid #eee;${style}">${text} z:${t.z}/${t.x}/${t.y}</div>`;
             }).join('');
         }
     </script>

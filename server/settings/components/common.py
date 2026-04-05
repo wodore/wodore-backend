@@ -162,6 +162,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     # "cloudinary_storage",  # https://pypi.org/project/django-cloudinary-storage/
     # "cloudinary",
     "django.contrib.gis",
+    "django.contrib.postgres",
     # django-admin:
     # "admin_volt.apps.AdminVoltConfig",  # https://github.com/app-generator/django-admin-volt
     # "grappelli",  # https://django-grappelli.readthedocs.io/en/latest/

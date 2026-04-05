@@ -71,7 +71,8 @@ tile = GeoPlacesForTilesView.objects.get_tile(
 ```
 
 ### Changelog
-- 2025-03-11: Initial implementation with language, fields, categories, and importance filtering
+- 2025-03-11: Initial implementation with language, fields, categories, and importance filtering (migration `0028_create_geoplaces_tile_function`)
+- 2025-04-05: Performance optimization — partial GIST index, faster bbox filter, eliminated RANDOM() sort, scoped CTEs (migration `0038_optimize_tile_function`)
 """
 
 from django.conf import settings

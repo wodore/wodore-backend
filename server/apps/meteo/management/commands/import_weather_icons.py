@@ -41,6 +41,11 @@ class Command(BaseCommand):
             default="filled,outlined,outlined-mono,filled-animated,outlined-animated",
             help="Comma-separated list of styles to import (default: all styles)",
         )
+        parser.add_argument(
+            "--force",
+            action="store_true",
+            help="Force reupload of symbols even if they already exist",
+        )
 
     def handle(self, *args, **options):
         dry_run = options.get("dry_run", False)
@@ -78,7 +83,9 @@ class Command(BaseCommand):
             self.stdout.write("\n" + "=" * 60)
             self.stdout.write("Importing weather icons...")
             self.stdout.write("=" * 60)
-            self._import_symbols(base_path, styles, dry_run, stats)
+            self._import_symbols(
+                base_path, styles, dry_run, stats, force=options.get("force", False)
+            )
 
         # Import WMO codes (separate process for each style collection)
         if not skip_codes:
@@ -108,7 +115,7 @@ class Command(BaseCommand):
         )
         self.stdout.write("=" * 60)
 
-    def _import_symbols(self, base_path, styles, dry_run, stats):
+    def _import_symbols(self, base_path, styles, dry_run, stats, force=False):
         """Import weather icon symbols from assets/weather-icons/symbols/"""
         # Get or create license
         license = self._get_or_create_license(dry_run)
@@ -151,9 +158,22 @@ class Command(BaseCommand):
                 # Check if symbol already exists
                 existing = Symbol.objects.filter(slug=slug, style=style).first()
                 if existing:
-                    stats["symbols_skipped"] += 1
-                    self.stdout.write(f"  ⊘ Skipped {slug} ({style}): already exists")
-                    continue
+                    if force:
+                        # Delete and reupload
+                        existing.delete()
+                        stats["symbols_created"] += 1
+                        if not dry_run:
+                            self.stdout.write(f"  ↻ Force reupload {slug} ({style})")
+                        else:
+                            self.stdout.write(
+                                f"  → Would force reupload {slug} ({style})"
+                            )
+                    else:
+                        stats["symbols_skipped"] += 1
+                        self.stdout.write(
+                            f"  ⊘ Skipped {slug} ({style}): already exists"
+                        )
+                        continue
 
                 # Create symbol
                 if not dry_run:
