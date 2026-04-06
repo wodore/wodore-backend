@@ -172,6 +172,7 @@ def search_huts(
                 "open": {
                     "slug": hut.hut_type_open.slug,
                     "name": hut.hut_type_open.name_i18n,
+                    "color": hut.hut_type_open.color,
                     "symbol": {
                         "mono": request.build_absolute_uri(
                             hut.hut_type_open.symbol_mono.svg_file.url
@@ -195,6 +196,7 @@ def search_huts(
                 "closed": {
                     "slug": hut.hut_type_closed.slug,
                     "name": hut.hut_type_closed.name_i18n,
+                    "color": hut.hut_type_closed.color,
                     "symbol": {
                         "mono": request.build_absolute_uri(
                             hut.hut_type_closed.symbol_mono.svg_file.url

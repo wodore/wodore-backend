@@ -44,6 +44,7 @@ class HutTypeSchema(ModelSchema):
     # model_config = ConfigDict(from_attributes=True)
     order: int | None = Field(None, alias="order")
     slug: str
+    color: str
     name: str | None = Field(..., alias="name_i18n")
     symbol: dict[str, str | None] | None = None
 

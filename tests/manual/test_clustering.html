@@ -436,10 +436,11 @@
                         3, 1,
                         7, 2,
                         10, 3,
-                        14, 4
+                        14, 4,
+                        20, 14
                     ],
                     'circle-color': ['coalesce', ['get', 'color'], '#808080'],
-                    'circle-opacity': 0.8,
+                    'circle-opacity': 0.6,
                     'circle-stroke-width': [
                         'interpolate', ['linear'], ['zoom'],
                         3, 0.5, 7, 1, 10, 2
@@ -460,19 +461,19 @@
                     // z3: tiny dots → z8: medium → z14: full size
                     'circle-radius': [
                         'interpolate', ['linear'], ['zoom'],
-                        3, ['interpolate', ['linear'], ['get', 'count'], 2, 3, 10, 4, 50, 6],
-                        6, ['interpolate', ['linear'], ['get', 'count'], 2, 4, 10, 6, 50, 8],
-                        10, ['interpolate', ['linear'], ['get', 'count'], 2, 6, 10, 8, 50, 11],
-                        14, ['interpolate', ['linear'], ['get', 'count'], 2, 8, 10, 10, 50, 14]
+                        3, ['interpolate', ['linear'], ['get', 'count'], 2, 1, 10, 2, 50, 4],
+                        6, ['interpolate', ['linear'], ['get', 'count'], 2, 2, 10, 3, 50, 6],
+                        10, ['interpolate', ['linear'], ['get', 'count'], 2, 3, 10, 4, 50, 10],
+                        14, ['interpolate', ['linear'], ['get', 'count'], 2, 4, 10, 6, 50, 12]
                     ],
                     'circle-color': ['coalesce', ['get', 'color'], '#808080'],
-                    'circle-opacity': 0.7,
+                    'circle-opacity': 0.5,
                     'circle-stroke-width': [
                         'interpolate', ['linear'], ['zoom'],
                         3, 1, 6, 2, 10, 2
                     ],
                     'circle-stroke-color': 'black',
-                    'circle-stroke-opacity': 1.0
+                    'circle-stroke-opacity': 0.7
                 }
             });
 
