@@ -51,6 +51,9 @@ class Command(BaseCommand):
                 self.style.WARNING("DRY RUN MODE - No changes will be made\n")
             )
 
+        # Initialize counters
+        symbols_count = 0
+
         # Delete collections and their mappings
         if not codes_only:
             collections_qs = WeatherCodeSymbolCollection.objects.all()

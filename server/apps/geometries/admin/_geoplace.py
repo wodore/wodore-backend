@@ -1,8 +1,11 @@
+import json
 from typing import ClassVar
 
 from django import forms
+from django.conf import settings
 from django.contrib import admin
 from django.forms import ModelForm
+from django.template.response import TemplateResponse
 from django.utils.translation import gettext_lazy as _
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
@@ -279,6 +282,55 @@ class GeoPlaceAdmin(ModelAdmin):
             GeoPlaceSourceAssociationInline,
             GeoPlaceExternalLinkInline,
         ]
+
+    def get_urls(self):
+        from django.urls import path
+
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "tilemap/",
+                self.admin_site.admin_view(self.tilemap_view),
+                name="geometries_geoplace_tilemap",
+            ),
+        ]
+        return custom_urls + urls
+
+    def tilemap_view(self, request):
+        """Interactive tile map with clustering debug and overlay filtering."""
+        from server.apps.categories.models import Category
+        from server.apps.geometries.config.osm_categories import CATEGORY_REGISTRY
+
+        category_slugs = [cat.category for cat in CATEGORY_REGISTRY]
+        categories = (
+            Category.objects.filter(
+                parent__isnull=True, slug__in=category_slugs, is_active=True
+            )
+            .order_by("order", "slug")
+            .values("slug", "name_i18n", "color")
+        )
+
+        overlay_categories = [
+            {
+                "slug": cat["slug"],
+                "name": cat["name_i18n"] or cat["slug"],
+                "color": cat["color"] or "#808080",
+            }
+            for cat in categories
+        ]
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": _("Tile Map"),
+            "has_permission": True,
+            "overlay_categories_json": json.dumps(overlay_categories),
+            "martin_tile_url": getattr(
+                settings, "MARTIN_TILE_URL", "http://localhost:8075"
+            ),
+            "is_fullwidth": "1",
+        }
+        return TemplateResponse(request, "admin/geometries_tilemap.html", context)
 
     # Display methods
 
