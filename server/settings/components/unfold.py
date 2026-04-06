@@ -189,6 +189,12 @@ UNFOLD = {
                         ),
                     },
                     {
+                        "title": _("Tile Map"),
+                        "icon": "map",
+                        "link": reverse_lazy("admin:geometries_geoplace_tilemap"),
+                        "permission": lambda request: request.user.is_superuser,
+                    },
+                    {
                         "title": _("External Links"),
                         "icon": "link",
                         "link": reverse_lazy(

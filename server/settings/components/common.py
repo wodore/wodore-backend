@@ -335,6 +335,9 @@ STATICFILES_FINDERS = (
 # https://github.com/cshum/imagor
 IMAGOR_URL = config("IMAGOR_URL", "")
 IMAGOR_KEY = config("IMAGOR_KEY", None)
+
+# Martin vector tile server
+MARTIN_TILE_URL = config("MARTIN_TILE_URL", "http://localhost:8075")
 # Templates
 # https://docs.djangoproject.com/en/4.2/ref/templates/api
 

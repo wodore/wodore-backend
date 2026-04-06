@@ -11,7 +11,12 @@ Docs: https://github.com/mozilla/django-csp
 # These values might and will be redefined in `development.py` env:
 CONTENT_SECURITY_POLICY = {
     "DIRECTIVES": {
-        "connect-src": ("'self'",),
+        "connect-src": (
+            "'self'",
+            "https://tiles.openfreemap.org",
+            "https://unpkg.com",
+            "http://localhost:8075",
+        ),
         "default-src": ("'none'",),
         "font-src": (
             "'self'",
@@ -32,6 +37,10 @@ CONTENT_SECURITY_POLICY = {
             "https://fonts.googleapis.com",
             "https://cdn.jsdelivr.net",
             "https://unpkg.com",
+        ),
+        "worker-src": (
+            "'self'",
+            "blob:",
         ),
     }
 }
