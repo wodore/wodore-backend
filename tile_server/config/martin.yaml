@@ -84,15 +84,15 @@ postgres:
       # Tile extent in tile coordinate space (default: 4096)
       extent: 4096
 
-      # Buffer size in pixels (helps prevent label/line clipping at tile edges)
-      buffer: 64
+      # Buffer size in pixels — 16 is enough for icons/labels on points (was 64)
+      buffer: 16
 
       # Clip geometries to tile bounds (recommended for points)
       clip_geom: true
 
-      # Support all zoom levels (0-20+)
+      # Points overzoom fine beyond maxzoom; no need for z17-20 tile generation
       minzoom: 7
-      maxzoom: 20
+      maxzoom: 16
 
     # GeoPlaces vector tiles (using view with precomputed JOINs)
     # This source serves all data without dynamic filtering
@@ -147,14 +147,15 @@ postgres:
       # Tile extent in tile coordinate space (default: 4096)
       extent: 4096
 
-      # Buffer size in pixels (helps prevent label/line clipping at tile edges)
-      buffer: 64
+      # Buffer size in pixels — 16 is enough for icons/labels on points (was 64)
+      buffer: 16
 
       # Clip geometries to tile bounds (recommended for points)
       clip_geom: true
 
+      # Points overzoom fine beyond maxzoom
       minzoom: 5 # ~ 2x swiss
-      maxzoom: 20
+      maxzoom: 16
 
   functions:
     # GeoPlaces vector tiles (using function with dynamic filtering and clustering)
@@ -199,8 +200,9 @@ postgres:
       id_columns: slug
 
       # Zoom levels (function handles importance filtering and clustering automatically)
+      # Points overzoom fine beyond maxzoom
       minzoom: 3
-      maxzoom: 20
+      maxzoom: 16
 
 sprites:
   # Size of the sprite cache (in MB).

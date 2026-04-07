@@ -162,6 +162,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     # "cloudinary_storage",  # https://pypi.org/project/django-cloudinary-storage/
     # "cloudinary",
     "django.contrib.gis",
+    "django.contrib.postgres",
     # django-admin:
     # "admin_volt.apps.AdminVoltConfig",  # https://github.com/app-generator/django-admin-volt
     # "grappelli",  # https://django-grappelli.readthedocs.io/en/latest/
@@ -334,6 +335,9 @@ STATICFILES_FINDERS = (
 # https://github.com/cshum/imagor
 IMAGOR_URL = config("IMAGOR_URL", "")
 IMAGOR_KEY = config("IMAGOR_KEY", None)
+
+# Martin vector tile server
+MARTIN_TILE_URL = config("MARTIN_TILE_URL", "http://localhost:8075")
 # Templates
 # https://docs.djangoproject.com/en/4.2/ref/templates/api
 

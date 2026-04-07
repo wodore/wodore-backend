@@ -8,49 +8,72 @@ This module provides:
 ## Function-Based Tile Serving (Recommended)
 
 The `get_geoplaces_for_tiles()` function provides dynamic tile generation with:
+- Category-aware clustering at low zoom levels (configurable thresholds)
 - Language selection (reduces tile size by only returning requested language)
 - Field filtering (only include requested properties)
-- Category filtering (OR/AND logic for overlays)
 - Importance-based zoom filtering (automatic or manual override)
 - Max feature limiting (prevent oversized tiles)
+- Database-level tile caching with TTL and cache versioning
 
 ### Function Location
-Migration: server/apps/geometries/migrations/0028_create_geoplaces_tile_function.py
+Latest migration: server/apps/geometries/migrations/0041_optimize_tile_performance.py
 
 ### Query Parameters
 ```json
 {
-  "lang": "en",                       // Language code (de, en, fr, it) - default: Django LANGUAGE_CODE
-  "categories": "hut,hotel",           // OR: places in ANY of these categories (comma-separated)
-  "categories_all": "hut,parking"      // AND: places in ALL of these categories (comma-separated)
-  "fields": "name,categories,extra",   // Which fields to include (comma-separated) - default: all
-  "min_importance": 50,                // Override auto importance filter - default: null (auto by zoom)
-  "max_features": 10000                // Max features per tile - default: null (no limit)
+  "lang": "en",                           // Language code (de, en, fr, it) - default: "de"
+  "cluster_max_zoom": 6,                  // Max zoom for clustering - default: 6
+  "cluster_low_zoom_offset": 2,           // Extra zooms for transition - default: 2
+  "importance_threshold": 50,             // Importance for early raw graduation - default: 50
+  "cluster_radius_m": 5000.0,             // Cluster radius in meters at ref zoom - default: auto
+  "cluster_ref_zoom": 8,                  // Reference zoom for cluster_radius_m - default: 8
+  "max_features": 10000,                  // Max features per tile - default: null (no limit)
+  "max_label_zoom": 14,                   // Only include name above this zoom - default: 14
+  "fields": "category,color,importance,count,name,slug",  // Fields to include - default: see list
+  "cache_ttl_days": 7,                    // Cache TTL in days - default: 7
+  "cache_version": 1                      // Bump to invalidate all cached tiles - default: 1
 }
 ```
 
-**Note:** The `lang` parameter defaults to Django's `LANGUAGE_CODE` setting (configured in
-`server/settings/components/common.py`). If not specified, tiles use the default language.
+### Clustering Behavior (defaults)
+- **z <= cluster_max_zoom**: All POIs clustered by (category, grid_cell). Cluster radius scales with zoom.
+- **cluster_max_zoom < z <= max+offset**: Transition zone. High-importance POIs (>= threshold) shown raw, low-importance still clustered with shrinking grid.
+- **z > max+offset**: All POIs raw (no clustering).
+
+### Caching Behavior
+- Tiles cached in `geometries_tile_cache` table
+- Cache key: md5(query_params + cache_version)
+- Cache invalidated by `expires_at` TTL or by bumping `cache_version`
+- Cached tiles skipped entirely on cache hit (no SQL query generation)
+
+### Architecture
+The function uses two separate query paths for performance:
+- **Clustered path** (low zoom): Minimal fields, no categories/sources JSON aggregation.
+  Pre-computes location in EPSG:3857 once. Uses `COUNT(*)` instead of `COUNT(DISTINCT)`.
+- **Raw path** (high zoom): Full fields with optional categories/sources aggregation.
 
 ### Usage Examples via Martin
 ```
-# Uses Django default language (currently "de" in settings)
-GET /geoplaces_fn/{z}/{x}/{y}
+# All defaults (German, clustering enabled, 7-day cache)
+GET /geoplaces/{z}/{x}/{y}
 
-# English labels only (reduces tile size)
-GET /geoplaces_fn/{z}/{x}/{y}?lang=en
+# English labels only
+GET /geoplaces/{z}/{x}/{y}?lang=en
 
-# Only huts and hotels
-GET /geoplaces_fn/{z}/{x}/{y}?categories=hut,hotel
+# Extend clustering to z10
+GET /geoplaces/{z}/{x}/{y}?cluster_max_zoom=10
 
-# Places that are BOTH huts AND have parking
-GET /geoplaces_fn/{z}/{x}/{y}?categories_all=hut,parking
+# Disable clustering (all raw)
+GET /geoplaces/{z}/{x}/{y}?cluster_max_zoom=null
 
-# Minimal fields only (reduces tile size significantly)
-GET /geoplaces_fn/{z}/{x}/{y}?fields=slug,name,importance
+# Larger clusters (10km at z8)
+GET /geoplaces/{z}/{x}/{y}?cluster_radius_m=10000
 
-# Combined filters: English, huts only, minimal fields
-GET /geoplaces_fn/{z}/{x}/{y}?lang=en&categories=hut&fields=slug,name,elevation
+# Bypass cache (fresh tiles)
+GET /geoplaces/{z}/{x}/{y}?cache_ttl_days=0
+
+# Invalidate all cached tiles
+GET /geoplaces/{z}/{x}/{y}?cache_version=2
 ```
 
 ### Django Manager Usage
@@ -63,15 +86,25 @@ tile = GeoPlacesForTilesView.objects.get_tile(12, 1234, 2345)
 # Get tile with specific language
 tile = GeoPlacesForTilesView.objects.get_tile(12, 1234, 2345, {"lang": "en"})
 
-# Get tile with filters
-tile = GeoPlacesForTilesView.objects.get_tile(
-    12, 1234, 2345,
-    {"lang": "en", "categories": "hut", "fields": "slug,name"}
-)
+# Get tile with clustering disabled
+tile = GeoPlacesForTilesView.objects.get_tile(12, 1234, 2345, {"cluster_max_zoom": "null"})
 ```
 
 ### Changelog
-- 2025-03-11: Initial implementation with language, fields, categories, and importance filtering
+- 2025-03-11: Initial implementation with language, fields, categories, and importance filtering (migration `0028`)
+- 2025-03-xx: Category-aware clustering with grid-based grouping, importance graduation (migration `0032`)
+- 2025-03-xx: Database-level tile caching with TTL and hit counting (migration `0036`)
+- 2025-03-xx: Inline caching in main function, cache_version and expires_at support (migration `0037`)
+- 2025-04-05: Performance optimization — partial GIST index, faster bbox filter, eliminated RANDOM(), scoped CTEs (migration `0038`)
+- 2025-04-05: Fix cluster grid_size transition zone logic, default cluster_max_zoom 8→6 (migration `0040`)
+- 2025-04-06: Major performance pass (migration `0041_optimize_tile_performance`):
+  - Split into clustered/raw query paths (skip JSON aggregation for clustered zooms)
+  - Remove ORDER BY md5() + LIMIT from sampled_pois
+  - Pre-compute location_3857 once (eliminate repeated ST_Transform)
+  - Replace EXECUTE format() cache INSERT with static SQL
+  - COUNT(*) instead of COUNT(DISTINCT slug) for clusters
+  - MATERIALIZED CTE hint on sampled_pois
+  - martin.yaml: buffer 64→16, maxzoom 20/24→16 for all point layers
 """
 
 from django.conf import settings

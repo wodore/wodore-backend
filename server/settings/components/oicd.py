@@ -44,7 +44,10 @@ def discover_oidc(discovery_url: str, internal_url: str = "") -> dict | None:
 
     try:
         response = requests.get(actual_url, headers=headers)
-    except requests.exceptions.ConnectionError as e:
+    except (
+        requests.exceptions.ConnectionError,
+        requests.exceptions.MissingSchema,
+    ) as e:
         logging.warning(
             "Failed to retrieve provider configuration for '%s': '%s'.",
             discovery_url,

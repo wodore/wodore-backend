@@ -6,6 +6,9 @@ def add_database_caching_layer(forwards_sql):
     -- Add database-level caching to get_geoplaces_for_tiles function
     -- This provides persistent caching beyond Martin's in-memory cache
 
+    -- Add expires_at column if missing (e.g. table was created by migration 0036 without it)
+    ALTER TABLE IF EXISTS geometries_tile_cache ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '7 days';
+
     -- Create cache table with TTL and versioning support
     CREATE TABLE IF NOT EXISTS geometries_tile_cache (
         id BIGSERIAL PRIMARY KEY,
@@ -23,6 +26,9 @@ def add_database_caching_layer(forwards_sql):
     -- Create indexes for cache lookups and cleanup
     CREATE INDEX IF NOT EXISTS idx_tile_cache_lookup ON geometries_tile_cache (z, x, y, params_hash);
     CREATE INDEX IF NOT EXISTS idx_tile_cache_expires ON geometries_tile_cache (expires_at);
+
+    -- Drop first to allow changing return type (0036 created it with RETURNS INT)
+    DROP FUNCTION IF EXISTS cleanup_tile_cache(INT);
 
     -- Create function to clean old cache entries
     -- days_to_keep: Delete entries older than this many days. Use 0 to delete ALL entries.

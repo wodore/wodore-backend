@@ -1,0 +1,538 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block extrastyle %}
+<link href="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.css" rel="stylesheet" />
+<style>
+    #tilemap-root { display: flex; height: calc(100vh - 64px); position: relative; }
+    #tilemap-panel { width: 280px; overflow-y: auto; flex-shrink: 0; background: #f9fafb; color: #111827; border-right: 1px solid #e5e7eb; transition: width 0.2s ease; }
+    #tilemap-panel.collapsed { width: 0; padding: 0; overflow: hidden; }
+    #tilemap-panel label { color: #374151; }
+    #tilemap-panel input[type="number"] { background: #fff; color: #111827; border: 1px solid #d1d5db; }
+    #tilemap-panel button { color: #fff; }
+    #tilemap-panel .panel-plain-btn { color: #374151; background: #f3f4f6; border: 1px solid #d1d5db; }
+    #tilemap-panel .panel-plain-btn:hover { background: #e5e7eb; }
+    #tilemap-map { flex: 1; min-width: 0; }
+    .tilemap-panel-section { border-bottom: 1px solid #e5e7eb; padding-bottom: 12px; margin-bottom: 12px; }
+    .tilemap-panel-section:last-child { border-bottom: none; }
+    #panel-toggle { position: absolute; top: 8px; left: 288px; z-index: 10; background: #f9fafb; border: 1px solid #d1d5db; border-left: none; border-radius: 0 4px 4px 0; padding: 4px 6px; cursor: pointer; font-size: 14px; color: #374151; line-height: 1; transition: left 0.2s ease; }
+    #tilemap-panel.collapsed ~ #panel-toggle { left: 0; }
+</style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+&rsaquo; <a href="{% url 'admin:app_list' app_label='geometries' %}">Geometries</a>
+&rsaquo; <a href="{% url 'admin:geometries_geoplace_changelist' %}">Geo Places</a>
+&rsaquo; {% translate 'Tile Map' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="tilemap-root">
+    <button id="panel-toggle" title="Toggle panel">&#9664;</button>
+    <div id="tilemap-panel" class="p-3 text-sm overflow-y-auto">
+        <h2 class="text-lg font-semibold mb-3">{% translate 'Tile Map' %}</h2>
+
+        {# ── Settings ── #}
+        <div class="tilemap-panel-section">
+            <button id="settings-toggle" class="bg-primary-500 hover:bg-primary-600 text-white px-3 py-2 rounded cursor-pointer w-full mb-2 text-sm font-medium">
+                {% translate 'Clustering Settings' %}
+            </button>
+            <div id="settings" class="hidden bg-gray-50 rounded p-3 space-y-2">
+                <div>
+                    <label class="block font-semibold text-xs mb-1">Cluster Radius (meters)</label>
+                    <input type="number" id="cluster-radius-m" value="5000" min="100" max="50000" step="100" class="w-full px-2 py-1 border rounded text-sm">
+                    <span class="text-xs text-gray-500">Radius at reference zoom. Max 100km cap at low zooms.</span>
+                </div>
+                <div>
+                    <label class="block font-semibold text-xs mb-1">Cluster Max Zoom</label>
+                    <input type="number" id="cluster-max-zoom" value="6" min="0" max="15" step="1" class="w-24 px-2 py-1 border rounded text-sm">
+                    <span class="text-xs text-gray-500">Maximum zoom level for clustering</span>
+                </div>
+                <div>
+                    <label class="block font-semibold text-xs mb-1">Cluster Low Zoom Offset</label>
+                    <input type="number" id="cluster-low-zoom-offset" value="2" min="0" max="5" step="1" class="w-24 px-2 py-1 border rounded text-sm">
+                    <span class="text-xs text-gray-500">Extra zoom levels for low-importance POIs</span>
+                </div>
+                <div>
+                    <label class="block font-semibold text-xs mb-1">Importance Threshold</label>
+                    <input type="number" id="importance-threshold" value="50" min="0" max="100" step="5" class="w-24 px-2 py-1 border rounded text-sm">
+                    <span class="text-xs text-gray-500">High-importance POIs (>= this) graduate early</span>
+                </div>
+                <div>
+                    <label class="block font-semibold text-xs mb-1">Cluster Reference Zoom</label>
+                    <input type="number" id="cluster-ref-zoom" value="8" min="0" max="15" step="1" class="w-24 px-2 py-1 border rounded text-sm">
+                    <span class="text-xs text-gray-500">Reference zoom for radius calculation</span>
+                </div>
+                <div>
+                    <label class="block font-semibold text-xs mb-1">Max Features (optional)</label>
+                    <input type="number" id="max-features" value="" min="1" max="10000" step="100" placeholder="No limit" class="w-full px-2 py-1 border rounded text-sm">
+                    <span class="text-xs text-gray-500">Limit features per tile (after clustering)</span>
+                </div>
+                <div class="bg-amber-50 p-2 rounded">
+                    <label class="block font-semibold text-xs text-amber-700 mb-1">Cache Version</label>
+                    <input type="number" id="cache-version" value="2" min="0" max="100" step="1" class="w-24 px-2 py-1 border rounded text-sm">
+                    <span class="text-xs text-amber-600">0 = disabled, 1 = default, 2+ = new cache</span>
+                </div>
+                <div class="bg-amber-50 p-2 rounded">
+                    <label class="block font-semibold text-xs text-amber-700 mb-1">Cache TTL (days)</label>
+                    <input type="number" id="cache-ttl-days" value="7" min="0" max="365" step="1" class="w-24 px-2 py-1 border rounded text-sm">
+                    <span class="text-xs text-amber-600">How long to cache tiles in database</span>
+                </div>
+                <button id="apply-settings" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded cursor-pointer w-full mt-2 text-sm font-medium">
+                    {% translate 'Apply & Reload Tiles' %}
+                </button>
+            </div>
+        </div>
+
+        {# ── Overlays ── #}
+        <div class="tilemap-panel-section">
+            <button id="overlay-toggle" class="flex items-center justify-between w-full font-semibold text-sm mb-2 cursor-pointer">
+                <span>{% translate 'Overlays' %} <span id="overlay-count" class="text-xs text-gray-500 font-normal"></span></span>
+                <svg id="overlay-chevron" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div id="overlay-container">
+                <div class="flex gap-2 mb-2">
+                    <button onclick="document.querySelectorAll('.overlay-cb').forEach(cb => cb.checked = true); window._updateOverlays();" class="text-xs px-2 py-1 rounded cursor-pointer panel-plain-btn">{% translate 'Select All' %}</button>
+                    <button onclick="document.querySelectorAll('.overlay-cb').forEach(cb => cb.checked = false); window._updateOverlays();" class="text-xs px-2 py-1 rounded cursor-pointer panel-plain-btn">{% translate 'Clear All' %}</button>
+                </div>
+                <div id="overlay-list" class="max-h-64 overflow-y-auto"></div>
+            </div>
+        </div>
+
+        {# ── Zoom Info ── #}
+        <div class="tilemap-panel-section">
+            <div class="bg-gray-100 rounded p-3 space-y-1 text-sm">
+                <div><strong>{% translate 'Zoom' %}:</strong> <span id="zoom">0</span></div>
+                <div><strong>{% translate 'Cluster Mode' %}:</strong> <span id="cluster-mode" class="font-semibold">ON</span></div>
+                <div><strong>{% translate 'Actual Radius' %}:</strong> <span id="actual-radius">0</span></div>
+                <div><strong>{% translate 'Visible Features' %}:</strong> <span id="max-features-display">0</span></div>
+                <details class="mt-2">
+                    <summary class="cursor-pointer font-semibold">{% translate 'By Parent Category' %}</summary>
+                    <div id="parent-category-counts" class="ml-3 text-xs text-gray-600 mt-1">{% translate 'Loading...' %}</div>
+                </details>
+            </div>
+        </div>
+
+        {# ── Debug ── #}
+        <div class="tilemap-panel-section">
+            <details>
+                <summary class="cursor-pointer font-semibold text-sm mb-2">{% translate 'Martin Debug' %}</summary>
+                <div class="space-y-2 text-xs">
+                    <div>
+                        <strong>{% translate 'Last Tile Load' %}:</strong> <span id="tile-load-time">-</span>
+                    </div>
+                    <div>
+                        <strong class="text-gray-600">{% translate 'Recent Tiles' %}:</strong>
+                        <div id="recent-tiles" class="max-h-40 overflow-y-auto font-mono bg-white p-2 rounded border mt-1">{% translate 'Loading tiles...' %}</div>
+                    </div>
+                    <div>
+                        <strong class="text-red-600">{% translate 'Errors' %}:</strong>
+                        <div id="tile-errors" class="max-h-24 overflow-y-auto font-mono bg-white p-2 rounded border mt-1">{% translate 'No errors' %}</div>
+                    </div>
+                    <div>
+                        <strong class="text-primary-600">{% translate 'Active Tiles' %}:</strong>
+                        <div id="active-tiles" class="max-h-24 overflow-y-auto font-mono bg-white p-2 rounded border mt-1">{% translate 'No active tiles' %}</div>
+                    </div>
+                </div>
+            </details>
+        </div>
+
+        <div id="popup-content" class="mt-2"></div>
+    </div>
+
+    <div id="tilemap-map"></div>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.js"></script>
+<script>
+(function() {
+    // ── Panel toggle ──
+    const panelToggle = document.getElementById('panel-toggle');
+    const tilemapPanel = document.getElementById('tilemap-panel');
+    panelToggle.addEventListener('click', () => {
+        tilemapPanel.classList.toggle('collapsed');
+        panelToggle.innerHTML = tilemapPanel.classList.contains('collapsed') ? '&#9654;' : '&#9664;';
+    });
+
+    const MARTIN_URL = '{{ martin_tile_url|escapejs }}';
+    const overlayCategories = JSON.parse('{{ overlay_categories_json|escapejs }}');
+
+    // ── Tile URL builder ──
+    function buildTileURL() {
+        const params = {};
+        params.fields = 'category,color,parent_color,categories_all,sources,importance,count,name,slug';
+
+        const clusterRadiusM = document.getElementById('cluster-radius-m').value;
+        if (clusterRadiusM) params.cluster_radius_m = clusterRadiusM;
+        const clusterMaxZoom = document.getElementById('cluster-max-zoom').value;
+        if (clusterMaxZoom) params.cluster_max_zoom = clusterMaxZoom;
+        const clusterLowZoomOffset = document.getElementById('cluster-low-zoom-offset').value;
+        if (clusterLowZoomOffset) params.cluster_low_zoom_offset = clusterLowZoomOffset;
+        const importanceThreshold = document.getElementById('importance-threshold').value;
+        if (importanceThreshold) params.importance_threshold = importanceThreshold;
+        const clusterRefZoom = document.getElementById('cluster-ref-zoom').value;
+        if (clusterRefZoom) params.cluster_ref_zoom = clusterRefZoom;
+        const maxFeatures = document.getElementById('max-features').value;
+        if (maxFeatures) params.max_features = maxFeatures;
+        const cacheVersion = document.getElementById('cache-version').value;
+        if (cacheVersion !== undefined) params.cache_version = cacheVersion;
+        const cacheTtlDays = document.getElementById('cache-ttl-days').value;
+        if (cacheTtlDays !== undefined) params.cache_ttl_days = cacheTtlDays;
+
+        const paramsStr = new URLSearchParams(params).toString();
+        return MARTIN_URL + '/geoplaces/{z}/{x}/{y}' + (paramsStr ? '?' + paramsStr : '');
+    }
+
+    // ── Overlay management ──
+    function getSelectedOverlays() {
+        return Array.from(document.querySelectorAll('.overlay-cb:checked')).map(cb => cb.value);
+    }
+
+    function renderOverlays() {
+        const container = document.getElementById('overlay-list');
+        const savedOverlays = JSON.parse(localStorage.getItem('poiClusteringOverlays') || '[]');
+        const savedSet = new Set(savedOverlays);
+
+        container.innerHTML = overlayCategories.map(cat => `
+            <div class="flex items-center gap-1.5 py-1 cursor-pointer text-xs">
+                <input type="checkbox" class="overlay-cb" id="overlay-${cat.slug}" value="${cat.slug}"
+                    ${savedSet.has(cat.slug) ? 'checked' : ''} onchange="window._updateOverlays()">
+                <span class="w-3 h-3 rounded-sm inline-block flex-shrink-0" style="background: ${cat.color}"></span>
+                <label for="overlay-${cat.slug}" class="cursor-pointer">${cat.name || cat.slug}</label>
+            </div>
+        `).join('');
+
+        updateOverlayCount();
+    }
+
+    function applyOverlayFilter() {
+        if (!map.getLayer('pois-clustered') || !map.getLayer('pois-raw')) return;
+
+        const selected = getSelectedOverlays();
+
+        if (selected.length === 0) {
+            map.setFilter('pois-clustered', ['>', ['get', 'count'], 1]);
+            map.setFilter('pois-raw', ['==', ['get', 'count'], 1]);
+            map.setFilter('pois-labels', ['==', ['get', 'count'], 1]);
+        } else {
+            const anyMatch = ['any', ...selected.map(slug => ['==', ['get', 'parent_slug'], slug])];
+            map.setFilter('pois-clustered', ['all', ['>', ['get', 'count'], 1], anyMatch]);
+            map.setFilter('pois-raw', ['all', ['==', ['get', 'count'], 1], anyMatch]);
+            map.setFilter('pois-labels', ['all', ['==', ['get', 'count'], 1], anyMatch]);
+        }
+    }
+
+    function updateOverlays() {
+        const selected = getSelectedOverlays();
+        localStorage.setItem('poiClusteringOverlays', JSON.stringify(selected));
+        updateOverlayCount();
+        applyOverlayFilter();
+    }
+    window._updateOverlays = updateOverlays;
+
+    function updateOverlayCount() {
+        const selected = getSelectedOverlays();
+        const countEl = document.getElementById('overlay-count');
+        countEl.textContent = selected.length > 0
+            ? '(' + selected.length + '/' + overlayCategories.length + ')'
+            : '(' + overlayCategories.length + ')';
+    }
+
+    // ── Settings persistence ──
+    function loadSettings() {
+        const s = JSON.parse(localStorage.getItem('poiClusteringSettings') || '{}');
+        if (s.clusterRadiusM) document.getElementById('cluster-radius-m').value = s.clusterRadiusM;
+        if (s.clusterMaxZoom) document.getElementById('cluster-max-zoom').value = s.clusterMaxZoom;
+        if (s.clusterLowZoomOffset) document.getElementById('cluster-low-zoom-offset').value = s.clusterLowZoomOffset;
+        if (s.importanceThreshold) document.getElementById('importance-threshold').value = s.importanceThreshold;
+        if (s.clusterRefZoom) document.getElementById('cluster-ref-zoom').value = s.clusterRefZoom;
+        if (s.maxFeatures) document.getElementById('max-features').value = s.maxFeatures;
+        if (s.cacheVersion !== undefined) document.getElementById('cache-version').value = s.cacheVersion;
+        if (s.cacheTtlDays) document.getElementById('cache-ttl-days').value = s.cacheTtlDays;
+    }
+
+    function saveSettings() {
+        localStorage.setItem('poiClusteringSettings', JSON.stringify({
+            clusterRadiusM: document.getElementById('cluster-radius-m').value,
+            clusterMaxZoom: document.getElementById('cluster-max-zoom').value,
+            clusterLowZoomOffset: document.getElementById('cluster-low-zoom-offset').value,
+            importanceThreshold: document.getElementById('importance-threshold').value,
+            clusterRefZoom: document.getElementById('cluster-ref-zoom').value,
+            maxFeatures: document.getElementById('max-features').value,
+            cacheVersion: document.getElementById('cache-version').value,
+            cacheTtlDays: document.getElementById('cache-ttl-days').value
+        }));
+    }
+
+    loadSettings();
+    renderOverlays();
+
+    // ── Map initialization ──
+    const map = new maplibregl.Map({
+        container: 'tilemap-map',
+        style: 'https://tiles.openfreemap.org/styles/bright',
+        center: [9.55, 47.15],
+        zoom: 8
+    });
+
+    map.addControl(new maplibregl.NavigationControl(), 'top-right');
+    map.addControl(new maplibregl.ScaleControl({ maxWidth: 100, unit: 'metric' }));
+
+    map.on('load', () => {
+        map.addSource('pois', {
+            type: 'vector',
+            tiles: [buildTileURL()],
+            minzoom: 0,
+            maxzoom: 20,
+            attribution: '© Wodore'
+        });
+
+        map.addLayer({
+            id: 'pois-raw',
+            type: 'circle',
+            source: 'pois',
+            'source-layer': 'geoplaces',
+            filter: ['==', ['get', 'count'], 1],
+            paint: {
+                'circle-radius': [
+                    'interpolate', ['linear'], ['zoom'],
+                    3, 1, 7, 2, 10, 3, 14, 4, 20, 14
+                ],
+                'circle-color': ['coalesce', ['get', 'color'], '#808080'],
+                'circle-opacity': 0.6,
+                'circle-stroke-width': [
+                    'interpolate', ['linear'], ['zoom'],
+                    3, 0.5, 7, 1, 10, 2
+                ],
+                'circle-stroke-color': 'white',
+                'circle-stroke-opacity': 0.8
+            }
+        });
+
+        map.addLayer({
+            id: 'pois-clustered',
+            type: 'circle',
+            source: 'pois',
+            'source-layer': 'geoplaces',
+            filter: ['>', ['get', 'count'], 1],
+            paint: {
+                'circle-radius': [
+                    'interpolate', ['linear'], ['zoom'],
+                    3, ['interpolate', ['linear'], ['get', 'count'], 2, 1, 10, 2, 50, 4],
+                    6, ['interpolate', ['linear'], ['get', 'count'], 2, 2, 10, 3, 50, 6],
+                    10, ['interpolate', ['linear'], ['get', 'count'], 2, 3, 10, 4, 50, 10],
+                    14, ['interpolate', ['linear'], ['get', 'count'], 2, 4, 10, 6, 50, 12]
+                ],
+                'circle-color': ['coalesce', ['get', 'color'], '#808080'],
+                'circle-opacity': 0.5,
+                'circle-stroke-width': [
+                    'interpolate', ['linear'], ['zoom'],
+                    3, 1, 6, 2, 10, 2
+                ],
+                'circle-stroke-color': 'black',
+                'circle-stroke-opacity': 0.7
+            }
+        });
+
+        map.addLayer({
+            id: 'pois-labels',
+            type: 'symbol',
+            source: 'pois',
+            'source-layer': 'geoplaces',
+            filter: ['==', ['get', 'count'], 1],
+            minzoom: 14,
+            layout: {
+                'text-field': ['coalesce', ['get', 'name'], ''],
+                'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+                'text-size': 12,
+                'text-anchor': 'top',
+                'text-offset': [0, 0.8],
+                'text-optional': true
+            },
+            paint: {
+                'text-color': '#000000',
+                'text-halo-color': '#ffffff',
+                'text-halo-width': 2
+            }
+        });
+
+        countVisibleFeatures();
+        applyOverlayFilter();
+    });
+
+    // ── Cluster radius calculation ──
+    function calculateActualRadius(zoomLevel) {
+        const clusterRadiusM = parseFloat(document.getElementById('cluster-radius-m').value) || 5000;
+        const clusterRefZoom = parseFloat(document.getElementById('cluster-ref-zoom').value) || 8;
+        const clusterMaxZoom = parseFloat(document.getElementById('cluster-max-zoom').value) || 6;
+        const clusterLowZoomOffset = parseFloat(document.getElementById('cluster-low-zoom-offset').value) || 2;
+
+        if (zoomLevel > clusterMaxZoom + clusterLowZoomOffset) {
+            return 0;
+        } else if (zoomLevel > clusterMaxZoom) {
+            const gridAtMaxZoom = clusterRadiusM * Math.pow(2, clusterRefZoom - clusterMaxZoom);
+            const progress = (zoomLevel - clusterMaxZoom) / clusterLowZoomOffset;
+            return Math.max(gridAtMaxZoom + (50 - gridAtMaxZoom) * progress, 50);
+        } else {
+            return Math.min(clusterRadiusM * Math.pow(2, clusterRefZoom - zoomLevel), 200000);
+        }
+    }
+
+    function getClusterMode(zoomLevel) {
+        const maxZoom = parseFloat(document.getElementById('cluster-max-zoom').value) || 6;
+        const offset = parseFloat(document.getElementById('cluster-low-zoom-offset').value) || 2;
+        if (zoomLevel <= maxZoom) return 'on';
+        if (zoomLevel <= maxZoom + offset) return 'hybrid';
+        return 'off';
+    }
+
+    map.on('zoom', () => {
+        const zoom = map.getZoom();
+        document.getElementById('zoom').textContent = zoom.toFixed(1);
+
+        const r = calculateActualRadius(zoom);
+        document.getElementById('actual-radius').textContent = r >= 1000
+            ? (r / 1000).toFixed(1) + ' km'
+            : r.toFixed(0) + ' m';
+
+        const mode = getClusterMode(zoom);
+        const modeEl = document.getElementById('cluster-mode');
+        modeEl.textContent = mode.toUpperCase();
+        modeEl.style.color = mode === 'on' ? '#28a745' : mode === 'hybrid' ? '#ffc107' : '#dc3545';
+
+        countVisibleFeatures();
+    });
+
+    function countVisibleFeatures() {
+        if (!map.getLayer('pois-clustered') || !map.getLayer('pois-raw')) return;
+        const features = map.queryRenderedFeatures({ layers: ['pois-clustered', 'pois-raw'] });
+        document.getElementById('max-features-display').textContent = features.length;
+
+        const counts = {};
+        features.forEach(f => {
+            const ps = f.properties.parent_slug || 'other';
+            counts[ps] = (counts[ps] || 0) + 1;
+        });
+
+        const div = document.getElementById('parent-category-counts');
+        div.innerHTML = Object.keys(counts).length > 0
+            ? Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([c, n]) => '<div>' + c + ': ' + n + '</div>').join('')
+            : 'No features visible';
+    }
+
+    map.on('moveend', countVisibleFeatures);
+    map.on('data', (e) => { if (e.sourceId === 'pois' && e.isSourceLoaded) countVisibleFeatures(); });
+
+    // ── Popups on click ──
+    map.on('click', 'pois-clustered', (e) => showPopup(e.features[0]));
+    map.on('click', 'pois-raw', (e) => showPopup(e.features[0]));
+
+    function showPopup(feature) {
+        document.getElementById('popup-content').innerHTML =
+            '<pre class="bg-gray-100 p-3 rounded text-xs overflow-x-auto max-h-96">' +
+            JSON.stringify(feature.properties, null, 2) + '</pre>';
+    }
+
+    map.on('mouseenter', 'pois-clustered', () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', 'pois-clustered', () => map.getCanvas().style.cursor = '');
+    map.on('mouseenter', 'pois-raw', () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', 'pois-raw', () => map.getCanvas().style.cursor = '');
+
+    // ── Settings panel toggle ──
+    document.getElementById('settings-toggle').addEventListener('click', () => {
+        const panel = document.getElementById('settings');
+        panel.classList.toggle('hidden');
+    });
+
+    document.getElementById('overlay-toggle').addEventListener('click', () => {
+        const container = document.getElementById('overlay-container');
+        const chevron = document.getElementById('overlay-chevron');
+        container.classList.toggle('hidden');
+        chevron.style.transform = container.classList.contains('hidden') ? '' : 'rotate(180deg)';
+    });
+
+    document.getElementById('apply-settings').addEventListener('click', () => {
+        saveSettings();
+        const newURL = buildTileURL();
+        const source = map.getSource('pois');
+        if (source) {
+            source.tiles = [newURL];
+            const sc = map.style.sourceCaches['pois'];
+            if (sc) sc.clearTiles();
+        }
+        alert('Settings applied! Tiles will reload with new parameters.');
+    });
+
+    // ── Martin debug ──
+    const tileLoadTimes = [], tileErrors = [];
+    const activeTiles = new Map();
+
+    map.on('sourcedataloading', (e) => {
+        if (e.sourceId === 'pois' && e.tile) {
+            const t = performance.now();
+            e.tile._loadStartTime = t;
+            const c = e.tile.tileID.canonical;
+            activeTiles.set(c.z + '/' + c.x + '/' + c.y, { z: c.z, x: c.x, y: c.y, startTime: t, status: 'loading' });
+            updateActiveTilesDisplay();
+        }
+    });
+
+    map.on('sourcedata', (e) => {
+        if (e.sourceId !== 'pois' || !e.tile) return;
+        const tile = e.tile, c = tile.tileID.canonical, key = c.z + '/' + c.x + '/' + c.y;
+
+        if (tile._loadStartTime) {
+            const loadTime = performance.now() - tile._loadStartTime;
+            const loadTimeEl = document.getElementById('tile-load-time');
+            loadTimeEl.textContent = loadTime.toFixed(2) + ' ms';
+            loadTimeEl.style.color = loadTime < 100 ? '#28a745' : loadTime < 500 ? '#ffc107' : '#dc3545';
+
+            tileLoadTimes.unshift({ z: c.z, x: c.x, y: c.y, time: loadTime });
+            if (tileLoadTimes.length > 10) tileLoadTimes.pop();
+            document.getElementById('recent-tiles').innerHTML = tileLoadTimes.map(t =>
+                '<div class="py-0.5 border-b border-gray-100">z:' + t.z + '/' + t.x + '/' + t.y + ' - <strong>' + t.time.toFixed(1) + 'ms</strong></div>'
+            ).join('');
+
+            if (activeTiles.has(key)) {
+                const a = activeTiles.get(key);
+                a.status = 'completed';
+                a.loadTime = loadTime;
+                activeTiles.set(key, a);
+            }
+        }
+
+        if (tile.state === 'errored' || tile.error) {
+            tileErrors.unshift({ z: c.z, x: c.x, y: c.y, error: tile.error || 'Unknown error', time: new Date().toLocaleTimeString() });
+            if (tileErrors.length > 5) tileErrors.pop();
+            document.getElementById('tile-errors').innerHTML = tileErrors.map(e =>
+                '<div class="py-1 bg-red-50 border-b border-red-100 text-red-700"><strong>ERROR ' + e.time + ':</strong> z:' + e.z + '/' + e.x + '/' + e.y + '<br><span class="text-[10px]">' + e.error + '</span></div>'
+            ).join('');
+            if (activeTiles.has(key)) {
+                const a = activeTiles.get(key);
+                a.status = 'failed';
+                a.error = tile.error;
+                activeTiles.set(key, a);
+            }
+        }
+
+        setTimeout(() => { activeTiles.delete(key); updateActiveTilesDisplay(); }, 2000);
+        updateActiveTilesDisplay();
+    });
+
+    function updateActiveTilesDisplay() {
+        const div = document.getElementById('active-tiles');
+        if (activeTiles.size === 0) { div.innerHTML = 'No active tiles'; return; }
+        div.innerHTML = Array.from(activeTiles.values()).map(t => {
+            let style = '', text = '';
+            if (t.status === 'loading') { style = 'color:#007cba;'; text = '⏳'; }
+            else if (t.status === 'completed') { style = 'color:#28a745;'; text = '✓ ' + t.loadTime.toFixed(1) + 'ms'; }
+            else if (t.status === 'failed') { style = 'color:#dc3545;text-decoration:line-through;'; text = '✗ Failed'; }
+            return '<div class="py-0.5 border-b border-gray-100" style="' + style + '">' + text + ' z:' + t.z + '/' + t.x + '/' + t.y + '</div>';
+        }).join('');
+    }
+})();
+</script>
+{% endblock %}

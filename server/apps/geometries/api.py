@@ -52,6 +52,72 @@ router = Router(tags=["geometries"])
 logger = logging.getLogger(__name__)
 
 
+@router.get(
+    "places/overlays",
+    response=list,
+    exclude_unset=True,
+    operation_id="get_overlay_categories",
+)
+@decorate_view(cache_page(300))
+@decorate_view(cache_control(max_age=300))
+def get_overlay_categories(request: HttpRequest) -> Any:
+    """Get available overlay categories for map tile filtering.
+
+    Returns root-level categories that can be used as overlay filters
+    in vector tile requests (via the `categories` parameter).
+    """
+    from server.apps.categories.models import Category
+    from server.apps.geometries.config.osm_categories import CATEGORY_REGISTRY
+
+    # Get unique category slugs from the OSM category registry
+    category_slugs = [cat.category for cat in CATEGORY_REGISTRY]
+
+    # Look up matching root-level categories from DB
+    categories = (
+        Category.objects.select_related(
+            "parent",
+            "symbol_detailed",
+            "symbol_simple",
+            "symbol_mono",
+        )
+        .filter(parent__isnull=True, slug__in=category_slugs, is_active=True)
+        .order_by("order", "slug")
+    )
+
+    results = []
+    for cat in categories:
+        results.append(
+            {
+                "slug": cat.slug,
+                "name": cat.name_i18n,
+                "description": cat.description_i18n or "",
+                "order": cat.order,
+                "level": cat.get_level(),
+                "parent": cat.parent.slug if cat.parent else None,
+                "identifier": cat.get_identifier(),
+                "color": cat.color,
+                "children": cat.has_children(),
+                "symbol_detailed": (
+                    request.build_absolute_uri(cat.symbol_detailed.svg_file.url)
+                    if cat.symbol_detailed and cat.symbol_detailed.svg_file
+                    else None
+                ),
+                "symbol_simple": (
+                    request.build_absolute_uri(cat.symbol_simple.svg_file.url)
+                    if cat.symbol_simple and cat.symbol_simple.svg_file
+                    else None
+                ),
+                "symbol_mono": (
+                    request.build_absolute_uri(cat.symbol_mono.svg_file.url)
+                    if cat.symbol_mono and cat.symbol_mono.svg_file
+                    else None
+                ),
+            }
+        )
+
+    return results
+
+
 class IncludeModeEnum(str, Enum):
     """Include mode enum for search endpoint - controls level of detail."""
 

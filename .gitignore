@@ -13,16 +13,21 @@ AGENT/
 tmp/
 .geoplaces_osm_import.json
 .pre-commit-cache
+allure-*/
 
 
 
 # Static folders
+/media
 /media/*
+/media*/*
 /media_local/*
 /static/*
 
 # Martin sync output
 /martin_sync/
+/martin_sync*/
+/martin_sync
 
 node_modules
 # Byte-compiled / optimized / DLL files
