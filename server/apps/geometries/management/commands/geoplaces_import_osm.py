@@ -5,11 +5,11 @@ Imports amenities from OSM via Geofabrik PBF files using category mappings.
 Handles deduplication, opening hours parsing, and category management.
 
 Usage:
-    app geoplaces_import_osm europe/switzerland                           # Import all enabled categories
-    app geoplaces_import_osm europe/alps --categories groceries,restaurant # Import specific categories
-    app geoplaces_import_osm --dry-run europe/switzerland                 # Dry run (no DB changes)
-    app geoplaces_import_osm -l 100 europe/switzerland                    # Limit to 100 records
-    app geoplaces_import_osm --data-dir /data/osm europe/switzerland      # Cache downloads
+    app geoplaces_import_osm --overpass ch                           # Import all enabled categories
+    app geoplaces_import_osm --overpass ch --categories groceries     # Import specific categories
+    app geoplaces_import_osm --overpass ch --dry-run                 # Dry run (no DB changes)
+    app geoplaces_import_osm --overpass ch -l 100                    # Limit to 100 records
+    app geoplaces_import_osm --overpass ch --output-dir /tmp         # Use /tmp for logs (Docker)
 """
 
 import tempfile
@@ -368,6 +368,12 @@ class Command(BaseCommand):
             default=None,
             help="Path to state JSON file for tracking per-mapping timestamps (default: <data-dir>/.geoplaces_osm_import.json)",
         )
+        parser.add_argument(
+            "--output-dir",
+            type=str,
+            default=".",
+            help="Directory for error log files (default: '.' for current directory, use '/tmp' for Docker environments)",
+        )
 
     def handle(self, *args, **options):
         """Main command execution."""
@@ -409,6 +415,7 @@ class Command(BaseCommand):
         overpass_queries_file = options.get("overpass_queries")
         since = options.get("since")
         state_file_path = options.get("state_file")
+        output_dir = options.get("output_dir", ".")
         run_start = timezone.now()
 
         # Determine state file location
@@ -542,6 +549,7 @@ class Command(BaseCommand):
                     dry_run=dry_run,
                     state=state,
                     state_file=state_file,
+                    output_dir=output_dir,
                 )
                 success = True
 
@@ -746,14 +754,19 @@ class Command(BaseCommand):
             self.stdout.write(f"  Deactivated: {deleted_count}")
 
     def _init_error_log(
-        self, region: str, run_start: datetime, data_dir: str = None
+        self, region: str, run_start: datetime, data_dir: str = "."
     ) -> Path:
         """Initialize error log file for on-the-fly error logging.
+
+        Args:
+            region: Region code (e.g., "CH", "AT")
+            run_start: Import start timestamp
+            data_dir: Directory for error log files (default: ".")
 
         Returns:
             Path to error log file
         """
-        log_dir = Path(data_dir) if data_dir else Path.cwd()
+        log_dir = Path(data_dir) if data_dir else Path(".")
         log_dir.mkdir(parents=True, exist_ok=True)
 
         error_log_path = (
@@ -2017,11 +2030,13 @@ class Command(BaseCommand):
         dry_run: bool = False,
         state: dict | None = None,
         state_file: Path | None = None,
+        output_dir: str = ".",
     ):
         """Process Overpass mappings in parallel using ThreadPoolExecutor.
 
         Args:
             workers: Number of parallel workers
+            output_dir: Directory for error log files (default: ".")
         """
         from concurrent.futures import ThreadPoolExecutor, as_completed
         import time
@@ -2098,8 +2113,7 @@ class Command(BaseCommand):
 
         # Initialize error log file for on-the-fly error logging
         if not dry_run:
-            data_dir = state_file.parent if state_file else None
-            self._init_error_log(region, run_start, data_dir)
+            self._init_error_log(region, run_start, output_dir)
             console.print(f"[dim]Error log: {self._error_log_file}[/dim]\n")
 
         # Initialize counters
