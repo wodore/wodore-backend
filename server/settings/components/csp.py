@@ -8,6 +8,8 @@ We are using `django-csp` to provide these headers.
 Docs: https://github.com/mozilla/django-csp
 """
 
+from server.settings.components import config
+
 # These values might and will be redefined in `development.py` env:
 CONTENT_SECURITY_POLICY = {
     "DIRECTIVES": {
@@ -16,6 +18,7 @@ CONTENT_SECURITY_POLICY = {
             "https://tiles.openfreemap.org",
             "https://unpkg.com",
             "http://localhost:8075",
+            config("MARTIN_TILE_URL", "http://localhost:8075"),
         ),
         "default-src": ("'none'",),
         "font-src": (
