@@ -17,7 +17,6 @@ CONTENT_SECURITY_POLICY = {
             "'self'",
             "https://tiles.openfreemap.org",
             "https://unpkg.com",
-            "http://localhost:8075",
             config("MARTIN_TILE_URL", "http://localhost:8075"),
         ),
         "default-src": ("'none'",),
