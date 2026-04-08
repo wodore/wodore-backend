@@ -76,6 +76,7 @@ private = [
 [project.scripts]
 manage = "manage:main"
 app = "manage:main"
+svg-to-mono = "scripts.svg_to_mono:svg_to_mono"
 
 [dependency-groups]
 dev = [
@@ -278,4 +279,4 @@ build-backend = "hatchling.build"
 
 
 [tool.hatch.build.targets.wheel]
-packages = ["server"]
+packages = ["server", "scripts"]
