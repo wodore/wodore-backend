@@ -28,9 +28,6 @@ def _load_env_test():
                 os.environ.setdefault(key, val)
 
 
-_load_env_test()
-
-
 @task(
     default=True,
     help={
@@ -41,6 +38,8 @@ _load_env_test()
 )
 def run(c: Ctx, create: bool = False, infisical: bool = False, args: str = ""):
     """Run tests (uses .env.test by default, or -i for infisical)"""
+    if not infisical:
+        _load_env_test()
     header(doc())
 
     pytest_args = []
