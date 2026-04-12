@@ -1,0 +1,72 @@
+geoplaces:
+  - name: Test Peak Dammastock
+    location: "SRID=4326;POINT (8.4500 46.6333)"
+    elevation: 3630
+    country: CH
+    importance: 80
+    detail_type: none
+    category_slugs:
+      - peak
+
+  - name: Test Pass Furka
+    location: "SRID=4326;POINT (8.4133 46.5717)"
+    elevation: 2436
+    country: CH
+    importance: 65
+    detail_type: none
+    category_slugs:
+      - pass
+
+  - name: Testsee
+    location: "SRID=4326;POINT (8.7500 46.6800)"
+    elevation: 1950
+    country: CH
+    importance: 45
+    detail_type: none
+    category_slugs:
+      - lake
+
+  - name: Testgletscher
+    location: "SRID=4326;POINT (8.3200 46.5900)"
+    elevation: 2900
+    country: CH
+    importance: 55
+    detail_type: none
+    category_slugs:
+      - glacier
+
+  - name: Testdorf Andermatt
+    location: "SRID=4326;POINT (8.6930 46.6310)"
+    elevation: 1437
+    country: CH
+    importance: 60
+    detail_type: admin
+    category_slugs:
+      - village
+
+  - name: Teststation
+    location: "SRID=4326;POINT (8.7100 46.6450)"
+    elevation: 1450
+    country: CH
+    importance: 40
+    detail_type: transport
+    category_slugs:
+      - train_station
+
+  - name: Test Aussichtspunkt
+    location: "SRID=4326;POINT (8.5600 46.7200)"
+    elevation: 2100
+    country: CH
+    importance: 35
+    detail_type: none
+    category_slugs:
+      - viewpoint
+
+  - name: Testwasserfall
+    location: "SRID=4326;POINT (8.1500 46.4800)"
+    elevation: 1650
+    country: CH
+    importance: 30
+    detail_type: none
+    category_slugs:
+      - waterfall
