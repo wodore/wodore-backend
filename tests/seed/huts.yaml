@@ -1,0 +1,124 @@
+huts:
+  - name: Testhütte Clariden
+    location: "SRID=4326;POINT (8.9649 46.8389)"
+    elevation: 2455
+    country: CH
+    hut_type_open: hut
+    capacity_open: 45
+    capacity_closed: 12
+    organizations:
+      - slug: sac
+        source_id: "1050"
+    contacts:
+      - function_slug: warden
+        name: "Hüttenwart Clariden"
+        email: "clariden@example.com"
+        phone: "+41 55 123 45 67"
+
+  - name: Testhütte Düssi
+    location: "SRID=4326;POINT (9.0421 46.7662)"
+    elevation: 2767
+    country: CH
+    hut_type_open: hut
+    hut_type_closed: bivouac
+    capacity_open: 24
+    capacity_closed: 8
+    organizations:
+      - slug: sac
+        source_id: "1051"
+
+  - name: Testhütte Planurahütte
+    location: "SRID=4326;POINT (9.1525 46.8123)"
+    elevation: 2947
+    country: CH
+    hut_type_open: hut
+    capacity_open: 80
+    organizations:
+      - slug: sac
+        source_id: "1052"
+
+  - name: Testhütte Landecque
+    location: "SRID=4326;POINT (7.1200 46.3500)"
+    elevation: 1880
+    country: CH
+    hut_type_open: hut
+    capacity_open: 30
+    organizations:
+      - slug: sac
+        source_id: "1053"
+
+  - name: Testhütte Monte Rosa
+    location: "SRID=4326;POINT (7.8667 45.9763)"
+    elevation: 2883
+    country: CH
+    hut_type_open: hut
+    hut_type_closed: selfhut
+    capacity_open: 160
+    capacity_closed: 20
+    organizations:
+      - slug: sac
+        source_id: "1400"
+      - slug: hrs
+        source_id: "hrs-1400"
+    contacts:
+      - function_slug: warden
+        name: "Hüttenwart Monte Rosa"
+        email: "monterosa@example.com"
+
+  - name: Testhütte Weisshorn
+    location: "SRID=4326;POINT (7.6283 46.0932)"
+    elevation: 2932
+    country: CH
+    hut_type_open: hut
+    capacity_open: 38
+    organizations:
+      - slug: sac
+        source_id: "1401"
+
+  - name: Testhütte Britannia
+    location: "SRID=4326;POINT (7.7142 46.1436)"
+    elevation: 3030
+    country: CH
+    hut_type_open: hut
+    capacity_open: 114
+    organizations:
+      - slug: sac
+        source_id: "1402"
+
+  - name: Testhütte Langflue
+    location: "SRID=4326;POINT (7.8961 46.1739)"
+    elevation: 2870
+    country: CH
+    hut_type_open: hut
+    capacity_open: 22
+    organizations:
+      - slug: sac
+        source_id: "1403"
+
+  - name: Testhütte Schwartzhorn
+    location: "SRID=4326;POINT (9.8456 46.8321)"
+    elevation: 2520
+    country: CH
+    hut_type_open: hut
+    capacity_open: 50
+    organizations:
+      - slug: sac
+        source_id: "1404"
+
+  - name: Testhütte Berner Oberland
+    location: "SRID=4326;POINT (8.0333 46.5333)"
+    elevation: 1820
+    country: CH
+    hut_type_open: hut
+    capacity_open: 90
+    organizations:
+      - slug: sac
+        source_id: "1405"
+    contacts:
+      - function_slug: warden
+        name: "Hüttenwart BO"
+        email: "bo-huette@example.com"
+        phone: "+41 33 987 65 43"
+      - function_slug: private_contact
+        name: "Reservations"
+        email: "reservations@bo-huette.ch"

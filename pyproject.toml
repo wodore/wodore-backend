@@ -115,6 +115,7 @@ dev = [
   #"ipython==8.*", # https://pypi.org/project/ipython/
   "icecream==2.*", # https://pypi.org/project/icecream/
   "faker==33.*", # https://pypi.org/project/faker/
+  "factory_boy==3.*", # https://pypi.org/project/factory_boy/
   "pyparsing==3.*", # https://pypi.org/project/pyparsing/
   "pydot==3.*", # https://pypi.org/project/pydot/
   "werkzeug==3.*", # https://pypi.org/project/werkzeug/
