@@ -52,7 +52,10 @@ def _get_or_create_category(slug: str) -> Category | None:
 
 
 def _get_or_create_contact_function(slug: str) -> ContactFunction | None:
-    """Look up or create a ContactFunction by slug."""
+    """Look up or create a ContactFunction by slug.
+
+    Returns None if slug is empty/falsy — callers should check.
+    """
     if not slug:
         return None
     func, _ = ContactFunction.objects.get_or_create(
