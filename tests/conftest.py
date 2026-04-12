@@ -45,6 +45,10 @@ def seed_data(django_db_setup, django_db_blocker):
                 needs_seeding = True
 
         if needs_seeding:
+            # Clear existing seed data before re-seeding to avoid
+            # duplicate key errors when --reuse-db is active.
+            Hut.objects.all().delete()
+
             results = load_all_seeds()
             # Store hash to detect future changes
             from django.core.cache import cache

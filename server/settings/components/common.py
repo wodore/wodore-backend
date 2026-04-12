@@ -184,9 +184,6 @@ INSTALLED_APPS: Tuple[str, ...] = (
     # You may want to enable other checks as well,
     # see: https://github.com/KristianOellegaard/django-health-check
     "health_check",
-    "health_check.db",
-    "health_check.cache",
-    "health_check.storage",
     "django_cleanup.apps.CleanupConfig",  # https://pypi.org/project/django-cleanup/
 )
 

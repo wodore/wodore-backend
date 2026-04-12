@@ -56,13 +56,21 @@ router = Router()
 
 
 class VersionSchema(Schema):
-    hash: str = Field(..., description="Git commit short hash", example="abc123e")
+    hash: str = Field(
+        ...,
+        description="Git commit short hash",
+        json_schema_extra={"example": "abc123e"},
+    )
     hash_long: str = Field(
         ...,
         description="Git commit full hash",
-        example="abc123ef4567890abcdef1234567890abcdef12",
+        json_schema_extra={"example": "abc123ef4567890abcdef1234567890abcdef12"},
     )
-    version: str = Field(..., description="Sematic version", example="1.2.0")
+    version: str = Field(
+        ...,
+        description="Sematic version",
+        json_schema_extra={"example": "1.2.0"},
+    )
     timestamp: datetime = Field(
         ...,
         description="Build timestamp",
@@ -70,7 +78,7 @@ class VersionSchema(Schema):
     environment: str = Field(
         ...,
         description="Current environment (development, production)",
-        example="production",
+        json_schema_extra={"example": "production"},
     )
 
 
@@ -96,7 +104,7 @@ class FieldsSchema(Schema):
     )
     # ",".join(exclude_default), description="Comma separated list, only used if 'include' is not set."
     # )
-    allowed_fields: List = Field(None, include_in_schema=False)
+    allowed_fields: List = Field(None, json_schema_extra={"include_in_schema": False})
     _model = None
 
     def set_allowed_fields(self, fields: List):
@@ -145,7 +153,9 @@ def fields_query(Model) -> FieldsSchema:  # fields:List, exclude_default=[]):
             ",".join(exclude_default),
             description="Comma separated list, only used if 'include' is not set.",
         )
-        allowed_fields: List = Field(fields, include_in_schema=False)
+        allowed_fields: List = Field(
+            fields, json_schema_extra={"include_in_schema": False}
+        )
         _model = Model
 
         # def set_allowed_fields(self, fields: List):

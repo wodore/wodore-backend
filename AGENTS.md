@@ -124,3 +124,17 @@ Services are defined in `docker-compose.yml`:
 - `exclude_unset=True` works by not adding fields to the response dict when they shouldn't be included
 - Don't set fields to `None` if you want them excluded - simply don't add them to the result dict
 - Add detailed descriptions explaining what values mean, especially for numeric thresholds or enum options
+
+## Testing
+
+After making changes, **always run the test suite** to verify nothing is broken:
+
+```bash
+# Activate virtualenv first
+source .venv/bin/activate
+
+# Run all tests
+inv tests
+```
+
+**Important**: This is mandatory after any code changes before considering work complete.
