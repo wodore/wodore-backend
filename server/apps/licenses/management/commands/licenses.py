@@ -1,8 +1,10 @@
 from server.core.management import CRUDCommand
+from django_admin_runner import register_command
 
 from ...models import License
 
 
+@register_command(group="Licenses")
 class Command(CRUDCommand):
     # help = ""
     use_media_args = True

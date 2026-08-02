@@ -176,6 +176,9 @@ INSTALLED_APPS: Tuple[str, ...] = (
     # "unfold.contrib.simple_history",  # optional, if django-simple-history package is used
     "django.contrib.admin",
     "django.contrib.admindocs",
+    # Task runner:
+    "django_q",  # https://github.com/django-q2/django-q2
+    "django_admin_runner",  # https://github.com/burgdev/django-admin-runner
     # Security:
     "axes",
     "mozilla_django_oidc",  # Load after auth https://github.com/mozilla/mozilla-django-oidc
@@ -477,3 +480,17 @@ BOT_AGENT = config(
 # This defines where hut categories (hut, bivouac, etc.) are located in the category hierarchy
 # Note: The migration creates "accommodation" at root level, not "map.accommodation"
 HUTS_CATEGORY_PARENT = config("HUTS_CATEGORY_PARENT", default="accommodation")
+
+
+# Django-Q2 — ORM broker (no external services)
+# https://django-q2.readthedocs.io/
+Q_CLUSTER = {
+    "name": "DJANGORM",
+    "orm": "default",
+    "retry": 600,
+    "timeout": 300,
+    "poll": 2,
+}
+
+# django-admin-runner backend
+ADMIN_RUNNER_BACKEND = "django-q2"

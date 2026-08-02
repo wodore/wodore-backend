@@ -9,6 +9,7 @@ Usage:
 """
 
 import click
+from django_admin_runner import register_command
 from rich.progress import (
     Progress,
     SpinnerColumn,
@@ -27,6 +28,7 @@ from ...models import HutAvailability
 from ...services import AvailabilityService
 
 
+@register_command(group="Availability")
 class Command(BaseCommand):
     help = "Update hut availability data from booking sources"
 

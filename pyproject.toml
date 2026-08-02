@@ -31,6 +31,8 @@ dependencies = [
   "django-extensions==4.*",    # https://pypi.org/project/django-extensions/
   #"django-unfold==0.43.*",            # https://pypi.org/project/django-unfold/
   "django-unfold==0.87.*",     # https://pypi.org/project/django-unfold/
+  "django-q2>=1.8.0",          # https://pypi.org/project/django-q2/
+  "django-admin-runner[django-q2,unfold]",  # https://github.com/burgdev/django-admin-runner
   "msgspec==0.20.*",           # https://pypi.org/project/msgspec/
   "python-benedict==0.35.*",   # https://pypi.org/project/python-benedict/
   "asyncify==0.12.*",          # https://pypi.org/project/asyncify/ # 0.12 needs python > 3.11
@@ -148,6 +150,7 @@ hut-services-private = { git = "ssh://git@github.com/wodore/hut-services-private
 # hut-services-private = { path = "/home/tobias/git/wodore/hut-services-private", editable = true }
 hut-services = { git = "ssh://git@github.com/wodore/hut-services", branch = "main" }
 # hut-services = { path = "/home/tobias/git/wodore/hut-services", editable = true } # local DEV
+django-admin-runner = { path = "/home/tobias/git/burgdev/django-admin-runner", editable = true }
 
 [tool.pytest.ini_options]
 minversion = "7.0"

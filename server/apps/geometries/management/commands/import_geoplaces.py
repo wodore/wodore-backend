@@ -32,6 +32,7 @@ import yaml
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.measure import D
 from django.core.management.base import BaseCommand, CommandParser
+from django_admin_runner import register_command
 
 from server.apps.external_geonames.management.commands._country_groups import (
     expand_countries,
@@ -42,6 +43,7 @@ from server.apps.huts.models import Hut
 from server.apps.organizations.models import Organization
 
 
+@register_command(group="Geometries")
 class Command(BaseCommand):
     help = "Import GeoPlace data from external GeoNames"
     batch_size = 500  # Increased from 100 for better VPS performance

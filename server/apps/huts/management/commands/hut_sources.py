@@ -7,6 +7,7 @@ from hut_services import BaseService, HutSourceSchema
 from django.conf import settings
 from django.contrib.gis.geos import Point as dbPoint
 from django.core.management.base import CommandParser
+from django_admin_runner import register_command
 
 from server.apps.organizations.models import Organization
 from server.core import UpdateCreateStatus
@@ -138,6 +139,7 @@ def add_hutsources_function(
             )
 
 
+@register_command(group="Huts")
 class Command(CRUDCommand[HutSource]):
     # help = ""
     model = HutSource

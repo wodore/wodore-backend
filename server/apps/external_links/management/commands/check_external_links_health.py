@@ -2,10 +2,12 @@ from django.core.management.base import BaseCommand
 from django.db import models
 from django.utils import timezone
 from datetime import timedelta
+from django_admin_runner import register_command
 
 from server.apps.external_links.models import ExternalLink
 
 
+@register_command(group="External Links")
 class Command(BaseCommand):
     help = "Check health of external links"
 

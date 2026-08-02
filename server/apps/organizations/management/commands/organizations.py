@@ -1,10 +1,12 @@
 from pathlib import Path
 
 from server.core.management import CRUDCommand
+from django_admin_runner import register_command
 
 from ...models import Organization
 
 
+@register_command(group="Organizations")
 class Command(CRUDCommand):
     # help = ""
     use_media_args = True

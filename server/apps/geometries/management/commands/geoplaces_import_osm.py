@@ -22,6 +22,7 @@ import httpx
 import osmium
 from django.contrib.gis.geos import Point
 from django.core.management.base import BaseCommand, CommandParser
+from django_admin_runner import register_command
 from django.db import transaction
 from django.utils import timezone
 
@@ -180,6 +181,7 @@ class OSMHandler(osmium.SimpleHandler):
         }
 
 
+@register_command(group="Geometries")
 class Command(BaseCommand):
     help = "Import amenities from OpenStreetMap via Geofabrik"
 
