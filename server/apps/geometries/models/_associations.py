@@ -228,6 +228,7 @@ class GeoPlaceCategory(TimeStampedModel):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
+        db_index=True,
         related_name="classifications",
         help_text=_("Optional classifier for this association (e.g., seasonal status)"),
     )

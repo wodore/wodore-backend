@@ -43,7 +43,7 @@ from server.apps.huts.models import Hut
 from server.apps.organizations.models import Organization
 
 
-@register_command(group="Geometries")
+@register_command(group="Geometries", timeout=21600)
 class Command(BaseCommand):
     help = "Import GeoPlace data from external GeoNames"
     batch_size = 500  # Increased from 100 for better VPS performance

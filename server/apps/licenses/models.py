@@ -83,6 +83,12 @@ class License(TimeStampedModel):
         verbose_name = _("License")
         ordering = ("order", "name_i18n")
         indexes = (GinIndex(fields=["i18n"]),)
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(review_status__in=["new", "done", "rejected"]),
+                name="licenses_license_review_status_valid",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.name_i18n} - {self.fullname_i18n}"

@@ -16,6 +16,7 @@ from server.apps.owners.models import Owner
 from ..models import (
     Hut,
     HutContactAssociation,
+    HutImageAssociation,
     HutOrganizationAssociation,
 )
 
@@ -134,3 +135,17 @@ class HutOrganizationAssociationViewInline(unfold_admin.TabularInline):
 @admin.register(HutContactAssociation)
 class HutContactAssociationsAdmin(ModelAdmin):
     list_display = ("hut", "contact", "order")
+
+
+@admin.register(HutImageAssociation)
+class HutImageAssociationAdmin(ModelAdmin):
+    list_display = ("hut", "image", "order")
+    autocomplete_fields = ("hut", "image")
+
+
+@admin.register(HutOrganizationAssociation)
+class HutOrganizationAssociationAdmin(ModelAdmin):
+    list_display = ("hut", "organization", "source_id")
+    list_filter = ("organization",)
+    search_fields = ("hut__name", "hut__slug", "source_id")
+    autocomplete_fields = ("hut", "organization")

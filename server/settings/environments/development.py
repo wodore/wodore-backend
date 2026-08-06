@@ -184,7 +184,7 @@ NPLUSONE_WHITELIST = [
 
 # Set of badly named migrations to ignore:
 DTM_IGNORED_MIGRATIONS = frozenset(
-    (("axes", "*"), ("computedfields", "0003_auto_20200713_2212"))
+    (("axes", "*"), ("computedfields", "0003_auto_20200713_2212"), ("django_q", "*"))
 )
 
 
