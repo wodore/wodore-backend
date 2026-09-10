@@ -490,6 +490,7 @@ Q_CLUSTER = {
     "retry": 600,
     "timeout": 300,
     "poll": 2,
+    "max_attempts": 1,
 }
 
 # django-admin-runner backend

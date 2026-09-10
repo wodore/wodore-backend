@@ -771,9 +771,12 @@ class Command(BaseCommand):
         log_dir = Path(data_dir) if data_dir else Path(".")
         log_dir.mkdir(parents=True, exist_ok=True)
 
+        # Sanitize region: hierarchical regions (e.g. "europe/switzerland")
+        # would otherwise create unintended subdirectories
+        safe_region = region.replace("/", "_")
         error_log_path = (
             log_dir
-            / f"osm_import_errors_{region}_{run_start.strftime('%Y%m%d_%H%M%S')}.log"
+            / f"osm_import_errors_{safe_region}_{run_start.strftime('%Y%m%d_%H%M%S')}.log"
         )
 
         # Write header
@@ -2563,8 +2566,9 @@ class Command(BaseCommand):
         # Write errors to log file if any occurred
         error_count = getattr(self, "_pipeline_errors", 0)
         if hasattr(self, "_import_errors") and self._import_errors:
+            safe_region = region.replace("/", "_")
             error_log_path = Path(
-                f"osm_import_errors_{region}_{run_start.strftime('%Y%m%d_%H%M%S')}.log"
+                f"osm_import_errors_{safe_region}_{run_start.strftime('%Y%m%d_%H%M%S')}.log"
             )
             with open(error_log_path, "w") as f:
                 f.write(f"OSM Import Errors - {region} - {run_start}\n")
