@@ -36,9 +36,18 @@ released **v0.2.0** (tag on `origin/main` @ `d6c1888`, "Release 0.2.0 (#8)").
 
 ## Open items
 
-- **Infisical session expired**: `app` alias (`infisical run ...`) hangs/fails —
-  run `infisical login` to restore. Workaround used here: env vars from
-  `docker-compose.yml` (POSTGRES_* = wodore) or `.env.test`.
-- **Package warning** (upstream): `django_admin_runner.ScheduledCommand.source`
-  (X060) field-choices-constraint — needs a `CheckConstraint` in the package's
-  model Meta, not fixable from wodore-backend.
+- ~~**Infisical session expired**~~ — resolved (user logged in again).
+- ~~**Package warning** (upstream)~~ — fixed on branch
+  `fix/scheduledcommand-source-constraint` in django-admin-runner (commit
+  `eb38b22`, rebased onto `origin/main` @ `f7d8238`):
+  - `ScheduledCommand.source` CheckConstraint + migration 0011 (+ DB tests)
+  - Model state synced with frozen migrations (help_text / label default) —
+    removes spurious `AlterField`s from downstream `makemigrations` runs
+  - `test_migrations.py::_restore_latest` now migrates to leaf nodes instead
+    of hardcoded 0006 (latent ordering flake)
+  - `uv.lock` refreshed to 0.2.0
+  - Applied 0011 to the wodore dev DB; `manage.py check` fully clean
+    (restart `app runserver` to pick it up), `inv tests` 8/8 green.
+  - Branch not yet pushed / PR not opened.
+  - Note: origin/main gained #9 + #10 (release-notes workflow) during this
+    work — the stashed curated-changelog work appears to have landed as #10.

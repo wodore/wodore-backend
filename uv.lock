@@ -792,9 +792,13 @@ argon2 = [
 [[package]]
 name = "django-admin-runner"
 version = "0.2.0"
-source = { editable = "/home/tobias/git/burgdev/django-admin-runner" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "django" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c5/25/e580f0d86bc8dca26f76de1086a60fa37fc485b99d40b3fdee64e9376e5c/django_admin_runner-0.2.0.tar.gz", hash = "sha256:3dc541dd3b35f7484348e550a0b41035bab65b121cc3f92bd5837b0cc73dc95d", size = 251859, upload-time = "2026-09-20T20:36:37.955Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4f/0a/18ee41822cb171a69ca68c7aafa175acb77309ea1a99ab737769a51d0f96/django_admin_runner-0.2.0-py3-none-any.whl", hash = "sha256:a201ef80c1867356a0ef37cafe0b6bd740d59a169c7779c00e01590c39ebb38e", size = 282112, upload-time = "2026-09-20T20:36:36.441Z" },
 ]
 
 [package.optional-dependencies]
@@ -803,37 +807,6 @@ django-q2 = [
 ]
 unfold = [
     { name = "django-unfold" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "celery", marker = "extra == 'celery'", specifier = ">=5.3" },
-    { name = "django", specifier = ">=6.0" },
-    { name = "django-q2", marker = "extra == 'django-q2'", specifier = ">=1.5" },
-    { name = "django-unfold", marker = "extra == 'unfold'", specifier = ">=0.40" },
-    { name = "rich", marker = "extra == 'rich'", specifier = ">=13.0" },
-]
-provides-extras = ["celery", "django-q2", "unfold", "rich"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "bump2version", specifier = ">=1.0.1" },
-    { name = "git-cliff", specifier = ">=2.7.0" },
-    { name = "pre-commit", specifier = ">=4.0.1" },
-    { name = "pyright", specifier = ">=1.1.0" },
-    { name = "ruff", specifier = ">=0.8.2" },
-]
-docs = [
-    { name = "mkdocs-literate-nav", specifier = ">=0.6.1" },
-    { name = "mkdocs-open-in-new-tab", specifier = ">=1.0.8" },
-    { name = "mkdocs-section-index", specifier = ">=0.3.9" },
-    { name = "mkdocstrings", extras = ["python"], specifier = ">=0.22.0" },
-    { name = "zensical", specifier = ">=0.0.32" },
-]
-test = [
-    { name = "pytest", specifier = ">=8.3.4" },
-    { name = "pytest-cov", specifier = ">=4.1.0" },
-    { name = "pytest-django", specifier = ">=4.10.0" },
 ]
 
 [[package]]
@@ -4531,7 +4504,7 @@ requires-dist = [
     { name = "deepdiff", specifier = "==8.*" },
     { name = "dickens", specifier = "==2.*" },
     { name = "django", extras = ["argon2"], specifier = "==6.*" },
-    { name = "django-admin-runner", extras = ["django-q2", "unfold"], editable = "/home/tobias/git/burgdev/django-admin-runner" },
+    { name = "django-admin-runner", extras = ["django-q2", "unfold"] },
     { name = "django-axes", specifier = "==8.*" },
     { name = "django-cleanup", specifier = "==9.*" },
     { name = "django-colorfield", specifier = "==0.14.*" },
