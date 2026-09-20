@@ -791,8 +791,8 @@ argon2 = [
 
 [[package]]
 name = "django-admin-runner"
-version = "0.1.0"
-source = { editable = "../../burgdev/django-admin-runner" }
+version = "0.2.0"
+source = { editable = "/home/tobias/git/burgdev/django-admin-runner" }
 dependencies = [
     { name = "django" },
 ]
@@ -4531,7 +4531,7 @@ requires-dist = [
     { name = "deepdiff", specifier = "==8.*" },
     { name = "dickens", specifier = "==2.*" },
     { name = "django", extras = ["argon2"], specifier = "==6.*" },
-    { name = "django-admin-runner", extras = ["django-q2", "unfold"], editable = "../../burgdev/django-admin-runner" },
+    { name = "django-admin-runner", extras = ["django-q2", "unfold"], editable = "/home/tobias/git/burgdev/django-admin-runner" },
     { name = "django-axes", specifier = "==8.*" },
     { name = "django-cleanup", specifier = "==9.*" },
     { name = "django-colorfield", specifier = "==0.14.*" },
