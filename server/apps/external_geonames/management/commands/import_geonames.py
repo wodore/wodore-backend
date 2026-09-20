@@ -18,6 +18,7 @@ import tempfile
 import urllib.request
 import zipfile
 from datetime import datetime
+from django_admin_runner import register_command
 
 from django.contrib.gis.geos import Point
 from django.core.management.base import BaseCommand, CommandParser
@@ -27,6 +28,7 @@ from ...models import AlternativeName, GeoName
 from ._country_groups import expand_countries
 
 
+@register_command(group="External Geonames")
 class Command(BaseCommand):
     help = "Import GeoNames place data for specified countries"
 

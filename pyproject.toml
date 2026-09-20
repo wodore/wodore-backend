@@ -30,28 +30,30 @@ dependencies = [
   "django-cors-headers==4.*",  # https://pypi.org/project/django-cors-headers/
   "django-extensions==4.*",    # https://pypi.org/project/django-extensions/
   #"django-unfold==0.43.*",            # https://pypi.org/project/django-unfold/
-  "django-unfold==0.87.*",     # https://pypi.org/project/django-unfold/
-  "msgspec==0.20.*",           # https://pypi.org/project/msgspec/
-  "python-benedict==0.35.*",   # https://pypi.org/project/python-benedict/
-  "asyncify==0.12.*",          # https://pypi.org/project/asyncify/ # 0.12 needs python > 3.11
-  "geojson-pydantic==1.*",     # https://pypi.org/project/geojson-pydantic/
-  "deepdiff==8.*",             # https://pypi.org/project/deepdiff/
-  "django-countries==8.*",     # https://pypi.org/project/django-countries/
-  "unidecode==1.*",            # https://pypi.org/project/unidecode/
-  "django-jsonsuit==0.5.*",    # https://pypi.org/project/django-jsonsuit/
-  "jinja2==3.*",               # https://pypi.org/project/Jinja2/
-  "easydict==1.*",             # https://pypi.org/project/easydict/
-  "xmltodict>=0.13.0,<0.14.0", # https://pypi.org/project/xmltodict/
-  "dickens==2.*",              # https://pypi.org/project/dickens/
-  "psycopg==3.*",              # https://pypi.org/project/psycopg/
-  "mozilla-django-oidc==5.*",  # https://pypi.org/project/mozilla-django-oidc/
-  "authlib==1.*",              # https://pypi.org/project/authlib/
-  "load-dotenv==0.1.*",        # https://pypi.org/project/load-dotenv/
-  "django-cleanup==9.*",       # https://pypi.org/project/django-cleanup/
-  "rich==14.*",                # https://pypi.org/project/rich/
-  "tzdata>=2025.3",            # https://pypi.org/project/tzdata/
-  "click==8.*",                # https://pypi.org/project/click/
-  "pyyaml==6.*",               # https://pypi.org/project/PyYAML/
+  "django-unfold==0.87.*",                 # https://pypi.org/project/django-unfold/
+  "django-q2>=1.8.0",                      # https://pypi.org/project/django-q2/
+  "django-admin-runner[django-q2,unfold]", # https://github.com/burgdev/django-admin-runner
+  "msgspec==0.20.*",                       # https://pypi.org/project/msgspec/
+  "python-benedict==0.35.*",               # https://pypi.org/project/python-benedict/
+  "asyncify==0.12.*",                      # https://pypi.org/project/asyncify/ # 0.12 needs python > 3.11
+  "geojson-pydantic==1.*",                 # https://pypi.org/project/geojson-pydantic/
+  "deepdiff==8.*",                         # https://pypi.org/project/deepdiff/
+  "django-countries==8.*",                 # https://pypi.org/project/django-countries/
+  "unidecode==1.*",                        # https://pypi.org/project/unidecode/
+  "django-jsonsuit==0.5.*",                # https://pypi.org/project/django-jsonsuit/
+  "jinja2==3.*",                           # https://pypi.org/project/Jinja2/
+  "easydict==1.*",                         # https://pypi.org/project/easydict/
+  "xmltodict>=0.13.0,<0.14.0",             # https://pypi.org/project/xmltodict/
+  "dickens==2.*",                          # https://pypi.org/project/dickens/
+  "psycopg==3.*",                          # https://pypi.org/project/psycopg/
+  "mozilla-django-oidc==5.*",              # https://pypi.org/project/mozilla-django-oidc/
+  "authlib==1.*",                          # https://pypi.org/project/authlib/
+  "load-dotenv==0.1.*",                    # https://pypi.org/project/load-dotenv/
+  "django-cleanup==9.*",                   # https://pypi.org/project/django-cleanup/
+  "rich==14.*",                            # https://pypi.org/project/rich/
+  "tzdata>=2025.3",                        # https://pypi.org/project/tzdata/
+  "click==8.*",                            # https://pypi.org/project/click/
+  "pyyaml==6.*",                           # https://pypi.org/project/PyYAML/
   #"hut-services==0.*", # https://github.com/wodore/hut-services
   "hut-services",                 # Local development version, see tool.uv.sources!
   "django-computedfields>=0.3.0", # https://pypi.org/project/django-computedfields/
@@ -80,53 +82,53 @@ svg-to-mono = "scripts.svg_to_mono:svg_to_mono"
 
 [dependency-groups]
 dev = [
-  "django-debug-toolbar==4.*", # https://pypi.org/project/django-debug-toolbar/
-  "django-querycount==0.8.*", # https://pypi.org/project/django-querycount/
-  "django-migration-linter==5.*", # https://pypi.org/project/django-migration-linter/
-  "django-extra-checks==0.*", # https://pypi.org/project/django-extra-checks/
-  "django-stubs-ext==5.*", # https://pypi.org/project/django-stubs-ext/
-  "django-stubs==5.*", # https://pypi.org/project/django-stubs/
-  "nplusone==1.*", # https://pypi.org/project/nplusone/
+  "django-debug-toolbar==4.*",     # https://pypi.org/project/django-debug-toolbar/
+  "django-querycount==0.8.*",      # https://pypi.org/project/django-querycount/
+  "django-migration-linter==5.*",  # https://pypi.org/project/django-migration-linter/
+  "django-extra-checks==0.*",      # https://pypi.org/project/django-extra-checks/
+  "django-stubs-ext==5.*",         # https://pypi.org/project/django-stubs-ext/
+  "django-stubs==5.*",             # https://pypi.org/project/django-stubs/
+  "nplusone==1.*",                 # https://pypi.org/project/nplusone/
   "wemake-python-styleguide==1.*", # https://pypi.org/project/wemake-python-styleguide/
-  "flake8-pytest-style==2.*", # https://pypi.org/project/flake8-pytest-style/
-  "flake8-django==1.*", # https://pypi.org/project/flake8-django/
+  "flake8-pytest-style==2.*",      # https://pypi.org/project/flake8-pytest-style/
+  "flake8-django==1.*",            # https://pypi.org/project/flake8-django/
   "flake8-logging-format==2024.*", # https://pypi.org/project/flake8-logging-format/
-  "nitpick==0.35.*", # https://pypi.org/project/nitpick/
-  "doc8==1.*", # https://pypi.org/project/doc8/
-  "pytest==8.*", # https://pypi.org/project/pytest/
-  "pytest-django==4.*", # 3 https://pypi.org/project/pytest-django/
-  "pytest-cov==6.*", # https://pypi.org/project/pytest-cov/
-  "django-coverage-plugin==3.*", # https://pypi.org/project/django-coverage-plugin/
-  "pytest-randomly==3.*", # https://pypi.org/project/pytest-randomly/
-  "pytest-timeout==2.*", # https://pypi.org/project/pytest-timeout/
-  "django-test-migrations==1.*", # https://pypi.org/project/django-test-migrations/
-  "hypothesis==6.*", # https://pypi.org/project/hypothesis/
-  "mypy==1.*", # https://pypi.org/project/mypy/
-  "types-requests==2.*", # https://pypi.org/project/types-requests/
-  "typing-extensions==4.*", # https://pypi.org/project/typing-extensions/
+  "nitpick==0.35.*",               # https://pypi.org/project/nitpick/
+  "doc8==1.*",                     # https://pypi.org/project/doc8/
+  "pytest==8.*",                   # https://pypi.org/project/pytest/
+  "pytest-django==4.*",            # 3 https://pypi.org/project/pytest-django/
+  "pytest-cov==6.*",               # https://pypi.org/project/pytest-cov/
+  "django-coverage-plugin==3.*",   # https://pypi.org/project/django-coverage-plugin/
+  "pytest-randomly==3.*",          # https://pypi.org/project/pytest-randomly/
+  "pytest-timeout==2.*",           # https://pypi.org/project/pytest-timeout/
+  "django-test-migrations==1.*",   # https://pypi.org/project/django-test-migrations/
+  "hypothesis==6.*",               # https://pypi.org/project/hypothesis/
+  "mypy==1.*",                     # https://pypi.org/project/mypy/
+  "types-requests==2.*",           # https://pypi.org/project/types-requests/
+  "typing-extensions==4.*",        # https://pypi.org/project/typing-extensions/
   "black>=24.10",
   "ruff>=0.8.6",
-  "yamllint==1.*", # https://pypi.org/project/yamllint/
-  "safety==3.*", # https://pypi.org/project/safety/
-  "dotenv-linter==0.5.*", # https://pypi.org/project/dotenv-linter/
-  "polint==0.4.*", # https://pypi.org/project/polint/
-  "dennis==1.*", # https://pypi.org/project/dennis/
-  "dump-env==1.*", # https://pypi.org/project/dump-env/
+  "yamllint==1.*",                 # https://pypi.org/project/yamllint/
+  "safety==3.*",                   # https://pypi.org/project/safety/
+  "dotenv-linter==0.5.*",          # https://pypi.org/project/dotenv-linter/
+  "polint==0.4.*",                 # https://pypi.org/project/polint/
+  "dennis==1.*",                   # https://pypi.org/project/dennis/
+  "dump-env==1.*",                 # https://pypi.org/project/dump-env/
   #"ipython==8.*", # https://pypi.org/project/ipython/
-  "icecream==2.*", # https://pypi.org/project/icecream/
-  "faker==33.*", # https://pypi.org/project/faker/
-  "factory_boy==3.*", # https://pypi.org/project/factory_boy/
-  "pyparsing==3.*", # https://pypi.org/project/pyparsing/
-  "pydot==3.*", # https://pypi.org/project/pydot/
-  "werkzeug==3.*", # https://pypi.org/project/werkzeug/
-  "locust==2.*", # https://pypi.org/project/locust/
-  "invoke==2.*", # https://pypi.org/project/invoke/
-  "environs>=13.0.0", # https://pypi.org/project/environs/
-  "humanize==4.*", # https://pypi.org/project/humanize/
-  "python-on-whales==0.*", # https://pypi.org/project/python-on-whales/
-  "git-cliff==2.*", # https://pypi.org/project/git-cliff/
-  "pre-commit==4.*", # https://pypi.org/project/pre-commit/
-  "bump2version>=1.0.1", # https://pypi.org/project/bump2version/
+  "icecream==2.*",                 # https://pypi.org/project/icecream/
+  "faker==33.*",                   # https://pypi.org/project/faker/
+  "factory_boy==3.*",              # https://pypi.org/project/factory_boy/
+  "pyparsing==3.*",                # https://pypi.org/project/pyparsing/
+  "pydot==3.*",                    # https://pypi.org/project/pydot/
+  "werkzeug==3.*",                 # https://pypi.org/project/werkzeug/
+  "locust==2.*",                   # https://pypi.org/project/locust/
+  "invoke==2.*",                   # https://pypi.org/project/invoke/
+  "environs>=13.0.0",              # https://pypi.org/project/environs/
+  "humanize==4.*",                 # https://pypi.org/project/humanize/
+  "python-on-whales==0.*",         # https://pypi.org/project/python-on-whales/
+  "git-cliff==2.*",                # https://pypi.org/project/git-cliff/
+  "pre-commit==4.*",               # https://pypi.org/project/pre-commit/
+  "bump2version>=1.0.1",           # https://pypi.org/project/bump2version/
   "mkdocs-autoapi>=0.3.2",
   "mkdocs-click>=0.8.1",
   "mkdocs-gen-files>=0.5.0",
@@ -148,6 +150,7 @@ hut-services-private = { git = "ssh://git@github.com/wodore/hut-services-private
 # hut-services-private = { path = "/home/tobias/git/wodore/hut-services-private", editable = true }
 hut-services = { git = "ssh://git@github.com/wodore/hut-services", branch = "main" }
 # hut-services = { path = "/home/tobias/git/wodore/hut-services", editable = true } # local DEV
+# django-admin-runner = { path = "/home/tobias/git/burgdev/django-admin-runner", editable = true }
 
 [tool.pytest.ini_options]
 minversion = "7.0"

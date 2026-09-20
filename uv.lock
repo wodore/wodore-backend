@@ -790,6 +790,26 @@ argon2 = [
 ]
 
 [[package]]
+name = "django-admin-runner"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c5/25/e580f0d86bc8dca26f76de1086a60fa37fc485b99d40b3fdee64e9376e5c/django_admin_runner-0.2.0.tar.gz", hash = "sha256:3dc541dd3b35f7484348e550a0b41035bab65b121cc3f92bd5837b0cc73dc95d", size = 251859, upload-time = "2026-09-20T20:36:37.955Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4f/0a/18ee41822cb171a69ca68c7aafa175acb77309ea1a99ab737769a51d0f96/django_admin_runner-0.2.0-py3-none-any.whl", hash = "sha256:a201ef80c1867356a0ef37cafe0b6bd740d59a169c7779c00e01590c39ebb38e", size = 282112, upload-time = "2026-09-20T20:36:36.441Z" },
+]
+
+[package.optional-dependencies]
+django-q2 = [
+    { name = "django-q2" },
+]
+unfold = [
+    { name = "django-unfold" },
+]
+
+[[package]]
 name = "django-axes"
 version = "8.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1067,12 +1087,37 @@ wheels = [
 ]
 
 [[package]]
+name = "django-picklefield"
+version = "3.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/93/03/13114bccbd1ec8c026ac1ff33dae75ae6c6a5632e4769ee9cda283b9f57e/django_picklefield-3.4.0.tar.gz", hash = "sha256:3a1f740536c0e60d0dba43aa89ccdbe86760d4c3f8ec47799eae122baa741d0a", size = 12555, upload-time = "2025-11-27T03:11:53.13Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/79/b7/139eb1419ca7b27fd714925b8d0eed6efb592479dcf2155fed6c0c87c956/django_picklefield-3.4.0-py3-none-any.whl", hash = "sha256:929bcfbae5b48bd22a52bc04521fdfdd152eee36abb9f20228f9480f9df65f45", size = 10031, upload-time = "2025-11-27T03:11:51.937Z" },
+]
+
+[[package]]
 name = "django-postgres-extra"
 version = "2.0.9rc4"
 source = { git = "https://github.com/armonge/django-postgres-extra.git?branch=feat%2Fdjango-6#4144576d128ac721da53638da75567530d5c93c7" }
 dependencies = [
     { name = "django" },
     { name = "python-dateutil" },
+]
+
+[[package]]
+name = "django-q2"
+version = "1.9.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+    { name = "django-picklefield" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/fc/e6/21375bed54a4be1339f6ee31e4173d361d457dbe91db7bff130b52566126/django_q2-1.9.0.tar.gz", hash = "sha256:ef7facca96fae9c11ddf2c5252d3817975c7a9a6d989fa0d65487d8823d57799", size = 77218, upload-time = "2025-12-04T22:11:29.336Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3e/b7/8282f9815fc9df3187d9303a6f54e0388e02742255dee1fed7b4019a03ae/django_q2-1.9.0-py3-none-any.whl", hash = "sha256:4eded27644b0ffb291839c9f9c12fea6c0dec63ebd891fa6881b0b446098a49d", size = 89615, upload-time = "2025-12-04T22:11:28.079Z" },
 ]
 
 [[package]]
@@ -4331,6 +4376,7 @@ dependencies = [
     { name = "deepdiff" },
     { name = "dickens" },
     { name = "django", extra = ["argon2"] },
+    { name = "django-admin-runner", extra = ["django-q2", "unfold"] },
     { name = "django-axes" },
     { name = "django-cleanup" },
     { name = "django-colorfield" },
@@ -4350,6 +4396,7 @@ dependencies = [
     { name = "django-permissions-policy" },
     { name = "django-pgtrigger" },
     { name = "django-postgres-extra" },
+    { name = "django-q2" },
     { name = "django-split-settings" },
     { name = "django-storages", extra = ["s3"] },
     { name = "django-unfold" },
@@ -4457,6 +4504,7 @@ requires-dist = [
     { name = "deepdiff", specifier = "==8.*" },
     { name = "dickens", specifier = "==2.*" },
     { name = "django", extras = ["argon2"], specifier = "==6.*" },
+    { name = "django-admin-runner", extras = ["django-q2", "unfold"] },
     { name = "django-axes", specifier = "==8.*" },
     { name = "django-cleanup", specifier = "==9.*" },
     { name = "django-colorfield", specifier = "==0.14.*" },
@@ -4476,6 +4524,7 @@ requires-dist = [
     { name = "django-permissions-policy", specifier = "==4.*" },
     { name = "django-pgtrigger", specifier = ">=4.17.0" },
     { name = "django-postgres-extra", git = "https://github.com/armonge/django-postgres-extra.git?branch=feat%2Fdjango-6" },
+    { name = "django-q2", specifier = ">=1.8.0" },
     { name = "django-split-settings", specifier = "==1.*" },
     { name = "django-storages", extras = ["s3"], specifier = ">=1.14.6" },
     { name = "django-unfold", specifier = "==0.87.*" },

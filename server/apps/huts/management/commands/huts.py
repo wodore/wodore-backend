@@ -11,6 +11,7 @@ from django.db import IntegrityError
 from server.apps.organizations.models import Organization
 from server.core import UpdateCreateStatus
 from server.core.management import CRUDCommand
+from django_admin_runner import register_command
 
 from ...models import Hut, HutSource
 
@@ -146,6 +147,7 @@ def add_huts_function(
     #    parser.stdout.write(parser.style.WARNING(f"Selected organization '{selected_organization}' not supported."))
 
 
+@register_command(group="Huts")
 class Command(CRUDCommand):
     # help = ""
     model = Hut

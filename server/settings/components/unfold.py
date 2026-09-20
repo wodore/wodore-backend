@@ -299,6 +299,60 @@ UNFOLD = {
                     },
                 ],
             },
+            {
+                "title": _("Command Runner"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Commands"),
+                        "icon": "terminal",
+                        "link": reverse_lazy(
+                            "admin:django_admin_runner_registeredcommand_changelist"
+                        ),
+                        "permission": lambda request: request.user.is_superuser,
+                    },
+                    {
+                        "title": _("Results"),
+                        "icon": "history",
+                        "link": reverse_lazy(
+                            "admin:django_admin_runner_commandexecution_changelist"
+                        ),
+                        "permission": lambda request: request.user.is_superuser,
+                    },
+                ],
+            },
+            {
+                "title": _("Scheduled Tasks"),
+                "separator": False,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Schedules"),
+                        "icon": "schedule",
+                        "link": reverse_lazy("admin:django_q_schedule_changelist"),
+                        "permission": lambda request: request.user.is_superuser,
+                    },
+                    {
+                        "title": _("Successful tasks"),
+                        "icon": "check_circle",
+                        "link": reverse_lazy("admin:django_q_success_changelist"),
+                        "permission": lambda request: request.user.is_superuser,
+                    },
+                    {
+                        "title": _("Failed tasks"),
+                        "icon": "error",
+                        "link": reverse_lazy("admin:django_q_failure_changelist"),
+                        "permission": lambda request: request.user.is_superuser,
+                    },
+                    {
+                        "title": _("Queued tasks"),
+                        "icon": "list_alt",
+                        "link": reverse_lazy("admin:django_q_ormq_changelist"),
+                        "permission": lambda request: request.user.is_superuser,
+                    },
+                ],
+            },
         ],
     },
     "TABS": [

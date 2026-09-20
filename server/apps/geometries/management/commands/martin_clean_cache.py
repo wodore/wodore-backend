@@ -1,7 +1,9 @@
 from django.core.management.base import BaseCommand
 from django.db import connection
+from django_admin_runner import register_command
 
 
+@register_command(group="Geometries")
 class Command(BaseCommand):
     help = "Clean up Martin tile cache entries from the database"
 

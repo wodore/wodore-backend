@@ -14,10 +14,12 @@ from io import StringIO
 
 from django.core.management.base import BaseCommand, CommandParser
 from django.db import transaction
+from django_admin_runner import register_command
 
 from ...models import Feature
 
 
+@register_command(group="External Geonames")
 class Command(BaseCommand):
     help = "Import GeoNames feature codes (add new only, never delete)"
 

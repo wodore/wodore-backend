@@ -2,11 +2,13 @@ from pathlib import Path
 
 from django.core.files import File
 from django.core.management.base import BaseCommand
+from django_admin_runner import register_command
 
 from server.apps.licenses.models import License
 from server.apps.symbols.models import Symbol
 
 
+@register_command(group="Categories")
 class Command(BaseCommand):
     help = "Sync category symbols from optimized assets directory to database. Reads from assets/ and creates/updates Symbol records."
 

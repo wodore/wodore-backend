@@ -1,6 +1,8 @@
 from server.core.management import CRUDCommand
+from django_admin_runner import register_command
 
 
+@register_command(group="Huts")
 class Command(CRUDCommand):
     """
     DEPRECATED: HutType is no longer a model.

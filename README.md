@@ -229,6 +229,14 @@ Start the application using the app alias (recommended):
 (.venv) app run -p 8000 # -i # with infisical
 ```
 
+### Task Runner (django-q2)
+
+To process background tasks (scheduled commands, async execution), start the qcluster worker in a separate terminal:
+
+```bash
+(.venv) app qcluster
+```
+
 Or use invoke with infisical:
 
 ```bash

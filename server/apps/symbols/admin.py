@@ -16,7 +16,7 @@ from unfold.decorators import display
 from server.apps.manager.admin import ModelAdmin
 
 from .forms import SymbolAdminFieldsets
-from .models import Symbol
+from .models import Symbol, SymbolGroup
 
 
 @admin.register(Symbol)
@@ -141,3 +141,8 @@ class SymbolAdmin(ModelAdmin):
 # class SymbolTagAdmin(ModelAdmin):
 #     """Admin panel for SymbolTag model."""
 #     pass
+
+
+@admin.register(SymbolGroup)
+class SymbolGroupAdmin(SymbolAdmin):
+    """Admin for the SymbolGroup proxy model (symbols grouped by slug)."""

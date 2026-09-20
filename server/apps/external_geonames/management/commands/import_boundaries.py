@@ -18,12 +18,14 @@ import urllib.request
 
 from django.contrib.gis.geos import GEOSGeometry, MultiPolygon
 from django.core.management.base import BaseCommand, CommandParser
+from django_admin_runner import register_command
 from django.db import transaction
 
 from ...models import Boundary, GeoName
 from ._country_groups import expand_countries
 
 
+@register_command(group="External Geonames")
 class Command(BaseCommand):
     help = "Import GeoNames administrative boundaries from GeoJSON"
 

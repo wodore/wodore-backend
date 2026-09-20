@@ -1,5 +1,6 @@
 from ._associations import (
     HutContactAssociation,
+    HutImageAssociation,
     HutOrganizationAssociation,
 )
 

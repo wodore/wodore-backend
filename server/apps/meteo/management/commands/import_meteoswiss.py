@@ -6,6 +6,7 @@ import httpx
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand
+from django_admin_runner import register_command
 
 from server.apps.licenses.models import License
 from server.apps.symbols.models import Symbol
@@ -18,6 +19,7 @@ from server.apps.meteo.models import (
 )
 
 
+@register_command(group="Meteo")
 class Command(BaseCommand):
     help = "Import MeteoSwiss weather icons and codes from JSON mapping"
 
