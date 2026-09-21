@@ -4,7 +4,7 @@ from ...models import ContactFunction
 
 
 class Command(CRUDCommand):
-    # help = ""
+    help = "Manage contact function entries (add/update from fixture, dump)."
     model = ContactFunction
     model_names = "contactfunctions"
 

@@ -27,7 +27,7 @@ def add_hut_source_db(  # type: ignore[no-any-unimported]
         org = Organization.get_by_slug(slug=organization)
     except Organization.DoesNotExist:
         click.secho(
-            f"Organiztion '{organization}' does not exist, add it first.", fg="red"
+            f"Organization '{organization}' does not exist, add it first.", fg="red"
         )
         sys.exit(1)
     init = HutSource.objects.filter(organization=org).count() == 0
@@ -159,12 +159,19 @@ class Command(CRUDCommand[HutSource]):
             "-O",
             "--orgs",
             "--organizations",
-            help=f"Organization slug, only add this one, use 'all' to add all (possible values: {', '.join(settings.SERVICES.keys())}).",
+            help=(
+                "Hut source organizations: single slug, comma separated list, "
+                f"or 'all' (possible values: {', '.join(settings.SERVICES.keys())})."
+            ),
             type=str,
             required=True,
         )
         parser.add_argument(
-            "--lang", help="Language to use (de, en, fr, it)", default="de", type=str
+            "--lang",
+            help="Language to use",
+            default="de",
+            choices=["de", "en", "fr", "it"],
+            type=str,
         )
         parser.add_argument(
             "-m",
@@ -180,11 +187,19 @@ class Command(CRUDCommand[HutSource]):
     def handle(
         self, orgs: str, lang: str, with_minisite: bool, *args: Any, **options: Any
     ) -> None:  # type: ignore[override]
-        org_list = (
-            settings.SERVICES.keys()
-            if orgs.lower().strip() == "all"
-            else [o.strip() for o in orgs.split(",")]
-        )
+        if orgs.lower().strip() == "all":
+            org_list = list(settings.SERVICES.keys())
+        else:
+            org_list = [o.strip() for o in orgs.split(",")]
+            unknown = [o for o in org_list if o not in settings.SERVICES]
+            if unknown:
+                self.stdout.write(
+                    self.style.ERROR(
+                        f"Unknown organization(s): {', '.join(unknown)}. "
+                        f"Possible values: {', '.join(settings.SERVICES.keys())}"
+                    )
+                )
+                sys.exit(1)
         super().handle(
             kwargs_add={
                 "selected_organizations": org_list,

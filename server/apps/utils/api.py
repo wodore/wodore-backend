@@ -56,26 +56,26 @@ router = Router()
 
 
 class VersionSchema(Schema):
-    hash: str = Field(
+    hash: str = Field(  # pyright: ignore[reportCallIssue]  # Django Ninja Annotated idiom
         ...,
         description="Git commit short hash",
         json_schema_extra={"example": "abc123e"},
     )
-    hash_long: str = Field(
+    hash_long: str = Field(  # pyright: ignore[reportCallIssue]  # Django Ninja Annotated idiom
         ...,
         description="Git commit full hash",
         json_schema_extra={"example": "abc123ef4567890abcdef1234567890abcdef12"},
     )
-    version: str = Field(
+    version: str = Field(  # pyright: ignore[reportCallIssue]  # Django Ninja Annotated idiom
         ...,
         description="Sematic version",
         json_schema_extra={"example": "1.2.0"},
     )
-    timestamp: datetime = Field(
+    timestamp: datetime = Field(  # pyright: ignore[reportCallIssue]  # Django Ninja Annotated idiom
         ...,
         description="Build timestamp",
     )
-    environment: str = Field(
+    environment: str = Field(  # pyright: ignore[reportCallIssue]  # Django Ninja Annotated idiom
         ...,
         description="Current environment (development, production)",
         json_schema_extra={"example": "production"},
@@ -96,15 +96,15 @@ def get_version(request):
 
 # @abc
 class FieldsSchema(Schema):
-    include: str | None = Query(
+    include: str | None = Query(  # pyright: ignore[reportCallIssue]  # Django Ninja Annotated idiom
         None, description="Comma separated list, allowed value:"
     )  # {', '.join(fields)}")
-    exclude: str | None = Query(
+    exclude: str | None = Query(  # pyright: ignore[reportCallIssue]  # Django Ninja Annotated idiom
         None, description="Comma separated list, only used if 'include' is not set."
     )
     # ",".join(exclude_default), description="Comma separated list, only used if 'include' is not set."
     # )
-    allowed_fields: List = Field(None, json_schema_extra={"include_in_schema": False})
+    allowed_fields: List = Field(None, json_schema_extra={"include_in_schema": False})  # pyright: ignore[reportCallIssue]  # Django Ninja Annotated idiom
     _model = None
 
     def set_allowed_fields(self, fields: List):
@@ -145,15 +145,15 @@ def fields_query(Model) -> FieldsSchema:  # fields:List, exclude_default=[]):
     """Returns a query which can be used to include and exclude fields"""
 
     class Fields(FieldsSchema):
-        include: str | None = Query(
+        include: str | None = Query(  # pyright: ignore[reportCallIssue]  # Django Ninja Annotated idiom
             None,
             description=f"Comma separated list, allowed value: {', '.join(fields)}",
         )
-        exclude: str | None = Query(
+        exclude: str | None = Query(  # pyright: ignore[reportCallIssue]  # Django Ninja Annotated idiom
             ",".join(exclude_default),
             description="Comma separated list, only used if 'include' is not set.",
         )
-        allowed_fields: List = Field(
+        allowed_fields: List = Field(  # pyright: ignore[reportCallIssue]  # Django Ninja Annotated idiom
             fields, json_schema_extra={"include_in_schema": False}
         )
         _model = Model

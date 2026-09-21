@@ -11,7 +11,7 @@ from django.core.management.base import BaseCommand, CommandParser
 
 
 class Command(BaseCommand):
-    help = "Get acces token for user ..."
+    help = "Get an access token for a user (for API testing)"
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)

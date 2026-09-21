@@ -5,6 +5,7 @@ import typing as t
 
 import click
 
+from django.conf import settings
 from django.core.management import call_command
 from django.db import IntegrityError
 
@@ -19,7 +20,7 @@ from ...models import Hut, HutSource
 def init_huts_db(
     hut_sources: list[HutSource],
     review: bool = False,
-    force_overwrite: bool = False,  # overwrite exisitng entries
+    force_overwrite: bool = False,  # overwrite existing entries
     force_overwrite_include: t.Sequence[
         str
     ] = [],  # set a list which field which should be overwritten
@@ -172,7 +173,8 @@ class Command(CRUDCommand):
             "-O",
             "--org",
             "--organization",
-            help="Organization slug, only add this one, otherwise all",
+            help="Hut source organization, only add this one, otherwise all",
+            choices=list(settings.SERVICES),
             type=str,
         )
         parser.add_argument(
@@ -187,7 +189,7 @@ class Command(CRUDCommand):
         parser.add_argument(
             "-x",
             "--exclude",
-            help=f"a comma separated list with fields not to overwrite. This sets '--overwrite' automatically and does not work togehter with '--include'. Possible values: \"{','.join(Hut.UPDATE_SCHEMA_FIELDS)}\"",
+            help=f"a comma separated list with fields not to overwrite. This sets '--overwrite' automatically and does not work together with '--include'. Possible values: \"{','.join(Hut.UPDATE_SCHEMA_FIELDS)}\"",
             default="",
         )
         parser.add_argument(
