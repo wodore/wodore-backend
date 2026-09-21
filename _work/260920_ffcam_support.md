@@ -182,6 +182,29 @@ type re-sync is possible via `huts --add --org ffcam -w -n hut_type`.
 Also: availability admin None handling (occupancy "?" bar, `–` for unknown
 free/total) after a TypeError on the hut change page.
 
+### Hut-type scoping & admin performance (2026-09-22)
+
+The hut change page took ~16 s: the `hut_type_open`/`hut_type_closed` selects
+rendered ALL ~9.1k categories (8.9k OSM brand entries from the geoplaces
+import, symbol-joined → 54.6k Symbol objects per request), plus 679-option
+organization selects (brand orgs). Fixes:
+
+- `Hut.hut_type_open`/`hut_type_closed`, `HutAvailability.hut_type`,
+  `HutAvailabilityHistory.hut_type`: `limit_choices_to=
+  Q(parent__slug=settings.HUTS_CATEGORY_PARENT)` — scopes EVERYTHING
+  (forms, autocomplete search, filters) to the accommodation subtree
+  (migrations `huts.0059`, `availability.0011`, no SQL change)
+- `HutsAdmin`: `autocomplete_fields` for `hut_type_open`/`hut_type_closed`;
+  `formfield_for_dbfield` limits `availability_source_ref` to booking-service
+  orgs; `HutTypeHelper.get_queryset()` added
+- organization FKs on org-association/source inlines → `autocomplete_fields`
+- availability `hut_type` list filters → `RelatedOnlyFieldListFilter`
+  (only types in use); inline querysets `select_related` (hut/hut_type/source)
+- removed stray `print()` in `hut_images`; `redirect(HTTP_REFERER or "/")`
+
+Result: hut change page 16.2 s → ~1.2 s, 1.77 MB → 0.5 MB, autocomplete
+verified scoped (`parents == {'accommodation'}`).
+
 ## Dev env notes
 
 - `infisical run` can hang when its API is unreachable; the CLI backup

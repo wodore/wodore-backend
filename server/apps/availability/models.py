@@ -1,4 +1,7 @@
+from django.conf import settings
 from django.db import models
+from hut_services.core.schema import OccupancyStatusEnum, ReservationStatusEnum
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -145,11 +148,13 @@ class HutAvailability(TimeStampedModel):
     )
     occupancy_status = models.CharField(
         max_length=20,
+        choices=[(e.value, e.value) for e in OccupancyStatusEnum],
         verbose_name=_("Occupancy Status"),
         help_text=_("Status: empty, low, medium, high, full, free_unknown, unknown"),
     )
     reservation_status = models.CharField(
         max_length=20,
+        choices=[(e.value, e.value) for e in ReservationStatusEnum],
         verbose_name=_("Reservation Status"),
         help_text=_("Status: unknown, possible, not_possible, not_online"),
     )
@@ -169,6 +174,7 @@ class HutAvailability(TimeStampedModel):
         related_name="availabilities",
         verbose_name=_("Hut Type"),
         help_text=_("Hut type on this date (open/closed)"),
+        limit_choices_to=Q(parent__slug=settings.HUTS_CATEGORY_PARENT),
     )
 
     # Metadata - timestamps
@@ -355,11 +361,13 @@ class HutAvailabilityHistory(TimeStampedModel):
     )
     occupancy_status = models.CharField(
         max_length=20,
+        choices=[(e.value, e.value) for e in OccupancyStatusEnum],
         verbose_name=_("Occupancy Status"),
         help_text=_("Status: empty, low, medium, high, full, free_unknown, unknown"),
     )
     reservation_status = models.CharField(
         max_length=20,
+        choices=[(e.value, e.value) for e in ReservationStatusEnum],
         verbose_name=_("Reservation Status"),
         help_text=_("Status: unknown, possible, not_possible, not_online"),
     )
@@ -373,6 +381,7 @@ class HutAvailabilityHistory(TimeStampedModel):
         related_name="availability_history",
         verbose_name=_("Hut Type"),
         help_text=_("Hut type on this date (open/closed)"),
+        limit_choices_to=Q(parent__slug=settings.HUTS_CATEGORY_PARENT),
     )
 
     # Timestamp tracking for state duration

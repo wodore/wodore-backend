@@ -1,3 +1,5 @@
+# NOTE: description=_(...) is the project-wide lazy-gettext idiom (i18n-safe);  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+# per-line pyright ignores below suppress the unfold-stub str-typing mismatch.
 import contextlib
 from typing import ClassVar
 
@@ -17,16 +19,18 @@ from django.utils.translation import gettext_lazy as _
 
 from unfold.contrib.filters.admin import (
     AutocompleteSelectMultipleFilter,
+    BooleanRadioFilter,
     ChoicesCheckboxFilter,
 )
 from unfold.decorators import action, display
 
 from server.apps.images.transfomer import ImagorImage
-from server.apps.manager.admin import ModelAdmin
+from server.apps.manager.admin import ModelAdmin, RelatedOnlyCheckboxFilter
+from server.apps.organizations.models import Organization
 from server.apps.translations.forms import required_i18n_fields_form_factory
 
 from ..forms import HutAdminFieldsets
-from ..models import Hut
+from ..models import Hut, HutTypeHelper
 from ..widgets import OpenMonthlyWidget
 from ._associations import (
     HutContactAssociationEditInline,
@@ -70,9 +74,9 @@ class HutsAdmin(ModelAdmin):
     )
     list_display_links = ("symbol_img", "hut_thumb", "title")
     list_filter = (
-        "is_active",
-        "is_public",
-        "is_modified",
+        ("is_active", BooleanRadioFilter),
+        ("is_public", BooleanRadioFilter),
+        ("is_modified", BooleanRadioFilter),
         (
             "review_status",
             ChoicesCheckboxFilter,
@@ -87,11 +91,11 @@ class HutsAdmin(ModelAdmin):
         ),  # Filter by hut type closed with autocomplete
         (
             "org_set",
-            AutocompleteSelectMultipleFilter,
-        ),  # Filter by sources (organizations) with autocomplete
+            RelatedOnlyCheckboxFilter,
+        ),  # Filter by sources (checkboxes, only orgs linked to huts)
     )
     fieldsets = HutAdminFieldsets
-    autocomplete_fields = ("hut_owner",)
+    autocomplete_fields = ("hut_owner", "hut_type_open", "hut_type_closed")
     readonly_fields = (
         "name_i18n",
         "description_i18n",
@@ -116,9 +120,26 @@ class HutsAdmin(ModelAdmin):
         return inlines
 
     def formfield_for_dbfield(self, db_field, request, **kwargs):
-        """Only apply the custom widget to the `open_monthly` field, not all JSONFields."""
+        """Customize FK querysets and the `open_monthly` widget.
+
+        The plain Category/Organization querysets contain thousands of OSM
+        brand entries — rendering them as selects slows the change page down
+        for seconds (9k+ options with symbol joins)."""
         if db_field.name == "open_monthly":
             kwargs["widget"] = OpenMonthlyWidget()
+        elif db_field.name in ("hut_type_open", "hut_type_closed"):
+            # hut types only (accommodation subtree), not all categories
+            kwargs["queryset"] = HutTypeHelper.get_queryset()
+        elif db_field.name == "availability_source_ref":
+            # only organizations whose service provides booking data
+            booking = [
+                slug
+                for slug, service in settings.SERVICES.items()
+                if service.support_booking
+            ]
+            kwargs["queryset"] = Organization.objects.filter(
+                slug__in=booking, is_active=True
+            )
         return super().formfield_for_dbfield(db_field, request, **kwargs)
 
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
@@ -137,7 +158,7 @@ class HutsAdmin(ModelAdmin):
         )
 
     @display(
-        description=_("Status"),
+        description=_("Status"),  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
         ordering="status",
         label={
             Hut.ReviewStatusChoices.review: "info",
@@ -157,7 +178,7 @@ class HutsAdmin(ModelAdmin):
         #    owner = "-"
         return (obj.name_i18n, obj.slug)  # self.icon_thumb(obj.type.icon_simple.url))
 
-    @display(header=True, description=_("Type"))
+    @display(header=True, description=_("Type"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def hut_type(self, obj):
         opened = mark_safe(f'<span class = "text-xs">{obj.hut_type_open.slug}</span>')
         closed = mark_safe(
@@ -165,7 +186,7 @@ class HutsAdmin(ModelAdmin):
         )
         return (opened, closed)
 
-    @display(header=True, description=_("Location"))
+    @display(header=True, description=_("Location"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def location_coords(self, obj):
         return (
             f"{obj.location.y:.3f}/{obj.location.x:.3f}",
@@ -183,16 +204,16 @@ class HutsAdmin(ModelAdmin):
             )
         return "-"
 
-    @display(description=_("Sources"))
+    @display(description=_("Sources"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def logo_orgs(self, obj: Hut) -> str:  # new
         SRC = settings.MEDIA_URL
         imgs = [
             f'<a href={o["link_i18n"]} target="blank"><img class="inline pr-2" src="{SRC}/{o["logo"]}" width="24px" alt="{o["name_i18n"]}"/></a>'
-            for o in obj.orgs
+            for o in obj.orgs  # pyright: ignore[reportAttributeAccessIssue]  # JSONBAgg annotation
         ]
 
         # return ", ".join([str(o.organization.name + o.link_i18n) for o in obj.orgs.all()])
-        return mark_safe(f'<span>{"".join(imgs)}</span>')
+        return mark_safe(f"<span>{''.join(imgs)}</span>")
 
     @display(description="")
     def view_link(self, obj: Hut) -> str:
@@ -208,7 +229,7 @@ class HutsAdmin(ModelAdmin):
             '<span class="material-symbols-outlined"> disabled_visible </span>'
         )
 
-    @display(description=_("Photos"))
+    @display(description=_("Photos"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def hut_images(self, obj):  # new
         img_html = "<div>"
         for i, img in enumerate(
@@ -216,8 +237,6 @@ class HutsAdmin(ModelAdmin):
             .order_by("details__order")
             .all()
         ):
-            print(img.image.url)
-            # img_html += mark_safe(img)
             link = reverse("admin:images_image_change", args=[img.pk])
             img_tag = f"""
               <a href='{link}' target='_blank'>{img.get_image_tag(radius=10, height=120, width=200)}</a>
@@ -250,7 +269,7 @@ class HutsAdmin(ModelAdmin):
               <span class="text-xs">{public_private_tag}</span>
               <h2><b>#{i + 1} - {img.caption_i18n}</b></h2>
               Status: <i>{img.review_status}</i><br/>
-              {', '.join(author_source)}<br/>
+              {", ".join(author_source)}<br/>
               <small>{lic}</small><br/>
             <span><a class="text-xs" href="{img.image.url}" target='_blank'> <span class="material-symbols-outlined"> visibility </span> </a>
             <span><a class="text-xs" href="{link}" target='_blank'> <span class="material-symbols-outlined"> edit </span> </a>
@@ -266,7 +285,7 @@ class HutsAdmin(ModelAdmin):
         img_html += "</div>"
         return mark_safe(img_html)
 
-    @display(description=_("Photo"))
+    @display(description=_("Photo"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def hut_thumb(self, obj):  # new
         if obj.photos:  # old style, show if available
             return (
@@ -290,40 +309,40 @@ class HutsAdmin(ModelAdmin):
     actions_detail = ("action_detail_prev", "action_detail_next")
 
     ## TODO: check if form is saved, save form and show next (or tell them to save)
-    @action(description=_("Next"), permissions=["view"])
+    @action(description=_("Next"), permissions=["view"])  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def action_detail_next(self, request: HttpRequest, object_id: int):  # obj: Hut):
         obj = Hut.objects.get(id=object_id)
         return redirect(
-            reverse_lazy("admin:huts_hut_change", args=(obj.next() or object_id,))
+            reverse_lazy("admin:huts_hut_change", args=(obj.next() or object_id,))  # pyright: ignore[reportArgumentType]  # lazy URL
         )
 
-    @action(description=_("Previous"), permissions=["view"])
+    @action(description=_("Previous"), permissions=["view"])  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def action_detail_prev(self, request: HttpRequest, object_id: int):  # obj: Hut):
         obj = Hut.objects.get(id=object_id)
         return redirect(
-            reverse_lazy("admin:huts_hut_change", args=(obj.prev() or object_id,))
+            reverse_lazy("admin:huts_hut_change", args=(obj.prev() or object_id,))  # pyright: ignore[reportArgumentType]  # lazy URL
         )
 
-    @action(description=_(mark_safe("set to <b>done</b>")), permissions=["change"])
+    @action(description=_(mark_safe("set to <b>done</b>")), permissions=["change"])  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def action_row_set_review_to_done(
         self, request: HttpRequest, object_id: int
     ):  # obj: Hut):
         obj = Hut.objects.get(id=object_id)
         obj.review_status = Hut.ReviewStatusChoices.done
         obj.save()
-        return redirect(request.META.get("HTTP_REFERER"))
+        return redirect(request.META.get("HTTP_REFERER"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
 
-    @action(description=_(mark_safe("set to <b>review</b>")), permissions=["change"])
+    @action(description=_(mark_safe("set to <b>review</b>")), permissions=["change"])  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def action_row_set_review_to_review(
         self, request: HttpRequest, object_id: int
     ):  # obj: Hut):
         obj = Hut.objects.get(id=object_id)
         obj.review_status = Hut.ReviewStatusChoices.review
         obj.save()
-        return redirect(request.META.get("HTTP_REFERER"))
+        return redirect(request.META.get("HTTP_REFERER"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
 
     @action(
-        description=_(mark_safe("set to <b>reject</b> (inactive)")),
+        description=_(mark_safe("set to <b>reject</b> (inactive)")),  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
         permissions=["delete"],
     )
     def action_row_set_inactive(
@@ -333,10 +352,10 @@ class HutsAdmin(ModelAdmin):
         obj.review_status = Hut.ReviewStatusChoices.reject
         obj.is_active = False
         obj.save()
-        return redirect(request.META.get("HTTP_REFERER"))
+        return redirect(request.META.get("HTTP_REFERER"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
 
-    @action(description=_(mark_safe("<b>delete</b> entry")), permissions=["delete"])
+    @action(description=_(mark_safe("<b>delete</b> entry")), permissions=["delete"])  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def action_row_delete(self, request: HttpRequest, object_id: int):  # obj: Hut):
         obj = Hut.objects.get(id=object_id)
         obj.delete()
-        return redirect(request.META.get("HTTP_REFERER"))
+        return redirect(request.META.get("HTTP_REFERER"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)

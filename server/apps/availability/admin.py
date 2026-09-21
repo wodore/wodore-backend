@@ -1,3 +1,5 @@
+# NOTE: description=_(...) is the project-wide lazy-gettext idiom (i18n-safe);  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+# per-line pyright ignores below suppress the unfold-stub str-typing mismatch.
 import datetime
 
 from django.conf import settings
@@ -12,10 +14,14 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
-from unfold.contrib.filters.admin import AutocompleteSelectMultipleFilter
+from unfold.contrib.filters.admin import (
+    AutocompleteSelectMultipleFilter,
+    BooleanRadioFilter,
+    ChoicesCheckboxFilter,
+)
 from unfold.decorators import display
 
-from server.apps.manager.admin import ModelAdmin
+from server.apps.manager.admin import ModelAdmin, RelatedOnlyCheckboxFilter
 
 from .models import AvailabilityStatus, HutAvailability, HutAvailabilityHistory
 
@@ -151,7 +157,7 @@ class HutAvailabilityHistoryInline(admin.TabularInline):
     )
     can_delete = False
 
-    @display(description=_("Duration"))
+    @display(description=_("Duration"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def duration_display(self, obj):
         if obj.pk:
             seconds = obj.duration_seconds
@@ -177,8 +183,9 @@ class AvailabilityStatusAdmin(ModelAdmin):
         "last_success",
     )
     list_display_links = ("hut_header",)
+    list_filter_submit = True  # Add submit button for filters
     list_filter = (
-        "has_data",
+        ("has_data", BooleanRadioFilter),
         "consecutive_failures",
     )
     search_fields = ("hut__name", "hut__slug")
@@ -231,24 +238,24 @@ class AvailabilityStatusAdmin(ModelAdmin):
         return False
 
     def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
+        return request.user.is_superuser  # pyright: ignore[reportAttributeAccessIssue]  # django-stubs limitation
 
-    @display(header=True, description=_("Hut"), ordering=Lower("hut__name"))
+    @display(header=True, description=_("Hut"), ordering=Lower("hut__name"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def hut_header(self, obj):
         """Display hut name and slug as header with link"""
         return (obj.hut.name, obj.hut.slug)
 
-    @display(description=_("Has Data"), ordering="has_data", boolean=True)
+    @display(description=_("Has Data"), ordering="has_data", boolean=True)  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def has_data_display(self, obj):
         """Display has_data field with custom label"""
         return obj.has_data
 
-    @display(description=_("Failures"), ordering="consecutive_failures")
+    @display(description=_("Failures"), ordering="consecutive_failures")  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def consecutive_failures_display(self, obj):
         """Display consecutive_failures field with custom label"""
         return obj.consecutive_failures
 
-    @display(description=_("Failing Since"))
+    @display(description=_("Failing Since"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def failing_since(self, obj):
         """Calculate and display when the hut started failing (if currently failing)"""
         if obj.consecutive_failures == 0:
@@ -300,20 +307,20 @@ class HutAvailabilityViewInline(admin.TabularInline):
         # Filter for next 14 days only
         return (
             qs.filter(availability_date__gte=today, availability_date__lte=end_date)
-            .select_related("hut_type")
+            .select_related("hut", "hut_type", "source_organization")
             .order_by("availability_date")
         )
 
     def has_add_permission(self, request: HttpRequest, obj=None) -> bool:
         return False
 
-    @display(description=_("Free/Total"))
+    @display(description=_("Free/Total"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def places_display(self, obj):
         free = "–" if obj.free is None else obj.free
         total = "–" if obj.total is None else obj.total
         return f"{free}/{total}"
 
-    @display(description=_("Occupancy"), label=True)
+    @display(description=_("Occupancy"), label=True)  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def occupancy_progress(self, obj):
         return mark_safe(
             get_occupancy_progress_bar(
@@ -325,7 +332,7 @@ class HutAvailabilityViewInline(admin.TabularInline):
     def status_icon(self, obj):
         return mark_safe(get_occupancy_icon_html(obj.occupancy_status, show_text=True))
 
-    @display(description=_("Type"))
+    @display(description=_("Type"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def hut_type_icon(self, obj):
         if (
             obj.hut_type
@@ -337,7 +344,7 @@ class HutAvailabilityViewInline(admin.TabularInline):
             )
         return "-"
 
-    @display(description=_("View"))
+    @display(description=_("View"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def view_link(self, obj):
         if obj.pk:
             url = reverse("admin:availability_hutavailability_change", args=[obj.pk])
@@ -359,15 +366,19 @@ class HutAvailabilityAdmin(ModelAdmin):
         "last_checked",
     )
     list_display_links = ("status_icon", "hut_header")
+    list_filter_submit = True  # Add submit button for filters
     list_filter = (
         AvailabilityDateFilter,
-        "occupancy_status",
-        "reservation_status",
-        "hut_type",
+        ("occupancy_status", ChoicesCheckboxFilter),
+        ("reservation_status", ChoicesCheckboxFilter),
+        (
+            "hut_type",
+            AutocompleteSelectMultipleFilter,
+        ),  # multiple autocomplete, scoped to hut types via limit_choices_to
         (
             "source_organization",
-            AutocompleteSelectMultipleFilter,
-        ),  # Filter by organization with autocomplete
+            RelatedOnlyCheckboxFilter,
+        ),  # checkboxes, only sources in use
     )
     search_fields = ("hut__name", "hut__slug")
     readonly_fields = (
@@ -425,15 +436,15 @@ class HutAvailabilityAdmin(ModelAdmin):
         return False
 
     def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
+        return request.user.is_superuser  # pyright: ignore[reportAttributeAccessIssue]  # django-stubs limitation
 
-    @display(description=_("Free/Total"))
+    @display(description=_("Free/Total"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def places_display(self, obj):
         free = "–" if obj.free is None else obj.free
         total = "–" if obj.total is None else obj.total
         return f"{free}/{total}"
 
-    @display(description=_("Occupancy"), label=True)
+    @display(description=_("Occupancy"), label=True)  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def occupancy_progress(self, obj):
         return mark_safe(
             get_occupancy_progress_bar(
@@ -445,12 +456,12 @@ class HutAvailabilityAdmin(ModelAdmin):
     def status_icon(self, obj):
         return mark_safe(get_occupancy_icon_html(obj.occupancy_status, show_text=True))
 
-    @display(header=True, description=_("Hut"), ordering=Lower("hut__name"))
+    @display(header=True, description=_("Hut"), ordering=Lower("hut__name"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def hut_header(self, obj):
         """Display hut name and slug as header with link"""
         return (obj.hut.name, obj.hut.slug)
 
-    @display(description=_("Type"))
+    @display(description=_("Type"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def hut_type_icon(self, obj):
         if (
             obj.hut_type
@@ -462,12 +473,12 @@ class HutAvailabilityAdmin(ModelAdmin):
             )
         return "-"
 
-    @display(description=_("Reservation"), label=True)
+    @display(description=_("Reservation"), label=True)  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def reservation_status_label(self, obj):
         """Display reservation status as a styled label"""
         return obj.reservation_status
 
-    @display(description=_("Source"))
+    @display(description=_("Source"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def source_display(self, obj):
         """Display source organization with logo and clickable source_id link"""
         if obj.source_organization:
@@ -515,9 +526,10 @@ class HutAvailabilityHistoryAdmin(ModelAdmin):
         "duration_display",
     )
     list_display_links = ("status_icon", "hut_header")
+    list_filter_submit = True  # Add submit button for filters
     list_filter = (
-        "occupancy_status",
-        "hut_type",
+        ("occupancy_status", ChoicesCheckboxFilter),
+        ("hut_type", AutocompleteSelectMultipleFilter),
         "availability_date",
     )
     search_fields = ("hut__name", "hut__slug")
@@ -581,7 +593,7 @@ class HutAvailabilityHistoryAdmin(ModelAdmin):
         qs = super().get_queryset(request)
         return qs.select_related("hut", "availability", "hut_type")
 
-    @display(header=True, description=_("Hut"), ordering=Lower("hut__name"))
+    @display(header=True, description=_("Hut"), ordering=Lower("hut__name"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def hut_header(self, obj):
         """Display hut name and slug as header with link"""
         return (obj.hut.name, obj.hut.slug)
@@ -590,15 +602,15 @@ class HutAvailabilityHistoryAdmin(ModelAdmin):
         return False
 
     def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
+        return request.user.is_superuser  # pyright: ignore[reportAttributeAccessIssue]  # django-stubs limitation
 
-    @display(description=_("Free/Total"))
+    @display(description=_("Free/Total"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def places_display(self, obj):
         free = "–" if obj.free is None else obj.free
         total = "–" if obj.total is None else obj.total
         return f"{free}/{total}"
 
-    @display(description=_("Occupancy"), label=True)
+    @display(description=_("Occupancy"), label=True)  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def occupancy_progress(self, obj):
         return mark_safe(
             get_occupancy_progress_bar(
@@ -610,7 +622,7 @@ class HutAvailabilityHistoryAdmin(ModelAdmin):
     def status_icon(self, obj):
         return mark_safe(get_occupancy_icon_html(obj.occupancy_status, show_text=True))
 
-    @display(description=_("Type"))
+    @display(description=_("Type"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def hut_type_icon(self, obj):
         if (
             obj.hut_type
@@ -622,7 +634,7 @@ class HutAvailabilityHistoryAdmin(ModelAdmin):
             )
         return "-"
 
-    @display(description=_("Duration"))
+    @display(description=_("Duration"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def duration_display(self, obj):
         if obj.pk:
             seconds = obj.duration_seconds

@@ -3,12 +3,15 @@ from jsonsuit.widgets import JSONSuit, ReadonlyJSONSuit
 
 # Register your models here.
 from django.contrib import admin
-from django.contrib.auth.admin import GroupAdmin, UserAdmin
+from django.contrib.auth.admin import GroupAdmin, UserAdmin  # pyright: ignore[reportAssignmentType]  # shadowed below (Django admin idiom)
 from django.contrib.auth.models import Group, User
 from django.contrib.gis.admin import GISModelAdmin
 from django.db import models
 
 from unfold.admin import ModelAdmin as UnfoldModelAdmin
+from unfold.contrib.filters.admin import RelatedCheckboxFilter
+from unfold.contrib.filters.admin.mixins import MultiValueMixin
+from unfold.contrib.filters.forms import CheckboxForm
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 from unfold.widgets import UnfoldAdminColorInputWidget
 
@@ -86,7 +89,7 @@ admin.site.unregister(User)
 
 
 @admin.register(User)
-class UserAdmin(UserAdmin, ModelAdmin):
+class UserAdmin(UserAdmin, ModelAdmin):  # pyright: ignore[reportGeneralTypeIssues]  # Django admin shadowing idiom
     form = UserChangeForm
     add_form = UserCreationForm
     change_password_form = AdminPasswordChangeForm
@@ -97,7 +100,7 @@ admin.site.unregister(Group)
 
 
 @admin.register(Group)
-class GroupAdmin(GroupAdmin, ModelAdmin):
+class GroupAdmin(GroupAdmin, ModelAdmin):  # pyright: ignore[reportGeneralTypeIssues]  # Django admin shadowing idiom
     pass
 
 
@@ -118,7 +121,7 @@ from unfold.widgets import (  # noqa: E402
 for _model in [Schedule, Success, Failure, OrmQ]:
     try:
         admin.site.unregister(_model)
-    except admin.sites.NotRegistered:
+    except admin.sites.NotRegistered:  # pyright: ignore[reportAttributeAccessIssue]  # runtime-valid submodule attr
         pass
 
 
@@ -160,10 +163,10 @@ class CustomScheduleAdmin(QScheduleAdmin, ModelAdmin):
         "cron": "schedule_type == 'C'",
     }
 
-    def get_form(self, request, obj=None, **kwargs):
+    def get_form(self, request, obj=None, change=False, **kwargs):
         from django_admin_runner.registry import _registry
 
-        form_class = super().get_form(request, obj, **kwargs)
+        form_class = super().get_form(request, obj, change=change, **kwargs)
 
         # Build choices from the registry — blank option allows free-text entry
         choices = [("", "---------")]
@@ -196,3 +199,20 @@ class UnfoldFailureAdmin(QFailAdmin, ModelAdmin):
 @admin.register(OrmQ)
 class UnfoldQueueAdmin(QQueueAdmin, ModelAdmin):
     pass
+
+
+class RelatedOnlyCheckboxFilter(MultiValueMixin, admin.RelatedOnlyFieldListFilter):
+    """Checkboxes over only the related values actually in use.
+
+    Combines Django's `RelatedOnlyFieldListFilter` (limits choices to the
+    related objects that occur in the data) with unfold's checkbox form
+    rendering and multi-select semantics (`RelatedCheckboxFilter` shows ALL
+    related objects — with ~680 organizations in this project that is not
+    usable).
+    """
+
+    template = "unfold/filters/filters_field.html"
+    form_class = CheckboxForm
+    # reuse unfold's checkbox rendering; `lookup_choices` comes from the
+    # RelatedOnly base class (only values in use).
+    choices = RelatedCheckboxFilter.choices

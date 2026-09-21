@@ -22,7 +22,7 @@ from django.contrib.gis.geos import Point as dbPoint
 from django.contrib.gis.measure import D
 from django.contrib.postgres.indexes import GinIndex
 from django.db import transaction
-from django.db.models import F, Value
+from django.db.models import F, Q, Value
 from django.db.models.functions import Concat, Lower
 from django.utils.translation import get_language
 from django.utils.translation import gettext_lazy as _
@@ -217,6 +217,7 @@ class Hut(TimeStampedModel):
         on_delete=models.RESTRICT,
         verbose_name=_("Hut type if open"),
         db_index=True,
+        limit_choices_to=Q(parent__slug=settings.HUTS_CATEGORY_PARENT),
     )
     hut_type_closed = models.ForeignKey(
         Category,
@@ -226,6 +227,7 @@ class Hut(TimeStampedModel):
         on_delete=models.RESTRICT,
         verbose_name=_("Hut type if closed"),
         db_index=True,
+        limit_choices_to=Q(parent__slug=settings.HUTS_CATEGORY_PARENT),
     )
     availability_source_ref = models.ForeignKey(
         Organization,
