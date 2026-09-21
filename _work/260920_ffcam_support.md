@@ -106,7 +106,7 @@ no totals; occupancy then is `free_unknown`). The backend assumed non-null:
 
 - `settings.SERVICES` contains `ffcam` (merged via `PRIVATE_SERVICES`), `support_booking=True`.
 - `app organizations --add --force` creates/updates orgs incl. FFCAM.
-- **Full import** `hut_sources --source ffcam` → 117 sources (114 created, 3 unchanged);
+- **Full import** `hut_sources --sources ffcam` → 117 sources (114 created, 3 unchanged);
   `huts --add --source ffcam --no-review` → 116 huts (107 created, 9 merged into existing,
   0 failed).
 - `manage.py update_availability --all` → full run over all 242 availability huts
@@ -156,7 +156,7 @@ from the per-hut minisite info box). Two gaps fixed:
    types after re-import: **75 selfhut + 3 bivouac** (27 huts without
    published winter data legitimately keep none).
 
-Re-run: `hut_sources --source ffcam --add --with-minisite` →
+Re-run: `hut_sources --sources ffcam --add --with-minisite` →
 `huts --add --source ffcam --no-review` → availability update (89/89 huts, 0
 failed). Result: 2,159 rows with totals (5–95 beds), 2,050 with computable
 occupancy (empty/low/medium/high/full), reduced types on offseason days
@@ -223,7 +223,7 @@ verified scoped (`parents == {'accommodation'}`).
   import wins (existing hut `albert` switched hrs→ffcam). If dual-source huts
   become common, the model needs a priority concept.
 - Full import run:
-  `app hut_sources --source ffcam` → `app huts --add --source ffcam --no-review` →
+  `app hut_sources --sources ffcam` → `app huts --add --source ffcam --no-review` →
   `app update_availability --all`. First run of the ffcam service builds a
   minisite→structure cache (~1 request per hut).
 - FFCAM booking engine does not publish bed totals per day unless minisite data
