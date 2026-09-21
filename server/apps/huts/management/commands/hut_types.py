@@ -4,6 +4,8 @@ from django_admin_runner import register_command
 
 @register_command(group="Huts")
 class Command(CRUDCommand):
+    help = "Deprecated: hut types are Category objects now; this command does nothing."
+
     """
     DEPRECATED: HutType is no longer a model.
 
