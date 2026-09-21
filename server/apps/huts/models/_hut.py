@@ -22,7 +22,7 @@ from django.contrib.gis.geos import Point as dbPoint
 from django.contrib.gis.measure import D
 from django.contrib.postgres.indexes import GinIndex
 from django.db import transaction
-from django.db.models import F, Value
+from django.db.models import F, Q, Value
 from django.db.models.functions import Concat, Lower
 from django.utils.translation import get_language
 from django.utils.translation import gettext_lazy as _
@@ -41,10 +41,22 @@ from ._associations import (
     HutOrganizationAssociation,
 )
 from ._hut_source import HutSource
+
+if t.TYPE_CHECKING:
+    # stub-only type (django-stubs): reverse-relation manager annotation below
+    from django.db.models.fields.related_descriptors import RelatedManager
 from ._hut_type import HutTypeHelper
 from server.apps.categories.models import Category
 
 SERVICES: dict[str, BaseService] = settings.SERVICES
+
+
+def primary_name(i18n_fields: dict) -> str | None:
+    """Primary (base language) name from the translated name fields."""
+    for code in ("de", "en", "fr", "it"):
+        if i18n_fields.get(f"name_{code}"):
+            return i18n_fields[f"name_{code}"]
+    return None
 
 
 class _ReviewStatusChoices(models.TextChoices):
@@ -60,6 +72,19 @@ def _monthly_open_default_value() -> dict[str, AnswerEnum]:
 
 
 class Hut(TimeStampedModel):
+    # Reverse relation to `HutSource` (explicit for type checkers without the
+    # django-stubs mypy plugin, which cannot infer `related_name` managers).
+    hut_sources: "RelatedManager[HutSource]"
+    # Original values tracked in `from_db()` to detect changes in `save()`.
+    _orig_slug: str | None
+    _orig_review_status: str | None
+
+    # Custom manager; see `HutManager`. The ignore is required for
+    # plugin-less Pyright, which flags custom-manager overrides on every
+    # Django model (mutable manager invariance — django-stubs relies on its
+    # mypy plugin for this, see https://github.com/typeddjango/django-stubs).
+    objects: HutManager = HutManager()  # pyright: ignore[reportIncompatibleVariableOverride]
+
     UPDATE_SCHEMA_FIELDS = (
         "slug",
         "name",
@@ -81,8 +106,6 @@ class Hut(TimeStampedModel):
         "open_monthly",
     )
     ReviewStatusChoices = _ReviewStatusChoices
-    # manager
-    objects: HutManager = HutManager()
     # translations
     i18n = TranslationField(fields=("name", "description", "note"))
 
@@ -194,6 +217,7 @@ class Hut(TimeStampedModel):
         on_delete=models.RESTRICT,
         verbose_name=_("Hut type if open"),
         db_index=True,
+        limit_choices_to=Q(parent__slug=settings.HUTS_CATEGORY_PARENT),
     )
     hut_type_closed = models.ForeignKey(
         Category,
@@ -203,6 +227,7 @@ class Hut(TimeStampedModel):
         on_delete=models.RESTRICT,
         verbose_name=_("Hut type if closed"),
         db_index=True,
+        limit_choices_to=Q(parent__slug=settings.HUTS_CATEGORY_PARENT),
     )
     availability_source_ref = models.ForeignKey(
         Organization,
@@ -233,7 +258,10 @@ class Hut(TimeStampedModel):
     # access: Access = Field(default_factory=Access, sa_column=Access.get_sa_column())
     # monthly: Monthly = Field(default_factory=Monthly, sa_column=Monthly.get_sa_column())
 
-    class Meta:
+    # type: ignore[assignment] below: Expressions in `ordering` (Lower) make the
+    # Meta type structurally incompatible with the abstract base Meta — a known
+    # django-stubs/Pyright limitation, harmless at runtime.
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = _("Hut")
         ordering = (Lower("name_i18n"),)
         indexes = (
@@ -396,6 +424,9 @@ class Hut(TimeStampedModel):
                 out_field = "note" if field == "notes" else field
                 if value:
                     i18n_fields[f"{out_field}_{code}"] = value
+        _name = primary_name(i18n_fields)
+        if _name:
+            i18n_fields["name"] = _name
         type_closed = (
             HutTypeHelper.values[str(hut_schema.hut_type.if_closed.value)]
             if hut_schema.hut_type.if_closed
@@ -488,7 +519,7 @@ class Hut(TimeStampedModel):
 
         # write to DB as one transaction
         with transaction.atomic():
-            if _hut_source is not None and _hut_source.organization.slug == "hrs":
+            if _hut_source is not None and hut_schema.is_bookable:
                 hut_db.availability_source_ref = _hut_source.organization
             hut_db.save()
             hut_db.refresh_from_db()
@@ -594,6 +625,9 @@ class Hut(TimeStampedModel):
                 out_field = "note" if field == "notes" else field
                 i18n_fields[f"{out_field}_{code}"] = value
         updates.update(i18n_fields)
+        _name = primary_name(updates)
+        if _name:
+            updates["name"] = _name
         if "location" in updates and hut_schema.location.ele is not None:
             updates["elevation"] = hut_schema.location.ele
         if "location" in updates:
@@ -636,7 +670,7 @@ class Hut(TimeStampedModel):
                 if hut_schema.hut_type.if_closed
                 else None
             )
-        if _hut_source is not None and _hut_source.organization.slug == "hrs":
+        if _hut_source is not None and hut_schema.is_bookable:
             updates["availability_source_ref"] = _hut_source.organization
         if set_modified or hut_schema.extras.get("is_modified", False):
             updates["is_modified"] = True
@@ -895,6 +929,7 @@ class Hut(TimeStampedModel):
         from server.apps.availability.models import HutAvailability
         from server.apps.availability.utils import parse_availability_date
         from collections import defaultdict
+        from ..schemas_booking import HutBookingSchema, HutBookingsSchema
 
         # Parse date parameter using utility function
         start_datetime = parse_availability_date(date)
@@ -943,8 +978,6 @@ class Hut(TimeStampedModel):
                 }
 
             # Add booking entry
-            from ..schemas_booking import HutBookingSchema, HutBookingsSchema
-
             booking = HutBookingSchema(
                 link=avail.link,
                 date=avail.availability_date,

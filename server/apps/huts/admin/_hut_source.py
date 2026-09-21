@@ -1,3 +1,5 @@
+# NOTE: description=_(...) is the project-wide lazy-gettext idiom (i18n-safe);  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+# per-line pyright ignores below suppress the unfold-stub str-typing mismatch.
 from typing import ClassVar
 
 from django.contrib import admin
@@ -8,13 +10,10 @@ from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
 from unfold import admin as unfold_admin
-from unfold.contrib.filters.admin import (
-    AutocompleteSelectMultipleFilter,
-    ChoicesCheckboxFilter,
-)
+from unfold.contrib.filters.admin import BooleanRadioFilter, ChoicesCheckboxFilter
 from unfold.decorators import action, display
 
-from server.apps.manager.admin import ModelAdmin
+from server.apps.manager.admin import ModelAdmin, RelatedOnlyCheckboxFilter
 from server.apps.manager.widgets import UnfoldReadonlyJSONSuit
 from server.core.utils import text_shorten_html
 
@@ -46,6 +45,7 @@ class HutSourceViewInline(unfold_admin.StackedInline):
     max_num = 20
     show_change_link = True
     can_delete = False
+    autocomplete_fields = ("organization",)  # ~680 orgs (OSM brands): no plain select
     # classes = ("collapse",)  # Commented out to keep tab expanded by default
     formfield_overrides: ClassVar = {
         models.JSONField: {"widget": UnfoldReadonlyJSONSuit}
@@ -73,17 +73,15 @@ class HutsSourceAdmin(ModelAdmin):
         "version",
         "review_tag",
     )
+    list_filter_submit = True  # Add submit button for filters
     list_filter = (
-        (
-            "organization",
-            AutocompleteSelectMultipleFilter,
-        ),  # Filter by organization with autocomplete
+        ("organization", RelatedOnlyCheckboxFilter),  # checkboxes, only orgs in use
         (
             "review_status",
             ChoicesCheckboxFilter,
         ),  # Filter by review status with checkboxes
-        "is_active",
-        "is_current",
+        ("is_active", BooleanRadioFilter),
+        ("is_current", BooleanRadioFilter),
         "version",
     )
     list_display_links = ("name",)
@@ -107,7 +105,7 @@ class HutsSourceAdmin(ModelAdmin):
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
 
     @display(
-        description=_("Status"),
+        description=_("Status"),  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
         ordering="status",
         label={
             HutSource.ReviewStatusChoices.new: "warning",  # green
@@ -119,14 +117,14 @@ class HutsSourceAdmin(ModelAdmin):
     def review_tag(self, obj):
         return obj.review_status
 
-    @display(description=_("Review Comment"))
+    @display(description=_("Review Comment"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def review_comment_short(self, obj):  # new
         return text_shorten_html(obj.review_comment, width=100)
 
-    def get_form(self, request, obj=None, **kwargs):
+    def get_form(self, request, obj=None, change=False, **kwargs):
         form = super().get_form(request, obj, **kwargs)
         if obj is not None:
-            form.base_fields["previous_object"].queryset = (
+            form.base_fields["previous_object"].queryset = (  # pyright: ignore[reportAttributeAccessIssue] — ModelChoiceField attr
                 # HutSource.objects.select_related("organization")
                 HutSource.objects.filter(
                     source_id=obj.source_id, version__lt=obj.version
@@ -144,26 +142,26 @@ class HutsSourceAdmin(ModelAdmin):
     # actions_detail = ["change_detail_action_block"]
     # actions_submit_line = ["submit_line_action_activate"]
 
-    @action(description=_(mark_safe("set to <b>done</b>")), permissions=["change"])
+    @action(description=_(mark_safe("set to <b>done</b>")), permissions=["change"])  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def action_row_set_review_to_done(
         self, request: HttpRequest, object_id: int
     ):  # obj: HutSource):
         obj = HutSource.objects.get(id=object_id)
         obj.review_status = HutSource.ReviewStatusChoices.done
         obj.save()
-        return redirect(request.META.get("HTTP_REFERER"))
+        return redirect(request.META.get("HTTP_REFERER") or "/")  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
 
-    @action(description=_(mark_safe("set to <b>review</b>")), permissions=["change"])
+    @action(description=_(mark_safe("set to <b>review</b>")), permissions=["change"])  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def action_row_set_review_to_review(
         self, request: HttpRequest, object_id: int
     ):  # obj: HutSource):
         obj = HutSource.objects.get(id=object_id)
         obj.review_status = HutSource.ReviewStatusChoices.review
         obj.save()
-        return redirect(request.META.get("HTTP_REFERER"))
+        return redirect(request.META.get("HTTP_REFERER") or "/")  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
 
     @action(
-        description=_(mark_safe("set to <b>reject</b> (inactive)")),
+        description=_(mark_safe("set to <b>reject</b> (inactive)")),  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
         permissions=["delete"],
     )
     def action_row_set_inactive(
@@ -173,12 +171,12 @@ class HutsSourceAdmin(ModelAdmin):
         obj.review_status = HutSource.ReviewStatusChoices.reject
         obj.is_active = False
         obj.save()
-        return redirect(request.META.get("HTTP_REFERER"))
+        return redirect(request.META.get("HTTP_REFERER") or "/")  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
 
-    @action(description=_(mark_safe("<b>delete</b> entry")), permissions=["delete"])
+    @action(description=_(mark_safe("<b>delete</b> entry")), permissions=["delete"])  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def action_row_delete(
         self, request: HttpRequest, object_id: int
     ):  # obj: HutSource):
         obj = HutSource.objects.get(id=object_id)
         obj.delete()
-        return redirect(request.META.get("HTTP_REFERER"))
+        return redirect(request.META.get("HTTP_REFERER") or "/")  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)

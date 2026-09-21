@@ -45,7 +45,7 @@ def init_huts_db(
                 force_overwrite_exclude=force_overwrite_exclude,
                 force_none=force_none,
             )
-            click.secho(f" {'('+db_hut.slug+')':<30}", dim=True, nl=False)
+            click.secho(f" {'(' + db_hut.slug + ')':<30}", dim=True, nl=False)
             if created == UpdateCreateStatus.created:
                 click.secho("created", fg="green")
                 added_huts += 1
@@ -60,7 +60,7 @@ def init_huts_db(
         except IntegrityError as e:
             err_msg = str(e).split("\n")[0]
             click.secho(
-                f" {'('+hut_src.organization.slug+'-'+hut_src.source_id+')':<20} E: {err_msg}",
+                f" {'(' + hut_src.organization.slug + '-' + hut_src.source_id + ')':<20} E: {err_msg}",
                 dim=True,
             )
             failed_huts += 1
@@ -68,7 +68,7 @@ def init_huts_db(
         except NotImplementedError as e:
             err_msg = str(e).split("\n")[0]
             click.secho(
-                f" {'('+hut_src.organization.slug+'-'+hut_src.source_id+')':<20} E: {err_msg}",
+                f" {'(' + hut_src.organization.slug + '-' + hut_src.source_id + ')':<20} E: {err_msg}",
                 dim=True,
             )
             failed_huts += 1
@@ -251,6 +251,7 @@ class Command(CRUDCommand):
                 },
                 {"org": "osm", "no_review": True},
                 {"org": "hrs", "no_review": True},
+                {"org": "ffcam", "no_review": True},
                 {"org": "refuges", "no_review": False},
                 {
                     "org": "wodore",
@@ -261,11 +262,11 @@ class Command(CRUDCommand):
             ]:
                 self.stdout.write(
                     self.style.HTTP_INFO(
-                        f"Add {params.get('org','all')} huts with parameter:"
+                        f"Add {params.get('org', 'all')} huts with parameter:"
                     )
                 )
                 for k, v in params.items():
-                    self.stdout.write(self.style.NOTICE(f"  {k+':':<10} '{v}'"))
+                    self.stdout.write(self.style.NOTICE(f"  {k + ':':<10} '{v}'"))
                 call_command("huts", add=True, force=force, limit=limit, **params)
             finished = True
         if finished:

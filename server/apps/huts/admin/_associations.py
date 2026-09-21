@@ -108,10 +108,14 @@ class HutOrganizationAssociationEditInline(unfold_admin.StackedInline):
     tab = True
     model = Hut.org_set.through
     fields = (("organization", "source_id"), "props", "schema")
+    autocomplete_fields = ("organization",)  # ~680 orgs (OSM brands): no plain select
     extra = 0
     # classes = ("collapse",)  # Commented out to keep tab expanded by default
     formfield_overrides: ClassVar = {models.JSONField: {"widget": UnfoldJSONSuit}}
     verbose_name = _("Edit Source")
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("organization")
 
 
 class HutOrganizationAssociationViewInline(unfold_admin.TabularInline):
@@ -119,15 +123,19 @@ class HutOrganizationAssociationViewInline(unfold_admin.TabularInline):
     tab = True
     fields = ("organization", "source_id")
     # readonly_fields = ["organization", "source_id"]
+    autocomplete_fields = ("organization",)  # ~680 orgs (OSM brands): no plain select
     can_delete = False
     extra = 0
     show_change_link = True
     verbose_name = _("Source")
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("organization")
+
     def has_add_permission(self, request, obj):
         return False
 
-    def has_change_permission(self, request, obj):
+    def has_change_permission(self, request, obj=None):
         return False
 
 

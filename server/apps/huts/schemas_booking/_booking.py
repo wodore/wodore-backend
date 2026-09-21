@@ -2,6 +2,7 @@ import datetime
 import typing as t
 
 from geojson_pydantic import Feature, FeatureCollection, Point
+from geojson_pydantic.types import Position2D
 from hut_services import LocationSchema
 from hut_services.core.schema import (
     BookingSchema,
@@ -15,13 +16,13 @@ from django.conf import settings  # noqa: F401
 
 
 class HutBookingSchema(BaseModel):
-    link: str
+    link: str | None = None
     date: datetime.date
     reservation_status: ReservationStatusEnum
-    free: int
-    total: int
-    occupancy_percent: float
-    occupancy_steps: int
+    free: int | None = None
+    total: int | None = None
+    occupancy_percent: float | None = None
+    occupancy_steps: int | None = None
     occupancy_status: OccupancyStatusEnum
     hut_type: str = "unknown"
 
@@ -60,10 +61,11 @@ class HutBookingsSchema(HutBookingsProps):
 
     def as_feature(self) -> HutBookingsFeature:
         # props = self.model_dump(exclude={"location"}, by_alias=True)
+        lon, lat = self.location.lon_lat
         return HutBookingsFeature(
             id=self.hut_id,
             type="Feature",
-            geometry=Point(type="Point", coordinates=self.location.lon_lat),
+            geometry=Point(type="Point", coordinates=Position2D(lon, lat)),
             properties=self,
         )
 

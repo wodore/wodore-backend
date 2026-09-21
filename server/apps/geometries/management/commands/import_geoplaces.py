@@ -26,7 +26,7 @@ Usage:
 
 import math
 from pathlib import Path
-from typing import Tuple
+from typing import Any, Tuple
 
 import yaml
 from django.contrib.gis.db.models.functions import Distance
@@ -201,7 +201,7 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.ERROR(f"Unknown source: {source}"))
                 continue
 
-            self.stdout.write(f"\n{'='*60}")
+            self.stdout.write(f"\n{'=' * 60}")
             self.stdout.write(f"Processing source: {source}")
             self.stdout.write("=" * 60)
 
@@ -220,12 +220,12 @@ class Command(BaseCommand):
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"\n{'='*60}\n"
+                f"\n{'=' * 60}\n"
                 f"Total import complete:\n"
                 f"  {total_created} created\n"
                 f"  {total_updated} updated\n"
                 f"  {total_skipped} skipped\n"
-                f"{'='*60}"
+                f"{'=' * 60}"
             )
         )
 
@@ -281,7 +281,7 @@ class Command(BaseCommand):
             / "organizations.yaml"
         )
 
-        org_data = None
+        org_data: dict[str, Any] | None = None
         if fixture_path.exists():
             try:
                 with open(fixture_path) as f:
@@ -479,18 +479,21 @@ class Command(BaseCommand):
                         self._create_place(geoname, importance)
                         created_count += 1
                     except Exception as e:
-                        # If creation fails (e.g., race condition), try to find and update
+                        # If creation fails (e.g., race condition), try to find
+                        # and update — but only when a duplicate exists and
+                        # updates are enabled; otherwise re-raise.
                         existing_place = self._find_duplicate(geoname)
-                        if existing_place and update:
-                            was_updated = self._update_place(
-                                existing_place, geoname, importance
-                            )
-                            if was_updated:
-                                updated_count += 1
-                            else:
-                                skipped_count += 1
-                        else:
+                        if not existing_place:
                             raise e
+                        if not update:
+                            raise e
+                        was_updated = self._update_place(
+                            existing_place, geoname, importance
+                        )
+                        if was_updated:
+                            updated_count += 1
+                        else:
+                            skipped_count += 1
 
             if processed % self.batch_size == 0:
                 self.stdout.write(
@@ -661,10 +664,10 @@ class Command(BaseCommand):
             "H.GLCR": 5,  # Glacier
             "H.FLLS": 5,  # Waterfall
         }
-        importance += feature_bonuses.get(geoname.feature_id, 0)
+        importance += feature_bonuses.get(geoname.feature.feature_code, 0)
 
         # Cap at 100
-        return min(int(importance), 100)
+        return min(math.floor(importance), 100)
 
     def _find_duplicate(self, geoname: GeoName) -> GeoPlace | None:
         """
@@ -784,7 +787,7 @@ class Command(BaseCommand):
             changed = True
         if (
             hut.hut_type_open
-            and not place.categories.filter(id=hut.hut_type_open_id).exists()
+            and not place.categories.filter(id=hut.hut_type_open.pk).exists()
         ):
             place.categories.add(hut.hut_type_open)
             changed = True

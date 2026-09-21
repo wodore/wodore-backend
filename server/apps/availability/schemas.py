@@ -18,19 +18,29 @@ class AvailabilityDaySchema(BaseModel):
         ...,
         description="Reservation status (unknown, possible, not_possible, not_online)",
     )
-    free: int = Field(..., description="Number of free places", ge=0)
-    total: int = Field(..., description="Total number of places", ge=0)
-    occupancy_percent: float = Field(
-        ..., description="Occupancy percentage (0-100)", ge=0, le=100
+    free: int | None = Field(
+        None, description="Number of free places (null = not published by source)", ge=0
     )
-    occupancy_steps: int = Field(
-        ...,
-        description="Occupancy in discrete steps (0-100, increments of 10)",
+    total: int | None = Field(
+        None,
+        description="Total number of places (null = not published by source)",
+        ge=0,
+    )
+    occupancy_percent: float | None = Field(
+        None,
+        description="Occupancy percentage (0-100), null if not computable",
+        ge=0,
+        le=100,
+    )
+    occupancy_steps: int | None = Field(
+        None,
+        description="Occupancy in discrete steps (0-100, increments of 10), null if not computable",
         ge=0,
         le=100,
     )
     occupancy_status: OccupancyStatusEnum = Field(
-        ..., description="Occupancy status (empty, low, medium, high, full, unknown)"
+        ...,
+        description="Occupancy status (empty, low, medium, high, full, free_unknown, unknown)",
     )
     hut_type: str = Field(
         default="unknown", description="Hut type on this date (e.g., 'hut', 'bivouac')"
@@ -114,19 +124,29 @@ class CurrentAvailabilityDaySchema(BaseModel):
         ...,
         description="Reservation status (unknown, possible, not_possible, not_online)",
     )
-    free: int = Field(..., description="Number of free places", ge=0)
-    total: int = Field(..., description="Total number of places", ge=0)
-    occupancy_percent: float = Field(
-        ..., description="Occupancy percentage (0-100)", ge=0, le=100
+    free: int | None = Field(
+        None, description="Number of free places (null = not published by source)", ge=0
     )
-    occupancy_steps: int = Field(
-        ...,
-        description="Occupancy in discrete steps (0-100, increments of 10)",
+    total: int | None = Field(
+        None,
+        description="Total number of places (null = not published by source)",
+        ge=0,
+    )
+    occupancy_percent: float | None = Field(
+        None,
+        description="Occupancy percentage (0-100), null if not computable",
+        ge=0,
+        le=100,
+    )
+    occupancy_steps: int | None = Field(
+        None,
+        description="Occupancy in discrete steps (0-100, increments of 10), null if not computable",
         ge=0,
         le=100,
     )
     occupancy_status: OccupancyStatusEnum = Field(
-        ..., description="Occupancy status (empty, low, medium, high, full, unknown)"
+        ...,
+        description="Occupancy status (empty, low, medium, high, full, free_unknown, unknown)",
     )
     hut_type: str = Field(
         default="unknown", description="Hut type on this date (e.g., 'hut', 'bivouac')"
@@ -205,13 +225,23 @@ class AvailabilityTrendDaySchema(BaseModel):
     date: datetime.date = Field(
         ..., description="Availability date this data applies to"
     )
-    free: int = Field(..., description="Number of free places", ge=0)
-    total: int = Field(..., description="Total number of places", ge=0)
-    occupancy_percent: float = Field(
-        ..., description="Occupancy percentage (0-100)", ge=0, le=100
+    free: int | None = Field(
+        None, description="Number of free places (null = not published by source)", ge=0
+    )
+    total: int | None = Field(
+        None,
+        description="Total number of places (null = not published by source)",
+        ge=0,
+    )
+    occupancy_percent: float | None = Field(
+        None,
+        description="Occupancy percentage (0-100), null if not computable",
+        ge=0,
+        le=100,
     )
     occupancy_status: OccupancyStatusEnum = Field(
-        ..., description="Occupancy status (empty, low, medium, high, full, unknown)"
+        ...,
+        description="Occupancy status (empty, low, medium, high, full, free_unknown, unknown)",
     )
     reservation_status: ReservationStatusEnum = Field(
         ...,

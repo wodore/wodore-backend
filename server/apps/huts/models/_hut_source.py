@@ -35,7 +35,7 @@ class HutSource(TimeStampedModel):
 
     ReviewStatusChoices = _ReviewStatusChoices
 
-    objects: BaseManager = BaseManager()
+    objects: BaseManager = BaseManager()  # pyright: ignore[reportIncompatibleVariableOverride]
 
     source_id = models.CharField(
         blank=False,
@@ -99,7 +99,7 @@ class HutSource(TimeStampedModel):
         verbose_name=_("Hut"),
     )
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = "Hut Source"
         verbose_name_plural = "Hut Sources"
         ordering = (Lower("name"), "organization__order")
@@ -122,12 +122,12 @@ class HutSource(TimeStampedModel):
         # check if already in DB
         status: UpdateCreateStatus = UpdateCreateStatus.ignored
         try:
-            other_hut_src = cls.objects.get(
+            other_hut_src: "HutSource" = cls.objects.get(
                 source_id=hut_source.source_id,
                 organization=hut_source.organization,
                 is_current=True,
             )
-            if other_hut_src.is_active is False:  # ignore if not active
+            if not other_hut_src.is_active:  # ignore if not active
                 return hut_source, UpdateCreateStatus.ignored
             diff = DeepDiff(
                 other_hut_src.source_data,
@@ -157,8 +157,7 @@ class HutSource(TimeStampedModel):
                     diff_comment = "alot changed, have a look ..."
                 hut_source.review_comment = diff_comment
                 hut_source.review_status = cls.ReviewStatusChoices.review
-                if other_hut_src is not None:
-                    hut_source.previous_object = other_hut_src
+                hut_source.previous_object = other_hut_src
                 hut_source.version = other_hut_src.version + 1
                 other_hut_src.review_status = HutSource.ReviewStatusChoices.old
                 other_hut_src.is_current = False

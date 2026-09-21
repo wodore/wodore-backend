@@ -92,6 +92,16 @@ class HutTypeHelper:
         return cls._values_cache
 
     @classmethod
+    def get_queryset(cls):
+        """All hut type categories: active children of the configured parent.
+
+        Use for FK form fields — the plain Category queryset contains ~9k
+        unrelated categories (OSM brands etc.) and is far too large for a
+        select widget.
+        """
+        return Category.objects.filter(parent=cls._get_parent(), is_active=True)
+
+    @classmethod
     def clear_cache(cls):
         """Clear cached parent and values (useful for tests)."""
         cls._parent_cache = None

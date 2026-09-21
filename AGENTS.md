@@ -51,6 +51,15 @@ OpenAPI schema available at:
 - **Dependencies**: hut-services library for external hut information and booking data
 - **Secrets**: Infisical for environment variable management
 
+### Local Editable Hut-Services
+
+For local development, `hut-services` and `hut-services-private` can be installed as
+editable sources from the sibling checkouts (see `[tool.uv.sources]` in `pyproject.toml`).
+Switch **both** to path sources together (uv resolves the private package's
+`../hut-services` path dependency and conflicts with a git pin), then run
+`uv sync --extra private` — the `private` extra is required to install
+`hut-services-private` at all (plain `uv sync` omits it).
+
 ## Related Projects
 
 The Wodore ecosystem consists of multiple repositories:

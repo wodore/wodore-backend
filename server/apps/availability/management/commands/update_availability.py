@@ -104,11 +104,9 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         profile_enabled = options.get("profile")
-
+        profiler = None
         if profile_enabled:
             import cProfile
-            import pstats
-            from io import StringIO
 
             profiler = cProfile.Profile()
             profiler.enable()
@@ -116,13 +114,11 @@ class Command(BaseCommand):
         try:
             self._handle_update(*args, **options)
         finally:
-            if profile_enabled:
-                profiler.disable()
+            if profiler is not None:
+                import pstats
+                from io import StringIO
 
-                # Print profile results
-                click.echo("\n" + "=" * 80)
-                click.secho("PROFILE RESULTS", fg="cyan", bold=True)
-                click.echo("=" * 80 + "\n")
+                profiler.disable()
 
                 # Sort by cumulative time
                 s = StringIO()
@@ -148,8 +144,8 @@ class Command(BaseCommand):
         hut_id = options.get("hut_id")
         update_all = options.get("all")
         dry_run = options.get("dry_run")
-        days = options.get("days")
-        request_interval = options.get("request_interval")
+        days = options.get("days") or 365
+        request_interval = options.get("request_interval") or 0.1
         no_progress = options.get("no_progress")
 
         # Priority parameters
@@ -301,7 +297,7 @@ class Command(BaseCommand):
                     def fetch_callback():
                         progress.advance(fetch_task)
                         # Update batch info when we move to next batch
-                        current_hut = progress.tasks[fetch_task].completed
+                        current_hut = int(progress.tasks[fetch_task].completed)
                         new_batch = (current_hut // batch_size) + 1
                         if new_batch != current_batch["fetch"]:
                             current_batch["fetch"] = new_batch
@@ -320,7 +316,7 @@ class Command(BaseCommand):
                     def process_callback():
                         progress.advance(process_task)
                         # Update batch info when we move to next batch
-                        current_hut = progress.tasks[process_task].completed
+                        current_hut = int(progress.tasks[process_task].completed)
                         new_batch = (current_hut // batch_size) + 1
 
                         # Update process status to show current batch
