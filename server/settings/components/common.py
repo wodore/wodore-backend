@@ -484,11 +484,22 @@ HUTS_CATEGORY_PARENT = config("HUTS_CATEGORY_PARENT", default="accommodation")
 
 # Django-Q2 — ORM broker (no external services)
 # https://django-q2.readthedocs.io/
+# Pattern from the django-admin-runner q2 example
+# (examples/unfold_django_q2/settings.py).
 Q_CLUSTER = {
     "name": "DJANGORM",
     "orm": "default",
-    "retry": 600,
-    "timeout": 300,
+    # Missed schedule slots while the cluster was down are NOT replayed:
+    # each schedule runs once at the next opportunity instead of catching
+    # up every missed slot in a burst ("only one task runs").
+    "catch_up": False,
+    # retry must exceed timeout, or q2 re-delivers tasks before they
+    # finish (and re-runs commands).
+    "retry": 90000,  # 25 h > timeout
+    # django-q2 SIGKILLs workers whose task exceeds this limit — the task
+    # row then needs a Force Stop to be finalized. Keep it well above the
+    # longest command you run (update_availability can take hours).
+    "timeout": 86400,  # 24 h
     "poll": 2,
     "max_attempts": 1,
 }

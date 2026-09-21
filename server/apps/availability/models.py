@@ -203,6 +203,18 @@ class HutAvailability(TimeStampedModel):
                 fields=["hut", "availability_date"],
                 name="unique_hut_date",
             ),
+            models.CheckConstraint(
+                name="%(app_label)s_%(class)s_occupancy_status_valid",
+                condition=models.Q(
+                    occupancy_status__in=[e.value for e in OccupancyStatusEnum]
+                ),
+            ),
+            models.CheckConstraint(
+                name="%(app_label)s_%(class)s_reservation_status_valid",
+                condition=models.Q(
+                    reservation_status__in=[e.value for e in ReservationStatusEnum]
+                ),
+            ),
         ]
 
     def __str__(self) -> str:
@@ -402,6 +414,20 @@ class HutAvailabilityHistory(TimeStampedModel):
         indexes = [
             models.Index(fields=["hut", "availability_date", "first_checked"]),
             models.Index(fields=["availability_date", "first_checked"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                name="%(app_label)s_%(class)s_occupancy_status_valid",
+                condition=models.Q(
+                    occupancy_status__in=[e.value for e in OccupancyStatusEnum]
+                ),
+            ),
+            models.CheckConstraint(
+                name="%(app_label)s_%(class)s_reservation_status_valid",
+                condition=models.Q(
+                    reservation_status__in=[e.value for e in ReservationStatusEnum]
+                ),
+            ),
         ]
 
     def __str__(self) -> str:
