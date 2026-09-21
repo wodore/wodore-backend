@@ -16,7 +16,8 @@
     description: Online Reservations System für Hütten.
     url: https://www.alpsonline.org/guest/login?lang=de_CH
     attribution: ""
-    link_hut_pattern: https://www.alpsonline.org/reservation/calendar?hut_id={{id}}&lang={{lang}}
+    link_hut_pattern: "https://www.alpsonline.org/reservation/calendar?\
+      hut_id={{id}}&lang={{lang}}"
     logo: organizations/logos/hrs_icon.png
     color_light: "#689751"
     color_dark: "#cbeba9"
@@ -45,7 +46,9 @@
     description: Der führende Verband für Bergsport in der Schweiz.
     url: https://www.sac-cas.ch/de/
     attribution: ""
-    link_hut_pattern: https://www.sac-cas.ch/{{lang}}/{{config.huts_tours.get(lang,'de')}}/{{config.portal.get(lang,'de')}}/{{id}}
+    link_hut_pattern: "https://www.sac-cas.ch/{{lang}}/\
+      {{config.huts_tours.get(lang,'de')}}/\
+      {{config.portal.get(lang,'de')}}/{{id}}"
     logo: organizations/logos/sac_icon.png
     color_light: "#008000"
     color_dark: "#008000"
@@ -71,7 +74,8 @@
     is_public: true
     name: Gipfelbuch
     fullname: Gipfelbuch
-    description: Portal für aktuelle Verhältnisse, Tourenbeschreibungen und mehr.
+    description: >-
+      Portal für aktuelle Verhältnisse, Tourenbeschreibungen und mehr.
     url: https://www.gipfelbuch.ch
     attribution: ""
     link_hut_pattern: https://www.gipfelbuch.ch/huetten/{{id}}-{{props.slug}}
@@ -101,7 +105,8 @@
     description: Organization der Naturefreunde Schweiz.
     url: https://naturfreunde.ch
     attribution: ""
-    link_hut_pattern: https://naturfreunde.ch/{{config.house.get(lang,'de')}}/{{props.slug}}
+    link_hut_pattern: >-
+      https://naturfreunde.ch/{{config.house.get(lang,'de')}}/{{props.slug}}
     logo: organizations/logos/nfs_icon.png
     color_light: "#e5162a"
     color_dark: "#e5162a"
@@ -182,7 +187,8 @@
     description: Freie Übernachtungs informationen in den Bergen (Französisch).
     url: https://www.refuges.info/
     attribution: ""
-    link_hut_pattern: https://www.refuges.info/point/{{id}}/{{props.hut_type}}/{{props.slug}}
+    link_hut_pattern: >-
+      https://www.refuges.info/point/{{id}}/{{props.hut_type}}/{{props.slug}}
     logo: organizations/logos/refugesinfo_icon.png
     color_light: "#e08020"
     color_dark: "#874d12"
@@ -449,3 +455,35 @@
     config: {}
     props_schema: {}
     order: 88
+- model: organizations.organization
+  pk: 14
+  fields:
+    i18n:
+      name_en: FFCAM
+      name_fr: FFCAM
+      name_it: FFCAM
+      fullname_en: French Federation of Alpine and Mountain Clubs
+      fullname_fr: Fédération Française des Clubs Alpins et de Montagne
+      fullname_it: Federazione Francese dei Club Alpini e di Montagna
+      description_en: >-
+        French federation of alpine clubs with online hut reservation system.
+      description_fr: >-
+        Fédération des clubs alpins et de montagne, réservation en ligne.
+      description_it: ""
+    slug: ffcam
+    is_active: true
+    is_public: true
+    name: FFCAM
+    fullname: Fédération Française des Clubs Alpins et de Montagne
+    description: >-
+      Französischer Alpenverein mit Online-Reservationssystem für Hütten.
+    url: https://ffcam.fr
+    attribution: ""
+    link_hut_pattern: >-
+      https://centrale.ffcam.fr/index.php?structure={{props.structure_id}}
+    logo: organizations/logos/ffcam_icon.png
+    color_light: "#00538b"
+    color_dark: "#5aa6dd"
+    config: {}
+    props_schema: {}
+    order: 15

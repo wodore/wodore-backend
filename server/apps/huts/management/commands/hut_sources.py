@@ -61,7 +61,7 @@ def add_hut_source_db(  # type: ignore[no-any-unimported]
         )
         shut, status = HutSource.add(shut, new_review_status=review_status)
         _hut_name = shut.name if len(shut.name) < 18 else shut.name[:15] + ".."
-        _name = f"  Hut {number!s: <3} {'`'+shut.source_id+'`':<15} {_hut_name:<20} {'('+str(shut.organization)+')':<8}"
+        _name = f"  Hut {number!s: <3} {'`' + shut.source_id + '`':<15} {_hut_name:<20} {'(' + str(shut.organization) + ')':<8}"
         click.echo(f"{_name: <48}", nl=False)
         status_color = {
             UpdateCreateStatus.updated: "yellow",
@@ -74,7 +74,7 @@ def add_hut_source_db(  # type: ignore[no-any-unimported]
         click.secho(
             f"  ... {status.value:<8}", fg=status_color.get(status, "red"), nl=False
         )
-        click.secho(f" (#{shut.id})", dim=True)
+        click.secho(f" (#{shut.id})", dim=True)  # pyright: ignore[reportAttributeAccessIssue]  # noqa: E501 — auto pk, plugin-less Pyright
         source_huts.append(shut)
     added = counter[UpdateCreateStatus.created]
     updated = counter[UpdateCreateStatus.updated]
@@ -92,16 +92,17 @@ def add_hutsources_function(
     **kwargs: Any,
 ) -> None:
     selected_orgs = kwargs.get("selected_organizations", [])
-    limit = kwargs.get("limit")
-    offset = kwargs.get("offset")
+    limit = kwargs.get("limit") or 0  # 0 = all
+    offset = kwargs.get("offset") or 0
     lang = kwargs.get("lang")
+    with_minisite = kwargs.get("with_minisite", False)
     for org in selected_orgs:
         service_class: BaseService = settings.SERVICES.get(org, None)
         if service_class is not None:
             service = service_class
             obj.stdout.write(f"Get data from '{service.__class__.__name__}'")
             src_huts = service.get_huts_from_source(
-                limit=limit, offset=offset, lang=lang
+                limit=limit, offset=offset, lang=lang, with_minisite=with_minisite
             )
             obj.stdout.write(
                 f"Got {len(src_huts)} results back, start filling database:"
@@ -142,9 +143,9 @@ def add_hutsources_function(
 @register_command(group="Huts")
 class Command(CRUDCommand[HutSource]):
     # help = ""
-    model = HutSource
+    model = HutSource  # pyright: ignore[reportAssignmentType] — CRUDCommand convention: class assigned to `model`
     model_names = "hutsources"
-    add_function = add_hutsources_function
+    add_function = add_hutsources_function  # pyright: ignore[reportAssignmentType] — see `model`
     use_limit_arg = True
     use_offset_arg = True
     # use_update_arg = True
@@ -165,13 +166,30 @@ class Command(CRUDCommand[HutSource]):
         parser.add_argument(
             "--lang", help="Language to use (de, en, fr, it)", default="de", type=str
         )
+        parser.add_argument(
+            "-m",
+            "--with-minisite",
+            action="store_true",
+            help=(
+                "Additionally fetch each hut's minisite info box "
+                "(FFCAM: guarded/winter bed totals and contacts; "
+                "1 request per hut, cached)."
+            ),
+        )
 
-    def handle(self, orgs: str, lang: str, *args: Any, **options: Any) -> None:  # type: ignore[override]
+    def handle(
+        self, orgs: str, lang: str, with_minisite: bool, *args: Any, **options: Any
+    ) -> None:  # type: ignore[override]
         org_list = (
             settings.SERVICES.keys()
             if orgs.lower().strip() == "all"
             else [o.strip() for o in orgs.split(",")]
         )
         super().handle(
-            kwargs_add={"selected_organizations": org_list, "lang": lang}, **options
+            kwargs_add={
+                "selected_organizations": org_list,
+                "lang": lang,
+                "with_minisite": with_minisite,
+            },
+            **options,
         )

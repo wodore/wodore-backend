@@ -726,7 +726,7 @@ class Command(BaseCommand):
         if not dry_run:
             self.stdout.write("Cleaning up deleted places...")
             deleted_count = self._cleanup_deleted_places(
-                osm_org, run_start, category_names
+                osm_org, run_start, category_names, region
             )
             self.stdout.write(f"Deactivated {deleted_count} places no longer in OSM")
 

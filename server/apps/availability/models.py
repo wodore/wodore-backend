@@ -25,7 +25,7 @@ class AvailabilityStatus(TimeStampedModel):
     - Preventing repeated failed attempts to fetch unavailable huts
     """
 
-    objects: AvailabilityStatusManager = AvailabilityStatusManager()
+    objects: AvailabilityStatusManager = AvailabilityStatusManager()  # pyright: ignore[reportIncompatibleVariableOverride]
 
     hut = models.OneToOneField(
         Hut,
@@ -56,7 +56,7 @@ class AvailabilityStatus(TimeStampedModel):
         help_text=_("Number of consecutive times the fetch returned no data or failed"),
     )
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = _("Availability Status")
         verbose_name_plural = _("Availability Statuses")
         ordering = ("-last_checked",)
@@ -87,7 +87,7 @@ class HutAvailability(TimeStampedModel):
     Optimized for fast reads (map queries, detail views).
     """
 
-    objects: HutAvailabilityManager = HutAvailabilityManager()
+    objects: HutAvailabilityManager = HutAvailabilityManager()  # pyright: ignore[reportIncompatibleVariableOverride]
 
     hut = models.ForeignKey(
         Hut,
@@ -115,29 +115,38 @@ class HutAvailability(TimeStampedModel):
         db_index=True,
     )
 
-    # Raw booking data from source (matching HutBookingSchema)
+    # Raw booking data from source (matching HutBookingSchema).
+    # null = source does not publish the value (e.g. FFCAM bookable days without counts).
     free = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
         verbose_name=_("Free Places"),
-        help_text=_("Number of available places"),
+        help_text=_("Number of available places (null = not published by source)"),
     )
     total = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
         verbose_name=_("Total Places"),
-        help_text=_("Total number of places"),
+        help_text=_("Total number of places (null = not published by source)"),
     )
 
     # Computed fields from HutBookingSchema (stored for fast retrieval)
     occupancy_percent = models.FloatField(
+        null=True,
+        blank=True,
         verbose_name=_("Occupancy Percent"),
-        help_text=_("Occupancy percentage (0-100)"),
+        help_text=_("Occupancy percentage (0-100), null if not computable"),
     )
     occupancy_steps = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
         verbose_name=_("Occupancy Steps"),
         help_text=_("Occupancy in discrete steps (0-100, increments of 10)"),
     )
     occupancy_status = models.CharField(
         max_length=20,
         verbose_name=_("Occupancy Status"),
-        help_text=_("Status: empty, low, medium, high, full, unknown"),
+        help_text=_("Status: empty, low, medium, high, full, free_unknown, unknown"),
     )
     reservation_status = models.CharField(
         max_length=20,
@@ -174,7 +183,7 @@ class HutAvailability(TimeStampedModel):
         db_index=True,
     )
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = _("Hut Availability")
         verbose_name_plural = _("Hut Availabilities")
         ordering = ("availability_date", "hut__name")
@@ -306,7 +315,7 @@ class HutAvailabilityHistory(TimeStampedModel):
     Tracks state duration using first_checked and last_checked timestamps.
     """
 
-    objects: HutAvailabilityHistoryManager = HutAvailabilityHistoryManager()
+    objects: HutAvailabilityHistoryManager = HutAvailabilityHistoryManager()  # pyright: ignore[reportIncompatibleVariableOverride]
 
     availability = models.ForeignKey(
         HutAvailability,
@@ -331,20 +340,23 @@ class HutAvailabilityHistory(TimeStampedModel):
 
     # Snapshot of availability state - minimal fields for history
     free = models.PositiveSmallIntegerField(
+        null=True,
         verbose_name=_("Free Places"),
     )
     total = models.PositiveSmallIntegerField(
+        null=True,
         verbose_name=_("Total Places"),
     )
 
     # Computed fields for trend analysis
     occupancy_percent = models.FloatField(
+        null=True,
         verbose_name=_("Occupancy Percent"),
     )
     occupancy_status = models.CharField(
         max_length=20,
         verbose_name=_("Occupancy Status"),
-        help_text=_("Status: empty, low, medium, high, full, unknown"),
+        help_text=_("Status: empty, low, medium, high, full, free_unknown, unknown"),
     )
     reservation_status = models.CharField(
         max_length=20,
@@ -374,7 +386,7 @@ class HutAvailabilityHistory(TimeStampedModel):
         help_text=_("When this state was last confirmed (updated on every check)"),
     )
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = _("Hut Availability History")
         verbose_name_plural = _("Hut Availability Histories")
         ordering = ("-first_checked",)

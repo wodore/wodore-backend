@@ -196,6 +196,7 @@ class AvailabilityService:
                     elif (
                         capacity_closed is not None
                         and capacity_closed > 0
+                        and b.places.total is not None
                         and b.places.total <= capacity_closed
                         and h.get("hut_type_closed_slug") is not None
                     ):

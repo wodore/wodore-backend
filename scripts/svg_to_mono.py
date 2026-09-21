@@ -4,7 +4,7 @@
 from pathlib import Path
 
 import click
-from lxml import etree
+import lxml.etree as etree
 
 
 # SVG namespace

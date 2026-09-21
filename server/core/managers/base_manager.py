@@ -25,7 +25,7 @@ class BaseQuerySet(models.QuerySet):
 
 
 class BaseManager(models.Manager):
-    def get_queryset(self):
+    def get_queryset(self) -> "BaseQuerySet":
         return BaseQuerySet(self.model, using=self._db)  # Important!
 
     def drop(
@@ -36,4 +36,14 @@ class BaseManager(models.Manager):
 
 
 class BaseMutlilingualManager(MultilingualManager, BaseManager):
-    pass
+    """Multilingual manager (modeltrans) mixed with `BaseManager` helpers.
+
+    `get_queryset` is declared explicitly: the MRO chains
+    `MultilingualManager.get_queryset` → `BaseManager.get_queryset`
+    (modeltrans patches the resulting `BaseQuerySet` class into a
+    `MultilingualQuerySet`, keeping `drop()` etc.). The explicit
+    declaration reconciles both base signatures for type checkers.
+    """
+
+    def get_queryset(self) -> models.QuerySet:
+        return super().get_queryset()

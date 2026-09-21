@@ -91,22 +91,27 @@ def get_occupancy_icon_html(occupancy_status: str, show_text: bool = True) -> st
         )
 
 
-def get_occupancy_progress_bar(occupancy_percent: float, active: bool = True) -> str:
+def get_occupancy_progress_bar(
+    occupancy_percent: float | None, active: bool = True
+) -> str:
     """Get HTML for occupancy progress bar matching SVG icon colors"""
     # Colors from occupation SVG icons
-    percent_text = f"{occupancy_percent:.0f}%"
-    if not active:
+    if occupancy_percent is None or not active:
+        # Occupancy not computable: either the status is 'unknown', or the
+        # source does not publish totals (e.g. FFCAM 'free_unknown' days).
         color = "#333333"
         percent_text = "?"
         occupancy_percent = 0
-    elif occupancy_percent >= 75:
-        color = "#d32f2f"  # full - red
-    elif occupancy_percent >= 50:
-        color = "#ffa726"  # high - orange
-    elif occupancy_percent >= 25:
-        color = "#99cc33"  # medium - yellow-green
     else:
-        color = "#33ff33"  # low/empty - green
+        percent_text = f"{occupancy_percent:.0f}%"
+        if occupancy_percent >= 75:
+            color = "#d32f2f"  # full - red
+        elif occupancy_percent >= 50:
+            color = "#ffa726"  # high - orange
+        elif occupancy_percent >= 25:
+            color = "#99cc33"  # medium - yellow-green
+        else:
+            color = "#33ff33"  # low/empty - green
 
     return format_html(
         '<div style="display: flex; align-items: center; gap: 8px; min-width: 120px; padding: 2px 0;">'
@@ -304,7 +309,9 @@ class HutAvailabilityViewInline(admin.TabularInline):
 
     @display(description=_("Free/Total"))
     def places_display(self, obj):
-        return f"{obj.free}/{obj.total}"
+        free = "–" if obj.free is None else obj.free
+        total = "–" if obj.total is None else obj.total
+        return f"{free}/{total}"
 
     @display(description=_("Occupancy"), label=True)
     def occupancy_progress(self, obj):
@@ -422,7 +429,9 @@ class HutAvailabilityAdmin(ModelAdmin):
 
     @display(description=_("Free/Total"))
     def places_display(self, obj):
-        return f"{obj.free}/{obj.total}"
+        free = "–" if obj.free is None else obj.free
+        total = "–" if obj.total is None else obj.total
+        return f"{free}/{total}"
 
     @display(description=_("Occupancy"), label=True)
     def occupancy_progress(self, obj):
@@ -585,7 +594,9 @@ class HutAvailabilityHistoryAdmin(ModelAdmin):
 
     @display(description=_("Free/Total"))
     def places_display(self, obj):
-        return f"{obj.free}/{obj.total}"
+        free = "–" if obj.free is None else obj.free
+        total = "–" if obj.total is None else obj.total
+        return f"{free}/{total}"
 
     @display(description=_("Occupancy"), label=True)
     def occupancy_progress(self, obj):
