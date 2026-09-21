@@ -170,9 +170,8 @@ class Command(CRUDCommand):
             help="Do not change to review status (to 'review' if update, to 'new' if created)",
         )
         parser.add_argument(
-            "-O",
-            "--org",
-            "--organization",
+            "-s",
+            "--source",
             help="Hut source organization, only add this one, otherwise all",
             choices=list(settings.SERVICES),
             type=str,
@@ -213,7 +212,7 @@ class Command(CRUDCommand):
     def handle(
         self,
         no_review: bool,
-        org: str,
+        source: str,
         overwrite: bool,
         include: str,
         exclude: str,
@@ -245,18 +244,18 @@ class Command(CRUDCommand):
             # No need to call the old hut_types command anymore
             limit = options.get("limit")
             for params in [
-                {"org": "sac", "no_review": True},
+                {"source": "sac", "no_review": True},
                 {
-                    "org": "wikidata",
+                    "source": "wikidata",
                     "include": "location,photos,photos_attribution",
                     "no_review": True,
                 },
-                {"org": "osm", "no_review": True},
-                {"org": "hrs", "no_review": True},
-                {"org": "ffcam", "no_review": True},
-                {"org": "refuges", "no_review": False},
+                {"source": "osm", "no_review": True},
+                {"source": "hrs", "no_review": True},
+                {"source": "ffcam", "no_review": True},
+                {"source": "refuges", "no_review": False},
                 {
-                    "org": "wodore",
+                    "source": "wodore",
                     "no_review": True,
                     "overwrite": True,
                     "set_none": True,
@@ -264,7 +263,7 @@ class Command(CRUDCommand):
             ]:
                 self.stdout.write(
                     self.style.HTTP_INFO(
-                        f"Add {params.get('org', 'all')} huts with parameter:"
+                        f"Add {params.get('source', 'all')} huts with parameter:"
                     )
                 )
                 for k, v in params.items():
@@ -276,7 +275,7 @@ class Command(CRUDCommand):
         super().handle(
             kwargs_add={
                 "review": not no_review,
-                "selected_organization": org,
+                "selected_organization": source,
                 "force_overwrite": overwrite,
                 "force_overwrite_include": [
                     f.strip() for f in include.split(",") if include

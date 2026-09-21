@@ -156,9 +156,8 @@ class Command(CRUDCommand[HutSource]):
     def add_arguments(self, parser: CommandParser) -> None:
         super().add_arguments(parser)
         parser.add_argument(
-            "-O",
-            "--orgs",
-            "--organizations",
+            "-s",
+            "--source",
             help=(
                 "Hut source organizations: single slug, comma separated list, "
                 f"or 'all' (possible values: {', '.join(settings.SERVICES.keys())})."
@@ -185,12 +184,12 @@ class Command(CRUDCommand[HutSource]):
         )
 
     def handle(
-        self, orgs: str, lang: str, with_minisite: bool, *args: Any, **options: Any
+        self, source: str, lang: str, with_minisite: bool, *args: Any, **options: Any
     ) -> None:  # type: ignore[override]
-        if orgs.lower().strip() == "all":
+        if source.lower().strip() == "all":
             org_list = list(settings.SERVICES.keys())
         else:
-            org_list = [o.strip() for o in orgs.split(",")]
+            org_list = [o.strip() for o in source.split(",")]
             unknown = [o for o in org_list if o not in settings.SERVICES]
             if unknown:
                 self.stdout.write(
