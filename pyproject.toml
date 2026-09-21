@@ -54,8 +54,7 @@ dependencies = [
   "tzdata>=2025.3",                        # https://pypi.org/project/tzdata/
   "click==8.*",                            # https://pypi.org/project/click/
   "pyyaml==6.*",                           # https://pypi.org/project/PyYAML/
-  #"hut-services==0.*", # https://github.com/wodore/hut-services
-  "hut-services",                 # Local development version, see tool.uv.sources!
+  "hut-services>=0.2.0",          # https://github.com/wodore/hut-services (0.2: nullable PlacesSchema + is_bookable)
   "django-computedfields>=0.3.0", # https://pypi.org/project/django-computedfields/
   "django-storages[s3]>=1.14.6",
   "django-pgtrigger>=4.17.0",
@@ -148,7 +147,7 @@ dev = [
 django-postgres-extra = { git = "https://github.com/armonge/django-postgres-extra.git", branch = "feat/django-6" }
 hut-services-private = { git = "ssh://git@github.com/wodore/hut-services-private", branch = "main" }
 # hut-services-private = { path = "/home/tobias/git/wodore/hut-services-private", editable = true }
-hut-services = { git = "ssh://git@github.com/wodore/hut-services", branch = "main" }
+# hut-services = { git = "ssh://git@github.com/wodore/hut-services", branch = "main" }
 # hut-services = { path = "/home/tobias/git/wodore/hut-services", editable = true } # local DEV
 # django-admin-runner = { path = "/home/tobias/git/burgdev/django-admin-runner", editable = true }
 

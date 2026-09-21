@@ -1756,8 +1756,8 @@ wheels = [
 
 [[package]]
 name = "hut-services"
-version = "0.1.3"
-source = { git = "ssh://git@github.com/wodore/hut-services?branch=main#a62d715e4ea4798b95c033eba2c794c77707e3c0" }
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bs4" },
     { name = "dateparser" },
@@ -1776,11 +1776,15 @@ dependencies = [
     { name = "wikidata" },
     { name = "xmltodict" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/24/a4/49d8e64f76ab04e413bd71d200c6c9c7639db4e763e9206ad90c5b61ccc0/hut_services-0.2.0.tar.gz", hash = "sha256:ba90758f0cc91783c60f7255d4b6ee789fd2793239d33373a62067f7e62a2d7c", size = 139842, upload-time = "2026-09-21T16:50:09.598Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8d/bc/80714de9788ab8a3b541bfbb920cf249a73fe59df7cbdb23f60e73dcf9a3/hut_services-0.2.0-py3-none-any.whl", hash = "sha256:d6a07bb746f6afc220f59aa674dd67d30d7db48d6bfc5b65d8500c463947f1f0", size = 53166, upload-time = "2026-09-21T16:50:08.307Z" },
+]
 
 [[package]]
 name = "hut-services-private"
 version = "0.2.0"
-source = { git = "ssh://git@github.com/wodore/hut-services-private?branch=main#25cea2b4d90cf88f6bca3081fdaebe1454546623" }
+source = { git = "ssh://git@github.com/wodore/hut-services-private?branch=main#6c37f303c51d9a1e034f2530898af1511ca1dc8f" }
 dependencies = [
     { name = "httpx" },
     { name = "hut-services" },
@@ -4532,7 +4536,7 @@ requires-dist = [
     { name = "geojson-pydantic", specifier = "==1.*" },
     { name = "gunicorn", specifier = "==25.*" },
     { name = "httpx", specifier = ">=0.25.0" },
-    { name = "hut-services", git = "ssh://git@github.com/wodore/hut-services?branch=main" },
+    { name = "hut-services", specifier = ">=0.2.0" },
     { name = "hut-services-private", marker = "extra == 'private'", git = "ssh://git@github.com/wodore/hut-services-private?branch=main" },
     { name = "jinja2", specifier = "==3.*" },
     { name = "load-dotenv", specifier = "==0.1.*" },
