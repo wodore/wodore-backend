@@ -1,6 +1,4 @@
 import datetime
-
-from django.utils import timezone
 import typing as t
 
 from easydict import EasyDict
@@ -25,6 +23,7 @@ from django.contrib.postgres.indexes import GinIndex
 from django.db import transaction
 from django.db.models import F, Q, Value
 from django.db.models.functions import Concat, Lower
+from django.utils import timezone
 from django.utils.translation import get_language
 from django.utils.translation import gettext_lazy as _
 
@@ -734,7 +733,7 @@ class Hut(TimeStampedModel):
                 ):
                     old_value = getattr(hut_db, f)
                     # special comparision for dbPoint -> valus are always different because it is a class
-                    if isinstance(v, dbPoint) and v.tuple == old_value.tuple:  # type: ignore[attr-defined]
+                    if isinstance(v, dbPoint) and v.tuple == old_value.tuple:  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
                         continue
                     setattr(hut_db, f, v)
                     sp = (

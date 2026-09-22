@@ -3,9 +3,9 @@ from jsonsuit.widgets import JSONSuit, ReadonlyJSONSuit
 
 # Register your models here.
 from django.contrib import admin
-from django.contrib.auth.admin import (  # pyright: ignore[reportAssignmentType]  # shadowed below (Django admin idiom)
-    GroupAdmin,
-    UserAdmin,
+from django.contrib.auth.admin import (  # shadowed below (Django admin idiom)
+    GroupAdmin,  # pyright: ignore[reportAssignmentType]
+    UserAdmin,  # pyright: ignore[reportAssignmentType]
 )
 from django.contrib.auth.models import Group, User
 from django.contrib.gis.admin import GISModelAdmin
