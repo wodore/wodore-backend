@@ -32,7 +32,7 @@ def add_contact_function(parser, limit, **kwargs):
 
 
 class Command(CRUDCommand):
-    help = "Add random contacts."
+    help = "Add random (faker) contacts; drop/update/dump via the base CRUD options."
     use_limit_arg = True
     model = Contact
     model_names = "contacts"
