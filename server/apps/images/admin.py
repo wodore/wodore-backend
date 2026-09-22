@@ -65,7 +65,7 @@ class ImageAdmin(ModelAdmin):
 
     form = required_i18n_fields_form_factory("caption")
     fieldsets = ImageAdminFieldsets
-    view_on_site = True
+    view_on_site = True  # pyright: ignore[reportIncompatibleVariableOverride, reportAssignmentType]  # Django admin idiom
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
     list_display = (
         "thumb",
@@ -101,8 +101,8 @@ class ImageAdmin(ModelAdmin):
     )
 
     def save_model(self, request, obj, form, change):
-        if not obj.uploaded_by_user:
-            obj.uploaded_by_user = request.user
+        if not obj.uploaded_by_user:  # pyright: ignore[reportAttributeAccessIssue]
+            obj.uploaded_by_user = request.user  # pyright: ignore[reportAttributeAccessIssue]
         super().save_model(request, obj, form, change)
 
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":

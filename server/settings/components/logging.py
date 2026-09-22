@@ -22,9 +22,12 @@ class SlowQueryFilter(logging.Filter):
 
     def __init__(self, threshold_ms: int | None = None) -> None:
         super().__init__()
-        self._threshold_ms = threshold_ms or int(
-            os.getenv("SLOW_QUERY_THRESHOLD_MS", "200")
-        )
+        try:
+            self._threshold_ms = threshold_ms or int(
+                os.getenv("SLOW_QUERY_THRESHOLD_MS", "200")
+            )
+        except ValueError:
+            self._threshold_ms = 200
 
     def filter(self, record: logging.LogRecord) -> bool:
         duration = getattr(record, "duration", None)
@@ -133,7 +136,7 @@ class StructlogFormatter(logging.Formatter):
             if self.renderer and callable(self.renderer):
                 result = self.renderer(None, record.levelname.lower(), event_dict)
                 return result if isinstance(result, str) else str(result)
-        except Exception:
+        except (TypeError, ValueError, KeyError, AttributeError):
             pass
 
         # Fallback to standard formatting

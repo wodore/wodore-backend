@@ -17,7 +17,7 @@ from server.settings.components.common import (
     MIDDLEWARE,
 )
 from server.settings.components.csp import CONTENT_SECURITY_POLICY
-from server.settings.components.oicd import discovery_info
+from server.settings.components.oidc import discovery_info
 
 # Setting the development status:
 

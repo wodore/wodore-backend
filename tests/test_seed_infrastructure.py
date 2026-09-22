@@ -19,6 +19,7 @@ class TestSeedFixture:
     def test_hut_has_required_fields(self, seed_data):
         """Each seeded hut should have name, location, elevation, etc."""
         hut = Hut.objects.first()
+        assert hut is not None, "No hut found — seed data may not have loaded"
         assert hut.name, "Hut should have a name"
         assert hut.location, "Hut should have a location"
         assert hut.slug, "Hut slug should be auto-generated"

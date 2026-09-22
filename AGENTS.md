@@ -23,6 +23,22 @@ app update_availability --all
 # Note: app expands to: infisical run --env=dev --path /backend --silent --log-level warn -- app <command>
 ```
 
+## Authentication Modes
+
+Two feature flags (see `server/settings/components/oidc.py`):
+
+| Mode | Flags | Admin login | Frontend/API auth |
+|---|---|---|---|
+| Zitadel (prod/staging default) | `OIDC_ENABLED=true` | OIDC SSO | Zitadel tokens (introspection) |
+| Local (dev/test default) | `LOCAL_AUTH_ENABLED=true` | classic Django login (`app createsuperuser`) | built-in provider at `/oauth/local/` |
+
+- `LOCAL_AUTH_ENABLED=true` is hard-refused outside `DJANGO_ENV=development|test`.
+- OIDC enabled + provider unreachable = startup fails fast (`ImproperlyConfigured`).
+- Frontend local mode: `WODORE_OICD_ISSUER_URL=http://localhost:8000/oauth/local`,
+  `WODORE_OICD_CLIENT_ID=wodore-local-dev`, any `WODORE_OICD_RESOURCE_ID`.
+- Local users: `app local_auth_users` (admin@local.test / admin-dev, editor@local.test / editor-dev).
+- Test tokens: `POST /oauth/local/token` with `grant_type=password`.
+
 ## Project Structure
 
 - **Django Apps**: `server/apps/` (e.g., `huts/`, `availbility/`, `organizations/`)

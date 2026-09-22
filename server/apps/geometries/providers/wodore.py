@@ -96,7 +96,7 @@ class WodoreProvider(ImageProvider):
             from server.apps.geometries.models import GeoPlace
 
             # Get GeoPlaces within 10m radius
-            places = (
+            places = (  # pyright: ignore[reportAssignmentType]  # QuerySet annotated later
                 GeoPlace.objects.filter(
                     is_active=True,
                     is_public=True,
@@ -109,8 +109,8 @@ class WodoreProvider(ImageProvider):
             results = []
             for place in places:
                 place_qid = None
-                if hasattr(place, "osm_tags") and place.osm_tags:
-                    place_qid = place.osm_tags.get("wikidata")
+                if hasattr(place, "osm_tags") and place.osm_tags:  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                    place_qid = place.osm_tags.get("wikidata")  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
 
                 logger.debug(
                     "Processing place",
@@ -120,7 +120,7 @@ class WodoreProvider(ImageProvider):
                 )
 
                 # Get images through association model
-                for assoc in place.image_associations.all():
+                for assoc in place.image_associations.all():  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
                     img = assoc.image
                     # Filter: must be active, approved, and not marked for no publication
                     if not img.is_active:
@@ -131,9 +131,9 @@ class WodoreProvider(ImageProvider):
                         continue
 
                     distance_m = (
-                        place.distance.m
-                        if hasattr(place.distance, "m")
-                        else place.distance
+                        place.distance.m  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                        if hasattr(place.distance, "m")  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                        else place.distance  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
                     )
 
                     # Generate attribution using base helper
@@ -152,7 +152,7 @@ class WodoreProvider(ImageProvider):
                             img.source_org.slug
                         )  # Use slug for provider field
                         provider_name = (
-                            img.source_org.name_i18n or img.source_org.slug
+                            img.source_org.name_i18n or img.source_org.slug  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
                         )  # Use name for attribution
                         provider_url = img.source_org.url
                         # Generate provider icon URL if logo exists
@@ -168,13 +168,13 @@ class WodoreProvider(ImageProvider):
                         author=img.author,
                         author_url=img.author_url,
                         license_slug=img.license.slug,
-                        license_name=license_info["name"],
+                        license_name=license_info["name"],  # pyright: ignore[reportArgumentType]  # dynamic license_info
                         license_url=license_info["url"],
                         provider_name=provider_name,
                         provider_url=provider_url,
                         source_url=img.source_url,
                         provider_icon=provider_icon,
-                        license_icons=license_info.get("icons"),
+                        license_icons=license_info.get("icons"),  # pyright: ignore[reportArgumentType]  # dynamic license_info
                     )
                     attribution = attribution_data["short"]
 
@@ -195,7 +195,7 @@ class WodoreProvider(ImageProvider):
                         source_url=img.source_url,
                         image_type="flat",  # Default for wodore images
                         captured_at=img.capture_date,
-                        location=place.location,
+                        location=place.location,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
                         distance_m=distance_m,
                         license_slug=img.license.slug,
                         attribution=attribution,
@@ -206,10 +206,10 @@ class WodoreProvider(ImageProvider):
                         place={
                             "id": place.id,
                             "slug": place.slug,
-                            "name": place.name_i18n,
+                            "name": place.name_i18n,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
                             "location": {
-                                "lat": place.location.y,
-                                "lon": place.location.x,
+                                "lat": place.location.y,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                                "lon": place.location.x,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
                             },
                         }
                         if place
@@ -355,7 +355,7 @@ class WodoreProvider(ImageProvider):
                         caption_preview=caption_preview,
                     )
                     distance_m = (
-                        hut.distance.m if hasattr(hut.distance, "m") else hut.distance
+                        hut.distance.m if hasattr(hut.distance, "m") else hut.distance  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
                     )
 
                     # Generate attribution using base helper
@@ -374,7 +374,7 @@ class WodoreProvider(ImageProvider):
                             img.source_org.slug
                         )  # Use slug for provider field
                         provider_name = (
-                            img.source_org.name_i18n or img.source_org.slug
+                            img.source_org.name_i18n or img.source_org.slug  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
                         )  # Use name for attribution
                         provider_url = img.source_org.url
                         # Generate provider icon URL if logo exists
@@ -390,13 +390,13 @@ class WodoreProvider(ImageProvider):
                         author=img.author,
                         author_url=img.author_url,
                         license_slug=img.license.slug,
-                        license_name=license_info["name"],
+                        license_name=license_info["name"],  # pyright: ignore[reportArgumentType]  # dynamic license_info
                         license_url=license_info["url"],
                         provider_name=provider_name,
                         provider_url=provider_url,
                         source_url=img.source_url,
                         provider_icon=provider_icon,
-                        license_icons=license_info.get("icons"),
+                        license_icons=license_info.get("icons"),  # pyright: ignore[reportArgumentType]  # dynamic license_info
                     )
                     attribution = attribution_data["short"]
 
@@ -417,7 +417,7 @@ class WodoreProvider(ImageProvider):
                         source_url=img.source_url,
                         image_type="flat",  # Default for wodore images
                         captured_at=img.capture_date,
-                        location=hut.location,
+                        location=hut.location,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
                         distance_m=distance_m,
                         license_slug=img.license.slug,
                         attribution=attribution,
@@ -428,10 +428,10 @@ class WodoreProvider(ImageProvider):
                         place={
                             "id": hut.id,
                             "slug": hut.slug,
-                            "name": hut.name_i18n,
+                            "name": hut.name_i18n,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
                             "location": {
-                                "lat": hut.location.y,
-                                "lon": hut.location.x,
+                                "lat": hut.location.y,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                                "lon": hut.location.x,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
                             },
                         }
                         if hut
@@ -452,6 +452,9 @@ class WodoreProvider(ImageProvider):
                 provider="WodoreProvider",
             )
             return results
+
+        # Unknown place type: no results rather than implicit None
+        return []
 
     def _extract_focal_area(self, image: Any) -> ImageArea | None:
         """

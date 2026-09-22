@@ -5,7 +5,7 @@ from typing import Any
 import requests
 
 from django.conf import settings
-from django.core.management.base import BaseCommand, CommandParser
+from django.core.management.base import BaseCommand, CommandError, CommandParser
 
 # https://github.com/zitadel/example-quote-generator-app/tree/main/backend
 
@@ -30,7 +30,7 @@ class Command(BaseCommand):
             "-t",
             "--token-url",
             help="Token endpoint",
-            default=settings.OIDC_OP_TOKEN_ENDPOINT,
+            default=getattr(settings, "OIDC_OP_TOKEN_ENDPOINT", ""),
         )
         parser.add_argument(
             "-p",
@@ -53,6 +53,12 @@ class Command(BaseCommand):
         *args: Any,
         **options: Any,
     ) -> None:
+        if not settings.OIDC_ENABLED:
+            raise CommandError(
+                "OIDC is disabled (OIDC_ENABLED=false) - this command requires "
+                "the Zitadel provider. Enable OIDC or use the local auth "
+                "provider's token endpoint instead."
+            )
         user_secrets = settings.ZITADEL_API_MACHINE_USERS
         if list_users:
             for u in user_secrets:
@@ -83,7 +89,7 @@ class Command(BaseCommand):
             "scope": f"openid profile email urn:zitadel:iam:org:project:id:{project_id}:aud",
         }
 
-        response = requests.post(token_url, headers=headers, data=data)
+        response = requests.post(token_url, headers=headers, data=data, timeout=10)
 
         if response.status_code == 200:
             resp = response.json()

@@ -43,5 +43,5 @@ class BaseMutlilingualManager(MultilingualManager, BaseManager):
     declaration reconciles both base signatures for type checkers.
     """
 
-    def get_queryset(self) -> models.QuerySet:
+    def get_queryset(self) -> models.QuerySet:  # pyright: ignore[reportIncompatibleMethodOverride]  # manager MRO generics
         return super().get_queryset()

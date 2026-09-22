@@ -5,6 +5,8 @@ Provides utilities to score images based on metadata completeness,
 technical quality, and other signals.
 """
 
+from math import floor
+
 
 def score_metadata_completeness(
     has_description: bool = False,
@@ -171,7 +173,9 @@ def calculate_age_penalty(days_old: int | None = None) -> int:
     elif age_years > 2:
         # Linear penalty from -5 to -25 for 2-15 years
         ratio = (age_years - 2) / (15 - 2)  # 0 to 1
-        return int(-5 + (ratio * -20))  # -5 to -25
+        return floor(
+            -5 + (ratio * -20)
+        )  # -5 to -25 (heuristic, floor vs int immaterial)
     else:
         return 5  # Recent images (<=2 years): small bonus
 
@@ -220,11 +224,12 @@ def score_distance_relevance(distance_m: float, search_radius_m: float) -> int:
     elif distance_m <= search_radius_m:
         # Linear interpolation: 20 -> 5 as distance increases
         ratio = distance_m / search_radius_m
-        return int(20 - (ratio * 15))
+        return floor(20 - (ratio * 15))
     # Outside search radius but reasonable distance (up to 5x radius)
     elif distance_m <= search_radius_m * 5:
         # Heavy penalty for being outside search radius
-        return max(0, 5 - int((distance_m - search_radius_m) / search_radius_m * 5))
+        inner = (distance_m - search_radius_m) / search_radius_m * 5
+        return max(0, 5 - floor(inner))
     # Too far
     else:
         return 0

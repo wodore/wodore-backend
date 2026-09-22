@@ -1,19 +1,27 @@
 """
-This file contains a definition for Content-Security-Policy headers.
+This file contains the OIDC (Zitadel RP) settings and the local dev/test
+auth provider flags.
 
-Read more about it:
-https://developer.mozilla.org/ru/docs/Web/HTTP/Headers/Content-Security-Policy
-
-We are using `django-csp` to provide these headers.
-Docs: https://github.com/mozilla/django-csp
+- ``OIDC_ENABLED``: activates the Zitadel relying-party surface (discovery,
+  ``/oidc/`` URLs, admin login redirect, PermissionBackend, SessionRefresh).
+  Enabled by default in production/staging, disabled in development/test;
+  an explicit environment value always wins. When enabled, a failed discovery
+  fetch aborts startup (fail-fast).
+- ``LOCAL_AUTH_ENABLED``: activates the built-in dev/test OIDC provider
+  (``server.apps.local_auth``) so the frontend can authenticate directly
+  against Django without Zitadel. Only ever active in development/test, and
+  explicitly refused elsewhere.
 """
 
 import json
 import logging
+import os
 import re
 from urllib.parse import urlparse
 
 import requests
+
+from django.core.exceptions import ImproperlyConfigured
 
 from server.settings.components import config
 
@@ -43,7 +51,7 @@ def discover_oidc(discovery_url: str, internal_url: str = "") -> dict | None:
         headers["Host"] = parsed_original.netloc
 
     try:
-        response = requests.get(actual_url, headers=headers)
+        response = requests.get(actual_url, headers=headers, timeout=10)
     except (
         requests.exceptions.ConnectionError,
         requests.exceptions.MissingSchema,
@@ -78,11 +86,20 @@ OIDC_RP_CLIENT_ID = config("OIDC_RP_CLIENT_ID", "")
 OIDC_RP_CLIENT_SECRET = config("OIDC_RP_CLIENT_SECRET", "")
 OIDC_OP_BASE_URL = config("OIDC_OP_BASE_URL", "https://notset")
 ZITADEL_API_PRIVATE_KEY_FILE_PATH = config("ZITADEL_API_PRIVATE_KEY_FILE_PATH", "")
-_ZITADEL_API_PRIVATE_KEY_JSON = (
-    json.loads(str(config("ZITADEL_API_PRIVATE_KEY_JSON")))
-    if config("ZITADEL_API_PRIVATE_KEY_JSON", None)
-    else {}
-)
+
+
+def _load_zitadel_private_key() -> dict:
+    raw = config("ZITADEL_API_PRIVATE_KEY_JSON", None)
+    if not raw:
+        return {}
+    try:
+        return json.loads(str(raw))
+    except json.JSONDecodeError:
+        logging.warning("ZITADEL_API_PRIVATE_KEY_JSON is not valid JSON - ignored.")
+        return {}
+
+
+_ZITADEL_API_PRIVATE_KEY_JSON = _load_zitadel_private_key()
 ZITADEL_API_PRIVATE_KEY = (
     {
         "client_id": _ZITADEL_API_PRIVATE_KEY_JSON["clientId"],
@@ -96,10 +113,38 @@ ZITADEL_API_PRIVATE_KEY = (
 
 OIDC_RP_SIGN_ALGO = "RS256"
 OIDC_RP_SCOPES = "openid email phone profile"
-OIDC_OP_DISCOVERY_ENDPOINT = OIDC_OP_BASE_URL + "/.well-known/openid-configuration"
+
+# --- Feature flags ---------------------------------------------------------
+# Components load before the environment files (which define DEBUG), so the
+# defaults are derived from DJANGO_ENV - the same source DEBUG comes from
+# (development.py sets DEBUG=True, everything else False).
+_ENV = os.environ.get("DJANGO_ENV", "development")
+_IS_DEV_OR_TEST = _ENV in ("development", "test")
+
+OIDC_ENABLED = config("OIDC_ENABLED", cast=bool, default=not _IS_DEV_OR_TEST)
+
+# Local dev/test auth provider: defaults to the inverse of OIDC in dev/test
+# and is hard-guarded - enabling it elsewhere aborts startup.
+LOCAL_AUTH_ENABLED = config(
+    "LOCAL_AUTH_ENABLED", cast=bool, default=_IS_DEV_OR_TEST and not OIDC_ENABLED
+)
+if LOCAL_AUTH_ENABLED and not _IS_DEV_OR_TEST:
+    raise ImproperlyConfigured(
+        "LOCAL_AUTH_ENABLED=true is only allowed in development/test "
+        "environments (DJANGO_ENV=development or DJANGO_ENV=test)."
+    )
+
+# Local provider configuration (only meaningful when LOCAL_AUTH_ENABLED).
+# The client id the frontend sends; a public PKCE client without secret.
+LOCAL_AUTH_CLIENT_ID = config("LOCAL_AUTH_CLIENT_ID", "wodore-local-dev")
+# Optional override of the signing key (JSON JWK). Defaults to the committed
+# dev-only keypair in server/apps/local_auth/tokens.py.
+LOCAL_AUTH_PRIVATE_KEY_JWK = config("LOCAL_AUTH_PRIVATE_KEY_JWK", "")
 
 # Optional internal URL for OIDC requests (e.g., k8s service URL)
 OIDC_ISSUER_INTERNAL_URL = config("OIDC_ISSUER_INTERNAL_URL", "")
+# Inert when OIDC is disabled; only fetched in the OIDC_ENABLED branch below.
+OIDC_OP_DISCOVERY_ENDPOINT = OIDC_OP_BASE_URL + "/.well-known/openid-configuration"
 
 # OIDC session renewal settings
 # https://mozilla-django-oidc.readthedocs.io/en/stable/settings.html#oidc-renew-id-token-expiry-seconds
@@ -121,8 +166,19 @@ OIDC_EXEMPT_URLS = [
     "/media/",  # Exempt media files (development only)
 ]
 
-# Discover OpenID Connect endpoints
-discovery_info = discover_oidc(OIDC_OP_DISCOVERY_ENDPOINT, OIDC_ISSUER_INTERNAL_URL)
+# Discover OpenID Connect endpoints. Only fetched when OIDC is enabled - and
+# then failing fast on an unreachable provider instead of silently producing
+# a broken admin login.
+discovery_info = None
+if OIDC_ENABLED:
+    discovery_info = discover_oidc(OIDC_OP_DISCOVERY_ENDPOINT, OIDC_ISSUER_INTERNAL_URL)
+    if discovery_info is None:
+        raise ImproperlyConfigured(
+            f"OIDC is enabled but the discovery document could not be "
+            f"retrieved from '{OIDC_OP_DISCOVERY_ENDPOINT}'. Check that the "
+            f"OIDC provider is reachable and OIDC_OP_BASE_URL is correct."
+        )
+
 if discovery_info:
     OIDC_OP_AUTHORIZATION_ENDPOINT = discovery_info["authorization_endpoint"]
     OIDC_OP_TOKEN_ENDPOINT = discovery_info["token_endpoint"]

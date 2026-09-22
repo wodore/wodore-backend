@@ -96,7 +96,7 @@ class ImageMetaSchema(BaseModel):
 
 
 class TransformImageConfig(BaseModel):
-    name: str = Field(
+    name: str | None = Field(
         default=None,
         description="Name of the transformed image, per default '{width}x{height}'",
     )
