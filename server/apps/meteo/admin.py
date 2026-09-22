@@ -72,7 +72,7 @@ class WeatherCodeSymbolInline(TabularInline):
                     f'<img src="{obj.symbol_day.svg_file.url}" width="30" height="30" '
                     f'style="object-fit:contain;" title="{obj.symbol_day.slug}" />'
                 )
-        except Exception:
+        except (OSError, ValueError, AttributeError, TypeError):
             pass
         return mark_safe('<span style="color:#999;">-</span>')
 
@@ -85,7 +85,7 @@ class WeatherCodeSymbolInline(TabularInline):
                     f'<img src="{obj.symbol_night.svg_file.url}" width="30" height="30" '
                     f'style="object-fit:contain;" title="{obj.symbol_night.slug}" />'
                 )
-        except Exception:
+        except (OSError, ValueError, AttributeError, TypeError):
             pass
         return mark_safe('<span style="color:#999;">-</span>')
 
@@ -139,7 +139,7 @@ class WeatherCodeAdmin(ModelAdmin):
     )
     # Note: Inlines disabled for performance - use WeatherCodeSymbol admin to manage symbols
     # inlines = [WeatherCodeSymbolInlineForWeatherCode]
-    fieldsets = (
+    fieldsets = (  # pyright: ignore[reportAssignmentType]  # unfold _FieldsetSpec gap
         (
             _("WMO Code"),
             {
@@ -192,9 +192,9 @@ class WeatherCodeAdmin(ModelAdmin):
     @display(description=_("Category"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def category_display(self, obj):
         """Display category."""
+        if obj.category and obj.category.parent:
+            return f"{obj.category.parent.slug}.{obj.category.slug}"
         if obj.category:
-            if obj.category.parent:
-                return f"{obj.category.parent.slug}.{obj.category.slug}"
             return obj.category.slug
         return "-"
 
@@ -204,14 +204,17 @@ class WeatherCodeAdmin(ModelAdmin):
         try:
             # Use prefetched symbols to avoid extra queries
             for code_symbol in obj.symbols.all():
-                if code_symbol.collection.slug == "weather-icons-filled":
-                    if code_symbol.symbol_day and code_symbol.symbol_day.svg_file:
+                if (
+                    code_symbol.collection.slug == "weather-icons-filled"
+                    and code_symbol.symbol_day
+                    and code_symbol.symbol_day.svg_file
+                ):
                         return mark_safe(
                             f'<img src="{code_symbol.symbol_day.svg_file.url}" width="40" height="40" '
                             f'style="object-fit:contain;" title="{code_symbol.symbol_day.slug}" />'
                         )
                     break
-        except Exception:
+        except (OSError, ValueError, AttributeError, TypeError):
             pass
         return mark_safe('<span style="color:#999;">-</span>')
 
@@ -228,7 +231,7 @@ class WeatherCodeAdmin(ModelAdmin):
                             f'style="object-fit:contain;" title="{code_symbol.symbol_night.slug}" />'
                         )
                     break
-        except Exception:
+        except (OSError, ValueError, AttributeError, TypeError):
             pass
         return mark_safe('<span style="color:#999;">-</span>')
 
@@ -286,7 +289,7 @@ class WeatherCodeSymbolCollectionAdmin(ModelAdmin):
     )
     # Note: Inlines disabled for performance - use WeatherCodeSymbol admin to manage symbols
     # inlines = [WeatherCodeSymbolInlineForCollection]
-    fieldsets = (
+    fieldsets = (  # pyright: ignore[reportAssignmentType]  # unfold _FieldsetSpec gap
         (
             None,
             {
@@ -361,7 +364,7 @@ class WeatherCodeSymbolAdmin(ModelAdmin):
         "created",
         "modified",
     )
-    fieldsets = (
+    fieldsets = (  # pyright: ignore[reportAssignmentType]  # unfold _FieldsetSpec gap
         (
             None,
             {
@@ -424,7 +427,7 @@ class WeatherCodeSymbolAdmin(ModelAdmin):
                     f'<img src="{obj.symbol_day.svg_file.url}" width="30" height="30" '
                     f'style="object-fit:contain;" title="{obj.symbol_day.slug}" />'
                 )
-        except Exception:
+        except (OSError, ValueError, AttributeError, TypeError):
             pass
         return mark_safe('<span style="color:#999;">-</span>')
 
@@ -439,6 +442,6 @@ class WeatherCodeSymbolAdmin(ModelAdmin):
                     f'title="{obj.symbol_night.slug}" />'
                 )
                 return mark_safe(img)
-        except Exception:
+        except (OSError, ValueError, AttributeError, TypeError):
             pass
         return mark_safe('<span style="color:#999;">-</span>')
