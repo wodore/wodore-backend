@@ -1,4 +1,3 @@
-from server.core.models import TimeStampedModel
 from modeltrans.fields import TranslationField
 
 from django.contrib.postgres.indexes import GinIndex
@@ -7,6 +6,7 @@ from django.db.models.functions import Lower
 from django.utils.translation import gettext_lazy as _
 
 from server.core.managers import BaseMutlilingualManager
+from server.core.models import TimeStampedModel
 
 from ._contact_function import ContactFunction
 
@@ -51,7 +51,7 @@ class Contact(TimeStampedModel):
         help_text=_("Only shown to editors if not public"),
     )
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = _("Contact")
         indexes = (GinIndex(fields=["i18n"]),)
         ordering = (Lower("name"),)

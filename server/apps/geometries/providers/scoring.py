@@ -5,8 +5,6 @@ Provides utilities to score images based on metadata completeness,
 technical quality, and other signals.
 """
 
-from typing import Optional
-
 
 def score_metadata_completeness(
     has_description: bool = False,
@@ -46,10 +44,10 @@ def score_metadata_completeness(
 
 
 def score_technical_quality(
-    width: Optional[int] = None,
-    height: Optional[int] = None,
-    mime_type: Optional[str] = None,
-    file_size: Optional[int] = None,
+    width: int | None = None,
+    height: int | None = None,
+    mime_type: str | None = None,
+    file_size: int | None = None,
 ) -> int:
     """
     Score technical image quality (0-30).
@@ -147,7 +145,7 @@ def score_usage_signals(
     return score
 
 
-def calculate_age_penalty(days_old: Optional[int] = None) -> int:
+def calculate_age_penalty(days_old: int | None = None) -> int:
     """
     Calculate age penalty score (-50 to +5).
 

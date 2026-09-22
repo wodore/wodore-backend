@@ -3,16 +3,16 @@ Provider for Wodore internal database images.
 Works with both GeoPlaces and Huts.
 """
 
-import structlog
 from typing import Any
 
+import structlog
 from asgiref.sync import sync_to_async
 
-from django.contrib.gis.geos import Point
 from django.contrib.gis.db.models.functions import Distance
+from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
 
-from .base import ImageProvider, ImageResult, ImageArea
+from .base import ImageArea, ImageProvider, ImageResult
 from .schemas import GeoPlaceSchema
 
 logger = structlog.get_logger()

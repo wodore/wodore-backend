@@ -1,8 +1,10 @@
+from datetime import timedelta
+
+from django_admin_runner import register_command
+
 from django.core.management.base import BaseCommand
 from django.db import models
 from django.utils import timezone
-from datetime import timedelta
-from django_admin_runner import register_command
 
 from server.apps.external_links.models import ExternalLink
 
@@ -97,11 +99,11 @@ class Command(BaseCommand):
 
                 self.stdout.write(f"[{checked}/{total}] {link.identifier}: {status}")
 
-            except Exception as e:
+            except (OSError, ValueError, KeyError, TypeError) as e:
                 failed += 1
                 self.stdout.write(
-                    self.stdout.style.ERROR(
-                        f"[{checked}/{total}] {link.identifier}: ✗ Exception: {str(e)}"
+                    self.style.ERROR(
+                        f"[{checked}/{total}] {link.identifier}: ✗ Exception: {e!s}"
                     )
                 )
                 errors.append(

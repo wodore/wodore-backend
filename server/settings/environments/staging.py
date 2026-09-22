@@ -5,16 +5,15 @@ Inherits from production.py and overrides staging-specific settings.
 """
 
 # Import all production settings
-from server.settings.environments.production import *  # noqa: F401, F403
-
 from server.settings.components import config
+from server.settings.environments.production import *
 
 # Environment identifier
 ENVIRONMENT = "staging"
 
 # Cache configuration - use different prefix to avoid conflicts
-if "default" in CACHES:  # noqa: F405
-    CACHES["default"]["KEY_PREFIX"] = "staging"  # noqa: F405
+if "default" in CACHES:
+    CACHES["default"]["KEY_PREFIX"] = "staging"
 
 # Session cookie - different name to prevent conflicts with production
 SESSION_COOKIE_NAME = "sessionid_staging"
@@ -34,7 +33,7 @@ STAGING_EMAIL_WHITELIST = (
 )
 
 # Add staging-specific middleware for headers
-MIDDLEWARE = list(MIDDLEWARE)  # noqa: F405
+MIDDLEWARE = list(MIDDLEWARE)
 # Add robots tag to prevent indexing (environment header is already in common.py)
 MIDDLEWARE.insert(0, "server.middleware.headers.RobotsTagMiddleware")
 MIDDLEWARE = tuple(MIDDLEWARE)

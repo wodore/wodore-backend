@@ -1,8 +1,9 @@
-from django.conf import settings
-from django.core.management.base import BaseCommand, CommandError
-from pathlib import Path
 import os
 import subprocess
+from pathlib import Path
+
+from django.conf import settings
+from django.core.management.base import BaseCommand, CommandError
 
 
 class Command(BaseCommand):
@@ -109,6 +110,7 @@ class Command(BaseCommand):
                 ["martin-cp", "--version"],
                 capture_output=True,
                 text=True,
+                check=False,
                 timeout=10,
             )
             if result.returncode == 0:
@@ -162,6 +164,7 @@ class Command(BaseCommand):
                 cmd,
                 capture_output=True,
                 text=True,
+                check=False,
                 timeout=7200,
                 env=env,
             )

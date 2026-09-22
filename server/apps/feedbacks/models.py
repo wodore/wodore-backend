@@ -1,9 +1,9 @@
 # Create your models here.
 
-from server.core.models import TimeStampedModel
-
 from django.db import models
 from django.utils.translation import gettext_lazy as _
+
+from server.core.models import TimeStampedModel
 
 
 class _FeedbackStatusChoices(models.TextChoices):
@@ -14,20 +14,20 @@ class _FeedbackStatusChoices(models.TextChoices):
 
 
 class Feedback(TimeStampedModel):
-    id: int
+    id: int  # pyright: ignore[reportIncompatibleVariableOverride]
 
     FeedbackStatusChoices = _FeedbackStatusChoices
 
-    email: str = models.CharField(max_length=100, blank=False, null=False)
-    subject: str = models.CharField(max_length=200, blank=True, null=True, default="")
-    message: str = models.TextField(max_length=10000, blank=True, null=True, default="")
+    email = models.CharField(max_length=100, blank=False, null=False)
+    subject = models.CharField(max_length=200, blank=True, null=True, default="")
+    message = models.TextField(max_length=10000, blank=True, null=True, default="")
     urls = models.JSONField(
         verbose_name=_("URLs"),
         help_text=_("Additional urls ['url1','url2',...]."),
         blank=True,
         default=list,
     )
-    get_updates: bool = models.BooleanField(default=False)
+    get_updates = models.BooleanField(default=False)
     feedback_status = models.CharField(
         max_length=12,
         choices=FeedbackStatusChoices.choices,
@@ -45,7 +45,7 @@ class Feedback(TimeStampedModel):
     def __str__(self) -> str:
         return self.email
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = _("Feedback")
         constraints = (
             models.CheckConstraint(

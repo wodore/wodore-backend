@@ -9,12 +9,14 @@ Usage:
     app import_features --url <URL>  # Use custom URL
 """
 
+import urllib.error
 import urllib.request
 from io import StringIO
 
+from django_admin_runner import register_command
+
 from django.core.management.base import BaseCommand, CommandParser
 from django.db import transaction
-from django_admin_runner import register_command
 
 from ...models import Feature
 
@@ -41,7 +43,7 @@ class Command(BaseCommand):
         try:
             with urllib.request.urlopen(url) as response:
                 content = response.read().decode("utf-8")
-        except Exception as e:
+        except (OSError, ValueError) as e:
             self.stdout.write(
                 self.style.ERROR(f"Failed to download feature codes: {e}")
             )

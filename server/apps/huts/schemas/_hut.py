@@ -276,8 +276,6 @@ class HutSchemaOptional(BaseModel):
 class HutSchemaList(HutSchemaOptional):
     """Schema for hut list endpoints (without created/modified timestamps)."""
 
-    pass
-
 
 class HutSchemaDetails(HutSchemaOptional):
     """Schema for single hut detail endpoint (with all details including timestamps)."""

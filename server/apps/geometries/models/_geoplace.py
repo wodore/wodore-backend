@@ -6,20 +6,21 @@ from collections import OrderedDict
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
+from django_countries.fields import CountryField
+from modeltrans.fields import TranslationField
+
 from django.conf import settings
 from django.contrib.gis.db import models
+from django.contrib.gis.geos import Point
 from django.contrib.postgres.indexes import GinIndex, GistIndex
 from django.db.models import Q
 from django.db.models.functions import Lower
 from django.utils.translation import gettext_lazy as _
-from modeltrans.fields import TranslationField
-from django_countries.fields import CountryField
-from django.contrib.gis.geos import Point
-from server.apps.translations import activate
 
 from server.apps.categories.models import Category
 from server.apps.images.models import Image
 from server.apps.organizations.models import Organization
+from server.apps.translations import activate
 from server.core.models import TimeStampedModel
 from server.core.utils import UpdateCreateStatus
 
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
         GeoPlaceBaseInput,
         SourceInput,
     )
+
     from ._associations import GeoPlaceSourceAssociation
 
 
@@ -359,6 +361,7 @@ class GeoPlace(TimeStampedModel):
 
         # Retry logic for database locks
         import time
+
         from django.db import DatabaseError
 
         last_exception = None
@@ -388,7 +391,9 @@ class GeoPlace(TimeStampedModel):
                     raise
 
         # If we get here, all retries failed
-        raise last_exception
+        if last_exception is not None:
+            raise last_exception
+        raise RuntimeError("retry loop exited without an exception")
 
     def _track_field_modifications(self):
         """Track which fields were manually modified and add them to protected_fields.
@@ -405,7 +410,7 @@ class GeoPlace(TimeStampedModel):
         except self.__class__.DoesNotExist:
             return
 
-        if getattr(original, "is_modified") and not getattr(self, "is_modified"):
+        if original.is_modified and not self.is_modified:
             # it was removed on purpose, reset proteted fields
             self.protected_fields = list()
             return
@@ -509,6 +514,7 @@ class GeoPlace(TimeStampedModel):
         """
         import secrets
         import string
+
         from slugify import slugify as pyslugify
 
         # 1. Fallback to category if name is empty
@@ -583,7 +589,7 @@ class GeoPlace(TimeStampedModel):
         source: Organization | int | str,
         source_id: str | None = None,
         **kwargs,
-    ) -> "GeoPlace":
+    ) -> GeoPlace:
         """
         Create a new GeoPlace and associate it with a source.
 
@@ -632,10 +638,10 @@ class GeoPlace(TimeStampedModel):
     @classmethod
     def from_schema(
         cls,
-        schema: "GeoPlaceBaseInput",
-        from_source: "SourceInput | None" = None,
-        dedup_options: "DedupOptions | None" = None,
-    ) -> tuple["GeoPlace", "UpdateCreateStatus"]:
+        schema: GeoPlaceBaseInput,
+        from_source: SourceInput | None = None,
+        dedup_options: DedupOptions | None = None,
+    ) -> tuple[GeoPlace, UpdateCreateStatus]:
         """
         Helper method that routes to update_or_create based on schema type.
 
@@ -658,10 +664,10 @@ class GeoPlace(TimeStampedModel):
     @classmethod
     def update_or_create(
         cls,
-        schema: "GeoPlaceBaseInput",
-        from_source: "SourceInput | None" = None,
-        dedup_options: "DedupOptions | None" = None,
-    ) -> tuple["GeoPlace", "UpdateCreateStatus"]:
+        schema: GeoPlaceBaseInput,
+        from_source: SourceInput | None = None,
+        dedup_options: DedupOptions | None = None,
+    ) -> tuple[GeoPlace, UpdateCreateStatus]:
         """
         Create or update a GeoPlace using a schema.
 
@@ -749,17 +755,18 @@ class GeoPlace(TimeStampedModel):
     @classmethod
     def _find_existing_place_by_schema(
         cls,
-        schema: "GeoPlaceBaseInput",
-        location: "Point",
+        schema: GeoPlaceBaseInput,
+        location: Point,
         source_obj: Organization | None,
-        from_source: "SourceInput | None",
-        dedup_options: "DedupOptions",
+        from_source: SourceInput | None,
+        dedup_options: DedupOptions,
         categories: list[Category],
-    ) -> "GeoPlace | None":
+    ) -> GeoPlace | None:
         """Find existing place using deduplication logic."""
+        import math
+
         from django.contrib.gis.db.models.functions import Distance
         from django.contrib.gis.geos import Polygon
-        import math
 
         from ._associations import GeoPlaceSourceAssociation
 
@@ -924,7 +931,7 @@ class GeoPlace(TimeStampedModel):
         seen_ids: set[int] = set()
         for identifier in identifiers:
             category = cls._resolve_category_from_identifier(identifier)
-            if category.id in seen_ids:
+            if category.id in seen_ids:  # pyright: ignore[reportAttributeAccessIssue]
                 continue
             categories.append(category)
             seen_ids.add(category.id)
@@ -933,12 +940,12 @@ class GeoPlace(TimeStampedModel):
     @classmethod
     def _create_from_schema(
         cls,
-        schema: "GeoPlaceBaseInput",
+        schema: GeoPlaceBaseInput,
         categories: list[Category],
-        location: "Point",
+        location: Point,
         source_obj: Organization | None,
-        from_source: "SourceInput | None",
-    ) -> tuple["GeoPlace", "UpdateCreateStatus"]:
+        from_source: SourceInput | None,
+    ) -> tuple[GeoPlace, UpdateCreateStatus]:
         """Create a new GeoPlace from schema."""
         from django.contrib.gis.geos import GEOSGeometry
 
@@ -1065,12 +1072,12 @@ class GeoPlace(TimeStampedModel):
     @classmethod
     def _update_from_schema(
         cls,
-        place: "GeoPlace",
-        schema: "GeoPlaceBaseInput",
+        place: GeoPlace,
+        schema: GeoPlaceBaseInput,
         categories: list[Category],
         source_obj: Organization | None,
-        from_source: "SourceInput | None",
-    ) -> tuple["GeoPlace", "UpdateCreateStatus"]:
+        from_source: SourceInput | None,
+    ) -> tuple[GeoPlace, UpdateCreateStatus]:
         """Update an existing GeoPlace from schema."""
         from datetime import datetime
 

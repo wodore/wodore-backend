@@ -1,20 +1,21 @@
 import json
 from pathlib import Path
 
+from django_admin_runner import register_command
+
 from django.conf import settings
 from django.core.files import File
 from django.core.management.base import BaseCommand
-from django_admin_runner import register_command
 
-from server.apps.licenses.models import License
-from server.apps.symbols.models import Symbol
-from server.apps.organizations.models import Organization
 from server.apps.categories.models import Category
+from server.apps.licenses.models import License
 from server.apps.meteo.models import (
     WeatherCode,
-    WeatherCodeSymbolCollection,
     WeatherCodeSymbol,
+    WeatherCodeSymbolCollection,
 )
+from server.apps.organizations.models import Organization
+from server.apps.symbols.models import Symbol
 
 
 @register_command(group="Meteo")
@@ -535,7 +536,7 @@ class Command(BaseCommand):
 
     def _verify_coverage(self, collection, style, stats):
         """Verify all forecast codes (0-3, 45-99) are covered in the collection"""
-        forecast_codes = set(range(0, 4)) | set(range(45, 100))
+        forecast_codes = set(range(4)) | set(range(45, 100))
 
         covered = WeatherCodeSymbol.objects.filter(
             collection=collection, weather_code__code__in=forecast_codes

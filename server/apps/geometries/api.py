@@ -6,35 +6,46 @@ import logging
 from enum import Enum
 from typing import Any
 
-from django.contrib.gis.geos import Point
 from ninja import Query, Router
 from ninja.decorators import decorate_view
 
 from django.conf import settings
 from django.contrib.gis.db.models import PointField
 from django.contrib.gis.db.models.functions import Distance
+from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
 from django.contrib.postgres.aggregates import JSONBAgg
 from django.contrib.postgres.search import (
     TrigramSimilarity,
 )
-from django.db.models import F, Q
 from django.db.models import (
     Case,
     CharField,
     ExpressionWrapper,
+    F,
     FloatField,
     Func,
+    Q,
     Value,
     When,
     Window,
 )
 from django.db.models.fields.json import KeyTextTransform
-from django.db.models.functions import Cast, Coalesce, Greatest, Lower, RowNumber
-from django.db.models.functions import JSONObject
+from django.db.models.functions import (
+    Cast,
+    Coalesce,
+    Greatest,
+    JSONObject,
+    Lower,
+    RowNumber,
+)
 from django.http import HttpRequest, HttpResponse
 from django.views.decorators.cache import cache_control, cache_page
 
+from server.apps.organizations.schema import (
+    OrganizationSourceIdDetailSchema,
+    OrganizationSourceIdSlugSchema,
+)
 from server.apps.translations import LanguageParam, activate, with_language_param
 
 from .models import GeoPlace
@@ -42,10 +53,6 @@ from .schemas import (
     AmenitySchema,
     GeoPlaceNearbySchema,
     GeoPlaceSearchSchema,
-)
-from server.apps.organizations.schema import (
-    OrganizationSourceIdDetailSchema,
-    OrganizationSourceIdSlugSchema,
 )
 
 router = Router(tags=["geometries"])
@@ -139,42 +146,42 @@ def search_geoplaces(
     request: HttpRequest,
     response: HttpResponse,
     lang: LanguageParam,
-    q: str = Query(
+    q: str = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         ...,
         description="Search query string to match against place names in all languages",
         example="Matterhorn",
     ),
     limit: int = Query(15, description="Maximum number of results to return"),
     offset: int = Query(0, description="Number of results to skip for pagination"),
-    types: list[str] | None = Query(
+    types: list[str] | None = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         None,
         description="Filter by category slugs (e.g., 'peak', 'pass', 'lake'). Use 'parent.child' format for child categories.",
     ),
-    categories: list[str] | None = Query(
+    categories: list[str] | None = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         None,
         description="Filter by parent category slugs (e.g., 'terrain', 'transport')",
     ),
-    countries: list[str] | None = Query(
+    countries: list[str] | None = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         None,
         description="Filter by country codes (e.g., 'CH', 'FR', 'IT')",
     ),
-    threshold: float = Query(
+    threshold: float = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         0.2,
         description="Minimum similarity score (0.0-1.0). Lower values return more results but with lower relevance. Recommended: 0.1 for fuzzy matching, 0.3 for stricter matching.",
     ),
-    min_importance: int = Query(
+    min_importance: int = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         0,
         description="Minimum importance score (0-100). Higher values filter for more prominent places.",
     ),
-    deduplicate: bool = Query(
+    deduplicate: bool = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         False,
         description="Remove near-identical places that share a name and a very close location before pagination.",
     ),
-    include_categories: IncludeModeEnum = Query(
+    include_categories: IncludeModeEnum = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         IncludeModeEnum.all,
         description="Include categories information: 'no' excludes field, 'slug' returns category slugs only, 'all' returns full category details with name and description",
     ),
-    include_sources: IncludeModeEnum = Query(
+    include_sources: IncludeModeEnum = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         IncludeModeEnum.no,
         description="Include data sources: 'no' excludes field, 'slug' returns source slugs only, 'all' returns full source details with name and logo",
     ),
@@ -500,24 +507,24 @@ def nearby_geoplaces(
     lang: LanguageParam,
     lat: float = Query(..., description="Latitude coordinate", example=46.0342),
     lon: float = Query(..., description="Longitude coordinate", example=7.6488),
-    radius: float = Query(
+    radius: float = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         10000, description="Search radius in meters (default: 10000 = 10km)"
     ),
     limit: int = Query(20, description="Maximum number of results"),
     offset: int = Query(0, description="Number of results to skip for pagination"),
-    types: list[str] | None = Query(
+    types: list[str] | None = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         None,
         description="Filter by category slugs (e.g., 'peak', 'pass'). Use 'parent.child' format for child categories.",
     ),
-    categories: list[str] | None = Query(
+    categories: list[str] | None = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         None, description="Filter by parent category slugs"
     ),
     min_importance: int = Query(0, description="Minimum importance score (0-100)"),
-    include_categories: IncludeModeEnum = Query(
+    include_categories: IncludeModeEnum = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         IncludeModeEnum.all,
         description="Include categories information: 'no' excludes field, 'slug' returns category slugs only, 'all' returns full category details with name and description",
     ),
-    include_sources: IncludeModeEnum = Query(
+    include_sources: IncludeModeEnum = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         IncludeModeEnum.no,
         description="Include data sources: 'no' excludes field, 'slug' returns source slugs only, 'all' returns full source details with name and logo",
     ),
@@ -706,7 +713,7 @@ def get_amenity(
     response: HttpResponse,
     lang: LanguageParam,
     place_id: int,
-    include_sources: IncludeModeEnum = Query(
+    include_sources: IncludeModeEnum = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         IncludeModeEnum.no,
         description="Include data sources: 'no' excludes field, 'slug' returns source slugs only, 'all' returns full source details with name and logo",
     ),

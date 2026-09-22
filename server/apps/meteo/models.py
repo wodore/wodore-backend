@@ -1,12 +1,13 @@
-from django.db import models
-from django.utils.translation import gettext_lazy as _
 from modeltrans.fields import TranslationField
 
-from server.core.models import TimeStampedModel
-from server.core.managers import BaseMutlilingualManager
-from server.apps.symbols.models import Symbol
+from django.db import models
+from django.utils.translation import gettext_lazy as _
+
 from server.apps.categories.models import Category
 from server.apps.organizations.models import Organization
+from server.apps.symbols.models import Symbol
+from server.core.managers import BaseMutlilingualManager
+from server.core.models import TimeStampedModel
 
 
 class WeatherCode(TimeStampedModel):

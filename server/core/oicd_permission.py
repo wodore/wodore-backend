@@ -47,6 +47,7 @@ class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimp
         """
         import json
         from base64 import urlsafe_b64decode
+
         from jwt.algorithms import RSAAlgorithm
 
         url, kwargs = self._prepare_request_with_custom_host(self.OIDC_OP_JWKS_ENDPOINT)

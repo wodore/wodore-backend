@@ -15,14 +15,16 @@ Usage:
 import csv
 import os
 import tempfile
+import urllib.error
 import urllib.request
 import zipfile
-from datetime import datetime
+from datetime import date
+
 from django_admin_runner import register_command
 
 from django.contrib.gis.geos import Point
 from django.core.management.base import BaseCommand, CommandParser
-from django.db import transaction
+from django.db import DatabaseError, transaction
 
 from ...models import AlternativeName, GeoName
 from ._country_groups import expand_countries
@@ -195,7 +197,14 @@ class Command(BaseCommand):
                 self.style.ERROR(f"Failed to download {country_code} data: {e}")
             )
             return 0, 0
-        except Exception as e:
+        except (
+            OSError,
+            ValueError,
+            KeyError,
+            TypeError,
+            csv.Error,
+            DatabaseError,
+        ) as e:
             self.stdout.write(self.style.ERROR(f"Error processing {country_code}: {e}"))
             import traceback
 
@@ -210,7 +219,12 @@ class Command(BaseCommand):
         updated_count = 0
         processed_count = 0
 
-        with open(filepath, "r", encoding="utf-8") as f:
+        try:
+            csv_file = open(filepath, "r", encoding="utf-8")
+        except OSError:
+            self.stdout.write(self.style.ERROR(f"Cannot open {filepath}"))
+            return 0, 0
+        with csv_file as f:
             reader = csv.reader(f, delimiter="\t")
 
             batch = []
@@ -241,7 +255,7 @@ class Command(BaseCommand):
                         if limit and processed_count >= limit:
                             break
 
-                except Exception as e:
+                except (ValueError, KeyError, IndexError, TypeError, csv.Error) as e:
                     self.stdout.write(self.style.WARNING(f"Error parsing row: {e}"))
                     continue
 
@@ -301,7 +315,7 @@ class Command(BaseCommand):
             mod_date = None
             if row[18]:
                 try:
-                    mod_date = datetime.strptime(row[18], "%Y-%m-%d").date()
+                    mod_date = date.fromisoformat(row[18])
                 except ValueError:
                     pass
 
@@ -339,7 +353,7 @@ class Command(BaseCommand):
 
         with transaction.atomic():
             # Get all unique feature IDs from this batch
-            feature_ids = set(place_data["feature_id"] for place_data in batch)
+            feature_ids = {place_data["feature_id"] for place_data in batch}
 
             # Load all features in one query - verify they exist
             existing_features = set(
@@ -465,7 +479,7 @@ class Command(BaseCommand):
                         f"No alternate names file for {country_code} (this is normal for some countries)"
                     )
                 )
-            except Exception as e:
+            except (OSError, ValueError, KeyError, IndexError, csv.Error) as e:
                 self.stdout.write(
                     self.style.WARNING(
                         f"Error loading alternate names for {country_code}: {e}"
@@ -484,7 +498,12 @@ class Command(BaseCommand):
         # Collect alternate name records
         altname_records = []
 
-        with open(filepath, "r", encoding="utf-8") as f:
+        try:
+            csv_file = open(filepath, "r", encoding="utf-8")
+        except OSError:
+            self.stdout.write(self.style.ERROR(f"Cannot open {filepath}"))
+            return 0
+        with csv_file as f:
             reader = csv.reader(f, delimiter="\t")
 
             for row in reader:

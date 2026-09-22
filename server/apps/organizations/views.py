@@ -11,7 +11,6 @@ from .models import Organization
 
 
 class OrganizationDetailView(PermissionRequiredMixin, DetailView):
-    #
     permission_required = "organiations.view_organization"
     template_name = "organizations/detail.html"
     model = Organization

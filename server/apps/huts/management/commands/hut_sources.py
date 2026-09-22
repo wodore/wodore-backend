@@ -1,13 +1,14 @@
 import sys
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import click
+from django_admin_runner import register_command
 from hut_services import BaseService, HutSourceSchema
 
 from django.conf import settings
 from django.contrib.gis.geos import Point as dbPoint
 from django.core.management.base import CommandParser
-from django_admin_runner import register_command
 
 from server.apps.organizations.models import Organization
 from server.core import UpdateCreateStatus
@@ -40,8 +41,7 @@ def add_hut_source_db(  # type: ignore[no-any-unimported]
         UpdateCreateStatus.no_change: 0,
         UpdateCreateStatus.ignored: 0,
     }
-    for hut in huts:
-        number += 1
+    for number, hut in enumerate(huts, start=number):
         shut = HutSource(
             source_id=hut.source_id,
             location=dbPoint(hut.location.lon_lat) if hut.location else None,
@@ -74,7 +74,7 @@ def add_hut_source_db(  # type: ignore[no-any-unimported]
         click.secho(
             f"  ... {status.value:<8}", fg=status_color.get(status, "red"), nl=False
         )
-        click.secho(f" (#{shut.id})", dim=True)  # pyright: ignore[reportAttributeAccessIssue]  # noqa: E501 — auto pk, plugin-less Pyright
+        click.secho(f" (#{shut.id})", dim=True)  # pyright: ignore[reportAttributeAccessIssue]
         source_huts.append(shut)
     added = counter[UpdateCreateStatus.created]
     updated = counter[UpdateCreateStatus.updated]

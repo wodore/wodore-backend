@@ -1,6 +1,5 @@
 from datetime import datetime
 from os import environ
-from typing import List
 
 from ninja import Field, Query, Router, Schema
 from ninja.errors import HttpError
@@ -104,13 +103,13 @@ class FieldsSchema(Schema):
     )
     # ",".join(exclude_default), description="Comma separated list, only used if 'include' is not set."
     # )
-    allowed_fields: List = Field(None, json_schema_extra={"include_in_schema": False})  # pyright: ignore[reportCallIssue]  # Django Ninja Annotated idiom
+    allowed_fields: list = Field(None, json_schema_extra={"include_in_schema": False})  # pyright: ignore[reportCallIssue]  # Django Ninja Annotated idiom
     _model = None
 
-    def set_allowed_fields(self, fields: List):
+    def set_allowed_fields(self, fields: list):
         self.allowed_fields = fields
 
-    def validate_fields(self, fields: List | None):
+    def validate_fields(self, fields: list | None):
         if fields is not None and self.allowed_fields:
             for field in fields:
                 if field not in self.allowed_fields:
@@ -119,7 +118,7 @@ class FieldsSchema(Schema):
                         f"'{field}' is not a valid field name! Possible names: {self.allowed_fields}",
                     )
 
-    def get_include(self) -> List[str]:
+    def get_include(self) -> list[str]:
         if self.include is not None:
             _include = [f.strip() for f in self.include.split(",") if f.strip()]
             self.validate_fields(_include)
@@ -153,7 +152,7 @@ def fields_query(Model) -> FieldsSchema:  # fields:List, exclude_default=[]):
             ",".join(exclude_default),
             description="Comma separated list, only used if 'include' is not set.",
         )
-        allowed_fields: List = Field(  # pyright: ignore[reportCallIssue]  # Django Ninja Annotated idiom
+        allowed_fields: list = Field(  # pyright: ignore[reportCallIssue]  # Django Ninja Annotated idiom
             fields, json_schema_extra={"include_in_schema": False}
         )
         _model = Model

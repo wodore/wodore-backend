@@ -64,7 +64,7 @@ class SymbolAdmin(ModelAdmin):
         qs = super().get_queryset(request)
         return qs.select_related("license", "source_org", "uploaded_by_user")
 
-    @display(description=_("SVG"))
+    @display(description=_("SVG"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def svg_preview(self, obj):
         """Show SVG preview in list view."""
         try:
@@ -76,7 +76,7 @@ class SymbolAdmin(ModelAdmin):
             pass
         return mark_safe('<span style="color:#999;">No file</span>')
 
-    @display(description=_("Preview"))
+    @display(description=_("Preview"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def svg_preview_inline(self, obj):
         """Show SVG preview inline in the form."""
         try:
@@ -90,7 +90,7 @@ class SymbolAdmin(ModelAdmin):
             pass
         return mark_safe('<span style="color:#999;">No file uploaded</span>')
 
-    @display(description=_("Search Text"))
+    @display(description=_("Search Text"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def search_text_display(self, obj):
         """Show search text in list view."""
         if obj.search_text:
@@ -102,7 +102,7 @@ class SymbolAdmin(ModelAdmin):
             return mark_safe(f'<small style="color:#666;">{text}</small>')
         return mark_safe('<small style="color:#999;">-</small>')
 
-    @display(description=_("License"), header=True)
+    @display(description=_("License"), header=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def license_display(self, obj):
         """Show license with link."""
         if obj.license:
@@ -112,7 +112,7 @@ class SymbolAdmin(ModelAdmin):
             return link, link
         return mark_safe("-"), mark_safe("-")
 
-    @display(description=_("Source"), header=True)
+    @display(description=_("Source"), header=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def source_display(self, obj):
         """Show source information."""
         parts = []
@@ -130,7 +130,7 @@ class SymbolAdmin(ModelAdmin):
             return source_text, source_text
         return mark_safe("-"), mark_safe("-")
 
-    @display(description=_("Status"))
+    @display(description=_("Status"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def review_status_display(self, obj):
         """Show review status."""
         return obj.get_review_status_display()

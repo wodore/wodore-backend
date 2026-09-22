@@ -298,8 +298,9 @@ class HutAvailabilityViewInline(admin.TabularInline):
 
     def get_queryset(self, request: HttpRequest) -> QuerySet:
         """Show only next 14 days of availability"""
-        from django.utils import timezone
         import datetime
+
+        from django.utils import timezone
 
         qs = super().get_queryset(request)
         today = timezone.now().date()

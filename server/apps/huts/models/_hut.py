@@ -11,7 +11,6 @@ from hut_services.core.guess import guess_slug_name
 from jinja2 import Environment
 
 from django_countries.fields import CountryField
-from server.core.models import TimeStampedModel
 from modeltrans.fields import TranslationField
 
 from django.conf import settings
@@ -32,6 +31,7 @@ from server.apps.images.models import Image
 from server.apps.organizations.models import Organization
 from server.apps.owners.models import Owner
 from server.core import UpdateCreateStatus
+from server.core.models import TimeStampedModel
 
 from ..managers import HutManager
 from ..schemas_booking import HutBookingsSchema
@@ -45,8 +45,9 @@ from ._hut_source import HutSource
 if t.TYPE_CHECKING:
     # stub-only type (django-stubs): reverse-relation manager annotation below
     from django.db.models.fields.related_descriptors import RelatedManager
-from ._hut_type import HutTypeHelper
 from server.apps.categories.models import Category
+
+from ._hut_type import HutTypeHelper
 
 SERVICES: dict[str, BaseService] = settings.SERVICES
 
@@ -297,8 +298,8 @@ class Hut(TimeStampedModel):
         # save original values, when model is loaded from database,
         # in a separate attribute on the model
         values = dict(zip(field_names, values))
-        instance._orig_slug = values.get("slug")  # type: ignore  # noqa: PGH003
-        instance._orig_review_status = values.get("review_status")  # type: ignore  # noqa: PGH003
+        instance._orig_slug = values.get("slug")  # type: ignore
+        instance._orig_review_status = values.get("review_status")  # type: ignore
         return instance
 
     def save(self, *args, **kwargs):
@@ -307,7 +308,7 @@ class Hut(TimeStampedModel):
         # if updated
         if (
             not self._state.adding and self.slug != self._orig_slug
-        ):  # updates # type: ignore  # noqa: PGH003
+        ):  # updates # type: ignore
             self.slug = self.create_unique_slug_name(self.slug)
         to_save = []
         if (
@@ -926,9 +927,11 @@ class Hut(TimeStampedModel):
         Note: The request_interval parameter is kept for API compatibility but is not used
         since we're fetching from the database instead of external services.
         """
+        from collections import defaultdict
+
         from server.apps.availability.models import HutAvailability
         from server.apps.availability.utils import parse_availability_date
-        from collections import defaultdict
+
         from ..schemas_booking import HutBookingSchema, HutBookingsSchema
 
         # Parse date parameter using utility function

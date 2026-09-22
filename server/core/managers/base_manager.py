@@ -13,10 +13,8 @@ class BaseQuerySet(models.QuerySet):
         entries = qs.all().count()
         if limit is not None:
             limit_with_offset = limit + offset
-            if limit_with_offset > entries:
-                limit_with_offset = entries
-            if offset > entries:
-                offset = entries
+            limit_with_offset = min(limit_with_offset, entries)
+            offset = min(offset, entries)
             pks = qs.all()[offset:limit_with_offset].values_list("pk", flat=True)
         else:
             pks = qs.all().values_list("pk", flat=True)

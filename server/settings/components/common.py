@@ -10,6 +10,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 import os
 import subprocess
+
 from django_countries.data import COUNTRIES
 
 # Set the environment variables - fix boto3 issue when uploading file
@@ -17,7 +18,6 @@ from django_countries.data import COUNTRIES
 os.environ["AWS_REQUEST_CHECKSUM_CALCULATION"] = "when_required"
 os.environ["AWS_RESPONSE_CHECKSUM_VALIDATION"] = "when_required"
 
-from typing import Dict, List, Tuple, Union
 
 from corsheaders.defaults import default_headers
 from hut_services import SERVICES
@@ -115,7 +115,7 @@ DJANGO_ADMIN_URL = (
 
 # Application definition:
 
-INSTALLED_APPS: Tuple[str, ...] = (
+INSTALLED_APPS: tuple[str, ...] = (
     # my server core:
     "server.core.apps.CoreConfig",
     # my apps:
@@ -190,7 +190,7 @@ INSTALLED_APPS: Tuple[str, ...] = (
     "django_cleanup.apps.CleanupConfig",  # https://pypi.org/project/django-cleanup/
 )
 
-MIDDLEWARE: Tuple[str, ...] = (
+MIDDLEWARE: tuple[str, ...] = (
     # Environment identification header:
     "server.middleware.headers.EnvironmentHeadersMiddleware",
     # Logging:
@@ -422,7 +422,7 @@ SILENCED_SYSTEM_CHECKS = ["security.W019"]  # django-admin-interface
 REFERRER_POLICY = "same-origin"
 
 # https://github.com/adamchainz/django-permissions-policy#setting
-PERMISSIONS_POLICY: Dict[str, Union[str, List[str]]] = {}
+PERMISSIONS_POLICY: dict[str, str | list[str]] = {}
 
 
 # Timeouts

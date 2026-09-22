@@ -22,12 +22,13 @@ Usage:
 """
 
 import shutil
-import yaml
 from pathlib import Path
+
+import yaml
+from django_admin_runner import register_command
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
-from django_admin_runner import register_command
 
 
 @register_command(group="Huts")

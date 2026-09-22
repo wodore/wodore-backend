@@ -1,17 +1,18 @@
 from typing import ClassVar
+
 from django.contrib import admin
 
 # Models
 from django.utils.safestring import mark_safe
+from django.utils.translation import gettext_lazy as _
 
-from server.apps.geometries.schemas import ReviewStatus
 from unfold.contrib.filters.admin import (
     AutocompleteSelectMultipleFilter,
     ChoicesCheckboxFilter,
 )
 from unfold.decorators import display
-from django.utils.translation import gettext_lazy as _
 
+from server.apps.geometries.schemas import ReviewStatus
 from server.apps.manager.admin import ModelAdmin
 from server.apps.translations.forms import required_i18n_fields_form_factory
 
@@ -69,7 +70,7 @@ class LicenseAdmin(ModelAdmin):
     )
 
     @display(
-        description=_("Review"),
+        description=_("Review"),  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
         label={
             ReviewStatus.NEW: "warning",
             ReviewStatus.REVIEW: "info",

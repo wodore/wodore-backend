@@ -1,6 +1,7 @@
 import datetime
 
 import factory
+
 from django.utils import timezone
 
 from server.apps.availability.models import HutAvailability

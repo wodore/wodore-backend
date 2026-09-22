@@ -120,7 +120,7 @@ def get_tags(
     return (tags, push_tags)
 
 
-class DotEnv(object):
+class DotEnv:
     """Create django .env file and delete it afterwards again"""
 
     def __init__(self, context: Ctx):

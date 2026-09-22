@@ -53,7 +53,7 @@ class ImageTagAdmin(ModelAdmin):
             f'<div style="background-color:{value};border-radius:{radius}px;min-height:{height}px;min-width:{width}px;max-height:{height}px;max-width:{width}px"></div>'
         )
 
-    @display(description=_("Color"))
+    @display(description=_("Color"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def color_tag(self, obj):
         return self.show_color(obj.color)
 
@@ -147,7 +147,7 @@ class ImageAdmin(ModelAdmin):
             # img = f'<img width=120 heigh=60 src="{obj.image.url}"/>'
             focal = obj.image_meta.get("focal") if obj.image_meta else None
             if focal:
-                focal_str = f"{focal.get('x1',0)}x{focal.get('y1',0)}:{focal.get('x2',1)}x{focal.get('y2',1)}"
+                focal_str = f"{focal.get('x1', 0)}x{focal.get('y1', 0)}:{focal.get('x2', 1)}x{focal.get('y2', 1)}"
             else:
                 focal_str = "0x0:1x1"
             crop_start, crop_stop = focal_str.split(":")
@@ -177,7 +177,7 @@ class ImageAdmin(ModelAdmin):
         return mark_safe(img)
 
     @display(
-        description=_("Status"),
+        description=_("Status"),  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
         ordering="status",
         label={
             Image.ReviewStatusChoices.approved: "success",
@@ -189,7 +189,7 @@ class ImageAdmin(ModelAdmin):
     def review_tag(self, obj):
         return obj.review_status
 
-    @display(description=_("Huts"))
+    @display(description=_("Huts"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def show_huts(self, obj):
         huts = []
         for hut in obj.huts.all():

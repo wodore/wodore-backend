@@ -5,10 +5,10 @@ Separate router to allow mounting at /geo/images/
 
 import logging
 
-from django.contrib.gis.geos import Point
 from ninja import Query, Router
 from ninja.decorators import decorate_view
 
+from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
 from django.http import HttpRequest, HttpResponse
 from django.views.decorators.cache import cache_control
@@ -16,21 +16,21 @@ from django.views.decorators.cache import cache_control
 from server.apps.translations import LanguageParam, activate, with_language_param
 
 from .models import GeoPlace
+from .providers import (
+    CamptocampProvider,
+    MapillaryProvider,
+    PanoramaxProvider,
+    RefugesInfoProvider,
+    WikimediaCommonsProvider,
+    WodoreProvider,
+    fetch_images_for_place,
+    fetch_images_from_providers,
+    post_process_images,
+    provider_registry,
+)
 from .schemas import (
     ImageCollectionResponse,
     ImageMetadataSchema,
-)
-from .providers import (
-    fetch_images_for_place,
-    fetch_images_from_providers,
-    provider_registry,
-    post_process_images,
-    WodoreProvider,
-    WikimediaCommonsProvider,
-    MapillaryProvider,
-    PanoramaxProvider,
-    CamptocampProvider,
-    RefugesInfoProvider,
 )
 
 router = Router(tags=["geoimages"])

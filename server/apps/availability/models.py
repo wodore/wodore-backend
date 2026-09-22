@@ -1,14 +1,15 @@
+from hut_services.core.schema import OccupancyStatusEnum, ReservationStatusEnum
+
 from django.conf import settings
 from django.db import models
-from hut_services.core.schema import OccupancyStatusEnum, ReservationStatusEnum
 from django.db.models import Q
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from server.core.models import TimeStampedModel
-from server.apps.huts.models import Hut
 from server.apps.categories.models import Category
+from server.apps.huts.models import Hut
 from server.apps.organizations.models import Organization
+from server.core.models import TimeStampedModel
 
 from .managers import (
     AvailabilityStatusManager,

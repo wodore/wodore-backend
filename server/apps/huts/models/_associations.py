@@ -2,7 +2,6 @@
 from computedfields.models import ComputedFieldsModel, computed
 from jinja2 import Environment
 
-from server.core.models import TimeStampedModel
 from modeltrans.manager import MultilingualManager
 
 from django.conf import settings
@@ -13,6 +12,7 @@ from django.utils.translation import gettext_lazy as _
 from server.apps.contacts.models import Contact
 from server.apps.images.models import Image
 from server.apps.organizations.models import Organization
+from server.core.models import TimeStampedModel
 
 
 class HutContactAssociation(TimeStampedModel):

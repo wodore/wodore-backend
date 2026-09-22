@@ -7,18 +7,18 @@ Slug is auto-generated on save by the model's save() method.
 import pathlib
 
 import yaml
+
 from django.contrib.gis.geos import GEOSGeometry
 
 from server.apps.categories.models import Category
 from server.apps.contacts.models import Contact, ContactFunction
+from server.apps.geometries.models import GeoPlace
 from server.apps.huts.models import (
     Hut,
     HutContactAssociation,
     HutOrganizationAssociation,
 )
-from server.apps.geometries.models import GeoPlace
 from server.apps.organizations.models import Organization
-
 
 SEED_DIR = pathlib.Path(__file__).parent
 

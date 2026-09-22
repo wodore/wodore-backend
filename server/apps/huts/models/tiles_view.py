@@ -5,9 +5,10 @@ This view provides optimized data structure for serving huts as vector tiles.
 It includes all necessary fields with JOINs pre-computed for performance.
 """
 
+from psqlextra.models import PostgresViewModel
+
 from django.conf import settings
 from django.contrib.gis.db import models
-from psqlextra.models import PostgresViewModel
 
 
 class HutsForTilesView(PostgresViewModel):

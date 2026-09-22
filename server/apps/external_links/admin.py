@@ -1,15 +1,18 @@
 from __future__ import annotations
+
 from typing import ClassVar
 
 from django.conf import settings
 from django.contrib import admin, messages
-from django.utils.translation import gettext_lazy as _
-from django.utils.safestring import mark_safe
-from unfold.decorators import display
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
+from django.utils.translation import gettext_lazy as _
+
+from unfold.decorators import display
 
 from server.apps.manager.admin import ModelAdmin
 from server.apps.translations.forms import required_i18n_fields_form_factory
+
 from .models import ExternalLink, ReviewStatus
 
 
@@ -112,7 +115,7 @@ class ExternalLinkAdmin(ModelAdmin):
     ]
 
     @display(
-        description=_("Review"),
+        description=_("Review"),  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
         label={
             ReviewStatus.NEW: "warning",
             ReviewStatus.REVIEW: "info",
@@ -124,12 +127,12 @@ class ExternalLinkAdmin(ModelAdmin):
         """Display review status as colored label."""
         return obj.review_status
 
-    @display(description=_("ID"))
+    @display(description=_("ID"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def identifier_code(self, obj: ExternalLink) -> str:
         """Display identifier wrapped in code tag."""
         return mark_safe(f"<code>{obj.identifier}</code>")
 
-    @display(description=_("Link"), header=True)
+    @display(description=_("Link"), header=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def label_and_url(self, obj: ExternalLink) -> tuple:
         """Display label and clickable URL together."""
         url = obj.url_i18n
@@ -148,7 +151,7 @@ class ExternalLinkAdmin(ModelAdmin):
 
         return (obj.label_i18n, url_link)
 
-    @display(description=_("Source"))
+    @display(description=_("Source"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def source_logo(self, obj: ExternalLink) -> str:
         """Display source organization with logo icon."""
         if not obj.source:
@@ -157,12 +160,12 @@ class ExternalLinkAdmin(ModelAdmin):
         if obj.source.logo:
             return mark_safe(
                 f'<img class="inline" src="{settings.MEDIA_URL}{obj.source.logo}" '
-                f'width="24px" alt="{obj.source.name_i18n}" title="{obj.source.name_i18n}"/>'
+                f'width="24px" alt="{obj.source.name_i18n}" title="{obj.source.name_i18n}"/>'  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation
             )
 
-        return obj.source.name_i18n
+        return obj.source.name_i18n  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation
 
-    @display(description=_("Health"))
+    @display(description=_("Health"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def health_status_display(self, obj: ExternalLink) -> str:
         """Display health status with color indicator."""
         if not obj.last_checked:

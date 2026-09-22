@@ -4,8 +4,7 @@
 from pathlib import Path
 
 import click
-import lxml.etree as etree
-
+from lxml import etree  # pyright: ignore[reportAttributeAccessIssue]
 
 # SVG namespace
 SVG_NS = {"svg": "http://www.w3.org/2000/svg"}
@@ -186,11 +185,14 @@ def svg_to_mono(
         output_file = output_dir / rel_path
 
         # Check if output file exists
-        if output_file.exists() and not force:
-            if not click.confirm(f"Overwrite {output_file}?", default=False):
-                click.echo(f"Skipping {svg_file}")
-                skipped += 1
-                continue
+        if (
+            output_file.exists()
+            and not force
+            and not click.confirm(f"Overwrite {output_file}?", default=False)
+        ):
+            click.echo(f"Skipping {svg_file}")
+            skipped += 1
+            continue
 
         # Create output directory if needed
         output_parent = output_file.parent
@@ -203,7 +205,7 @@ def svg_to_mono(
             convert_svg_to_mono(svg_file, output_file, color, stroke_factor)
             click.echo(f"Converted: {rel_path}")
             converted += 1
-        except Exception as e:
+        except (OSError, ValueError, etree.XMLSyntaxError) as e:
             click.echo(f"Error converting {svg_file}: {e}", err=True)
 
     click.echo(f"\nDone: {converted} converted, {skipped} skipped")

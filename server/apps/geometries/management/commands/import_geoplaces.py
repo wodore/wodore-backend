@@ -26,13 +26,14 @@ Usage:
 
 import math
 from pathlib import Path
-from typing import Any, Tuple
+from typing import Any
 
 import yaml
+from django_admin_runner import register_command
+
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.measure import D
 from django.core.management.base import BaseCommand, CommandParser
-from django_admin_runner import register_command
 
 from server.apps.external_geonames.management.commands._country_groups import (
     expand_countries,
@@ -229,7 +230,7 @@ class Command(BaseCommand):
             )
         )
 
-    def _normalize_elevation(self, elevation: float | int | None) -> int | None:
+    def _normalize_elevation(self, elevation: float | None) -> int | None:
         if elevation is None:
             return None
         try:
@@ -329,7 +330,7 @@ class Command(BaseCommand):
         min_importance: int,
         dry_run: bool,
         continue_import: bool = False,
-    ) -> Tuple[int, int, int]:
+    ) -> tuple[int, int, int]:
         """Import from external_geonames GeoName model.
 
         Args:
@@ -510,7 +511,7 @@ class Command(BaseCommand):
         min_importance: int,
         dry_run: bool,
         continue_import: bool = False,
-    ) -> Tuple[int, int, int]:
+    ) -> tuple[int, int, int]:
         """Import from huts into GeoPlace for search.
 
         Args:

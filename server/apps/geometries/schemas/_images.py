@@ -6,9 +6,8 @@ Defines the unified image schema returned by all providers.
 from datetime import datetime
 
 from geojson_pydantic import Feature, FeatureCollection, Point
-from pydantic import BaseModel, Field
-
 from hut_services import LocationSchema
+from pydantic import BaseModel, Field
 
 
 class ImageLicenseSchema(BaseModel):
@@ -185,8 +184,6 @@ class ImageMetadataSchema(BaseModel):
 
 class ImageFeatureCollection(FeatureCollection[ImageFeature]):
     """GeoJSON FeatureCollection of images from multiple providers."""
-
-    pass
 
 
 class ImageCollectionResponse(BaseModel):

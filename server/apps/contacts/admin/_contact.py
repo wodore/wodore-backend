@@ -98,11 +98,11 @@ class ContactAdmin(ModelAdmin):
     #        # field.widget = Textarea
     #    return field
 
-    @display(header=True, description=_("Name and Email"), ordering=Lower("name"))
+    @display(header=True, description=_("Name and Email"), ordering=Lower("name"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def name_email(self, obj):
         return (obj.name, obj.email)
 
-    @display(header=True, description=_("Address"))
+    @display(header=True, description=_("Address"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def address_fmt(self, obj):
         adr_list = [a.strip() for a in obj.address.replace(",", "\n").split("\n")]
         header = ""
@@ -113,7 +113,7 @@ class ContactAdmin(ModelAdmin):
             content = adr_list[1:]
         return header, mark_safe(", ".join(content))
 
-    @display(header=False, description=_("Phone"))
+    @display(header=False, description=_("Phone"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def mobile_or_phone(self, obj):
         mobile = self._phone_link(obj.mobile, icon="smartphone")
         phone = self._phone_link(obj.phone, icon="call")

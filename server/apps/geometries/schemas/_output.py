@@ -4,10 +4,11 @@ Schemas for GeoPlace API endpoints.
 
 from typing import Any
 
-from django.conf import settings
-from django.http import HttpRequest
 from hut_services import LocationSchema
 from ninja import Field, ModelSchema, Schema
+
+from django.conf import settings
+from django.http import HttpRequest
 
 from server.apps.categories.models import Category
 from server.apps.organizations.schema import (

@@ -3,7 +3,10 @@ from jsonsuit.widgets import JSONSuit, ReadonlyJSONSuit
 
 # Register your models here.
 from django.contrib import admin
-from django.contrib.auth.admin import GroupAdmin, UserAdmin  # pyright: ignore[reportAssignmentType]  # shadowed below (Django admin idiom)
+from django.contrib.auth.admin import (  # pyright: ignore[reportAssignmentType]  # shadowed below (Django admin idiom)
+    GroupAdmin,
+    UserAdmin,
+)
 from django.contrib.auth.models import Group, User
 from django.contrib.gis.admin import GISModelAdmin
 from django.db import models
@@ -108,12 +111,13 @@ class GroupAdmin(GroupAdmin, ModelAdmin):  # pyright: ignore[reportGeneralTypeIs
 # Django-Q2 admin — Unfold-styled with command dropdown in Schedule
 # ---------------------------------------------------------------------------
 
-from django_q.admin import FailAdmin as QFailAdmin  # noqa: E402
-from django_q.admin import QueueAdmin as QQueueAdmin  # noqa: E402
-from django_q.admin import ScheduleAdmin as QScheduleAdmin  # noqa: E402
-from django_q.admin import TaskAdmin as QTaskAdmin  # noqa: E402
-from django_q.models import Failure, OrmQ, Schedule, Success  # noqa: E402
-from unfold.widgets import (  # noqa: E402
+from django_q.admin import FailAdmin as QFailAdmin
+from django_q.admin import QueueAdmin as QQueueAdmin
+from django_q.admin import ScheduleAdmin as QScheduleAdmin
+from django_q.admin import TaskAdmin as QTaskAdmin
+from django_q.models import Failure, OrmQ, Schedule, Success
+
+from unfold.widgets import (
     UnfoldAdminSelectWidget,
     UnfoldAdminTextInputWidget,
 )

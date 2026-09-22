@@ -19,8 +19,10 @@ class ContactFactory(factory.django.DjangoModelFactory):
     name = factory.Faker("name")
     email = factory.Faker("email")
     phone = factory.LazyFunction(
-        lambda: f"+41 {__import__('random').randint(100, 999)} "
-        f"{__import__('random').randint(100, 999)} {__import__('random').randint(100, 999)}"
+        lambda: (
+            f"+41 {__import__('random').randint(100, 999)} "
+            f"{__import__('random').randint(100, 999)} {__import__('random').randint(100, 999)}"
+        )
     )
     function = factory.SubFactory(ContactFunctionFactory)
     is_active = True

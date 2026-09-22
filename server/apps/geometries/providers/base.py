@@ -3,15 +3,17 @@ Base classes and utilities for image providers.
 """
 
 import asyncio
-import structlog
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Any, Literal
 
+import structlog
 from asgiref.sync import sync_to_async
+
 from django.contrib.gis.geos import Point
 from django.core.cache import cache
+
 from .schemas import GeoPlaceSchema
 
 logger = structlog.get_logger()
@@ -425,8 +427,8 @@ def _get_provider_info(provider_name: str, force_refresh: bool = False) -> dict:
 
     # Try to get provider from database (overrides fallback if exists)
     try:
-        from server.apps.organizations.models import Organization
         from server.apps.images.transfomer import ImagorImage
+        from server.apps.organizations.models import Organization
 
         org = Organization.objects.filter(slug=provider_name).first()
         if org:
@@ -1854,8 +1856,9 @@ async def _get_image_dimensions_from_headers(url: str) -> tuple[int, int] | None
     Returns:
         Tuple of (width, height) or None if could not determine
     """
-    import httpx
     import struct
+
+    import httpx
 
     # Valid SOF markers for dimension extraction
     # Excludes: 0xC4 (DHT), 0xC8 (JPEG-LS), 0xCC (Reserved)

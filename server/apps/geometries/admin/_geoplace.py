@@ -4,12 +4,12 @@ from typing import ClassVar
 from django import forms
 from django.conf import settings
 from django.contrib import admin
+from django.db.models.functions import Lower
 from django.forms import ModelForm
 from django.template.response import TemplateResponse
-from django.utils.translation import gettext_lazy as _
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
-from django.db.models.functions import Lower
+from django.utils.translation import gettext_lazy as _
 
 from unfold import admin as unfold_admin
 from unfold.contrib.filters.admin import (
@@ -25,14 +25,13 @@ from server.apps.translations.forms import required_i18n_fields_form_factory
 
 from ..forms import GeoPlaceAdminFieldsets
 from ..models import (
+    AmenityDetail,
     GeoPlace,
     GeoPlaceCategory,
-    GeoPlaceSourceAssociation,
     GeoPlaceExternalLink,
-    AmenityDetail,
+    GeoPlaceSourceAssociation,
 )
 from ..utils import get_progress_bar
-
 
 ## Custom Admin Forms
 
@@ -101,7 +100,7 @@ class GeoPlaceSourceAssociationInline(unfold_admin.TabularInline):
     def has_delete_permission(self, request, obj):
         return False
 
-    @display(description=_("Extra Data"))
+    @display(description=_("Extra Data"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def extra_display(self, obj: GeoPlaceSourceAssociation) -> str:
         """Display extra data in a readable format."""
         if not obj.extra:
@@ -357,20 +356,20 @@ class GeoPlaceAdmin(ModelAdmin):
         """Display name and slug in the same column, like Hut admin."""
         return (obj.name_i18n, mark_safe(f"<small><code>{obj.slug}</code></small>"))
 
-    @display(description=_("Categories"))
+    @display(description=_("Categories"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def categories_display(self, obj: GeoPlace) -> str:
         """Display categories with parents if available."""
         categories = list(obj.categories.all())
         return _format_categories_list(categories)
 
-    @display(description=_("Elevation"))
+    @display(description=_("Elevation"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def elevation_display(self, obj: GeoPlace) -> str:
         """Display elevation with unit."""
         if obj.elevation is not None:
             return f"{obj.elevation} m"
         return "-"
 
-    @display(description=_("Sources"))
+    @display(description=_("Sources"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def sources_display(self, obj: GeoPlace) -> str:
         """Display source organizations as icons."""
 
@@ -404,7 +403,7 @@ class GeoPlaceAdmin(ModelAdmin):
 
         return mark_safe(f"<span>{''.join(imgs)}</span>")
 
-    @display(description=_("Importance"), ordering="importance")
+    @display(description=_("Importance"), ordering="importance")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def importance_display(self, obj: GeoPlace) -> str:
         """Display importance as a progress bar with blue color range."""
         # Use blue color gradient
@@ -416,7 +415,7 @@ class GeoPlaceAdmin(ModelAdmin):
             active=True,
         )
 
-    @display(description=_("Created/Modified"), ordering="modified")
+    @display(description=_("Created/Modified"), ordering="modified")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def timestamps_display(self, obj: GeoPlace) -> str:
         """Display created and modified timestamps in one column with small font."""
         created = obj.created.strftime("%Y-%m-%d %H:%M") if obj.created else "-"
@@ -432,7 +431,7 @@ class GeoPlaceAdmin(ModelAdmin):
         )
 
     @display(
-        description=_("Review"),
+        description=_("Review"),  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
         label={
             "new": "warning",
             "review": "info",
@@ -444,7 +443,7 @@ class GeoPlaceAdmin(ModelAdmin):
         """Display review status as colored label."""
         return obj.review_status
 
-    @display(description=_("Location"))
+    @display(description=_("Location"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def location_display(self, obj: GeoPlace) -> str:
         """Display location coordinates."""
         if obj.location:
@@ -589,23 +588,23 @@ class AmenityDetailAdmin(ModelAdmin):
 
     # Display methods
 
-    @display(description=_("Place Name"))
+    @display(description=_("Place Name"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def place_name(self, obj: AmenityDetail) -> str:
         """Display associated place name."""
         return obj.geo_place.name_i18n
 
-    @display(description=_("Categories"))
+    @display(description=_("Categories"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def place_categories(self, obj: AmenityDetail) -> str:
         """Display place categories."""
         categories = list(obj.geo_place.categories.all())
         return _format_categories_list(categories)
 
-    @display(description=_("Opening Hours"), boolean=True)
+    @display(description=_("Opening Hours"), boolean=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def has_opening_hours(self, obj: AmenityDetail) -> bool:
         """Check if opening hours are defined."""
         return bool(obj.opening_hours)
 
-    @display(description=_("Phones"), boolean=True)
+    @display(description=_("Phones"), boolean=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def has_phones(self, obj: AmenityDetail) -> bool:
         """Check if phone numbers are defined."""
         return bool(obj.phones)

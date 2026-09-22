@@ -1,6 +1,5 @@
 from functools import lru_cache
 
-from server.core.models import TimeStampedModel
 from modeltrans.fields import TranslationField
 
 from django.contrib.postgres.indexes import GinIndex
@@ -10,6 +9,7 @@ from django.utils.regex_helper import _lazy_re_compile
 from django.utils.translation import gettext_lazy as _
 
 from server.core.managers import BaseMutlilingualManager
+from server.core.models import TimeStampedModel
 
 slug_re = _lazy_re_compile(r"^[-a-zA-Z0-9_\.]+\Z")
 validate_lic_slug = RegexValidator(

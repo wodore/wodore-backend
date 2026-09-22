@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from server.apps.translations.schema import TranslationSchema
 
 from ..models import OperatingStatus
-from ..schemas import PhoneSchema
+from ._output import PhoneSchema  # direct sibling import: avoids package circularity
 
 
 # Enums for type safety

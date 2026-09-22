@@ -1,6 +1,7 @@
+from collections.abc import Callable
 from contextlib import ContextDecorator
 from functools import wraps
-from typing import Any, Callable
+from typing import Any
 
 from django.http import HttpRequest
 from django.utils.translation import activate as django_activate
@@ -13,19 +14,16 @@ _LANG = None
 
 
 def activate(language):
-    global _LANG
     _LANG = language
     return _LANG
 
 
 def deactivate():
-    global _LANG
     _LANG = None
     return _LANG
 
 
 def get_language():
-    global _LANG
     return _LANG
 
 
@@ -37,9 +35,9 @@ def with_language_param(
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
         def wrapper(request: HttpRequest, *args: Any, **kwargs: Any) -> Any:
-            assert (
-                _param in kwargs
-            ), f"Function paramter '{_param}: LanguageParam' is missing! "
+            assert _param in kwargs, (
+                f"Function paramter '{_param}: LanguageParam' is missing! "
+            )
             lang = kwargs.get(_param)
             with override(lang):
                 return func(request, *args, **kwargs)

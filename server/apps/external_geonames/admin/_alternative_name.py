@@ -2,7 +2,6 @@ from django.contrib import admin
 from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _
 
-
 from server.apps.manager.admin import ModelAdmin
 
 from ..models import AlternativeName

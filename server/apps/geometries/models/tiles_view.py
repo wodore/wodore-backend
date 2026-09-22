@@ -107,10 +107,11 @@ tile = GeoPlacesForTilesView.objects.get_tile(12, 1234, 2345, {"cluster_max_zoom
   - martin.yaml: buffer 64→16, maxzoom 20/24→16 for all point layers
 """
 
+from psqlextra.models import PostgresViewModel
+
 from django.conf import settings
 from django.contrib.gis.db import models
 from django.db import connection
-from psqlextra.models import PostgresViewModel
 
 
 class GeoPlacesForTilesViewManager(models.Manager):
@@ -118,7 +119,9 @@ class GeoPlacesForTilesViewManager(models.Manager):
     Manager for GeoPlacesForTilesView with helper methods for tile generation.
     """
 
-    def get_tile(self, z: int, x: int, y: int, query_params: dict = None) -> bytes:
+    def get_tile(
+        self, z: int, x: int, y: int, query_params: dict | None = None
+    ) -> bytes | None:
         """
         Get vector tile for given coordinates.
 
@@ -221,7 +224,7 @@ class GeoPlacesForTilesView(PostgresViewModel):
     # Organization sources (array of objects with slug and source_id)
     sources = models.JSONField(default=list)
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         managed = False
         db_table = "geoplaces_for_tiles"
 

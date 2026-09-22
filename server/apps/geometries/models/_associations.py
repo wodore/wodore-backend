@@ -1,13 +1,14 @@
+from computedfields.models import ComputedFieldsModel
+
+from modeltrans.manager import MultilingualManager
+
 from django.contrib.gis.db import models
 from django.utils.translation import gettext_lazy as _
-
-from server.core.models import TimeStampedModel
-from computedfields.models import ComputedFieldsModel
-from modeltrans.manager import MultilingualManager
 
 from server.apps.categories.models import Category
 from server.apps.images.models import Image
 from server.apps.organizations.models import Organization
+from server.core.models import TimeStampedModel
 
 
 class UpdatePolicy(models.TextChoices):
@@ -43,7 +44,7 @@ class GeoPlaceImageAssociation(TimeStampedModel):
     def __str__(self) -> str:
         return f"{self.geo_place} <> {self.image}"
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = _("Image and Geo Place Association")
         ordering = ("geo_place__name", "order")
         constraints = (
@@ -124,7 +125,7 @@ class GeoPlaceSourceAssociation(TimeStampedModel, ComputedFieldsModel):
         help_text=_("Source precedence for field conflicts (lower number wins)"),
     )
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = _("Geo Place and Organization Association")
         indexes = [
             models.Index(fields=["priority"]),
@@ -189,7 +190,7 @@ class GeoPlaceExternalLink(models.Model):
         help_text=_("Display order for this link"),
     )
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = _("Geo Place Link")
         verbose_name_plural = _("Geo Place Links")
         ordering = ["order", "id"]
@@ -239,7 +240,7 @@ class GeoPlaceCategory(TimeStampedModel):
         help_text=_("Category-specific overflow data (JSON)"),
     )
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         db_table = "geometries_geoplace_category"
         verbose_name = _("Geo Place Category Association")
         verbose_name_plural = _("Geo Place Category Associations")

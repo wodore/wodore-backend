@@ -1,7 +1,7 @@
 """Base classes for OSM category mappings."""
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Optional, Union
 
 
 @dataclass
@@ -73,7 +73,7 @@ class OSMMapping:
         )
     """
 
-    osm_filters: list[Union[str, tuple[str, ...]]]
+    osm_filters: list[str | tuple[str, ...]]
     """
     List of filters (AND logic):
     - str: Single tag "shop=bakery" or key "shop"
@@ -83,13 +83,13 @@ class OSMMapping:
     category_slug: str
     """Target category slug (e.g., 'groceries.bakery')"""
 
-    condition: Optional[Callable[[dict], bool]] = None
+    condition: Callable[[dict], bool] | None = None
     """Optional filter function to check additional tag conditions"""
 
-    pre_process: Optional[Callable[[dict], dict]] = None
+    pre_process: Callable[[dict], dict] | None = None
     """Optional function to transform tags before mapping (returns modified tags dict)"""
 
-    post_process: Optional[Callable[[dict, dict], dict]] = None
+    post_process: Callable[[dict, dict], dict] | None = None
     """Optional function to add extra data after mapping (receives tags and extracted data, returns modified data dict)"""
 
     mapcomplete_theme: str = "shops"
@@ -98,7 +98,7 @@ class OSMMapping:
     priority: int = 0
     """Priority for this mapping (lower number = higher priority, used when multiple mappings match)"""
 
-    default_name: Optional[dict] = field(default_factory=dict)
+    default_name: dict | None = field(default_factory=dict)
     """
     Optional multilingual default name for unnamed places.
 
@@ -109,7 +109,7 @@ class OSMMapping:
     This prevents adding names to places that genuinely shouldn't have them.
     """
 
-    importance_range: Optional[tuple[int, int, int]] = None
+    importance_range: tuple[int, int, int] | None = None
     """
     Optional importance range for OSM-imported places (min, base, max).
 
@@ -163,7 +163,7 @@ class CategoryMappings:
             filters.extend(mapping.osm_filters)
         return filters
 
-    def match_category(self, tags: dict) -> Optional[tuple[str, OSMMapping]]:
+    def match_category(self, tags: dict) -> tuple[str, OSMMapping] | None:
         """
         Find matching category slug for given OSM tags.
 
@@ -174,9 +174,10 @@ class CategoryMappings:
         matches = []
 
         for mapping in self.mappings:
-            if self._tags_match(tags, mapping.osm_filters):
-                if mapping.condition is None or mapping.condition(tags):
-                    matches.append((mapping.category_slug, mapping))
+            if self._tags_match(tags, mapping.osm_filters) and (
+                mapping.condition is None or mapping.condition(tags)
+            ):
+                matches.append((mapping.category_slug, mapping))
 
         if not matches:
             return None
@@ -202,10 +203,9 @@ class CategoryMappings:
                 if not any(self._matches_single_tag(tags, t) for t in item):
                     return False  # None matched, fail AND
 
-            elif isinstance(item, str):
-                # Single tag must match
-                if not self._matches_single_tag(tags, item):
-                    return False
+            elif isinstance(item, str) and not self._matches_single_tag(tags, item):
+                # Single tag did not match
+                return False
 
             # Note: Filter instances can't be checked here
             # They're only used for pyosmium file filtering

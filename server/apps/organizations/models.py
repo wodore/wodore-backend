@@ -3,7 +3,6 @@ from functools import lru_cache
 from colorfield.fields import ColorField
 from django_cleanup import cleanup
 
-from server.core.models import TimeStampedModel
 from modeltrans.fields import TranslationField
 
 from django.contrib.postgres.indexes import GinIndex
@@ -14,6 +13,7 @@ from django.utils.translation import gettext_lazy as _
 
 # from modeltrans.manager import MultilingualManager
 from server.core.managers import BaseMutlilingualManager
+from server.core.models import TimeStampedModel
 
 
 @cleanup.ignore

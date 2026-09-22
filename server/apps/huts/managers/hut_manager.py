@@ -1,13 +1,14 @@
+from modeltrans.manager import MultilingualManager
+
 from django.conf import settings
 from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
 from django.db.models import F, FloatField, Q, Value
 from django.db.models.functions import Coalesce, Greatest
-from modeltrans.manager import MultilingualManager
 
 from server.core.managers import BaseManager
 
 
-class HutManager(MultilingualManager, BaseManager):
+class HutManager(MultilingualManager, BaseManager):  # pyright: ignore[reportIncompatibleVariableOverride]  # manager MRO generics
     """Manager for Hut model with search capabilities."""
 
     def search(

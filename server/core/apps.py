@@ -3,8 +3,8 @@ Core app configuration.
 """
 
 import pgtrigger
-from django.apps import AppConfig, apps
 
+from django.apps import AppConfig, apps
 
 # Module-level flag to prevent duplicate trigger registration
 _triggers_registered = False

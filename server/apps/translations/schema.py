@@ -35,9 +35,9 @@ def with_language_param(
     def decorator(func: t.Callable[..., t.Any]) -> t.Callable[..., t.Any]:
         @wraps(func)
         def wrapper(request: HttpRequest, *args: t.Any, **kwargs: t.Any) -> t.Any:
-            assert (
-                _param in kwargs
-            ), f"Function paramter '{_param}: LanguageParam' is missing! "
+            assert _param in kwargs, (
+                f"Function paramter '{_param}: LanguageParam' is missing! "
+            )
             # lang = kwargs.get(_param)
             # with override(lang):
             return func(request, *args, **kwargs)

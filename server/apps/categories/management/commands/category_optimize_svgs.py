@@ -1,6 +1,6 @@
 import subprocess
-from pathlib import Path
 from argparse import ArgumentTypeError
+from pathlib import Path
 
 from django.core.management.base import BaseCommand
 
@@ -71,6 +71,7 @@ class Command(BaseCommand):
                 capture_output=True,
                 text=True,
                 timeout=10,
+                check=False,
             )
             return result.returncode == 0
         except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -78,15 +79,21 @@ class Command(BaseCommand):
 
     def update_config_size(self, config_path, target_width, target_height):
         """Update the svgo config file with the target size."""
-        with open(config_path, "r") as f:
-            content = f.read()
+        try:
+            with open(config_path, "r") as f:
+                content = f.read()
+        except OSError:
+            return
 
         # Replace width and height values in the config
         content = content.replace("width: '48'", f"width: '{target_width}'")
         content = content.replace("height: '48'", f"height: '{target_height}'")
 
-        with open(config_path, "w") as f:
-            f.write(content)
+        try:
+            with open(config_path, "w") as f:
+                f.write(content)
+        except OSError:
+            return
 
     def optimize_directory(self, source_dir, output_dir, config_path):
         """Optimize all SVG files in a directory using svgo."""
@@ -110,6 +117,7 @@ class Command(BaseCommand):
                 capture_output=True,
                 text=True,
                 timeout=120,  # 2 minutes timeout for batch processing
+                check=False,
             )
 
             if result.returncode != 0:
@@ -120,7 +128,7 @@ class Command(BaseCommand):
         except subprocess.TimeoutExpired:
             self.stdout.write(self.style.ERROR("svgo timeout"))
             return False
-        except Exception as e:
+        except (OSError, subprocess.SubprocessError, ValueError) as e:
             self.stdout.write(self.style.ERROR(f"Error running svgo: {e}"))
             return False
 

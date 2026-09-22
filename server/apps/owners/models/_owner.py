@@ -1,4 +1,3 @@
-from server.core.models import TimeStampedModel
 from modeltrans.fields import TranslationField
 
 from django.contrib.postgres.indexes import GinIndex
@@ -7,6 +6,7 @@ from django.db.models.functions import Lower
 from django.utils.translation import gettext_lazy as _
 
 from server.apps.contacts.models import Contact
+from server.core.models import TimeStampedModel
 
 from ..managers import OwnerManager
 from ._associations import OwnerContactAssociation

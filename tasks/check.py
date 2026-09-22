@@ -3,8 +3,8 @@ from tasks import (
     doc,
     header,
     success,
-    warning,
     task,
+    warning,
 )
 
 

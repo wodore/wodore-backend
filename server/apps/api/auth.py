@@ -1,7 +1,8 @@
 import json
 import logging
 import time
-from typing import Any, Dict
+from math import floor
+from typing import Any
 
 import requests
 from authlib.integrations.django_oauth2 import ResourceProtector
@@ -10,12 +11,15 @@ from authlib.oauth2.rfc7662 import IntrospectTokenValidator
 from ninja.security import HttpBearer
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 
 # API_PRIVATE_KEY_FILE: dict[str, str] = {}
 
+logger = logging.getLogger(__name__)
+
 
 class ValidatorError(Exception):
-    def __init__(self, error: Dict[str, str], status_code: int):
+    def __init__(self, error: dict[str, str], status_code: int):
         super().__init__()
         self.error = error
         self.status_code = status_code
@@ -42,14 +46,14 @@ class ZitadelIntrospectTokenValidator(IntrospectTokenValidator):  # type: ignore
                 _key_obj["private_key"] = data["key"]
         except FileNotFoundError:
             if settings.DEBUG:
-                logging.warning(
+                logger.warning(
                     "ZITADEL_API_PRIVATE_KEY or _FILE_PATH not found. authentication does not work!!"
                 )
                 _key_obj["client_id"] = None
                 _key_obj["key_id"] = None
                 _key_obj["private_key"] = None
             else:
-                raise Exception(
+                raise ImproperlyConfigured(
                     "ZITADEL_API_PRIVATE_KEY or _FILE_PATH not found. Authentication cannot be configured."
                 )
 
@@ -61,8 +65,8 @@ class ZitadelIntrospectTokenValidator(IntrospectTokenValidator):  # type: ignore
             "iss": self.__api_private_key["client_id"],
             "sub": self.__api_private_key["client_id"],
             "aud": settings.OIDC_OP_BASE_URL,
-            "exp": int(time.time()) + 60 * 60,  # Expires in 1 hour
-            "iat": int(time.time()),
+            "exp": floor(time.time()) + 60 * 60,  # Expires in 1 hour
+            "iat": floor(time.time()),
         }
         header = {
             "alg": settings.OIDC_RP_SIGN_ALGO,
@@ -82,7 +86,10 @@ class ZitadelIntrospectTokenValidator(IntrospectTokenValidator):  # type: ignore
             "token": token_string,
         }
         response = requests.post(
-            settings.OIDC_OP_INTROSPECTION_ENDPOINT, headers=headers, data=data
+            settings.OIDC_OP_INTROSPECTION_ENDPOINT,
+            headers=headers,
+            data=data,
+            timeout=10,
         )
         response.raise_for_status()
         token_data = response.json()
@@ -127,7 +134,7 @@ class ZitadelIntrospectTokenValidator(IntrospectTokenValidator):  # type: ignore
         ]
         return any(group in groups for group in or_groups)
 
-    def validate_token(
+    def validate_requirements(
         self,
         token: dict[str, Any],
         scopes: list[str] | None,
@@ -135,7 +142,7 @@ class ZitadelIntrospectTokenValidator(IntrospectTokenValidator):  # type: ignore
         groups: list[str] | None,
         request: Any,
     ) -> None:
-        now = int(time.time())
+        now = floor(time.time())
         if not token:
             raise ValidatorError(
                 {"code": "invalid_token_revoked", "description": "Token was revoked."},
@@ -188,7 +195,7 @@ class ZitadelIntrospectTokenValidator(IntrospectTokenValidator):  # type: ignore
     ) -> dict[str, Any] | None:
         token = self.introspect_token(token_string)
         try:
-            self.validate_token(token, scopes, roles, groups, request)
+            self.validate_requirements(token, scopes, roles, groups, request)
         except ValidatorError as _:
             # print(f"Unauthorized: {e.error}")
             return None

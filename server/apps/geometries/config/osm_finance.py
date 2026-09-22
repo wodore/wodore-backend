@@ -5,7 +5,6 @@ See: https://wiki.openstreetmap.org/wiki/Key:amenity#Money
 
 from .osm_base import CategoryMappings, OSMMapping
 
-
 FINANCE = CategoryMappings(
     category="finance",
     detail_type="amenity",
