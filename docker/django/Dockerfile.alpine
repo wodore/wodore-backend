@@ -3,11 +3,13 @@
 # https://docs.docker.com/develop/develop-images/multistage-build/
 
 ################################################################################
-# Pinned tag: `alpine-small-latest` is now based on Alpine 3.24, which ships
-# python 3.14 and no longer provides the python 3.12 packages we need for
-# PYTHON_VERSION=3.12 below. alpine-small-3.13.3 = Alpine 3.23 (python 3.12.x).
-# When bumping PYTHON_VERSION, check the base image provides a matching python3.
-FROM ghcr.io/osgeo/gdal:alpine-small-3.13.3 AS python-base
+# NOTE: floating tag (deliberate, python 3.14 upgrade): this is currently the
+# only gdal alpine image with python 3.14 (Alpine 3.24, python 3.14.x) - pinned
+# tags stop at alpine-small-3.13.3 (Alpine 3.23, python 3.12). `latest` also
+# carries a dev build of GDAL (3.14.0dev): pin to alpine-small-3.14.x as soon
+# as that tag exists. When bumping PYTHON_VERSION, check the base image
+# provides a matching python3.
+FROM ghcr.io/osgeo/gdal:alpine-small-latest AS python-base
 
 LABEL org.opencontainers.image.name="Wodore Backend Alpine"
 LABEL org.opencontainers.image.authors="tb@wodore.com"
@@ -22,7 +24,7 @@ ARG DJANGO_ENV \
   # Needed for fixing permissions of files created by Docker:
   UID=1001 \
   GID=1001 \
-  PYTHON_VERSION=3.12 \
+  PYTHON_VERSION=3.14 \
   CONFIG_DIR="config" \
   WITH_DEV=0 \
   GIT_HASH \

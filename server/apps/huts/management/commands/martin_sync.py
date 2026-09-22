@@ -709,7 +709,7 @@ class Command(BaseCommand):
 
     def _write_marker_file(self, target_path, stats):
         """Write a marker file with timestamp - only updated if changes were made."""
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         marker_file = target_path / ".martin_sync_last_changed"
         changes_made = (
@@ -720,7 +720,7 @@ class Command(BaseCommand):
 
         if changes_made:
             # Write timestamp - changes detected
-            timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+            timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
             with open(marker_file, "w") as f:
                 f.write(f"Last modified: {timestamp}\n")
             self.stdout.write(f"\n✓ Updated marker file: {marker_file}")
@@ -730,7 +730,7 @@ class Command(BaseCommand):
                 self.stdout.write("\n✓ Marker file unchanged (no changes detected)")
             else:
                 # First run with no changes - create marker anyway
-                timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+                timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
                 with open(marker_file, "w") as f:
                     f.write(f"Last modified: {timestamp}\n")
                 self.stdout.write(f"\n✓ Created marker file: {marker_file}")

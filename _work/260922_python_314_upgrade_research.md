@@ -75,3 +75,23 @@ from source against `libpq-dev` (already in the builder), same as today.
 
 Small: one-line pins per file, no dependency changes, no code changes beyond
 the utcnow cleanup. The main work is the alpine decision + verification runs.
+
+## Update 2026-09-22: implemented (option 2 for alpine)
+
+Implemented on branch `chore/python-314`:
+
+- `.python-version` → 3.14, README requirement updated
+- alpine: `alpine-small-latest` (Alpine 3.24, python 3.14.7, GDAL 3.14.0dev —
+  floating tag accepted deliberately; TODO pin `alpine-small-3.14.x` when it
+  exists), `PYTHON_VERSION=3.14`
+- ubuntu: pinned `ubuntu-small-3.13.3` (26.04, python 3.14.4, GDAL 3.13.3
+  stable), `PYTHON_VERSION=3.14`
+- debian: `python:3.14.5-slim-bookworm`, `UV_PYTHON=python3.14`
+- CI setup action: uv 0.9.22 → 0.11.16 (now aligned with Dockerfiles/local),
+  unused python-version input default 3.12 → 3.14
+- `martin_sync.py`: `datetime.utcnow()` → `datetime.now(timezone.utc)`
+- `uv.lock`/`pyproject.toml`: unchanged (lock already covers 3.14)
+
+Verification: all three images build end-to-end and pass `manage.py check`
+on 3.14.7 / 3.14.4 / 3.14.5 respectively. Full test suite runs in CI
+(test.yml follows `.python-version` via the setup-uv-env action).
