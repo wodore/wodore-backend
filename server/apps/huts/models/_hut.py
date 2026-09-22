@@ -1,4 +1,6 @@
 import datetime
+
+from django.utils import timezone
 import typing as t
 
 from easydict import EasyDict
@@ -454,9 +456,7 @@ class Hut(TimeStampedModel):
             open_monthly=hut_schema.open_monthly.model_dump(),
             **i18n_fields,
         )
-        if (hut_db.hut_type_open.slug == "hut" and hut_db.capacity_closed) or (
-            0 > 0 and not type_closed
-        ):
+        if hut_db.hut_type_open.slug == "hut" and hut_db.capacity_closed:
             if (hut_db.elevation or 0) < 3000:
                 hut_db.hut_type_closed = HutTypeHelper.values["selfhut"]
             else:
@@ -691,7 +691,7 @@ class Hut(TimeStampedModel):
                     for img in v:
                         img.save()
                         img.refresh_from_db()
-                        pa, created = HutImageAssociation.objects.update_or_create(
+                        _assoc, created = HutImageAssociation.objects.update_or_create(
                             image=img, hut=hut_db, defaults={"order": photo_order}
                         )
                         # pa.save()
@@ -870,7 +870,7 @@ class Hut(TimeStampedModel):
     ) -> str:
         """Adds a review comment, if title included a date is added automatically."""
         title_date = (
-            f"\n\n~~~ {datetime.datetime.today().strftime('%Y-%m-%d %H:%M')}\n{title}\n\n"
+            f"\n\n~~~ {timezone.localtime().strftime('%Y-%m-%d %H:%M')}\n{title}\n\n"
             if title is not None
             else ""
         )
