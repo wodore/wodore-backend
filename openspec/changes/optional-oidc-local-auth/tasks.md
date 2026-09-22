@@ -26,7 +26,7 @@
 
 ## 4. Documentation & rollout
 
-- [ ] 4.1 Update `AGENTS.md` and `_work/` log: env flags (`OIDC_ENABLED`, `LOCAL_AUTH_ENABLED`), local mode workflow, frontend env vars (`WODORE_OICD_ISSUER_URL=http://localhost:8000/oauth/local`, `WODORE_OICD_CLIENT_ID=wodore-local-dev`, any `WODORE_OICD_RESOURCE_ID`)
-- [ ] 4.2 Run `inv tests` (all suites incl. new tests) and pre-commit; verify `uv lock --check` clean (no new dependencies expected)
-- [ ] 4.3 Manual smoke: local mode runserver → admin classic login works, frontend env-switched login + silent renew + logout works, protected endpoint 401/200 behavior; then `OIDC_ENABLED=true` against live Zitadel reproduces current behavior
+- [x] 4.1 Update `AGENTS.md` and `_work/` log: env flags (`OIDC_ENABLED`, `LOCAL_AUTH_ENABLED`), local mode workflow, frontend env vars (`WODORE_OICD_ISSUER_URL=http://localhost:8000/oauth/local`, `WODORE_OICD_CLIENT_ID=wodore-local-dev`, any `WODORE_OICD_RESOURCE_ID`)
+- [x] 4.2 Run `inv tests` (all suites incl. new tests) and pre-commit; verify `uv lock --check` clean (no new dependencies expected)
+- [x] 4.3 Manual smoke: local mode runserver → admin classic login works, frontend env-switched login + silent renew + logout works, protected endpoint 401/200 behavior; then `OIDC_ENABLED=true` against live Zitadel reproduces current behavior
 - [ ] 4.4 Open PR; note in description the rollout steps (no prod config change required — defaults preserve current behavior; optional `OIDC_ENABLED=true` in infisical dev when Zitadel stack is up)
