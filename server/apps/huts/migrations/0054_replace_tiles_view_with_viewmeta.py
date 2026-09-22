@@ -26,6 +26,13 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("huts", "0053_create_tiles_view"),
+        # The view SQL (ViewMeta.query) references categories_category.color,
+        # added by categories.0013. Without this explicit dependency the
+        # interleaved app order on a fresh database can run this view
+        # migration first and fail with `column cat_open.color does not
+        # exist`. Dependency-only change: no effect on already-migrated
+        # databases.
+        ("categories", "0013_remove_category_color_dark_and_more"),
     ]
 
     operations = [
