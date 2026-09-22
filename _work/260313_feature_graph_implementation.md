@@ -105,8 +105,10 @@ If needed later, a separate `relation_reverse` category could be added for displ
 ```python
 from enum import IntEnum
 
+
 class Month(IntEnum):
     """Month enumeration (1-based, matching calendar and database fields)."""
+
     JANUARY = 1
     FEBRUARY = 2
     MARCH = 3
@@ -232,9 +234,7 @@ class GeoPlaceOperation(TimeStampedModel):
     """
 
     geo_place = models.ForeignKey(
-        "GeoPlace",
-        related_name="operations",
-        on_delete=models.CASCADE
+        "GeoPlace", related_name="operations", on_delete=models.CASCADE
     )
 
     relation = models.ForeignKey(
@@ -249,84 +249,102 @@ class GeoPlaceOperation(TimeStampedModel):
     capacity = models.PositiveSmallIntegerField(
         null=True,
         blank=True,
-        help_text=_("Capacity: beds for huts, seats for restaurants, max visitors for museums")
+        help_text=_(
+            "Capacity: beds for huts, seats for restaurants, max visitors for museums"
+        ),
     )
 
     # Monthly opening percentage (0-100%, NULL = unknown)
     # Using separate int fields for performance and DB validation
     month_01 = models.PositiveSmallIntegerField(
-        null=True, blank=True,
+        null=True,
+        blank=True,
         validators=[MaxValueValidator(100)],
-        verbose_name=_("January")
+        verbose_name=_("January"),
     )
     month_02 = models.PositiveSmallIntegerField(
-        null=True, blank=True,
+        null=True,
+        blank=True,
         validators=[MaxValueValidator(100)],
-        verbose_name=_("February")
+        verbose_name=_("February"),
     )
     month_03 = models.PositiveSmallIntegerField(
-        null=True, blank=True,
+        null=True,
+        blank=True,
         validators=[MaxValueValidator(100)],
-        verbose_name=_("March")
+        verbose_name=_("March"),
     )
     month_04 = models.PositiveSmallIntegerField(
-        null=True, blank=True,
+        null=True,
+        blank=True,
         validators=[MaxValueValidator(100)],
-        verbose_name=_("April")
+        verbose_name=_("April"),
     )
     month_05 = models.PositiveSmallIntegerField(
-        null=True, blank=True,
+        null=True,
+        blank=True,
         validators=[MaxValueValidator(100)],
-        verbose_name=_("May")
+        verbose_name=_("May"),
     )
     month_06 = models.PositiveSmallIntegerField(
-        null=True, blank=True,
+        null=True,
+        blank=True,
         validators=[MaxValueValidator(100)],
-        verbose_name=_("June")
+        verbose_name=_("June"),
     )
     month_07 = models.PositiveSmallIntegerField(
-        null=True, blank=True,
+        null=True,
+        blank=True,
         validators=[MaxValueValidator(100)],
-        verbose_name=_("July")
+        verbose_name=_("July"),
     )
     month_08 = models.PositiveSmallIntegerField(
-        null=True, blank=True,
+        null=True,
+        blank=True,
         validators=[MaxValueValidator(100)],
-        verbose_name=_("August")
+        verbose_name=_("August"),
     )
     month_09 = models.PositiveSmallIntegerField(
-        null=True, blank=True,
+        null=True,
+        blank=True,
         validators=[MaxValueValidator(100)],
-        verbose_name=_("September")
+        verbose_name=_("September"),
     )
     month_10 = models.PositiveSmallIntegerField(
-        null=True, blank=True,
+        null=True,
+        blank=True,
         validators=[MaxValueValidator(100)],
-        verbose_name=_("October")
+        verbose_name=_("October"),
     )
     month_11 = models.PositiveSmallIntegerField(
-        null=True, blank=True,
+        null=True,
+        blank=True,
         validators=[MaxValueValidator(100)],
-        verbose_name=_("November")
+        verbose_name=_("November"),
     )
     month_12 = models.PositiveSmallIntegerField(
-        null=True, blank=True,
+        null=True,
+        blank=True,
         validators=[MaxValueValidator(100)],
-        verbose_name=_("December")
+        verbose_name=_("December"),
     )
 
     # Opening hours (simple string, OSM-compatible or free text)
     hours = models.TextField(
         blank=True,
         default="",
-        help_text=_('OSM format or text: "Mo-Fr 08:00-18:00", "24/7", "by appointment"')
+        help_text=_(
+            'OSM format or text: "Mo-Fr 08:00-18:00", "24/7", "by appointment"'
+        ),
     )
 
     # Flexible extra data (JSONB)
     extra = models.JSONField(
         default=dict,
         blank=True,
-        help_text=_('Structured details: {"staffed": true, "services": ["restaurant"], "price_per_night": 85}')
+        help_text=_(
+            'Structured details: {"staffed": true, "services": ["restaurant"], "price_per_night": 85}'
+        ),
     )
 
     is_active = models.BooleanField(default=True)
@@ -370,6 +388,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ._operation import GeoPlaceOperation
+
 
 class MonthAccessor:
     """Dict-like accessor for month percentages using Month enum.
@@ -500,8 +519,9 @@ def add_relation(self, to_place: "GeoPlace", relation_slug: str, **kwargs):
         from_place=self,
         to_place=to_place,
         relation=relation_cat,
-        defaults={**kwargs, "is_active": True}
+        defaults={**kwargs, "is_active": True},
     )[0]
+
 
 def get_related_places(self, relation_slug: str = None, direction: str = "outgoing"):
     """Get related places via semantic relations."""
@@ -662,14 +682,22 @@ operating_red = Category.objects.get(slug="reduced", parent__slug="operating")
 brand_relation = Category.objects.get(slug="brand")
 
 # Categories for standard mode
-GeoPlaceCategory.objects.create(geo_place=hut, category=alpine_hut, relation=operating_std)
-GeoPlaceCategory.objects.create(geo_place=hut, category=restaurant, relation=operating_std)
+GeoPlaceCategory.objects.create(
+    geo_place=hut, category=alpine_hut, relation=operating_std
+)
+GeoPlaceCategory.objects.create(
+    geo_place=hut, category=restaurant, relation=operating_std
+)
 
 # Categories for reduced mode
-GeoPlaceCategory.objects.create(geo_place=hut, category=unattended, relation=operating_red)
+GeoPlaceCategory.objects.create(
+    geo_place=hut, category=unattended, relation=operating_red
+)
 
 # Brand (independent of operating mode)
-GeoPlaceCategory.objects.create(geo_place=hut, category=sac_brand, relation=brand_relation)
+GeoPlaceCategory.objects.create(
+    geo_place=hut, category=sac_brand, relation=brand_relation
+)
 
 # 3. Add operating modes
 from server.apps.geometries.models import Month
@@ -681,13 +709,17 @@ summer_op = GeoPlaceOperation.objects.create(
 )
 
 # Use Month enum for clarity
-summer_op.months[Month.JUNE] = 75      # yesish (opening transition)
-summer_op.months[Month.JULY] = 100     # fully open
-summer_op.months[Month.AUGUST] = 100   # fully open
+summer_op.months[Month.JUNE] = 75  # yesish (opening transition)
+summer_op.months[Month.JULY] = 100  # fully open
+summer_op.months[Month.AUGUST] = 100  # fully open
 summer_op.months[Month.SEPTEMBER] = 100  # fully open
-summer_op.months[Month.OCTOBER] = 25    # noish (closing transition)
+summer_op.months[Month.OCTOBER] = 25  # noish (closing transition)
 summer_op.hours = "24/7"
-summer_op.extra = {"staffed": True, "services": ["restaurant", "shower"], "price_per_night": 85}
+summer_op.extra = {
+    "staffed": True,
+    "services": ["restaurant", "shower"],
+    "price_per_night": 85,
+}
 summer_op.save()
 
 winter_op = GeoPlaceOperation.objects.create(
@@ -718,9 +750,7 @@ from server.apps.external_links.models import ExternalLink
 
 phone_type = Category.objects.get(slug="phone", parent__slug="link_types")
 phone = ExternalLink.objects.create(
-    url="tel:+41279672215",
-    label="Hut Reception",
-    relation=phone_type
+    url="tel:+41279672215", label="Hut Reception", relation=phone_type
 )
 hut.external_links.add(phone)
 ```
@@ -748,15 +778,11 @@ summer_categories = hut.categories.filter(
 # Returns: [alpine_hut, restaurant]
 
 # Get brand
-brand = hut.categories.filter(
-    category_associations__relation__slug="brand"
-).first()
+brand = hut.categories.filter(category_associations__relation__slug="brand").first()
 # Returns: sac
 
 # Find all huts open in summer (July >= 75%)
-summer_huts = GeoPlace.objects.filter(
-    operations__month_07__gte=75
-).distinct()
+summer_huts = GeoPlace.objects.filter(operations__month_07__gte=75).distinct()
 
 # Get parent municipality
 parent = hut.get_related_places("part_of", direction="outgoing").first()
@@ -782,18 +808,20 @@ VALUE_MAP = {
     "unknown": None,
 }
 
+
 def migrate_month_value(old_value: str) -> int | None:
     """Convert fuzzy value to percentage."""
     return VALUE_MAP.get(old_value.lower(), None)
 
+
 # Example: Set months using helper
 old_data = {
-    "jan": "yes",     # 100
-    "feb": "yes",     # 100
+    "jan": "yes",  # 100
+    "feb": "yes",  # 100
     "jun": "yesish",  # 75
-    "jul": "yes",     # 100
-    "oct": "noish",   # 25
-    "nov": "no",      # 0
+    "jul": "yes",  # 100
+    "oct": "noish",  # 25
+    "nov": "no",  # 0
 }
 
 for month_name, value in old_data.items():
@@ -894,8 +922,14 @@ EOF
 ```python
 from django.contrib.gis.geos import Point
 from server.apps.huts.models import Hut
-from server.apps.geometries.models import GeoPlace, GeoPlaceCategory, GeoPlaceOperation, Month
+from server.apps.geometries.models import (
+    GeoPlace,
+    GeoPlaceCategory,
+    GeoPlaceOperation,
+    Month,
+)
 from server.apps.categories.models import Category
+
 
 def migrate_hut_to_geoplace(hut: Hut) -> GeoPlace:
     """Migrate a Hut to GeoPlace with operations"""
@@ -919,16 +953,12 @@ def migrate_hut_to_geoplace(hut: Hut) -> GeoPlace:
 
     # 3. Add categories with operating modes
     GeoPlaceCategory.objects.create(
-        geo_place=place,
-        category=hut.hut_type_open,
-        relation=operating_std
+        geo_place=place, category=hut.hut_type_open, relation=operating_std
     )
 
     if hut.hut_type_closed:
         GeoPlaceCategory.objects.create(
-            geo_place=place,
-            category=hut.hut_type_closed,
-            relation=operating_red
+            geo_place=place, category=hut.hut_type_closed, relation=operating_red
         )
 
     # 4. Migrate open_monthly to percentages
@@ -940,7 +970,7 @@ def migrate_hut_to_geoplace(hut: Hut) -> GeoPlace:
             geo_place=place,
             relation=operating_std,
             capacity=hut.capacity_open,
-            extra={"staffed": True}
+            extra={"staffed": True},
         )
 
         # Set months using Month enum
@@ -959,7 +989,7 @@ def migrate_hut_to_geoplace(hut: Hut) -> GeoPlace:
             geo_place=place,
             relation=operating_red,
             capacity=hut.capacity_closed,
-            extra={"staffed": False}
+            extra={"staffed": False},
         )
 
         # Set months using Month enum
