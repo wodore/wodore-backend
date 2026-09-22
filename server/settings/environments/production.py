@@ -6,7 +6,7 @@ values are overridden.
 """
 
 from server.settings.components.common import DJANGO_TRUSTED_DOMAINS, MIDDLEWARE
-from server.settings.components.oicd import discovery_info
+from server.settings.components.oidc import discovery_info
 
 # Production flags:
 # https://docs.djangoproject.com/en/4.2/howto/deployment/

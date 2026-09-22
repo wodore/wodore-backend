@@ -27,8 +27,6 @@ admin.autodiscover()
 
 # Define base URL patterns
 urlpatterns = [
-    # Auth
-    path("oidc/", include("mozilla_django_oidc.urls")),
     # Apps:
     path("main/", include(django_admin_urls, namespace="main")),
     # Health checks:
@@ -48,11 +46,6 @@ urlpatterns = [
     # path("grappelli/", include("grappelli.urls")),  # grappelli URLS
     # path("", include("admin_volt.urls")), # admin-volt
     path("admin/doc/", include(admindocs_urls)),
-    # admin hack, should not be needed (https://stackoverflow.com/questions/59881651/django-mozilla-django-oidc-and-admin)
-    path(
-        "admin/login/",
-        RedirectView.as_view(url="/oidc/authenticate?next=/admin/", permanent=False),
-    ),
     path("admin/", admin.site.urls),
     # Api:
     path("v1/", api_v1.urls),  # type: ignore
@@ -75,6 +68,25 @@ urlpatterns = [
     # It is a good practice to have explicit index view:
     path("", index, name="index"),
 ]
+
+# Zitadel RP routes + admin login redirect (only when OIDC is enabled; when
+# disabled the admin falls back to Django's classic login form).
+if settings.OIDC_ENABLED:
+    urlpatterns += [
+        path("oidc/", include("mozilla_django_oidc.urls")),
+        # admin hack, should not be needed (https://stackoverflow.com/questions/59881651/django-mozilla-django-oidc-and-admin)
+        path(
+            "admin/login/",
+            RedirectView.as_view(
+                url="/oidc/authenticate?next=/admin/", permanent=False
+            ),
+        ),
+    ]
+
+# Local dev/test auth provider (frontend authenticates directly against
+# Django when Zitadel is not available).
+if settings.LOCAL_AUTH_ENABLED:
+    urlpatterns += [path("oauth/local/", include("server.apps.local_auth.urls"))]
 
 if settings.DEBUG:  # pragma: no cover
     try:

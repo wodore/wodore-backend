@@ -56,6 +56,9 @@ def _hut_slugs_list(slugs: str | None) -> list[str] | None:
     deprecated=True,
     summary="Get hut bookings (deprecated)",
     description="**DEPRECATED**: Use `/huts/availability.geojson` instead. This endpoint will be removed in a future version.",
+    # auth stays disabled: the Zitadel role vocabulary ("perm:bookings") does
+    # not exist for local auth users, so enabling this would lock the
+    # endpoints out of local mode. Revisit together with the roles strategy.
     # auth=AuthBearer(roles=["perm:bookings"], groups=["root", "admin", "editor"]),
 )
 @with_language_param("lang")
@@ -83,6 +86,9 @@ def get_hut_bookings(  # type: ignore
     deprecated=True,
     summary="Get hut bookings as GeoJSON (deprecated)",
     description="**DEPRECATED**: Use `/huts/availability.geojson` instead. This endpoint will be removed in a future version.",
+    # auth stays disabled: the Zitadel role vocabulary ("perm:bookings") does
+    # not exist for local auth users, so enabling this would lock the
+    # endpoints out of local mode. Revisit together with the roles strategy.
     # auth=AuthBearer(roles=["perm:bookings"], groups=["root", "admin", "editor"]),
 )
 @with_language_param("lang")

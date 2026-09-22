@@ -32,12 +32,15 @@ _base_settings = (
     "components/csp.py",
     "components/unfold.py",
     "components/caches.py",
-    "components/oicd.py",
+    "components/oidc.py",
     "components/email.py",
     # Select the right env:
     f"environments/{_ENV}.py",
     # Optionally override some settings:
     optional("environments/local.py"),
+    # Conditional app/backend registrations - MUST load last, after the
+    # environment files have re-imported the base tuples from common:
+    "components/registry.py",
 )
 
 # Include settings:

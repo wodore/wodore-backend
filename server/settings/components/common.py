@@ -384,7 +384,7 @@ IMAGOR_MEDIA_URL = str(
 AUTHENTICATION_BACKENDS = (
     "axes.backends.AxesBackend",
     "django.contrib.auth.backends.ModelBackend",
-    "server.core.oicd_permission.PermissionBackend",
+    # OIDC PermissionBackend is appended by components/oidc.py when OIDC_ENABLED
 )
 
 PASSWORD_HASHERS = [
