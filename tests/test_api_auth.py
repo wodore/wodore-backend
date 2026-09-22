@@ -112,7 +112,13 @@ class TestProtectedEndpoints:
 
 
 class TestDisabledMode:
-    def test_clean_401_when_nothing_configured(self, settings, local_users):
+    def test_clean_401_when_nothing_configured(self, settings):
+        # NOTE: do NOT request real tokens while LOCAL_AUTH_ENABLED is
+        # overridden to False: the provider routes are mounted at urlconf
+        # import time behind that flag, and pytest-django may reload the
+        # urlconf around the override - poisoning the rest of the run with
+        # 404s. The "not configured" 401 fires before any token validation,
+        # so a dummy token is sufficient (and keeps this test DB-free).
         settings.OIDC_ENABLED = False
         settings.LOCAL_AUTH_ENABLED = False
         # Endpoint built after the override, so its AuthBearer has no validator.
@@ -122,9 +128,8 @@ class TestDisabledMode:
         def x(request):
             return {"ok": True}
 
-        token = _password_token("admin@local.test", "admin-dev")
         response = TestClient(disabled_api).get(
-            "/x", headers={"Authorization": f"Bearer {token}"}
+            "/x", headers={"Authorization": "Bearer any-token"}
         )
         assert response.status_code == 401
         assert "not configured" in str(response.json()).lower()
