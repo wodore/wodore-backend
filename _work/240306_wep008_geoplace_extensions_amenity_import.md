@@ -159,7 +159,10 @@ def generate_unique_slug(name, max_length=50, min_length=3, uuid_length=3):
 {
     "monday": [{"open": "08:00", "close": "18:00"}],
     "tuesday": [{"open": "08:00", "close": "18:00"}],
-    "wednesday": [{"open": "08:00", "close": "12:00"}, {"open": "14:00", "close": "18:00"}],
+    "wednesday": [
+        {"open": "08:00", "close": "12:00"},
+        {"open": "14:00", "close": "18:00"},
+    ],
     # ... etc
 }
 ```
@@ -347,11 +350,9 @@ Returns detailed amenity information:
         "websites": [
             {"url": "https://berggasthaus-zermatt.ch", "description": "Official site"}
         ],
-        "phones": [
-            {"number": "+41 123 45 67", "description": "Main line"}
-        ],
-        "extra": {}
-    }
+        "phones": [{"number": "+41 123 45 67", "description": "Main line"}],
+        "extra": {},
+    },
 }
 ```
 
@@ -372,9 +373,11 @@ class WebsiteSchema(Schema):
     url: str
     description: str | None = None
 
+
 class PhoneSchema(Schema):
     number: str
     description: str | None = None
+
 
 class AmenityDetailSchema(Schema):
     operating_status: str | None
@@ -383,6 +386,7 @@ class AmenityDetailSchema(Schema):
     websites: list[WebsiteSchema]
     phones: list[PhoneSchema]
     extra: dict
+
 
 class AmenitySchema(Schema):
     id: int
@@ -481,19 +485,59 @@ name = "Camping Alpenglühn"
 ```python
 NOT_IN_SLUG = [
     # Amenity types
-    "restaurant", "ristorante", "beizli", "gasthaus", "gasthof",
-    "hotel", "hostel", "jugendherberg", "berghotel", "berggasthaus",
-    "cafe", "cafeteria", "bar", "pub",
-    "camping", "zelt", "campground",
+    "restaurant",
+    "ristorante",
+    "beizli",
+    "gasthaus",
+    "gasthof",
+    "hotel",
+    "hostel",
+    "jugendherberg",
+    "berghotel",
+    "berggasthaus",
+    "cafe",
+    "cafeteria",
+    "bar",
+    "pub",
+    "camping",
+    "zelt",
+    "campground",
     # Common filler words
-    "alp", "alpe", "la", "le", "les", "del", "des", "sous", "sur",
+    "alp",
+    "alpe",
+    "la",
+    "le",
+    "les",
+    "del",
+    "des",
+    "sous",
+    "sur",
     # Place types
-    "berghaus", "berghuette", "waldhuette", "huette", "hütte",
-    "cabane", "capanna", "rifugio", "refuge", "rif",
+    "berghaus",
+    "berghuette",
+    "waldhuette",
+    "huette",
+    "hütte",
+    "cabane",
+    "capanna",
+    "rifugio",
+    "refuge",
+    "rif",
     # Articles/prepositions
-    "am", "an", "im", "in", "zum", "zur", "bei", "ob", "unter",
+    "am",
+    "an",
+    "im",
+    "in",
+    "zum",
+    "zur",
+    "bei",
+    "ob",
+    "unter",
     # Operators/organizations
-    "sac", "cai", "dac", "cas",
+    "sac",
+    "cai",
+    "dac",
+    "cas",
 ]
 ```
 
@@ -613,10 +657,10 @@ def generate_unique_slug(name, max_length=50, uuid_length=3):
 ```python
 generate_unique_slug(
     name,
-    max_length=50,     # Maximum slug length
-    min_length=3,      # Minimum base slug length
-    uuid_length=3,     # Starting UUID suffix length
-    exclude_id=None    # For updates (exclude current record)
+    max_length=50,  # Maximum slug length
+    min_length=3,  # Minimum base slug length
+    uuid_length=3,  # Starting UUID suffix length
+    exclude_id=None,  # For updates (exclude current record)
 )
 ```
 
@@ -704,7 +748,7 @@ To regenerate only specific slugs:
 # Regenerate only food places
 from server.apps.geometries.models import GeoPlace
 
-for place in GeoPlace.objects.filter(place_type__slug='food'):
+for place in GeoPlace.objects.filter(place_type__slug="food"):
     old_slug = place.slug
     place.slug = None
     place.save()
@@ -913,9 +957,7 @@ place = GeoPlace.create_amenity(
     websites=[
         {"url": "https://berggasthaus-zermatt.ch", "description": "Official website"}
     ],
-    phones=[
-        {"number": "+41 123 45 67", "description": "Main line"}
-    ],
+    phones=[{"number": "+41 123 45 67", "description": "Main line"}],
 )
 
 # Slug is auto-generated: "zermatt-85g"
@@ -937,13 +979,15 @@ lake = GeoPlace.create_natural(
     category=lake_category,
     source="manual",
     source_id="lake-zurich",
-    shape=Polygon([
-        (8.54, 47.30),  # Northwest corner
-        (8.54, 47.24),  # Southwest corner
-        (8.82, 47.24),  # Southeast corner
-        (8.82, 47.30),  # Northeast corner
-        (8.54, 47.30),  # Close polygon
-    ]),
+    shape=Polygon(
+        [
+            (8.54, 47.30),  # Northwest corner
+            (8.54, 47.24),  # Southwest corner
+            (8.82, 47.24),  # Southeast corner
+            (8.82, 47.30),  # Northeast corner
+            (8.54, 47.30),  # Close polygon
+        ]
+    ),
 )
 
 # Create an administrative area (municipality)
@@ -953,21 +997,22 @@ municipality = GeoPlace.create_admin(
     category=municipality_category,
     source="swisstopo",
     source_id="municipality-6322",
-    shape=Polygon([
-        (7.6, 46.05),
-        (7.6, 45.95),
-        (7.8, 45.95),
-        (7.8, 46.05),
-        (7.6, 46.05),
-    ]),
+    shape=Polygon(
+        [
+            (7.6, 46.05),
+            (7.6, 45.95),
+            (7.8, 45.95),
+            (7.8, 46.05),
+            (7.6, 46.05),
+        ]
+    ),
 )
 
 # Query places that intersect with a point
 from django.contrib.gis.geos import Point
+
 search_point = Point(8.68, 47.27)
-places = GeoPlace.objects.filter(
-    shape__contains=search_point
-)
+places = GeoPlace.objects.filter(shape__contains=search_point)
 ```
 
 ### Querying Amenities
@@ -977,8 +1022,7 @@ from server.apps.geometries.models import GeoPlace
 
 # Get all restaurants
 restaurants = GeoPlace.objects.filter(
-    place_type__slug="restaurant",
-    detail_type="amenity"
+    place_type__slug="restaurant", detail_type="amenity"
 )
 
 # Get operating restaurants in Zermatt
@@ -990,7 +1034,7 @@ operating_restaurants = GeoPlace.objects.filter(
     place_type__slug="restaurant",
     detail_type="amenity",
     amenitydetail__operating_status="operating",
-    location__distance_lte=(zermatt, 5000)  # 5km radius
+    location__distance_lte=(zermatt, 5000),  # 5km radius
 )
 
 # Check if open in January

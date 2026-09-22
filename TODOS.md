@@ -105,10 +105,7 @@ This document tracks potential improvements, refactoring ideas, and technical de
 
 ```python
 # Future: Generator yields results as they're fetched
-for hut_result in service.get_bookings_generator(
-    hut_slugs=slugs,
-    request_interval=0.1
-):
+for hut_result in service.get_bookings_generator(hut_slugs=slugs, request_interval=0.1):
     # Process and store each hut immediately
     process_hut_bookings(hut_result)
     progress_callback()

@@ -69,7 +69,9 @@ def generate_unique_slug(
 **Code changes:**
 ```python
 # Line 252-310: save() method
-def save(self, *args, track_modifications=True, skip_slug_check=True, max_retries=3, **kwargs):
+def save(
+    self, *args, track_modifications=True, skip_slug_check=True, max_retries=3, **kwargs
+):
     # ... slug generation ...
 
     # Retry logic for database locks
@@ -79,13 +81,13 @@ def save(self, *args, track_modifications=True, skip_slug_check=True, max_retrie
             return  # Success
         except Exception as e:
             is_db_lock = (
-                "database is locked" in str(e).lower() or
-                "deadlock" in str(e).lower() or
-                "could not serialize" in str(e).lower()
+                "database is locked" in str(e).lower()
+                or "deadlock" in str(e).lower()
+                or "could not serialize" in str(e).lower()
             )
 
             if is_db_lock and attempt < max_retries - 1:
-                time.sleep(0.1 * (2 ** attempt))  # Exponential backoff
+                time.sleep(0.1 * (2**attempt))  # Exponential backoff
                 continue
             else:
                 raise
@@ -115,7 +117,7 @@ for slug_attempt in range(max_slug_attempts):
     try:
         place.save(
             track_modifications=False,
-            skip_slug_check=(slug_attempt == 0)  # First attempt: skip check
+            skip_slug_check=(slug_attempt == 0),  # First attempt: skip check
         )
         break  # Success
     except Exception as e:
@@ -148,23 +150,35 @@ for slug_attempt in range(max_slug_attempts):
 def meters_to_degrees(latitude: float, target_meters: float) -> tuple[float, float]:
     """Convert meters to latitude/longitude delta at given latitude."""
     import math
+
     lat_rad = math.radians(latitude)
 
     # Accurate formulas for Earth's ellipsoid
-    meters_per_deg_lat = 111132.954 - 559.822 * math.cos(2 * lat_rad) + 1.175 * math.cos(4 * lat_rad)
-    meters_per_deg_lon = 111412.84 * math.cos(lat_rad) - 93.5 * math.cos(3 * lat_rad) + 0.118 * math.cos(5 * lat_rad)
+    meters_per_deg_lat = (
+        111132.954 - 559.822 * math.cos(2 * lat_rad) + 1.175 * math.cos(4 * lat_rad)
+    )
+    meters_per_deg_lon = (
+        111412.84 * math.cos(lat_rad)
+        - 93.5 * math.cos(3 * lat_rad)
+        + 0.118 * math.cos(5 * lat_rad)
+    )
 
     delta_lat = target_meters / meters_per_deg_lat
     delta_lon = target_meters / meters_per_deg_lon
 
     return delta_lat, delta_lon
 
+
 # Build BBox for 20m radius
 delta_lat, delta_lon = meters_to_degrees(location.y, 20)
-bbox = Polygon.from_bbox((
-    location.x - delta_lon, location.y - delta_lat,
-    location.x + delta_lon, location.y + delta_lat
-))
+bbox = Polygon.from_bbox(
+    (
+        location.x - delta_lon,
+        location.y - delta_lat,
+        location.x + delta_lon,
+        location.y + delta_lat,
+    )
+)
 
 # Use BBox filter instead of distance
 nearby = GeoPlace.objects.filter(
@@ -322,16 +336,16 @@ If issues occur, all optimizations can be reverted individually:
 ### 1. Revert Slug Optimization
 ```python
 # In GeoPlace.save()
-skip_slug_check=False  # Always check slug uniqueness
+skip_slug_check = False  # Always check slug uniqueness
 ```
 
 ### 2. Revert BBox Optimization
 ```python
 # In _find_existing_place_by_schema()
 # Replace:
-location__contained=bbox
+location__contained = bbox
 # With:
-location__distance_lte=(location, dedup_options.distance_same)
+location__distance_lte = (location, dedup_options.distance_same)
 ```
 
 ### 3. Revert Transaction Changes

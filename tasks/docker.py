@@ -85,7 +85,7 @@ def get_tags(
     registry: str | None = None,
     no_sha_tag: bool = False,
 ) -> tuple[list[str], list[str]]:
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     tag_names = [] if no_edge_tag else ["edge"]
     if version_tag:
@@ -97,7 +97,7 @@ def get_tags(
     if not no_sha_tag:
         git_short_hash = c.run("git rev-parse --short HEAD", hide=True).stdout.strip()
         # Add timestamp + SHA tag (matching CI format: YYYYMMDDTHHmm-sha-<short-sha>)
-        timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M")
         tag_names += [f"{timestamp}-sha-{git_short_hash}"]
         info(f"Git hash:        '{git_short_hash}'")
         info(f"Timestamp tag:   '{timestamp}-sha-{git_short_hash}'")

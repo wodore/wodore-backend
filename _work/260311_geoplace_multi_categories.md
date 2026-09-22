@@ -220,7 +220,9 @@ class GeoPlaceCategory(TimeStampedModel):
 
     def __str__(self) -> str:
         classifier_str = f" [{self.classifier.slug}]" if self.classifier else ""
-        return f"{self.geo_place.name_i18n} → {self.category.identifier}{classifier_str}"
+        return (
+            f"{self.geo_place.name_i18n} → {self.category.identifier}{classifier_str}"
+        )
 ```
 
 ### 10. Edge Case Handling
@@ -370,7 +372,7 @@ from pydantic import Field
 place_type_identifiers: list[str] = Field(
     ...,
     min_length=1,
-    description="Category identifiers (e.g., ['shop.bakery', 'peak']). At least one category is required."
+    description="Category identifiers (e.g., ['shop.bakery', 'peak']). At least one category is required.",
 )
 ```
 
@@ -383,7 +385,9 @@ place_type_identifiers: list[str] = Field(
 
 ```python
 def get_queryset(self, request):
-    return super().get_queryset(request).prefetch_related("categories__parent").distinct()
+    return (
+        super().get_queryset(request).prefetch_related("categories__parent").distinct()
+    )
 ```
 
 #### 4. Test Coverage Gaps
@@ -434,18 +438,16 @@ def get_queryset(self, request):
 class Meta:
     indexes = [
         # Primary lookup: find all categories for a place (reverse lookup)
-        models.Index(fields=['category', 'geo_place']),
-
+        models.Index(fields=["category", "geo_place"]),
         # Reverse lookup: find all places for a category (most common filter)
-        models.Index(fields=['geo_place', 'category']),
-
+        models.Index(fields=["geo_place", "category"]),
         # Classifier filtering (future use)
-        models.Index(fields=['classifier']),
+        models.Index(fields=["classifier"]),
     ]
     constraints = [
         models.UniqueConstraint(
-            fields=['geo_place', 'category'],
-            name='geoplacecategory_unique_place_category'
+            fields=["geo_place", "category"],
+            name="geoplacecategory_unique_place_category",
         ),
     ]
 ```
@@ -454,22 +456,20 @@ class Meta:
 
 ```python
 # List views - minimal prefetch
-queryset = GeoPlace.objects.prefetch_related('categories__parent')
+queryset = GeoPlace.objects.prefetch_related("categories__parent")
 
 # Detail views - full prefetch
 queryset = GeoPlace.objects.prefetch_related(
-    'categories__parent',
-    'categories__symbol_detailed',
-    'categories__symbol_simple',
-    'categories__symbol_mono'
+    "categories__parent",
+    "categories__symbol_detailed",
+    "categories__symbol_simple",
+    "categories__symbol_mono",
 )
 
 # Filter optimization - use subquery if needed
-category_ids = Category.objects.filter(
-    parent__slug__in=category_parents
-).values_list('id', flat=True)
+category_ids = Category.objects.filter(parent__slug__in=category_parents).values_list(
+    "id", flat=True
+)
 
-queryset = GeoPlace.objects.filter(
-    categories__id__in=category_ids
-).distinct()
+queryset = GeoPlace.objects.filter(categories__id__in=category_ids).distinct()
 ```

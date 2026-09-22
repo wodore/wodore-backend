@@ -164,9 +164,7 @@ Add BM25 index to existing model:
 # Add BM25Index to model's Meta
 Bm25Index(
     fields=["id", "name", "i18n", "importance", "country_code"],
-    json_fields=[
-        JSONFieldIndexConfig("i18n", fast=True)
-    ]
+    json_fields=[JSONFieldIndexConfig("i18n", fast=True)],
 )
 ```
 
@@ -183,8 +181,7 @@ Bm25Index(
 ```python
 # Search across requested language
 queryset.filter(
-    JsonOp("i18n", "name_{lang}", "match", value=query) |
-    Search("name", query)
+    JsonOp("i18n", "name_{lang}", "match", value=query) | Search("name", query)
 )
 ```
 
@@ -203,9 +200,9 @@ filter(JsonOp("i18n", "name_de", "match", value="Matterhorn"))
 
 # Multi-language fallback
 filter(
-    JsonOp("i18n", "name_de", "match", value=query) |
-    JsonOp("i18n", "name_fr", "match", value=query) |
-    Search("name", query)
+    JsonOp("i18n", "name_de", "match", value=query)
+    | JsonOp("i18n", "name_fr", "match", value=query)
+    | Search("name", query)
 )
 ```
 
@@ -215,10 +212,7 @@ filter(
 
 ```python
 # Combined: BM25 text search + geographic distance + importance
-filter(
-    Search("name", query),
-    location__distance_lte=(point, D(km=10))
-).annotate(
+filter(Search("name", query), location__distance_lte=(point, D(km=10))).annotate(
     distance=Distance("location", point)
 ).order_by("distance", "-importance")
 ```

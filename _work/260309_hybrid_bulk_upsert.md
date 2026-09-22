@@ -32,19 +32,16 @@ if non_duplicates:
 if existing_to_update:
     # Update fields
     places_to_update = [
-        prepare_update(place, schema)
-        for place, schema in existing_to_update
+        prepare_update(place, schema) for place, schema in existing_to_update
     ]
 
     # Single bulk update query
     GeoPlace.objects.bulk_update(
-        places_to_update,
-        fields=['name', 'location', 'modified']
+        places_to_update, fields=["name", "location", "modified"]
     )
 
     AmenityDetail.objects.bulk_update(
-        details_to_update,
-        fields=['operating_status', 'opening_hours']
+        details_to_update, fields=["operating_status", "opening_hours"]
     )
 ```
 
@@ -96,7 +93,7 @@ with transaction.atomic():
 
     # Bulk update existing
     if existing_places:
-        GeoPlace.objects.bulk_update(existing_places, ['name', 'location'])
+        GeoPlace.objects.bulk_update(existing_places, ["name", "location"])
 ```
 
 ## Expected Performance
