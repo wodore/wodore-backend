@@ -112,8 +112,6 @@ HutAvailabilityFeature = Feature[Point, HutAvailabilityPropertiesSchema]
 class HutAvailabilityFeatureCollection(FeatureCollection[HutAvailabilityFeature]):
     """GeoJSON FeatureCollection of hut availability data."""
 
-    pass
-
 
 # Schemas for current availability endpoint
 class CurrentAvailabilityDaySchema(BaseModel):

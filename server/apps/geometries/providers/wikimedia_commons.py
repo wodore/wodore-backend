@@ -10,21 +10,22 @@ and usage signals. Images matching the GeoPlace's QID get a significant
 score boost.
 """
 
-import structlog
 import re
 from datetime import datetime, timezone
 from typing import Any
 
-from django.contrib.gis.geos import Point
+import structlog
+
 from django.conf import settings
+from django.contrib.gis.geos import Point
 
 from .base import ImageProvider, ImageResult
 from .schemas import GeoPlaceSchema
 from .scoring import (
-    score_metadata_completeness,
-    score_technical_quality,
-    score_qid_match,
     calculate_age_penalty,
+    score_metadata_completeness,
+    score_qid_match,
+    score_technical_quality,
 )
 
 logger = structlog.get_logger()
@@ -901,7 +902,7 @@ class WikimediaCommonsProvider(ImageProvider):
         try:
             # Extract coordinates if available (not always in Commons)
             # For now, use query coordinates
-            from math import radians, cos, sin, asin, sqrt
+            from math import asin, cos, radians, sin, sqrt
 
             def haversine_distance(lat1, lon1, lat2, lon2):
                 """Calculate distance between two points in meters."""

@@ -51,10 +51,10 @@ The existing system uses **priority-based matching** via `CATEGORY_REGISTRY` ord
 ```python
 # CATEGORY_REGISTRY in priority order
 CATEGORY_REGISTRY = [
-    GROCERIES,      # Priority 1
-    RESTAURANT,     # Priority 2
+    GROCERIES,  # Priority 1
+    RESTAURANT,  # Priority 2
     HEALTH_AND_EMERGENCY,  # Priority 3
-    ...
+    ...,
 ]
 ```
 
@@ -188,7 +188,7 @@ All options have significant performance implications.
 # Group categories by parent slug
 parent_groups = {}
 for category in categories:
-    parent = category.split('.')[0]
+    parent = category.split(".")[0]
     parent_groups.setdefault(parent, []).append(category)
 
 # Pick winner per parent using mapping order
@@ -216,7 +216,7 @@ GROCERIES = CategoryMappings(
     mappings=[
         OSMMapping(..., category_slug="groceries.bakery", priority=0),
         OSMMapping(..., category_slug="groceries.supermarket", priority=1),
-    ]
+    ],
 )
 
 # osm_restaurant.py
@@ -224,7 +224,7 @@ RESTAURANT = CategoryMappings(
     category="restaurant",
     mappings=[
         OSMMapping(..., category_slug="restaurant.cafe", priority=0),
-    ]
+    ],
 )
 ```
 
@@ -263,13 +263,13 @@ def select_winner(categories, mappings):
 OSMMapping(
     osm_filters=["shop=bakery"],
     category_slug="groceries.bakery",
-    priority=0  # Highest priority
+    priority=0,  # Highest priority
 )
 
 OSMMapping(
     osm_filters=["amenity=cafe"],
     category_slug="restaurant.cafe",
-    priority=0  # Same priority
+    priority=0,  # Same priority
 )
 ```
 
@@ -282,7 +282,7 @@ OSMMapping(
 ```python
 # GROCERIES comes before RESTAURANT
 CATEGORY_REGISTRY = [
-    GROCERIES,   # Wins
+    GROCERIES,  # Wins
     RESTAURANT,
 ]
 ```
@@ -354,7 +354,7 @@ C) **Post-processing script** (decoupled from import)
 # Import pass 1: Create GeoPlace
 GeoPlace(
     name="Berghaus Gandria",
-    categories=[accommodation.hut]  # No classifier
+    categories=[accommodation.hut],  # No classifier
 )
 
 # Later: How to know this should have classifier=season.winter_room?
@@ -373,7 +373,7 @@ GeoPlace(
 OSMMapping(
     osm_filters=["tourism=hotel"],
     category_slug="accommodation.hut",
-    condition=lambda tags: tags.get('season') == 'winter',  # Existing mechanism
+    condition=lambda tags: tags.get("season") == "winter",  # Existing mechanism
 )
 ```
 
@@ -385,7 +385,7 @@ OSMMapping(
     osm_filters=["tourism=hotel"],
     category_slug="accommodation.hut",
     classifier_category="season.winter_room",  # NEW field
-    condition=lambda tags: tags.get('season') == 'winter',
+    condition=lambda tags: tags.get("season") == "winter",
 )
 ```
 
@@ -433,8 +433,7 @@ season → off_season
    def add_classifier_to_existing_places():
        # Find all places that need classifier
        places = GeoPlace.objects.filter(
-           categories__slug="accommodation.hut",
-           osm_tags__season="winter"
+           categories__slug="accommodation.hut", osm_tags__season="winter"
        )
 
        # Add classifier association
@@ -444,7 +443,7 @@ season → off_season
            GeoPlaceCategory.objects.create(
                geo_place=place,
                category=accommodation_hut,
-               classifier=season_winter_room  # NEW
+               classifier=season_winter_room,  # NEW
            )
    ```
 
@@ -520,13 +519,13 @@ def _find_existing_place_by_schema(...):
 # Existing place
 place1 = GeoPlace(
     id=1,
-    categories=[groceries.bakery]  # Has one category
+    categories=[groceries.bakery],  # Has one category
 )
 
 # New import with same source_id
 new_data = {
     "source_id": "node/123",
-    "categories": [restaurant.cafe]  # Different category
+    "categories": [restaurant.cafe],  # Different category
 }
 ```
 
@@ -559,15 +558,12 @@ place1.categories.add(restaurant.cafe)
 **Scenario**:
 ```python
 # Existing place
-place1 = GeoPlace(
-    id=1,
-    categories=[groceries.bakery]
-)
+place1 = GeoPlace(id=1, categories=[groceries.bakery])
 
 # New import
 new_data = {
     "source_id": "node/123",
-    "categories": [groceries.bakery]  # SAME category
+    "categories": [groceries.bakery],  # SAME category
 }
 ```
 
@@ -583,8 +579,7 @@ new_data = {
 class Meta:
     constraints = [
         models.UniqueConstraint(
-            fields=["geo_place", "category"],
-            name="unique_geo_place_category"
+            fields=["geo_place", "category"], name="unique_geo_place_category"
         )
     ]
 ```
@@ -597,7 +592,9 @@ class Meta:
 GeoPlaceCategory(geo_place=place1, category=groceries.bakery, extra={"source": "OSM"})
 
 # New import
-GeoPlaceCategory(geo_place=place1, category=groceries.bakery, extra={"source": "manual"})
+GeoPlaceCategory(
+    geo_place=place1, category=groceries.bakery, extra={"source": "manual"}
+)
 ```
 
 Should we update `extra` field or preserve original?
@@ -643,6 +640,7 @@ for category_group in category_groups:
             source_id = element.source_id
             source_to_categories.setdefault(source_id, set()).add(mapping.category_slug)
 
+
 # Phase 2: Parallel - import aggregated data
 def import_batch(source_ids):
     for source_id in source_ids:
@@ -669,8 +667,7 @@ def import_batch(source_ids):
 class Meta:
     constraints = [
         models.UniqueConstraint(
-            fields=["geo_place", "category"],
-            name="unique_geo_place_category"
+            fields=["geo_place", "category"], name="unique_geo_place_category"
         )
     ]
 ```
@@ -783,9 +780,7 @@ class Meta:
 # Step 2: Migrate existing data
 for place in GeoPlace.objects.all():
     GeoPlaceCategory.objects.create(
-        geo_place=place,
-        category=place.place_type,
-        classifier=None
+        geo_place=place, category=place.place_type, classifier=None
     )
 
 # Step 3: Drop place_type field
@@ -840,9 +835,7 @@ for place in GeoPlace.objects.all():
    for data in amenities:
        category_slugs.update(data["categories"])
 
-   categories = Category.objects.filter(
-       slug__in=category_slugs
-   ).select_related("parent")
+   categories = Category.objects.filter(slug__in=category_slugs).select_related("parent")
    ```
 
 2. **Cache parent lookups**
@@ -856,10 +849,9 @@ for place in GeoPlace.objects.all():
 3. **Use bulk operations for through model**
    ```python
    # Instead of loop
-   GeoPlaceCategory.objects.bulk_create([
-       GeoPlaceCategory(geo_place=place, category=cat)
-       for cat in categories
-   ])
+   GeoPlaceCategory.objects.bulk_create(
+       [GeoPlaceCategory(geo_place=place, category=cat) for cat in categories]
+   )
    ```
 
 ### 6.3 Testing Strategy

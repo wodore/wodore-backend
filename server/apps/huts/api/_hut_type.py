@@ -15,7 +15,7 @@ from ..schemas import HutTypeDetailSchema
 from ._router import router
 
 
-def _get_hut_types(  # type: ignore  # noqa: PGH003
+def _get_hut_types(  # type: ignore
     request: HttpRequest,
     lang: LanguageParam,
     fields: Query[FieldsParam[HutTypeDetailSchema]],
@@ -41,7 +41,7 @@ def _get_hut_types(  # type: ignore  # noqa: PGH003
     operation_id="get_hut_types",
 )
 @with_language_param("lang")
-def get_hut_types(  # type: ignore  # noqa: PGH003
+def get_hut_types(  # type: ignore
     request: HttpRequest,
     lang: LanguageParam,
     fields: Query[FieldsParam[HutTypeDetailSchema]],
@@ -56,7 +56,7 @@ def get_hut_types(  # type: ignore  # noqa: PGH003
     operation_id="get_hut_type_records",
 )
 @with_language_param("lang")
-def get_hut_type_records(  # type: ignore  # noqa: PGH003
+def get_hut_type_records(  # type: ignore
     request: HttpRequest,
     lang: LanguageParam,
     fields: Query[FieldsParam[HutTypeDetailSchema]],

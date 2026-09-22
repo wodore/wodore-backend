@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import ClassVar
+
+from modeltrans.fields import TranslationField
 
 from django.conf import settings
-from modeltrans.fields import TranslationField
-from server.core.models import TimeStampedModel
 
-if TYPE_CHECKING:
-    pass
+from server.core.models import TimeStampedModel
 
 
 class GeoPlaceDetailBase(TimeStampedModel):
@@ -22,11 +21,11 @@ class GeoPlaceDetailBase(TimeStampedModel):
             _trackable_fields = ["operating_status", "opening_hours", "phones", "brand"]
     """
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         abstract = True
 
     # Child classes should override this
-    _trackable_fields = []
+    _trackable_fields: ClassVar[list[str]] = []
 
     def save(self, *args, track_modifications=True, **kwargs):
         """Save the detail and track modifications to parent GeoPlace.
@@ -84,7 +83,7 @@ class GeoPlaceDetailBase(TimeStampedModel):
 
         # Update parent GeoPlace if any fields were modified
         if modified_fields:
-            place = self.geo_place
+            place = self.geo_place  # pyright: ignore[reportAttributeAccessIssue]  # abstract FK
             place.is_modified = True
 
             # Add modified detail fields to parent's protected_fields
@@ -116,10 +115,9 @@ class GeoPlaceDetailBase(TimeStampedModel):
 
         # Find all TranslationField instances in the model
         for field in self._meta.get_fields():
-            if isinstance(field, TranslationField):
-                # TranslationField has a 'fields' attribute listing translated fields
-                if hasattr(field, "fields"):
-                    translation_fields.update(field.fields)
+            # TranslationField has a 'fields' attribute listing translated fields
+            if isinstance(field, TranslationField) and hasattr(field, "fields"):
+                translation_fields.update(field.fields)
 
         return translation_fields
 

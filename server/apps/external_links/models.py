@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+from modeltrans.fields import TranslationField
+
 from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
-from modeltrans.fields import TranslationField
-from server.core.models import TimeStampedModel
 
 from server.apps.categories.models import Category
 from server.apps.organizations.models import Organization
+from server.core.models import TimeStampedModel
 
 
 class ReviewStatus(models.TextChoices):
@@ -163,7 +164,7 @@ class ExternalLink(TimeStampedModel):
         help_text=_("Whether this link is active (soft delete)"),
     )
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = _("External Link")
         verbose_name_plural = _("External Links")
         ordering = ["-created"]
@@ -279,7 +280,7 @@ class ExternalLink(TimeStampedModel):
             Extracted title or generated label from URL
         """
         import requests
-        from bs4 import BeautifulSoup
+        from bs4 import BeautifulSoup, Tag
 
         try:
             # Fetch the webpage (stream to avoid loading full content)
@@ -308,20 +309,20 @@ class ExternalLink(TimeStampedModel):
 
             # Try Open Graph title
             og_title = soup.find("meta", property="og:title")
-            if og_title and og_title.get("content"):
-                return og_title["content"].strip()
+            if isinstance(og_title, Tag) and og_title.get("content"):
+                return str(og_title["content"]).strip()
 
             # Try Twitter Card title
             twitter_title = soup.find("meta", attrs={"name": "twitter:title"})
-            if twitter_title and twitter_title.get("content"):
-                return twitter_title["content"].strip()
+            if isinstance(twitter_title, Tag) and twitter_title.get("content"):
+                return str(twitter_title["content"]).strip()
 
             # Try regular HTML title
             title_tag = soup.find("title")
-            if title_tag and title_tag.string:
+            if isinstance(title_tag, Tag) and title_tag.string:
                 return title_tag.string.strip()
 
-        except Exception:
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
             # If fetching fails, fall through to URL-based label
             pass
 
@@ -345,7 +346,7 @@ class ExternalLink(TimeStampedModel):
         Returns:
             Human-readable label
         """
-        from urllib.parse import urlparse, unquote
+        from urllib.parse import unquote, urlparse
 
         parsed = urlparse(url)
 
@@ -450,6 +451,7 @@ class ExternalLink(TimeStampedModel):
             Dictionary with health check results for all languages
         """
         import requests
+
         from django.utils import timezone
 
         # Check if template without example values
@@ -551,7 +553,7 @@ class ExternalLink(TimeStampedModel):
                     "url": url,
                 }
                 any_failure = True
-                errors.append(f"{lang}: {str(e)}")
+                errors.append(f"{lang}: {e!s}")
 
         # Update health fields
         self.last_checked = timezone.now()
@@ -644,7 +646,7 @@ class ExternalLink(TimeStampedModel):
         """Check if an identifier already exists in the database."""
         return cls.objects.filter(identifier=identifier).exists()
 
-    def render_url(self, lang: str = None, **kwargs) -> str:
+    def render_url(self, lang: str | None = None, **kwargs) -> str:
         """
         Render template URL with provided variables.
 

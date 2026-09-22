@@ -1,7 +1,6 @@
 from ninja import ModelSchema
 from pydantic import BaseModel
 
-
 from .models import Symbol
 
 

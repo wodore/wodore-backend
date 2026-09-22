@@ -3,17 +3,17 @@ Provider for Panoramax images.
 Uses Panoramax STAC API to find geolocated 360° images.
 """
 
-import structlog
 from datetime import datetime, timezone
 from typing import Any
 
+import structlog
 
 from .base import ImageProvider, ImageResult
 from .schemas import GeoPlaceSchema
 from .scoring import (
+    calculate_age_penalty,
     score_metadata_completeness,
     score_technical_quality,
-    calculate_age_penalty,
 )
 
 logger = structlog.get_logger()
@@ -77,6 +77,7 @@ class PanoramaxProvider(ImageProvider):
 
             # 2. Fetch from API
             import httpx
+
             from django.conf import settings
 
             # Calculate bbox from center point and radius
@@ -202,7 +203,7 @@ class PanoramaxProvider(ImageProvider):
             geom_lon, geom_lat = coordinates[0], coordinates[1]
 
             # Calculate distance
-            from math import radians, cos, sin, asin, sqrt
+            from math import asin, cos, radians, sin, sqrt
 
             def haversine_distance(lat1, lon1, lat2, lon2):
                 """Calculate distance between two points in meters."""

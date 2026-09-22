@@ -13,7 +13,6 @@ from PIL import Image as PILImage
 from model_utils.fields import (
     MonitorField,
 )
-from server.core.models import TimeStampedModel
 from modeltrans.fields import TranslationField
 
 from django.contrib.auth import get_user_model
@@ -32,6 +31,7 @@ from server.apps.meta_image_field.schema import MetaImageSchema
 from server.apps.organizations.models import Organization
 from server.apps.utils.fields import MonitorFields
 from server.core.managers import BaseMutlilingualManager
+from server.core.models import TimeStampedModel
 
 # from .forms import CustomImageField
 User = get_user_model()

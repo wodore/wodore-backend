@@ -73,7 +73,7 @@ class HutTypesAdmin(ModelAdmin):
         )
         return f'<a class="{klass}" title="{help_text}" href={url}>{number}</a>'
 
-    @display(description=_("Huts"), ordering="number_huts")
+    @display(description=_("Huts"), ordering="number_huts")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def show_numbers_huts(self, obj: "QuerySetAny") -> str:
         open_url = self._get_url_str(obj, closed=False)
         # return mark_safe(f"{open_url}")
@@ -89,7 +89,7 @@ class HutTypesAdmin(ModelAdmin):
             avatar = self.avatar(obj.symbol_simple.svg_file.url)
         return (obj.name_i18n, obj.description_i18n, avatar)
 
-    @display(description=_("Symbol"))
+    @display(description=_("Symbol"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def symbol_img(self, obj):  # new
         if obj.symbol_detailed and obj.symbol_detailed.svg_file:
             return mark_safe(
@@ -97,7 +97,7 @@ class HutTypesAdmin(ModelAdmin):
             )
         return "-"
 
-    @display(description=_("Icon"))
+    @display(description=_("Icon"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def icon_img(self, obj):  # new
         if obj.symbol_mono and obj.symbol_mono.svg_file:
             return mark_safe(f'<img src="{obj.symbol_mono.svg_file.url}" width="16"/>')
@@ -106,6 +106,6 @@ class HutTypesAdmin(ModelAdmin):
     def avatar(self, url):  # new
         return mark_safe(f'<img src = "{url}" width = "20"/>')
 
-    @display(description=_("Order"), ordering="order")
+    @display(description=_("Order"), ordering="order")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def comfort(self, obj):  # new
         return mark_safe(f"<small>{obj.order}</small>")

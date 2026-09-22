@@ -1,8 +1,6 @@
 import uuid
 
-
 from model_utils.fields import MonitorField
-from server.core.models import TimeStampedModel
 
 from django.contrib.auth import get_user_model
 from django.db import models
@@ -11,6 +9,7 @@ from django.utils.translation import gettext_lazy as _
 from server.apps.licenses.models import License
 from server.apps.organizations.models import Organization
 from server.core.managers import BaseMutlilingualManager
+from server.core.models import TimeStampedModel
 
 User = get_user_model()
 
@@ -140,7 +139,7 @@ class Symbol(TimeStampedModel):
     )
     uploaded_date = MonitorField(monitor="svg_file", verbose_name=_("Uploaded Date"))
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = _("Symbol")
         verbose_name_plural = _("Symbols")
         ordering = ("slug", "style")
@@ -164,7 +163,7 @@ class Symbol(TimeStampedModel):
         )
 
     def __str__(self) -> str:
-        return f"{self.slug} ({self.get_style_display()})"
+        return f"{self.slug} ({self.get_style_display()})"  # pyright: ignore[reportAttributeAccessIssue]  # choices auto-method
 
     @classmethod
     def get_fields_all(cls) -> list[str]:
@@ -208,7 +207,7 @@ class SymbolGroup(Symbol):
     on a single line in the admin interface.
     """
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         proxy = True
         verbose_name = _("Symbol Group")
         verbose_name_plural = _("Symbol Groups")

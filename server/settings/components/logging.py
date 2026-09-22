@@ -8,10 +8,10 @@
 import logging
 import logging.config
 import os
-from typing import TYPE_CHECKING, Callable, final
+from collections.abc import Callable
+from typing import TYPE_CHECKING, final
 
 import structlog
-
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse

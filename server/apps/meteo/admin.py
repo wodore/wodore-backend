@@ -14,7 +14,7 @@ from unfold.decorators import display
 
 from server.apps.manager.admin import ModelAdmin
 
-from .models import WeatherCode, WeatherCodeSymbolCollection, WeatherCodeSymbol
+from .models import WeatherCode, WeatherCodeSymbol, WeatherCodeSymbolCollection
 
 
 class WeatherCodeSymbolInline(TabularInline):
@@ -49,21 +49,21 @@ class WeatherCodeSymbolInline(TabularInline):
             "symbol_night",
         )
 
-    @display(description=_("Collection"))
+    @display(description=_("Collection"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def collection_display(self, obj):
         """Display collection slug."""
         if obj.collection:
             return obj.collection.slug
         return "-"
 
-    @display(description=_("Weather Code"))
+    @display(description=_("Weather Code"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def weather_code_display(self, obj):
         """Display weather code."""
         if obj.weather_code:
             return f"WMO {obj.weather_code.code}"
         return "-"
 
-    @display(description=_("Day"))
+    @display(description=_("Day"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def symbol_day_preview(self, obj):
         """Show day symbol preview."""
         try:
@@ -72,11 +72,11 @@ class WeatherCodeSymbolInline(TabularInline):
                     f'<img src="{obj.symbol_day.svg_file.url}" width="30" height="30" '
                     f'style="object-fit:contain;" title="{obj.symbol_day.slug}" />'
                 )
-        except Exception:
+        except (OSError, ValueError, AttributeError, TypeError):
             pass
         return mark_safe('<span style="color:#999;">-</span>')
 
-    @display(description=_("Night"))
+    @display(description=_("Night"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def symbol_night_preview(self, obj):
         """Show night symbol preview."""
         try:
@@ -85,7 +85,7 @@ class WeatherCodeSymbolInline(TabularInline):
                     f'<img src="{obj.symbol_night.svg_file.url}" width="30" height="30" '
                     f'style="object-fit:contain;" title="{obj.symbol_night.slug}" />'
                 )
-        except Exception:
+        except (OSError, ValueError, AttributeError, TypeError):
             pass
         return mark_safe('<span style="color:#999;">-</span>')
 
@@ -139,7 +139,7 @@ class WeatherCodeAdmin(ModelAdmin):
     )
     # Note: Inlines disabled for performance - use WeatherCodeSymbol admin to manage symbols
     # inlines = [WeatherCodeSymbolInlineForWeatherCode]
-    fieldsets = (
+    fieldsets = (  # pyright: ignore[reportAssignmentType]  # unfold _FieldsetSpec gap
         (
             _("WMO Code"),
             {
@@ -189,33 +189,36 @@ class WeatherCodeAdmin(ModelAdmin):
         )
         return qs
 
-    @display(description=_("Category"))
+    @display(description=_("Category"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def category_display(self, obj):
         """Display category."""
+        if obj.category and obj.category.parent:
+            return f"{obj.category.parent.slug}.{obj.category.slug}"
         if obj.category:
-            if obj.category.parent:
-                return f"{obj.category.parent.slug}.{obj.category.slug}"
             return obj.category.slug
         return "-"
 
-    @display(description=_("Day"))
+    @display(description=_("Day"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def symbol_preview_day(self, obj):
         """Show day symbol preview from weather-icons-filled collection."""
         try:
             # Use prefetched symbols to avoid extra queries
             for code_symbol in obj.symbols.all():
-                if code_symbol.collection.slug == "weather-icons-filled":
-                    if code_symbol.symbol_day and code_symbol.symbol_day.svg_file:
-                        return mark_safe(
-                            f'<img src="{code_symbol.symbol_day.svg_file.url}" width="40" height="40" '
-                            f'style="object-fit:contain;" title="{code_symbol.symbol_day.slug}" />'
-                        )
+                if (
+                    code_symbol.collection.slug == "weather-icons-filled"
+                    and code_symbol.symbol_day
+                    and code_symbol.symbol_day.svg_file
+                ):
+                    return mark_safe(
+                        f'<img src="{code_symbol.symbol_day.svg_file.url}" width="40" height="40" '
+                        f'style="object-fit:contain;" title="{code_symbol.symbol_day.slug}" />'
+                    )
                     break
-        except Exception:
+        except (OSError, ValueError, AttributeError, TypeError):
             pass
         return mark_safe('<span style="color:#999;">-</span>')
 
-    @display(description=_("Night"))
+    @display(description=_("Night"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def symbol_preview_night(self, obj):
         """Show night symbol preview from weather-icons-filled collection."""
         try:
@@ -228,11 +231,11 @@ class WeatherCodeAdmin(ModelAdmin):
                             f'style="object-fit:contain;" title="{code_symbol.symbol_night.slug}" />'
                         )
                     break
-        except Exception:
+        except (OSError, ValueError, AttributeError, TypeError):
             pass
         return mark_safe('<span style="color:#999;">-</span>')
 
-    @display(description=_("Day Description"))
+    @display(description=_("Day Description"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def description_preview_day(self, obj):
         """Show truncated day description."""
         if obj.description_day:
@@ -286,7 +289,7 @@ class WeatherCodeSymbolCollectionAdmin(ModelAdmin):
     )
     # Note: Inlines disabled for performance - use WeatherCodeSymbol admin to manage symbols
     # inlines = [WeatherCodeSymbolInlineForCollection]
-    fieldsets = (
+    fieldsets = (  # pyright: ignore[reportAssignmentType]  # unfold _FieldsetSpec gap
         (
             None,
             {
@@ -320,14 +323,14 @@ class WeatherCodeSymbolCollectionAdmin(ModelAdmin):
         # Note: Removed prefetch since inlines are disabled for performance
         return qs
 
-    @display(description=_("Organization"))
+    @display(description=_("Organization"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def source_org_display(self, obj):
         """Display source organization."""
         if obj.source_org:
             return obj.source_org.name or obj.source_org.slug
         return "-"
 
-    @display(description=_("Symbol Count"))
+    @display(description=_("Symbol Count"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def symbol_count(self, obj):
         """Display number of symbols in collection."""
         # Use annotated count if available, otherwise fall back to query
@@ -361,7 +364,7 @@ class WeatherCodeSymbolAdmin(ModelAdmin):
         "created",
         "modified",
     )
-    fieldsets = (
+    fieldsets = (  # pyright: ignore[reportAssignmentType]  # unfold _FieldsetSpec gap
         (
             None,
             {
@@ -401,21 +404,21 @@ class WeatherCodeSymbolAdmin(ModelAdmin):
             "symbol_night",
         )
 
-    @display(description=_("Weather Code"))
+    @display(description=_("Weather Code"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def weather_code_display(self, obj):
         """Display weather code."""
         if obj.weather_code:
             return f"WMO {obj.weather_code.code} ({obj.weather_code.slug})"
         return "-"
 
-    @display(description=_("Collection"))
+    @display(description=_("Collection"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def collection_display(self, obj):
         """Display collection."""
         if obj.collection:
             return obj.collection.slug
         return "-"
 
-    @display(description=_("Day Symbol"))
+    @display(description=_("Day Symbol"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def symbol_preview_day(self, obj):
         """Show day symbol preview."""
         try:
@@ -424,11 +427,11 @@ class WeatherCodeSymbolAdmin(ModelAdmin):
                     f'<img src="{obj.symbol_day.svg_file.url}" width="30" height="30" '
                     f'style="object-fit:contain;" title="{obj.symbol_day.slug}" />'
                 )
-        except Exception:
+        except (OSError, ValueError, AttributeError, TypeError):
             pass
         return mark_safe('<span style="color:#999;">-</span>')
 
-    @display(description=_("Night Symbol"))
+    @display(description=_("Night Symbol"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def symbol_preview_night(self, obj):
         """Show night symbol preview."""
         try:
@@ -439,6 +442,6 @@ class WeatherCodeSymbolAdmin(ModelAdmin):
                     f'title="{obj.symbol_night.slug}" />'
                 )
                 return mark_safe(img)
-        except Exception:
+        except (OSError, ValueError, AttributeError, TypeError):
             pass
         return mark_safe('<span style="color:#999;">-</span>')

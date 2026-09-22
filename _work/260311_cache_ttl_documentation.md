@@ -145,6 +145,7 @@ class PanoramaxProvider(ImageProvider):
     cache_ttl = 6 * 60 * 60  # 6 hours
     priority = 3
 
+
 # server/apps/geometries/providers/wikidata.py
 class WikidataProvider(ImageProvider):
     source = "wikidata"
@@ -345,14 +346,16 @@ from django.utils.http import quote_etag
 import hashlib
 import json
 
+
 def generate_etag(data: dict) -> str:
     content = json.dumps(data, sort_keys=True)
     hash_value = hashlib.sha256(content.encode()).hexdigest()
     return quote_etag(hash_value)
 
+
 # In endpoint
 etag = generate_etag(response_data.model_dump())
-if request.headers.get('If-None-Match') == etag:
+if request.headers.get("If-None-Match") == etag:
     return HttpResponse(status=304)
 ```
 

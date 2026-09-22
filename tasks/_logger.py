@@ -21,14 +21,14 @@ def header(
 ):
     terminal_width = shutil.get_terminal_size(fallback=(80, 20)).columns
     max_length = int(terminal_width)
-    max_length = 50 if max_length < 50 else 120 if max_length > 120 else max_length
+    max_length = 50 if max_length < 50 else min(max_length, 120)
     min_ = 6
     max_ = max_length - min_ - 2
     length = len(msg)
     start = f"[dim]{symb * (max_ - length) if length < max_ else symb * min_}[/]"
-    end = f"[dim]{symb*min_}[/]"
+    end = f"[dim]{symb * min_}[/]"
     if not msg:
-        echo(f"[dim]{symb*max_length}[/]", file=sys.stderr if stderr else None)
+        echo(f"[dim]{symb * max_length}[/]", file=sys.stderr if stderr else None)
     else:
         echo(f"{start} [{style}]{msg} {end}", file=sys.stderr if stderr else None)
 

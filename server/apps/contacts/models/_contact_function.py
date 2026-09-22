@@ -1,4 +1,3 @@
-from server.core.models import TimeStampedModel
 from modeltrans.fields import TranslationField
 
 from django.contrib.postgres.indexes import GinIndex
@@ -6,6 +5,7 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from server.core.managers import BaseMutlilingualManager
+from server.core.models import TimeStampedModel
 
 
 class ContactFunction(TimeStampedModel):
@@ -40,10 +40,10 @@ class ContactFunction(TimeStampedModel):
 
     # contacts -> access all contacts
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = _("Contact Function")
         ordering = ("priority", "name_i18n")
         indexes = (GinIndex(fields=["i18n"]),)
 
     def __str__(self) -> str:
-        return self.name_i18n
+        return self.name_i18n  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation

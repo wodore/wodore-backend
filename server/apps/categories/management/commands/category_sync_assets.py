@@ -1,8 +1,9 @@
 from pathlib import Path
 
+from django_admin_runner import register_command
+
 from django.core.files import File
 from django.core.management.base import BaseCommand
-from django_admin_runner import register_command
 
 from server.apps.licenses.models import License
 from server.apps.symbols.models import Symbol

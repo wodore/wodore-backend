@@ -9,8 +9,6 @@ from server.core.managers import BaseManager
 class AvailabilityStatusManager(BaseManager):
     """Custom manager for AvailabilityStatus"""
 
-    pass
-
 
 class HutAvailabilityManager(BaseManager):
     """Custom manager for HutAvailability with priority-based query methods"""
@@ -44,28 +42,40 @@ class HutAvailabilityManager(BaseManager):
         """
         from django.conf import settings
 
-        # Get defaults from settings
+        # Get defaults from settings (resolve into locals: the declared
+        # `int | None` parameter type would otherwise stick to the values)
         settings_dict = getattr(settings, "AVAILABILITY_UPDATE_SETTINGS", {})
-        if high_priority_minutes is None:
-            high_priority_minutes = settings_dict.get("HIGH_PRIORITY_MINUTES", 30)
-        if medium_priority_minutes is None:
-            medium_priority_minutes = settings_dict.get("MEDIUM_PRIORITY_MINUTES", 180)
-        if low_priority_minutes is None:
-            low_priority_minutes = settings_dict.get("LOW_PRIORITY_MINUTES", 1440)
-        if inactive_priority_minutes is None:
-            inactive_priority_minutes = settings_dict.get(
-                "INACTIVE_PRIORITY_MINUTES", 10080
-            )
-        if next_days is None:
-            next_days = settings_dict.get("NEXT_DAYS", 14)
+        high = (
+            high_priority_minutes
+            if high_priority_minutes is not None
+            else settings_dict.get("HIGH_PRIORITY_MINUTES", 30)
+        )
+        medium = (
+            medium_priority_minutes
+            if medium_priority_minutes is not None
+            else settings_dict.get("MEDIUM_PRIORITY_MINUTES", 180)
+        )
+        low = (
+            low_priority_minutes
+            if low_priority_minutes is not None
+            else settings_dict.get("LOW_PRIORITY_MINUTES", 1440)
+        )
+        inactive = (
+            inactive_priority_minutes
+            if inactive_priority_minutes is not None
+            else settings_dict.get("INACTIVE_PRIORITY_MINUTES", 10080)
+        )
+        days = (
+            next_days if next_days is not None else settings_dict.get("NEXT_DAYS", 14)
+        )
 
         now = timezone.now()
-        high_threshold = now - datetime.timedelta(minutes=high_priority_minutes)
-        medium_threshold = now - datetime.timedelta(minutes=medium_priority_minutes)
-        low_threshold = now - datetime.timedelta(minutes=low_priority_minutes)
-        inactive_threshold = now - datetime.timedelta(minutes=inactive_priority_minutes)
+        high_threshold = now - datetime.timedelta(minutes=high)
+        medium_threshold = now - datetime.timedelta(minutes=medium)
+        low_threshold = now - datetime.timedelta(minutes=low)
+        inactive_threshold = now - datetime.timedelta(minutes=inactive)
 
-        end_date = now.date() + datetime.timedelta(days=next_days)
+        end_date = now.date() + datetime.timedelta(days=days)
 
         # High priority: 'high' and 'full' occupancy status
         high_priority = self.filter(
@@ -173,9 +183,11 @@ class HutAvailabilityManager(BaseManager):
         - Discovery of new huts
         """
         # Import here to avoid circular dependency
-        from server.apps.huts.models import Hut
-        from .models import AvailabilityStatus
         from django.conf import settings
+
+        from server.apps.huts.models import Hut
+
+        from .models import AvailabilityStatus
 
         # Get defaults from settings if not provided
         settings_dict = getattr(settings, "AVAILABILITY_UPDATE_SETTINGS", {})

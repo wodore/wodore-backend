@@ -1,7 +1,8 @@
 from pathlib import Path
 
-from server.core.management import CRUDCommand
 from django_admin_runner import register_command
+
+from server.core.management import CRUDCommand
 
 from ...models import Organization
 

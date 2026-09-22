@@ -2,8 +2,6 @@ import typing as t
 
 from deepdiff import DeepDiff
 
-from server.core.models import TimeStampedModel
-
 from django.contrib.gis.db import models
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
@@ -13,6 +11,7 @@ from django.utils.translation import gettext_lazy as _
 from server.apps.organizations.models import Organization
 from server.core import UpdateCreateStatus
 from server.core.managers import BaseManager
+from server.core.models import TimeStampedModel
 
 if t.TYPE_CHECKING:
     from ._hut import Hut
@@ -122,7 +121,7 @@ class HutSource(TimeStampedModel):
         # check if already in DB
         status: UpdateCreateStatus = UpdateCreateStatus.ignored
         try:
-            other_hut_src: "HutSource" = cls.objects.get(
+            other_hut_src: HutSource = cls.objects.get(
                 source_id=hut_source.source_id,
                 organization=hut_source.organization,
                 is_current=True,

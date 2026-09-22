@@ -1,4 +1,5 @@
 import factory
+
 from django.contrib.gis.geos import Point
 
 from server.apps.categories.models import Category
@@ -34,20 +35,20 @@ class OrganizationFactory(factory.django.DjangoModelFactory):
 # Re-export all factories from app modules for convenience
 # Usage: from tests.factories import HutFactory
 #    or: from tests.factories.huts import HutFactory
-from .availability import AvailabilityFactory  # noqa: E402
-from .contacts import ContactFactory, ContactFunctionFactory  # noqa: E402
-from .geometries import GeoPlaceFactory  # noqa: E402
-from .huts import HutFactory  # noqa: E402
-from .owners import OwnerFactory  # noqa: E402
+from .availability import AvailabilityFactory
+from .contacts import ContactFactory, ContactFunctionFactory
+from .geometries import GeoPlaceFactory
+from .huts import HutFactory
+from .owners import OwnerFactory
 
 __all__ = [
-    "random_swiss_point",
+    "AvailabilityFactory",
     "CategoryFactory",
-    "OrganizationFactory",
-    "HutFactory",
     "ContactFactory",
     "ContactFunctionFactory",
     "GeoPlaceFactory",
-    "AvailabilityFactory",
+    "HutFactory",
+    "OrganizationFactory",
     "OwnerFactory",
+    "random_swiss_point",
 ]

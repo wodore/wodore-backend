@@ -1,4 +1,4 @@
-from typing import Any, Type, cast
+from typing import Any, cast
 
 import msgspec
 from ninja.parser import Parser
@@ -7,7 +7,7 @@ from ninja.types import DictStrAny
 from django.http import HttpRequest
 
 
-def decoder_hook(type: Type, obj: Any) -> Any:
+def decoder_hook(type: type, obj: Any) -> Any:
     # `type` here is the value of the custom type annotation being decoded.
     # if type is complex:
     #    # Convert ``obj`` (which should be a ``tuple``) to a complex

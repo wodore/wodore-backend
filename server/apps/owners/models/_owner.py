@@ -1,4 +1,3 @@
-from server.core.models import TimeStampedModel
 from modeltrans.fields import TranslationField
 
 from django.contrib.postgres.indexes import GinIndex
@@ -7,6 +6,7 @@ from django.db.models.functions import Lower
 from django.utils.translation import gettext_lazy as _
 
 from server.apps.contacts.models import Contact
+from server.core.models import TimeStampedModel
 
 from ..managers import OwnerManager
 from ._associations import OwnerContactAssociation
@@ -50,13 +50,13 @@ class Owner(TimeStampedModel):
         verbose_name=_("Contacts"),
     )
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = _("Owner")
         indexes = (GinIndex(fields=["i18n"]),)
         ordering = (Lower("name_i18n"),)
 
     def __str__(self) -> str:
-        return self.name_i18n
+        return self.name_i18n  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation
 
     @classmethod
     def get_or_create(cls) -> "Owner":

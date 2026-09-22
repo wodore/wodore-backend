@@ -41,8 +41,10 @@ class GeoJSON(JsonBuildObject):
     output_field = JSONField()
 
     def __init__(
-        self, geom_field, fields=[], simplify=True, precision=0.0025, decimals=3
+        self, geom_field, fields=None, simplify=True, precision=0.0025, decimals=3
     ):
+        if fields is None:
+            fields = []
         expressions = [Value("type"), Value("FeatureCollection"), Value("features")]
 
         geometry = F(geom_field)
@@ -77,7 +79,7 @@ class GeoJSON(JsonBuildObject):
 
         expressions.append(JSONBAgg(features))
 
-        super(GeoJSON, self).__init__(*expressions)
+        super().__init__(*expressions)
 
     @property
     def default_alias(self):

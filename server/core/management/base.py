@@ -1,8 +1,9 @@
 import os
 import shutil
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Generic, Protocol, Sequence, Tuple, TypeVar
+from typing import Any, Generic, Protocol, TypeVar
 
 import click
 import yaml
@@ -289,7 +290,7 @@ def dump_fixture_function(
         )
         with open(fixture_path) as file:
             new_lines = []  # remove created and modified
-            for line in file.readlines():
+            for line in file:
                 if "    modified: " not in line and "    created: " not in line:
                     new_lines.append(line)
         with open(fixture_path, "w") as file:
@@ -627,7 +628,7 @@ class CRUDCommand(BaseCommand, Generic[TModel]):
     def get_app_path(self) -> Path:
         return Path(settings.BASE_DIR) / "server" / "apps" / self.app_label
 
-    def get_media_paths(self) -> Tuple[Path | None, Path | None]:
+    def get_media_paths(self) -> tuple[Path | None, Path | None]:
         if (self.media_src and self.use_media_args is not False) or self.use_media_args:
             media_dst = Path(str(self.media_dst))
             media_src = Path(str(self.media_src))
@@ -643,7 +644,7 @@ class CRUDCommand(BaseCommand, Generic[TModel]):
 
     def set_media_paths(
         self, src: Path | str | None = None, dst: Path | str | None = None
-    ) -> Tuple[Path | None, Path | None]:
+    ) -> tuple[Path | None, Path | None]:
         """Set media source and destination path, starint add app root, respecively, media root"""
         if src is None:
             default_src = Path("media") / self.app_label / self.model_names

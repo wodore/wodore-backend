@@ -1,4 +1,5 @@
 import contextlib
+from typing import ClassVar
 
 from django.conf import settings
 from django.contrib import admin
@@ -68,7 +69,7 @@ class ChildCategoryInline(admin.TabularInline):
             )
         return "-"
 
-    @display(description=_("View"))
+    @display(description=_("View"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def view_link(self, obj):
         """Link to view/edit this child category."""
         if obj.pk:
@@ -84,7 +85,9 @@ class CategoryAdmin(ModelAdmin):
     list_filter_submit = True  # Add submit button for filters
 
     class Media:
-        css = {"all": ("css/admin-categories.css",)}
+        css: ClassVar[dict[str, tuple[str, ...]]] = {
+            "all": ("css/admin-categories.css",)
+        }
 
     search_fields = ("name", "slug", "identifier")
     list_display = (
@@ -110,7 +113,7 @@ class CategoryAdmin(ModelAdmin):
     list_per_page = 15
     ordering = ("-parent", "order")  # Order by parent (NULL first, then by parent ID)
 
-    actions = ["auto_set_color_from_svg"]
+    actions = ("auto_set_color_from_svg",)
 
     # Add autocomplete for parent field to make selection easier with many categories
     autocomplete_fields = (
@@ -123,7 +126,7 @@ class CategoryAdmin(ModelAdmin):
 
     readonly_fields = ("identifier", "name_i18n", "description_i18n")
 
-    fieldsets = (
+    fieldsets = (  # pyright: ignore[reportAssignmentType]  # unfold _FieldsetSpec gap
         (
             _("Main Information"),
             {
@@ -184,8 +187,9 @@ class CategoryAdmin(ModelAdmin):
 
     def symbols_view(self, request):
         """Display all symbols grouped by slug with their three style variants."""
-        from server.apps.symbols.models import Symbol
         from django.template.response import TemplateResponse
+
+        from server.apps.symbols.models import Symbol
 
         # Get all unique slugs
         slugs = (
@@ -252,7 +256,7 @@ class CategoryAdmin(ModelAdmin):
         # Remove avatar to avoid FileField.url access (symbols shown in other columns)
         return (name, description, "")
 
-    @display(description=_("Symbol"))
+    @display(description=_("Symbol"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def symbol_img(self, obj):
         """Display detailed symbol."""
         if obj.symbol_detailed and obj.symbol_detailed.svg_file:
@@ -261,7 +265,7 @@ class CategoryAdmin(ModelAdmin):
             )
         return "-"
 
-    @display(description=_("Mono"))
+    @display(description=_("Mono"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def icon_img(self, obj):
         """Display monochrome symbol."""
         if obj.symbol_mono and obj.symbol_mono.svg_file:
@@ -270,7 +274,7 @@ class CategoryAdmin(ModelAdmin):
             )
         return "-"
 
-    @display(description=_("Identifier"), ordering="identifier")
+    @display(description=_("Identifier"), ordering="identifier")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def identifier_display(self, obj):
         """Display identifier without 'root.' prefix."""
         identifier = obj.identifier
@@ -278,7 +282,7 @@ class CategoryAdmin(ModelAdmin):
             return identifier[5:]  # Remove 'root.' prefix
         return identifier
 
-    @display(description=_("Children"), label=True)
+    @display(description=_("Children"), label=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def children_count(self, obj):
         """Display count of children using annotated field to avoid N+1 queries."""
         # Use the annotated count from get_queryset
@@ -294,12 +298,12 @@ class CategoryAdmin(ModelAdmin):
             )
         return "-"
 
-    @display(description=_("Order"), ordering="order")
+    @display(description=_("Order"), ordering="order")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def order_display(self, obj):
         """Display order value."""
         return mark_safe(f"<small>{obj.order}</small>")
 
-    @display(description=_("Parent"), label=True, ordering="parent")
+    @display(description=_("Parent"), label=True, ordering="parent")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def parent_display(self, obj):
         """Display parent category if exists."""
         if obj.parent:
@@ -310,7 +314,7 @@ class CategoryAdmin(ModelAdmin):
         """Helper to create small avatar image."""
         return mark_safe(f'<img src="{url}" width="20" alt="avatar"/>')
 
-    @display(description=_("Auto-set color from SVG"))
+    @display(description=_("Auto-set color from SVG"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def auto_set_color_from_svg(self, request, queryset):
         """
         Admin action to automatically set color from SVG symbols.
@@ -328,13 +332,13 @@ class CategoryAdmin(ModelAdmin):
                 skipped_count += 1
 
         if updated_count > 0:
-            message = _(
-                f"Successfully updated color for {updated_count} category(ies)."
-            )
+            message = _("Successfully updated color for %(count)d category(ies).") % {
+                "count": updated_count
+            }
             if skipped_count > 0:
                 message += _(
-                    f" Skipped {skipped_count} category(ies) with no SVG or no colors."
-                )
+                    " Skipped %(count)d category(ies) with no SVG or no colors."
+                ) % {"count": skipped_count}
             self.message_user(request, message, level="success")
         else:
             self.message_user(
@@ -345,4 +349,4 @@ class CategoryAdmin(ModelAdmin):
                 level="warning",
             )
 
-    auto_set_color_from_svg.short_description = _("Auto-set color from SVG symbols")
+    auto_set_color_from_svg.short_description = _("Auto-set color from SVG symbols")  # pyright: ignore[reportFunctionMemberAccess]  # legacy Django admin attr

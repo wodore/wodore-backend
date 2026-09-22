@@ -370,24 +370,27 @@ location /geoplaces_fn/ {
 ```python
 # settings.py
 CACHES = {
-    'tiles': {
-        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': 'redis://127.0.0.1:6379/2',
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+    "tiles": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": "redis://127.0.0.1:6379/2",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
         },
-        'TIMEOUT': 3600,  # 1 hour
-        'KEY_PREFIX': 'tile',
+        "TIMEOUT": 3600,  # 1 hour
+        "KEY_PREFIX": "tile",
     }
 }
 
 # views.py
 from django.core.cache import cache
 
+
 def get_tile_cached(z: int, x: int, y: int, query_params: dict) -> bytes:
     # Create cache key from parameters
-    params_hash = hashlib.md5(json.dumps(query_params, sort_keys=True).encode()).hexdigest()[:8]
-    cache_key = f'tile:geoplaces:{z}/{x}/{y}:{params_hash}'
+    params_hash = hashlib.md5(
+        json.dumps(query_params, sort_keys=True).encode()
+    ).hexdigest()[:8]
+    cache_key = f"tile:geoplaces:{z}/{x}/{y}:{params_hash}"
 
     # Try cache first
     tile_data = cache.get(cache_key)
@@ -411,6 +414,7 @@ from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from server.apps.geometries.models import GeoPlace
 
+
 @receiver(post_save, sender=GeoPlace)
 @receiver(post_delete, sender=GeoPlace)
 def invalidate_tile_cache(sender, instance, **kwargs):
@@ -420,7 +424,7 @@ def invalidate_tile_cache(sender, instance, **kwargs):
     Strategy: Invalidate all tiles (nuclear option) or calculate affected tiles.
     """
     # Option 1: Invalidate all tiles (simple)
-    cache.delete_pattern('tile:geoplaces:*')
+    cache.delete_pattern("tile:geoplaces:*")
 
     # Option 2: Calculate affected tiles (more efficient)
     # Get bounding box of changed place
@@ -434,7 +438,7 @@ def invalidate_tile_cache(sender, instance, **kwargs):
         # Delete affected tiles
         for x in range(min_x, max_x + 1):
             for y in range(min_y, max_y + 1):
-                cache.delete_many([f'tile:geoplaces:{z}/{x}/{y}:*'])
+                cache.delete_many([f"tile:geoplaces:{z}/{x}/{y}:*"])
 ```
 
 **Expected Improvement:** Similar to Martin cache (5-10ms per cached request).
@@ -617,8 +621,9 @@ from django.core.management.base import BaseCommand
 from server.apps.geometries.models import GeoPlacesForTilesView
 import math
 
+
 class Command(BaseCommand):
-    help = 'Pre-generate tiles for low zoom levels'
+    help = "Pre-generate tiles for low zoom levels"
 
     def handle(self, *args, **options):
         # Pre-generate zoom levels 0-8
@@ -629,18 +634,18 @@ class Command(BaseCommand):
             min_y, max_y = self.lat_to_tile_y(47.8, z), self.lat_to_tile_y(45.8, z)
 
             total_tiles = (max_x - min_x + 1) * (max_y - min_y + 1)
-            self.stdout.write(f'Generating {total_tiles} tiles for z{z}...')
+            self.stdout.write(f"Generating {total_tiles} tiles for z{z}...")
 
             for x in range(min_x, max_x + 1):
                 for y in range(min_y, max_y + 1):
                     try:
                         # Generate tile (will be cached by Martin/Redis)
                         tile_data = GeoPlacesForTilesView.objects.get_tile(z, x, y)
-                        self.stdout.write(f'  Generated tile {z}/{x}/{y}', ending='\r')
+                        self.stdout.write(f"  Generated tile {z}/{x}/{y}", ending="\r")
                     except Exception as e:
-                        self.stderr.write(f'Error generating tile {z}/{x}/{y}: {e}')
+                        self.stderr.write(f"Error generating tile {z}/{x}/{y}: {e}")
 
-            self.stdout.write(f'Completed z{z}')
+            self.stdout.write(f"Completed z{z}")
 
     @staticmethod
     def lon_to_tile_x(lon, zoom):
@@ -648,7 +653,17 @@ class Command(BaseCommand):
 
     @staticmethod
     def lat_to_tile_y(lat, zoom):
-        return math.floor((1 - math.log(math.tan(math.radians(lat)) + 1 / math.cos(math.radians(lat))) / math.pi) / 2 * 2**zoom)
+        return math.floor(
+            (
+                1
+                - math.log(
+                    math.tan(math.radians(lat)) + 1 / math.cos(math.radians(lat))
+                )
+                / math.pi
+            )
+            / 2
+            * 2**zoom
+        )
 ```
 
 **Usage:**
@@ -698,26 +713,55 @@ from django.core.management.base import BaseCommand
 from server.apps.geometries.models import GeoPlacesForTilesView
 from django.db import connection
 
+
 class Command(BaseCommand):
-    help = 'Warm tile cache for high-demand areas'
+    help = "Warm tile cache for high-demand areas"
 
     def handle(self, *args, **options):
         # Warm cache for Swiss region at zoom levels 9-14
         for z in range(9, 15):
-            self.stdout.write(f'Warming cache for z{z}...')
+            self.stdout.write(f"Warming cache for z{z}...")
 
             # Swiss bounding box
             min_x = max(0, int((5.9 + 180) / 360 * 2**z))
             max_x = min(2**z - 1, int((10.5 + 180) / 360 * 2**z))
-            min_y = max(0, int((1 - math.log(math.tan(math.radians(47.8)) + 1 / math.cos(math.radians(47.8))) / math.pi) / 2 * 2**z))
-            max_y = min(2**z - 1, int((1 - math.log(math.tan(math.radians(45.8)) + 1 / math.cos(math.radians(45.8))) / math.pi) / 2 * 2**z))
+            min_y = max(
+                0,
+                int(
+                    (
+                        1
+                        - math.log(
+                            math.tan(math.radians(47.8))
+                            + 1 / math.cos(math.radians(47.8))
+                        )
+                        / math.pi
+                    )
+                    / 2
+                    * 2**z
+                ),
+            )
+            max_y = min(
+                2**z - 1,
+                int(
+                    (
+                        1
+                        - math.log(
+                            math.tan(math.radians(45.8))
+                            + 1 / math.cos(math.radians(45.8))
+                        )
+                        / math.pi
+                    )
+                    / 2
+                    * 2**z
+                ),
+            )
 
             for x in range(min_x, max_x + 1):
                 for y in range(min_y, max_y + 1):
                     try:
                         tile_data = GeoPlacesForTilesView.objects.get_tile(z, x, y)
                     except Exception as e:
-                        self.stderr.write(f'Error: {e}')
+                        self.stderr.write(f"Error: {e}")
 ```
 
 ### 5.3 Simplify Geometry for Clustered Features (LOW PRIORITY)

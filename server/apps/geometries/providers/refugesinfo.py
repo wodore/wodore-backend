@@ -8,16 +8,17 @@ Uses source_id from GeoPlace source associations with organization slug 'refuges
 #   https://www.refuges.info/point/6069/cabane-non-gardee/abri-de-Beauregard
 #   http://192.168.1.50:8000/v1/geo/images/hut/beauregard?lang=de&radius=50&limit=20
 
-import structlog
 from datetime import datetime, timezone
+
+import structlog
 
 from django.contrib.gis.geos import Point
 
 from .base import ImageProvider, ImageResult
 from .schemas import GeoPlaceSchema
 from .scoring import (
-    score_metadata_completeness,
     calculate_age_penalty,
+    score_metadata_completeness,
 )
 
 logger = structlog.get_logger()
@@ -60,6 +61,7 @@ class RefugesInfoProvider(ImageProvider):
 
         try:
             import httpx
+
             from django.conf import settings
 
             # 1. Check cache first

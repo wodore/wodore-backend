@@ -8,8 +8,8 @@ from ._associations import (
 from ._geoplace import GeoPlaceAdmin
 
 __all__ = [
-    "GeoPlaceAdmin",
     "AdminDetailAdmin",
+    "GeoPlaceAdmin",
     "GeoPlaceCategoryAdmin",
     "GeoPlaceExternalLinkAdmin",
     "GeoPlaceImageAssociationAdmin",

@@ -7,8 +7,8 @@ consistent way regardless of the underlying model.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
 from logging import getLogger
+from typing import Any
 
 from asgiref.sync import sync_to_async
 
@@ -28,8 +28,8 @@ class Source:
     """
 
     slug: str
-    source_id: Optional[str] = None
-    source_data: Optional[dict] = None
+    source_id: str | None = None
+    source_data: dict | None = None
     priority: int = 10
 
     def __repr__(self) -> str:
@@ -63,7 +63,7 @@ class GeoPlaceSchema:
     def __repr__(self) -> str:
         return f"GeoPlaceSchema(slug={self.slug!r}, name={self.name!r}, sources={len(self.sources)})"
 
-    def get_source_id(self, slug: str) -> Optional[str]:
+    def get_source_id(self, slug: str) -> str | None:
         """
         Get the source_id for a given source slug.
 
@@ -89,7 +89,7 @@ class GeoPlaceSchema:
         logger.debug(f"  get_source_id({slug!r}) for {self.slug}: not found")
         return None
 
-    def get_wikidata_qid(self) -> Optional[str]:
+    def get_wikidata_qid(self) -> str | None:
         """
         Convenience method to get the Wikidata QID from any available source.
 
@@ -136,7 +136,7 @@ class GeoPlaceSchema:
         logger.debug(f"  get_wikidata_qid for {self.slug}: not found")
         return None
 
-    def get_source(self, slug: str) -> Optional[Source]:
+    def get_source(self, slug: str) -> Source | None:
         """
         Get the Source object for a given slug.
 

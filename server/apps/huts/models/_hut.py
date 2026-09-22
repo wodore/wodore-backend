@@ -11,7 +11,6 @@ from hut_services.core.guess import guess_slug_name
 from jinja2 import Environment
 
 from django_countries.fields import CountryField
-from server.core.models import TimeStampedModel
 from modeltrans.fields import TranslationField
 
 from django.conf import settings
@@ -24,6 +23,7 @@ from django.contrib.postgres.indexes import GinIndex
 from django.db import transaction
 from django.db.models import F, Q, Value
 from django.db.models.functions import Concat, Lower
+from django.utils import timezone
 from django.utils.translation import get_language
 from django.utils.translation import gettext_lazy as _
 
@@ -32,6 +32,7 @@ from server.apps.images.models import Image
 from server.apps.organizations.models import Organization
 from server.apps.owners.models import Owner
 from server.core import UpdateCreateStatus
+from server.core.models import TimeStampedModel
 
 from ..managers import HutManager
 from ..schemas_booking import HutBookingsSchema
@@ -45,8 +46,9 @@ from ._hut_source import HutSource
 if t.TYPE_CHECKING:
     # stub-only type (django-stubs): reverse-relation manager annotation below
     from django.db.models.fields.related_descriptors import RelatedManager
-from ._hut_type import HutTypeHelper
 from server.apps.categories.models import Category
+
+from ._hut_type import HutTypeHelper
 
 SERVICES: dict[str, BaseService] = settings.SERVICES
 
@@ -297,8 +299,8 @@ class Hut(TimeStampedModel):
         # save original values, when model is loaded from database,
         # in a separate attribute on the model
         values = dict(zip(field_names, values))
-        instance._orig_slug = values.get("slug")  # type: ignore  # noqa: PGH003
-        instance._orig_review_status = values.get("review_status")  # type: ignore  # noqa: PGH003
+        instance._orig_slug = values.get("slug")  # type: ignore
+        instance._orig_review_status = values.get("review_status")  # type: ignore
         return instance
 
     def save(self, *args, **kwargs):
@@ -307,7 +309,7 @@ class Hut(TimeStampedModel):
         # if updated
         if (
             not self._state.adding and self.slug != self._orig_slug
-        ):  # updates # type: ignore  # noqa: PGH003
+        ):  # updates # type: ignore
             self.slug = self.create_unique_slug_name(self.slug)
         to_save = []
         if (
@@ -453,9 +455,7 @@ class Hut(TimeStampedModel):
             open_monthly=hut_schema.open_monthly.model_dump(),
             **i18n_fields,
         )
-        if (hut_db.hut_type_open.slug == "hut" and hut_db.capacity_closed) or (
-            0 > 0 and not type_closed
-        ):
+        if hut_db.hut_type_open.slug == "hut" and hut_db.capacity_closed:
             if (hut_db.elevation or 0) < 3000:
                 hut_db.hut_type_closed = HutTypeHelper.values["selfhut"]
             else:
@@ -690,7 +690,7 @@ class Hut(TimeStampedModel):
                     for img in v:
                         img.save()
                         img.refresh_from_db()
-                        pa, created = HutImageAssociation.objects.update_or_create(
+                        _assoc, created = HutImageAssociation.objects.update_or_create(
                             image=img, hut=hut_db, defaults={"order": photo_order}
                         )
                         # pa.save()
@@ -733,7 +733,7 @@ class Hut(TimeStampedModel):
                 ):
                     old_value = getattr(hut_db, f)
                     # special comparision for dbPoint -> valus are always different because it is a class
-                    if isinstance(v, dbPoint) and v.tuple == old_value.tuple:  # type: ignore[attr-defined]
+                    if isinstance(v, dbPoint) and v.tuple == old_value.tuple:  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
                         continue
                     setattr(hut_db, f, v)
                     sp = (
@@ -869,7 +869,7 @@ class Hut(TimeStampedModel):
     ) -> str:
         """Adds a review comment, if title included a date is added automatically."""
         title_date = (
-            f"\n\n~~~ {datetime.datetime.today().strftime('%Y-%m-%d %H:%M')}\n{title}\n\n"
+            f"\n\n~~~ {timezone.localtime().strftime('%Y-%m-%d %H:%M')}\n{title}\n\n"
             if title is not None
             else ""
         )
@@ -926,9 +926,11 @@ class Hut(TimeStampedModel):
         Note: The request_interval parameter is kept for API compatibility but is not used
         since we're fetching from the database instead of external services.
         """
+        from collections import defaultdict
+
         from server.apps.availability.models import HutAvailability
         from server.apps.availability.utils import parse_availability_date
-        from collections import defaultdict
+
         from ..schemas_booking import HutBookingSchema, HutBookingsSchema
 
         # Parse date parameter using utility function

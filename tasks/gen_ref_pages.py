@@ -204,7 +204,7 @@ for path in sorted(server_dir.rglob("*.py")):
         # Set edit path for the generated file
         mkdocs_gen_files.set_edit_path(full_doc_path, path.relative_to(root))
     except Exception as e:
-        print(f"Error processing {path}: {str(e)}")
+        print(f"Error processing {path}: {e!s}")
         continue
 
 # Create a summary file with the navigation structure

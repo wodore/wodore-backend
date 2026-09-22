@@ -1,16 +1,17 @@
 from typing import Any
 
-from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
-from django.views.decorators.cache import cache_control
 from ninja import Query, Router
 from ninja.decorators import decorate_view
 from ninja.errors import HttpError
 
-from server.apps.translations import LanguageParam, override, with_language_param
+from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
+from django.views.decorators.cache import cache_control
+
 from server.apps.categories.models import Category
+from server.apps.translations import LanguageParam, override, with_language_param
 
 from .models import WeatherCode, WeatherCodeSymbol, WeatherCodeSymbolCollection
-from .schemas import IncludeModeEnum, DayTimeEnum
+from .schemas import DayTimeEnum, IncludeModeEnum
 
 router = Router()
 
@@ -51,8 +52,8 @@ def build_weather_code_dict(
     data = {
         "code": weather_code.code,
         "slug": weather_code.slug,
-        "description_day": weather_code.description_day_i18n,
-        "description_night": weather_code.description_night_i18n,
+        "description_day": weather_code.description_day_i18n,  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation
+        "description_night": weather_code.description_night_i18n,  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation
     }
 
     # Add symbols based on include mode (from WeatherCodeSymbol)
@@ -134,23 +135,23 @@ def get_weather_codes(
     request: HttpRequest,
     response: HttpResponse,
     lang: LanguageParam,
-    collection: str = Query(
+    collection: str = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         DEFAULT_COLLECTION,
         description="Symbol collection slug (default: weather-icons-outlined-mono)",
     ),
-    category: str | None = Query(
+    category: str | None = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         None,
         description="Filter by category slug (supports dot notation like 'meteo.rain')",
     ),
-    include_symbols: IncludeModeEnum = Query(
+    include_symbols: IncludeModeEnum = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         IncludeModeEnum.slug,
         description="Include symbols: 'no' excludes, 'slug' returns slugs only, 'all' returns full URLs",
     ),
-    include_category: IncludeModeEnum = Query(
+    include_category: IncludeModeEnum = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         IncludeModeEnum.no,
         description="Include category: 'no' excludes, 'slug' returns slug, 'all' returns full details with symbols",
     ),
-    include_collection: IncludeModeEnum = Query(
+    include_collection: IncludeModeEnum = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         IncludeModeEnum.slug,
         description="Include collection: 'no' excludes, 'slug' returns slug, 'all' returns full details",
     ),
@@ -260,19 +261,19 @@ def get_weather_code(
     response: HttpResponse,
     code: int,
     lang: LanguageParam,
-    collection: str = Query(
+    collection: str = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         DEFAULT_COLLECTION,
         description="Symbol collection slug (default: weather-icons-outlined-mono)",
     ),
-    include_symbols: IncludeModeEnum = Query(
+    include_symbols: IncludeModeEnum = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         IncludeModeEnum.slug,
         description="Include symbols: 'no' excludes, 'slug' returns slugs only, 'all' returns full URLs",
     ),
-    include_category: IncludeModeEnum = Query(
+    include_category: IncludeModeEnum = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         IncludeModeEnum.no,
         description="Include category: 'no' excludes, 'slug' returns slug, 'all' returns full details with symbols",
     ),
-    include_collection: IncludeModeEnum = Query(
+    include_collection: IncludeModeEnum = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         IncludeModeEnum.slug,
         description="Include collection: 'no' excludes, 'slug' returns slug, 'all' returns full details",
     ),

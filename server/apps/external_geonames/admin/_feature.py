@@ -72,10 +72,10 @@ class FeatureAdmin(ModelAdmin):
         ),
     )
 
-    @display(description=_("Feature Code"), ordering="feature_code", label=True)
+    @display(description=_("Feature Code"), ordering="feature_code", label=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def feature_code_display(self, obj: Feature) -> str:
         return f"{obj.feature_class}.{obj.feature_code}"
 
-    @display(header=True, description=_("Name"), ordering="name")
+    @display(header=True, description=_("Name"), ordering="name")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def name_description_display(self, obj: Feature) -> tuple:
         return (obj.name, obj.description if obj.description else "")

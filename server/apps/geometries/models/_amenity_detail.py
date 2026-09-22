@@ -195,10 +195,10 @@ class AmenityDetail(GeoPlaceDetailBase):
     @classmethod
     def update_or_create(
         cls,
-        place: "GeoPlace",
-        schema: "AmenityDetailInput",
+        place: GeoPlace,
+        schema: AmenityDetailInput,
         protected_fields: set[str] | None = None,
-    ) -> tuple["AmenityDetail", "UpdateCreateStatus"]:
+    ) -> tuple[AmenityDetail, UpdateCreateStatus]:
         """
         Create or update an AmenityDetail for a GeoPlace.
 

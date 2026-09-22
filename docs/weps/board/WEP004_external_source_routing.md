@@ -162,10 +162,7 @@ def filter_tags(attrs):
     elif "markierte spur" in objektart:
         tags.update({"highway": "path", "trail_visibility": "good"})
     elif "klettersteig" in objektart:
-        tags.update({
-            "highway": "via_ferrata",
-            "sac_scale": "demanding_alpine_hiking"
-        })
+        tags.update({"highway": "via_ferrata", "sac_scale": "demanding_alpine_hiking"})
     elif "fahrstrasse" in objektart or "strasse" in objektart:
         tags.update({"highway": "track"})
 

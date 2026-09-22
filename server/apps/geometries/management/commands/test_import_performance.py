@@ -12,13 +12,13 @@ Usage:
 import time
 from dataclasses import dataclass
 
-from django.core.management.base import BaseCommand, CommandParser
-from django.contrib.gis.geos import Point, Polygon
 from django.contrib.gis.db.models.functions import Distance
+from django.contrib.gis.geos import Point, Polygon
+from django.core.management.base import BaseCommand, CommandParser
 from django.utils import timezone
 
-from server.apps.geometries.models import GeoPlace, GeoPlaceCategory
 from server.apps.categories.models import Category
+from server.apps.geometries.models import GeoPlace, GeoPlaceCategory
 
 
 @dataclass
@@ -128,7 +128,7 @@ class Command(BaseCommand):
                 f"✓ {result.test_name}:\n"
                 f"  Iterations: {result.iterations:,}\n"
                 f"  Total time: {result.total_time:.2f}s\n"
-                f"  Avg time: {result.avg_time*1000:.2f}ms\n"
+                f"  Avg time: {result.avg_time * 1000:.2f}ms\n"
                 f"  {result.details}\n"
             )
 
@@ -174,8 +174,8 @@ class Command(BaseCommand):
             total_time=fast_time,
             avg_time=avg_time_fast,
             details=f"Speedup: {speedup:.1f}x faster (skip_check=True vs skip_check=False)\n"
-            f"Old method: {slow_time_per_iter*1000:.2f}ms per slug\n"
-            f"New method: {avg_time_fast*1000:.2f}ms per slug\n"
+            f"Old method: {slow_time_per_iter * 1000:.2f}ms per slug\n"
+            f"New method: {avg_time_fast * 1000:.2f}ms per slug\n"
             f"Projected time for 1M entries:\n"
             f"  • Optimized: {self._format_duration(time_per_million_fast)}\n"
             f"  • Old method: {self._format_duration(time_per_million_slow)}\n"
@@ -265,8 +265,8 @@ class Command(BaseCommand):
             total_time=bbox_time,
             avg_time=avg_time_bbox,
             details=f"Speedup: {speedup:.1f}x faster (BBox vs distance)\n"
-            f"Old method (distance): {(distance_time/100)*1000:.2f}ms per query\n"
-            f"New method (BBox): {avg_time_bbox*1000:.2f}ms per query\n"
+            f"Old method (distance): {(distance_time / 100) * 1000:.2f}ms per query\n"
+            f"New method (BBox): {avg_time_bbox * 1000:.2f}ms per query\n"
             f"Projected time for 1M queries:\n"
             f"  • Optimized (BBox): {self._format_duration(time_per_million_bbox)}\n"
             f"  • Old method (distance): {self._format_duration(time_per_million_distance)}\n"
@@ -277,16 +277,17 @@ class Command(BaseCommand):
         """Test end-to-end deduplication performance."""
         self.stdout.write("Testing deduplication performance...")
 
+        from hut_services import LocationSchema
+
         from server.apps.geometries.schemas import (
+            DedupOptions,
             GeoPlaceAmenityInput,
             SourceInput,
-            DedupOptions,
         )
-        from hut_services import LocationSchema
-        from server.apps.translations.schema import TranslationSchema
 
         # Get or create test organization
         from server.apps.organizations.models import Organization
+        from server.apps.translations.schema import TranslationSchema
 
         osm_org, _ = Organization.objects.get_or_create(
             slug="osm",
@@ -397,8 +398,9 @@ class Command(BaseCommand):
         self.stdout.write("Testing transaction performance...")
 
         from django.db import transaction
-        from server.apps.organizations.models import Organization
+
         from server.apps.categories.models import Category
+        from server.apps.organizations.models import Organization
 
         # Get or create test data
         osm_org, _ = Organization.objects.get_or_create(
@@ -420,12 +422,13 @@ class Command(BaseCommand):
                 details="Skipped - no test category",
             )
 
+        from hut_services import LocationSchema
+
         from server.apps.geometries.schemas import (
+            DedupOptions,
             GeoPlaceAmenityInput,
             SourceInput,
-            DedupOptions,
         )
-        from hut_services import LocationSchema
         from server.apps.translations.schema import TranslationSchema
 
         # Test WITH transaction (old method)
@@ -524,13 +527,13 @@ class Command(BaseCommand):
             total_time=no_transaction_time,
             avg_time=avg_time_no_trans,
             details=f"Speedup: {speedup:.2f}x faster (without transaction)\n"
-            f"With transaction: {transaction_time:.2f}s ({(transaction_time/test_iterations)*1000:.2f}ms per place)\n"
-            f"Without transaction: {no_transaction_time:.2f}s ({(no_transaction_time/test_iterations)*1000:.2f}ms per place)\n"
+            f"With transaction: {transaction_time:.2f}s ({(transaction_time / test_iterations) * 1000:.2f}ms per place)\n"
+            f"Without transaction: {no_transaction_time:.2f}s ({(no_transaction_time / test_iterations) * 1000:.2f}ms per place)\n"
             f"Cleaned up {cleanup_count} test places\n"
             f"Projected time for 1M entries:\n"
             f"  • Without transaction: {self._format_duration(time_per_million)}\n"
-            f"  • With transaction: {self._format_duration((transaction_time/test_iterations) * 1000000)}\n"
-            f"  • Time saved: {self._format_duration(abs((transaction_time/test_iterations * 1000000) - time_per_million))}",
+            f"  • With transaction: {self._format_duration((transaction_time / test_iterations) * 1000000)}\n"
+            f"  • Time saved: {self._format_duration(abs((transaction_time / test_iterations * 1000000) - time_per_million))}",
         )
 
     def _test_bulk_operations(self, iterations: int) -> TestResult:
@@ -538,8 +541,9 @@ class Command(BaseCommand):
         self.stdout.write("Testing bulk operations...")
 
         from django.db import transaction
-        from server.apps.organizations.models import Organization
+
         from server.apps.categories.models import Category
+        from server.apps.organizations.models import Organization
 
         # Get or create test data
         osm_org, _ = Organization.objects.get_or_create(
@@ -561,12 +565,13 @@ class Command(BaseCommand):
                 details="Skipped - no test category",
             )
 
+        from hut_services import LocationSchema
+
         from server.apps.geometries.schemas import (
+            DedupOptions,
             GeoPlaceAmenityInput,
             SourceInput,
-            DedupOptions,
         )
-        from hut_services import LocationSchema
         from server.apps.translations.schema import TranslationSchema
 
         test_iterations = min(iterations, 500)  # Limit for bulk test
@@ -668,8 +673,8 @@ class Command(BaseCommand):
             total_time=bulk_time,
             avg_time=avg_time_bulk,
             details=f"Speedup: {speedup:.1f}x faster (bulk vs individual)\n"
-            f"Individual saves: {individual_time:.2f}s ({(individual_time/test_iterations)*1000:.2f}ms per place)\n"
-            f"Bulk create: {bulk_time:.2f}s ({(bulk_time/test_iterations)*1000:.2f}ms per place)\n"
+            f"Individual saves: {individual_time:.2f}s ({(individual_time / test_iterations) * 1000:.2f}ms per place)\n"
+            f"Bulk create: {bulk_time:.2f}s ({(bulk_time / test_iterations) * 1000:.2f}ms per place)\n"
             f"NOTE: Bulk create skips deduplication - not directly comparable!\n"
             f"Cleaned up {cleanup_count} test places\n"
             f"Projected time for 1M entries:\n"
@@ -694,15 +699,17 @@ class Command(BaseCommand):
         """
         self.stdout.write("Testing hybrid dedup + bulk approach...")
 
+        from hut_services import LocationSchema
+
         from django.db import transaction
-        from server.apps.organizations.models import Organization
+
         from server.apps.categories.models import Category
         from server.apps.geometries.schemas import (
+            DedupOptions,
             GeoPlaceAmenityInput,
             SourceInput,
-            DedupOptions,
         )
-        from hut_services import LocationSchema
+        from server.apps.organizations.models import Organization
         from server.apps.translations.schema import TranslationSchema
 
         # Get or create test data
@@ -882,8 +889,8 @@ class Command(BaseCommand):
             total_time=hybrid_time,
             avg_time=avg_time_hybrid,
             details=f"Speedup: {speedup:.1f}x faster (hybrid vs individual)\n"
-            f"Individual saves: {avg_time_individual*1000:.2f}ms per place\n"
-            f"Hybrid approach: {avg_time_hybrid*1000:.2f}ms per place\n"
+            f"Individual saves: {avg_time_individual * 1000:.2f}ms per place\n"
+            f"Hybrid approach: {avg_time_hybrid * 1000:.2f}ms per place\n"
             f"Created: {created_count}, Duplicates filtered: {duplicate_count}\n"
             f"Cleaned up {cleanup_count} test places\n\n"
             f"Strategy:\n"
@@ -905,15 +912,17 @@ class Command(BaseCommand):
         """
         self.stdout.write("Testing batch size optimization...")
 
+        from hut_services import LocationSchema
+
         from django.db import transaction
-        from server.apps.organizations.models import Organization
+
         from server.apps.categories.models import Category
         from server.apps.geometries.schemas import (
+            DedupOptions,
             GeoPlaceAmenityInput,
             SourceInput,
-            DedupOptions,
         )
-        from hut_services import LocationSchema
+        from server.apps.organizations.models import Organization
         from server.apps.translations.schema import TranslationSchema
 
         # Get or create test data
@@ -1115,7 +1124,7 @@ class Command(BaseCommand):
                 baseline_time / result["avg_time"] if result["avg_time"] > 0 else 0
             )
             comparison_lines.append(
-                f"{bs:<12} {result['avg_time']*1000:<18.2f}ms "
+                f"{bs:<12} {result['avg_time'] * 1000:<18.2f}ms "
                 f"{result['time']:<12.2f}s {speedup:<10.1f}x"
             )
 
@@ -1243,7 +1252,7 @@ class Command(BaseCommand):
             avg_time=avg_time,
             details=(
                 f"Created: {to_create} (existing: {existing_count})\n"
-                f"Avg create time: {avg_time*1000:.2f}ms per place"
+                f"Avg create time: {avg_time * 1000:.2f}ms per place"
             ),
         )
 
@@ -1253,14 +1262,15 @@ class Command(BaseCommand):
 
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
+        from hut_services import LocationSchema
+
         from server.apps.geometries.schemas import (
             DedupOptions,
             GeoPlaceAmenityInput,
             SourceInput,
         )
-        from server.apps.translations.schema import TranslationSchema
-        from hut_services import LocationSchema
         from server.apps.organizations.models import Organization
+        from server.apps.translations.schema import TranslationSchema
 
         Organization.objects.get_or_create(
             slug="osm",

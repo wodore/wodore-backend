@@ -59,7 +59,7 @@ class FeedbackAdmin(ModelAdmin):
     readonly_fields = ("created", "modified")
 
     @display(
-        description=_("Status"),
+        description=_("Status"),  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
         ordering="status",
         label={
             # Feedback.FeedbackStatusChoices.review: "info",

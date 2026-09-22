@@ -8,8 +8,6 @@ Example:
     user@example.com -> info+staging_user_AT_example_DOT_com@wodore.com
 """
 
-from typing import List
-
 from django.conf import settings
 from django.core.mail.backends.smtp import EmailBackend as SMTPBackend
 from django.core.mail.message import EmailMessage
@@ -34,7 +32,7 @@ class StagingEmailBackend(SMTPBackend):
         - All emails from @wodore.com domain
     """
 
-    def send_messages(self, email_messages: List[EmailMessage]) -> int:
+    def send_messages(self, email_messages: list[EmailMessage]) -> int:
         """
         Send messages after rewriting recipient addresses.
 
@@ -171,7 +169,7 @@ class StagingEmailBackend(SMTPBackend):
             base_local, base_domain = rewrite_to.rsplit("@", 1)
         else:
             raise ValueError(
-                "Wrong e-mail format for staging email address ({})".format(rewrite_to)
+                f"Wrong e-mail format for staging email address ({rewrite_to})"
             )
 
         # Transform original email: replace special characters

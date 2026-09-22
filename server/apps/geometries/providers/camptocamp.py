@@ -11,16 +11,16 @@ Fetches images from Camptocamp API using bbox queries.
 # Result api:
 #   http://localhost:8000/v1/geo/images/hut/hollandia?lang=de&radius=50&limit=20&update_cache=1
 
-import structlog
 from datetime import datetime
 
+import structlog
 
 from .base import ImageProvider, ImageResult
 from .schemas import GeoPlaceSchema
 from .scoring import (
-    score_metadata_completeness,
-    score_distance_relevance,
     calculate_age_penalty,
+    score_distance_relevance,
+    score_metadata_completeness,
 )
 
 logger = structlog.get_logger()
@@ -88,6 +88,7 @@ class CamptocampProvider(ImageProvider):
 
             # 2. Fetch from API
             import httpx
+
             from django.conf import settings
 
             # Calculate bbox from center point and radius
@@ -310,7 +311,7 @@ class CamptocampProvider(ImageProvider):
                 return []
 
         # Calculate distance
-        from math import radians, cos, sin, asin, sqrt
+        from math import asin, cos, radians, sin, sqrt
 
         def haversine_distance(lat1, lon1, lat2, lon2):
             """Calculate distance between two points in meters."""

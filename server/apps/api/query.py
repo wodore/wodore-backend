@@ -1,5 +1,6 @@
+from collections.abc import Sequence
 from enum import Enum
-from typing import Any, Generic, Literal, Sequence, Type, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 
 # if TYPE_CHECKING:
 from ninja import ModelSchema, Query, Schema
@@ -8,37 +9,39 @@ from ninja.orm import create_schema
 from pydantic import TypeAdapter
 from pydantic.fields import FieldInfo
 
-TSchema = TypeVar("S_co", bound=Schema)  # , covariant=True)
+S_co = TypeVar("S_co", bound=Schema)  # , covariant=True)
 
 # this does not work
 # FieldsParam = Annotated[Fields[S_co], Query()]
 # tried https://docs.pydantic.dev/latest/concepts/types/#generics (did not work)
 
 
-class FieldsParam(Schema, Generic[TSchema]):
+class FieldsParam(Schema, Generic[S_co]):
     """Specify which fields to return when query models."""
 
-    include: Any = Query(
+    include: Any = Query(  # pyright: ignore[reportCallIssue]
         None,
         description="Comma separated list with field names, use `__all__` in order to include every field.",
         # example="__all__",
     )
-    exclude: Any = Query(
+    exclude: Any = Query(  # pyright: ignore[reportCallIssue]
         None,
         description="Comma separated list with field names, if set it uses all fields except the excluded ones.",
     )
 
     @property
-    def _schema(self) -> Type[Schema] | None:
+    def _schema(self) -> type[Schema] | None:
         try:
             return self.__pydantic_generic_metadata__["args"][0]
         except (IndexError, ValueError):
             return None
 
     @property
-    def _db_model(self) -> Type[ModelSchema] | None:
+    def _db_model(self) -> type[ModelSchema] | None:
         if self._schema is not None:
-            return self._schema.Meta.model
+            meta = getattr(self._schema, "Meta", None)
+            return meta.model if meta is not None else None
+        return None
 
     @property
     def available_field_names(self) -> list[str]:
@@ -64,7 +67,7 @@ class FieldsParam(Schema, Generic[TSchema]):
         if missing_set:
             possible_names = f"Possible names: {', '.join(self.available_field_names)}."
             if len(missing_set) == 1:
-                msg = f"'{list(missing_set)[0]}' is not a valid field name! {possible_names}"
+                msg = f"'{next(iter(missing_set))}' is not a valid field name! {possible_names}"
             else:
                 msg = f"'{', '.join(list(missing_set))}' are not valid field names! {possible_names}"
             raise HttpError(400, msg)
@@ -90,14 +93,18 @@ class FieldsParam(Schema, Generic[TSchema]):
         else:
             include += self.required_field_names
         ## add i18n use to get translations
-        if self._db_model and hasattr(self._db_model, "i18n"):
-            i18n_fields = list(self._db_model.i18n.field.fields)
+        i18n = getattr(self._db_model, "i18n", None) if self._db_model else None
+        if i18n is not None:
+            i18n_fields = list(i18n.field.fields)
             include += [f"{i}_i18n" for i in include if i in i18n_fields]
         return list(set(include) - set(exclude))
 
-    def get_schema(self) -> Type[Schema] | None:
+    def get_schema(self) -> type[Schema] | None:
         if self._db_model:
-            return create_schema(self._db_model, fields=self.get_include())
+            return create_schema(
+                self._db_model,  # pyright: ignore[reportArgumentType]
+                fields=self.get_include(),
+            )
         return None
 
     def type_adapter(self, _type: Any | None = None):
@@ -112,11 +119,11 @@ class FieldsParam(Schema, Generic[TSchema]):
             )  # .validate_python(list(Organization.objects.all()))
         return objs
 
-    def validate(
+    def validate(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
         _obj: Any | None = None,
         validator: Literal["python", "json", "strings"] = "python",
-    ) -> list[TSchema]:
+    ) -> list[S_co]:
         if isinstance(_obj, list):
             return getattr(self.type_adapter(list), f"validate_{validator}")(_obj)
         return getattr(self.type_adapter(), f"validate_{validator}")(_obj)

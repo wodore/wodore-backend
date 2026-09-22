@@ -11,11 +11,11 @@ Usage:
 import click
 from django_admin_runner import register_command
 from rich.progress import (
+    BarColumn,
     Progress,
     SpinnerColumn,
-    TextColumn,
-    BarColumn,
     TaskProgressColumn,
+    TextColumn,
     TimeElapsedColumn,
 )
 
@@ -25,8 +25,7 @@ from django.utils import timezone
 from server.apps.huts.models import Hut
 
 from ...models import HutAvailability
-from ...services import SERVICES
-from ...services import AvailabilityService
+from ...services import SERVICES, AvailabilityService
 
 # availability sources that provide booking data (slug -> service)
 BOOKING_SOURCES = [
@@ -338,7 +337,7 @@ class Command(BaseCommand):
                     def fetch_callback():
                         progress.advance(fetch_task)
                         # Update batch info when we move to next batch
-                        current_hut = int(progress.tasks[fetch_task].completed)
+                        current_hut = progress.tasks[fetch_task].completed or 0
                         new_batch = (current_hut // batch_size) + 1
                         if new_batch != current_batch["fetch"]:
                             current_batch["fetch"] = new_batch
@@ -357,7 +356,7 @@ class Command(BaseCommand):
                     def process_callback():
                         progress.advance(process_task)
                         # Update batch info when we move to next batch
-                        current_hut = int(progress.tasks[process_task].completed)
+                        current_hut = progress.tasks[process_task].completed or 0
                         new_batch = (current_hut // batch_size) + 1
 
                         # Update process status to show current batch

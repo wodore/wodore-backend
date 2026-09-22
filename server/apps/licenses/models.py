@@ -1,6 +1,5 @@
 from functools import lru_cache
 
-from server.core.models import TimeStampedModel
 from modeltrans.fields import TranslationField
 
 from django.contrib.postgres.indexes import GinIndex
@@ -10,6 +9,7 @@ from django.utils.regex_helper import _lazy_re_compile
 from django.utils.translation import gettext_lazy as _
 
 from server.core.managers import BaseMutlilingualManager
+from server.core.models import TimeStampedModel
 
 slug_re = _lazy_re_compile(r"^[-a-zA-Z0-9_\.]+\Z")
 validate_lic_slug = RegexValidator(
@@ -79,7 +79,7 @@ class License(TimeStampedModel):
         help_text=_("Review comments or notes"),
     )
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = _("License")
         ordering = ("order", "name_i18n")
         indexes = (GinIndex(fields=["i18n"]),)
@@ -91,7 +91,7 @@ class License(TimeStampedModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.name_i18n} - {self.fullname_i18n}"
+        return f"{self.name_i18n} - {self.fullname_i18n}"  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation
 
     @classmethod
     @lru_cache(50)

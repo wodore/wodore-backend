@@ -2,10 +2,8 @@ import typing as t
 
 from ninja import Field, ModelSchema
 
-from server.apps.symbols.utils import resolve_symbol_urls
-
-
 from server.apps.categories.models import Category
+from server.apps.symbols.utils import resolve_symbol_urls
 
 # Note: HutType is now a helper class, these schemas use Category model
 # The API still references "hut_type" for backward compatibility

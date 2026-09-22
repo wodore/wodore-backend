@@ -1,9 +1,10 @@
-# type: ignore  # noqa: PGH003
+# type: ignore
 # TODO: add types
 import sys
 import typing as t
 
 import click
+from django_admin_runner import register_command
 
 from django.conf import settings
 from django.core.management import call_command
@@ -12,7 +13,6 @@ from django.db import IntegrityError
 from server.apps.organizations.models import Organization
 from server.core import UpdateCreateStatus
 from server.core.management import CRUDCommand
-from django_admin_runner import register_command
 
 from ...models import Hut, HutSource
 
@@ -26,15 +26,14 @@ def init_huts_db(
     ] = [],  # set a list which field which should be overwritten
     force_overwrite_exclude: t.Sequence[str] = [],  #  ... exclude
     force_none: bool = False,  # force t oset value to none (overwrite is needed)
-) -> t.Tuple[int, int]:
+) -> tuple[int, int]:
     added_huts = 0
     updated_huts = 0
     nochange_huts = 0
     failed_huts = 0
     hut_counter = 0
     fails = []
-    for hut_src in hut_sources:
-        hut_counter += 1
+    for hut_counter, hut_src in enumerate(hut_sources, start=1):
         _name = f"  Hut {hut_counter!s: <3} '{hut_src.name}'"
         click.echo(f"{_name: <48}", nl=False)
         try:

@@ -1,4 +1,5 @@
 import typing as t
+from enum import Enum
 from typing import Any
 
 import msgspec
@@ -6,8 +7,8 @@ from benedict import benedict
 from geojson_pydantic import FeatureCollection
 from ninja import Query
 from ninja.decorators import decorate_view
-# from rich import print
 
+# from rich import print
 # from ninja.errors import HttpError
 from django.conf import settings
 from django.contrib.postgres.aggregates import JSONBAgg
@@ -18,9 +19,6 @@ from django.urls import reverse_lazy
 from django.views.decorators.cache import cache_control
 
 from server.apps.api.query import FieldsParam, TristateEnum
-from enum import Enum
-
-
 from server.apps.huts.schemas._hut import ImageMetaSchema
 from server.apps.translations import (
     LanguageParam,
@@ -69,26 +67,26 @@ def search_huts(
     request: HttpRequest,
     response: HttpResponse,
     lang: LanguageParam,
-    q: str = Query(
+    q: str = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         ...,
         description="Search query string to match against hut names in all languages",
         example="rotond",
     ),
-    offset: int = Query(0, description="Number of results to skip for pagination"),
-    limit: int | None = Query(15, description="Maximum number of results to return"),
-    threshold: float = Query(
+    offset: int = Query(0, description="Number of results to skip for pagination"),  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
+    limit: int | None = Query(15, description="Maximum number of results to return"),  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
+    threshold: float = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         0.1,
         description="Minimum similarity score (0.0-1.0). Lower values return more results but with lower relevance. Recommended: 0.1 for fuzzy matching, 0.3 for stricter matching.",
     ),
-    include_hut_type: IncludeModeEnum = Query(
+    include_hut_type: IncludeModeEnum = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         IncludeModeEnum.no,
         description="Include hut type information: 'no' excludes field, 'slug' returns type slugs only, 'all' returns full type details with icons",
     ),
-    include_sources: IncludeModeEnum = Query(
+    include_sources: IncludeModeEnum = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         IncludeModeEnum.no,
         description="Include data sources: 'no' excludes field, 'slug' returns source slugs only, 'all' returns full source details with logos",
     ),
-    include_avatar: bool = Query(
+    include_avatar: bool = Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         True,
         description="Include avatar/primary photo URL in results",
     ),
@@ -256,7 +254,7 @@ def search_huts(
     operation_id="get_huts",
 )
 @with_language_param("lang")
-def get_huts(  # type: ignore  # noqa: PGH003
+def get_huts(  # type: ignore
     request: HttpRequest,
     response: HttpResponse,
     lang: LanguageParam,
@@ -310,7 +308,7 @@ def get_huts(  # type: ignore  # noqa: PGH003
         # Return 304 Not Modified
         response.status_code = 304
         set_cache_headers(response, etag, last_modified, max_age=60)
-        return response
+        return response  # pyright: ignore[reportReturnType]  # 304 Not Modified path
     if is_modified != TristateEnum.unset:
         huts_db = huts_db.filter(is_modified=is_modified.bool)
     if is_active != TristateEnum.unset:
@@ -418,7 +416,7 @@ def get_json_obj(
     values: dict[str, t.Any], flat: bool = False
 ) -> dict[str, JSONObject | F]:
     if flat:
-        return {
+        return {  # pyright: ignore[reportReturnType]  # benedict key typing
             k: F(str(v)) for k, v in benedict(values).flatten(separator="_").items()
         }
     new_vals = {}
@@ -431,7 +429,7 @@ def get_json_obj(
 
 @router.get("huts.geojson", response=FeatureCollection, operation_id="get_huts_geojson")
 @with_language_param("lang")
-def get_huts_geojson(  # type: ignore  # noqa: PGH003
+def get_huts_geojson(  # type: ignore
     request: HttpRequest,
     response: HttpResponse,
     lang: LanguageParam,
@@ -639,7 +637,7 @@ def get_hut(
     response: HttpResponse,
     slug: str,
     lang: LanguageParam,
-    fields: Query[FieldsParam[HutSchemaDetails]],
+    fields: Query[FieldsParam[HutSchemaDetails]],  # pyright: ignore[reportInvalidTypeArguments]  # cross-package Schema base
 ) -> Hut:
     """Get a hut by its slug."""
     activate(lang)
@@ -827,7 +825,7 @@ def get_hut(
         )
         hut_db.images = [old_photo, *hut_db.images]
     link = reverse_lazy("admin:huts_hut_change", args=[hut_db.pk])
-    hut_db.edit_link = request.build_absolute_uri(link)
+    hut_db.edit_link = request.build_absolute_uri(link)  # pyright: ignore[reportArgumentType]  # reverse_lazy _StrPromise
 
     # Get modified timestamp from ETag calculation (checks all related tables)
     modified_timestamp = get_last_modified_timestamp(

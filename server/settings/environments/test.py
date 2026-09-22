@@ -1,6 +1,6 @@
 """Test environment settings."""
 
-from server.settings.environments.development import *  # noqa: F401, F403, WPS433
+from server.settings.environments.development import *
 
 ENVIRONMENT = "test"
 DEBUG = False

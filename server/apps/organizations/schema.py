@@ -1,8 +1,9 @@
 from typing import Any
 
+from ninja import Field, ModelSchema, Schema
+
 from django.conf import settings
 from django.http import HttpRequest
-from ninja import Field, ModelSchema, Schema
 
 from .models import Organization
 

@@ -1,11 +1,10 @@
 from copy import deepcopy
 from typing import Annotated, Any
-from pydantic import create_model
 
 # from django.db.models import JSONField
 from django_jsonform.models.fields import JSONField
 from ninja import Query
-from pydantic import Field
+from pydantic import Field, create_model
 
 from django.conf import settings
 from django.db.models import TextField
@@ -89,7 +88,7 @@ class TranslationJSONFieldDescriptor:
                   If the language key is missing, will return None.
         """
         if instance is None:
-            return self
+            return self  # pyright: ignore[reportReturnType]  # descriptor protocol: class access
 
         field_name = self.field.attname
         data = instance.__dict__.get(field_name, {})

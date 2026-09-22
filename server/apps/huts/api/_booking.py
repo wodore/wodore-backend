@@ -6,7 +6,6 @@ from ninja.errors import HttpError
 
 from django.http import HttpRequest
 
-
 # from django.contrib.gis.db.models.functions import AsGeoJSON
 # from django.contrib.postgres.aggregates import JSONBAgg
 from server.apps.translations import (
@@ -60,7 +59,7 @@ def _hut_slugs_list(slugs: str | None) -> list[str] | None:
     # auth=AuthBearer(roles=["perm:bookings"], groups=["root", "admin", "editor"]),
 )
 @with_language_param("lang")
-def get_hut_bookings(  # type: ignore  # noqa: PGH003
+def get_hut_bookings(  # type: ignore
     request: HttpRequest, lang: LanguageParam, queries: Query[HutBookingsQuery]
 ) -> list[HutBookingsSchema]:
     hut_slugs_list = _hut_slugs_list(queries.slugs)
@@ -87,7 +86,7 @@ def get_hut_bookings(  # type: ignore  # noqa: PGH003
     # auth=AuthBearer(roles=["perm:bookings"], groups=["root", "admin", "editor"]),
 )
 @with_language_param("lang")
-def get_hut_bookings_geojson(  # type: ignore  # noqa: PGH003
+def get_hut_bookings_geojson(  # type: ignore
     request: HttpRequest,
     lang: LanguageParam,
     queries: Query[HutBookingsQuery],

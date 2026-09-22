@@ -1,5 +1,5 @@
-from collections import defaultdict
 import re
+from collections import defaultdict
 from xml.etree import ElementTree as ET
 
 from colorfield.fields import ColorField
@@ -71,7 +71,7 @@ class Category(ComputedFieldsModel, models.Model):
 
         Assumes parent is pre-fetched via select_related when needed.
         """
-        if self.parent_id and self.parent:
+        if self.parent_id and self.parent:  # pyright: ignore[reportAttributeAccessIssue]
             # Direct access - relies on select_related in queryset
             parent_slug = self.parent.slug
             return f"{parent_slug}.{self.slug}"
@@ -181,7 +181,7 @@ class Category(ComputedFieldsModel, models.Model):
         ),
     )
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = _("Category")
         verbose_name_plural = _("Categories")
         ordering = ("parent__order", "order", "slug")
@@ -230,12 +230,12 @@ class Category(ComputedFieldsModel, models.Model):
 
         descendants_ids = []
         if include_self:
-            descendants_ids.append(self.id)
+            descendants_ids.append(self.id)  # pyright: ignore[reportAttributeAccessIssue]
 
         to_process = [self]
         while to_process:
             current = to_process.pop(0)
-            children = list(current.children.all())
+            children = list(current.children.all())  # pyright: ignore[reportAttributeAccessIssue]
             descendants_ids.extend([c.id for c in children])
             to_process.extend(children)
 
@@ -271,7 +271,7 @@ class Category(ComputedFieldsModel, models.Model):
 
     def has_children(self) -> bool:
         """Check if this category has any children."""
-        return self.children.exists()
+        return self.children.exists()  # pyright: ignore[reportAttributeAccessIssue]
 
     def get_default_or_self(self) -> "Category":
         """Get the default child if set, otherwise return self."""

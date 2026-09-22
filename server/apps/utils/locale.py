@@ -1,4 +1,5 @@
-from typing import Callable, Literal, Optional, Union
+from collections.abc import Callable
+from typing import Literal, Union
 
 from pydantic import BaseModel, PrivateAttr, validator
 
@@ -16,7 +17,7 @@ DEFAULT_LOCALE: LOCALES = "de"
 DEFAULT_FALLBACK_LOCALE: LOCALES = "de"
 
 
-def set_current_locale(lang: Optional[LOCALES]):
+def set_current_locale(lang: LOCALES | None):
     global _current_locale
     _current_locale = DEFAULT_LOCALE if lang is None else lang
 
@@ -26,7 +27,7 @@ def get_current_locale() -> LOCALES:
     return _current_locale
 
 
-def set_fallback_locale(lang: Optional[LOCALES]):
+def set_fallback_locale(lang: LOCALES | None):
     global _fallback_locale
     _fallback_locale = DEFAULT_FALLBACK_LOCALE if lang is None else lang
 
@@ -37,26 +38,26 @@ def get_fallback_locale() -> LOCALES:
 
 
 class Translations(BaseModel):
-    de: Optional[str] = None
-    en: Optional[str] = None
-    fr: Optional[str] = None
-    it: Optional[str] = None
+    de: str | None = None
+    en: str | None = None
+    fr: str | None = None
+    it: str | None = None
     __locale: LOCALES = PrivateAttr()
     __fallback_locale: LOCALES = PrivateAttr()
     __fallback: bool = PrivateAttr()
     __ignore_errors: bool = PrivateAttr()
-    __locale_factory: Optional[Callable] = PrivateAttr()
-    __fallback_locale_factory: Optional[Callable] = PrivateAttr()
+    __locale_factory: Callable | None = PrivateAttr()
+    __fallback_locale_factory: Callable | None = PrivateAttr()
 
     def __init__(
         self,
         default_value: str = None,
-        locale: Optional[LOCALES] = None,
-        fallback_locale: Optional[LOCALES] = None,
+        locale: LOCALES | None = None,
+        fallback_locale: LOCALES | None = None,
         fallback: bool = True,
         ignore_errors: bool = True,
-        locale_factory: Optional[Callable] = None,
-        fallback_locale_factory: Optional[Callable] = None,
+        locale_factory: Callable | None = None,
+        fallback_locale_factory: Callable | None = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -76,9 +77,9 @@ class Translations(BaseModel):
 
     def get(
         self,
-        locale: Optional[LOCALES] = None,
-        default_locale: Optional[LOCALES] = None,
-        fallback: Optional[bool] = None,
+        locale: LOCALES | None = None,
+        default_locale: LOCALES | None = None,
+        fallback: bool | None = None,
     ) -> str:
         lang = self.get_locale() if locale is None else locale
         default_lang = (
@@ -93,8 +94,8 @@ class Translations(BaseModel):
     def set(
         self,
         value: Union[str, dict, "Translations"],
-        locale: Optional[LOCALES] = None,
-        ignore_errors: Optional[bool] = None,
+        locale: LOCALES | None = None,
+        ignore_errors: bool | None = None,
     ):
         ignore_errors = self.__ignore_errors if ignore_errors is None else ignore_errors
         if isinstance(value, str):
@@ -168,10 +169,10 @@ class Translations(BaseModel):
 
     class TransField(BaseModel):
         field: str
-        locale: Optional[LOCALES] = None
-        default_locale: Optional[LOCALES] = None
-        fallback: Optional[bool] = None
-        ignore_errors: Optional[bool] = None
+        locale: LOCALES | None = None
+        default_locale: LOCALES | None = None
+        fallback: bool | None = None
+        ignore_errors: bool | None = None
         translated_field: bool = True
 
         # @classmethod

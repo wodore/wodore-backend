@@ -1,12 +1,13 @@
-from django.db import models
-from django.utils.translation import gettext_lazy as _
 from modeltrans.fields import TranslationField
 
-from server.core.models import TimeStampedModel
-from server.core.managers import BaseMutlilingualManager
-from server.apps.symbols.models import Symbol
+from django.db import models
+from django.utils.translation import gettext_lazy as _
+
 from server.apps.categories.models import Category
 from server.apps.organizations.models import Organization
+from server.apps.symbols.models import Symbol
+from server.core.managers import BaseMutlilingualManager
+from server.core.models import TimeStampedModel
 
 
 class WeatherCode(TimeStampedModel):
@@ -50,7 +51,7 @@ class WeatherCode(TimeStampedModel):
         help_text=_("Weather description for nighttime"),
     )
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = _("Weather Code")
         verbose_name_plural = _("Weather Codes")
         ordering = ("code",)
@@ -207,7 +208,7 @@ class WeatherCodeSymbolCollection(TimeStampedModel):
         help_text=_("Organization providing this symbol collection"),
     )
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = _("Weather Symbol Collection")
         verbose_name_plural = _("Weather Symbol Collections")
         ordering = ("slug",)
@@ -257,7 +258,7 @@ class WeatherCodeSymbol(TimeStampedModel):
         db_index=True,
     )
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = _("Weather Code Symbol")
         verbose_name_plural = _("Weather Code Symbols")
         ordering = ("collection", "weather_code__code")

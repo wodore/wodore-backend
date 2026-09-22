@@ -20,9 +20,10 @@ from pathlib import Path
 
 import httpx
 import osmium
+from django_admin_runner import register_command
+
 from django.contrib.gis.geos import Point
 from django.core.management.base import BaseCommand, CommandParser
-from django_admin_runner import register_command
 from django.db import transaction
 from django.utils import timezone
 
@@ -641,9 +642,7 @@ class Command(BaseCommand):
 
                 self.stdout.write(
                     self.style.WARNING(
-                        "\nYou can resume with: app geoplaces_import_osm --overpass {} --since auto".format(
-                            region
-                        )
+                        f"\nYou can resume with: app geoplaces_import_osm --overpass {region} --since auto"
                     )
                 )
                 return
@@ -866,7 +865,7 @@ class Command(BaseCommand):
             try:
                 with open(state_file, "r") as f:
                     return json.load(f)
-            except (json.JSONDecodeError, IOError):
+            except (OSError, json.JSONDecodeError):
                 # Return empty state if file is corrupted
                 return {"countries": {}}
         return {"countries": {}}
@@ -877,8 +876,8 @@ class Command(BaseCommand):
         Uses atomic write to prevent corruption if interrupted.
         """
         import json
-        import tempfile
         import os
+        import tempfile
 
         state_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -893,7 +892,7 @@ class Command(BaseCommand):
 
             # Atomic rename
             os.replace(temp_path, state_file)
-        except Exception:
+        except (OSError, ValueError, KeyError, TypeError):
             # Cleanup temp file on error
             try:
                 os.unlink(temp_path)
@@ -1011,7 +1010,7 @@ class Command(BaseCommand):
             self._storage_dir = storage_dir
             return pbf_path
 
-        except Exception as e:
+        except (OSError, ValueError, KeyError, TypeError) as e:
             self.stdout.write(self.style.ERROR(f"Download failed: {e}"))
             if cleanup_after and storage_dir.exists():
                 storage_dir.rmdir()
@@ -1192,6 +1191,7 @@ class Command(BaseCommand):
             Number of places deactivated
         """
         from django.db.models import Exists, OuterRef
+
         from server.apps.geometries.models import GeoPlaceSourceAssociation
 
         # Get categories for this import
@@ -1479,7 +1479,7 @@ class Command(BaseCommand):
                 category_cache[category_slug] = self._get_or_create_category(
                     category_slug
                 )
-            except Exception:
+            except (OSError, ValueError, KeyError, TypeError):
                 pass
 
         # Pre-create brand parent category
@@ -1501,7 +1501,7 @@ class Command(BaseCommand):
                         },
                     )
                     brand_cache[brand_name] = brand_category
-                except Exception:
+                except (OSError, ValueError, KeyError, TypeError):
                     pass
 
         self.stdout.write(
@@ -1640,8 +1640,9 @@ class Command(BaseCommand):
             return {}
 
         try:
-            from opening_hours import OpeningHours
             from datetime import datetime, timedelta
+
+            from opening_hours import OpeningHours
 
             oh = OpeningHours(opening_hours_str)
 
@@ -1698,7 +1699,7 @@ class Command(BaseCommand):
                     if in_open_period:
                         intervals.append({"open": period_start, "close": "23:59"})
 
-                except Exception:
+                except (OSError, ValueError, KeyError, TypeError):
                     # If parsing fails for this day, skip it
                     pass
 
@@ -1714,7 +1715,7 @@ class Command(BaseCommand):
 
             return result
 
-        except Exception:
+        except (OSError, ValueError, KeyError, TypeError):
             # Fallback: store raw string
             return {"_raw": opening_hours_str}
 
@@ -1802,8 +1803,9 @@ class Command(BaseCommand):
             - success: bool
             - duration: float
         """
-        from django.db import connection
         import time as time_module
+
+        from django.db import connection
 
         mapping_start = time_module.time()
         category, mapping = mapping_data
@@ -1815,7 +1817,7 @@ class Command(BaseCommand):
             def _hide() -> None:
                 try:
                     progress.update(task_to_hide, visible=False)
-                except Exception:
+                except (OSError, ValueError, KeyError, TypeError):
                     pass
 
             threading.Timer(30, _hide).start()
@@ -1984,7 +1986,7 @@ class Command(BaseCommand):
                 "success": True,
             }
 
-        except Exception as e:
+        except (OSError, ValueError, KeyError, TypeError) as e:
             # Log exception to error list
             if not hasattr(self, "_import_errors"):
                 self._import_errors = []
@@ -1993,7 +1995,7 @@ class Command(BaseCommand):
                 {
                     "name": f"Worker {worker_id}",
                     "category": mapping.category_slug,
-                    "error": f"Worker exception: {str(e)}",
+                    "error": f"Worker exception: {e!s}",
                 }
             )
 
@@ -2043,17 +2045,18 @@ class Command(BaseCommand):
             workers: Number of parallel workers
             output_dir: Directory for error log files (default: ".")
         """
-        from concurrent.futures import ThreadPoolExecutor, as_completed
         import time
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
         from rich.console import Console
+        from rich.panel import Panel
         from rich.progress import (
+            BarColumn,
             Progress,
             SpinnerColumn,
-            BarColumn,
             TextColumn,
             TimeElapsedColumn,
         )
-        from rich.panel import Panel
 
         console = Console()
 
@@ -2241,7 +2244,7 @@ class Command(BaseCommand):
                                     deleted=result.get("deleted", 0),
                                     errors=result.get("errors", 0),
                                 )
-                    except Exception as e:
+                    except (OSError, ValueError, KeyError, TypeError) as e:
                         console.log(f"[red]Worker exception: {e}[/red]")
                         total_errors += 1
                         progress.advance(overall_task)
@@ -2313,15 +2316,16 @@ class Command(BaseCommand):
             True on success, False on error
         """
         import time
+
         from rich.console import Console
+        from rich.panel import Panel
         from rich.progress import (
+            BarColumn,
             Progress,
             SpinnerColumn,
-            BarColumn,
             TextColumn,
             TimeElapsedColumn,
         )
-        from rich.panel import Panel
 
         console = Console()
 
@@ -2732,9 +2736,10 @@ class Command(BaseCommand):
         Returns:
             Tuple of (list of OSMElement or None on error, download size in bytes, server label used, element count)
         """
-        import httpx
-        import time
         import json
+        import time
+
+        import httpx
 
         # If custom server provided, use it directly
         if api_endpoint:
@@ -2858,7 +2863,7 @@ class Command(BaseCommand):
                         )
                     return all_elements, download_size, server_label, element_count
 
-                except Exception as e:
+                except (OSError, ValueError, KeyError, TypeError) as e:
                     # Check if it's a retryable error
                     is_rate_limit = isinstance(
                         e, httpx.HTTPStatusError
@@ -2976,7 +2981,7 @@ class Command(BaseCommand):
                     category_cache[category_slug] = self._get_or_create_category(
                         category_slug
                     )
-                except Exception:
+                except (OSError, ValueError, KeyError, TypeError):
                     pass
 
         # Pre-create brand categories if not cached
@@ -3000,7 +3005,7 @@ class Command(BaseCommand):
                             },
                         )
                         brand_cache[brand_name] = brand_category
-                    except Exception:
+                    except (OSError, ValueError, KeyError, TypeError):
                         pass
 
     def _preload_place_cache(
@@ -3115,7 +3120,7 @@ class Command(BaseCommand):
                             else:
                                 # Not retryable or max retries exceeded
                                 raise
-            except Exception as e:
+            except (OSError, ValueError, KeyError, TypeError) as e:
                 error_count += 1
 
                 # Get full exception details
@@ -3312,9 +3317,9 @@ class Command(BaseCommand):
                                 f"      Debug: elements count in result: {len(result['elements'])}"
                             )
                         break  # Success, exit retry loop
-                    except Exception as e:
-                        import time
+                    except (OSError, ValueError, KeyError, TypeError) as e:
                         import json
+                        import time
 
                         # Check if it's a retryable error
                         is_rate_limit = isinstance(
@@ -3434,7 +3439,7 @@ class Command(BaseCommand):
                         f"      [3/3] Collected {len(amenities)} amenities total"
                     )
 
-                except Exception as e:
+                except (OSError, ValueError, KeyError, TypeError) as e:
                     self.stdout.write(
                         self.style.ERROR(
                             f"Overpass query failed for {cat.category}.{mapping.category_slug}: {e}"
@@ -3471,8 +3476,8 @@ class Command(BaseCommand):
             category_names: List of category names to filter
             force: If True, overwrite existing filtered file without asking
         """
-        from collections import defaultdict
         import subprocess
+        from collections import defaultdict
 
         # Check if filtered file already exists
         filtered_pbf = pbf_path.parent / f"{pbf_path.stem}_filtered.osm.pbf"
@@ -3662,7 +3667,7 @@ class Command(BaseCommand):
                     category_cache[category_slug] = self._get_or_create_category(
                         category_slug
                     )
-                except Exception as e:
+                except (OSError, ValueError, KeyError, TypeError) as e:
                     # Log error but continue - some categories might fail
                     self.stderr.write(
                         f"Warning: Failed to create category '{category_slug}': {e}"
@@ -3783,6 +3788,7 @@ class Command(BaseCommand):
             Tuple of (created_count, updated_count, skipped_count, error_count)
         """
         import time
+
         from django.db import DatabaseError
 
         # Step 1: Check all for duplicates (BBox queries)
@@ -4122,9 +4128,10 @@ class Command(BaseCommand):
 
     def _data_to_schema(self, data: dict):
         """Convert amenity data to schema."""
+        from hut_services import LocationSchema
+
         from server.apps.geometries.schemas import GeoPlaceAmenityInput
         from server.apps.translations.schema import TranslationSchema
-        from hut_services import LocationSchema
 
         return GeoPlaceAmenityInput(
             name=TranslationSchema(de=data.get("name", "")),

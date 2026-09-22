@@ -7,20 +7,6 @@ Image schemas (_images.py): Used for image aggregation API
 """
 
 # Output schemas (for API responses)
-from ._output import (
-    AmenityDetailSchema,
-    AmenitySchema,
-    CategoryPlaceTypeSchema,
-    CategorySchema,
-    GeoPlaceBaseSchema,
-    GeoPlaceDetailSchema,
-    GeoPlaceNearbySchema,
-    GeoPlaceSearchSchema,
-    PhoneSchema,
-    SymbolSchema,
-    WebsiteSchema,
-)
-
 # Image schemas (for image aggregation API)
 from ._images import (
     ImageCollectionResponse,
@@ -49,21 +35,41 @@ from ._input import (
     SourceInput,
     UpdatePolicyEnum,
 )
+from ._output import (
+    AmenityDetailSchema,
+    AmenitySchema,
+    CategoryPlaceTypeSchema,
+    CategorySchema,
+    GeoPlaceBaseSchema,
+    GeoPlaceDetailSchema,
+    GeoPlaceNearbySchema,
+    GeoPlaceSearchSchema,
+    PhoneSchema,
+    SymbolSchema,
+    WebsiteSchema,
+)
 
 __all__ = [
-    # Output schemas
+    "# Image schemas",
+    "# Input schemas",
+    "# Output schemas",
     "AmenityDetailSchema",
     "AmenitySchema",
+    "BrandInput",
     "CategoryPlaceTypeSchema",
     "CategorySchema",
+    "DedupOptions",
+    "DeletePolicyEnum",
+    "DetailType",
+    "GeoPlaceAdminInput",
+    "GeoPlaceAmenityInput",
+    "GeoPlaceBaseInput",
     "GeoPlaceBaseSchema",
     "GeoPlaceDetailSchema",
+    "GeoPlaceNaturalInput",
     "GeoPlaceNearbySchema",
     "GeoPlaceSearchSchema",
-    "PhoneSchema",
-    "SymbolSchema",
-    "WebsiteSchema",
-    # Image schemas
+    "GeoPlaceTransportInput",
     "ImageCollectionResponse",
     "ImageFeature",
     "ImageFeatureCollection",
@@ -73,17 +79,10 @@ __all__ = [
     "ImagePropertiesSchema",
     "ImageProviderSchema",
     "ImageUrlsSchema",
-    # Input schemas
-    "BrandInput",
-    "DedupOptions",
-    "DeletePolicyEnum",
-    "DetailType",
-    "GeoPlaceAdminInput",
-    "GeoPlaceAmenityInput",
-    "GeoPlaceBaseInput",
-    "GeoPlaceNaturalInput",
-    "GeoPlaceTransportInput",
+    "PhoneSchema",
     "ReviewStatus",
     "SourceInput",
+    "SymbolSchema",
     "UpdatePolicyEnum",
+    "WebsiteSchema",
 ]

@@ -1,8 +1,8 @@
 from django.contrib.gis.db import models
 from django.utils.translation import gettext_lazy as _
 
-from server.core.models import TimeStampedModel
 from server.core.managers import BaseManager
+from server.core.models import TimeStampedModel
 
 
 class Boundary(TimeStampedModel):
@@ -13,7 +13,7 @@ class Boundary(TimeStampedModel):
     Read-only in admin. Imported from shapes files and admin codes.
     """
 
-    objects: BaseManager = BaseManager()
+    objects: BaseManager = BaseManager()  # pyright: ignore[reportIncompatibleVariableOverride]  # django-stubs generics
 
     # Primary identifier
     geoname_id = models.BigIntegerField(
@@ -69,14 +69,14 @@ class Boundary(TimeStampedModel):
         help_text=_("Last modification date from GeoNames"),
     )
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = _("Boundary")
         verbose_name_plural = _("Boundaries")
         ordering = ("name",)
-        indexes = [
+        indexes = (
             models.Index(fields=["country_code", "admin_level"]),
             models.Index(fields=["feature_code"]),
-        ]
+        )
 
     def __str__(self) -> str:
         return f"{self.name} ({self.geoname_id})"

@@ -14,12 +14,14 @@ Usage:
 """
 
 import json
+import urllib.error
 import urllib.request
+
+from django_admin_runner import register_command
 
 from django.contrib.gis.geos import GEOSGeometry, MultiPolygon
 from django.core.management.base import BaseCommand, CommandParser
-from django_admin_runner import register_command
-from django.db import transaction
+from django.db import DatabaseError, transaction
 
 from ...models import Boundary, GeoName
 from ._country_groups import expand_countries
@@ -163,9 +165,9 @@ class Command(BaseCommand):
         # Download the shapes file
         self.stdout.write(f"Downloading boundaries from: {self.SHAPES_URL}")
 
+        import os
         import tempfile
         import zipfile
-        import os
 
         try:
             # Download zip file
@@ -321,7 +323,7 @@ class Command(BaseCommand):
 
                             # Create or update
                             with transaction.atomic():
-                                boundary, created = Boundary.objects.update_or_create(
+                                _boundary, created = Boundary.objects.update_or_create(
                                     geoname_id=geoname_id,
                                     defaults={
                                         "name": name,
@@ -342,7 +344,14 @@ class Command(BaseCommand):
                                     f"  Processed {created_count + updated_count} boundaries..."
                                 )
 
-                        except Exception as e:
+                        except (
+                            ValueError,
+                            KeyError,
+                            TypeError,
+                            IndexError,
+                            OSError,
+                            DatabaseError,
+                        ) as e:
                             self.stdout.write(
                                 self.style.WARNING(
                                     f"Error processing line {line_num}: {e}"
@@ -361,7 +370,7 @@ class Command(BaseCommand):
                 f"  Successfully imported: {created_count + updated_count}"
             )
 
-        except Exception as e:
+        except (OSError, ValueError, KeyError, TypeError, DatabaseError) as e:
             self.stdout.write(
                 self.style.ERROR(f"Error downloading/processing boundaries: {e}")
             )

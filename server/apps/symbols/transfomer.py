@@ -1,7 +1,7 @@
 import base64
 import hashlib
 import hmac
-from typing import Literal, Optional
+from typing import Literal
 from urllib.parse import quote as url_quote
 
 import requests
@@ -28,7 +28,7 @@ class TransformedImage:
         """
         self.url = url
 
-    def get_html(self, alt_text: Optional[str] = "") -> str:
+    def get_html(self, alt_text: str | None = "") -> str:
         """
         Generate an HTML img tag for the transformed image.
 
@@ -133,15 +133,15 @@ class ImagorImage:
     def _build_path(
         self,
         size: str,
-        crop_start: Optional[str],
-        crop_stop: Optional[str],
+        crop_start: str | None,
+        crop_stop: str | None,
         fit: bool,
         stretch: bool,
-        halign: Optional[str],
-        valign: Optional[str],
-        focal: Optional[str],
-        quality: Optional[int],
-        blur: Optional[float],
+        halign: str | None,
+        valign: str | None,
+        focal: str | None,
+        quality: int | None,
+        blur: float | None,
         round_corner: int | tuple[int, int] | tuple[int, int, int] | None = None,
         filters: list[str] | None = None,
     ) -> str:
@@ -200,15 +200,15 @@ class ImagorImage:
     def transform(
         self,
         size: str = "600x400",
-        crop_start: Optional[str] = None,
-        crop_stop: Optional[str] = None,
+        crop_start: str | None = None,
+        crop_stop: str | None = None,
         fit: bool = False,
         stretch: bool = False,
-        halign: Optional[str] = None,
-        valign: Optional[str] = None,
-        focal: Optional[str] = None,
-        quality: Optional[int] = None,
-        blur: Optional[float] = None,
+        halign: str | None = None,
+        valign: str | None = None,
+        focal: str | None = None,
+        quality: int | None = None,
+        blur: float | None = None,
         round_corner: int | tuple[int, int] | tuple[int, int, int] | None = None,
         filters: list[str] | None = None,
         unsafe: bool = False,

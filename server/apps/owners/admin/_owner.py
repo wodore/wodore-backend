@@ -92,14 +92,14 @@ class OwnerAdmin(ModelAdmin):
         qs = super().get_queryset(request)
         return qs.annotate(number_huts=models.Count("huts"))
 
-    @display(description=_("Huts"), ordering="number_huts")
+    @display(description=_("Huts"), ordering="number_huts")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def show_numbers_huts(self, obj):  # new
         return obj.number_huts
 
-    @display(header=True, description=_("Name"), ordering=Lower("name_i18n"))
+    @display(header=True, description=_("Name"), ordering=Lower("name_i18n"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def name_slug(self, obj):  # new
         return obj.name_i18n, obj.slug
 
-    @display(description=_("Note"))
+    @display(description=_("Note"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def note_short(self, obj):  # new
         return text_shorten_html(obj.note_i18n, width=100)
