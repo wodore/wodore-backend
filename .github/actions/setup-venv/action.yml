@@ -10,14 +10,13 @@ inputs:
     required: false
     description: "GitHub token for caching uv binary"
 
+outputs:
+  python-version:
+    description: "The resolved Python version"
+    value: ${{ steps.setup-python.outputs.python-version }}
+
 runs:
   using: "composite"
-
-  outputs:
-    python-version:
-      description: "The resolved Python version"
-      value: ${{ steps.setup-python.outputs.python-version }}
-
   steps:
     - name: "Install uv"
       uses: astral-sh/setup-uv@v7
