@@ -18,7 +18,7 @@ import json
 import logging
 import time
 from math import floor
-from typing import Any, Dict
+from typing import Any
 
 import requests
 from authlib.jose import jwt
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 class ValidatorError(Exception):
-    def __init__(self, error: Dict[str, str], status_code: int):
+    def __init__(self, error: dict[str, str], status_code: int):
         super().__init__()
         self.error = error
         self.status_code = status_code

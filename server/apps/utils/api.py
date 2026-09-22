@@ -103,7 +103,9 @@ class FieldsSchema(Schema):
     )
     # ",".join(exclude_default), description="Comma separated list, only used if 'include' is not set."
     # )
-    allowed_fields: list = Field(None, json_schema_extra={"include_in_schema": False})  # pyright: ignore[reportCallIssue]  # Django Ninja Annotated idiom
+    allowed_fields: list = Field(  # pyright: ignore[reportAssignmentType, reportCallIssue]  # ninja idiom (None default, Annotated marker)
+        None, json_schema_extra={"include_in_schema": False}
+    )
     _model = None
 
     def set_allowed_fields(self, fields: list):
@@ -134,7 +136,10 @@ class FieldsSchema(Schema):
         return _include
 
     def get_schema(self):
-        return create_schema(self._model, fields=self.get_include())
+        return create_schema(
+            self._model,  # pyright: ignore[reportArgumentType]  # dynamic _model
+            fields=self.get_include(),
+        )
 
 
 def fields_query(Model) -> FieldsSchema:  # fields:List, exclude_default=[]):
@@ -184,4 +189,4 @@ def fields_query(Model) -> FieldsSchema:  # fields:List, exclude_default=[]):
         # def get_schema(self):
         #    return create_schema(self._model, fields=self.get_include())
 
-    return Fields
+    return Fields  # pyright: ignore[reportReturnType]  # dynamic schema class

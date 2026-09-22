@@ -20,7 +20,7 @@ def header(
     msg: str = "", symb="-", style="blue bold", max_length=None, stderr: bool = True
 ):
     terminal_width = shutil.get_terminal_size(fallback=(80, 20)).columns
-    max_length = int(terminal_width)
+    max_length = terminal_width
     max_length = 50 if max_length < 50 else min(max_length, 120)
     min_ = 6
     max_ = max_length - min_ - 2

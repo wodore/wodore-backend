@@ -6,9 +6,10 @@ tokens from the local provider (password grant), covering success, wrong-role
 """
 
 import pytest
-from django.test import Client
 from ninja import NinjaAPI
 from ninja.testing import TestClient
+
+from django.test import Client
 
 from server.apps.api.auth import AuthBearer, LocalJWTValidator
 

@@ -11,6 +11,7 @@ import secrets
 from urllib.parse import parse_qs, urlparse
 
 import pytest
+
 from django.core.management import call_command
 
 pytestmark = pytest.mark.django_db

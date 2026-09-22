@@ -11,7 +11,7 @@ LANGUAGE_CODES = [lang[0] for lang in settings.LANGUAGES]
 
 LanguageParam = t.Annotated[
     str,
-    Query(
+    Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
         "de",
         description=f"Select language code: {', '.join(LANGUAGE_CODES)}.",  # or _empty_ for all.",
         # example=settings.LANGUAGE_CODE,
@@ -35,9 +35,9 @@ def with_language_param(
     def decorator(func: t.Callable[..., t.Any]) -> t.Callable[..., t.Any]:
         @wraps(func)
         def wrapper(request: HttpRequest, *args: t.Any, **kwargs: t.Any) -> t.Any:
-            assert (
-                _param in kwargs
-            ), f"Function paramter '{_param}: LanguageParam' is missing! "
+            assert _param in kwargs, (
+                f"Function paramter '{_param}: LanguageParam' is missing! "
+            )
             # lang = kwargs.get(_param)
             # with override(lang):
             return func(request, *args, **kwargs)

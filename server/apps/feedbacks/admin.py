@@ -45,7 +45,7 @@ class FeedbackAdmin(ModelAdmin):
         ),
     ]
 
-    view_on_site = True
+    view_on_site = True  # pyright: ignore[reportIncompatibleVariableOverride, reportAssignmentType]  # Django admin idiom
     list_display = ("email", "subject", "created", "get_updates", "status_tag")
     list_display_links = ("email",)
     list_filter = (

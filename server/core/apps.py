@@ -39,7 +39,11 @@ class CoreConfig(AppConfig):
                 # Use hash of table name to keep it short but unique
                 import hashlib
 
-                table_hash = hashlib.md5(model._meta.db_table.encode()).hexdigest()[:8]
+                # Postgres identifier limit (63) - non-security identifier
+                # hashing of the table name (see usedforsecurity=False).
+                table_hash = hashlib.new(
+                    "md5", model._meta.db_table.encode(), usedforsecurity=False
+                ).hexdigest()[:8]
                 trigger_name = f"upd_mod_{table_hash}"
 
                 try:

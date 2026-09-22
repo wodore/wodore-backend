@@ -14,6 +14,7 @@ from math import floor
 from typing import Any
 
 from authlib.jose import JsonWebKey, jwt
+
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.exceptions import ImproperlyConfigured

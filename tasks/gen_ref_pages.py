@@ -52,7 +52,7 @@ except Exception as e:
     INSTALLED_APPS = []
 
 # Initialize navigation
-nav = mkdocs_gen_files.Nav()
+nav = mkdocs_gen_files.Nav()  # pyright: ignore[reportAttributeAccessIssue]  # stub gap
 
 # Define source directory
 src = server_dir

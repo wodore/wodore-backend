@@ -29,7 +29,7 @@ class OrganizationAdmin(ModelAdmin):
 
     form = required_i18n_fields_form_factory("name", "fullname")
     fieldsets = OrganizationAdminFieldsets
-    view_on_site = True
+    view_on_site = True  # pyright: ignore[reportIncompatibleVariableOverride, reportAssignmentType]  # Django admin idiom
     list_display = (
         "organization",
         "url_link",

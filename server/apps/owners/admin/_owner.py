@@ -43,10 +43,10 @@ class _OwnerShowHutsViewInline(unfold_admin.TabularInline):
     verbose_name = _("Hut")
     show_change_link = True
 
-    def has_add_permission(self, request, obj):
+    def has_add_permission(self, request, obj=None):
         return False
 
-    def has_change_permission(self, request, obj):
+    def has_change_permission(self, request, obj=None):
         return False
 
 
@@ -64,7 +64,7 @@ class OwnerAdmin(ModelAdmin):
         _OwnerShowContactsEditInline,
         _OwnerShowHutsViewInline,
     )
-    fieldsets = (
+    fieldsets = (  # pyright: ignore[reportAssignmentType]  # unfold _FieldsetSpec gap
         (
             _("Main Information"),
             {

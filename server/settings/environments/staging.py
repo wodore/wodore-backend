@@ -12,8 +12,8 @@ from server.settings.environments.production import *
 ENVIRONMENT = "staging"
 
 # Cache configuration - use different prefix to avoid conflicts
-if "default" in CACHES:  # noqa: F405  # pyright: ignore[reportUndefinedVariable]
-    CACHES["default"]["KEY_PREFIX"] = "staging"  # noqa: F405  # pyright: ignore[reportUndefinedVariable]
+if "default" in CACHES:  # pyright: ignore[reportUndefinedVariable]
+    CACHES["default"]["KEY_PREFIX"] = "staging"  # pyright: ignore[reportUndefinedVariable]
 
 # Session cookie - different name to prevent conflicts with production
 SESSION_COOKIE_NAME = "sessionid_staging"
@@ -33,7 +33,7 @@ STAGING_EMAIL_WHITELIST = (
 )
 
 # Add staging-specific middleware for headers
-MIDDLEWARE = list(MIDDLEWARE)  # noqa: F405  # pyright: ignore[reportUndefinedVariable]
+MIDDLEWARE = list(MIDDLEWARE)  # pyright: ignore[reportUndefinedVariable]
 # Add robots tag to prevent indexing (environment header is already in common.py)
 MIDDLEWARE.insert(0, "server.middleware.headers.RobotsTagMiddleware")
 MIDDLEWARE = tuple(MIDDLEWARE)  # pyright: ignore[reportUndefinedVariable]
