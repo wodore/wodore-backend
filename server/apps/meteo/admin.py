@@ -209,10 +209,10 @@ class WeatherCodeAdmin(ModelAdmin):
                     and code_symbol.symbol_day
                     and code_symbol.symbol_day.svg_file
                 ):
-                        return mark_safe(
-                            f'<img src="{code_symbol.symbol_day.svg_file.url}" width="40" height="40" '
-                            f'style="object-fit:contain;" title="{code_symbol.symbol_day.slug}" />'
-                        )
+                    return mark_safe(
+                        f'<img src="{code_symbol.symbol_day.svg_file.url}" width="40" height="40" '
+                        f'style="object-fit:contain;" title="{code_symbol.symbol_day.slug}" />'
+                    )
                     break
         except (OSError, ValueError, AttributeError, TypeError):
             pass
