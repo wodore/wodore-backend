@@ -50,7 +50,7 @@ def _query_params(location: str) -> dict[str, str]:
 
 
 @pytest.fixture(scope="module")
-def local_users(django_db_blocker):
+def local_users(django_db_setup, django_db_blocker):
     with django_db_blocker.unblock():
         call_command("local_auth_users")
     yield
