@@ -3,11 +3,10 @@
 # https://docs.docker.com/develop/develop-images/multistage-build/
 
 #FROM python:3.11.5-slim-bookworm AS python-base
-# Pinned tag: `ubuntu-small-latest` is now based on Ubuntu 26.04 (python 3.14),
-# which does not provide python 3.12 required by PYTHON_VERSION=3.12 below.
-# ubuntu-small-3.12.4 = Ubuntu 24.04 (python 3.12.x).
-# When bumping PYTHON_VERSION, check the base image provides a matching python3.
-FROM ghcr.io/osgeo/gdal:ubuntu-small-3.12.4 AS python-base
+# Pinned tag: ubuntu-small-3.13.3 = Ubuntu 26.04 (python 3.14.x, GDAL 3.13.3).
+# Keep pinned so base drift is a conscious decision; re-check when bumping
+# PYTHON_VERSION that the base image provides a matching python3.
+FROM ghcr.io/osgeo/gdal:ubuntu-small-3.13.3 AS python-base
 
 LABEL org.opencontainers.image.name="Wodore Backend Ubuntu"
 LABEL org.opencontainers.image.authors="tb@wodore.com"
@@ -22,7 +21,7 @@ ARG DJANGO_ENV \
   # Needed for fixing permissions of files created by Docker:
   UID=1001 \
   GID=1001 \
-  PYTHON_VERSION=3.12 \
+  PYTHON_VERSION=3.14 \
   CONFIG_DIR="config" \
   WITH_DEV=0 \
   GIT_HASH \

@@ -392,7 +392,7 @@ infisical run --env=dev --path /backend -- \
 
 Required development tools:
 
-- `python3.12` (see `pyproject.toml`)
+- `python3.14` (see `pyproject.toml`)
 - `postgresql13`
 - `docker` with `docker compose`
 - `infisical` ([installation guide](https://infisical.com/docs/cli/overview#installation)) (optional)
