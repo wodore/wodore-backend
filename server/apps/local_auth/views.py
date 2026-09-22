@@ -27,6 +27,7 @@ from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from . import tokens
@@ -200,6 +201,7 @@ def _verify_pkce(verifier: str, challenge: str) -> bool:
 
 
 @require_POST
+@csrf_exempt  # OAuth2 token endpoints are machine-to-machine; no CSRF token
 def token(request: HttpRequest) -> JsonResponse:
     grant_type = request.POST.get("grant_type", "")
     if grant_type == "authorization_code":
