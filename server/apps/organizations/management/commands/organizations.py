@@ -8,7 +8,7 @@ from ...models import Organization
 
 @register_command(group="Organizations")
 class Command(CRUDCommand):
-    # help = ""
+    help = "Manage organizations (add/update from fixture with logos, dump)."
     use_media_args = True
     model = Organization
     model_names = "organizations"

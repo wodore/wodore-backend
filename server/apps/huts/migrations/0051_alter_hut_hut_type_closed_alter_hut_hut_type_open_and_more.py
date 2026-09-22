@@ -9,6 +9,12 @@ class Migration(migrations.Migration):
     dependencies = [
         ("categories", "0002_migrate_huttype_data"),  # Need HutTypes copied to Categories first
         ("huts", "0050_add_name_gin_index"),
+        # availability.0009 repoints HutAvailability(History).hut_type from
+        # huts.HutType (removed below) to categories.Category. It must run
+        # first, otherwise the lazy HutType reference cannot be resolved on a
+        # fresh database (`Related model 'huts.huttype' cannot be resolved`).
+        # Dependency-only change: no effect on already-migrated databases.
+        ("availability", "0009_alter_hutavailability_hut_type_and_more"),
     ]
 
     operations = [

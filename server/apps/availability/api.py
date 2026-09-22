@@ -436,5 +436,5 @@ def get_hut_availability_trend(
         target_date=target_date,
         period_start=period_start,
         period_end=period_end,
-        data=data,
+        data=data,  # pyright: ignore[reportArgumentType]  # schema list coercion
     )

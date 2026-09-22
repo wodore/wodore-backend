@@ -6,7 +6,7 @@ from ...models import License
 
 @register_command(group="Licenses")
 class Command(CRUDCommand):
-    # help = ""
+    help = "Manage licenses (add/update from fixture, dump)."
     use_media_args = True
     model = License
     model_names = "licenses"

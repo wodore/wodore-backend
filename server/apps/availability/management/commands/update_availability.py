@@ -25,10 +25,21 @@ from django.utils import timezone
 from server.apps.huts.models import Hut
 
 from ...models import HutAvailability
+from ...services import SERVICES
 from ...services import AvailabilityService
+
+# availability sources that provide booking data (slug -> service)
+BOOKING_SOURCES = [
+    slug for slug, service in SERVICES.items() if service.support_booking
+]
 
 
 @register_command(group="Availability")
+def _hut_source_str(hut: "Hut") -> str:
+    """Availability source slug of a hut (for display; needs select_related)."""
+    return hut.availability_source_ref.slug if hut.availability_source_ref else "-"
+
+
 class Command(BaseCommand):
     help = "Update hut availability data from booking sources"
 
@@ -47,6 +58,13 @@ class Command(BaseCommand):
             "--all",
             action="store_true",
             help="Force update all huts with booking references",
+        )
+        parser.add_argument(
+            "-s",
+            "--source",
+            default="all",
+            choices=["all"] + BOOKING_SOURCES,
+            help="Only update huts of this availability source (default: all)",
         )
         parser.add_argument(
             "--dry-run",
@@ -147,6 +165,7 @@ class Command(BaseCommand):
         days = options.get("days") or 365
         request_interval = options.get("request_interval") or 0.1
         no_progress = options.get("no_progress")
+        source = (options.get("source") or "all").strip().lower()
 
         # Priority parameters
         high_priority_minutes = options.get("high_priority_minutes")
@@ -156,23 +175,34 @@ class Command(BaseCommand):
         next_days = options.get("next_days")
 
         click.secho("\n=== Hut Availability Update ===\n", fg="cyan", bold=True)
+        label = f" of source '{source}'" if source != "all" else ""
 
         # Determine which huts to update
         if hut_slug:
-            huts = Hut.objects.filter(slug=hut_slug)
+            huts = Hut.objects.filter(slug=hut_slug).select_related(
+                "availability_source_ref"
+            )
             if not huts.exists():
                 click.secho(f"Error: Hut with slug '{hut_slug}' not found", fg="red")
                 return
             click.echo(f"Updating hut: {hut_slug}")
         elif hut_id:
-            huts = Hut.objects.filter(id=hut_id)
+            huts = Hut.objects.filter(id=hut_id).select_related(
+                "availability_source_ref"
+            )
             if not huts.exists():
                 click.secho(f"Error: Hut with ID '{hut_id}' not found", fg="red")
                 return
             click.echo(f"Updating hut ID: {hut_id}")
         elif update_all:
-            huts = Hut.objects.filter(availability_source_ref__isnull=False)
-            click.echo(f"Updating all {huts.count()} huts with availability sources")
+            huts = Hut.objects.filter(
+                availability_source_ref__isnull=False
+            ).select_related("availability_source_ref")
+            if source != "all":
+                huts = huts.filter(availability_source_ref__slug=source)
+            click.echo(
+                f"Updating all {huts.count()} huts with availability sources{label}"
+            )
         else:
             # Default: Use priority-based selection + new huts
             click.echo("Using priority-based selection (includes new huts)")
@@ -183,14 +213,18 @@ class Command(BaseCommand):
                 inactive_priority_minutes=inactive_priority_minutes,
                 next_days=next_days,
             )
+            huts = huts.select_related("availability_source_ref")
+            if source != "all":
+                huts = huts.filter(availability_source_ref__slug=source)
             hut_count = huts.count()
-            click.echo(f"Found {hut_count} hut(s) needing updates")
+            click.echo(f"Found {hut_count} hut(s) needing updates{label}")
 
         if dry_run:
             click.secho("\n[DRY RUN MODE - No changes will be made]\n", fg="yellow")
 
         # Fetch booking data using batch update
         huts_to_update = list(huts)
+        source_by_slug = {h.slug: _hut_source_str(h) for h in huts_to_update}
         if not huts_to_update:
             click.secho("No huts to update", fg="yellow")
             return
@@ -206,6 +240,7 @@ class Command(BaseCommand):
             click.echo(f"Estimated fetch time: ~{estimated_seconds:.0f} seconds")
         click.echo()
 
+        failed_results: list[tuple] = []
         stats = {
             "huts_processed": 0,
             "huts_failed": 0,
@@ -239,7 +274,10 @@ class Command(BaseCommand):
                     current_batch = ((hut_counter["fetch"] - 1) // batch_size) + 1
                     # Get current hut info
                     current_hut = huts_to_update[hut_counter["fetch"] - 1]
-                    hut_info = f"{current_hut.name} ({current_hut.slug})"
+                    hut_info = (
+                        f"{current_hut.name} ({current_hut.slug}) "
+                        f"[{source_by_slug.get(current_hut.slug, '-')}]{label}"
+                    )
                     click.echo(
                         f"[{hut_counter['fetch']}/{len(huts_to_update)}] "
                         f"Batch {current_batch}/{total_batches} - "
@@ -251,7 +289,10 @@ class Command(BaseCommand):
                     current_batch = ((hut_counter["process"] - 1) // batch_size) + 1
                     # Get current hut info
                     current_hut = huts_to_update[hut_counter["process"] - 1]
-                    hut_info = f"{current_hut.name} ({current_hut.slug})"
+                    hut_info = (
+                        f"{current_hut.name} ({current_hut.slug}) "
+                        f"[{source_by_slug.get(current_hut.slug, '-')}]{label}"
+                    )
                     click.echo(
                         f"[{hut_counter['process']}/{len(huts_to_update)}] "
                         f"Batch {current_batch}/{total_batches} - "
@@ -348,8 +389,9 @@ class Command(BaseCommand):
                 )
                 hut_name = hut.name if hut else result.hut_slug
 
+                src = source_by_slug.get(result.hut_slug, "-")
                 click.echo(
-                    f"{stats['huts_processed']:3d}. {hut_name} ({result.hut_slug})...",
+                    f"{stats['huts_processed']:3d}. {hut_name} ({result.hut_slug}) [{src}]...",
                     nl=False,
                 )
 
@@ -372,6 +414,7 @@ class Command(BaseCommand):
                         else "red"
                     )
                     click.secho(f" ✗ {result.error_message}", fg=color)
+                    failed_results.append((result, src))
 
         end_time = timezone.now()
         duration = (end_time - start_time).total_seconds()
@@ -389,24 +432,22 @@ class Command(BaseCommand):
             click.secho("\n[DRY RUN - No changes were made]", fg="yellow")
             return
 
-        # Determine exit code based on failures
-        # Exit code 0: All huts succeeded
-        # Exit code 1: Some huts failed (partial failure)
-        # Exit code 2: All huts failed (complete failure)
+        if failed_results:
+            click.secho(
+                f"\nFailed huts ({len(failed_results)} of {stats['huts_processed']}):",
+                fg="yellow",
+                bold=True,
+            )
+            for result, src in failed_results:
+                click.echo(f"  {result.hut_slug} [{src}]: {result.error_message}")
+
+        # Complete failure (e.g. source API down) is a real error -> raise.
+        # Partial failures (closed/between-season huts) are expected and only listed.
         if (
             stats["huts_processed"] > 0
             and stats["huts_failed"] == stats["huts_processed"]
         ):
-            # All huts failed
-            raise CommandError(f"All {stats['huts_failed']} hut(s) failed to update")
-        elif stats["huts_failed"] > 0:
-            # Partial failure - some huts succeeded
-            click.secho(
-                f"\nWarning: {stats['huts_failed']} of {stats['huts_processed']} hut(s) failed",
-                fg="yellow",
-                bold=True,
-            )
-            # Exit with code 1 for monitoring systems
             raise CommandError(
-                f"{stats['huts_failed']} of {stats['huts_processed']} hut(s) failed"
+                f"All {stats['huts_failed']} hut(s) failed"
+                + (f" (source '{source}')" if source != "all" else "")
             )
