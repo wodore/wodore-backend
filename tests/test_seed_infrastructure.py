@@ -12,13 +12,14 @@ class TestSeedFixture:
     def test_huts_exist_in_db(self, seed_data):
         """Seed data should be loaded and huts should be present."""
         assert Hut.objects.exists(), "No huts found — seed data may not have loaded"
-        assert Hut.objects.count() >= 5, (
-            f"Expected >= 5 huts, got {Hut.objects.count()}"
-        )
+        assert (
+            Hut.objects.count() >= 5
+        ), f"Expected >= 5 huts, got {Hut.objects.count()}"
 
     def test_hut_has_required_fields(self, seed_data):
         """Each seeded hut should have name, location, elevation, etc."""
         hut = Hut.objects.first()
+        assert hut is not None, "No hut found — seed data may not have loaded"
         assert hut.name, "Hut should have a name"
         assert hut.location, "Hut should have a location"
         assert hut.slug, "Hut slug should be auto-generated"
