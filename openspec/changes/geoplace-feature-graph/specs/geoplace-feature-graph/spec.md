@@ -58,6 +58,19 @@ The system SHALL remove the `GeoPlace.parent` field and SHALL migrate existing p
 ### Requirement: Relation auto-generation during import
 The import pipeline SHALL be able to auto-generate relations: spatial containment produces `part_of`, proximity below a threshold produces `serves`, and OSM operator metadata produces brand classification, storing a `confidence` score below 1.0 for generated edges.
 
+Auto-generation SHALL be idempotent across re-imports (auto-generated edges
+with the same triple are replaced, not duplicated; manually curated edges with
+confidence 1.0 are preserved) and SHALL be bounded to defined place types
+rather than applied to the full GeoNames/OSM corpus.
+
 #### Scenario: Containment generates part_of
 - **WHEN** an imported place lies within a municipality geometry
 - **THEN** a `part_of` relation to the municipality is created with confidence < 1.0
+
+#### Scenario: Re-import regenerates instead of duplicating
+- **WHEN** the import re-runs and the auto-generated `part_of` triple already exists with confidence < 1.0
+- **THEN** the edge is updated in place and the total count of auto-generated edges does not grow
+
+#### Scenario: Manual curation survives re-import
+- **WHEN** an edge with confidence 1.0 (curated) matches a triple the importer would generate
+- **THEN** the curated edge is left unchanged

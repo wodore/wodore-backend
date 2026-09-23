@@ -12,7 +12,7 @@ The system SHALL rename `GeoPlaceCategory.classifier` to `relation` and `Externa
 - **THEN** all existing classifier/link_type values remain intact on the renamed columns
 
 ### Requirement: Relation and service category trees
-The system SHALL provide Category fixture trees: `relations/` (part_of, near, serves, access_point), `service/` (standard, reduced), `link_types/` (website, booking, social, phone) and `brand/`, loadable idempotently via a `relation_categories` fixture.
+The system SHALL provide Category fixture trees: `relations/` (part_of, near, serves, access_point), `operating/` (standard, reduced), `link_types/` (website, booking, social, phone) and `brand/`, loadable idempotently via a `relation_categories` fixture.
 
 #### Scenario: Fixtures load idempotently
 - **WHEN** `app loaddata relation_categories` runs twice

@@ -11,8 +11,16 @@ spatial operations, one consistent `relation` vocabulary, and coverage for all
 place types (huts, restaurants, shops, museums, medical) — replacing
 `AmenityDetail` entirely.
 
+**Sequencing**: GeoPlace is the strategic, more flexible entity; `Hut` remains
+the currently used model and will converge onto GeoPlace in a later, separate
+change. This change deliberately builds all required capabilities into
+GeoPlace first - the Hut migration is explicitly out of scope (see design
+non-goals).
+
 Source documents: `_work/260313_geoplace_feature_graph_spec.md` and
-`_work/260313_feature_graph_implementation.md` (converted into this change).
+`_work/260313_feature_graph_implementation.md` (converted into this change;
+`service/`/`link/` slugs from the source prose normalized to the
+code-consistent `operating/`/`link_types/`).
 
 ## What Changes
 
@@ -31,7 +39,7 @@ Source documents: `_work/260313_geoplace_feature_graph_spec.md` and
   `ExternalLink.link_type` → `relation` (**BREAKING** renames, including API
   field names).
 - **Category trees** loaded as fixtures: `relations/` (part_of, near, serves,
-  access_point), `service/` (standard, reduced), `link_types/` (website,
+  access_point), `operating/` (standard, reduced), `link_types/` (website,
   booking, social, phone), `brand/`.
 - **Phones via `ExternalLink`** with `tel:` URIs instead of phone fields.
 - **GeoPlace helpers**: `add_relation`, `get_related_places` (direction-aware).

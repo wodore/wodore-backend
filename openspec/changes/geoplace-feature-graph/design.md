@@ -13,6 +13,12 @@ The existing `Category` model already provides a hierarchy with slugs, ordering
 and translations — it can define relation semantics without a new relation-type
 model.
 
+**Strategic sequencing (confirmed)**: GeoPlace is the strategic, more flexible
+entity; `Hut` is the currently used model and will converge onto GeoPlace in a
+**later, separate change**. This change builds all capabilities GeoPlace needs
+first — so the graph ships with infrastructure value (imports, admin, internal
+queries) even before the Hut convergence unlocks its headline queries.
+
 Source: `_work/260313_geoplace_feature_graph_spec.md` (concept) and
 `_work/260313_feature_graph_implementation.md` (implementation plan, incl. a
 2026-03-13 code review of 17 affected files across 5 tiers).
@@ -34,6 +40,9 @@ Source: `_work/260313_geoplace_feature_graph_spec.md` (concept) and
 
 **Non-Goals:**
 
+- **Hut → GeoPlace convergence** — separate future change (sequencing above);
+  the `migrate_hut_to_geoplace` sketch in the source documents belongs to that
+  change, not this one.
 - Routes (`RouteRelation`, ordered nodes, LineString) — separate future change.
 - Organization migration onto the Category system (`owned_by` relations) —
   Phase 2 per the implementation plan.
@@ -50,6 +59,13 @@ Relation types are `Category` rows under a `relations/` parent
 (`part_of`, `near`, `serves`, `access_point`). No new RelationType model.
 *Rationale*: Category already has hierarchy, slugs, ordering, i18n and admin
 support; a parallel model would duplicate all of it.
+
+### D1b: Canonical category slugs
+
+The source documents used `service/`/`link/` in prose but `operating`/`link_types`
+in all code blocks (`limit_choices_to=parent__slug="operating"` etc.). The
+canonical slugs are **`relations/`, `operating/`, `link_types/`, `brand/`**
+(code-consistent); the prose variants are normalized away in this change.
 
 ### D2: One-direction storage, no inverse_relation
 
@@ -97,6 +113,23 @@ updates, (5) `migrate_parent_to_relations`, (6) remove `parent`, (7)
 `migrate_amenity_to_operation`, (8) delete `AmenityDetail`. Renames first
 avoids FK violations; data migrations run before their source models disappear.
 
+### D8: Auto-relation lifecycle and bounding
+
+Auto-generated edges carry `confidence < 1.0`; re-imports are idempotent —
+an auto edge with the same `(from, to, relation)` triple is updated in place,
+never duplicated, and curated edges (`confidence = 1.0`) are preserved.
+Generation is bounded to defined place types (not the full GeoNames/OSM corpus)
+to keep edge volume proportional to query needs. Without this, re-imports
+would either duplicate (blocked by the unique triple) or strand stale edges
+when geometries change.
+
+### D9: Fixtures reconcile with existing DB categories
+
+The categories app has no fixtures today, but relation/link-type parents may
+already exist as admin-created rows in environments. The `relation_categories`
+fixture therefore uses get-or-create semantics keyed on slug, so loading is
+idempotent against both fresh and pre-populated databases.
+
 ## Risks / Trade-offs
 
 - [BREAKING API field renames (`classifier`, `link_type`) and removed
@@ -119,7 +152,22 @@ migrations are forward-only (source data deleted afterwards by design).
 
 ## Open Questions
 
+- **Multi-capacity modeling (decision needed before implementation)** —
+  `unique(geo_place, relation)` allows exactly one capacity per operating
+  mode. A place that is both a hut (170 beds) and a restaurant (40 seats)
+  under `standard` cannot express both. Options:
+  (a) move capacity to the `GeoPlaceCategory` triple `(place, category,
+  relation)` — most precise, more rows and joins;
+  (b) keep the constraint, put secondary capacities into `extra` JSON —
+  simple but unqueryable;
+  (c) relax uniqueness to `(geo_place, relation, category)` on the operation
+  model — middle ground, one operation per category-type per mode.
+  Recommendation: (c), decided before the model migration is written.
+- **API compatibility policy (decision needed)** — the `classifier`/`link_type`
+  renames and the AmenityDetail→Operation schema are BREAKING for API
+  consumers (frontend). Options: hard cut on the next API version, or a
+  transitional dual-field serialization. Needs frontend coordination.
 - Should `relation/located_in` be distinguished from `part_of`? Deferred —
   add when a concrete requirement appears (per implementation plan Phase 1+).
-- Emergency service mode (`service/emergency`): listed as future extension;
-  add on demand.
+- Emergency operating mode (`operating/emergency`): listed as future
+  extension; add on demand.
