@@ -40,9 +40,10 @@ the incoming schema.
 - **THEN** the stored `main_language` remains unchanged
 
 ### Requirement: Per-record translation fallback
-Translated-field lookups on `Hut` and `GeoPlace` (e.g. `name_i18n`)
-SHALL try the record's `main_language` as the first fallback language
-before the configured `MODELTRANS_FALLBACK` chain.
+The system SHALL resolve translated-field lookups on `Hut` and
+`GeoPlace` (e.g. `name_i18n`) by trying the record's `main_language`
+as the first fallback language, before the configured
+`MODELTRANS_FALLBACK` chain.
 
 #### Scenario: French hut in German context
 - **WHEN** a hut has `main_language = "fr"`, an empty base `name`
