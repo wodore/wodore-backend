@@ -24,7 +24,7 @@
 
 - [x] 5.1 store_quality transitions GeoPlace `done → rework` (refetch pattern); new/review untouched
 - [x] 5.2 translate piggyback fires for geoplaces with descriptions (assess_source True)
-- [x] 5.3 command `--geoplace` selectors, mixed model selection
+- [x] 5.3 command `--geoplace` selectors; cross-model selector/`--model` combinations rejected with `CommandError` (tested)
 - [x] 5.4 admin actions: callable-level behavior for translate/assess (skips, errors, config message) and button view (POST works, GET 405, no-permission 403)
 - [x] 5.5 full suite green on the lane DB
 

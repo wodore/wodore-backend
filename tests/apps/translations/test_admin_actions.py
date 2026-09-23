@@ -169,3 +169,23 @@ def test_mixin_registered_on_both_admins(hut_admin, geoplace_admin):
     assert isinstance(geoplace_admin, LLMAdminMixin)
     assert "description_quality_display" in hut_admin.list_display
     assert "description_quality_display" in geoplace_admin.list_display
+
+
+def test_changelist_actions_registered_with_change_permission(
+    hut_admin, geoplace_admin
+):
+    """Both bulk actions must actually appear in the changelist dropdown."""
+    for model_admin in (hut_admin, geoplace_admin):
+        assert "translate_selected" in model_admin.actions
+        assert "assess_selected" in model_admin.actions
+    # View-only staff must not be able to run them (Django filters
+    # changelist actions by allowed_permissions). The unfold @action
+    # decorator's return typing hides the attribute (runtime-set).
+    assert (
+        LLMAdminMixin.translate_selected.allowed_permissions  # pyright: ignore[reportAttributeAccessIssue]  # runtime-set by @action
+        == ["change"]
+    )
+    assert (
+        LLMAdminMixin.assess_selected.allowed_permissions  # pyright: ignore[reportAttributeAccessIssue]  # runtime-set by @action
+        == ["change"]
+    )

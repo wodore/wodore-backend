@@ -63,6 +63,10 @@ class LLMAdminMixin(admin.ModelAdmin):
 
     change_form_template = "translations/llm_change_form.html"
 
+    # Changelist bulk actions — Django only collects actions listed here
+    # (decorated methods are NOT auto-discovered).
+    actions = ("translate_selected", "assess_selected")
+
     @display(
         description=_("Quality"),  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
         ordering="description_quality",
@@ -82,11 +86,21 @@ class LLMAdminMixin(admin.ModelAdmin):
 
     # -- changelist actions ------------------------------------------------
 
-    @action(description=_("Translate missing languages (AI)"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+    @action(  # pyright: ignore[reportArgumentType]  # decorator kwargs
+        description=_(  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+            "Translate missing languages (AI)"
+        ),
+        permissions=["change"],
+    )
     def translate_selected(self, request: HttpRequest, queryset) -> None:
         self._run_llm(request, queryset, mode="translate")
 
-    @action(description=_("Assess description (AI)"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+    @action(  # pyright: ignore[reportArgumentType]  # decorator kwargs
+        description=_(  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+            "Assess description (AI)"
+        ),
+        permissions=["change"],
+    )
     def assess_selected(self, request: HttpRequest, queryset) -> None:
         self._run_llm(request, queryset, mode="assess")
 

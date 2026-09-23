@@ -150,7 +150,21 @@ class Command(BaseCommand):
         if all_flag and not model_label:
             raise CommandError("--all requires --model (hut or geoplace)")
         if model_label:
+            # Reject cross-model selector combinations: they would otherwise
+            # silently widen to the full model (e.g. `--model hut --geoplace
+            # X` would assess ALL unscored huts).
+            other = geoplace_slugs if model_label == "hut" else hut_slugs
+            if other:
+                wrong = "--geoplace" if model_label == "hut" else "--hut"
+                raise CommandError(
+                    f"--model {model_label} cannot be combined with {wrong} selectors"
+                )
             return model_label, _MODEL_CHOICES[model_label]
+        if hut_slugs and geoplace_slugs:
+            raise CommandError(
+                "--hut and --geoplace selectors cannot be mixed; "
+                "run one model at a time or use --model MODEL --all"
+            )
         if geoplace_slugs:
             return "geoplace", GeoPlace
         return "hut", Hut

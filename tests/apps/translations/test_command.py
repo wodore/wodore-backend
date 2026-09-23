@@ -250,3 +250,14 @@ def test_assess_command_all_requires_model():
 def test_assess_command_unknown_geoplace():
     with pytest.raises(CommandError, match="not found"):
         call_command("assess_descriptions", "--geoplace", "does-not-exist")
+
+
+def test_assess_command_rejects_cross_model_selectors():
+    # Cross combos would silently widen to a full-model run (e.g. all
+    # unscored huts); they are rejected before any API call.
+    with pytest.raises(CommandError, match="cannot be combined with --geoplace"):
+        call_command("assess_descriptions", "--model", "hut", "--geoplace", "zermatt")
+    with pytest.raises(CommandError, match="cannot be combined with --hut"):
+        call_command("assess_descriptions", "--model", "geoplace", "--hut", "some-hut")
+    with pytest.raises(CommandError, match="cannot be mixed"):
+        call_command("assess_descriptions", "--hut", "a", "--geoplace", "b")

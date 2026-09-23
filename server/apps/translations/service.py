@@ -77,8 +77,9 @@ def store_quality(
     Writes ``description_quality``/``description_quality_at`` and a marked
     block in ``review_comment`` (replacing only a previous LLM block,
     never human text). Below the review threshold (default from
-    ``TRANSLATION_QUALITY_REVIEW_THRESHOLD``) a ``done`` hut is moved to
-    ``rework``; huts in other statuses are left untouched.
+    ``TRANSLATION_QUALITY_REVIEW_THRESHOLD``) a ``done`` record
+    (Hut or GeoPlace) is moved to ``rework``; records in other statuses
+    are left untouched.
 
     Returns the list of touched field names (for ``update_fields``).
     """
@@ -223,7 +224,7 @@ def translate_instance(
     result: dict[str, t.Any] = {}
     quality: dict[str, t.Any] | None = None
     # Piggyback: score an unscored description in the same API call
-    # (models with a description_quality field, i.e. Hut).
+    # (models with a description_quality field: Hut and GeoPlace).
     assess_source = (
         hasattr(obj, "description_quality")
         and obj.description_quality is None
