@@ -130,6 +130,7 @@ INSTALLED_APPS: tuple[str, ...] = (
     "server.apps.feedbacks",
     "server.apps.owners",
     "server.apps.categories",
+    "server.apps.translations",
     "server.apps.huts",
     "server.apps.availability",
     "server.apps.meteo",
@@ -314,6 +315,17 @@ MODELTRANS_FALLBACK = {
     "it": ("fr", "de", "en"),
     "fr": ("it", "de", "en"),
 }
+
+# LLM field translations (`app update_translations` and the admin translate
+# button). Any OpenAI-compatible chat-completions endpoint works, e.g. the
+# z.ai *general* API (https://api.z.ai/api/paas/v4) with a GLM model, OpenAI,
+# or a local server (Ollama: http://localhost:11434/v1).
+# Note: the z.ai GLM *Coding Plan* endpoint must not be used here - its terms
+# restrict usage to supported coding tools.
+TRANSLATION_API_BASE_URL = config("TRANSLATION_API_BASE_URL", "")
+TRANSLATION_API_KEY = config("TRANSLATION_API_KEY", "")
+TRANSLATION_MODEL = config("TRANSLATION_MODEL", "")
+TRANSLATION_API_TIMEOUT = config("TRANSLATION_API_TIMEOUT", 120, cast=int)
 
 # Use all countries from django-countries package
 # This ensures the GeoPlace.country_code constraint accepts all valid ISO 3166-1 alpha-2 codes

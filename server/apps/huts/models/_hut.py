@@ -31,6 +31,7 @@ from server.apps.contacts.models import Contact, ContactFunction
 from server.apps.images.models import Image
 from server.apps.organizations.models import Organization
 from server.apps.owners.models import Owner
+from server.apps.translations.detect import detect_main_language
 from server.core import UpdateCreateStatus
 from server.core.models import TimeStampedModel
 
@@ -109,7 +110,21 @@ class Hut(TimeStampedModel):
     )
     ReviewStatusChoices = _ReviewStatusChoices
     # translations
-    i18n = TranslationField(fields=("name", "description", "note"))
+    i18n = TranslationField(
+        fields=("name", "description", "note"),
+        fallback_language_field="main_language",
+    )
+    # Source language of this hut's texts; all other languages are
+    # translated from it (see `app update_translations`).
+    main_language = models.CharField(
+        max_length=10,
+        choices=settings.LANGUAGES,
+        default=settings.LANGUAGE_CODE,
+        verbose_name=_("Main language"),
+        help_text=_(
+            "Language of the original texts; other languages are translated from it."
+        ),
+    )
 
     slug = models.SlugField(unique=True, verbose_name=_("Slug"), db_index=True)
     review_status = models.CharField(
@@ -287,6 +302,10 @@ class Hut(TimeStampedModel):
                 name="%(app_label)s_%(class)s_review_status_valid",
                 condition=models.Q(review_status__in=_ReviewStatusChoices.values),
             ),
+            models.CheckConstraint(
+                name="%(app_label)s_%(class)s_main_language_valid",
+                condition=models.Q(main_language__in=settings.LANGUAGE_CODES),
+            ),
         )
 
     def __str__(self) -> str:
@@ -429,6 +448,9 @@ class Hut(TimeStampedModel):
         _name = primary_name(i18n_fields)
         if _name:
             i18n_fields["name"] = _name
+        main_language = detect_main_language(
+            {code: i18n_fields.get(f"name_{code}") for code in settings.LANGUAGE_CODES}
+        )
         type_closed = (
             HutTypeHelper.values[str(hut_schema.hut_type.if_closed.value)]
             if hut_schema.hut_type.if_closed
@@ -451,6 +473,7 @@ class Hut(TimeStampedModel):
             hut_type_open=HutTypeHelper.values[str(hut_schema.hut_type.if_open.value)],
             hut_type_closed=type_closed,
             review_status=review_status,
+            main_language=main_language or settings.LANGUAGE_CODE,
             is_modified=is_modified or hut_schema.extras.get("is_modified", False),
             open_monthly=hut_schema.open_monthly.model_dump(),
             **i18n_fields,
@@ -628,6 +651,11 @@ class Hut(TimeStampedModel):
         _name = primary_name(updates)
         if _name:
             updates["name"] = _name
+        _main_language = detect_main_language(
+            {code: updates.get(f"name_{code}") for code in settings.LANGUAGE_CODES}
+        )
+        if _main_language:
+            updates["main_language"] = _main_language
         if "location" in updates and hut_schema.location.ele is not None:
             updates["elevation"] = hut_schema.location.ele
         if "location" in updates:

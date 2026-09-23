@@ -21,6 +21,7 @@ from server.apps.categories.models import Category
 from server.apps.images.models import Image
 from server.apps.organizations.models import Organization
 from server.apps.translations import activate
+from server.apps.translations.detect import detect_main_language
 from server.core.models import TimeStampedModel
 from server.core.utils import UpdateCreateStatus
 
@@ -69,6 +70,14 @@ _BRAND_CATEGORY_CACHE = _LRUCacheBytes(max_bytes=50 * 1024 * 1024)
 _BRAND_CATEGORY_CACHE_LOCK = threading.Lock()
 _BRAND_CATEGORY_CACHE_MISS = object()
 
+# Substrings of database errors that are worth retrying (locks, deadlocks).
+RETRYABLE_DB_MESSAGES = (
+    "database is locked",
+    "deadlock",
+    "could not serialize",
+    "database error",
+)
+
 
 class DetailType(models.TextChoices):
     """Detail model types for GeoPlace."""
@@ -89,7 +98,21 @@ class GeoPlace(TimeStampedModel):
     # TODO: add index which starts at 10000 or UIID?
 
     # Translation support
-    i18n = TranslationField(fields=("name", "description"))
+    i18n = TranslationField(
+        fields=("name", "description"),
+        fallback_language_field="main_language",
+    )
+    # Source language of this place's texts; all other languages are
+    # translated from it (see `app update_translations`).
+    main_language = models.CharField(
+        max_length=10,
+        choices=settings.LANGUAGES,
+        default=settings.LANGUAGE_CODE,
+        verbose_name=_("Main language"),
+        help_text=_(
+            "Language of the original texts; other languages are translated from it."
+        ),
+    )
 
     name = models.CharField(max_length=200, blank=True, verbose_name=_("Name"))
     name_i18n: str  # for typing
@@ -245,7 +268,7 @@ class GeoPlace(TimeStampedModel):
         verbose_name=_("Images"),
     )
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]  # TimeStampedModel.Meta inheritance
         verbose_name = _("Geo Place")
         verbose_name_plural = _("Geo Places")
         ordering = ("-importance", Lower("name_i18n"))
@@ -281,6 +304,10 @@ class GeoPlace(TimeStampedModel):
             models.CheckConstraint(
                 name="%(app_label)s_%(class)s_country_valid",
                 condition=models.Q(country_code__in=settings.COUNTRIES_ONLY),
+            ),
+            models.CheckConstraint(
+                name="%(app_label)s_%(class)s_main_language_valid",
+                condition=models.Q(main_language__in=settings.LANGUAGE_CODES),
             ),
             models.CheckConstraint(
                 name="%(app_label)s_%(class)s_detail_type_valid",
@@ -362,33 +389,26 @@ class GeoPlace(TimeStampedModel):
         # Retry logic for database locks
         import time
 
-        from django.db import DatabaseError
-
         last_exception = None
         for attempt in range(max_retries):
             try:
                 super().save(*args, **kwargs)
                 return  # Success, exit retry loop
-            except (DatabaseError, Exception) as e:
+            except Exception as e:
                 last_exception = e
                 error_str = str(e).lower()
-
-                # Check if it's a retryable database error
-                is_db_lock = (
-                    "database is locked" in error_str
-                    or "deadlock" in error_str
-                    or "could not serialize" in error_str
-                    or "database error" in error_str
+                is_retryable = any(
+                    message in error_str for message in RETRYABLE_DB_MESSAGES
                 )
-
-                if is_db_lock and attempt < max_retries - 1:
-                    # Retry with exponential backoff
-                    wait_time = 0.1 * (2**attempt)  # 100ms, 200ms, 400ms
-                    time.sleep(wait_time)
-                    continue
-                else:
-                    # Not retryable or max retries exceeded
-                    raise
+                attempts_left = attempt < max_retries - 1
+                if is_retryable:
+                    if attempts_left:
+                        # Retry with exponential backoff
+                        wait_time = 0.1 * (2**attempt)  # 100ms, 200ms, 400ms
+                        time.sleep(wait_time)
+                        continue
+                # Not retryable or max retries exceeded
+                raise
 
         # If we get here, all retries failed
         if last_exception is not None:
@@ -934,7 +954,7 @@ class GeoPlace(TimeStampedModel):
             if category.id in seen_ids:  # pyright: ignore[reportAttributeAccessIssue]
                 continue
             categories.append(category)
-            seen_ids.add(category.id)
+            seen_ids.add(category.id)  # pyright: ignore[reportAttributeAccessIssue]  # auto PK, plugin-less
         return categories
 
     @classmethod
@@ -962,6 +982,7 @@ class GeoPlace(TimeStampedModel):
         # Build place data
         place_data = {
             "name": name_dict.get(settings.LANGUAGE_CODE, ""),
+            "main_language": detect_main_language(name_dict) or settings.LANGUAGE_CODE,
             "location": location,
             "country_code": schema.country_code,
             "detail_type": schema.detail_type,
@@ -1147,7 +1168,9 @@ class GeoPlace(TimeStampedModel):
         if "categories" not in protected and categories:
             existing_ids = set(place.categories.values_list("id", flat=True))
             new_categories = [
-                category for category in categories if category.id not in existing_ids
+                category
+                for category in categories
+                if category.id not in existing_ids  # pyright: ignore[reportAttributeAccessIssue]  # auto PK, plugin-less
             ]
             if new_categories:
                 GeoPlaceCategory.objects.bulk_create(
@@ -1162,6 +1185,11 @@ class GeoPlace(TimeStampedModel):
         # Update name translations
         if "name" not in protected:
             name_dict = schema.get_name_dict()
+            detected_language = detect_main_language(name_dict)
+            if detected_language and place.main_language != detected_language:
+                place.main_language = detected_language
+                update_fields.append("main_language")
+                place_updated = True
             for lang_code, name_value in name_dict.items():
                 if lang_code == settings.LANGUAGE_CODE:
                     if place.name != name_value:
@@ -1245,7 +1273,7 @@ class GeoPlace(TimeStampedModel):
         if schema.detail_type == DetailType.AMENITY and schema.operating_status:
             # Build amenity detail data from flattened schema
             try:
-                amenity_detail = place.amenity_detail
+                amenity_detail = place.amenity_detail  # pyright: ignore[reportAttributeAccessIssue]  # reverse relation, plugin-less
                 is_new = False
             except AmenityDetail.DoesNotExist:
                 amenity_detail = AmenityDetail(geo_place=place)
