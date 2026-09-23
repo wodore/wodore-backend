@@ -147,7 +147,13 @@ class TranslationClient:
             )
         self._http = httpx.Client(
             base_url=self.base_url,
-            headers={"Authorization": f"Bearer {self.api_key}"},
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                # Identify ourselves per the project-wide BOT_AGENT setting
+                # (honest client identification; also distinguishes us from
+                # anonymous SDK traffic on provider-side analytics).
+                "User-Agent": settings.BOT_AGENT,
+            },
             timeout=self.timeout,
             transport=transport,
         )
