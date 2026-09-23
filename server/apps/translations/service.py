@@ -4,8 +4,9 @@ import inspect
 import typing as t
 
 from django.conf import settings
+from django.utils import timezone
 
-from server.apps.translations.llm import TranslationClient
+from server.apps.translations.llm import TranslationClient, TranslationError
 
 
 class _Translator(t.Protocol):
@@ -17,10 +18,15 @@ class _Translator(t.Protocol):
         source_lang: str,
         target_langs: t.Sequence[str],
         context: str = "",
-    ) -> dict[str, dict[str, str]]: ...
+        assess_source: bool = False,
+    ) -> dict[str, t.Any]: ...
+
+    def assess(self, text: str, context: str = "") -> dict[str, t.Any]: ...
 
 
 TranslationResult = dict[str, t.Any]
+
+_LLM_COMMENT_MARK = "[LLM "
 
 
 def translated_field_names(obj: t.Any) -> tuple[str, ...]:
@@ -58,6 +64,97 @@ def _save_instance(obj: t.Any, update_fields: list[str]) -> None:
         # modified (which would protect them from source updates).
         kwargs["track_modifications"] = False
     obj.save(**kwargs)
+
+
+def store_quality(
+    obj: t.Any,
+    score: int,
+    summary: str,
+    review_below: int | None = None,
+) -> list[str]:
+    """Store a description quality assessment on the instance (no save).
+
+    Writes ``description_quality``/``description_quality_at`` and a marked
+    block in ``review_comment`` (replacing only a previous LLM block,
+    never human text). Below the review threshold (default from
+    ``TRANSLATION_QUALITY_REVIEW_THRESHOLD``) a ``done`` hut is moved to
+    ``rework``; huts in other statuses are left untouched.
+
+    Returns the list of touched field names (for ``update_fields``).
+    """
+    if not isinstance(score, int) or isinstance(score, bool) or not 1 <= score <= 10:
+        raise TranslationError(f"Invalid quality score: {score!r}")
+    summary = str(summary or "")[:300]
+
+    obj.description_quality = score
+    obj.description_quality_at = timezone.now()
+    touched = ["description_quality", "description_quality_at"]
+
+    block = f"[LLM {timezone.localdate().isoformat()} · quality {score}/10] {summary}"
+    lines = [
+        line
+        for line in (obj.review_comment or "").splitlines()
+        if not line.startswith(_LLM_COMMENT_MARK)
+    ]
+    lines.append(block)
+    obj.review_comment = "\n".join(lines).strip()[:10000]
+    touched.append("review_comment")
+
+    threshold = (
+        review_below
+        if review_below is not None
+        else settings.TRANSLATION_QUALITY_REVIEW_THRESHOLD
+    )
+    choices = getattr(obj, "ReviewStatusChoices", None)
+    done = getattr(choices, "done", None)
+    rework = getattr(choices, "rework", None)
+    if (
+        done is not None
+        and rework is not None
+        and score < threshold
+        and getattr(obj, "review_status", None) == done
+    ):
+        obj.review_status = rework
+        touched.append("review_status")
+    return touched
+
+
+def assess_instance(
+    obj: t.Any,
+    *,
+    rescore: bool = False,
+    review_below: int | None = None,
+    client: _Translator | None = None,
+) -> TranslationResult:
+    """Assess the main-language description quality of one instance.
+
+    Skips empty descriptions and already-scored instances (unless
+    ``rescore``); makes a single API call; saves via ``update_fields``.
+
+    Returns:
+        ``{"score", "summary", "rework"}`` on success, or
+        ``{"skipped": "empty" | "scored"}``.
+    """
+    if not hasattr(obj, "description_quality"):
+        return {"skipped": "unsupported"}
+    if obj.description_quality is not None and not rescore:
+        return {"skipped": "scored"}
+    source_lang = getattr(obj, "main_language", "") or settings.LANGUAGE_CODE
+    description = localized_value(obj, "description", source_lang)
+    if not description:
+        return {"skipped": "empty"}
+    if client is None:
+        client = TranslationClient()
+    result = client.assess(description, context=f"{obj.__class__.__name__} '{obj}'")
+    touched = store_quality(
+        obj, result["score"], result["summary"], review_below=review_below
+    )
+    _save_instance(obj, touched)
+    return {
+        "score": result["score"],
+        "summary": result["summary"],
+        "rework": "review_status" in touched,
+    }
 
 
 def translate_instance(
@@ -123,7 +220,15 @@ def translate_instance(
         and (lang, field) not in missing
     ]
 
-    result: dict[str, dict[str, str]] = {}
+    result: dict[str, t.Any] = {}
+    quality: dict[str, t.Any] | None = None
+    # Piggyback: score an unscored description in the same API call
+    # (models with a description_quality field, i.e. Hut).
+    assess_source = (
+        hasattr(obj, "description_quality")
+        and obj.description_quality is None
+        and bool(sources.get("description"))
+    )
     if missing and not dry_run:
         if client is None:
             client = TranslationClient()
@@ -134,7 +239,9 @@ def translate_instance(
             source_lang,
             needed_langs,
             context=f"{obj.__class__.__name__} '{obj}'",
+            assess_source=assess_source,
         )
+        quality = result.pop("source_quality", None)
 
     translated: dict[str, list[str]] = {}
     too_long: list[tuple[str, str, int]] = []
@@ -158,6 +265,9 @@ def translate_instance(
                 update_fields.append(field)
         translated.setdefault(lang, []).append(field)
 
+    if quality is not None and not dry_run:
+        update_fields.extend(store_quality(obj, quality["score"], quality["summary"]))
+
     if translated and not dry_run:
         _save_instance(obj, update_fields)
 
@@ -168,4 +278,5 @@ def translate_instance(
         "skipped_no_source": skipped_no_source,
         "too_long": too_long,
         "saved": bool(translated) and not dry_run,
+        "quality": quality,
     }

@@ -326,6 +326,11 @@ TRANSLATION_API_BASE_URL = config("TRANSLATION_API_BASE_URL", "")
 TRANSLATION_API_KEY = config("TRANSLATION_API_KEY", "")
 TRANSLATION_MODEL = config("TRANSLATION_MODEL", "")
 TRANSLATION_API_TIMEOUT = config("TRANSLATION_API_TIMEOUT", 120, cast=int)
+# Hut descriptions scored below this LLM quality (1-10) move `done` huts
+# back to `rework` (see `app assess_descriptions`).
+TRANSLATION_QUALITY_REVIEW_THRESHOLD = config(
+    "TRANSLATION_QUALITY_REVIEW_THRESHOLD", 5, cast=int
+)
 
 # Use all countries from django-countries package
 # This ensures the GeoPlace.country_code constraint accepts all valid ISO 3166-1 alpha-2 codes

@@ -9,6 +9,8 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import override_settings
 
+from server.apps.huts.models import Hut
+
 pytestmark = pytest.mark.django_db
 
 COMMAND_MODULE = "server.apps.translations.management.commands.update_translations"
@@ -99,3 +101,122 @@ def test_command_limit_processes_subset(monkeypatch):
     call_command("update_translations", "--model", "hut", "--all", "--limit", 2)
 
     assert len(fake.calls) == 2
+
+
+# --- assess_descriptions command ---
+
+ASSESS_MODULE = "server.apps.huts.management.commands.assess_descriptions"
+
+
+def patch_assess_client(monkeypatch, fake):
+    monkeypatch.setattr(f"{ASSESS_MODULE}.TranslationClient", lambda: fake)
+
+
+def _done_hut(**kwargs):
+    hut = HutFactory(**kwargs)
+    Hut.objects.filter(pk=hut.pk).update(review_status="done")
+    hut.refresh_from_db()
+    return hut
+
+
+def test_assess_command_moves_done_hut_to_rework(monkeypatch, capsys):
+    hut = _done_hut(name="Redaktionshütte", description="Kurzer Text.")
+    fake = FakeTranslationClient(assess_result={"score": 4, "summary": "Too thin."})
+    patch_assess_client(monkeypatch, fake)
+
+    call_command("assess_descriptions", "--hut", hut.slug)
+
+    hut.refresh_from_db()
+    assert hut.description_quality == 4
+    assert hut.review_status == "rework"
+    assert "[LLM" in hut.review_comment
+    output = capsys.readouterr().out
+    assert "4/10" in output
+    assert "rework" in output
+
+
+def test_assess_command_keeps_queued_huts(monkeypatch):
+    hut = HutFactory(name="Wartehütte", description="Text.")  # default: review
+    fake = FakeTranslationClient(assess_result={"score": 3, "summary": "Bad."})
+    patch_assess_client(monkeypatch, fake)
+
+    call_command("assess_descriptions", "--hut", hut.slug)
+
+    hut.refresh_from_db()
+    assert hut.description_quality == 3
+    assert hut.review_status == "review"  # untouched
+
+
+def test_assess_command_defaults_to_unscored(monkeypatch):
+    scored = _done_hut(name="Fertig3", description="Text.")
+    Hut.objects.filter(pk=scored.pk).update(description_quality=8)
+    fresh = _done_hut(name="Neu3", description="Anderer Text.")
+    fake = FakeTranslationClient()
+    patch_assess_client(monkeypatch, fake)
+
+    call_command("assess_descriptions", "--all")
+
+    assert len(fake.calls) == 1
+    fresh.refresh_from_db()
+    assert fresh.description_quality == 7
+
+
+def test_assess_command_rescore(monkeypatch):
+    hut = _done_hut(name="Rescorehütte", description="Text.")
+    Hut.objects.filter(pk=hut.pk).update(description_quality=3)
+    fake = FakeTranslationClient()
+    patch_assess_client(monkeypatch, fake)
+
+    call_command("assess_descriptions", "--hut", hut.slug, "--rescore")
+
+    hut.refresh_from_db()
+    assert hut.description_quality == 7
+
+
+def test_assess_command_review_below_override(monkeypatch):
+    hut = _done_hut(name="Grenzfallhütte", description="Text.")
+    fake = FakeTranslationClient(assess_result={"score": 7, "summary": "Gut."})
+    patch_assess_client(monkeypatch, fake)
+
+    call_command("assess_descriptions", "--hut", hut.slug, "--review-below", "8")
+
+    hut.refresh_from_db()
+    assert hut.review_status == "rework"
+
+
+def test_assess_command_limit(monkeypatch):
+    # Explicit slugs (not --all): the session seed data adds huts to the
+    # test DB, and --all processes them first.
+    hut_a = HutFactory(name="Limithütte A", description="Text.")
+    hut_b = HutFactory(name="Limithütte B", description="Text.")
+    hut_c = HutFactory(name="Limithütte C", description="Text.")
+    fake = FakeTranslationClient()
+    patch_assess_client(monkeypatch, fake)
+
+    call_command(
+        "assess_descriptions",
+        "--hut",
+        hut_a.slug,
+        "--hut",
+        hut_b.slug,
+        "--hut",
+        hut_c.slug,
+        "--limit",
+        "2",
+    )
+
+    assert len(fake.calls) == 2
+
+
+def test_assess_command_errors():
+    with pytest.raises(CommandError, match="Nothing to do"):
+        call_command("assess_descriptions")
+    with pytest.raises(CommandError, match="not found"):
+        call_command("assess_descriptions", "--hut", "does-not-exist")
+
+
+def test_assess_command_unconfigured():
+    hut = HutFactory(name="Ohnekonfighütte", description="Text.")
+    with override_settings(**EMPTY_API_SETTINGS):
+        with pytest.raises(CommandError, match="Translation API"):
+            call_command("assess_descriptions", "--hut", hut.slug)
