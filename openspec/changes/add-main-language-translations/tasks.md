@@ -32,6 +32,6 @@
 
 ## 6. Rollout
 
-- [ ] 6.1 Add the four `TRANSLATION_*` variables to Infisical (dev first; e.g. z.ai general API `https://api.z.ai/api/paas/v4` + GLM model)
+- [ ] 6.1 Add the four `TRANSLATION_*` variables to Infisical (dev first: z.ai general API `https://api.z.ai/api/paas/v4`, model `glm-5.3-flash`)
 - [ ] 6.2 First bulk run: `app update_translations --model hut --all --limit 5`, spot-check, then widen; geoplaces afterwards
 - [ ] 6.3 Archive this change once the admin action (§5) has shipped and been verified

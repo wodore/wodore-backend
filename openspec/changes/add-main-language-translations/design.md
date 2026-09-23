@@ -79,6 +79,15 @@ terms restrict usage to supported coding tools; scripted/SDK usage may
 be throttled. Only the pay-as-you-go general API
 (`https://api.z.ai/api/paas/v4`) is permitted.
 
+**Model recommendation:** `glm-5.3-flash` (z.ai general API,
+$0.15 input / $0.50 output per 1M tokens as of 2026-09) — strong
+de/en/fr/it quality, JSON-mode capable, cheap enough that the whole
+hut corpus costs well under $1. Escalation path: `glm-5.3`
+($1.4/$4.4 per 1M) for spot re-translations of flagship records.
+Because the client is provider-agnostic, OpenAI (`gpt-4.1-nano` /
+`gpt-4.1-mini`), Gemini Flash or DeepSeek are drop-in alternatives
+via env vars if benchmarking favours them.
+
 ### D4: one API call per record; empty-only semantics
 
 `translate_instance()` batches all missing (field, language) pairs of
