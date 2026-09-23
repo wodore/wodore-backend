@@ -34,6 +34,7 @@ def test_translate_parses_response_and_builds_request():
     def handler(request: httpx.Request) -> httpx.Response:
         seen["url"] = str(request.url)
         seen["auth"] = request.headers.get("authorization")
+        seen["ua"] = request.headers.get("user-agent")
         seen["body"] = json.loads(request.content)
         return ok_response(VALID_JSON)
 
@@ -43,6 +44,10 @@ def test_translate_parses_response_and_builds_request():
     assert result == {"fr": {"name": "Cabane"}, "it": {"name": "Rifugio"}}
     assert seen["url"] == "https://llm.example/v1/chat/completions"
     assert seen["auth"] == "Bearer test-key"
+    # Client identifies itself via the project-wide BOT_AGENT setting.
+    from django.conf import settings as dj_settings
+
+    assert seen["ua"] == dj_settings.BOT_AGENT
     body = seen["body"]
     assert body["model"] == "test-model"
     assert body["response_format"] == {"type": "json_object"}
