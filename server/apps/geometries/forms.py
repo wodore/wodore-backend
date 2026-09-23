@@ -19,6 +19,7 @@ GeoPlaceAdminFieldsets = [
         {
             "classes": ["tab"],
             "fields": [
+                "main_language",
                 tuple([f"name_{code}" for code in settings.LANGUAGE_CODES]),
             ],
         },
