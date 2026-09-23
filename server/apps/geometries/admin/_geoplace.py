@@ -21,6 +21,10 @@ from unfold.decorators import display
 
 from server.apps.manager.admin import ModelAdmin
 from server.apps.manager.widgets import UnfoldReadonlyJSONSuit
+from server.apps.translations.admin_helpers import (
+    DescriptionQualityFilter,
+    LLMAdminMixin,
+)
 from server.apps.translations.forms import required_i18n_fields_form_factory
 
 from ..forms import GeoPlaceAdminFieldsets
@@ -97,7 +101,7 @@ class GeoPlaceSourceAssociationInline(unfold_admin.TabularInline):
     def has_add_permission(self, request, obj):
         return False
 
-    def has_delete_permission(self, request, obj):
+    def has_delete_permission(self, request, obj):  # pyright: ignore[reportIncompatibleMethodOverride]  # inline-admin default-param drift, plugin-less
         return False
 
     @display(description=_("Extra Data"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
@@ -136,7 +140,7 @@ class GeoPlaceExternalLinkInline(unfold_admin.TabularInline):
     def has_add_permission(self, request, obj):
         return True
 
-    def has_delete_permission(self, request, obj):
+    def has_delete_permission(self, request, obj):  # pyright: ignore[reportIncompatibleMethodOverride]  # inline-admin default-param drift, plugin-less
         return True
 
 
@@ -178,7 +182,7 @@ class GeoPlaceCategoryInline(unfold_admin.TabularInline):
     def has_add_permission(self, request, obj):
         return True
 
-    def has_delete_permission(self, request, obj):
+    def has_delete_permission(self, request, obj):  # pyright: ignore[reportIncompatibleMethodOverride]  # inline-admin default-param drift, plugin-less
         return True
 
 
@@ -186,7 +190,7 @@ class GeoPlaceCategoryInline(unfold_admin.TabularInline):
 
 
 @admin.register(GeoPlace)
-class GeoPlaceAdmin(ModelAdmin):
+class GeoPlaceAdmin(LLMAdminMixin, ModelAdmin):
     """
     Admin interface for GeoPlace model.
 
@@ -207,6 +211,7 @@ class GeoPlaceAdmin(ModelAdmin):
         "sources_display",
         "importance_display",
         "review_tag",
+        "description_quality_display",
         "is_public",
         "is_active",
         "timestamps_display",
@@ -222,6 +227,7 @@ class GeoPlaceAdmin(ModelAdmin):
             "review_status",
             ChoicesCheckboxFilter,
         ),  # Filter by review status with checkboxes
+        DescriptionQualityFilter,
         "is_public",
         "is_active",
         (
@@ -373,7 +379,7 @@ class GeoPlaceAdmin(ModelAdmin):
     def sources_display(self, obj: GeoPlace) -> str:
         """Display source organizations as icons."""
 
-        sources = obj.source_associations.select_related("organization").all()
+        sources = obj.source_associations.select_related("organization").all()  # pyright: ignore[reportAttributeAccessIssue]  # reverse relation, plugin-less
         if not sources:
             return "-"
 
@@ -435,7 +441,7 @@ class GeoPlaceAdmin(ModelAdmin):
         label={
             "new": "warning",
             "review": "info",
-            "work": "danger",
+            "rework": "danger",
             "done": "success",
         },
     )

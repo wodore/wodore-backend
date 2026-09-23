@@ -89,6 +89,13 @@ class DetailType(models.TextChoices):
     NONE = "none", _("None")
 
 
+class _ReviewStatusChoices(models.TextChoices):
+    new = "new", _("New")
+    review = "review", _("Review Needed")
+    rework = "rework", _("needs rework")
+    done = "done", _("Reviewed")
+
+
 class GeoPlace(TimeStampedModel):
     """
     Canonical, curated geographic place.
@@ -177,16 +184,26 @@ class GeoPlace(TimeStampedModel):
     )
     description_i18n: str
 
+    # LLM quality score (1-10) of the main-language description;
+    # NULL = never assessed (see `app assess_descriptions`).
+    description_quality = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        verbose_name=_("Description quality"),
+        help_text=_("LLM quality score (1-10); empty = not assessed yet."),
+    )
+    description_quality_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_("Description quality assessed at"),
+    )
+
     # Review workflow
+    ReviewStatusChoices = _ReviewStatusChoices
     review_status = models.CharField(
         max_length=20,
-        choices=[
-            ("new", _("New")),
-            ("review", _("Review Needed")),
-            ("work", _("In Review")),
-            ("done", _("Reviewed")),
-        ],
-        default="new",
+        choices=ReviewStatusChoices.choices,
+        default=ReviewStatusChoices.new,
         db_index=True,
         verbose_name=_("Review Status"),
         help_text=_("Editorial state - places shown only when 'new' or 'done'"),
@@ -317,7 +334,15 @@ class GeoPlace(TimeStampedModel):
             ),
             models.CheckConstraint(
                 name="%(app_label)s_%(class)s_review_status_valid",
-                condition=models.Q(review_status__in=["new", "review", "work", "done"]),
+                condition=models.Q(review_status__in=_ReviewStatusChoices.values),
+            ),
+            models.CheckConstraint(
+                name="%(app_label)s_%(class)s_description_quality_valid",
+                condition=models.Q(description_quality__isnull=True)
+                | (
+                    models.Q(description_quality__gte=1)
+                    & models.Q(description_quality__lte=10)
+                ),
             ),
         )
 

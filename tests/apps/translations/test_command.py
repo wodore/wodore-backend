@@ -105,7 +105,7 @@ def test_command_limit_processes_subset(monkeypatch):
 
 # --- assess_descriptions command ---
 
-ASSESS_MODULE = "server.apps.huts.management.commands.assess_descriptions"
+ASSESS_MODULE = "server.apps.translations.management.commands.assess_descriptions"
 
 
 def patch_assess_client(monkeypatch, fake):
@@ -154,7 +154,7 @@ def test_assess_command_defaults_to_unscored(monkeypatch):
     fake = FakeTranslationClient()
     patch_assess_client(monkeypatch, fake)
 
-    call_command("assess_descriptions", "--all")
+    call_command("assess_descriptions", "--model", "hut", "--all")
 
     assert len(fake.calls) == 1
     fresh.refresh_from_db()
@@ -220,3 +220,33 @@ def test_assess_command_unconfigured():
     with override_settings(**EMPTY_API_SETTINGS):
         with pytest.raises(CommandError, match="Translation API"):
             call_command("assess_descriptions", "--hut", hut.slug)
+
+
+def test_assess_command_geoplace_selector(monkeypatch, capsys):
+    from tests.factories.geometries import GeoPlaceFactory
+
+    from server.apps.geometries.models import GeoPlace
+
+    place = GeoPlaceFactory(name="Bewertungsort", description="Ein Ort.")
+    GeoPlace.objects.filter(pk=place.pk).update(review_status="done")
+    fake = FakeTranslationClient(assess_result={"score": 4, "summary": "Too thin."})
+    patch_assess_client(monkeypatch, fake)
+
+    call_command("assess_descriptions", "--geoplace", place.slug)
+
+    place.refresh_from_db()
+    assert place.description_quality == 4
+    assert place.review_status == "rework"
+    output = capsys.readouterr().out
+    assert "4/10" in output
+    assert "rework" in output
+
+
+def test_assess_command_all_requires_model():
+    with pytest.raises(CommandError, match="--all requires --model"):
+        call_command("assess_descriptions", "--all")
+
+
+def test_assess_command_unknown_geoplace():
+    with pytest.raises(CommandError, match="not found"):
+        call_command("assess_descriptions", "--geoplace", "does-not-exist")
