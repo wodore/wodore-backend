@@ -22,6 +22,7 @@ import httpx
 import osmium
 from django_admin_runner import register_command
 
+from django.conf import settings
 from django.contrib.gis.geos import Point
 from django.core.management.base import BaseCommand, CommandParser
 from django.db import transaction
@@ -1745,7 +1746,6 @@ class Command(BaseCommand):
             The Django default language (LANGUAGE_CODE='de') is used for the base field
             Example: {'de': 'Zermatt', 'fr': 'Cervin', 'it': 'Cervino', 'en': 'Matterhorn'}
         """
-        from django.conf import settings
 
         result = {}
 
@@ -2084,7 +2084,7 @@ class Command(BaseCommand):
             api_endpoint = overpass_server
             server_name = overpass_server.split("/")[2]
 
-        headers = {"User-Agent": "Wodore/1.0 (https://wodore.com) Python/httpx"}
+        headers = {"User-Agent": settings.BOT_AGENT}
 
         # Get categories and build mapping list
         categories = get_categories(category_names)
@@ -2355,7 +2355,7 @@ class Command(BaseCommand):
             api_endpoint = overpass_endpoints[0]
             server_name = api_endpoint.split("/")[2]
 
-        headers = {"User-Agent": "Wodore/1.0 (https://wodore.com) Python/httpx"}
+        headers = {"User-Agent": settings.BOT_AGENT}
 
         # Initialize counters
         self._pipeline_created = 0
@@ -3228,7 +3228,7 @@ class Command(BaseCommand):
         api_endpoint = overpass_endpoints[0]
         self.stdout.write(f"Using Overpass endpoint: {api_endpoint}")
 
-        headers = {"User-Agent": "Wodore/1.0 (https://wodore.com) Python/httpx"}
+        headers = {"User-Agent": settings.BOT_AGENT}
 
         amenities = []
 

@@ -15,6 +15,7 @@ from model_utils.fields import (
 )
 from modeltrans.fields import TranslationField
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.postgres.indexes import GinIndex
 from django.core.files.base import ContentFile
@@ -280,7 +281,7 @@ class Image(TimeStampedModel):
             logging.info("Image already exists, skipping...")
             return cls.objects.get(source_ident=source_ident)
 
-        headers = {"User-Agent": "Wodore Backend Bot/1.0 (https://www.wodore.com)"}
+        headers = {"User-Agent": settings.BOT_AGENT}
         # Download the image from the raw_url
         try:
             response = requests.get(photo_schema.raw_url, headers=headers, timeout=10)
