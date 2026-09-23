@@ -75,4 +75,4 @@ code-consistent `operating/`/`link_types/`).
 - **Admin**: `external_links/admin.py` (link_type → relation), `geometries/admin/_geoplace.py`.
 - **Migrations**: ~6, in strict order (renames → new models → fixtures → data
   migrations → field/model removals).
-- **~17 files affected** overall; API consumers see renamed fields (BREAKING).
+- **~17 files affected** overall; API consumers see renamed fields (BREAKING — hard cut, no transitional serialization; the project is in beta).

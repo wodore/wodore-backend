@@ -11,6 +11,10 @@ The system SHALL rename `GeoPlaceCategory.classifier` to `relation` and `Externa
 - **WHEN** the rename migrations run
 - **THEN** all existing classifier/link_type values remain intact on the renamed columns
 
+#### Scenario: Hard cut in API responses
+- **WHEN** API payloads expose the association or link type after this change
+- **THEN** the field is named `relation` only — no legacy `classifier`/`link_type` fields are serialized alongside it
+
 ### Requirement: Relation and service category trees
 The system SHALL provide Category fixture trees: `relations/` (part_of, near, serves, access_point), `operating/` (standard, reduced), `link_types/` (website, booking, social, phone) and `brand/`, loadable idempotently via a `relation_categories` fixture.
 

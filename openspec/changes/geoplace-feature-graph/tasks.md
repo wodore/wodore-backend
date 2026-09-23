@@ -34,5 +34,5 @@
 
 - [ ] 5.1 Tests: models (constraints, MonthAccessor round-trip/errors), helpers (add_relation idempotency, direction lookup), fixtures idempotency, month-percentage query, auto-relation regeneration (re-import replaces auto edges, preserves curated); run `inv tests`
 - [ ] 5.2 Verification shell checks from the implementation plan (relation/operation counts, Month values, accessor) + OSM import smoke on a sample region
-- [ ] 5.3 Update `_work` log for this change; document API BREAKING renames (classifier/link_type, AmenityDetail schema) for frontend coordination
+- [ ] 5.3 Update `_work` log for this change; communicate the hard-cut API renames (classifier/link_type, AmenityDetail schema) to the frontend for lock-step update (no dual-field period; beta)
 - [ ] 5.4 Open PR (this branch), reference this change, note migration-order requirements for deployment
