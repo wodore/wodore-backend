@@ -4,23 +4,36 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('categories', '0016_add_huttype_availability_fr_it'),
-        ('external_links', '0009_add_template_fields'),
-        ('geometries', '0041_optimize_tile_performance'),
-        ('images', '0024_image_upd_mod_8c4acfcb_imagetag_upd_mod_43df27cd'),
-        ('organizations', '0020_organization_upd_mod_406b4872'),
+        ("categories", "0016_add_huttype_availability_fr_it"),
+        ("external_links", "0009_add_template_fields"),
+        ("geometries", "0041_optimize_tile_performance"),
+        ("images", "0024_image_upd_mod_8c4acfcb_imagetag_upd_mod_43df27cd"),
+        ("organizations", "0020_organization_upd_mod_406b4872"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='geoplace',
-            name='main_language',
-            field=models.CharField(choices=[('de', 'German'), ('en', 'English'), ('fr', 'French'), ('it', 'Italian')], default='de', help_text='Language of the original texts; other languages are translated from it.', max_length=10, verbose_name='Main language'),
+            model_name="geoplace",
+            name="main_language",
+            field=models.CharField(
+                choices=[
+                    ("de", "German"),
+                    ("en", "English"),
+                    ("fr", "French"),
+                    ("it", "Italian"),
+                ],
+                default="de",
+                help_text="Language of the original texts; other languages are translated from it.",
+                max_length=10,
+                verbose_name="Main language",
+            ),
         ),
         migrations.AddConstraint(
-            model_name='geoplace',
-            constraint=models.CheckConstraint(condition=models.Q(('main_language__in', ['de', 'en', 'fr', 'it'])), name='geometries_geoplace_main_language_valid'),
+            model_name="geoplace",
+            constraint=models.CheckConstraint(
+                condition=models.Q(("main_language__in", ["de", "en", "fr", "it"])),
+                name="geometries_geoplace_main_language_valid",
+            ),
         ),
     ]
