@@ -141,6 +141,13 @@ shower) never carry capacity — seats or similar, if ever needed, live in
 `extra`. So `unique(geo_place, relation)` holds: one operational profile
 (capacity, months, hours) per place per mode.
 
+### D11: Hard-cut API compatibility (RESOLVED)
+
+The `classifier`/`link_type` renames and the AmenityDetail →
+GeoPlaceOperation schema change ship as a **hard cut**: renamed fields only,
+no transitional dual-field serialization, no old schema shapes. The project
+is in beta — API consumers (frontend) update in lock-step with this change.
+
 ### D9: Fixtures reconcile with existing DB categories
 
 The categories app has no fixtures today, but relation/link-type parents may
@@ -151,8 +158,8 @@ idempotent against both fresh and pre-populated databases.
 ## Risks / Trade-offs
 
 - [BREAKING API field renames (`classifier`, `link_type`) and removed
-  AmenityDetail schema] → coordinate with frontend consumers; the change rides
-  a major-version API boundary.
+  AmenityDetail schema] → hard cut (D11): beta status, frontend updates in
+  lock-step; no dual-field period.
 - [OSM import is heavily coupled to AmenityDetail] → import updated in the same
   change (AmenityDetailInput → GeoPlaceOperationInput, Month enum usage);
   verified by the import test suite.
@@ -170,10 +177,6 @@ migrations are forward-only (source data deleted afterwards by design).
 
 ## Open Questions
 
-- **API compatibility policy (decision needed)** — the `classifier`/`link_type`
-  renames and the AmenityDetail→Operation schema are BREAKING for API
-  consumers (frontend). Options: hard cut on the next API version, or a
-  transitional dual-field serialization. Needs frontend coordination.
 - Should `relation/located_in` be distinguished from `part_of`? Deferred —
   add when a concrete requirement appears (per implementation plan Phase 1+).
 - Emergency operating mode (`operating/emergency`): listed as future
