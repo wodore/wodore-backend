@@ -9,7 +9,7 @@
 
 - [ ] 2.1 `geometries/models/_operation.py`: `Month` IntEnum (1-based) + `MonthAccessor` (TypeError on non-Month key, ValueError outside 0–100, `to_dict()`)
 - [ ] 2.2 `GeoPlaceOperation` model in `_operation.py`: nullable capacity, month_01–12 (0–100 validated), hours string, extra JSONB, unique (geo_place, relation), indexes on (geo_place, relation), month_07, month_12; makemigrations `create_geoplaceoperation`
-- [ ] 2.3 `GeoPlaceRelation` model in `_associations.py`: from/to FKs (outgoing/incoming_relations), relation FK limited to `relations/` children, confidence, extra, is_active; unique triple + no-self-loop constraints; composite indexes; makemigrations `create_geoplacerelation` (NOTE: write after the multi-capacity decision in design.md Open Questions, in case the operation unique constraint changes)
+- [ ] 2.3 `GeoPlaceRelation` model in `_associations.py`: from/to FKs (outgoing/incoming_relations), relation FK limited to `relations/` children, confidence, extra, is_active; unique triple + no-self-loop constraints; composite indexes;
 - [ ] 2.4 Update `geometries/models/__init__.py` exports (GeoPlaceRelation, GeoPlaceOperation, Month); remove AmenityDetail imports
 - [ ] 2.5 GeoPlace helpers: `add_relation` (update_or_create, idempotent) and `get_related_places(relation_slug, direction)` in `_geoplace.py`
 

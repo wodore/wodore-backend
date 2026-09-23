@@ -11,6 +11,10 @@ The system SHALL provide a `GeoPlaceOperation` model linking a GeoPlace to an `o
 - **WHEN** two operations with the same `(geo_place, relation)` are created
 - **THEN** the second insert is rejected
 
+#### Scenario: Mixed-type place has one capacity per mode
+- **WHEN** a place is categorized both `alpine_hut` and `restaurant` under the `standard` operating relation
+- **THEN** it has exactly one standard-mode operation whose capacity is the accommodation capacity (beds); restaurant seating, if recorded, lives in `extra`
+
 ### Requirement: Month availability as validated integers
 Month availability SHALL be stored as twelve `month_01`…`month_12` integer columns with values 0–100 (opening percentage; NULL = unknown), each DB-validated to at most 100, with indexes on `month_07` and `month_12` for seasonal queries.
 

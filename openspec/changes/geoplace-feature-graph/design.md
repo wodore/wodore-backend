@@ -123,6 +123,24 @@ to keep edge volume proportional to query needs. Without this, re-imports
 would either duplicate (blocked by the unique triple) or strand stale edges
 when geometries change.
 
+### D10: Capacity is the accommodation function, one per operating mode
+(RESOLVED — the original `unique(geo_place, relation)` constraint is kept)
+
+Code evidence: multiple categories per place are the existing, working design
+(`GeoPlaceCategory` is unique on `(place, category)`; the OSM import attaches
+a *list* of category slugs per element; the category tree separates
+accommodation types under `HUTS_CATEGORY_PARENT` from root-level categories
+like `restaurant`). A hut-with-restaurant genuinely is both — "either/or"
+would discard real OSM data.
+
+The capacity ambiguity dissolves at the domain level: capacity means *beds of
+the accommodation function*, and per operating mode a place has exactly one
+accommodation type (the `hut_type_open` / `hut_type_closed` dichotomy becomes
+`standard` / `reduced`). Non-accommodation categories (restaurant, toilet,
+shower) never carry capacity — seats or similar, if ever needed, live in
+`extra`. So `unique(geo_place, relation)` holds: one operational profile
+(capacity, months, hours) per place per mode.
+
 ### D9: Fixtures reconcile with existing DB categories
 
 The categories app has no fixtures today, but relation/link-type parents may
@@ -152,17 +170,6 @@ migrations are forward-only (source data deleted afterwards by design).
 
 ## Open Questions
 
-- **Multi-capacity modeling (decision needed before implementation)** —
-  `unique(geo_place, relation)` allows exactly one capacity per operating
-  mode. A place that is both a hut (170 beds) and a restaurant (40 seats)
-  under `standard` cannot express both. Options:
-  (a) move capacity to the `GeoPlaceCategory` triple `(place, category,
-  relation)` — most precise, more rows and joins;
-  (b) keep the constraint, put secondary capacities into `extra` JSON —
-  simple but unqueryable;
-  (c) relax uniqueness to `(geo_place, relation, category)` on the operation
-  model — middle ground, one operation per category-type per mode.
-  Recommendation: (c), decided before the model migration is written.
 - **API compatibility policy (decision needed)** — the `classifier`/`link_type`
   renames and the AmenityDetail→Operation schema are BREAKING for API
   consumers (frontend). Options: hard cut on the next API version, or a
