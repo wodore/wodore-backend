@@ -5,6 +5,7 @@ Generates ETags based on the last modified timestamp across all relevant tables.
 """
 
 import hashlib
+import json
 from typing import Any
 
 from django.conf import settings
@@ -13,10 +14,37 @@ from django.http import HttpRequest, HttpResponse
 from django.utils.http import http_date, parse_http_date_safe
 
 from server.apps.availability.models import AvailabilityStatus
+from server.apps.categories.models import Category
 from server.apps.huts.models import Hut
 from server.apps.images.models import Image
 from server.apps.organizations.models import Organization
 from server.apps.owners.models import Owner
+
+
+def get_categories_content_hash(
+    parent_slugs: tuple[str, ...] = ("accommodation", "availability"),
+) -> str:
+    """
+    Stable hash over the i18n content of the categories that are embedded
+    in hut responses (hut types, availability statuses).
+
+    Category rows have no modification timestamp, so the hut endpoint ETags
+    cannot track them via ``Max("modified")``. Hashing the content makes
+    the ETag invalidate when category translations change (e.g. via data
+    migrations) — otherwise browsers keep serving stale cached responses
+    after a 304 revalidation.
+    """
+    digest = hashlib.md5()
+    rows = (
+        Category.objects.filter(parent__slug__in=parent_slugs)
+        .values_list("id", "name", "i18n")
+        .order_by("id")
+    )
+    for row_id, name, i18n in rows:
+        digest.update(
+            f"{row_id}:{name}:{json.dumps(i18n, sort_keys=True, default=str)};".encode()
+        )
+    return digest.hexdigest()
 
 
 def get_last_modified_timestamp(
@@ -87,6 +115,7 @@ def generate_etag(
     include_owners: bool = False,
     include_images: bool = False,
     include_availability: bool = False,
+    include_categories: bool = False,
     hut_queryset: QuerySet[Hut] | None = None,
     additional_keys: list[str] | None = None,
 ) -> str:
@@ -95,6 +124,9 @@ def generate_etag(
 
     Args:
         include_*: Which tables to check for modifications
+        include_categories: Include a content hash of the categories embedded
+            in hut responses (hut types / availability statuses) — they have
+            no modification timestamp, so their content is hashed instead
         hut_queryset: Optional filtered hut queryset
         additional_keys: Additional strings to include in hash (e.g., query parameters)
 
@@ -115,6 +147,9 @@ def generate_etag(
 
     # Include git hash for cache invalidation on code changes
     hash_parts.append(settings.GIT_HASH)
+
+    if include_categories:
+        hash_parts.append(f"categories:{get_categories_content_hash()}")
 
     if additional_keys:
         hash_parts.extend(additional_keys)

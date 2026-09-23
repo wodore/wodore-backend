@@ -283,6 +283,7 @@ def get_huts(  # type: ignore
 
     etag = generate_etag(
         include_huts=True,
+        include_categories=True,  # hut types/availability statuses are embedded
         include_organizations=True,  # sources are always included
         include_owners=True,  # owner is always included
         include_images=True,  # images are always included
@@ -476,6 +477,7 @@ def get_huts_geojson(  # type: ignore
 
     etag = generate_etag(
         include_huts=True,
+        include_categories=True,  # hut types/availability statuses are embedded
         include_organizations=include_organizations_in_etag,
         include_owners=include_owners_in_etag,
         include_images=False,  # Images not included in geojson
@@ -652,6 +654,7 @@ def get_hut(
 
     etag = generate_etag(
         include_huts=True,
+        include_categories=True,  # hut types/availability statuses are embedded
         include_organizations=True,  # sources are always included
         include_owners=True,  # owner is always included
         include_images=True,  # images are always included
