@@ -50,6 +50,35 @@ except ImportError:
 
 
 ## ADMIN
+class DescriptionQualityFilter(admin.SimpleListFilter):
+    """Range filter for the LLM description quality score."""
+
+    title = _("description quality")  # pyright: ignore[reportAssignmentMismatch]  # SimpleListFilter API
+    parameter_name = "description_quality_range"
+
+    def lookups(self, request, model_admin):
+        return (
+            ("low", _("low (1-3)")),
+            ("mid", _("adequate (4-6)")),
+            ("good", _("good (7-10)")),
+            ("none", _("unscored")),
+        )
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if value == "low":
+            return queryset.filter(description_quality__lte=3)
+        if value == "mid":
+            return queryset.filter(
+                description_quality__gte=4, description_quality__lte=6
+            )
+        if value == "good":
+            return queryset.filter(description_quality__gte=7)
+        if value == "none":
+            return queryset.filter(description_quality__isnull=True)
+        return queryset
+
+
 @admin.register(Hut)
 class HutsAdmin(ModelAdmin):
     search_fields = ("name",)
@@ -70,6 +99,7 @@ class HutsAdmin(ModelAdmin):
         "is_modified",
         "is_active",
         "review_tag",
+        "description_quality_display",
         "view_link",
     )
     list_display_links = ("symbol_img", "hut_thumb", "title")
@@ -81,6 +111,7 @@ class HutsAdmin(ModelAdmin):
             "review_status",
             ChoicesCheckboxFilter,
         ),  # Filter by review status with checkboxes
+        DescriptionQualityFilter,
         (
             "hut_type_open",
             AutocompleteSelectMultipleFilter,
@@ -164,11 +195,28 @@ class HutsAdmin(ModelAdmin):
             Hut.ReviewStatusChoices.review: "info",
             Hut.ReviewStatusChoices.done: "success",
             Hut.ReviewStatusChoices.new: "warning",  # green
-            Hut.ReviewStatusChoices.work: "danger",
+            Hut.ReviewStatusChoices.rework: "danger",
         },
     )
     def review_tag(self, obj):
         return obj.review_status
+
+    @display(
+        description=_("Quality"),  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+        ordering="description_quality",
+        label={
+            str(score): "danger"
+            if score <= 3
+            else "warning"
+            if score <= 6
+            else "success"
+            for score in range(1, 11)
+        },
+    )
+    def description_quality_display(self, obj):
+        if obj.description_quality is None:
+            return "–"
+        return str(obj.description_quality)
 
     @display(header=True, ordering=Lower("name"))
     def title(self, obj):
