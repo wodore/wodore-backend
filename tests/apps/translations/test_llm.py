@@ -131,3 +131,75 @@ def test_client_requires_configuration():
     ):
         with pytest.raises(ImproperlyConfigured, match="Translation API"):
             TranslationClient()
+
+
+# --- Quality assessment (assess + translation piggyback) ---
+
+
+def test_assess_parses_and_validates():
+    content = json.dumps({"score": 4, "summary": "Too thin: no access info."})
+    client = make_client(lambda request: ok_response(content))
+    assert client.assess("Kleines Häuschen") == {
+        "score": 4,
+        "summary": "Too thin: no access info.",
+    }
+
+
+def test_assess_strips_fences_and_truncates_summary():
+    fenced = f'```json\n{{"score": 9, "summary": "{"x" * 500}"}}\n```'
+    client = make_client(lambda request: ok_response(fenced))
+    result = client.assess("Schöne Hütte")
+    assert result["score"] == 9
+    assert len(result["summary"]) == 300
+
+
+def test_assess_uses_zero_temperature_and_rubric():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        return ok_response('{"score": 5, "summary": "ok"}')
+
+    client = make_client(handler)
+    client.assess("Text", context="Hut 'x'")
+    assert seen["body"]["temperature"] == 0.0
+    assert "QUALITY RUBRIC" in seen["body"]["messages"][0]["content"]
+    assert json.loads(seen["body"]["messages"][1]["content"])["context"] == "Hut 'x'"
+
+
+def test_assess_rejects_invalid_output():
+    for bad in ('{"score": 11}', '{"score": "7"}', '{"summary": "no score"}', '["x"]'):
+        client = make_client(lambda request, payload=bad: ok_response(payload))
+        with pytest.raises(TranslationError):
+            client.assess("Text")
+
+
+def test_translate_with_assess_source_extracts_quality():
+    content = json.dumps(
+        {"fr": {"name": "Cabane"}, "source_quality": {"score": 6, "summary": "Basics."}}
+    )
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        return ok_response(content)
+
+    client = make_client(handler)
+    result = client.translate({"name": "Hütte"}, "de", ["fr"], assess_source=True)
+    assert result["fr"] == {"name": "Cabane"}
+    assert result["source_quality"] == {"score": 6, "summary": "Basics."}
+    user_payload = json.loads(seen["body"]["messages"][1]["content"])
+    assert user_payload["assess_source_quality"] is True
+
+
+def test_translate_quality_absent_tolerated():
+    client = make_client(lambda request: ok_response('{"fr": {"name": "Cabane"}}'))
+    result = client.translate({"name": "Hütte"}, "de", ["fr"], assess_source=True)
+    assert result == {"fr": {"name": "Cabane"}}
+
+
+def test_translate_malformed_quality_ignored():
+    content = json.dumps({"fr": {"name": "Cabane"}, "source_quality": {"score": 99}})
+    client = make_client(lambda request: ok_response(content))
+    result = client.translate({"name": "Hütte"}, "de", ["fr"], assess_source=True)
+    assert result == {"fr": {"name": "Cabane"}}

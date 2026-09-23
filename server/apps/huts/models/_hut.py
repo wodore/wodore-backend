@@ -66,7 +66,7 @@ class _ReviewStatusChoices(models.TextChoices):
     new = "new", _("new")
     review = "review", _("review")
     done = "done", _("done")
-    work = "work", _("work")
+    rework = "rework", _("needs rework")
     reject = "reject", _("reject")
 
 
@@ -124,6 +124,19 @@ class Hut(TimeStampedModel):
         help_text=_(
             "Language of the original texts; other languages are translated from it."
         ),
+    )
+    # LLM quality score (1-10) of the main-language description;
+    # NULL = never assessed (see `app assess_descriptions`).
+    description_quality = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        verbose_name=_("Description quality"),
+        help_text=_("LLM quality score (1-10); empty = not assessed yet."),
+    )
+    description_quality_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_("Description quality assessed at"),
     )
 
     slug = models.SlugField(unique=True, verbose_name=_("Slug"), db_index=True)
@@ -305,6 +318,14 @@ class Hut(TimeStampedModel):
             models.CheckConstraint(
                 name="%(app_label)s_%(class)s_main_language_valid",
                 condition=models.Q(main_language__in=settings.LANGUAGE_CODES),
+            ),
+            models.CheckConstraint(
+                name="%(app_label)s_%(class)s_description_quality_valid",
+                condition=models.Q(description_quality__isnull=True)
+                | (
+                    models.Q(description_quality__gte=1)
+                    & models.Q(description_quality__lte=10)
+                ),
             ),
         )
 
@@ -780,7 +801,7 @@ class Hut(TimeStampedModel):
             ]:
                 status = (
                     review_status
-                    if review_status != Hut.ReviewStatusChoices.work
+                    if review_status != Hut.ReviewStatusChoices.rework
                     else None
                 )
                 hut_db.add_review_comment(
