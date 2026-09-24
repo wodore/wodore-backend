@@ -32,7 +32,7 @@ allure-*/
 
 node_modules
 # Byte-compiled / optimized / DLL files
-__pycache__/
+__pycache__
 *.py[cod]
 *$py.class
 
@@ -81,7 +81,7 @@ coverage.xml
 *.cover
 *.py,cover
 .hypothesis/
-.pytest_cache/
+.pytest_cache
 cover/
 
 # Translations
@@ -172,7 +172,7 @@ venv.bak/
 /site
 
 # mypy
-.mypy_cache/
+.mypy_cache
 .dmypy.json
 dmypy.json
 
@@ -192,3 +192,8 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 .volumes/
+
+# workz worktree provisioning artifacts — never commit these (workz#34)
+.env.local
+# ruff cache: directory form and the workz-provisioned symlink
+.ruff_cache
