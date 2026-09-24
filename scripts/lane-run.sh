@@ -34,5 +34,8 @@ if [ -n "$PORT_END" ]; then
 fi
 
 export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-server.settings}"
-exec infisical run --env=dev --path /backend --silent --log-level warn \
+# NOTE: no --silent on the infisical invocation — it swallows the CHILD's
+# stdout too, so interactive commands (createsuperuser) hang with invisible
+# prompts. --log-level warn keeps infisical's own logging quiet.
+exec infisical run --env=dev --path /backend --log-level warn \
     -- env "${EXTRA_ENV[@]}" "$@"

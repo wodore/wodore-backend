@@ -19,6 +19,13 @@ hut_services_private/tmb/NOTES.md`.
   types-beautifulsoup4 & friends (dependency cleanup from the uv migration,
   PR #18). `pyproject.toml` unchanged (already `branch = "main"`).
 
+> **Correction (2026-09-24):** this bump never actually landed in #164 —
+> the lockfile edit was made in the wrong checkout and reverted before
+> commit, and the lane verification passed on the shared venv which
+> happened to hold `8042422`. Fresh syncs from the merged lock installed
+> the pre-TMB `6c37f30` (no `tmb` service). Restored in the worktree-safety
+> PR (see `_work/260924_worktree_safety.md`).
+
 ### `server/apps/organizations/fixtures/organizations.yaml`
 
 - New `tmb` org (pk 15, order 16): url https://www.montourdumontblanc.com,
