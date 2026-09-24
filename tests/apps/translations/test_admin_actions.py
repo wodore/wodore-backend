@@ -189,3 +189,120 @@ def test_changelist_actions_registered_with_change_permission(
         LLMAdminMixin.assess_selected.allowed_permissions  # pyright: ignore[reportAttributeAccessIssue]  # runtime-set by @action
         == ["change"]
     )
+
+
+# --- Feature gating: UI only when the translation API is configured ------
+
+ENABLED_API_SETTINGS = dict(
+    TRANSLATION_API_BASE_URL="https://api.example/v1",
+    TRANSLATION_API_KEY="test-key",
+    TRANSLATION_MODEL="test-model",
+)
+
+
+def _runner_registry():
+    from django_admin_runner import registry
+
+    return registry._registry
+
+
+def test_actions_hidden_when_api_unconfigured(hut_admin, superuser):
+    with override_settings(**EMPTY_API_SETTINGS):
+        actions = hut_admin.get_actions(make_request(user=superuser))
+    assert "translate_selected" not in actions
+    assert "assess_selected" not in actions
+
+
+def test_actions_listed_when_api_configured(hut_admin, superuser):
+    with override_settings(**ENABLED_API_SETTINGS):
+        actions = hut_admin.get_actions(make_request(user=superuser))
+    assert "translate_selected" in actions
+    assert "assess_selected" in actions
+
+
+def test_llm_button_urls_absent_when_unconfigured(hut_admin):
+    with override_settings(**EMPTY_API_SETTINGS):
+        names = [p.name for p in hut_admin.get_urls() if p.name]
+    assert not any("llm" in name for name in names)
+
+
+def test_llm_button_urls_present_when_configured(hut_admin):
+    with override_settings(**ENABLED_API_SETTINGS):
+        names = [p.name for p in hut_admin.get_urls()]
+    assert any("llm_translate" in name for name in names)
+    assert any("llm_assess" in name for name in names)
+
+
+def _captured_change_form_context(monkeypatch, model_admin, obj):
+    """Run render_change_form with the real chain but a stub base render.
+
+    Full-page admin renders require the debug-toolbar context, which the
+    plain test client does not provide — so capture the context instead.
+    """
+    from django.contrib import admin as django_model_admin
+
+    captured: dict = {}
+
+    def fake_render(self, request, context, **kwargs):
+        captured.update(context)
+        return "ok"
+
+    monkeypatch.setattr(
+        django_model_admin.ModelAdmin, "render_change_form", fake_render
+    )
+    model_admin.render_change_form(make_request(), {"original": obj})
+    return captured
+
+
+def test_change_form_buttons_hidden_when_unconfigured(monkeypatch, hut_admin):
+    hut = _hut(name="Gatedhütte A")
+    with override_settings(**EMPTY_API_SETTINGS):
+        context = _captured_change_form_context(monkeypatch, hut_admin, hut)
+    assert "llm_translate_url" not in context
+    assert "llm_assess_url" not in context
+
+
+def test_change_form_buttons_shown_when_configured(monkeypatch, hut_admin):
+    hut = _hut(name="Gatedhütte B")
+    # URL registration is covered by the get_urls() tests above; here we
+    # assert the gating branch sets the context (reverse stubbed — the
+    # root urlconf materializes admin URLs at import, so live reverse
+    # can't react to override_settings).
+    monkeypatch.setattr(f"{ADMIN_HELPERS}.reverse", lambda *a, **k: "/stub")
+    with override_settings(**ENABLED_API_SETTINGS):
+        context = _captured_change_form_context(monkeypatch, hut_admin, hut)
+    assert context.get("llm_translate_url") == "/stub"
+    assert context.get("llm_assess_url") == "/stub"
+
+
+def test_runner_registration_absent_when_unconfigured():
+    # Default import-time state: vars unset -> commands never registered.
+    assert "update_translations" not in _runner_registry()
+    assert "assess_descriptions" not in _runner_registry()
+
+
+def test_runner_registration_present_when_configured():
+    import importlib
+
+    import server.apps.translations.management.commands.update_translations as mod
+
+    try:
+        with override_settings(**ENABLED_API_SETTINGS):
+            importlib.reload(mod)
+        assert "update_translations" in _runner_registry()
+    finally:
+        # No unregister API in the package: restore manually.
+        _runner_registry().pop("update_translations", None)
+
+
+def test_runner_registration_assess_command_when_configured():
+    import importlib
+
+    import server.apps.translations.management.commands.assess_descriptions as mod
+
+    try:
+        with override_settings(**ENABLED_API_SETTINGS):
+            importlib.reload(mod)
+        assert "assess_descriptions" in _runner_registry()
+    finally:
+        _runner_registry().pop("assess_descriptions", None)

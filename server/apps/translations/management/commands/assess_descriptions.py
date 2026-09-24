@@ -29,7 +29,11 @@ from django.db.models import QuerySet
 
 from server.apps.geometries.models import GeoPlace
 from server.apps.huts.models import Hut
-from server.apps.translations.llm import TranslationClient, TranslationError
+from server.apps.translations.llm import (
+    TranslationClient,
+    TranslationError,
+    translations_api_enabled,
+)
 from server.apps.translations.service import assess_instance
 
 _MODEL_CHOICES = {"hut": Hut, "geoplace": GeoPlace}
@@ -38,7 +42,17 @@ _MODEL_CHOICES = {"hut": Hut, "geoplace": GeoPlace}
 _LEVEL_COLORS = {"success": "green", "warning": "yellow", "error": "red"}
 
 
-@register_command(group="Translations", models=[Hut, GeoPlace])
+# Admin-runner registration is import-time (the package registry has no
+# unregister); unconfigured environments register a no-op so the command
+# stays absent from the admin while remaining fully available on the CLI.
+_register = (
+    register_command(group="Translations", models=[Hut, GeoPlace])
+    if translations_api_enabled()
+    else (lambda cls: cls)
+)
+
+
+@_register
 class Command(BaseCommand):
     help = (
         "Assess the quality (1-10) of hut and geoplace descriptions in "
