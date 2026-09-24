@@ -23,6 +23,15 @@ if [ -z "$DB_NAME" ]; then
     exit 1
 fi
 
+# Point the backend at the lane martin (scripts/lane-martin.sh, port PORT+1)
+# when this is an isolated lane. Overridable; without a PORT (not isolated)
+# nothing is injected and the settings default (shared martin :8075) applies.
+PORT_BASE="$(sed -n 's/^PORT=//p' .env.local)"
+EXTRA_ENV=("POSTGRES_DB=$DB_NAME")
+if [ -n "$PORT_BASE" ]; then
+    EXTRA_ENV+=("MARTIN_TILE_URL=${MARTIN_TILE_URL:-http://localhost:$((PORT_BASE + 1))}")
+fi
+
 export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-server.settings}"
 exec infisical run --env=dev --path /backend --silent --log-level warn \
-    -- env POSTGRES_DB="$DB_NAME" "$@"
+    -- env "${EXTRA_ENV[@]}" "$@"
