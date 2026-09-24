@@ -3,6 +3,16 @@
 from django.db import migrations, models
 
 
+def convert_legacy_review_status(apps, schema_editor):
+    """Rename legacy 'work' review status to 'rework'.
+
+    Must run after the old check constraint is removed and before the new
+    one (which no longer allows 'work') is added.
+    """
+    Hut = apps.get_model("huts", "Hut")
+    Hut.objects.filter(review_status="work").update(review_status="rework")
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ("categories", "0016_add_huttype_availability_fr_it"),
@@ -50,6 +60,10 @@ class Migration(migrations.Migration):
                 max_length=12,
                 verbose_name="Review status",
             ),
+        ),
+        migrations.RunPython(
+            convert_legacy_review_status,
+            migrations.RunPython.noop,
         ),
         migrations.AddConstraint(
             model_name="hut",
