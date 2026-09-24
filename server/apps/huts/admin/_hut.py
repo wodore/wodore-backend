@@ -7,6 +7,8 @@ with contextlib.suppress(ModuleNotFoundError):
     from django_stubs_ext import QuerySetAny
 
 
+from django_admin_runner.admin import CommandRunnerModelAdminMixin
+
 from django.conf import settings
 from django.contrib import admin
 from django.contrib.postgres.aggregates import JSONBAgg
@@ -27,6 +29,10 @@ from unfold.decorators import action, display
 from server.apps.images.transfomer import ImagorImage
 from server.apps.manager.admin import ModelAdmin, RelatedOnlyCheckboxFilter
 from server.apps.organizations.models import Organization
+from server.apps.translations.admin_helpers import (
+    DescriptionQualityFilter,
+    LLMAdminMixin,
+)
 from server.apps.translations.forms import required_i18n_fields_form_factory
 
 from ..forms import HutAdminFieldsets
@@ -50,37 +56,8 @@ except ImportError:
 
 
 ## ADMIN
-class DescriptionQualityFilter(admin.SimpleListFilter):
-    """Range filter for the LLM description quality score."""
-
-    title = _("description quality")  # pyright: ignore[reportAssignmentMismatch]  # SimpleListFilter API
-    parameter_name = "description_quality_range"
-
-    def lookups(self, request, model_admin):
-        return (
-            ("low", _("low (1-3)")),
-            ("mid", _("adequate (4-6)")),
-            ("good", _("good (7-10)")),
-            ("none", _("unscored")),
-        )
-
-    def queryset(self, request, queryset):
-        value = self.value()
-        if value == "low":
-            return queryset.filter(description_quality__lte=3)
-        if value == "mid":
-            return queryset.filter(
-                description_quality__gte=4, description_quality__lte=6
-            )
-        if value == "good":
-            return queryset.filter(description_quality__gte=7)
-        if value == "none":
-            return queryset.filter(description_quality__isnull=True)
-        return queryset
-
-
 @admin.register(Hut)
-class HutsAdmin(ModelAdmin):
+class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
     search_fields = ("name",)
     # list_select_related = ()  # ( "type", "owner")
     form = required_i18n_fields_form_factory("name")
@@ -150,7 +127,9 @@ class HutsAdmin(ModelAdmin):
             inlines.append(HutAvailabilityViewInline)
         return inlines
 
-    def formfield_for_dbfield(self, db_field, request, **kwargs):
+    def formfield_for_dbfield(  # pyright: ignore[reportIncompatibleMethodOverride]  # untyped django_admin_runner base in MRO
+        self, db_field, request, **kwargs
+    ):
         """Customize FK querysets and the `open_monthly` widget.
 
         The plain Category/Organization querysets contain thousands of OSM
@@ -200,23 +179,6 @@ class HutsAdmin(ModelAdmin):
     )
     def review_tag(self, obj):
         return obj.review_status
-
-    @display(
-        description=_("Quality"),  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
-        ordering="description_quality",
-        label={
-            str(score): "danger"
-            if score <= 3
-            else "warning"
-            if score <= 6
-            else "success"
-            for score in range(1, 11)
-        },
-    )
-    def description_quality_display(self, obj):
-        if obj.description_quality is None:
-            return "–"
-        return str(obj.description_quality)
 
     @display(header=True, ordering=Lower("name"))
     def title(self, obj):

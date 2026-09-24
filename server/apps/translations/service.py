@@ -70,15 +70,16 @@ def store_quality(
     obj: t.Any,
     score: int,
     summary: str,
-    review_below: int | None = None,
+    rework_below: int | None = None,
 ) -> list[str]:
     """Store a description quality assessment on the instance (no save).
 
     Writes ``description_quality``/``description_quality_at`` and a marked
     block in ``review_comment`` (replacing only a previous LLM block,
-    never human text). Below the review threshold (default from
-    ``TRANSLATION_QUALITY_REVIEW_THRESHOLD``) a ``done`` hut is moved to
-    ``rework``; huts in other statuses are left untouched.
+    never human text). Below the rework threshold (default from
+    ``TRANSLATION_QUALITY_REVIEW_THRESHOLD``) a ``done`` record
+    (Hut or GeoPlace) is moved to ``rework``; records in other statuses
+    are left untouched.
 
     Returns the list of touched field names (for ``update_fields``).
     """
@@ -101,8 +102,8 @@ def store_quality(
     touched.append("review_comment")
 
     threshold = (
-        review_below
-        if review_below is not None
+        rework_below
+        if rework_below is not None
         else settings.TRANSLATION_QUALITY_REVIEW_THRESHOLD
     )
     choices = getattr(obj, "ReviewStatusChoices", None)
@@ -123,7 +124,7 @@ def assess_instance(
     obj: t.Any,
     *,
     rescore: bool = False,
-    review_below: int | None = None,
+    rework_below: int | None = None,
     client: _Translator | None = None,
 ) -> TranslationResult:
     """Assess the main-language description quality of one instance.
@@ -147,7 +148,7 @@ def assess_instance(
         client = TranslationClient()
     result = client.assess(description, context=f"{obj.__class__.__name__} '{obj}'")
     touched = store_quality(
-        obj, result["score"], result["summary"], review_below=review_below
+        obj, result["score"], result["summary"], rework_below=rework_below
     )
     _save_instance(obj, touched)
     return {
@@ -223,7 +224,7 @@ def translate_instance(
     result: dict[str, t.Any] = {}
     quality: dict[str, t.Any] | None = None
     # Piggyback: score an unscored description in the same API call
-    # (models with a description_quality field, i.e. Hut).
+    # (models with a description_quality field: Hut and GeoPlace).
     assess_source = (
         hasattr(obj, "description_quality")
         and obj.description_quality is None

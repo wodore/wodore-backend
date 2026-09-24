@@ -24,7 +24,7 @@ class ReviewStatus(str, Enum):
 
     NEW = "new"
     REVIEW = "review"
-    WORK = "work"
+    REWORK = "rework"
     DONE = "done"
 
 

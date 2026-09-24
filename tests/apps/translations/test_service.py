@@ -196,7 +196,7 @@ def test_store_quality_rejects_invalid_score():
 
 def test_store_quality_custom_threshold():
     hut = _update_hut(HutFactory(name="Grenzhütte"), review_status="done")
-    touched = store_quality(hut, 7, "Good.", review_below=8)
+    touched = store_quality(hut, 7, "Good.", rework_below=8)
     assert "review_status" in touched
     assert hut.review_status == "rework"
 
@@ -224,8 +224,16 @@ def test_assess_instance_skips_empty_scored_unsupported():
     assert assess_instance(scored, client=FakeTranslationClient()) == {
         "skipped": "scored"
     }
+    # GeoPlace now has quality fields (parity): without a description it
+    # skips as "empty" instead of "unsupported".
     place = GeoPlaceFactory(name="Nirgendshaus")
     assert assess_instance(place, client=FakeTranslationClient()) == {
+        "skipped": "empty"
+    }
+    # Models without quality fields still skip as "unsupported".
+    from types import SimpleNamespace
+
+    assert assess_instance(SimpleNamespace(), client=FakeTranslationClient()) == {
         "skipped": "unsupported"
     }
 
@@ -263,12 +271,46 @@ def test_translate_piggyback_skipped_when_scored():
     assert hut.description_quality == 7
 
 
-def test_translate_no_piggyback_on_geoplace():
-    place = GeoPlaceFactory(name="Nirgends", description="Ein Ort.")
-    fake = FakeTranslationClient()
+def test_translate_piggyback_fires_for_geoplace():
+    """GeoPlace parity: unscored description is assessed during translation."""
+    place = GeoPlaceFactory(name="Beschriebener Ort", description="Ein schöner Ort.")
+    place = GeoPlace.objects.get(pk=place.pk)
+    fake = FakeTranslationClient(quality={"score": 6, "summary": "Basics."})
     stats = translate_instance(place, languages=["en"], client=fake)
+    assert fake.calls[0]["assess_source"] is True
+    assert stats["quality"] == {"score": 6, "summary": "Basics."}
+    place.refresh_from_db()
+    assert place.description_quality == 6
+    assert place.i18n["name_en"]
+
+
+def test_store_quality_moves_done_geoplace_to_rework():
+    place = GeoPlaceFactory(name="Fertiger Ort", description="Schöner Ort.")
+    GeoPlace.objects.filter(pk=place.pk).update(review_status="done")
+    place = GeoPlace.objects.get(pk=place.pk)
+    touched = store_quality(place, 4, "Too thin.")
+    assert "review_status" in touched
+    assert place.review_status == "rework"
+    assert place.description_quality == 4
+    assert "[LLM" in place.review_comment
+
+
+def test_store_quality_keeps_queued_geoplace():
+    place = GeoPlaceFactory(name="Neuer Ort", description="Text.")
+    touched = store_quality(place, 3, "Thin.")
+    assert "review_status" not in touched
+    assert place.review_status == "new"
+
+
+def test_translate_piggyback_skipped_when_scored_geoplace():
+    place = GeoPlaceFactory(name="Bewerteter Ort", description="Ein Ort.")
+    GeoPlace.objects.filter(pk=place.pk).update(description_quality=7)
+    place = GeoPlace.objects.get(pk=place.pk)
+    fake = FakeTranslationClient()
+    translate_instance(place, languages=["en"], client=fake)
     assert fake.calls[0]["assess_source"] is False
-    assert stats["quality"] is None
+    place.refresh_from_db()
+    assert place.description_quality == 7
 
 
 def test_description_quality_check_constraint():

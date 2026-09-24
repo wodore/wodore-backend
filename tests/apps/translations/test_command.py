@@ -105,7 +105,7 @@ def test_command_limit_processes_subset(monkeypatch):
 
 # --- assess_descriptions command ---
 
-ASSESS_MODULE = "server.apps.huts.management.commands.assess_descriptions"
+ASSESS_MODULE = "server.apps.translations.management.commands.assess_descriptions"
 
 
 def patch_assess_client(monkeypatch, fake):
@@ -154,7 +154,7 @@ def test_assess_command_defaults_to_unscored(monkeypatch):
     fake = FakeTranslationClient()
     patch_assess_client(monkeypatch, fake)
 
-    call_command("assess_descriptions", "--all")
+    call_command("assess_descriptions", "--model", "hut", "--all")
 
     assert len(fake.calls) == 1
     fresh.refresh_from_db()
@@ -173,12 +173,12 @@ def test_assess_command_rescore(monkeypatch):
     assert hut.description_quality == 7
 
 
-def test_assess_command_review_below_override(monkeypatch):
+def test_assess_command_rework_below_override(monkeypatch):
     hut = _done_hut(name="Grenzfallhütte", description="Text.")
     fake = FakeTranslationClient(assess_result={"score": 7, "summary": "Gut."})
     patch_assess_client(monkeypatch, fake)
 
-    call_command("assess_descriptions", "--hut", hut.slug, "--review-below", "8")
+    call_command("assess_descriptions", "--hut", hut.slug, "--rework-below", "8")
 
     hut.refresh_from_db()
     assert hut.review_status == "rework"
@@ -220,3 +220,44 @@ def test_assess_command_unconfigured():
     with override_settings(**EMPTY_API_SETTINGS):
         with pytest.raises(CommandError, match="Translation API"):
             call_command("assess_descriptions", "--hut", hut.slug)
+
+
+def test_assess_command_geoplace_selector(monkeypatch, capsys):
+    from tests.factories.geometries import GeoPlaceFactory
+
+    from server.apps.geometries.models import GeoPlace
+
+    place = GeoPlaceFactory(name="Bewertungsort", description="Ein Ort.")
+    GeoPlace.objects.filter(pk=place.pk).update(review_status="done")
+    fake = FakeTranslationClient(assess_result={"score": 4, "summary": "Too thin."})
+    patch_assess_client(monkeypatch, fake)
+
+    call_command("assess_descriptions", "--geoplace", place.slug)
+
+    place.refresh_from_db()
+    assert place.description_quality == 4
+    assert place.review_status == "rework"
+    output = capsys.readouterr().out
+    assert "4/10" in output
+    assert "rework" in output
+
+
+def test_assess_command_all_requires_model():
+    with pytest.raises(CommandError, match="--all requires --model"):
+        call_command("assess_descriptions", "--all")
+
+
+def test_assess_command_unknown_geoplace():
+    with pytest.raises(CommandError, match="not found"):
+        call_command("assess_descriptions", "--geoplace", "does-not-exist")
+
+
+def test_assess_command_rejects_cross_model_selectors():
+    # Cross combos would silently widen to a full-model run (e.g. all
+    # unscored huts); they are rejected before any API call.
+    with pytest.raises(CommandError, match="cannot be combined with --geoplace"):
+        call_command("assess_descriptions", "--model", "hut", "--geoplace", "zermatt")
+    with pytest.raises(CommandError, match="cannot be combined with --hut"):
+        call_command("assess_descriptions", "--model", "geoplace", "--hut", "some-hut")
+    with pytest.raises(CommandError, match="cannot be mixed"):
+        call_command("assess_descriptions", "--hut", "a", "--geoplace", "b")
