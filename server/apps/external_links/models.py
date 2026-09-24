@@ -289,9 +289,7 @@ class ExternalLink(TimeStampedModel):
                 timeout=10,
                 stream=True,
                 allow_redirects=True,
-                headers={
-                    "User-Agent": "Mozilla/5.0 (compatible; WodoreBot/1.0; +https://wodore.com)"
-                },
+                headers={"User-Agent": settings.BOT_AGENT},
             )
             response.raise_for_status()
 
@@ -512,9 +510,7 @@ class ExternalLink(TimeStampedModel):
                     url,
                     timeout=20,
                     allow_redirects=True,
-                    headers={
-                        "User-Agent": "Mozilla/5.0 (compatible; WodoreBot/1.0; +https://wodore.com)"
-                    },
+                    headers={"User-Agent": settings.BOT_AGENT},
                 )
 
                 response_time_ms = int((time.time() - start_time) * 1000)

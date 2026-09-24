@@ -57,7 +57,7 @@ def get_redirect_url(url: str) -> str:
         url,
         allow_redirects=True,
         timeout=10,
-        headers={"User-Agent": "wodore-backend/1.0 (contact: info@wodo.re)"},
+        headers={"User-Agent": settings.BOT_AGENT},
     )  # follows redirect
     return resp.url
 
@@ -283,7 +283,7 @@ if __name__ == "__main__":
                 test_path,
                 allow_redirects=True,
                 timeout=10,
-                headers={"User-Agent": "wodore-backend/1.0 (contact: info@wodore.com)"},
+                headers={"User-Agent": settings.BOT_AGENT},
             )  # follows redirect
             test_path = resp.url
 
