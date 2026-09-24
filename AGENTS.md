@@ -179,11 +179,12 @@ Agent worktrees are provisioned by [workz](https://github.com/rohansx/workz)
 
 - **Dotfiles synced** from the main checkout: `.env*` (workz default) plus
   `.infisical.json` and `.geoplaces_osm_import.json`.
-- **Its own `.venv`** — never symlinked (`.workz.toml` ignores it): the
-  post_start hook runs `uv sync --frozen --extra private`, and uv hardlinks
-  from the shared cache (~6 MB marginal disk, sub-second warm sync). Each
-  lane's editable install points at its own checkout, so `app`/`manage`
-  and `pytest` always run lane code. Never `git add` it (gitignored).
+- **Its own `.venv`** — never symlinked (`.workz.toml` ignores it):
+  `scripts/lane-venv.sh` (post_start) syncs with `--frozen --extra private`
+  and patches activate with a lane-aware `app()`. uv hardlinks from the
+  shared cache (~6 MB marginal disk, sub-second warm sync). Each lane's
+  editable install points at its own checkout, so `app`/`manage` and
+  `pytest` always run lane code. Never `git add` it (gitignored).
   `--extra private` is required: plain `uv sync` silently omits
   hut-services-private.
 - **Its own database on the shared dev postgres** (`django-local-postgis:5432`,
@@ -215,10 +216,17 @@ run the `post_start` hook (that only fires on `workz start`). Create the
 lane database yourself after provisioning:
 
 ```bash
-uv sync --frozen --extra private && scripts/lane-db.sh create && scripts/sync-martin.sh
-# all idempotent: venv hardlinks from the uv cache, DB clones from
-# wodore_template, martin_sync copies from the main checkout
+scripts/lane-venv.sh && scripts/lane-db.sh create && scripts/sync-martin.sh
+# all idempotent: venv hardlinks from the uv cache (and patches activate
+# with a lane-aware `app()`), DB clones from wodore_template, martin_sync
+# copies from the main checkout
 ```
+
+After `source .venv/bin/activate` in the lane, `app <command>` runs against
+the LANE database (lane-aware function; the main checkout's `app` targets
+dev). No `make init` needed in lanes: pre-commit hooks live in the shared
+`.git/hooks` and the `.volumes`/`media/imagor_data` directories are only
+needed for local compose/imagor work.
 
 Note: workz reads `.workz.toml` from the **main checkout** — provisioning
 activates repo-wide once this file is merged to main (before that, a

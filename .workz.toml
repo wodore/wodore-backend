@@ -18,6 +18,10 @@ copy_add = [
 # code inside lanes), and any lane running `uv sync` re-pointed that editable
 # for everyone. uv makes own venvs cheap: hardlinked from the shared cache
 # (~6 MB marginal disk, ~0.2 s warm sync).
+# scripts/lane-venv.sh syncs (--frozen --extra private) and patches the
+# activate script with a lane-aware `app()` that targets the LANE database
+# (the main checkout's `inv update-venv --infisical` function wraps
+# infisical, which injects the DEV database — wrong target for lanes).
 ignore_add = [".venv"]
 
 [hooks]
@@ -25,7 +29,7 @@ ignore_add = [".venv"]
 # its own name, cloned from the quiescent `wodore_template` snapshot —
 # same state as the dev main DB. Need current data? Refresh first:
 #   scripts/db-refresh-template.sh
-post_start = 'uv sync --frozen --extra private && scripts/lane-db.sh create && scripts/sync-martin.sh'
+post_start = 'scripts/lane-venv.sh && scripts/lane-db.sh create && scripts/sync-martin.sh'
 pre_done = 'scripts/lane-martin.sh stop && scripts/lane-db.sh drop'
 
 [isolation]

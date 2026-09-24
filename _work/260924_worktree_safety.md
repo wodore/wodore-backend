@@ -22,14 +22,24 @@ checkouts keep the editable fallback). With per-lane venvs this is defense
 in depth: running the MAIN venv's `app` while standing in a worktree still
 does the right thing.
 
-### `.workz.toml` — per-lane venvs instead of a shared symlink
+### `.workz.toml` + `scripts/lane-venv.sh` — per-lane venvs instead of a shared symlink
 
 - `[sync] ignore_add = [".venv"]`: workz no longer symlinks the shared venv.
-- `post_start` now runs `uv sync --frozen --extra private` first. Workz's
-  own auto-install never fires for us (it requires no `.venv` anywhere;
-  main always has one) and would run plain `uv sync`, which **silently
-  omits hut-services-private** (settings swallow the ImportError and the
-  booking sources vanish from `SERVICES`).
+- `post_start` runs `scripts/lane-venv.sh` first: `uv sync --frozen --extra
+  private` (workz's own auto-install never fires for us — it requires no
+  `.venv` anywhere; main always has one — and would run plain `uv sync`,
+  which **silently omits hut-services-private**: settings swallow the
+  ImportError and the booking sources vanish from `SERVICES`).
+- The script also patches the lane venv's `activate` with a LANE-AWARE
+  `app()`: `scripts/lane-run.sh .venv/bin/python manage.py "$@"`. The
+  original function (`inv update-venv --infisical` → `app() { inv app.app
+  -i --cmd "$*"; }`) wraps infisical, which injects the DEV database —
+  wrong target inside a lane (.env.local is not in Django's env chain,
+  which is why lane-run.sh re-injects POSTGRES_DB). Lane `app` → lane DB.
+- No `make init` for lanes: its other pieces are covered — pre-commit hooks
+  live in the shared `.git/hooks` (worktrees already run them), and
+  `.volumes/pgdata` + `media/imagor_data` are only needed for local
+  compose/imagor work (main checkout).
 - Cost, measured: ~6 MB marginal disk per lane (uv hardlinks package files
   from `~/.cache/uv`; 635 MB venv size is an illusion — only ~6 MB are
   unique inodes), 0.2 s warm sync. Hardlinks require the venv to share a
@@ -61,11 +71,12 @@ gotcha), lane step 1 now includes the venv sync.
    resolves the worktree; from a subdir without `manage.py` and from the
    main checkout, behaviour unchanged; `inv tests` → 129 passed.
 2. Lane verification (`workz start` on a temp branch, new provisioning):
-   worktree got its own real `.venv` (not a symlink) via the post_start
-   `uv sync --frozen --extra private`; `app shell` resolved lane code;
-   `scripts/lane-run.sh .venv/bin/pytest` → 129 passed;
-   `scripts/lane-db.sh drop` (no arg, name from `.env.local`) now drops
-   the lane DB; explicit `drop wodore` still refused.
+   worktree got its own real `.venv` (not a symlink) via `lane-venv.sh`;
+   activate carries the lane-aware `app()` — `app shell -c` reported the
+   LANE database and lane code; `scripts/lane-run.sh .venv/bin/pytest` →
+   129 passed; `scripts/lane-db.sh drop` (no arg, name from `.env.local`)
+   now drops the lane DB; explicit `drop wodore` still refused.
+   `lane-venv.sh` re-run is idempotent (no duplicate `app()`).
 3. Teardown: `workz done <branch> --cleanup-db` now drops the lane DB
    through the widened guard.
 
