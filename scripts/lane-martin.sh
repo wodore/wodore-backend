@@ -11,8 +11,9 @@
 # --webui enable-for-all). The container joins the compose postgres network
 # and reaches the shared dev postgres by container name; DATABASE_URL points
 # at the LANE DB (name from the workz-managed .env.local). The martin port is
-# PORT+1 — the lane dev server (`workz run`) uses PORT — and
-# scripts/lane-run.sh injects MARTIN_TILE_URL=http://localhost:<PORT+1>
+# PORT_END — the top of the workz range (the dev server uses PORT and workz
+# itself advertises REDIS_URL at PORT+1, so PORT+1 is NOT free) — and
+# scripts/lane-run.sh injects MARTIN_TILE_URL=http://localhost:<PORT_END>
 # accordingly.
 #
 # Credentials (POSTGRES_USER/PASSWORD) come from infisical, like every other
@@ -29,20 +30,26 @@ if [ ! -f .env.local ]; then
     exit 1
 fi
 DB_NAME="$(sed -n 's/^DB_NAME=//p' .env.local)"
-PORT_BASE="$(sed -n 's/^PORT=//p' .env.local)"
-if [ -z "$DB_NAME" ] || [ -z "$PORT_BASE" ]; then
-    echo "lane-martin: DB_NAME/PORT missing from .env.local (workz managed block missing?)" >&2
+PORT_END="$(sed -n 's/^PORT_END=//p' .env.local)"
+if [ -z "$DB_NAME" ] || [ -z "$PORT_END" ]; then
+    echo "lane-martin: DB_NAME/PORT_END missing from .env.local (workz managed block missing?)" >&2
     exit 1
 fi
-MARTIN_PORT="${MARTIN_PORT:-$((PORT_BASE + 1))}"
+MARTIN_PORT="${MARTIN_PORT:-$PORT_END}"
 CONTAINER="martin-lane-${DB_NAME}"
+
+is_running() {
+    [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null || true)" = "true" ]
+}
 
 case "${1:-}" in
 start)
-    if docker inspect "$CONTAINER" >/dev/null 2>&1; then
+    if is_running; then
         echo "lane-martin: already running at http://localhost:${MARTIN_PORT} (DB: ${DB_NAME}, container: ${CONTAINER})"
         exit 0
     fi
+    # A stale exited/created container with our name would block docker run.
+    docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
     if [ ! -f martin_sync/config/martin.yaml ]; then
         echo "lane-martin: no martin_sync/config/martin.yaml — run 'scripts/sync-martin.sh' first" >&2
         exit 1
@@ -73,7 +80,7 @@ stop)
     echo "lane-martin: stopped (${CONTAINER})"
     ;;
 status)
-    if docker inspect "$CONTAINER" >/dev/null 2>&1; then
+    if is_running; then
         echo "lane-martin: running — http://localhost:${MARTIN_PORT} (DB: ${DB_NAME}, container: ${CONTAINER})"
     else
         echo "lane-martin: not running (start with: scripts/lane-martin.sh start)"

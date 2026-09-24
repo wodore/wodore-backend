@@ -23,13 +23,14 @@ if [ -z "$DB_NAME" ]; then
     exit 1
 fi
 
-# Point the backend at the lane martin (scripts/lane-martin.sh, port PORT+1)
-# when this is an isolated lane. Overridable; without a PORT (not isolated)
+# Point the backend at the lane martin (scripts/lane-martin.sh, port
+# PORT_END — PORT+1 is taken by workz's REDIS_URL allocation) when this is
+# an isolated lane. Overridable; without a PORT range (not isolated)
 # nothing is injected and the settings default (shared martin :8075) applies.
-PORT_BASE="$(sed -n 's/^PORT=//p' .env.local)"
+PORT_END="$(sed -n 's/^PORT_END=//p' .env.local)"
 EXTRA_ENV=("POSTGRES_DB=$DB_NAME")
-if [ -n "$PORT_BASE" ]; then
-    EXTRA_ENV+=("MARTIN_TILE_URL=${MARTIN_TILE_URL:-http://localhost:$((PORT_BASE + 1))}")
+if [ -n "$PORT_END" ]; then
+    EXTRA_ENV+=("MARTIN_TILE_URL=${MARTIN_TILE_URL:-http://localhost:$PORT_END}")
 fi
 
 export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-server.settings}"

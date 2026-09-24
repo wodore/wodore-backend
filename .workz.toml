@@ -19,7 +19,7 @@ copy_add = [
 # same state as the dev main DB. Need current data? Refresh first:
 #   scripts/db-refresh-template.sh
 post_start = 'scripts/lane-db.sh create && scripts/sync-martin.sh'
-pre_done = 'scripts/lane-db.sh drop'
+pre_done = 'scripts/lane-martin.sh stop && scripts/lane-db.sh drop'
 
 [isolation]
 # Dev-server port range for `workz run` — clear of django (8000),

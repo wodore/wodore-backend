@@ -222,14 +222,15 @@ temporary untracked copy in the main checkout bootstraps it).
 **Martin in a worktree:** tile work *can* happen in a worktree — start a
 lane-scoped Martin with `scripts/lane-martin.sh start` (docker, same image
 and config as the compose instance, serving the **lane database** on the
-workz port `PORT+1`; `lane-run.sh` points `MARTIN_TILE_URL` there
-automatically). Refill the lane `martin_sync` first when you need current
-tiles: `scripts/lane-run.sh .venv/bin/python manage.py martin_sync`.
-`scripts/lane-martin.sh stop` tears it down (workz `reap` cannot remove
-containers — always stop lane containers explicitly). Work on the
-**shared** martin instance — version/image updates (the `martin` service
-in `docker-compose.yml`) and shared config — stays in the **main
-checkout**, never in a worktree.
+workz port `PORT_END`; `lane-run.sh` points `MARTIN_TILE_URL` there
+automatically). Refill the lane `martin_sync` when you need current tiles
+(`scripts/lane-run.sh .venv/bin/python manage.py martin_sync`) — martin
+loads its config at startup, so `stop` + `start` afterwards to pick the
+refill up. Teardown stops the container automatically (`pre_done`);
+`scripts/lane-martin.sh stop` also works ad hoc (workz `reap` cannot
+remove containers). Work on the **shared** martin instance —
+version/image updates (the `martin` service in `docker-compose.yml`) and
+shared config — stays in the **main checkout**, never in a worktree.
 
 **Imagor rule:** work that touches **imagor** is done in the main
 checkout — the shared container reads the main checkout's media setup.
