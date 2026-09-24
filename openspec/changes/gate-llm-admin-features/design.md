@@ -40,9 +40,8 @@ time so admin views react to `override_settings` in tests.
 
 ### D2: gate the mixin via Django's documented hooks
 
-- `get_actions(request)`: return `()` when disabled (class-level
-  `actions` tuple stays as the source list; filtering here is the
-  Django-idiomatic conditional).
+- `get_actions(request)`: when disabled, remove the two LLM actions from the inherited dict (built-ins like `delete_selected` survive); class-level
+  `actions` tuple stays as the source list.
 - `get_urls()`: omit the two LLM paths when disabled (prevents
   `NoReverseMatch` from a stale template context and hides the views).
 - `render_change_form()`: set the `llm_*_url` context vars only when

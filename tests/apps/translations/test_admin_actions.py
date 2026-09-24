@@ -211,6 +211,8 @@ def test_actions_hidden_when_api_unconfigured(hut_admin, superuser):
         actions = hut_admin.get_actions(make_request(user=superuser))
     assert "translate_selected" not in actions
     assert "assess_selected" not in actions
+    # Built-in bulk actions must survive the filter (no empty-dict return).
+    assert "delete_selected" in actions
 
 
 def test_actions_listed_when_api_configured(hut_admin, superuser):
@@ -276,9 +278,22 @@ def test_change_form_buttons_shown_when_configured(monkeypatch, hut_admin):
 
 
 def test_runner_registration_absent_when_unconfigured():
-    # Default import-time state: vars unset -> commands never registered.
-    assert "update_translations" not in _runner_registry()
-    assert "assess_descriptions" not in _runner_registry()
+    # Enforce the premise instead of relying on process-start env state
+    # (decouple reads os.environ before .env.test; a developer with the
+    # real vars exported would otherwise fail here and the present-tests'
+    # finally-pop would strip a legitimate registration).
+    import importlib
+
+    import server.apps.translations.management.commands.update_translations as mod
+
+    try:
+        with override_settings(**EMPTY_API_SETTINGS):
+            importlib.reload(mod)
+        assert "update_translations" not in _runner_registry()
+        assert "assess_descriptions" not in _runner_registry()
+    finally:
+        _runner_registry().pop("update_translations", None)
+        _runner_registry().pop("assess_descriptions", None)
 
 
 def test_runner_registration_present_when_configured():

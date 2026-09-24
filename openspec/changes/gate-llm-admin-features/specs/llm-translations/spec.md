@@ -27,7 +27,15 @@ the CLI, failing fast with their existing configuration error.
 #### Scenario: UI hidden when API is unconfigured
 - **WHEN** the admin renders without `TRANSLATION_*` configuration
 - **THEN** the translate changelist action is not listed and the
-  change form shows no translate button, with no error messages
+  change form shows no translate button, with no error messages, and
+  Django's built-in bulk actions (e.g. `delete_selected`) remain listed
+
+#### Scenario: Runner registration absent when API is unconfigured
+- **WHEN** the admin runner registry is built without `TRANSLATION_*`
+  configuration
+- **THEN** `update_translations` is absent from the runner list and the
+  admin shows no Run link for it, while the CLI command still exists and
+  fails fast with its configuration error
 
 #### Scenario: Unconfigured API in admin
 - **WHEN** the API was configured when the admin loaded but the

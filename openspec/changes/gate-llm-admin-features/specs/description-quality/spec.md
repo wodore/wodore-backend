@@ -28,4 +28,6 @@ CLI, failing fast with its existing configuration error.
 #### Scenario: UI hidden when API is unconfigured
 - **WHEN** the admin renders without `TRANSLATION_*` configuration
 - **THEN** the assess changelist action is not listed and the change
-  form shows no assess button, with no error messages
+  form shows no assess button, with no error messages, while Django's
+  built-in bulk actions remain listed and `assess_descriptions` is
+  absent from the admin runner registry (CLI command unchanged)

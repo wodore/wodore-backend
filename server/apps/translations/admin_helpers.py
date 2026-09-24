@@ -91,10 +91,16 @@ class LLMAdminMixin(admin.ModelAdmin):
     # -- changelist actions ------------------------------------------------
 
     def get_actions(self, request) -> dict[str, t.Any]:
-        """Hide the LLM bulk actions when the API is unconfigured."""
+        """Hide the LLM bulk actions when the API is unconfigured.
+
+        Filters the inherited actions instead of returning an empty dict so
+        built-ins like ``delete_selected`` survive.
+        """
+        actions = super().get_actions(request)
         if not translations_api_enabled():
-            return {}
-        return super().get_actions(request)
+            actions.pop("translate_selected", None)
+            actions.pop("assess_selected", None)
+        return actions
 
     @action(  # pyright: ignore[reportArgumentType]  # decorator kwargs
         description=_(  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
