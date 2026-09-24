@@ -7,14 +7,37 @@
 # dev database can stay in use (martin, imagor, app) while this runs.
 #
 # Takes a few minutes for the ~3.6 GB dev database.
+#
+# Targets are env-only (there is deliberately no positional argument —
+# `db-refresh-template.sh wodore` must never mean "drop wodore"):
+#   WORKZ_TEMPLATE_DB  drop/recreate target  (default: wodore_template)
+#   WORKZ_SOURCE_DB    dump source           (default: wodore)
+# The live dev DB and system DBs can never be the refresh TARGET.
 set -euo pipefail
 
-TEMPLATE_DB="${1:-wodore_template}"
+TEMPLATE_DB="${WORKZ_TEMPLATE_DB:-wodore_template}"
 SOURCE_DB="${WORKZ_SOURCE_DB:-wodore}"
 
-CID="$(docker ps --format '{{.ID}} {{.Names}}' | grep -i postgis | head -1 | cut -d' ' -f1)"
+if [ "$TEMPLATE_DB" = "$SOURCE_DB" ]; then
+    echo "db-refresh-template: refusing: template and source are the same database ('$TEMPLATE_DB')" >&2
+    exit 1
+fi
+for protected in wodore postgres template0 template1; do
+    if [ "$TEMPLATE_DB" = "$protected" ]; then
+        echo "db-refresh-template: refusing to drop/recreate '$TEMPLATE_DB' (protected: live/system database)" >&2
+        exit 1
+    fi
+    if [ "$SOURCE_DB" = "$protected" ] && [ "$protected" != "wodore" ]; then
+        echo "db-refresh-template: refusing '$SOURCE_DB' as source (system database)" >&2
+        exit 1
+    fi
+done
+
+# Resolve the postgres container by its exact name (see AGENTS.md). `|| true`
+# keeps a missing container a *checkable* error instead of a silent set -e exit.
+CID="$(docker ps --format '{{.ID}} {{.Names}}' | grep -w django-local-postgis | head -1 | cut -d' ' -f1 || true)"
 if [ -z "$CID" ]; then
-    echo "db-refresh-template: no postgres container running" >&2
+    echo "db-refresh-template: no postgres container running (django-local-postgis)" >&2
     exit 1
 fi
 
@@ -28,7 +51,7 @@ infisical run --env=dev --path /backend --silent --log-level warn -- bash -c '
         -c "DROP DATABASE IF EXISTS $REFRESH_TEMPLATE" \
         -c "CREATE DATABASE $REFRESH_TEMPLATE TEMPLATE template0 OWNER $POSTGRES_USER"
     docker_exec pg_dump -h localhost -U "$POSTGRES_USER" "$REFRESH_SOURCE" \
-        | docker_exec psql -h localhost -U "$POSTGRES_USER" -d "$REFRESH_TEMPLATE" -q
+        | docker_exec psql -h localhost -U "$POSTGRES_USER" -v ON_ERROR_STOP=1 -d "$REFRESH_TEMPLATE" -q
     docker_exec psql -h localhost -U "$POSTGRES_USER" -d "$REFRESH_TEMPLATE" -tAc "ANALYZE"
     echo "done: $REFRESH_TEMPLATE is a fresh snapshot of $REFRESH_SOURCE"
 '

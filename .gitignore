@@ -195,3 +195,5 @@ cython_debug/
 
 # workz worktree provisioning artifacts — never commit these (workz#34)
 .env.local
+# ruff cache: directory form and the workz-provisioned symlink
+.ruff_cache
