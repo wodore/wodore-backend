@@ -252,6 +252,7 @@ class Command(CRUDCommand):
                 {"source": "osm", "no_review": True},
                 {"source": "hrs", "no_review": True},
                 {"source": "ffcam", "no_review": True},
+                {"source": "tmb", "no_review": True},
                 {"source": "refuges", "no_review": False},
                 {
                     "source": "wodore",
