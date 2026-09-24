@@ -7,7 +7,7 @@
 # Gitignored repo files that must ride along into every worktree:
 copy_add = [
     ".infisical.json",          # infisical project link (needed by the `app` wrapper)
-    ".geoplaces_osm_import.json",
+    ".geoplaces*",
 ]
 
 [hooks]

@@ -32,7 +32,7 @@ allure-*/
 
 node_modules
 # Byte-compiled / optimized / DLL files
-__pycache__/
+__pycache__
 *.py[cod]
 *$py.class
 
@@ -81,7 +81,7 @@ coverage.xml
 *.cover
 *.py,cover
 .hypothesis/
-.pytest_cache/
+.pytest_cache
 cover/
 
 # Translations
@@ -172,7 +172,7 @@ venv.bak/
 /site
 
 # mypy
-.mypy_cache/
+.mypy_cache
 .dmypy.json
 dmypy.json
 

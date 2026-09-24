@@ -191,6 +191,19 @@ scripts/lane-run.sh .venv/bin/pytest
 re-injects the lane name after infisical so it wins. Teardown drops the lane
 DB: `workz done <branch> --cleanup-db`.
 
+**Lane step 1:** the global pi provisioning hook runs `workz sync …
+--isolated`, which syncs files and allocates the DB name — but does **not**
+run the `post_start` hook (that only fires on `workz start`). Create the
+lane database yourself after provisioning:
+
+```bash
+scripts/lane-db.sh create    # idempotent; clones from wodore_template
+```
+
+Note: workz reads `.workz.toml` from the **main checkout** — provisioning
+activates repo-wide once this file is merged to main (before that, a
+temporary untracked copy in the main checkout bootstraps it).
+
 **⚠ Martin/imagor rule:** work that touches **martin** or **imagor** must
 **NOT be done in a worktree.** The shared martin/imagor containers keep
 reading the *main dev database* — lane databases are invisible to them, so
