@@ -1,0 +1,78 @@
+# Worktree lane safety: own venvs, checkout-aware app, lane DB cleanup
+
+## Goal
+
+Make workz lanes fully self-contained and remove the shared-venv footguns
+discovered during the TMB lane (`_work/260924_tmb_support.md`): the `app`
+console script silently ran main-checkout code inside worktrees, the shared
+`.venv` symlink let any lane's `uv sync` re-point the shared editable
+install for everyone, and `workz done --cleanup-db` failed to drop
+branch-derived lane DB names.
+
+## Changes
+
+### `manage.py` — checkout-aware console scripts
+
+`app` / `manage` (`[project.scripts]` → `manage:main`) live in the venv;
+their imports resolved `server.*` from the venv's editable install, which
+pins the main checkout. `_prefer_cwd_checkout()` prepends the working
+directory when a `manage.py` exists next to the caller — the same thing
+`python manage.py` does via `sys.path[0]`. No-op elsewhere (subdirs, non-
+checkouts keep the editable fallback). With per-lane venvs this is defense
+in depth: running the MAIN venv's `app` while standing in a worktree still
+does the right thing.
+
+### `.workz.toml` — per-lane venvs instead of a shared symlink
+
+- `[sync] ignore_add = [".venv"]`: workz no longer symlinks the shared venv.
+- `post_start` now runs `uv sync --frozen --extra private` first. Workz's
+  own auto-install never fires for us (it requires no `.venv` anywhere;
+  main always has one) and would run plain `uv sync`, which **silently
+  omits hut-services-private** (settings swallow the ImportError and the
+  booking sources vanish from `SERVICES`).
+- Cost, measured: ~6 MB marginal disk per lane (uv hardlinks package files
+  from `~/.cache/uv`; 635 MB venv size is an illusion — only ~6 MB are
+  unique inodes), 0.2 s warm sync. Hardlinks require the venv to share a
+  filesystem with the cache (worktrees under `/home/tobias` do).
+- Why not keep the symlink: a shared venv's editable install pins the MAIN
+  checkout on `sys.path` (the `app` bug), and any lane running `uv sync`
+  re-points that editable to its own checkout — silently poisoning the
+  main checkout's dev runs and every other lane.
+
+### `scripts/lane-db.sh` — drop guard accepts workz-allocated names
+
+The guard only accepted `pi_*` / `*lane*` patterns, but workz derives DB
+names from the branch (`feat_tmb_huts` matched nothing), so
+`workz done --cleanup-db` aborted and orphaned the lane DB (pre_done hook
+failure — `workz done` removed the worktree anyway). The guard now also
+accepts the name recorded in the worktree's own workz-managed `.env.local`
+(`DB_NAME`) — that file is the authoritative allocation record. Protected
+databases (`wodore`, `wodore_template`, system DBs) are still refused
+unconditionally.
+
+### `AGENTS.md`
+
+Worktree section updated: own-venv bullet (with the `--extra private`
+gotcha), lane step 1 now includes the venv sync.
+
+## Verified (2026-09-24)
+
+1. `manage.py`: from a test worktree root, `app shell -c "import server…"`
+   resolves the worktree; from a subdir without `manage.py` and from the
+   main checkout, behaviour unchanged; `inv tests` → 129 passed.
+2. Lane verification (`workz start` on a temp branch, new provisioning):
+   worktree got its own real `.venv` (not a symlink) via the post_start
+   `uv sync --frozen --extra private`; `app shell` resolved lane code;
+   `scripts/lane-run.sh .venv/bin/pytest` → 129 passed;
+   `scripts/lane-db.sh drop` (no arg, name from `.env.local`) now drops
+   the lane DB; explicit `drop wodore` still refused.
+3. Teardown: `workz done <branch> --cleanup-db` now drops the lane DB
+   through the widened guard.
+
+## Notes / open points
+
+- venv sync only happens via `post_start` (`workz start`) or manually —
+  the pi provisioning `workz sync --isolated` path still needs lane step 1
+  (documented in AGENTS.md).
+- Cold-cache or changed-lockfile syncs cost seconds (git deps) to a
+  minute — still fine per lane.

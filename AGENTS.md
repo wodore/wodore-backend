@@ -179,8 +179,13 @@ Agent worktrees are provisioned by [workz](https://github.com/rohansx/workz)
 
 - **Dotfiles synced** from the main checkout: `.env*` (workz default) plus
   `.infisical.json` and `.geoplaces_osm_import.json`.
-- **`.venv` symlinked** — shared virtualenv, never copied. Never `git add`
-  the symlink or `.env.local` (both gitignored).
+- **Its own `.venv`** — never symlinked (`.workz.toml` ignores it): the
+  post_start hook runs `uv sync --frozen --extra private`, and uv hardlinks
+  from the shared cache (~6 MB marginal disk, sub-second warm sync). Each
+  lane's editable install points at its own checkout, so `app`/`manage`
+  and `pytest` always run lane code. Never `git add` it (gitignored).
+  `--extra private` is required: plain `uv sync` silently omits
+  hut-services-private.
 - **Its own database on the shared dev postgres** (`django-local-postgis:5432`,
   no extra ports), cloned from the quiescent `wodore_template` snapshot —
   same state as the dev main DB. Need current dev data? Refresh the template
@@ -210,9 +215,9 @@ run the `post_start` hook (that only fires on `workz start`). Create the
 lane database yourself after provisioning:
 
 ```bash
-scripts/lane-db.sh create && scripts/sync-martin.sh
-# both idempotent: DB clones from wodore_template, martin_sync copies
-# from the main checkout
+uv sync --frozen --extra private && scripts/lane-db.sh create && scripts/sync-martin.sh
+# all idempotent: venv hardlinks from the uv cache, DB clones from
+# wodore_template, martin_sync copies from the main checkout
 ```
 
 Note: workz reads `.workz.toml` from the **main checkout** — provisioning
