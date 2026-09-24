@@ -17,7 +17,11 @@ from django.utils.translation import gettext_lazy as _
 
 from unfold.decorators import action, display
 
-from server.apps.translations.llm import TranslationClient, TranslationError
+from server.apps.translations.llm import (
+    TranslationClient,
+    TranslationError,
+    translations_api_enabled,
+)
 from server.apps.translations.service import assess_instance, translate_instance
 
 # Max object names listed per outcome in a single admin message.
@@ -86,6 +90,18 @@ class LLMAdminMixin(admin.ModelAdmin):
 
     # -- changelist actions ------------------------------------------------
 
+    def get_actions(self, request) -> dict[str, t.Any]:
+        """Hide the LLM bulk actions when the API is unconfigured.
+
+        Filters the inherited actions instead of returning an empty dict so
+        built-ins like ``delete_selected`` survive.
+        """
+        actions = super().get_actions(request)
+        if not translations_api_enabled():
+            actions.pop("translate_selected", None)
+            actions.pop("assess_selected", None)
+        return actions
+
     @action(  # pyright: ignore[reportArgumentType]  # decorator kwargs
         description=_(  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
             "Translate missing languages (AI)"
@@ -107,6 +123,8 @@ class LLMAdminMixin(admin.ModelAdmin):
     # -- change-form buttons -----------------------------------------------
 
     def get_urls(self):
+        if not translations_api_enabled():
+            return super().get_urls()
         info = (self.model._meta.app_label, self.model._meta.model_name)
         return [
             path(
@@ -148,7 +166,7 @@ class LLMAdminMixin(admin.ModelAdmin):
     ):
         context = context or {}
         obj = context.get("original") or obj
-        if obj is not None and obj.pk:
+        if translations_api_enabled() and obj is not None and obj.pk:
             info = (self.model._meta.app_label, self.model._meta.model_name)
             context["llm_translate_url"] = reverse(
                 "admin:%s_%s_llm_translate" % info, args=[obj.pk]

@@ -115,6 +115,23 @@ class TranslationError(RuntimeError):
     """Raised when the translation API fails or returns unusable output."""
 
 
+def translations_api_enabled() -> bool:
+    """True when the LLM translation API is fully configured.
+
+    Single source of truth for gating the admin surface (buttons,
+    changelist actions, admin-runner command registration) and matching
+    :class:`TranslationClient` constructibility: all of
+    ``TRANSLATION_API_BASE_URL``, ``TRANSLATION_API_KEY`` and
+    ``TRANSLATION_MODEL`` must be set. CLI commands stay available
+    regardless and fail fast with their own configuration error.
+    """
+    return bool(
+        settings.TRANSLATION_API_BASE_URL
+        and settings.TRANSLATION_API_KEY
+        and settings.TRANSLATION_MODEL
+    )
+
+
 class TranslationClient:
     """Minimal OpenAI chat-completions client for field translations."""
 

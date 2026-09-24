@@ -26,14 +26,27 @@ from django.db.models import QuerySet
 
 from server.apps.geometries.models import GeoPlace
 from server.apps.huts.models import Hut
-from server.apps.translations.llm import TranslationClient, TranslationError
+from server.apps.translations.llm import (
+    TranslationClient,
+    TranslationError,
+    translations_api_enabled,
+)
 from server.apps.translations.service import translate_instance
 
 # rich markup colors per report level (see _report)
 _LEVEL_COLORS = {"success": "green", "warning": "yellow", "error": "red"}
 
+# Admin-runner registration is import-time (the package registry has no
+# unregister); unconfigured environments register a no-op so the commands
+# stay absent from the admin while remaining fully available on the CLI.
+_register = (
+    register_command(group="Translations", models=[Hut, GeoPlace])
+    if translations_api_enabled()
+    else (lambda cls: cls)
+)
 
-@register_command(group="Translations", models=[Hut, GeoPlace])
+
+@_register
 class Command(BaseCommand):
     help = (
         "Translate empty translated fields (name/description/note) of huts "
