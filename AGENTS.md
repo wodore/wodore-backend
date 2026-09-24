@@ -163,3 +163,36 @@ inv tests
 ```
 
 **Important**: This is mandatory after any code changes before considering work complete.
+
+## Worktrees / workz
+
+Agent worktrees are provisioned by [workz](https://github.com/rohansx/workz)
+(see `.workz.toml`). Every worktree gets:
+
+- **Dotfiles synced** from the main checkout: `.env*` (workz default) plus
+  `.infisical.json` and `.geoplaces_osm_import.json`.
+- **`.venv` symlinked** — shared virtualenv, never copied. Never `git add`
+  the symlink or `.env.local` (both gitignored).
+- **Its own database on the shared dev postgres** (`docker-local-postgis:5432`,
+  no extra ports), cloned from the quiescent `wodore_template` snapshot —
+  same state as the dev main DB. Need current dev data? Refresh the template
+  first: `scripts/db-refresh-template.sh` (takes a few minutes).
+- **A dev-server port range** from 3400 up (only used by `workz run`).
+
+**Run commands against the lane DB with the standard infisical wrapper, not
+raw `infisical run`:**
+
+```bash
+scripts/lane-run.sh .venv/bin/pytest
+```
+
+`workz` writes the lane DB name into `.env.local`, but Django reads
+`POSTGRES_DB` from the environment (infisical injects it) — `lane-run.sh`
+re-injects the lane name after infisical so it wins. Teardown drops the lane
+DB: `workz done <branch> --cleanup-db`.
+
+**⚠ Martin/imagor rule:** work that touches **martin** or **imagor** must
+**NOT be done in a worktree.** The shared martin/imagor containers keep
+reading the *main dev database* — lane databases are invisible to them, so
+martin/imagor changes (config, tile generation, image processing) can only
+be validated from the main checkout.
