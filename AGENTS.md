@@ -20,7 +20,9 @@ app makemigrations
 app migrate
 app update_availability --all
 
-# Note: app expands to: infisical run --env=dev --path /backend --silent --log-level warn -- app <command>
+# Note: app expands to: infisical run --env=dev --path /backend --log-level warn -- app <command>
+# (no --silent: it swallows the child's stdout — interactive commands like
+# `app createsuperuser` would hang with invisible prompts)
 ```
 
 ## Authentication Modes

@@ -87,6 +87,12 @@ gotcha), lane step 1 now includes the venv sync.
 
 ## Notes / open points
 
+- `infisical run --silent` swallows the CHILD's stdout too: `app
+  createsuperuser` hung with invisible prompts after the username (root
+  cause found by the user: removing `--silent` fixed it). Dropped `--silent`
+  (kept `--log-level warn`) from `tasks/app.py`, `scripts/lane-run.sh` and
+  the AGENTS.md alias doc.
+
 - venv sync only happens via `post_start` (`workz start`) or manually —
   the pi provisioning `workz sync --isolated` path still needs lane step 1
   (documented in AGENTS.md).
