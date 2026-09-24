@@ -487,3 +487,37 @@
     config: {}
     props_schema: {}
     order: 15
+- model: organizations.organization
+  pk: 15
+  fields:
+    i18n:
+      name_en: Tour du Mont-Blanc
+      name_fr: Tour du Mont-Blanc
+      name_it: Tour del Monte Bianco
+      fullname_en: Association of Mont-Blanc Tour Keepers
+      fullname_fr: Association des Gardiens du Tour du Mont-Blanc
+      fullname_it: Associazione dei Guardiani del Tour del Monte Bianco
+      description_en: >-
+        Booking platform of the Mont-Blanc tour keepers (huts in France, Italy
+        and Switzerland) with online reservation.
+      description_fr: >-
+        Plateforme de réservation des gardiens du Tour du Mont-Blanc (refuges
+        en France, Italie et Suisse) avec réservation en ligne.
+      description_it: ""
+    slug: tmb
+    is_active: true
+    is_public: true
+    name: Tour du Mont-Blanc
+    fullname: Association des Gardiens du Tour du Mont-Blanc
+    description: >-
+      Reservationsplattform der Hüttenwarte des Tour du Mont-Blanc (Hütten in
+      Frankreich, Italien und der Schweiz) mit Online-Reservation.
+    url: https://www.montourdumontblanc.com
+    attribution: ""
+    link_hut_pattern: https://www.montourdumontblanc.com/fr/refuges/{{id}}
+    logo: organizations/logos/tmb_icon.png
+    color_light: "#0a5a54"
+    color_dark: "#7fc7c0"
+    config: {}
+    props_schema: {}
+    order: 16
