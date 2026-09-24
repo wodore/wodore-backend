@@ -32,9 +32,22 @@ if ! grep -q "# LANE app function" "$ACTIVATE"; then
     cat >> "$ACTIVATE" <<'EOF'
 
 # LANE app function (lane-aware: manage.py against the LANE database).
-# The main checkout uses `inv update-venv --infisical` instead, which wraps
-# infisical (dev database) around the `app` console script.
-app() { scripts/lane-run.sh .venv/bin/python manage.py "$@"; }
+# Default mode routes through scripts/lane-run.sh (infisical), mirroring
+# the main checkout's `inv update-venv --infisical` function (inf() { inv
+# app.app -i --cmd "$*"; }). Local-env mode — like `inv app.app` WITHOUT
+# -i, where the original task runs the bare console script on your shell
+# environment — is enabled with WODORE_APP_NO_INFISICAL=1: everything
+# except POSTGRES_DB/MARTIN_TILE_URL (taken from .env.local so you still
+# hit the LANE database) must come from your own environment.
+app() {
+    if [ "${WODORE_APP_NO_INFISICAL:-0}" = "1" ]; then
+        POSTGRES_DB="$(sed -n 's/^DB_NAME=//p' .env.local 2>/dev/null)" \
+        MARTIN_TILE_URL="${MARTIN_TILE_URL:-http://localhost:$(sed -n 's/^PORT_END=//p' .env.local 2>/dev/null)}" \
+        .venv/bin/python manage.py "$@"
+    else
+        scripts/lane-run.sh .venv/bin/python manage.py "$@"
+    fi
+}
 # LANE app function end
 EOF
 fi

@@ -31,11 +31,16 @@ does the right thing.
   which **silently omits hut-services-private**: settings swallow the
   ImportError and the booking sources vanish from `SERVICES`).
 - The script also patches the lane venv's `activate` with a LANE-AWARE
-  `app()`: `scripts/lane-run.sh .venv/bin/python manage.py "$@"`. The
-  original function (`inv update-venv --infisical` → `app() { inv app.app
-  -i --cmd "$*"; }`) wraps infisical, which injects the DEV database —
-  wrong target inside a lane (.env.local is not in Django's env chain,
-  which is why lane-run.sh re-injects POSTGRES_DB). Lane `app` → lane DB.
+  `app()`, defaulting to `scripts/lane-run.sh .venv/bin/python manage.py
+  "$@"` (infisical, LANE database). The original function (`inv
+  update-venv --infisical` → `app() { inv app.app -i --cmd "$*"; }`)
+  wraps infisical, which injects the DEV database — wrong target inside a
+  lane (.env.local is not in Django's env chain, which is why lane-run.sh
+  re-injects POSTGRES_DB). The original task supports a no-infisical mode
+  (`inv app.app` without `-i` → bare console script on the shell env);
+  the lane function supports it too via `WODORE_APP_NO_INFISICAL=1`, still
+  forcing `POSTGRES_DB`/`MARTIN_TILE_URL` from `.env.local` so local-env
+  mode also targets the lane DB.
 - No `make init` for lanes: its other pieces are covered — pre-commit hooks
   live in the shared `.git/hooks` (worktrees already run them), and
   `.volumes/pgdata` + `media/imagor_data` are only needed for local

@@ -224,9 +224,12 @@ scripts/lane-venv.sh && scripts/lane-db.sh create && scripts/sync-martin.sh
 
 After `source .venv/bin/activate` in the lane, `app <command>` runs against
 the LANE database (lane-aware function; the main checkout's `app` targets
-dev). No `make init` needed in lanes: pre-commit hooks live in the shared
-`.git/hooks` and the `.volumes`/`media/imagor_data` directories are only
-needed for local compose/imagor work.
+dev). `WODORE_APP_NO_INFISICAL=1 app <cmd>` skips infisical (like `inv
+app.app` without `-i`): all env except `POSTGRES_DB`/`MARTIN_TILE_URL`
+(from `.env.local`) must come from your shell. No `make init` needed in
+lanes: pre-commit hooks live in the shared `.git/hooks` and the
+`.volumes`/`media/imagor_data` directories are only needed for local
+compose/imagor work.
 
 Note: workz reads `.workz.toml` from the **main checkout** — provisioning
 activates repo-wide once this file is merged to main (before that, a
