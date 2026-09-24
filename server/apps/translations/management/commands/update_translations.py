@@ -10,6 +10,16 @@ Examples:
 
 import typing as t
 
+from django_admin_runner import register_command
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
+
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import QuerySet
@@ -19,7 +29,11 @@ from server.apps.huts.models import Hut
 from server.apps.translations.llm import TranslationClient, TranslationError
 from server.apps.translations.service import translate_instance
 
+# rich markup colors per report level (see _report)
+_LEVEL_COLORS = {"success": "green", "warning": "yellow", "error": "red"}
 
+
+@register_command(group="Translations", models=[Hut, GeoPlace])
 class Command(BaseCommand):
     help = (
         "Translate empty translated fields (name/description/note) of huts "
@@ -73,6 +87,12 @@ class Command(BaseCommand):
             action="store_true",
             help="Show what would be translated without saving",
         )
+        parser.add_argument(
+            "--no-progress",
+            action="store_true",
+            help="Disable the progress bar and print results as they "
+            "complete (useful for cron jobs)",
+        )
 
     def handle(self, *args: t.Any, **options: t.Any) -> None:
         hut_slugs: list[str] = options["hut"]
@@ -95,6 +115,44 @@ class Command(BaseCommand):
                 raise CommandError(str(error)) from error
 
         limit: int | None = options["limit"]
+        total = queryset.count() if limit is None else min(limit, queryset.count())
+
+        if options["no_progress"]:
+            self._run(
+                queryset, limit, options, languages, client, self._emit_plain, None
+            )
+        else:
+            with Progress(
+                SpinnerColumn(finished_text="✓"),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                TextColumn("•"),
+                TimeElapsedColumn(),
+            ) as progress:
+                task = progress.add_task(
+                    "[cyan]Translating missing fields...", total=total
+                )
+                self._run(
+                    queryset,
+                    limit,
+                    options,
+                    languages,
+                    client,
+                    self._emit_rich(progress),
+                    (progress, task),
+                )
+
+    def _run(
+        self,
+        queryset: QuerySet,
+        limit: int | None,
+        options: dict[str, t.Any],
+        languages: list[str] | None,
+        client: TranslationClient | None,
+        emit: t.Callable[[str, str], None],
+        progress: tuple[Progress, t.Any] | None,
+    ) -> None:
         translated_total = 0
         errors = 0
         processed = 0
@@ -112,17 +170,37 @@ class Command(BaseCommand):
                 )
             except TranslationError as error:
                 errors += 1
-                self.stdout.write(self.style.ERROR(f"{obj.slug}: {error}"))
+                emit(f"{obj.slug}: {error}", "error")
                 continue
+            if progress is not None:
+                progress[0].advance(progress[1])
             translated_total += sum(
                 len(fields) for fields in stats["translated"].values()
             )
-            self._report(obj, stats, dry_run=options["dry_run"])
+            self._report(obj, stats, options["dry_run"], emit)
 
         summary = f"\n{processed} instance(s) processed, {translated_total} field(s) translated"
         if errors:
             summary += f", {errors} error(s)"
         self.stdout.write(self.style.SUCCESS(summary))
+
+    def _emit_plain(self, line: str, level: str) -> None:
+        writer = {
+            "success": self.style.SUCCESS,
+            "warning": self.style.WARNING,
+            "error": self.style.ERROR,
+        }.get(level)
+        self.stdout.write(writer(line) if writer else line)
+
+    def _emit_rich(self, progress: Progress) -> t.Callable[[str, str], None]:
+        def emit(line: str, level: str) -> None:
+            color = _LEVEL_COLORS.get(level)
+            if color:
+                progress.console.print(f"[{color}]{line}[/{color}]")
+            else:
+                progress.console.print(line)
+
+        return emit
 
     def _parse_languages(self, raw: str | None) -> list[str] | None:
         if not raw:
@@ -171,7 +249,13 @@ class Command(BaseCommand):
             if missing:
                 raise CommandError(f"{label}(s) not found: {', '.join(missing)}")
 
-    def _report(self, obj: t.Any, stats: dict[str, t.Any], dry_run: bool) -> None:
+    def _report(
+        self,
+        obj: t.Any,
+        stats: dict[str, t.Any],
+        dry_run: bool,
+        emit: t.Callable[[str, str], None],
+    ) -> None:
         label = f"{obj._meta.model_name} '{obj.slug}'"
         parts = []
         for lang, fields in stats["translated"].items():
@@ -179,24 +263,18 @@ class Command(BaseCommand):
         if parts:
             mode = "would translate" if dry_run else "translated"
             suffix = "" if dry_run else " (saved)"
-            self.stdout.write(
-                self.style.SUCCESS(f"{label}: {mode} {', '.join(parts)}{suffix}")
-            )
+            emit(f"{label}: {mode} {', '.join(parts)}{suffix}", "success")
         elif stats["skipped_existing"] and not stats["translated"]:
-            self.stdout.write(f"{label}: nothing to do (translations exist)")
+            emit(f"{label}: nothing to do (translations exist)", "plain")
         elif stats["skipped_no_source"] and not stats["translated"]:
-            self.stdout.write(
-                self.style.WARNING(
-                    f"{label}: no source texts in main language "
-                    f"'{stats['source_lang']}'"
-                )
+            emit(
+                f"{label}: no source texts in main language '{stats['source_lang']}'",
+                "warning",
             )
         else:
-            self.stdout.write(f"{label}: nothing to do")
+            emit(f"{label}: nothing to do", "plain")
         for lang, field, length in stats["too_long"]:
-            self.stdout.write(
-                self.style.WARNING(
-                    f"{label}: skipped {field}_{lang} "
-                    f"({length} chars exceeds field limit)"
-                )
+            emit(
+                f"{label}: skipped {field}_{lang} ({length} chars exceeds field limit)",
+                "warning",
             )

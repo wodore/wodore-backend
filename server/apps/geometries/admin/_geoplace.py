@@ -1,6 +1,8 @@
 import json
 from typing import ClassVar
 
+from django_admin_runner.admin import CommandRunnerModelAdminMixin
+
 from django import forms
 from django.conf import settings
 from django.contrib import admin
@@ -190,7 +192,7 @@ class GeoPlaceCategoryInline(unfold_admin.TabularInline):
 
 
 @admin.register(GeoPlace)
-class GeoPlaceAdmin(LLMAdminMixin, ModelAdmin):
+class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
     """
     Admin interface for GeoPlace model.
 

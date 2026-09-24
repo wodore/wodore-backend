@@ -196,7 +196,7 @@ def test_store_quality_rejects_invalid_score():
 
 def test_store_quality_custom_threshold():
     hut = _update_hut(HutFactory(name="Grenzhütte"), review_status="done")
-    touched = store_quality(hut, 7, "Good.", review_below=8)
+    touched = store_quality(hut, 7, "Good.", rework_below=8)
     assert "review_status" in touched
     assert hut.review_status == "rework"
 

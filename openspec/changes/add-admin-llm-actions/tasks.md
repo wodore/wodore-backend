@@ -31,3 +31,11 @@
 ## 6. Gates
 
 - [x] 6.1 ruff check + format on touched files; openspec validate passes
+
+## 7. Owner review round 2 (PR #159)
+
+- [x] 7.1 `description_quality`: `MinValueValidator(1)`/`MaxValueValidator(10)` + scale-explaining help text on BOTH models (NULL = not assessed, kept over 0); migration
+- [x] 7.2 `update_translations` + `assess_descriptions` registered with django-admin-runner (`@register_command(group="Translations", models=[Hut, GeoPlace])`) + `CommandRunnerModelAdminMixin` on both admins (Run links); `--no-progress` flags
+- [x] 7.3 rich console output for both commands: live progress bar (Spinner/Bar/TaskProgress/TimeElapsed), colored per-record lines; plain summary line kept
+- [x] 7.4 rename `--review-below` → `--rework-below` (CLI flag + service kwarg `rework_below` + tests + spec); `TRANSLATION_QUALITY_REVIEW_THRESHOLD` setting name unchanged
+- [x] 7.5 fix review/rework wording slips in service + command docstrings

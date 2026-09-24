@@ -20,6 +20,7 @@ from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point as dbPoint
 from django.contrib.gis.measure import D
 from django.contrib.postgres.indexes import GinIndex
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import transaction
 from django.db.models import F, Q, Value
 from django.db.models.functions import Concat, Lower
@@ -130,8 +131,12 @@ class Hut(TimeStampedModel):
     description_quality = models.PositiveSmallIntegerField(
         null=True,
         blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(10)],
         verbose_name=_("Description quality"),
-        help_text=_("LLM quality score (1-10); empty = not assessed yet."),
+        help_text=_(
+            "LLM quality score of the description: 1 = low (thin/marketing "
+            "text), 10 = excellent. Empty means not assessed yet."
+        ),
     )
     description_quality_at = models.DateTimeField(
         null=True,

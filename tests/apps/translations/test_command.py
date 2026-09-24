@@ -173,12 +173,12 @@ def test_assess_command_rescore(monkeypatch):
     assert hut.description_quality == 7
 
 
-def test_assess_command_review_below_override(monkeypatch):
+def test_assess_command_rework_below_override(monkeypatch):
     hut = _done_hut(name="Grenzfallhütte", description="Text.")
     fake = FakeTranslationClient(assess_result={"score": 7, "summary": "Gut."})
     patch_assess_client(monkeypatch, fake)
 
-    call_command("assess_descriptions", "--hut", hut.slug, "--review-below", "8")
+    call_command("assess_descriptions", "--hut", hut.slug, "--rework-below", "8")
 
     hut.refresh_from_db()
     assert hut.review_status == "rework"

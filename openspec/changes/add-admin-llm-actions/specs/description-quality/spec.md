@@ -47,7 +47,7 @@ assessment time `description_quality_at`, and SHALL leave both fields
 The unused `work` review status SHALL be renamed to `rework` ("needs
 rework"; no data migration — zero rows use `work`) on both `Hut` and
 `GeoPlace`, and assessments SHALL move a record from `done` to `rework`
-when the score is below the review threshold (default 5), while records
+when the score is below the rework threshold (default 5), while records
 in `new`, `review`, `rework` or (on Hut) `reject` SHALL keep their
 status regardless of score.
 
@@ -76,7 +76,7 @@ status regardless of score.
 The `assess_descriptions` management command SHALL support `--hut SLUG`
 and `--geoplace SLUG` (repeatable), `--model hut|geoplace` with `--all`,
 `--limit`, `--rescore` (re-assess already-scored records), and
-`--review-below N` (review-status threshold override), SHALL by default
+`--rework-below N` (rework-threshold override), SHALL by default
 assess only records with `NULL` scores and non-empty main-language
 descriptions, and SHALL report per-record scores and a run summary.
 

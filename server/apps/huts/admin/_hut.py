@@ -7,6 +7,8 @@ with contextlib.suppress(ModuleNotFoundError):
     from django_stubs_ext import QuerySetAny
 
 
+from django_admin_runner.admin import CommandRunnerModelAdminMixin
+
 from django.conf import settings
 from django.contrib import admin
 from django.contrib.postgres.aggregates import JSONBAgg
@@ -55,7 +57,7 @@ except ImportError:
 
 ## ADMIN
 @admin.register(Hut)
-class HutsAdmin(LLMAdminMixin, ModelAdmin):
+class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
     search_fields = ("name",)
     # list_select_related = ()  # ( "type", "owner")
     form = required_i18n_fields_form_factory("name")
@@ -125,7 +127,9 @@ class HutsAdmin(LLMAdminMixin, ModelAdmin):
             inlines.append(HutAvailabilityViewInline)
         return inlines
 
-    def formfield_for_dbfield(self, db_field, request, **kwargs):
+    def formfield_for_dbfield(  # pyright: ignore[reportIncompatibleMethodOverride]  # untyped django_admin_runner base in MRO
+        self, db_field, request, **kwargs
+    ):
         """Customize FK querysets and the `open_monthly` widget.
 
         The plain Category/Organization querysets contain thousands of OSM

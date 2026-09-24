@@ -13,6 +13,7 @@ from django.conf import settings
 from django.contrib.gis.db import models
 from django.contrib.gis.geos import Point
 from django.contrib.postgres.indexes import GinIndex, GistIndex
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db.models import Q
 from django.db.models.functions import Lower
 from django.utils.translation import gettext_lazy as _
@@ -189,8 +190,12 @@ class GeoPlace(TimeStampedModel):
     description_quality = models.PositiveSmallIntegerField(
         null=True,
         blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(10)],
         verbose_name=_("Description quality"),
-        help_text=_("LLM quality score (1-10); empty = not assessed yet."),
+        help_text=_(
+            "LLM quality score of the description: 1 = low (thin/marketing "
+            "text), 10 = excellent. Empty means not assessed yet."
+        ),
     )
     description_quality_at = models.DateTimeField(
         null=True,
