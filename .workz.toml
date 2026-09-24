@@ -1,0 +1,27 @@
+# workz provisioning for wodore-backend agent worktrees.
+# Docs: https://github.com/rohansx/workz — repo usage: AGENTS.md § Worktrees / workz
+#
+# What workz defaults already do: copy `.env`/`.env.*`/`.envrc` +
+# tool-version files, symlink `.venv` (shared virtualenv — never commit it).
+[sync]
+# Gitignored repo files that must ride along into every worktree.
+# NOTE: workz copy_add only handles regular files — directories are not
+# copied (verified against the binary), so martin_sync/ is copied by the
+# post_start hook (scripts/sync-martin.sh) instead.
+copy_add = [
+    ".infisical.json",          # infisical project link (needed by the `app` wrapper)
+    ".geoplaces*",
+]
+
+[hooks]
+# Lane DB lives on the SHARED dev postgres (django-local-postgis:5432) under
+# its own name, cloned from the quiescent `wodore_template` snapshot —
+# same state as the dev main DB. Need current data? Refresh first:
+#   scripts/db-refresh-template.sh
+post_start = 'scripts/lane-db.sh create && scripts/sync-martin.sh'
+pre_done = 'scripts/lane-db.sh drop'
+
+[isolation]
+# Dev-server port range for `workz run` — clear of django (8000),
+# martin (8075) and imagor (8079).
+base_port = 3400
