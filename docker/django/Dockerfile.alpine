@@ -192,6 +192,8 @@ RUN <<EOF
 mkdir -p /tmp/py_file_cache
 touch /tmp/py_file_cache/.gitignore
 chown -R web:web /tmp/py_file_cache
+mkdir -p /code/static
+chown web:web /code/static
 chmod +x '/docker-entrypoint.sh'
 python manage.py collectstatic --noinput
 # Generate build timestamp automatically during build
