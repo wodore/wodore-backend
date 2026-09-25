@@ -71,8 +71,12 @@ urlpatterns = [
 
 # Zitadel RP routes + admin login redirect (only when OIDC is enabled; when
 # disabled the admin falls back to Django's classic login form).
+# Prepended, not appended: "admin/login/" must be matched BEFORE
+# path("admin/", admin.site.urls) in the base list above, otherwise the
+# admin site's own login form shadows the redirect and the admin silently
+# falls back to the classic password form (regression introduced in #150).
 if settings.OIDC_ENABLED:
-    urlpatterns += [
+    urlpatterns = [
         path("oidc/", include("mozilla_django_oidc.urls")),
         # admin hack, should not be needed (https://stackoverflow.com/questions/59881651/django-mozilla-django-oidc-and-admin)
         path(
@@ -81,6 +85,7 @@ if settings.OIDC_ENABLED:
                 url="/oidc/authenticate?next=/admin/", permanent=False
             ),
         ),
+        *urlpatterns,
     ]
 
 # Local dev/test auth provider (frontend authenticates directly against
