@@ -523,6 +523,9 @@ Q_CLUSTER = {
     # heavy. Defaults to node CPU count if unset (too many on a VPS), so set
     # it explicitly (burginfra: WD_QCLUSTER_WORKERS -> Q_CLUSTER_WORKERS).
     "workers": config("Q_CLUSTER_WORKERS", cast=int, default=3),
+    # Shared (database) cache so the sentinel's cluster status is visible
+    # to the web/admin processes (see components/caches.py, "shared").
+    "cache": "shared",
 }
 
 # django-admin-runner backend
