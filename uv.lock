@@ -1784,7 +1784,7 @@ wheels = [
 [[package]]
 name = "hut-services-private"
 version = "0.2.0"
-source = { git = "ssh://git@github.com/wodore/hut-services-private?branch=main#80424229318fa49d2344dcd583cdf8197c0d35a5" }
+source = { git = "ssh://git@github.com/wodore/hut-services-private?branch=main#e664602c4bd45b78e8e59441ca3fac731a447f52" }
 dependencies = [
     { name = "httpx" },
     { name = "hut-services" },
