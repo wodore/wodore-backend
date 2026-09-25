@@ -50,11 +50,29 @@ class TestWikimediaThumbUrl:
             THUMB_500_URL, 1920
         )
 
-    def test_only_first_width_segment_is_replaced(self):
-        url = THUMB_500_URL.replace(
-            "Huette.jpg/500px-", "Huette.jpg/500px-"
-        )  # single segment by construction
-        assert "3000px-" in _wikimedia_thumb_url(url, 3000)
+    def test_file_name_starting_with_digits_px_keeps_directory(self):
+        """Files named "640px-foo.jpg" carry the pattern twice.
+
+        The directory component (the original file name) must survive; only
+        the thumb segment is rewritten. Rewriting the directory component
+        yields a silently-404ing large source.
+        """
+        thumb = (
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/"
+            "640px-foo.jpg/500px-640px-foo.jpg"
+        )
+        rewritten = _wikimedia_thumb_url(thumb, 1920)
+        assert rewritten == (
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/"
+            "640px-foo.jpg/1920px-640px-foo.jpg"
+        )
+        assert "/640px-foo.jpg/" in rewritten  # directory component untouched
+
+    def test_rewrites_thumb_segment_only(self):
+        """Single-segment sanity: only the thumb width changes."""
+        assert _wikimedia_thumb_url(THUMB_500_URL, 3000) == THUMB_500_URL.replace(
+            "500px-", "3000px-"
+        )
 
 
 def _image_result(**overrides: Any) -> ImageResult:
@@ -188,6 +206,20 @@ class TestPostProcessSourceSelection:
             urls["original"]["proxy"],
         ):
             assert _quoted(ORIGINAL_URL) in variant
+
+    def test_constrained_not_nominal_size_selects_source(self, patched_lookups):
+        """Discriminator: selection must use the CONSTRAINED target size.
+
+        Square "medium" is nominally 1000x1000 (> 500 → large source under a
+        nominal-only implementation), but against an 800x460 original it is
+        constrained to 460x460 (<= 500) and must pick the medium source.
+        """
+        result = _image_result(url_medium=THUMB_500_URL, width=800, height=460)
+        [feature] = post_process_images([result])
+        urls = feature["properties"]["urls"]
+
+        assert _calculate_constrained_size(1000, 1000, 800, 460) == (460, 460)
+        assert _quoted(THUMB_500_URL) in urls["square"]["medium"]
 
     def test_original_raw_is_large_source_not_true_original(self, patched_lookups):
         """For Wikimedia the provider already points url_large at a thumb."""

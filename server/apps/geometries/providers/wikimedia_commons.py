@@ -49,7 +49,10 @@ def _wikimedia_thumb_url(thumb_url: str, width: int) -> str:
     replaced width-agnostically so cached metadata from older requests
     (e.g. 400px buckets) still resolves.
     """
-    return re.sub(r"/(\d+)px-", f"/{width}px-", thumb_url, count=1)
+    # Anchor to the last URL segment: Commons files whose own name starts
+    # with "640px-…" appear as …/thumb/a/ab/640px-foo.jpg/500px-640px-foo.jpg
+    # and the directory component must not be rewritten (silent 404 source).
+    return re.sub(r"/(\d+)px-(?=[^/]*$)", f"/{width}px-", thumb_url, count=1)
 
 
 class WikimediaCommonsProvider(ImageProvider):
