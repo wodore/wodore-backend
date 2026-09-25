@@ -519,6 +519,10 @@ Q_CLUSTER = {
     "timeout": 86400,  # 24 h
     "poll": 2,
     "max_attempts": 1,
+    # Worker processes per qcluster — keep low: tasks are long-running and
+    # heavy. Defaults to node CPU count if unset (too many on a VPS), so set
+    # it explicitly (burginfra: WD_QCLUSTER_WORKERS -> Q_CLUSTER_WORKERS).
+    "workers": config("Q_CLUSTER_WORKERS", cast=int, default=3),
 }
 
 # django-admin-runner backend
