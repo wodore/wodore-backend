@@ -184,6 +184,8 @@ COPY --chown=web:web tile_server/styles /code/tile_server/styles
 
 # Setting up proper permissions:
 RUN <<EOF
+mkdir -p /code/static
+chown web:web /code/static
 chmod +x '/docker-entrypoint.sh'
 python manage.py collectstatic --noinput
 # Generate build timestamp automatically during build
