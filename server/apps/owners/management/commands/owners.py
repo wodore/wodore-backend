@@ -1,7 +1,5 @@
 import random
 
-from faker import Faker
-
 from django.db import IntegrityError
 from django.utils.text import slugify
 
@@ -11,6 +9,8 @@ from ...models import Owner  # , Contact
 
 
 def add_owner_function(parser, limit, **kwargs):
+    from faker import Faker
+
     fake = Faker(["de", "fr", "it"])
     # contact_functions_pks = ContactFunction.objects.all().values_list("pk", flat=True)
     parser.stdout.write("Add owners:")
