@@ -27,6 +27,10 @@ wait-for-it \
 # It is also possible to wait for other services as well: redis, elastic, mongo
 echo "Postgres ${DJANGO_DATABASE_HOST}:${DJANGO_DATABASE_PORT} is up"
 
+# Gunicorn 25.x opens a control socket (.gunicorn/ in cwd) by default; it is
+# unused in containers and fails on root-owned cwd. Disable unless the caller
+# opted in via GUNICORN_CMD_ARGS.
+export GUNICORN_CMD_ARGS="${GUNICORN_CMD_ARGS:+$GUNICORN_CMD_ARGS }--no-control-socket"
 
 # Evaluating passed command (do not touch):
 # shellcheck disable=SC2086
