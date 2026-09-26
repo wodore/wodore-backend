@@ -1,0 +1,46 @@
+{% comment %}
+Base layout override for all allauth pages (login, logout, MFA, passkeys,
+password reset). Styling comes from the shared Wodore design tokens
+(DESIGN.md in wodore-frontend-quasar) via a static stylesheet — see
+static/local_auth/css/account.css. Rendered full-page for redirects and
+inside the SPA's login popup.
+{% endcomment %}{% load i18n static %}<!DOCTYPE html>
+<html lang="{{ LANGUAGE_CODE|default:'en' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="robots" content="noindex">
+  <title>{% block head_title %}Wodore{% endblock head_title %}</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="{% static 'local_auth/css/account.css' %}">
+  {% block extra_head %}{% endblock extra_head %}
+</head>
+<body>
+  {% block body %}
+    <main class="account-card">
+      <div class="account-brand">wodore</div>
+      {% if user.is_authenticated %}
+        <nav class="account-nav">
+          <a href="/accounts/2fa/">{% trans "Two-Factor Auth" %}</a>
+          <a href="/accounts/email/">{% trans "Change Email" %}</a>
+          <a href="/accounts/password/change/">{% trans "Change Password" %}</a>
+          <form method="post" action="/accounts/logout/" class="account-nav-logout">
+            {% csrf_token %}
+            <button type="submit" class="linklike">{% trans "Sign Out" %}</button>
+          </form>
+        </nav>
+        <hr>
+      {% endif %}
+      {% if messages %}
+        <ul class="messages">
+          {% for message in messages %}<li>{{ message }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+      {% block content %}{% endblock content %}
+    </main>
+  {% endblock body %}
+  {% block extra_body %}{% endblock extra_body %}
+</body>
+</html>

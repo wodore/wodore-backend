@@ -39,7 +39,9 @@ Two feature flags (see `server/settings/components/oidc.py`):
 - Frontend local mode: `WODORE_OICD_ISSUER_URL=http://localhost:8000/oauth/local`,
   `WODORE_OICD_CLIENT_ID=wodore-local-dev`, any `WODORE_OICD_RESOURCE_ID`.
 - Local users: `app local_auth_users` (admin@local.test / admin-dev, editor@local.test / editor-dev).
-- Test tokens: `POST /oauth/local/token` with `grant_type=password`.
+- Test tokens: `POST /oauth/local/token` with `grant_type=password`,
+  `client_id=wodore-local-dev-password`, `client_secret=wodore-local-dev-secret`
+  (dev/test-only client seeded by `app local_auth_users`).
 
 ## Project Structure
 
