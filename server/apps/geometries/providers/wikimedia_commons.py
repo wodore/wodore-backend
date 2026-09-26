@@ -33,26 +33,42 @@ logger = structlog.get_logger()
 # Width of the thumb bucket requested from the Commons API (iiurlwidth).
 # Serves as the medium source for small display variants (gallery thumbs).
 WIKIMEDIA_MEDIUM_THUMB_WIDTH = 500
-# Upper bound for the large thumb source. Requesting the original file
-# instead would trip Wikimedia's per-IP rate limit on imagor cache misses
-# and feed huge/slow originals (e.g. ~9MB TIFFs) to imagor.
-WIKIMEDIA_THUMB_MAX_WIDTH = 3000
-# The Wikimedia TIFF renderer caps rendered thumbs at ~1920px.
-WIKIMEDIA_TIFF_THUMB_MAX_WIDTH = 1920
+# Thumb buckets for the large source. Wikimedia serves thumbs only at the
+# $wgThumbnailSteps widths (20, 40, 60, 120, 250, 330, 500, 960, 1280,
+# 1920, 3840): any other width answers 400 ("Use thumbnail sizes listed on
+# https://w.wiki/GHai"), and a step larger than the original falls back to
+# the original file URL. Large sources therefore come from dedicated API
+# passes: the API snaps to a servable step (TIFF pre-rendered as JPEG) and
+# returns the original URL when the original is not larger than the step.
+WIKIMEDIA_LARGE_THUMB_WIDTH = 1920
+WIKIMEDIA_LARGEST_THUMB_WIDTH = 3840
 
 
-def _wikimedia_thumb_url(thumb_url: str, width: int) -> str:
-    """Rewrite a Commons ``thumburl`` to the requested pixel width.
+def _select_large_source(
+    original_url: str,
+    thumb_url: str,
+    thumb_url_large: str,
+    thumb_url_largest: str,
+    mime: str,
+) -> str:
+    """Pick the large imagor source from the bucket-pass results.
 
-    The pixel width is part of the thumb filename
-    (``.../thumb/x/xx/File.jpg/500px-File.jpg``). The width segment is
-    replaced width-agnostically so cached metadata from older requests
-    (e.g. 400px buckets) still resolves.
+    A bucket pass returns the ORIGINAL file URL when the original is not
+    larger than the step — for rasters that original is a reasonably sized
+    file and the best quality, but for TIFF it must not win over a smaller
+    servable thumb (heavy decode, browsers cannot render it).
     """
-    # Anchor to the last URL segment: Commons files whose own name starts
-    # with "640px-…" appear as …/thumb/a/ab/640px-foo.jpg/500px-640px-foo.jpg
-    # and the directory component must not be rewritten (silent 404 source).
-    return re.sub(r"/(\d+)px-(?=[^/]*$)", f"/{width}px-", thumb_url, count=1)
+
+    def is_thumb(url: str) -> bool:
+        return bool(url) and "/thumb/" in url
+
+    if is_thumb(thumb_url_largest):
+        return thumb_url_largest
+    if is_thumb(thumb_url_large):
+        return thumb_url_large
+    if str(mime).lower() == "image/tiff":
+        return thumb_url if is_thumb(thumb_url) else original_url
+    return original_url or thumb_url_large or thumb_url or thumb_url
 
 
 class WikimediaCommonsProvider(ImageProvider):
@@ -515,6 +531,16 @@ class WikimediaCommonsProvider(ImageProvider):
             data = response.json()
             pages = data.get("query", {}).get("pages", {}).values()
 
+            # Extra passes at the large thumb steps (servable sources —
+            # hand-rewritten thumb widths are not; see
+            # WIKIMEDIA_LARGE_THUMB_WIDTH).
+            thumbs_large = await self._fetch_thumb_bucket(
+                client, params, WIKIMEDIA_LARGE_THUMB_WIDTH
+            )
+            thumbs_largest = await self._fetch_thumb_bucket(
+                client, params, WIKIMEDIA_LARGEST_THUMB_WIDTH
+            )
+
             results = []
             for page in pages:
                 try:
@@ -524,6 +550,10 @@ class WikimediaCommonsProvider(ImageProvider):
 
                     # Extract metadata
                     img_data = self._parse_commons_api_response(page)
+                    img_data["thumb_url_large"] = thumbs_large.get(commons_title, "")
+                    img_data["thumb_url_largest"] = thumbs_largest.get(
+                        commons_title, ""
+                    )
 
                     # Calculate score (no QID for geosearch)
                     score = self._score_commons_image(
@@ -546,6 +576,35 @@ class WikimediaCommonsProvider(ImageProvider):
 
             logger.debug("commons_geosearch_complete", image_count=len(results))
             return results
+
+    async def _fetch_thumb_bucket(
+        self, client, params: dict, width: int
+    ) -> dict[str, str]:
+        """Fetch servable thumburls for one bucket width, keyed by page title.
+
+        Runs the same query with ``iiurlwidth=width``. The Commons API snaps
+        the request to a $wgThumbnailSteps size (and to the original file
+        URL for originals not larger than the step), so the returned URLs
+        are always fetchable. On failure an empty map is returned and
+        callers fall back to the smaller bucket / original.
+        """
+        bucket_params = {**params, "iiurlwidth": width}
+        try:
+            response = await client.get(self.commons_api, params=bucket_params)
+            response.raise_for_status()
+            data = response.json()
+        except Exception as e:
+            logger.warning(
+                "commons_thumb_bucket_fetch_failed", width=width, error=str(e)
+            )
+            return {}
+        thumbs: dict[str, str] = {}
+        for page in data.get("query", {}).get("pages", {}).values():
+            title = page.get("title", "")
+            thumburl = (page.get("imageinfo") or [{}])[0].get("thumburl")
+            if title and thumburl:
+                thumbs[title] = thumburl
+        return thumbs
 
     async def _fetch_commons_metadata(
         self, commons_title: str, client
@@ -582,7 +641,18 @@ class WikimediaCommonsProvider(ImageProvider):
                 if page_id == "-1":  # Missing page
                     return None
 
-                return self._parse_commons_api_response(page_data)
+                metadata = self._parse_commons_api_response(page_data)
+                # Extra passes at the large thumb steps (servable sources —
+                # hand-rewritten thumb widths are not).
+                thumbs_large = await self._fetch_thumb_bucket(
+                    client, params, WIKIMEDIA_LARGE_THUMB_WIDTH
+                )
+                thumbs_largest = await self._fetch_thumb_bucket(
+                    client, params, WIKIMEDIA_LARGEST_THUMB_WIDTH
+                )
+                metadata["thumb_url_large"] = thumbs_large.get(commons_title, "")
+                metadata["thumb_url_largest"] = thumbs_largest.get(commons_title, "")
+                return metadata
 
         except Exception as e:
             logger.warning(
@@ -1018,22 +1088,27 @@ class WikimediaCommonsProvider(ImageProvider):
             # pre-converted to JPEG.
             original_url = img_data.get("url", "")
             thumb_url = img_data.get("thumb_url") or ""
+            thumb_url_large = img_data.get("thumb_url_large") or ""
+            thumb_url_largest = img_data.get("thumb_url_largest") or ""
 
-            # Medium source: the thumb bucket requested via iiurlwidth
-            # (500px). If the original is not larger than that bucket the
-            # API returns the original URL itself — a tiny file, served
-            # directly.
+            # Medium source: the 500px-bucket thumburl from the metadata
+            # pass. For originals not larger than the bucket the API returns
+            # the original URL itself — a tiny file, served directly.
             url_medium = thumb_url or original_url
-            url_large = original_url
-            if width and width <= WIKIMEDIA_MEDIUM_THUMB_WIDTH:
-                url_medium = original_url
-            elif thumb_url and width:
-                max_width = (
-                    WIKIMEDIA_TIFF_THUMB_MAX_WIDTH
-                    if str(img_data.get("mime", "")).lower() == "image/tiff"
-                    else WIKIMEDIA_THUMB_MAX_WIDTH
-                )
-                url_large = _wikimedia_thumb_url(thumb_url, min(width, max_width))
+            # Large source: prefer the LARGEST servable THUMB (3840-step,
+            # only returned as a thumb when the original is larger), then
+            # the 1920-step thumb, then any thumb, then the original. A
+            # bucket pass returns the original URL when the original is not
+            # larger than the step — preferring the smaller-step thumb keeps
+            # heavy originals (TIFF!) out of imagor. Never rewrite thumb
+            # widths by hand (400, $wgThumbnailSteps policy).
+            url_large = _select_large_source(
+                original_url,
+                thumb_url,
+                thumb_url_large,
+                thumb_url_largest,
+                str(img_data.get("mime", "")),
+            )
 
             return ImageResult(
                 provider="wikicommons",
