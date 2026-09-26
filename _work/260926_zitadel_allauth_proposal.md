@@ -39,8 +39,11 @@ Planning session that produced the OpenSpec change
 
 ## Open follow-ups
 
-- Issuer URL choice (same origin vs. dedicated auth host) — open question in
-  design.md.
+- Login UX is phased (D2a): hosted allauth login at cutover (different
+  domains → first-party-cookie redirect flow), SPA-hosted login via headless
+  browser mode as optional phase 2 — feasible only if SPA and backend share
+  the registrable domain (same-site); otherwise blocked by Safari/Chrome
+  third-party-cookie rules.
 - Staff-MFA enforcement timing.
 - Frontend coordination (wodore-frontend-quasar): issuer, roles claim, login
   template styling.
