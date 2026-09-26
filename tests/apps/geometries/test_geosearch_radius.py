@@ -132,6 +132,12 @@ class _CategoryPage:
     members: list[tuple[str, float | None, float | None]] = []
 
 
+class _SparqlPage:
+    """Canned Wikidata SPARQL bindings for the direct-QID path."""
+
+    bindings: list[dict] = []
+
+
 class _DispatchingFakeClient:
     """Answers categorymembers listings and per-title metadata requests."""
 
@@ -145,6 +151,8 @@ class _DispatchingFakeClient:
         pass
 
     async def get(self, url: str, params: dict) -> _Response:
+        if "query" in params:  # Wikidata SPARQL
+            return _Response({"results": {"bindings": _SparqlPage.bindings}})
         if params.get("list") == "categorymembers":
             return _Response(
                 {
@@ -222,3 +230,49 @@ class TestCategoryImageDistance:
             [("File:At500m.jpg", 46.5044, 7.5), ("File:Over500m.jpg", 46.506, 7.5)]
         )
         assert [r.source_id for r in results] == ["File:At500m.jpg"]
+
+
+class TestQidQueryCoordinates:
+    """Regression: the direct-QID path must thread the query coordinates.
+
+    The category-distance change fed geotag distances through
+    ``_create_image_result`` while the QID path still passed (0, 0) as the
+    query point — P18 distances came out as haversine-vs-Null-Island
+    (~5,212 km) and the category filter, centered at (0, 0), dropped every
+    geotagged category member.
+    """
+
+    def _fetch(self):
+        _SparqlPage.bindings = [
+            {
+                "item": {"value": "http://www.wikidata.org/entity/Q123"},
+                "image": {
+                    "value": (
+                        "http://commons.wikimedia.org/wiki/Special:FilePath/Huette.jpg"
+                    )
+                },
+                "category": {"value": "Testcat"},
+            }
+        ]
+        _CategoryPage.members = [
+            ("File:Huette.jpg", 46.501, 7.5),  # P18 image, ~111 m from query
+            ("File:CatNear.jpg", 46.502, 7.5),  # category member, ~222 m
+            ("File:CatFar.jpg", 46.55, 7.5),  # category member, ~5.5 km
+        ]
+        provider = WikimediaCommonsProvider()
+        return asyncio.run(
+            provider._fetch_wikidata_by_qids(
+                {"Q123"}, lat=46.5, lon=7.5, limit=10, httpx=_DispatchingHttpx
+            )
+        )
+
+    def test_p18_distance_uses_query_coords(self):
+        results = self._fetch()
+        p18 = next(r for r in results if r.source_id == "File:Huette.jpg")
+        assert 90 < p18.distance_m < 130  # true distance, not 5,212 km
+
+    def test_category_filter_centered_on_query(self):
+        results = self._fetch()
+        ids = [r.source_id for r in results]
+        assert "File:CatNear.jpg" in ids
+        assert "File:CatFar.jpg" not in ids
