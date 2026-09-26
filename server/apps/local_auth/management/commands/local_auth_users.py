@@ -6,12 +6,15 @@ client so scripts and tests can fetch tokens with a simple POST (parity with
 the retired hand-rolled provider).
 """
 
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand, CommandParser
+
+if TYPE_CHECKING:
+    from server.apps.accounts.models import User
 
 ADMIN_USER = "admin@local.test"
 EDITOR_USER = "editor@local.test"
@@ -90,9 +93,12 @@ class Command(BaseCommand):
         password: str,
         groups: list[Group],
         created: list[str],
-    ) -> Any:
+    ) -> "User":
         user_model = get_user_model()
-        user, was_created = user_model.objects.get_or_create(email=email)
+        user, was_created = cast(
+            "tuple[User, bool]",
+            user_model.objects.get_or_create(email=email),
+        )
         if was_created:
             created.append(email)
         user.is_active = True
@@ -123,9 +129,12 @@ class Command(BaseCommand):
         )
 
         # Dev/test convenience: password grant client (parity with the
-        # retired local provider). Never in production.
-        is_dev_or_test = (
-            settings.DEBUG or getattr(settings, "ENVIRONMENT", "") == "test"
+        # retired local provider). Never in production. ENVIRONMENT is
+        # "development" or "test" (DEBUG is False inside pytest, so it
+        # cannot be relied on alone).
+        is_dev_or_test = settings.DEBUG or getattr(settings, "ENVIRONMENT", "") in (
+            "development",
+            "test",
         )
         if is_dev_or_test:
             application_model.objects.update_or_create(

@@ -111,14 +111,18 @@ class TestFlagDefaults:
         assert "ROLLBACK=True" in out
         assert "Traceback" not in out
 
+    def test_none_mode_needs_nothing(self):
+        """AUTH_PROVIDER=none is the image-build/no-auth state: no discovery
+        fetch, no signing key, no provider surfaces."""
+        out = _load_settings_env("production", extra={"AUTH_PROVIDER": "none"})
+        assert "AUTH_PROVIDER=none" in out
+        assert "OIDC_ENABLED=False" in out
+        assert "ZITADEL_RP_ENABLED=False" in out
+        assert "ROLLBACK=False" in out
+        assert "Traceback" not in out
+
     def test_invalid_provider_value_aborts(self):
-        out = _load_settings_env(
-            "development",
-            extra={
-                "AUTH_PROVIDER": "saml",
-                "LOCAL_AUTH_PRIVATE_KEY_JWK": _dev_key_json(),
-            },
-        )
+        out = _load_settings_env("development", extra={"AUTH_PROVIDER": "saml"})
         assert "ImproperlyConfigured" in out
         assert "AUTH_PROVIDER" in out
 

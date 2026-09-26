@@ -43,17 +43,21 @@ AUTH_PROVIDER = (
     .strip()
     .lower()
 )
-if AUTH_PROVIDER not in ("builtin", "zitadel"):
+if AUTH_PROVIDER not in ("builtin", "zitadel", "none"):
     raise ImproperlyConfigured(
-        f"AUTH_PROVIDER must be 'builtin' or 'zitadel', got '{AUTH_PROVIDER}'."
+        f"AUTH_PROVIDER must be 'builtin', 'zitadel' or 'none', got '{AUTH_PROVIDER}'."
     )
 
+# "none" disables every provider surface (no discovery fetch, no signing
+# key) - the state image builds and "no auth" test runs want.
 OIDC_ENABLED = AUTH_PROVIDER == "builtin"  # built-in provider surface
 ZITADEL_RP_ENABLED = AUTH_PROVIDER == "zitadel"  # Zitadel RP surface
 
 ZITADEL_ROLLBACK_ENABLED = config(
     "ZITADEL_ROLLBACK_ENABLED", cast=bool, default=not _IS_DEV_OR_TEST
 )
+if AUTH_PROVIDER == "none":
+    ZITADEL_ROLLBACK_ENABLED = False
 
 # --- Built-in provider -----------------------------------------------------------
 
@@ -115,7 +119,7 @@ OIDC_PROVIDER_PRIVATE_JWK: dict = _resolve_provider_jwk() if OIDC_ENABLED else {
 
 def _jwk_to_pem(jwk: dict) -> str:
     key = JsonWebKey.import_key(jwk, {"kty": "RSA"})
-    pem = key.as_pem(is_private=True)
+    pem = key.as_pem(is_private=True)  # pyright: ignore[reportAttributeAccessIssue]  # authlib Key stubs lack as_pem
     return pem.decode() if isinstance(pem, bytes) else str(pem)
 
 

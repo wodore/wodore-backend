@@ -197,10 +197,10 @@ mkdir -p /code/static
 chown web:web /code/static
 chmod +x '/docker-entrypoint.sh'
 # collectstatic must work without runtime env or network access:
-# OIDC_ENABLED=false skips the OIDC discovery fetch in settings (it fails
-# at build time and - without set -e - silently shipped images with an
-# empty /code/static, breaking all /static/ serving under whitenoise).
-OIDC_ENABLED=false python manage.py collectstatic --noinput
+# AUTH_PROVIDER=none disables every provider surface (no OIDC
+# discovery fetch, no signing key) so collectstatic works without
+# runtime env or network access at build time.
+AUTH_PROVIDER=none python manage.py collectstatic --noinput
 # Generate build timestamp automatically during build
 printf 'export BUILD_TIMESTAMP=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%S.%6NZ)" > /code/.build_timestamp
 chmod 644 /code/.build_timestamp
