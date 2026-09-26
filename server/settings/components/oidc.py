@@ -1,23 +1,32 @@
-"""OIDC provider settings: the built-in provider (django-oauth-toolkit +
-django-allauth) and the Zitadel rollback window.
+"""Auth provider settings: Zitadel RP (default in production) and the
+built-in provider (django-oauth-toolkit + django-allauth).
 
-- ``OIDC_ENABLED``: gates the built-in provider surface — DOT's OAuth2/OIDC
-  endpoints under ``/oauth/local/``, allauth's account URLs, the admin login
-  redirect — and the built-in JWT validator. Defaults to **true in all
-  environments**; an explicit environment value always wins.
-- ``ZITADEL_ROLLBACK_ENABLED``: while tokens issued by Zitadel may still be
-  in circulation, the introspection validator stays available. Defaults to
-  true outside development/test; explicit env value wins. Removed together
-  with the Zitadel decommission.
+The switch is a single environment variable, ``AUTH_PROVIDER``:
 
-The provider's signing key comes from ``LOCAL_AUTH_PRIVATE_KEY_JWK`` (JSON
-JWK, Infisical-backed). In development/test a committed dev-only keypair is
-the fallback; everywhere else startup aborts without a real key (fail-fast).
+- ``zitadel`` (default outside development/test): the classic relying-party
+  surface - mozilla-django-oidc login (``/oidc/``), admin login redirect,
+  SessionRefresh, the Zitadel ``PermissionBackend`` and token validation
+  via introspection. A failed discovery fetch aborts startup (fail-fast).
+- ``builtin`` (default in development/test): DOT serves the OIDC provider
+  at ``/oauth/local/`` with django-allauth accounts behind it; tokens
+  validate locally (opaque DB lookup / JWT signature + exact issuer).
+
+The production default stays ``zitadel`` until the built-in flow has been
+rehearsed in staging; the later flip is an env change
+(``AUTH_PROVIDER=builtin``), not a deploy.
+
+- ``ZITADEL_ROLLBACK_ENABLED``: while ``AUTH_PROVIDER=builtin`` and legacy
+  Zitadel tokens may still be in circulation, the introspection validator
+  stays available alongside the built-in one. Defaults to true outside
+  development/test; removed together with the Zitadel decommission.
 """
 
 import json
 import logging
+import re
+from urllib.parse import urlparse
 
+import requests
 from authlib.jose import JsonWebKey
 
 from django.core.exceptions import ImproperlyConfigured
@@ -27,17 +36,28 @@ from server.settings.components import config
 _ENV = config("DJANGO_ENV", "development")
 _IS_DEV_OR_TEST = _ENV in ("development", "test")
 
-# --- Flags -------------------------------------------------------------------
+# --- Provider switch -----------------------------------------------------------
 
-OIDC_ENABLED = config("OIDC_ENABLED", cast=bool, default=True)
+AUTH_PROVIDER = (
+    config("AUTH_PROVIDER", default="builtin" if _IS_DEV_OR_TEST else "zitadel")
+    .strip()
+    .lower()
+)
+if AUTH_PROVIDER not in ("builtin", "zitadel"):
+    raise ImproperlyConfigured(
+        f"AUTH_PROVIDER must be 'builtin' or 'zitadel', got '{AUTH_PROVIDER}'."
+    )
+
+OIDC_ENABLED = AUTH_PROVIDER == "builtin"  # built-in provider surface
+ZITADEL_RP_ENABLED = AUTH_PROVIDER == "zitadel"  # Zitadel RP surface
 
 ZITADEL_ROLLBACK_ENABLED = config(
     "ZITADEL_ROLLBACK_ENABLED", cast=bool, default=not _IS_DEV_OR_TEST
 )
 
-# --- Built-in provider ---------------------------------------------------------
+# --- Built-in provider -----------------------------------------------------------
 
-# Issuer base path — the frontend's issuer URL is ``{origin}/oauth/local``.
+# Issuer base path - the frontend's issuer URL is ``{origin}/oauth/local``.
 # Kept from the hand-rolled provider so frontend configs stay valid.
 OIDC_PROVIDER_BASE_PATH = "oauth/local"
 
@@ -47,8 +67,8 @@ LOCAL_AUTH_CLIENT_ID = config("LOCAL_AUTH_CLIENT_ID", "wodore-local-dev")
 # Comma-separated exact redirect URIs for the SPA client.
 LOCAL_AUTH_REDIRECT_URIS = config("LOCAL_AUTH_REDIRECT_URIS", "")
 
-# Committed dev-only RSA key (JWK). Only ever the fallback in dev/test —
-# production must provide ``LOCAL_AUTH_PRIVATE_KEY_JWK``.
+# Committed dev-only RSA key (JWK). Only ever the fallback in dev/test -
+# ``AUTH_PROVIDER=builtin`` outside dev/test requires a real key.
 _DEV_PRIVATE_JWK: dict = {
     "kty": "RSA",
     "kid": "wodore-local-dev-1",
@@ -83,10 +103,10 @@ def _resolve_provider_jwk() -> dict:
     if _IS_DEV_OR_TEST:
         return dict(_DEV_PRIVATE_JWK)
     raise ImproperlyConfigured(
-        "The built-in OIDC provider is enabled (OIDC_ENABLED defaults to "
-        "true) but no signing key is configured. Set LOCAL_AUTH_PRIVATE_KEY_JWK "
-        "(JSON JWK) - e.g. via Infisical. The committed dev key is only "
-        "allowed in development/test."
+        "The built-in OIDC provider is enabled (AUTH_PROVIDER=builtin) but no "
+        "signing key is configured. Set LOCAL_AUTH_PRIVATE_KEY_JWK (JSON JWK) "
+        "- e.g. via Infisical. The committed dev key is only allowed in "
+        "development/test."
     )
 
 
@@ -126,43 +146,138 @@ if OIDC_ENABLED:
         ),
     }
 
-# --- Zitadel rollback window ---------------------------------------------------
+# --- Zitadel RP + rollback window --------------------------------------------------
 
-# Legacy machine-user key for introspection client assertions (same format
-# the Zitadel RP used). Only needed while ZITADEL_ROLLBACK_ENABLED is true.
 ZITADEL_PROJECT = config("ZITADEL_PROJECT", "")
 OIDC_RP_SIGN_ALGO = "RS256"
+OIDC_RP_CLIENT_ID = config("OIDC_RP_CLIENT_ID", "")
+OIDC_RP_CLIENT_SECRET = config("OIDC_RP_CLIENT_SECRET", "")
+OIDC_RP_SCOPES = "openid email phone profile"
 ZITADEL_OP_BASE_URL = config("OIDC_OP_BASE_URL", "https://notset")
-ZITADEL_INTROSPECTION_URL = config(
-    "ZITADEL_INTROSPECTION_URL",
-    ZITADEL_OP_BASE_URL.rstrip("/") + "/oauth/v2/introspect",
-)
 ZITADEL_API_PRIVATE_KEY_FILE_PATH = config("ZITADEL_API_PRIVATE_KEY_FILE_PATH", "")
+
+# Optional internal URL for OIDC requests (e.g., k8s service URL)
+OIDC_ISSUER_INTERNAL_URL = config("OIDC_ISSUER_INTERNAL_URL", "")
+OIDC_OP_DISCOVERY_ENDPOINT = ZITADEL_OP_BASE_URL + "/.well-known/openid-configuration"
+
+
+def discover_oidc(discovery_url: str, internal_url: str = "") -> dict | None:
+    """Fetch the provider's OIDC discovery document (endpoint URLs)."""
+    headers: dict[str, str] = {}
+    actual_url = discovery_url
+
+    if internal_url:
+        parsed_original = urlparse(discovery_url)
+        parsed_internal = urlparse(internal_url)
+        actual_url = discovery_url.replace(
+            f"{parsed_original.scheme}://{parsed_original.netloc}",
+            f"{parsed_internal.scheme}://{parsed_internal.netloc}",
+        )
+        headers["Host"] = parsed_original.netloc
+
+    try:
+        response = requests.get(actual_url, headers=headers, timeout=10)
+    except (
+        requests.exceptions.ConnectionError,
+        requests.exceptions.MissingSchema,
+    ) as e:
+        logging.warning(
+            "Failed to retrieve provider configuration for '%s': '%s'.",
+            discovery_url,
+            str(e),
+        )
+        return None
+    if response.status_code != 200:
+        logging.warning(
+            "Failed to retrieve provider configuration for '%s' (Status code: %s).",
+            discovery_url,
+            response.status_code,
+        )
+        return None
+    provider_config = response.json()
+    return {
+        "authorization_endpoint": provider_config["authorization_endpoint"],
+        "token_endpoint": provider_config["token_endpoint"],
+        "userinfo_endpoint": provider_config["userinfo_endpoint"],
+        "introspection_endpoint": provider_config["introspection_endpoint"],
+        "jwks_uri": provider_config["jwks_uri"],
+    }
 
 
 def _load_zitadel_private_key() -> dict:
     raw = config("ZITADEL_API_PRIVATE_KEY_JSON", None)
-    if raw:
-        try:
-            data = json.loads(raw)
-            return {
-                "client_id": data["clientId"],
-                "key_id": data["keyId"],
-                "private_key": data["key"],
-            }
-        except (json.JSONDecodeError, KeyError) as exc:
-            logging.warning(
-                "ZITADEL_API_PRIVATE_KEY_JSON is invalid - ignored: %s", exc
-            )
-    return {}
+    if not raw:
+        return {}
+    try:
+        data = json.loads(str(raw))
+        return {
+            "client_id": data["clientId"],
+            "key_id": data["keyId"],
+            "private_key": data["key"],
+        }
+    except (json.JSONDecodeError, KeyError):
+        logging.warning("ZITADEL_API_PRIVATE_KEY_JSON is invalid - ignored.")
+        return {}
 
 
 ZITADEL_API_PRIVATE_KEY = _load_zitadel_private_key()
 
-if ZITADEL_ROLLBACK_ENABLED and not ZITADEL_API_PRIVATE_KEY:
+# OIDC session renewal (mozilla-django-oidc), Zitadel RP mode only.
+OIDC_RENEW_ID_TOKEN_EXPIRY_SECONDS = 60 * 60 * 24  # 24 hours
+OIDC_STORE_ACCESS_TOKEN = True
+OIDC_STORE_ID_TOKEN = True
+OIDC_EXEMPT_URLS = [
+    re.compile(r"^/v\d+/.*"),  # Exempt all API routes (any version)
+    "/static/",
+    "/media/",
+]
+
+discovery_info = None
+if ZITADEL_RP_ENABLED:
+    discovery_info = discover_oidc(OIDC_OP_DISCOVERY_ENDPOINT, OIDC_ISSUER_INTERNAL_URL)
+    if discovery_info is None:
+        raise ImproperlyConfigured(
+            f"AUTH_PROVIDER=zitadel but the discovery document could not be "
+            f"retrieved from '{OIDC_OP_DISCOVERY_ENDPOINT}'. Check that the "
+            f"OIDC provider is reachable and OIDC_OP_BASE_URL is correct."
+        )
+
+if discovery_info:
+    OIDC_OP_AUTHORIZATION_ENDPOINT = discovery_info["authorization_endpoint"]
+    OIDC_OP_TOKEN_ENDPOINT = discovery_info["token_endpoint"]
+    OIDC_OP_USER_ENDPOINT = discovery_info["userinfo_endpoint"]
+    OIDC_OP_JWKS_ENDPOINT = discovery_info["jwks_uri"]
+
+    _django_admin_url = (
+        config("DJANGO_ADMIN_URL")
+        if config("DJANGO_ADMIN_URL", None)
+        else "http://localhost:8000"
+    )
+    LOGIN_REDIRECT_URL = f"{_django_admin_url}/admin"
+    LOGIN_URL = "/oidc/authenticate/"
+
+    ZITADEL_API_MACHINE_USERS = {
+        us[0].strip(): us[1].strip()
+        for us in (
+            user_secret.split(":")
+            for user_secret in config("ZITADEL_API_MACHINE_USERS", "").split(",")
+        )
+    }
+
+# Introspection endpoint for the Zitadel token validators: explicit env,
+# else from discovery (RP mode), else derived from the base URL (rollback).
+ZITADEL_INTROSPECTION_URL = config("ZITADEL_INTROSPECTION_URL", "")
+if not ZITADEL_INTROSPECTION_URL and discovery_info:
+    ZITADEL_INTROSPECTION_URL = discovery_info["introspection_endpoint"]
+if not ZITADEL_INTROSPECTION_URL:
+    ZITADEL_INTROSPECTION_URL = ZITADEL_OP_BASE_URL.rstrip("/") + "/oauth/v2/introspect"
+
+_ZITADEL_VALIDATION_ACTIVE = ZITADEL_RP_ENABLED or ZITADEL_ROLLBACK_ENABLED
+if _ZITADEL_VALIDATION_ACTIVE and not ZITADEL_API_PRIVATE_KEY:
     if not _IS_DEV_OR_TEST:
         raise ImproperlyConfigured(
-            "ZITADEL_ROLLBACK_ENABLED=true but no Zitadel machine-user key is "
-            "configured. Set ZITADEL_API_PRIVATE_KEY_JSON (or the "
+            "Zitadel token validation is active (AUTH_PROVIDER=zitadel or "
+            "ZITADEL_ROLLBACK_ENABLED=true) but no Zitadel machine-user key "
+            "is configured. Set ZITADEL_API_PRIVATE_KEY_JSON (or the "
             "_FILE_PATH variant), or set ZITADEL_ROLLBACK_ENABLED=false."
         )

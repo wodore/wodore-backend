@@ -222,3 +222,11 @@ DATABASES["default"]["CONN_MAX_AGE"] = 0
 # 3 failures, permanent until `manage.py axes_reset`). Production keeps the
 # defaults; allauth's own rate limits still apply everywhere.
 AXES_ENABLED = False
+
+# Zitadel RP mode only (AUTH_PROVIDER=zitadel): refresh OIDC sessions.
+from server.settings.components.oidc import (
+    ZITADEL_RP_ENABLED,  # pyright: ignore[reportUndefinedVariable]
+)
+
+if ZITADEL_RP_ENABLED:
+    MIDDLEWARE += ("mozilla_django_oidc.middleware.SessionRefresh",)  # pyright: ignore[reportUndefinedVariable]

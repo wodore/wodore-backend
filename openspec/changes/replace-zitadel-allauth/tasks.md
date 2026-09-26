@@ -16,11 +16,11 @@
 
 ## 2. Promote: flip the production default to the built-in provider (Zitadel stays rollback)
 
-- [ ] 2.1 Flags end state: `OIDC_ENABLED` gates the built-in provider, defaulting true everywhere; retire `LOCAL_AUTH_ENABLED` and its dev/test gate together with the `local_auth` app; tests that want "no auth" set `OIDC_ENABLED=false` (clean-401 path)
+- [x] 2.1 Flags: single `AUTH_PROVIDER` switch (`zitadel` production default pre-flip, `builtin` in dev/test and post-flip); `OIDC_ENABLED` derives from it; `ZITADEL_ROLLBACK_ENABLED` covers the post-flip window; tests that want "no auth" set the flags off (clean-401 path)
 - [ ] 2.2 Issuer-routed dual token validation in `server/apps/api/auth.py`: built-in JWTs verify locally (JWKS-cached, `iss`/`aud`, clock skew) while Zitadel introspection tokens stay accepted as long as Zitadel is enabled; unknown issuer → 401; tests for both issuers
 - [ ] 2.3 Bootstrap initial production accounts directly (admin/editor via the fixture command) — no user migration needed (no production user base yet)
 - [ ] 2.4 Audit logging on auth signals (login, logout, MFA changes, token failures); add `cleartokens` cron
-- [ ] 2.5 Staging rehearsal, then flip the frontend default issuer (`WODORE_OICD_ISSUER_URL` → backend `/oauth` path) — frontend change is configuration only; verify popup + redirect login, refresh rotation, roles on protected endpoints; Zitadel stays selectable as rollback
+- [ ] 2.5 Staging rehearsal with `AUTH_PROVIDER=builtin`, then flip production the same way and point the frontend default issuer (`WODORE_OICD_ISSUER_URL`) at the backend `/oauth/local` path — configuration only; verify popup + redirect login, refresh rotation, roles on protected endpoints; rollback = `AUTH_PROVIDER=zitadel` again
 
 ## 3. Decommission: remove Zitadel
 

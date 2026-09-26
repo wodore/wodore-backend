@@ -6,9 +6,11 @@ Validators share the scope/role/group matching logic from
 - ``BuiltInJWTValidator`` - verifies JWT access tokens issued by the built-in
   OIDC provider (django-oauth-toolkit) locally: RS256 signature against the
   provider key, expiry, issuer - no network call per request.
-- ``ZitadelIntrospectTokenValidator`` - legacy rollback: verifies tokens
-  issued by Zitadel via its introspection endpoint, available only while
-  ``ZITADEL_ROLLBACK_ENABLED`` is true (until the Zitadel decommission).
+- ``ZitadelIntrospectTokenValidator`` - verifies Zitadel-issued tokens via
+  the introspection endpoint: the default validator while
+  ``AUTH_PROVIDER=zitadel``, and additionally available behind
+  ``ZITADEL_ROLLBACK_ENABLED`` during the rollback window after the
+  ``AUTH_PROVIDER=builtin`` flip (until the Zitadel decommission).
 
 ``AuthBearer`` picks the active validators from settings per instance and
 tries them in order. When auth is disabled, protected endpoints answer with
@@ -353,7 +355,7 @@ def _select_validators() -> list[BaseTokenValidator]:
     validators: list[BaseTokenValidator] = []
     if settings.OIDC_ENABLED:
         validators.append(BuiltInJWTValidator())
-    if settings.ZITADEL_ROLLBACK_ENABLED:
+    if settings.ZITADEL_RP_ENABLED or settings.ZITADEL_ROLLBACK_ENABLED:
         validators.append(ZitadelIntrospectTokenValidator())
     return validators
 

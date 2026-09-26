@@ -58,3 +58,11 @@ CSRF_COOKIE_SECURE = True
 CORS_ALLOWED_ORIGIN_REGEXES = [
     *[f"^https?://{d}" for d in DJANGO_TRUSTED_DOMAINS],
 ]
+
+# Zitadel RP mode only (AUTH_PROVIDER=zitadel): refresh OIDC sessions.
+from server.settings.components.oidc import (
+    ZITADEL_RP_ENABLED,  # pyright: ignore[reportUndefinedVariable]
+)
+
+if ZITADEL_RP_ENABLED:
+    MIDDLEWARE += ("mozilla_django_oidc.middleware.SessionRefresh",)  # noqa: F821  # pyright: ignore[reportUndefinedVariable]

@@ -135,6 +135,7 @@ class TestProtectedEndpoints:
 class TestDisabledMode:
     def test_clean_401_when_nothing_configured(self, settings):
         settings.OIDC_ENABLED = False
+        settings.ZITADEL_RP_ENABLED = False
         settings.ZITADEL_ROLLBACK_ENABLED = False
         disabled_api = NinjaAPI(urls_namespace="test-disabled-api")
 
@@ -152,12 +153,26 @@ class TestDisabledMode:
 class TestValidatorRouting:
     def test_builtin_validator_selected_by_default(self, settings):
         settings.OIDC_ENABLED = True
+        settings.ZITADEL_RP_ENABLED = False
         settings.ZITADEL_ROLLBACK_ENABLED = False
         validators = AuthBearer().validators
         assert [type(v) for v in validators] == [BuiltInJWTValidator]
 
+    def test_zitadel_mode_selects_zitadel_validator(self, settings):
+        settings.OIDC_ENABLED = False
+        settings.ZITADEL_RP_ENABLED = True
+        settings.ZITADEL_ROLLBACK_ENABLED = False
+        settings.ZITADEL_API_PRIVATE_KEY = {
+            "client_id": "test",
+            "key_id": "test",
+            "private_key": "test",
+        }
+        validators = AuthBearer().validators
+        assert [type(v) for v in validators] == [ZitadelIntrospectTokenValidator]
+
     def test_rollback_adds_zitadel_validator(self, settings):
         settings.OIDC_ENABLED = True
+        settings.ZITADEL_RP_ENABLED = False
         settings.ZITADEL_ROLLBACK_ENABLED = True
         settings.ZITADEL_API_PRIVATE_KEY = {
             "client_id": "test",
@@ -172,5 +187,6 @@ class TestValidatorRouting:
 
     def test_disabled_mode_has_no_validators(self, settings):
         settings.OIDC_ENABLED = False
+        settings.ZITADEL_RP_ENABLED = False
         settings.ZITADEL_ROLLBACK_ENABLED = False
         assert AuthBearer().validators == []

@@ -13,11 +13,21 @@ never redefined by environment files, so they are read directly from the
 shared scope (bare references).
 """
 
+if ZITADEL_RP_ENABLED:  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+    # Classic Zitadel relying-party surface (production default until the
+    # AUTH_PROVIDER=builtin flip): mozilla-django-oidc + permission backend.
+    INSTALLED_APPS += (  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+        "mozilla_django_oidc",
+    )
+    AUTHENTICATION_BACKENDS += (  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+        "server.core.oidc_permission.PermissionBackend",
+    )
+
 if OIDC_ENABLED:  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
     # Built-in OIDC provider + account management.
     # server.apps.local_auth is listed FIRST: its template overrides
     # (allauth account templates) must be found before allauth's own.
-    INSTALLED_APPS += (  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+    INSTALLED_APPS += (  # pyright: ignore[reportUndefinedVariable]
         "server.apps.local_auth",
         "oauth2_provider",
         "allauth",
@@ -38,6 +48,6 @@ if OIDC_ENABLED:  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
         "allauth.usersessions.middleware.UserSessionsMiddleware",
     )
 
-    AUTHENTICATION_BACKENDS += (  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+    AUTHENTICATION_BACKENDS += (  # pyright: ignore[reportUndefinedVariable]
         "allauth.account.auth_backends.AuthenticationBackend",
     )
