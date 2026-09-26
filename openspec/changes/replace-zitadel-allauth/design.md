@@ -72,18 +72,34 @@ non-standard token endpoint = a worse B.
 - **Django Ninja + `AuthBearer`**: resource server — local JWT
   verification.
 
-### D2a: SPA-hosted login via allauth headless (browser mode)
+### D2a: Login UX — hosted login at cutover, SPA-hosted login later
 
-The SPA renders its own login (and MFA/password-reset) screens and drives
-them through allauth's headless **browser-mode** endpoints; on success the
-browser holds an authenticated Django session cookie, so the subsequent
-auth-code + PKCE roundtrip through `/authorize` is an invisible 302 back to
-the SPA — no hosted login page, no popup, no iframe silent renew (renewal
-uses rotated refresh tokens). The hosted templates are still styled as a
-fallback (expired-session deep links) and for the future Android client
-(Custom Tab). Requires the SPA and backend to be same-origin (or
-CORS-with-credentials + SameSite=None + CSRF trusted origins), which
-resolves the issuer-URL open question in favor of the same origin.
+The SPA and the backend live on **different domains**, which rules out the
+simplest same-origin form of SPA-hosted login. Login UX is therefore
+phased:
+
+- **Phase 1 (cutover)**: hosted allauth login on the backend domain via the
+  standard top-level redirect flow (`/authorize` → allauth login → back to
+  the SPA `redirect_uri` with the code). All cookies stay first-party on
+  the backend domain — no `SameSite=None`, no credentialed CORS; only
+  plain (non-credentialed) CORS on `/o/token/` and `/o/userinfo/` for the
+  SPA origin. Same UX shape as Zitadel today, so the frontend change stays
+  minimal. Hosted templates are styled mobile-first — they are the primary
+  login surface for SPA users until phase 2 and remain the surface for the
+  future Android client.
+- **Phase 2 (post-cutover, optional)**: the SPA renders its own
+  login/MFA/password-reset screens via allauth headless **browser mode**;
+  the subsequent `/authorize` roundtrip becomes an invisible 302 back to
+  the SPA — no popup, no iframe. Feasible **iff** SPA and backend share
+  the same registrable domain (e.g. `app.wodore.com` + `hub.wodore.com`):
+  the cross-origin fetch is then still *same-site*, so the session cookie
+  works with credentialed CORS + `CSRF_TRUSTED_ORIGINS` and no
+  `SameSite=None`. If the SPA sits on an unrelated registrable domain, the
+  session cookie would be third-party (blocked by Safari ITP and Chrome's
+  third-party-cookie restrictions) — in that case stay on hosted login or
+  consolidate hosts before building phase 2.
+- Token renewal uses rotated refresh tokens in both phases — no iframes or
+  popups at any point.
 
 ### D3: Claims — plain `roles` claim, groups stay authoritative in Django
 
@@ -181,9 +197,10 @@ decommission (phase 5) rollback = re-provisioning Zitadel + re-inviting.
 
 ## Open Questions
 
-- ~~Issuer URL~~ — **Resolved by D2a**: same origin as the API
-  (`https://hub.wodore.com/…`) so the SPA's login gets the session cookie
-  without cross-origin cookie plumbing.
+- SPA host vs. backend host: do they share the registrable domain
+  (`*.wodore.com`)? Decides whether phase 2 (SPA-hosted login per D2a) is
+  feasible as specced or requires consolidating hosts; the issuer stays on
+  the backend origin either way.
 - Enforce MFA for staff/admin accounts (allauth config) at cutover or later?
 - Should `api_test_token` mint DOT tokens directly (management command)
   once password grant is dev-only?

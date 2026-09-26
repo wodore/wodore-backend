@@ -10,11 +10,13 @@
 
 ## 2. Account management (allauth)
 
-- [ ] 2.1 Enable allauth headless (browser mode) for SPA-driven login/MFA flows; style the server-rendered allauth templates mobile-first as fallback (expired-session deep links) and for the future Android Custom Tab (login, logout, password reset, email verification)
+- [ ] 2.1 Style the server-rendered allauth templates mobile-first (login, logout, password reset, email verification) — they are the primary SPA login surface at cutover (hosted redirect flow, per design D2a phase 1) and the future Android Custom Tab surface
 - [ ] 2.2 Enable MFA (TOTP + recovery codes) and session view/revoke for users; decide and record staff-MFA policy (open question in design)
 - [ ] 2.3 Redirect `/admin/` login to the unified account login preserving the continuation target
 - [ ] 2.4 Port `local_auth_users` into the successor idempotent dev fixture users command (users + groups + passwords)
 - [ ] 2.5 Add the SPA public PKCE client (and optionally the Android client row) via a data migration or fixture; seed groups `root/admin/editor/viewer` and `perm:*` roles as Django groups
+- [ ] 2.6 Configure non-credentialed CORS for the SPA origin on the token and userinfo endpoints (required for the SPA's code exchange from a different domain)
+- [ ] 2.7 After cutover — phase 2, gated on same-registrable-domain confirmation (design D2a): enable allauth headless browser mode for SPA-hosted login/MFA (credentialed CORS + `CSRF_TRUSTED_ORIGINS`) and move SPA login screens into the Quasar app
 
 ## 3. OIDC provider claims and permission bridge
 
