@@ -188,10 +188,10 @@ set -e
 mkdir -p /code/static
 chown web:web /code/static
 chmod +x '/docker-entrypoint.sh'
-# AUTH_PROVIDER=none disables every provider surface (no OIDC
-# discovery fetch, no signing key) so collectstatic works without
-# runtime env or network access at build time.
-AUTH_PROVIDER=none python manage.py collectstatic --noinput
+# DJANGO_ENV=test: see Dockerfile.alpine (offline-safe settings; no
+# network, no production signing key needed - without this the
+# auth settings raise at build time).
+DJANGO_ENV=test python manage.py collectstatic --noinput
 # Generate build timestamp automatically during build
 printf 'export BUILD_TIMESTAMP=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%S.%6NZ)" > /code/.build_timestamp
 chmod 644 /code/.build_timestamp
