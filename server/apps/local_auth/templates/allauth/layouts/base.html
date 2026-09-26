@@ -1,14 +1,18 @@
 {% comment %}
-Minimal, mobile-first base for allauth templates (login, logout, MFA,
-password reset). Rendered full-page for redirects and inside the SPA's
-login popup — keep it small and self-contained.
+Minimal, mobile-first override of allauth's root layout
+(allauth/layouts/base.html). Every allauth page — login, logout, MFA,
+passkeys, password reset — extends this, so one styled base covers the
+whole account surface. Rendered full-page for redirects and inside the
+SPA's login popup — keep it small and self-contained (inline CSS, no
+static files).
 {% endcomment %}
-<!DOCTYPE html>
-<html lang="en">
+{% load i18n %}<!DOCTYPE html>
+<html lang="{{ LANGUAGE_CODE|default:"en" }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Wodore — Sign in{% endblock %}</title>
+  <title>{% block head_title %}Wodore{% endblock head_title %}</title>
+  {% block extra_head %}{% endblock extra_head %}
   <style>
     :root { color-scheme: light dark; }
     * { box-sizing: border-box; }
@@ -24,9 +28,9 @@ login popup — keep it small and self-contained.
     }
     @media (prefers-color-scheme: dark) {
       body { background: #161a1f; color: #e6e9ed; }
-      .card { background: #1f252d; }
+      .card { background: #1f252d; border-color: #2b333d; }
+      input, select { background: #12161b; color: #e6e9ed; border-color: #2b333d; }
       .btn { background: #3b82f6; }
-      input { background: #12161b; color: #e6e9ed; }
     }
     .card {
       width: 100%;
@@ -34,13 +38,15 @@ login popup — keep it small and self-contained.
       margin: 1rem;
       padding: 2rem 1.75rem;
       background: #fff;
+      border: 1px solid #e5e9ee;
       border-radius: 12px;
       box-shadow: 0 4px 24px rgba(15, 23, 42, .08);
     }
     h1 { font-size: 1.25rem; margin: 0 0 1.25rem; }
     p { line-height: 1.5; }
     label { display: block; font-size: .875rem; margin: .875rem 0 .25rem; }
-    input[type="text"], input[type="email"], input[type="password"], input[type="tel"] {
+    input[type="text"], input[type="email"], input[type="password"],
+    input[type="tel"], input[type="url"], input[type="number"], select {
       width: 100%;
       padding: .625rem .75rem;
       border: 1px solid #cbd2d9;
@@ -48,7 +54,7 @@ login popup — keep it small and self-contained.
       font-size: 1rem;
       background: #fff;
     }
-    .btn {
+    button, .btn, input[type="submit"] {
       display: inline-block;
       margin-top: 1.25rem;
       width: 100%;
@@ -61,8 +67,9 @@ login popup — keep it small and self-contained.
       font-weight: 600;
       cursor: pointer;
     }
-    .messages, .errorlist { list-style: none; margin: 0 0 .5rem; padding: 0; }
-    .messages li, .errorlist li {
+    button.secondary, input[type="submit"].secondary { background: transparent; color: #2563eb; border: 1px solid #cbd2d9; }
+    .messages, .errorlist, ul.messages { list-style: none; margin: 0 0 .5rem; padding: 0; }
+    .messages li, .errorlist li, ul.messages li {
       margin: .5rem 0;
       padding: .5rem .75rem;
       border-radius: 8px;
@@ -70,18 +77,22 @@ login popup — keep it small and self-contained.
       background: #fef3c7;
     }
     .errorlist li { background: #fee2e2; }
-    .muted { color: inherit; opacity: .65; font-size: .875rem; }
+    a { color: #2563eb; }
+    hr { border: 0; border-top: 1px solid #e5e9ee; margin: 1.5rem 0; }
   </style>
 </head>
 <body>
-  <main class="card">
-    <h1>Wodore</h1>
-    {% if messages %}
-      <ul class="messages">
-        {% for message in messages %}<li>{{ message }}</li>{% endfor %}
-      </ul>
-    {% endif %}
-    {% block content %}{% endblock %}
-  </main>
+  {% block body %}
+    <main class="card">
+      <h1>Wodore</h1>
+      {% if messages %}
+        <ul class="messages">
+          {% for message in messages %}<li>{{ message }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+      {% block content %}{% endblock content %}
+    </main>
+  {% endblock body %}
+  {% block extra_body %}{% endblock extra_body %}
 </body>
 </html>
