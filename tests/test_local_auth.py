@@ -319,6 +319,15 @@ class TestLoginMethods:
         user = get_user_model().objects.get(email="admin@local.test")
         assert user.is_authenticated
 
+    def test_account_overview_page(self, client, local_users):
+        from django.contrib.auth import get_user_model
+
+        client.force_login(get_user_model().objects.get(email="admin@local.test"))
+        response = client.get("/accounts/")
+        assert response.status_code == 200
+        assert b"admin@local.test" in response.content
+        assert b"/accounts/2fa/" in response.content
+
     def test_login_form_rejects_wrong_password(self, client, local_users):
         response = client.post(
             "/accounts/login/",

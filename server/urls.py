@@ -20,6 +20,7 @@ from django.urls import include, path
 from django.views.generic import RedirectView, TemplateView
 
 from .apps.api.api_v1 import api as api_v1
+from .apps.local_auth import account_views
 from .apps.main import urls as django_admin_urls
 from .apps.main.views import index
 
@@ -85,6 +86,9 @@ if settings.OIDC_ENABLED:
             RedirectView.as_view(url="/accounts/login/?next=/admin/", permanent=False),
         ),
         path("oauth/local/", include("server.apps.local_auth.urls")),
+        # Self-service account overview (exact match, before the allauth
+        # include which serves all /accounts/<sub> flows).
+        path("accounts/", account_views.account_overview),
         path("accounts/", include("allauth.urls")),
         *urlpatterns,
     ]

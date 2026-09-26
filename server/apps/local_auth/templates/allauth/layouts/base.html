@@ -23,6 +23,7 @@ inside the SPA's login popup.
       <div class="account-brand">wodore</div>
       {% if user.is_authenticated %}
         <nav class="account-nav">
+          <a href="/accounts/">{% trans "Account" %}</a>
           <a href="/accounts/2fa/">{% trans "Two-Factor Auth" %}</a>
           <a href="/accounts/email/">{% trans "Change Email" %}</a>
           <a href="/accounts/password/change/">{% trans "Change Password" %}</a>

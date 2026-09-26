@@ -225,3 +225,44 @@ ul.messages li,
 .errors p {
   color: var(--w-danger);
 }
+
+/* Account overview */
+
+dl {
+  display: grid;
+  grid-template-columns: minmax(6rem, auto) 1fr;
+  gap: 0.5rem 1rem;
+  margin: 0;
+}
+
+dt {
+  color: var(--w-ink-soft);
+  font-size: 0.875rem;
+  align-self: center;
+}
+
+dd {
+  margin: 0;
+}
+
+.chip {
+  display: inline-block;
+  margin: 0 0.25rem 0.25rem 0;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--w-ridge);
+  border-radius: 999px;
+  background: var(--w-panel-deep);
+  font-size: 0.8125rem;
+}
+
+.muted {
+  color: var(--w-ink-soft);
+}
+
+.account-links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
