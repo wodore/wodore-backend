@@ -264,3 +264,62 @@ class TestPinGeoplace:
         )
         assert hut_assoc.score == 90
         assert place_assoc.score == 40  # per-place curation
+
+
+class TestPlaceEndpointPins:
+    """images_for_place gets the same pins fast path / lazy write-through."""
+
+    @pytest.fixture
+    def client(self):
+        return TestClient(router)
+
+    @pytest.fixture
+    def place(self, seed_data):
+        from server.apps.geometries.models import GeoPlace, GeoPlaceImageAssociation
+
+        place = GeoPlace.objects.filter(is_active=True, is_public=True).first()
+        assert place is not None
+        GeoPlaceImageAssociation.objects.filter(geo_place=place).delete()
+        place.images_pinned_at = None
+        place.save(update_fields=["images_pinned_at"])
+        return place
+
+    @pytest.fixture
+    def fetch(self, monkeypatch):
+        from server.apps.geometries import api_images
+
+        stub = _FetchStub()
+        monkeypatch.setattr(api_images, "fetch_images_for_place", stub)
+        return stub
+
+    def test_lazy_pins_on_first_visit(self, client, place, fetch):
+        response = client.get(f"/place/{place.slug}?radius=50&lang=en&limit=10")
+        assert response.status_code == 200
+        assert fetch.calls == 1
+        assert place_has_visible_pins(place)
+        assert Image.objects.filter(provider_synced_at__isnull=False).count() == 2
+
+        second = client.get(f"/place/{place.slug}?radius=50&lang=en&limit=9")
+        assert second.status_code == 200
+        assert fetch.calls == 1  # pins fast path, no live pipeline
+
+    def test_fast_path_serves_pins_by_score(self, client, place, fetch, monkeypatch):
+        from server.apps.geometries import api_images
+
+        def _boom(**kwargs):
+            raise AssertionError("live path must not run when pins exist")
+
+        monkeypatch.setattr(api_images, "fetch_images_for_place", _boom)
+        pin_place_images(
+            place, [_result(score=80), _result(source_id="File:Low.jpg", score=10)]
+        )
+        response = client.get(f"/place/{place.slug}?radius=50&lang=en&limit=10")
+        assert response.status_code == 200
+        source_ids = [f["properties"]["source_id"] for f in response.json()["features"]]
+        assert source_ids[0] == "wikicommons:File:Test.jpg"  # highest score first
+
+    def test_update_cache_forces_repin(self, client, place, fetch):
+        client.get(f"/place/{place.slug}?radius=50&lang=en&limit=10")
+        assert fetch.calls == 1
+        client.get(f"/place/{place.slug}?radius=50&lang=en&limit=10&update_cache=true")
+        assert fetch.calls == 2

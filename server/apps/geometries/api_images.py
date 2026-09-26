@@ -324,28 +324,86 @@ def images_for_place(
     logger.debug(f"Fetching images for GeoPlace '{place_slug}'")
     logger.debug(f"Radius: {radius}m, Sources: {sources_list}")
 
-    try:
-        # Fetch images and place info
-        results, place_info = asyncio.run(
-            fetch_images_for_place(
-                place_slug=place_slug,
-                place_type="geoplace",
-                radius=radius,
-                sources=sources_list,
-                limit=limit,
-                update_cache=update_cache,  # Pass update_cache flag
+    from server.apps.geometries.models import GeoPlace
+
+    from .pinning import pin_place_images, place_has_visible_pins
+
+    place = GeoPlace.objects.filter(
+        slug=place_slug, is_active=True, is_public=True
+    ).first()
+
+    # Pins fast path (openspec pin-external-images): the place already has
+    # pinned/uploaded images — serve them from the DB via the internal
+    # Wodore provider only; no external provider is contacted.
+    serve_from_pins = bool(
+        place
+        and not sources_list
+        and not update_cache
+        and place_has_visible_pins(place)
+    )
+
+    if serve_from_pins and place is not None:
+        try:
+            # Pure-DB fast path — same as the hut endpoint.
+            results = WodoreProvider(place_type="geoplace")._fetch_sync(
+                [], place.location.y, place.location.x, radius
             )
-        )
-        logger.debug(f"Total raw results from all providers: {len(results)} images")
-    except Exception as e:
-        logger.error(f"Error fetching images for place '{place_slug}': {e}")
-        cached, _fresh = image_response_cache.get_response(resp_key)
-        if cached is not None:
-            logger.warning(
-                f"Stale fallback: serving cached response for place '{place_slug}'"
+            place_info = {
+                "location": {"lat": place.location.y, "lon": place.location.x}
+            }
+            logger.debug(
+                f"Serving {len(results)} pinned/local images for place '{place_slug}'"
             )
-            return cached
-        raise
+        except Exception as e:
+            logger.error(f"Error fetching pinned images for place '{place_slug}': {e}")
+            cached, _fresh = image_response_cache.get_response(resp_key)
+            if cached is not None:
+                logger.warning(
+                    f"Stale fallback: serving cached response for place '{place_slug}'"
+                )
+                return cached
+            raise
+    else:
+        try:
+            # Fetch images and place info
+            results, place_info = asyncio.run(
+                fetch_images_for_place(
+                    place_slug=place_slug,
+                    place_type="geoplace",
+                    radius=radius,
+                    sources=sources_list,
+                    limit=limit,
+                    update_cache=update_cache,  # Pass update_cache flag
+                )
+            )
+            logger.debug(f"Total raw results from all providers: {len(results)} images")
+        except Exception as e:
+            logger.error(f"Error fetching images for place '{place_slug}': {e}")
+            cached, _fresh = image_response_cache.get_response(resp_key)
+            if cached is not None:
+                logger.warning(
+                    f"Stale fallback: serving cached response for place '{place_slug}'"
+                )
+                return cached
+            raise
+
+        # Lazy pin-on-first-visit / forced re-pin (full default runs only).
+        if place is not None and not sources_list:
+            try:
+                stats = pin_place_images(place, results)
+                logger.info(f"Pinned images for place '{place_slug}': {stats}")
+                # Pinning bumped the response-cache version — recompute the
+                # key so this response is stored at the new version.
+                resp_key = image_response_cache.response_key(
+                    "place",
+                    place_slug,
+                    radius=radius,
+                    sources=sources,
+                    lang=lang,
+                    limit=limit,
+                )
+            except Exception as e:
+                logger.error(f"Error pinning images for place '{place_slug}': {e}")
 
     # Sort by score (primary), then by distance (secondary)
     results.sort(key=lambda r: (-r.score, r.distance_m))
