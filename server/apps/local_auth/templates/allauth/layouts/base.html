@@ -1,90 +1,26 @@
 {% comment %}
-Minimal, mobile-first override of allauth's root layout
-(allauth/layouts/base.html). Every allauth page — login, logout, MFA,
-passkeys, password reset — extends this, so one styled base covers the
-whole account surface. Rendered full-page for redirects and inside the
-SPA's login popup — keep it small and self-contained (inline CSS, no
-static files).
-{% endcomment %}
-{% load i18n %}<!DOCTYPE html>
-<html lang="{{ LANGUAGE_CODE|default:"en" }}">
+Base layout override for all allauth pages (login, logout, MFA, passkeys,
+password reset). Styling comes from the shared Wodore design tokens
+(DESIGN.md in wodore-frontend-quasar) via a static stylesheet — see
+static/local_auth/css/account.css. Rendered full-page for redirects and
+inside the SPA's login popup.
+{% endcomment %}{% load i18n static %}<!DOCTYPE html>
+<html lang="{{ LANGUAGE_CODE|default:'en' }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="robots" content="noindex">
   <title>{% block head_title %}Wodore{% endblock head_title %}</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="{% static 'local_auth/css/account.css' %}">
   {% block extra_head %}{% endblock extra_head %}
-  <style>
-    :root { color-scheme: light dark; }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-      background: #f4f6f8;
-      color: #1f2933;
-      display: flex;
-      min-height: 100vh;
-      align-items: center;
-      justify-content: center;
-    }
-    @media (prefers-color-scheme: dark) {
-      body { background: #161a1f; color: #e6e9ed; }
-      .card { background: #1f252d; border-color: #2b333d; }
-      input, select { background: #12161b; color: #e6e9ed; border-color: #2b333d; }
-      .btn { background: #3b82f6; }
-    }
-    .card {
-      width: 100%;
-      max-width: 380px;
-      margin: 1rem;
-      padding: 2rem 1.75rem;
-      background: #fff;
-      border: 1px solid #e5e9ee;
-      border-radius: 12px;
-      box-shadow: 0 4px 24px rgba(15, 23, 42, .08);
-    }
-    h1 { font-size: 1.25rem; margin: 0 0 1.25rem; }
-    p { line-height: 1.5; }
-    label { display: block; font-size: .875rem; margin: .875rem 0 .25rem; }
-    input[type="text"], input[type="email"], input[type="password"],
-    input[type="tel"], input[type="url"], input[type="number"], select {
-      width: 100%;
-      padding: .625rem .75rem;
-      border: 1px solid #cbd2d9;
-      border-radius: 8px;
-      font-size: 1rem;
-      background: #fff;
-    }
-    button, .btn, input[type="submit"] {
-      display: inline-block;
-      margin-top: 1.25rem;
-      width: 100%;
-      padding: .625rem .75rem;
-      border: 0;
-      border-radius: 8px;
-      background: #2563eb;
-      color: #fff;
-      font-size: 1rem;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    button.secondary, input[type="submit"].secondary { background: transparent; color: #2563eb; border: 1px solid #cbd2d9; }
-    .messages, .errorlist, ul.messages { list-style: none; margin: 0 0 .5rem; padding: 0; }
-    .messages li, .errorlist li, ul.messages li {
-      margin: .5rem 0;
-      padding: .5rem .75rem;
-      border-radius: 8px;
-      font-size: .875rem;
-      background: #fef3c7;
-    }
-    .errorlist li { background: #fee2e2; }
-    a { color: #2563eb; }
-    hr { border: 0; border-top: 1px solid #e5e9ee; margin: 1.5rem 0; }
-  </style>
 </head>
 <body>
   {% block body %}
-    <main class="card">
-      <h1>Wodore</h1>
+    <main class="account-card">
+      <div class="account-brand">wodore</div>
       {% if messages %}
         <ul class="messages">
           {% for message in messages %}<li>{{ message }}</li>{% endfor %}

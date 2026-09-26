@@ -1,0 +1,202 @@
+/*
+ * Wodore account pages (allauth layout base).
+ *
+ * Design tokens from the shared design system:
+ *   wodore-frontend-quasar/src/assets/wodore-design/DESIGN.md
+ * "one instrument, two lighting conditions" — light = day palette,
+ * dark = pine palette. Keep in sync when the tokens evolve.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* Surfaces — day */
+  --w-bg: #f6f9f7; /* day-paper */
+  --w-panel: #fdfefd; /* day-panel */
+  --w-panel-deep: #ffffff;
+  --w-ridge: #dde7e0; /* day-ridge */
+  --w-ink: #1c1c1c; /* day-ink */
+  --w-ink-soft: rgba(28, 28, 28, 0.64);
+
+  /* Brand + actions */
+  --w-brand: #346751; /* forest-green */
+  --w-brand-ice: #8fd6b7; /* forest-green-ice */
+  --w-action: #25bf5e; /* signal-green */
+  --w-action-deep: #198053; /* signal-green-deep */
+  --w-action-ink: #ffffff;
+  --w-link: #2673bf; /* glacier-blue */
+
+  /* Feedback — explicit ink on tinted surfaces in both modes */
+  --w-danger: #bf211e; /* alpine-red */
+  --w-danger-bg: #f2acab; /* alpine-red-soft */
+  --w-danger-ink: #1c1c1c;
+  --w-notice-bg: #f6ad4b; /* amber-soft */
+  --w-notice-ink: #1c1c1c;
+
+  --w-radius: 10px;
+  --w-font: "Barlow Semi Condensed", "Barlow", -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Surfaces — pine */
+    --w-bg: #0a140f; /* night-pine */
+    --w-panel: #112119; /* pine-panel */
+    --w-panel-deep: #0e1b14; /* pine-panel-deep */
+    --w-ridge: #1c3629; /* pine-ridge */
+    --w-ink: #e8f1ea;
+    --w-ink-soft: rgba(232, 241, 234, 0.62);
+    --w-action-ink: #06130b;
+    --w-link: #abcff2; /* glacier-blue-ice */
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  display: flex;
+  background: var(--w-bg);
+  color: var(--w-ink);
+  font-family: var(--w-font);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+/*
+ * Safe centering: `margin: auto` (not `align-items: center`) so tall
+ * cards scroll instead of being clipped above the viewport — the card
+ * must stay fully reachable in small popup windows.
+ */
+.account-card {
+  margin: auto;
+  width: 100%;
+  max-width: 380px;
+  padding: 1.75rem;
+  padding-top: max(1.75rem, env(safe-area-inset-top));
+}
+
+.account-brand {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--w-brand);
+  margin-bottom: 1.25rem;
+}
+
+.account-brand::after {
+  content: "";
+  display: block;
+  width: 2.5rem;
+  height: 3px;
+  margin-top: 0.375rem;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--w-brand), var(--w-brand-ice));
+}
+
+h1,
+h2 {
+  font-size: 1.25rem;
+  font-weight: 500;
+  margin: 0 0 1rem;
+}
+
+p {
+  margin: 0.5rem 0;
+}
+
+a {
+  color: var(--w-link);
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--w-ridge);
+  margin: 1.5rem 0;
+}
+
+/* Forms */
+
+label {
+  display: block;
+  font-size: 0.875rem;
+  margin: 0.875rem 0 0.25rem;
+  color: var(--w-ink-soft);
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="tel"],
+input[type="url"],
+input[type="number"],
+select {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--w-ridge);
+  border-radius: var(--w-radius);
+  background: var(--w-panel-deep);
+  color: var(--w-ink);
+  font: inherit;
+}
+
+button,
+input[type="submit"] {
+  display: inline-block;
+  width: 100%;
+  margin-top: 1.25rem;
+  padding: 0.625rem 0.875rem;
+  border: 0;
+  border-radius: var(--w-radius);
+  background: var(--w-action);
+  color: var(--w-action-ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:hover,
+input[type="submit"]:hover {
+  background: var(--w-action-deep);
+}
+
+button.secondary,
+input[type="submit"].secondary {
+  background: transparent;
+  color: var(--w-ink);
+  border: 1px solid var(--w-ridge);
+}
+
+/* Feedback: always explicit ink on tinted background (both modes) */
+
+ul.messages,
+.messages,
+.errorlist {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+}
+
+ul.messages li,
+.messages li {
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--w-radius);
+  background: var(--w-notice-bg);
+  color: var(--w-notice-ink);
+}
+
+.errorlist,
+.errorlist li {
+  background: var(--w-danger-bg);
+  color: var(--w-danger-ink);
+}
+
+.error,
+.errors p {
+  color: var(--w-danger);
+}
