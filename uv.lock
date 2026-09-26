@@ -1756,7 +1756,7 @@ wheels = [
 
 [[package]]
 name = "hut-services"
-version = "0.2.0"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bs4" },
@@ -1776,15 +1776,15 @@ dependencies = [
     { name = "wikidata" },
     { name = "xmltodict" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/24/a4/49d8e64f76ab04e413bd71d200c6c9c7639db4e763e9206ad90c5b61ccc0/hut_services-0.2.0.tar.gz", hash = "sha256:ba90758f0cc91783c60f7255d4b6ee789fd2793239d33373a62067f7e62a2d7c", size = 139842, upload-time = "2026-09-21T16:50:09.598Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/eb/0f/33ac04b7e1f03c4b9644258adb171b2a5d6a8530e48dba41e4bb9eb62b1e/hut_services-0.3.0.tar.gz", hash = "sha256:6459ffe693d62bbc2326fdb79581c7070931de216d4673ddb060f42e4248c455", size = 142301, upload-time = "2026-09-26T14:10:46.713Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8d/bc/80714de9788ab8a3b541bfbb920cf249a73fe59df7cbdb23f60e73dcf9a3/hut_services-0.2.0-py3-none-any.whl", hash = "sha256:d6a07bb746f6afc220f59aa674dd67d30d7db48d6bfc5b65d8500c463947f1f0", size = 53166, upload-time = "2026-09-21T16:50:08.307Z" },
+    { url = "https://files.pythonhosted.org/packages/36/7d/be2132962246f3051242e1f220fed908dd04d75575bbb49ab16687ff56a7/hut_services-0.3.0-py3-none-any.whl", hash = "sha256:9a1e276b62c5964b5c0f2c28c53012be6ec384613a90b6ac462ae7872f822085", size = 53773, upload-time = "2026-09-26T14:10:45.491Z" },
 ]
 
 [[package]]
 name = "hut-services-private"
 version = "0.2.0"
-source = { git = "ssh://git@github.com/wodore/hut-services-private?branch=main#c022c7f51e26e8894348cb16b61d9c8c9becad7b" }
+source = { git = "ssh://git@github.com/wodore/hut-services-private?branch=main#7a2223ed05b64593a5c89b3b3babd8a95c9b3848" }
 dependencies = [
     { name = "httpx" },
     { name = "hut-services" },
@@ -4492,7 +4492,7 @@ requires-dist = [
     { name = "geojson-pydantic", specifier = "==1.*" },
     { name = "gunicorn", specifier = "==25.*" },
     { name = "httpx", specifier = ">=0.25.0" },
-    { name = "hut-services", specifier = ">=0.2.0" },
+    { name = "hut-services", specifier = ">=0.3.0" },
     { name = "hut-services-private", marker = "extra == 'private'", git = "ssh://git@github.com/wodore/hut-services-private?branch=main" },
     { name = "jinja2", specifier = "==3.*" },
     { name = "load-dotenv", specifier = "==0.1.*" },
