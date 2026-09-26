@@ -30,6 +30,30 @@ from .scoring import (
 
 logger = structlog.get_logger()
 
+# Width of the thumb bucket requested from the Commons API (iiurlwidth).
+# Serves as the medium source for small display variants (gallery thumbs).
+WIKIMEDIA_MEDIUM_THUMB_WIDTH = 500
+# Upper bound for the large thumb source. Requesting the original file
+# instead would trip Wikimedia's per-IP rate limit on imagor cache misses
+# and feed huge/slow originals (e.g. ~9MB TIFFs) to imagor.
+WIKIMEDIA_THUMB_MAX_WIDTH = 3000
+# The Wikimedia TIFF renderer caps rendered thumbs at ~1920px.
+WIKIMEDIA_TIFF_THUMB_MAX_WIDTH = 1920
+
+
+def _wikimedia_thumb_url(thumb_url: str, width: int) -> str:
+    """Rewrite a Commons ``thumburl`` to the requested pixel width.
+
+    The pixel width is part of the thumb filename
+    (``.../thumb/x/xx/File.jpg/500px-File.jpg``). The width segment is
+    replaced width-agnostically so cached metadata from older requests
+    (e.g. 400px buckets) still resolves.
+    """
+    # Anchor to the last URL segment: Commons files whose own name starts
+    # with "640px-…" appear as …/thumb/a/ab/640px-foo.jpg/500px-640px-foo.jpg
+    # and the directory component must not be rewritten (silent 404 source).
+    return re.sub(r"/(\d+)px-(?=[^/]*$)", f"/{width}px-", thumb_url, count=1)
+
 
 class WikimediaCommonsProvider(ImageProvider):
     """
@@ -475,7 +499,7 @@ class WikimediaCommonsProvider(ImageProvider):
             "ggslimit": min(limit, 50),
             "prop": "imageinfo",
             "iiprop": "url|extmetadata|size",
-            "iiurlwidth": 400,
+            "iiurlwidth": 500,
             "format": "json",
             "origin": "*",
         }
@@ -541,7 +565,7 @@ class WikimediaCommonsProvider(ImageProvider):
             "titles": commons_title,
             "prop": "imageinfo|categories",
             "iiprop": "url|extmetadata|size",
-            "iiurlwidth": 400,
+            "iiurlwidth": 500,
             "cllimit": 20,
             "format": "json",
             "origin": "*",
@@ -956,8 +980,6 @@ class WikimediaCommonsProvider(ImageProvider):
                         date_taken=img_data.get("date_taken"),
                         error=str(e),
                     )
-                except (ValueError, TypeError):
-                    pass
 
             # Build attribution
             author = img_data.get("author", "Unknown")
@@ -988,6 +1010,31 @@ class WikimediaCommonsProvider(ImageProvider):
             width = img_data.get("width")
             height = img_data.get("height")
 
+            # Source URLs: serve thumbs instead of the original file. Fetching
+            # upload.wikimedia.org originals through imagor in bursts trips
+            # Wikimedia's per-IP rate limit, and large/slow originals (TIFF)
+            # half-decode into gray cached thumbnails browsers cannot even
+            # render. Thumb URLs are stable/immutable and TIFF thumbs come
+            # pre-converted to JPEG.
+            original_url = img_data.get("url", "")
+            thumb_url = img_data.get("thumb_url") or ""
+
+            # Medium source: the thumb bucket requested via iiurlwidth
+            # (500px). If the original is not larger than that bucket the
+            # API returns the original URL itself — a tiny file, served
+            # directly.
+            url_medium = thumb_url or original_url
+            url_large = original_url
+            if width and width <= WIKIMEDIA_MEDIUM_THUMB_WIDTH:
+                url_medium = original_url
+            elif thumb_url and width:
+                max_width = (
+                    WIKIMEDIA_TIFF_THUMB_MAX_WIDTH
+                    if str(img_data.get("mime", "")).lower() == "image/tiff"
+                    else WIKIMEDIA_THUMB_MAX_WIDTH
+                )
+                url_large = _wikimedia_thumb_url(thumb_url, min(width, max_width))
+
             return ImageResult(
                 provider="wikicommons",
                 source_id=commons_title,
@@ -1001,8 +1048,8 @@ class WikimediaCommonsProvider(ImageProvider):
                 author=author,
                 author_url=img_data.get("author_url"),  # Use extracted author URL
                 author_raw=author_raw,  # Raw concatenated author info for deduplication
-                url_large=img_data.get("url", ""),  # Original URL only
-                # url_medium is not set - we always use the original high-quality image
+                url_large=url_large,
+                url_medium=url_medium,
                 width=width,
                 height=height,
                 place=None,  # TODO: Could look up place info from QID, but requires database query
@@ -1010,6 +1057,9 @@ class WikimediaCommonsProvider(ImageProvider):
                     "source_url": img_data.get(
                         "url"
                     ),  # Add source URL for deduplication
+                    # True original file URL, kept for provenance — never fed
+                    # to imagor.
+                    "original_url": original_url,
                 },
                 score=score,
             )

@@ -334,7 +334,9 @@ def _invalidate_provider_metadata_cache(provider_name: str) -> None:
     )
 
 
-def _get_provider_info(provider_name: str, force_refresh: bool = False) -> dict:
+def _get_provider_info(
+    provider_name: str, force_refresh: bool = False
+) -> dict[str, Any]:
     """
     Get provider information from database.
 
@@ -558,7 +560,7 @@ def _generate_license_slug(input_string: str) -> str:
     return slug if slug else "unknown"
 
 
-def _get_license_info(slug: str | None) -> dict[str, str | None]:
+def _get_license_info(slug: str | None) -> dict[str, Any]:
     """
     Get license information from database, creating if necessary.
 
@@ -657,7 +659,7 @@ def _get_license_info(slug: str | None) -> dict[str, str | None]:
             "name": license_obj.name,
             "fullname": license_obj.fullname,
             "url": license_obj.url,
-            "category": license_obj.category_id,
+            "category": license_obj.category_id,  # type: ignore[attr-defined]
             "icons": icons if icons else None,
             "description": license_obj.description,
         }
@@ -687,7 +689,7 @@ def _build_attribution(
     license_slug: str,
     license_name: str,
     license_url: str | None,
-    provider_name: str,
+    provider_name: str | None,
     provider_url: str | None,
     source_url: str | None = None,
     provider_icon: str | None = None,
@@ -810,6 +812,12 @@ def _build_attribution(
     }
 
 
+# Display variants whose constrained target size does not exceed this
+# dimension can be served from the medium source (Wikimedia 500px thumb
+# bucket); anything larger uses the large source.
+MEDIUM_SOURCE_MAX_DIMENSION = 500
+
+
 def _calculate_constrained_size(
     target_width: int,
     target_height: int,
@@ -914,7 +922,7 @@ async def fetch_images_for_place(
             return {
                 "place": place,
                 "place_info": {
-                    "id": place.id,
+                    "id": place.id,  # type: ignore[attr-defined]
                     "slug": place.slug,
                     "name": place.name_i18n,
                     "location": {"lat": place.location.y, "lon": place.location.x},
@@ -940,7 +948,7 @@ async def fetch_images_for_place(
             return {
                 "place": place,
                 "place_info": {
-                    "id": place.id,
+                    "id": place.id,  # type: ignore[attr-defined]
                     "slug": place.slug,
                     "name": place.name_i18n,
                     "location": {"lat": place.location.y, "lon": place.location.x},
@@ -975,7 +983,8 @@ def post_process_images(
     Post-process image results to generate final output format.
 
     This function:
-    1. Generates all image URLs (portrait/landscape) from url_large
+    1. Generates all image URLs (portrait/landscape) from the smallest
+       suitable source URL (url_medium / url_large)
     2. Determines orientation from dimensions
     3. Creates final GeoJSON Feature format
     4. Adds license information from slug
@@ -987,7 +996,7 @@ def post_process_images(
     Returns:
         List of GeoJSON Feature dictionaries
     """
-    from server.apps.images.transfomer import ImagorImage
+    from server.apps.images.transfomer import ImagorImage, TransformedImage
 
     final_results = []
 
@@ -1026,10 +1035,23 @@ def post_process_images(
             if result.width and result.height:
                 is_portrait = result.height > result.width
 
-            # Always use url_large for generating proxy URLs (not url_medium/thumb_url)
-            # This ensures we use the original high-quality image, not thumbnails
-            original_url = result.url_large
-            imagor_img = ImagorImage(original_url)
+            # Source selection: build each display variant from the smallest
+            # source URL that satisfies its constrained target size. Providers
+            # can supply a medium source via ImageResult.url_medium (Wikimedia:
+            # 500px thumb bucket); url_large is the high-quality source — for
+            # Wikimedia a bounded thumb (3000px, 1920px for TIFF), never the
+            # original file, whose bursts through imagor trip Wikimedia 429s.
+            large_img = ImagorImage(result.url_large)
+            medium_img = ImagorImage(result.url_medium) if result.url_medium else None
+
+            def get_source(target_w: int, target_h: int) -> ImagorImage:
+                """Pick the smallest source satisfying the target size."""
+                cw, ch = _calculate_constrained_size(
+                    target_w, target_h, result.width, result.height
+                )
+                if medium_img and max(cw, ch) <= MEDIUM_SOURCE_MAX_DIMENSION:
+                    return medium_img
+                return large_img
 
             # Determine focal point for transforms
             # Use focal area if available, otherwise default to smart detection
@@ -1057,96 +1079,120 @@ def post_process_images(
                 cw, ch = _calculate_constrained_size(w, h, result.width, result.height)
                 return f"{cw}x{ch}"
 
+            def transform_for(
+                target_w: int, target_h: int, **kwargs
+            ) -> TransformedImage:
+                """Transform from the smallest suitable source URL."""
+                return get_source(target_w, target_h).transform(
+                    size=get_size(target_w, target_h), **kwargs
+                )
+
             urls = {
                 "original": {
+                    # The true original is never fed to imagor: url_large is a
+                    # bounded thumb for Wikimedia, so "raw"/"proxy" expose the
+                    # large thumb (JPEG even for TIFF sources, browsers cannot
+                    # render TIFF). The true file URL stays in extra["original_url"].
                     "raw": result.url_large,
-                    "proxy": imagor_img.transform().get_full_url(),
+                    "proxy": large_img.transform().get_full_url(),
                 },
                 "square": {
-                    "avatar": imagor_img.transform(
-                        size=get_size(96, 96),
+                    "avatar": transform_for(
+                        96,
+                        96,
                         quality=quality,
                         focal=focal_point,
                         crop_start=focal_start,
                         crop_stop=focal_stop,
                     ).get_full_url(),
-                    "avatar@2x": imagor_img.transform(
-                        size=get_size(192, 192),
+                    "avatar@2x": transform_for(
+                        192,
+                        192,
                         quality=quality,
                         focal=focal_point,
                         crop_start=focal_start,
                         crop_stop=focal_stop,
                     ).get_full_url(),
-                    "thumb": imagor_img.transform(
-                        size=get_size(200, 200),
+                    "thumb": transform_for(
+                        200,
+                        200,
                         quality=quality,
                         focal=focal_point,
                         crop_start=focal_start,
                         crop_stop=focal_stop,
                     ).get_full_url(),
-                    "thumb@2x": imagor_img.transform(
-                        size=get_size(400, 400),
+                    "thumb@2x": transform_for(
+                        400,
+                        400,
                         quality=quality,
                         focal=focal_point,
                         crop_start=focal_start,
                         crop_stop=focal_stop,
                     ).get_full_url(),
-                    "preview": imagor_img.transform(
-                        size=get_size(400, 400),
+                    "preview": transform_for(
+                        400,
+                        400,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
-                    "preview@2x": imagor_img.transform(
-                        size=get_size(800, 800),
+                    "preview@2x": transform_for(
+                        800,
+                        800,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
-                    "placeholder": imagor_img.transform(
-                        size=get_size(400, 400),
+                    "placeholder": transform_for(
+                        400,
+                        400,
                         quality=5,
                         blur=20,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
-                    "placeholder@2x": imagor_img.transform(
-                        size=get_size(800, 800),
+                    "placeholder@2x": transform_for(
+                        800,
+                        800,
                         quality=5,
                         blur=20,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
-                    "medium": imagor_img.transform(
-                        size=get_size(1000, 1000),
+                    "medium": transform_for(
+                        1000,
+                        1000,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                         no_upscale=True,
                     ).get_full_url(),
-                    "medium@2x": imagor_img.transform(
-                        size=get_size(2000, 2000),
+                    "medium@2x": transform_for(
+                        2000,
+                        2000,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                         no_upscale=True,
                     ).get_full_url(),
-                    "large": imagor_img.transform(
-                        size=get_size(2000, 2000),
+                    "large": transform_for(
+                        2000,
+                        2000,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                         no_upscale=True,
                     ).get_full_url(),
-                    "large@2x": imagor_img.transform(
-                        size=get_size(4000, 4000),
+                    "large@2x": transform_for(
+                        4000,
+                        4000,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
@@ -1155,76 +1201,86 @@ def post_process_images(
                     ).get_full_url(),
                 },
                 "landscape": {
-                    "thumb": imagor_img.transform(
-                        size=get_size(200, 133),
+                    "thumb": transform_for(
+                        200,
+                        133,
                         quality=quality,
                         focal=focal_point,
                         crop_start=focal_start,
                         crop_stop=focal_stop,
                     ).get_full_url(),
-                    "thumb@2x": imagor_img.transform(
-                        size=get_size(400, 266),
+                    "thumb@2x": transform_for(
+                        400,
+                        266,
                         quality=quality,
                         focal=focal_point,
                         crop_start=focal_start,
                         crop_stop=focal_stop,
                     ).get_full_url(),
-                    "preview": imagor_img.transform(
-                        size=get_size(400, 267),
+                    "preview": transform_for(
+                        400,
+                        267,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
-                    "preview@2x": imagor_img.transform(
-                        size=get_size(800, 534),
+                    "preview@2x": transform_for(
+                        800,
+                        534,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
-                    "placeholder": imagor_img.transform(
-                        size=get_size(400, 267),
+                    "placeholder": transform_for(
+                        400,
+                        267,
                         quality=5,
                         blur=20,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
-                    "placeholder@2x": imagor_img.transform(
-                        size=get_size(800, 534),
+                    "placeholder@2x": transform_for(
+                        800,
+                        534,
                         quality=5,
                         blur=20,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
-                    "medium": imagor_img.transform(
-                        size=get_size(1200, 800),
+                    "medium": transform_for(
+                        1200,
+                        800,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                         no_upscale=False,
                     ).get_full_url(),
-                    "medium@2x": imagor_img.transform(
-                        size=get_size(2400, 1600),
+                    "medium@2x": transform_for(
+                        2400,
+                        1600,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                         no_upscale=False,
                     ).get_full_url(),
-                    "large": imagor_img.transform(
-                        size=get_size(2000, 1333),
+                    "large": transform_for(
+                        2000,
+                        1333,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                         no_upscale=False,
                     ).get_full_url(),
-                    "large@2x": imagor_img.transform(
-                        size=get_size(4000, 2666),
+                    "large@2x": transform_for(
+                        4000,
+                        2666,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
@@ -1233,76 +1289,86 @@ def post_process_images(
                     ).get_full_url(),
                 },
                 "portrait": {
-                    "thumb": imagor_img.transform(
-                        size=get_size(133, 200),
+                    "thumb": transform_for(
+                        133,
+                        200,
                         quality=quality,
                         focal=focal_point,
                         crop_start=focal_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
-                    "thumb@2x": imagor_img.transform(
-                        size=get_size(266, 400),
+                    "thumb@2x": transform_for(
+                        266,
+                        400,
                         quality=quality,
                         focal=focal_point,
                         crop_start=focal_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
-                    "preview": imagor_img.transform(
-                        size=get_size(300, 450),
+                    "preview": transform_for(
+                        300,
+                        450,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
-                    "preview@2x": imagor_img.transform(
-                        size=get_size(600, 900),
+                    "preview@2x": transform_for(
+                        600,
+                        900,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
-                    "placeholder": imagor_img.transform(
-                        size=get_size(300, 450),
+                    "placeholder": transform_for(
+                        300,
+                        450,
                         quality=5,
                         blur=20,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
-                    "placeholder@2x": imagor_img.transform(
-                        size=get_size(600, 900),
+                    "placeholder@2x": transform_for(
+                        600,
+                        900,
                         quality=5,
                         blur=20,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
-                    "medium": imagor_img.transform(
-                        size=get_size(900, 1350),
+                    "medium": transform_for(
+                        900,
+                        1350,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                         no_upscale=False,
                     ).get_full_url(),
-                    "medium@2x": imagor_img.transform(
-                        size=get_size(1800, 2700),
+                    "medium@2x": transform_for(
+                        1800,
+                        2700,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                         no_upscale=False,
                     ).get_full_url(),
-                    "large": imagor_img.transform(
-                        size=get_size(1500, 2250),
+                    "large": transform_for(
+                        1500,
+                        2250,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                         no_upscale=False,
                     ).get_full_url(),
-                    "large@2x": imagor_img.transform(
-                        size=get_size(3000, 4500),
+                    "large@2x": transform_for(
+                        3000,
+                        4500,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
@@ -1527,7 +1593,7 @@ async def fetch_images_from_providers(
     all_results = []
     for i, result_list in enumerate(results_lists):
         provider = providers[i]
-        if isinstance(result_list, Exception):
+        if isinstance(result_list, BaseException):
             logger.error(
                 "Provider fetch failed",
                 provider=provider.source,
@@ -1842,7 +1908,8 @@ def _hash_url(url: str) -> str:
     """Create a hash from URL for cache key."""
     import hashlib
 
-    return hashlib.md5(url.encode()).hexdigest()[:16]
+    # Non-security cache key; sha256 kept over md5 per lint policy.
+    return hashlib.sha256(url.encode()).hexdigest()[:16]
 
 
 async def _get_image_dimensions_from_headers(url: str) -> tuple[int, int] | None:
