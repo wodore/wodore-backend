@@ -267,7 +267,12 @@ class WikimediaCommonsProvider(ImageProvider):
         Returns:
             List of ImageResult objects
         """
-        radius_km = max(1, radius / 1000)  # At least 1km
+        # The hut's own images arrive via the direct-QID path (Strategy 1,
+        # radius-independent); this spatial fallback must not sweep
+        # NEIGHBORING huts — honor the requested radius with a 50 m floor
+        # for coordinate/rounding safety only (empirically 50 m still matches
+        # the co-located hut item; the old 1 km floor pulled in neighbors).
+        radius_km = max(50, radius) / 1000
 
         sparql = f"""
         SELECT ?item ?itemLabel ?image ?category WHERE {{

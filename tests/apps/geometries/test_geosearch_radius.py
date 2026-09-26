@@ -7,7 +7,10 @@ results; the geosearch fallback never contributed).
 """
 
 import asyncio
+import re
 from typing import Any, Self
+
+import pytest
 
 from server.apps.geometries.providers.wikimedia_commons import (
     WikimediaCommonsProvider,
@@ -83,3 +86,40 @@ class TestGeosearchRadiusUnit:
     def test_all_passes_share_the_radius(self):
         values = _ggsradius_values(3000)
         assert len(set(values)) == 1
+
+
+class TestWikidataSpatialRadius:
+    """The spatial SPARQL fallback must honor the requested radius.
+
+    A known hut's own images come via the direct-QID path (radius-
+    independent); the spatial query is a fallback and must not sweep
+    neighboring huts. Old behavior: floor of 1 km.
+    """
+
+    def _radius_in_query(self, radius_m: float) -> float:
+        _FakeAsyncClient.calls = []
+        provider = WikimediaCommonsProvider()
+        asyncio.run(
+            provider._fetch_wikidata_spatial(
+                lat=46.0,
+                lon=7.75,
+                radius=radius_m,
+                limit=10,
+                place_qids=set(),
+                httpx=_FakeHttpx,
+            )
+        )
+        assert _FakeAsyncClient.calls, "provider made no API calls"
+        query = str(_FakeAsyncClient.calls[0].get("query", ""))
+        match = re.search(r'wikibase:radius "([\d.]+)"', query)
+        assert match, "radius missing from SPARQL query"
+        return float(match.group(1))
+
+    def test_requested_radius_honored(self):
+        assert self._radius_in_query(50) == pytest.approx(0.05)
+
+    def test_floor_at_50m(self):
+        assert self._radius_in_query(10) == pytest.approx(0.05)
+
+    def test_larger_radius_passed_through(self):
+        assert self._radius_in_query(250) == pytest.approx(0.25)
