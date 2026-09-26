@@ -34,10 +34,12 @@ MFA_PASSKEY_LOGIN_ENABLED = True
 ACCOUNT_PREVENT_ENUMERATION = True
 
 # Brute-force protection on top of django-axes (already in the backends).
+# Format: "attempts/window[/per]" with per ∈ {ip, user, key} — "key" is
+# the login identifier (email), giving per-account lockout on failures.
 ACCOUNT_RATE_LIMITS = {
-    "login": "5/5m/ip+username",
-    "login_failed": "10/5m/ip+username",
-    "reset_password": "5/5m/email",
+    "login": "10/5m, 30/1h",
+    "login_failed": "10/5m/key, 50/1h/ip",
+    "reset_password": "5/5m, 20/1h",
 }
 
 # Argon2 first; falls back to the other hashers for existing passwords.

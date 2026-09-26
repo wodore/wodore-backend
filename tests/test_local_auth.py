@@ -292,6 +292,29 @@ class TestLoginMethods:
         response = client.get("/accounts/login/")
         assert response.status_code == 200
 
+    def test_login_form_post_logs_in(self, client, local_users):
+        """Drives the real allauth login form (GET + POST with credentials) -
+        guards against configuration errors that only surface on POST
+        (e.g. malformed ACCOUNT_RATE_LIMITS raising ValueError)."""
+        from django.contrib.auth import get_user_model
+
+        page = client.get("/accounts/login/")
+        assert page.status_code == 200
+        response = client.post(
+            "/accounts/login/",
+            data={"login": "admin@local.test", "password": "admin-dev"},
+        )
+        assert response.status_code == 302, getattr(response, "context", None)
+        user = get_user_model().objects.get(username="admin@local.test")
+        assert user.is_authenticated
+
+    def test_login_form_rejects_wrong_password(self, client, local_users):
+        response = client.post(
+            "/accounts/login/",
+            data={"login": "admin@local.test", "password": "wrong"},
+        )
+        assert response.status_code == 200  # form re-rendered with errors
+
     def test_email_only_identifier(self, settings):
         assert settings.ACCOUNT_LOGIN_METHODS == {
             "username": False,
