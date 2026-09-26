@@ -171,6 +171,31 @@ input[type="submit"].secondary {
   border: 1px solid var(--w-ridge);
 }
 
+/* In-card navigation for authenticated users */
+
+.account-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.875rem;
+  font-size: 0.875rem;
+}
+
+.account-nav-logout {
+  display: inline;
+  margin: 0;
+}
+
+button.linklike {
+  width: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--w-link);
+  font-weight: 400;
+  cursor: pointer;
+}
+
 /* Feedback: always explicit ink on tinted background (both modes) */
 
 ul.messages,

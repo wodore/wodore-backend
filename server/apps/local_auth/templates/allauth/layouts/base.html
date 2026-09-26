@@ -21,6 +21,18 @@ inside the SPA's login popup.
   {% block body %}
     <main class="account-card">
       <div class="account-brand">wodore</div>
+      {% if user.is_authenticated %}
+        <nav class="account-nav">
+          <a href="/accounts/2fa/">{% trans "Two-Factor Auth" %}</a>
+          <a href="/accounts/email/">{% trans "Change Email" %}</a>
+          <a href="/accounts/password/change/">{% trans "Change Password" %}</a>
+          <form method="post" action="/accounts/logout/" class="account-nav-logout">
+            {% csrf_token %}
+            <button type="submit" class="linklike">{% trans "Sign Out" %}</button>
+          </form>
+        </nav>
+        <hr>
+      {% endif %}
       {% if messages %}
         <ul class="messages">
           {% for message in messages %}<li>{{ message }}</li>{% endfor %}
