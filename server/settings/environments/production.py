@@ -5,8 +5,7 @@ This file is required and if development.py is present these
 values are overridden.
 """
 
-from server.settings.components.common import DJANGO_TRUSTED_DOMAINS, MIDDLEWARE
-from server.settings.components.oidc import discovery_info
+from server.settings.components.common import DJANGO_TRUSTED_DOMAINS
 
 # Production flags:
 # https://docs.djangoproject.com/en/4.2/howto/deployment/
@@ -23,8 +22,6 @@ ALLOWED_HOSTS = [
     "localhost",
 ]
 
-if discovery_info:  # use only if setup correct
-    MIDDLEWARE += ("mozilla_django_oidc.middleware.SessionRefresh",)
 
 # Staticfiles
 # https://docs.djangoproject.com/en/4.2/ref/contrib/staticfiles/

@@ -74,10 +74,15 @@ rotation SHALL be supported by accepting multiple key ids.
 - **THEN** the signature verifies
 
 ### Requirement: Hardened provider defaults
-The provider SHALL enable the RFC 9700 (OAuth 2.0 Security BCP) compliance
-gates, refresh-token rotation with reuse protection, and authorization-code
-expiry of at most 60 seconds, and the Django system checks SHALL report no
-oauth2_provider security errors or warnings in the deployment configuration.
+The provider SHALL enforce PKCE for all authorization-code grants,
+refresh-token rotation with reuse protection, authorization-code expiry of
+at most 60 seconds, exact-match redirect URIs limited to `https` (plus an
+allowlisted app scheme for the future Android client; `http` only in
+development/test), and the Django system checks SHALL report no
+`oauth2_provider` error-level findings in the deployment configuration.
+The resource-owner password grant is deliberately kept for development/test
+convenience via a dedicated client that is only seeded in those
+environments; production has no such client.
 
 #### Scenario: Deployment checks pass
 - **WHEN** system checks run with the provider enabled and production settings

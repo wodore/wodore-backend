@@ -1,8 +1,9 @@
 """End-to-end tests for API bearer validation routing (spec: api-token-validation).
 
 Uses a test-only Ninja API with AuthBearer-protected endpoints driven by
-tokens from the local provider (password grant), covering success, wrong-role
-401, invalid-token 401, disabled-mode 401, and validator routing per mode.
+tokens from the built-in provider (dev password grant), covering success,
+wrong-role 401, invalid-token 401, disabled-mode 401, and validator
+routing by issuer/flags.
 """
 
 import pytest
@@ -11,7 +12,11 @@ from ninja.testing import TestClient
 
 from django.test import Client
 
-from server.apps.api.auth import AuthBearer, LocalJWTValidator
+from server.apps.api.auth import (
+    AuthBearer,
+    BuiltInJWTValidator,
+    ZitadelIntrospectTokenValidator,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -23,10 +28,11 @@ def public(request):
     return {"ok": True}
 
 
-# NOTE: with the preserved Zitadel validation semantics, a requirement of
+# NOTE: with the preserved validation semantics, a requirement of
 # ``roles=[...]`` only rejects when ``groups=[...]`` is also given and neither
-# matches (see BaseTokenValidator.validate_token). Endpoints below therefore
-# use the roles+groups combination, like the real (commented) booking usage.
+# matches (see BaseTokenValidator.validate_requirements). Endpoints below
+# therefore use the roles+groups combination, like the real (commented)
+# booking usage.
 @api.get("/admin-only", auth=AuthBearer(roles=["admin"], groups=["admin"]))
 def admin_only(request):
     return {"ok": True}
@@ -39,8 +45,14 @@ def editor_only(request):
 
 def _password_token(username: str, password: str) -> str:
     response = Client().post(
-        "/oauth/local/token",
-        data={"grant_type": "password", "username": username, "password": password},
+        "/oauth/local/token/",
+        data={
+            "grant_type": "password",
+            "username": username,
+            "password": password,
+            "client_id": "wodore-local-dev-password",
+            "client_secret": "wodore-local-dev-secret",
+        },
     )
     assert response.status_code == 200, response.content
     return response.json()["access_token"]
@@ -78,21 +90,6 @@ class TestProtectedEndpoints:
         )
         assert response.status_code == 401
 
-    def test_any_valid_token_passes_roles_only_endpoint(self, client):
-        # Documented semantics quirk: without a groups requirement the roles
-        # check cannot reject (groups=None always satisfies).
-        other_api = NinjaAPI(urls_namespace="test-roles-only-api")
-
-        @other_api.get("/roles-only", auth=AuthBearer(roles=["admin"]))
-        def roles_only(request):
-            return {"ok": True}
-
-        token = _password_token("editor@local.test", "editor-dev")
-        response = TestClient(other_api).get(
-            "/roles-only", headers={"Authorization": f"Bearer {token}"}
-        )
-        assert response.status_code == 200
-
     def test_editor_token_passes_editor_endpoint(self, client):
         token = _password_token("editor@local.test", "editor-dev")
         response = client.get(
@@ -102,7 +99,7 @@ class TestProtectedEndpoints:
 
     def test_garbage_token_rejected(self, client):
         response = client.get(
-            "/admin-only", headers={"Authorization": "Bearer not-a-jwt"}
+            "/admin-only", headers={"Authorization": "Bearer not-a-token"}
         )
         assert response.status_code == 401
 
@@ -110,18 +107,35 @@ class TestProtectedEndpoints:
         response = client.get("/admin-only")
         assert response.status_code == 401
 
+    def test_wrong_issuer_jwt_rejected(self, client):
+        from django.contrib.auth import get_user_model
+
+        from server.apps.local_auth import tokens
+
+        admin = get_user_model().objects.get(username="admin@local.test")
+        forged = tokens.issue_access_token(
+            admin, "https://evil.example/oauth/local", "wodore-local-dev"
+        )
+        response = client.get(
+            "/admin-only", headers={"Authorization": f"Bearer {forged}"}
+        )
+        assert response.status_code == 401
+
+    def test_revocation_takes_effect_immediately(self, client):
+        from oauth2_provider.models import get_access_token_model
+
+        token = _password_token("admin@local.test", "admin-dev")
+        get_access_token_model().objects.filter(token=token).delete()
+        response = client.get(
+            "/admin-only", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert response.status_code == 401
+
 
 class TestDisabledMode:
     def test_clean_401_when_nothing_configured(self, settings):
-        # NOTE: do NOT request real tokens while LOCAL_AUTH_ENABLED is
-        # overridden to False: the provider routes are mounted at urlconf
-        # import time behind that flag, and pytest-django may reload the
-        # urlconf around the override - poisoning the rest of the run with
-        # 404s. The "not configured" 401 fires before any token validation,
-        # so a dummy token is sufficient (and keeps this test DB-free).
         settings.OIDC_ENABLED = False
-        settings.LOCAL_AUTH_ENABLED = False
-        # Endpoint built after the override, so its AuthBearer has no validator.
+        settings.ZITADEL_ROLLBACK_ENABLED = False
         disabled_api = NinjaAPI(urls_namespace="test-disabled-api")
 
         @disabled_api.get("/x", auth=AuthBearer())
@@ -129,32 +143,34 @@ class TestDisabledMode:
             return {"ok": True}
 
         response = TestClient(disabled_api).get(
-            "/x", headers={"Authorization": "Bearer any-token"}
+            "/x", headers={"Authorization": "Bearer whatever"}
         )
         assert response.status_code == 401
-        assert "not configured" in str(response.json()).lower()
+        assert "not configured" in response.json()["detail"].lower()
 
 
 class TestValidatorRouting:
-    def test_local_mode_selects_local_validator(self, settings):
-        settings.OIDC_ENABLED = False
-        settings.LOCAL_AUTH_ENABLED = True
-        assert isinstance(AuthBearer().validator, LocalJWTValidator)
-
-    def test_oidc_mode_selects_zitadel_validator(self, settings):
-        from server.apps.api.auth import ZitadelIntrospectTokenValidator
-
+    def test_builtin_validator_selected_by_default(self, settings):
         settings.OIDC_ENABLED = True
-        settings.LOCAL_AUTH_ENABLED = False
+        settings.ZITADEL_ROLLBACK_ENABLED = False
+        validators = AuthBearer().validators
+        assert [type(v) for v in validators] == [BuiltInJWTValidator]
+
+    def test_rollback_adds_zitadel_validator(self, settings):
+        settings.OIDC_ENABLED = True
+        settings.ZITADEL_ROLLBACK_ENABLED = True
         settings.ZITADEL_API_PRIVATE_KEY = {
             "client_id": "test",
             "key_id": "test",
             "private_key": "test",
         }
-        validator = AuthBearer().validator
-        assert isinstance(validator, ZitadelIntrospectTokenValidator)
+        validators = AuthBearer().validators
+        assert [type(v) for v in validators] == [
+            BuiltInJWTValidator,
+            ZitadelIntrospectTokenValidator,
+        ]
 
-    def test_disabled_mode_has_no_validator(self, settings):
+    def test_disabled_mode_has_no_validators(self, settings):
         settings.OIDC_ENABLED = False
-        settings.LOCAL_AUTH_ENABLED = False
-        assert AuthBearer().validator is None
+        settings.ZITADEL_ROLLBACK_ENABLED = False
+        assert AuthBearer().validators == []

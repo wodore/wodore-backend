@@ -50,10 +50,21 @@ and assert both the success and the 401 denial paths.
 ## ADDED Requirements
 
 ### Requirement: Local JWT verification without per-request network calls
-Verification of built-in provider tokens SHALL NOT perform a network request
-per API call: the provider JWKS SHALL be fetched at most once per cache
-window, with clock-skew tolerance applied to `exp`/`iat` checks.
+Verification of built-in provider tokens SHALL NOT perform a network
+request per API call: opaque DOT access tokens verify via a local database
+lookup (with roles sourced live from the user's Django groups and
+revocation taking effect immediately), and JWT-shaped tokens verify locally
+via signature, expiry and exact issuer matching (request-derived plus
+configured issuer URLs - never by path suffix).
 
-#### Scenario: No introspection roundtrip
+#### Scenario: No network roundtrip
 - **WHEN** two consecutive protected requests present the same valid provider token
-- **THEN** both succeed and at most one JWKS fetch occurs within the cache window
+- **THEN** both succeed with no HTTP request to any external service
+
+#### Scenario: Revocation is immediate
+- **WHEN** a valid access token's database row is deleted
+- **THEN** the next request presenting it responds 401
+
+#### Scenario: Wrong-issuer JWT rejected
+- **WHEN** a properly signed JWT carries an issuer outside the accepted set (e.g. a different host under the same path)
+- **THEN** the response is 401

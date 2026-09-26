@@ -1,0 +1,87 @@
+{% comment %}
+Minimal, mobile-first base for allauth templates (login, logout, MFA,
+password reset). Rendered full-page for redirects and inside the SPA's
+login popup — keep it small and self-contained.
+{% endcomment %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Wodore — Sign in{% endblock %}</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: #f4f6f8;
+      color: #1f2933;
+      display: flex;
+      min-height: 100vh;
+      align-items: center;
+      justify-content: center;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: #161a1f; color: #e6e9ed; }
+      .card { background: #1f252d; }
+      .btn { background: #3b82f6; }
+      input { background: #12161b; color: #e6e9ed; }
+    }
+    .card {
+      width: 100%;
+      max-width: 380px;
+      margin: 1rem;
+      padding: 2rem 1.75rem;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(15, 23, 42, .08);
+    }
+    h1 { font-size: 1.25rem; margin: 0 0 1.25rem; }
+    p { line-height: 1.5; }
+    label { display: block; font-size: .875rem; margin: .875rem 0 .25rem; }
+    input[type="text"], input[type="email"], input[type="password"], input[type="tel"] {
+      width: 100%;
+      padding: .625rem .75rem;
+      border: 1px solid #cbd2d9;
+      border-radius: 8px;
+      font-size: 1rem;
+      background: #fff;
+    }
+    .btn {
+      display: inline-block;
+      margin-top: 1.25rem;
+      width: 100%;
+      padding: .625rem .75rem;
+      border: 0;
+      border-radius: 8px;
+      background: #2563eb;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .messages, .errorlist { list-style: none; margin: 0 0 .5rem; padding: 0; }
+    .messages li, .errorlist li {
+      margin: .5rem 0;
+      padding: .5rem .75rem;
+      border-radius: 8px;
+      font-size: .875rem;
+      background: #fef3c7;
+    }
+    .errorlist li { background: #fee2e2; }
+    .muted { color: inherit; opacity: .65; font-size: .875rem; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Wodore</h1>
+    {% if messages %}
+      <ul class="messages">
+        {% for message in messages %}<li>{{ message }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

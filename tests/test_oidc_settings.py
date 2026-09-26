@@ -1,34 +1,36 @@
-"""Tests for the optional-OIDC feature flags (spec: optional-oidc).
+"""Tests for the OIDC feature flags (spec: optional-oidc).
 
 Flag semantics under test (settings component loads before the environment
-files, so defaults derive from DJANGO_ENV):
+files):
 
-- development/test: OIDC disabled, local auth provider enabled (default)
-- production/staging: OIDC enabled, local auth refused
-- explicit env vars always win
-- enabled-but-unreachable provider aborts startup (fail-fast)
+- ``OIDC_ENABLED`` defaults to true in ALL environments (the built-in
+  provider serves dev/test and production alike); explicit env vars win
+- ``LOCAL_AUTH_ENABLED`` no longer exists (retired with the hand-rolled
+  provider)
+- production without a provider signing key aborts startup (fail-fast)
+- production with ``ZITADEL_ROLLBACK_ENABLED=true`` but no Zitadel
+  machine-user key aborts startup
 
 Settings load in a subprocess with a controlled DJANGO_ENV; importing
-settings performs no database access.
+settings performs no database access. The committed dev key (JSON JWK) is
+injected via env where a production-style load must succeed.
 """
 
+import json
 import os
 import subprocess
 import sys
 
 import pytest
 
-from django.core.management import call_command
-from django.core.management.base import CommandError
-
 pytestmark = pytest.mark.django_db
 
-_PRINT_FLAGS = (
-    "import django; django.setup(); "
-    "from django.conf import settings; "
-    "print(f'OIDC_ENABLED={settings.OIDC_ENABLED}'); "
-    "print(f'LOCAL_AUTH_ENABLED={settings.LOCAL_AUTH_ENABLED}')"
-)
+
+def _dev_key_json() -> str:
+    """The resolved (dev/test committed) provider key as JSON for envs."""
+    from django.conf import settings
+
+    return json.dumps(settings.OIDC_PROVIDER_PRIVATE_JWK)
 
 
 def _load_settings_env(env: str, extra: dict[str, str] | None = None) -> str:
@@ -53,65 +55,51 @@ def _load_settings_env(env: str, extra: dict[str, str] | None = None) -> str:
     return result.stdout + result.stderr
 
 
-class TestFlagDefaults:
-    def test_dev_defaults_to_local_auth(self):
-        out = _load_settings_env("development")
-        assert "OIDC_ENABLED=False" in out
-        assert "LOCAL_AUTH_ENABLED=True" in out
+_PRINT_FLAGS = (
+    "import django; django.setup(); "
+    "from django.conf import settings; "
+    "print(f'OIDC_ENABLED={settings.OIDC_ENABLED}'); "
+    "print(f'ROLLBACK={settings.ZITADEL_ROLLBACK_ENABLED}'); "
+    "print(f'HAS_LOCAL_AUTH={hasattr(settings, \"LOCAL_AUTH_ENABLED\")}')"
+)
 
-    def test_test_env_defaults_to_local_auth(self):
-        out = _load_settings_env("test")
+
+class TestFlagDefaults:
+    @pytest.mark.parametrize("env", ["development", "test"])
+    def test_builtin_provider_on_everywhere(self, env):
+        out = _load_settings_env(env)
+        assert "OIDC_ENABLED=True" in out
+        assert "HAS_LOCAL_AUTH=False" in out
+        assert "Traceback" not in out
+
+    def test_production_defaults(self):
+        out = _load_settings_env(
+            "production", extra={"LOCAL_AUTH_PRIVATE_KEY_JWK": _dev_key_json()}
+        )
+        assert "OIDC_ENABLED=True" in out
+        # Rollback defaults on outside dev/test until decommission.
+        assert "ROLLBACK=True" in out
+        assert "HAS_LOCAL_AUTH=False" in out
+        assert "Traceback" not in out
+
+    def test_explicit_disable_wins(self):
+        out = _load_settings_env("development", extra={"OIDC_ENABLED": "false"})
         assert "OIDC_ENABLED=False" in out
-        assert "LOCAL_AUTH_ENABLED=True" in out
 
 
 class TestFailFast:
-    def test_enabled_but_unreachable_aborts(self):
-        """Production default enables OIDC; the unreachable provider must abort."""
-        out = _load_settings_env("production")
-        assert (
-            "OIDC is enabled but the discovery document could not be retrieved" in out
+    def test_production_without_signing_key_aborts(self):
+        out = _load_settings_env("production", extra={"LOCAL_AUTH_PRIVATE_KEY_JWK": ""})
+        assert "ImproperlyConfigured" in out
+        assert "LOCAL_AUTH_PRIVATE_KEY_JWK" in out
+
+    def test_rollback_without_zitadel_key_aborts(self):
+        out = _load_settings_env(
+            "production",
+            extra={
+                "LOCAL_AUTH_PRIVATE_KEY_JWK": _dev_key_json(),
+                "ZITADEL_API_PRIVATE_KEY_JSON": "",
+            },
         )
-
-    def test_explicit_oidc_enabled_override_in_test_env(self):
-        """An explicit OIDC_ENABLED=true override must be honored (and then
-        fail fast against the unreachable default provider)."""
-        out = _load_settings_env("test", extra={"OIDC_ENABLED": "true"})
-        assert (
-            "OIDC is enabled but the discovery document could not be retrieved" in out
-        )
-
-    def test_production_refuses_local_auth(self):
-        out = _load_settings_env("production", extra={"LOCAL_AUTH_ENABLED": "true"})
-        assert "LOCAL_AUTH_ENABLED=true is only allowed" in out
-
-
-class TestDisabledMode:
-    def test_oidc_disabled_in_test_env(self, settings):
-        assert settings.OIDC_ENABLED is False
-        assert settings.LOCAL_AUTH_ENABLED is True
-
-    def test_permission_backend_not_registered(self, settings):
-        assert (
-            "server.core.oidc_permission.PermissionBackend"
-            not in settings.AUTHENTICATION_BACKENDS
-        )
-        assert (
-            "django.contrib.auth.backends.ModelBackend"
-            in settings.AUTHENTICATION_BACKENDS
-        )
-
-    def test_oidc_urls_not_mounted(self):
-        from django.urls import Resolver404, resolve
-
-        with pytest.raises(Resolver404):
-            resolve("/oidc/authenticate/")
-
-    def test_admin_login_is_classic_form(self, client):
-        response = client.get("/admin/login/?next=/admin/")
-        assert response.status_code == 200
-        assert b"/oidc/authenticate" not in response.content
-
-    def test_api_test_token_refuses(self):
-        with pytest.raises(CommandError, match="OIDC is disabled"):
-            call_command("api_test_token")
+        assert "ImproperlyConfigured" in out
+        assert "ZITADEL" in out

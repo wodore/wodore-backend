@@ -182,7 +182,6 @@ INSTALLED_APPS: tuple[str, ...] = (
     "django_admin_runner",  # https://github.com/burgdev/django-admin-runner
     # Security:
     "axes",
-    "mozilla_django_oidc",  # Load after auth https://github.com/mozilla/mozilla-django-oidc
     "csp",
     # Health checks:
     # You may want to enable other checks as well,
@@ -401,7 +400,7 @@ IMAGOR_MEDIA_URL = str(
 AUTHENTICATION_BACKENDS = (
     "axes.backends.AxesBackend",
     "django.contrib.auth.backends.ModelBackend",
-    # OIDC PermissionBackend is appended by components/oidc.py when OIDC_ENABLED
+    # allauth backend is appended by components/registry.py when OIDC_ENABLED
 )
 
 PASSWORD_HASHERS = [

@@ -59,6 +59,24 @@ grant dev-only). allauth+DOT becomes phase 2 "modernize" under the SAME
 issuer URL (frontend config untouched; DOT emits legacy claim shape too);
 phase 3 decommissions Zitadel. See design.md Migration Plan + tasks.md.
 
+## Implementation notes (260926, phase 1 "modernize" applied)
+
+- DOT 3.4.1 issues **opaque DB-backed access tokens** (JWTs are ID-token
+  only). Spec updated: validation = local DB lookup (instant revocation,
+  live roles from Django groups); api_test_token mints JWTs that verify
+  via signature + exact issuer match (no path-suffix matching - a forged
+  `evil.example/oauth/local` issuer must fail).
+- Issuer matching is exact against request-derived + configured issuers
+  (`LOCAL_AUTH_ALLOWED_ISSUERS`).
+- Password grant: dev/test-only confidential client seeded by
+  `local_auth_users` (needs client_id+secret now). DOT RFC 9700 gates stay
+  off because of it - revisit at DOT 4.0 (gate default flips) by switching
+  test convenience to `api_test_token`.
+- debug_toolbar middleware survived the star-import into the test env and
+  injected into HTML responses (local-only quirk); test.py strips it now.
+- Full suite: 144 passed; `manage.py check` in production settings (with
+  key env vars): 0 issues.
+
 ## Open follow-ups
 
 - Login UX is phased (D2a): hosted allauth login at cutover (different

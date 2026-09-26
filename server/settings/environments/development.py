@@ -17,7 +17,6 @@ from server.settings.components.common import (
     MIDDLEWARE,
 )
 from server.settings.components.csp import CONTENT_SECURITY_POLICY
-from server.settings.components.oidc import discovery_info
 
 # Setting the development status:
 
@@ -133,8 +132,6 @@ if WITH_DEV:
         "querycount.middleware.QueryCountMiddleware",
     )
 
-if discovery_info:  # use only if setup correct
-    MIDDLEWARE += ("mozilla_django_oidc.middleware.SessionRefresh",)
 
 # https://django-debug-toolbar.readthedocs.io/en/stable/installation.html#configure-internal-ips
 try:  # This might fail on some OS
