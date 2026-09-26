@@ -13,3 +13,106 @@
   height: auto;
   margin: 0;
 }
+
+/* ---------------------------------------------------------------------------
+   Meta image widget — semantic styling for the unfold admin.
+   The template only uses tailwind utilities that actually exist in the
+   admin's compiled CSS (unfold JIT-builds its own templates only); all
+   colors/theme adaptation live here via the admin's CSS variables
+   (--color-base-*, --color-primary-*), with light-mode fallbacks.
+   --------------------------------------------------------------------------- */
+.mfu .mfu-preview-box {
+  min-height: 8rem;
+  background: var(--color-base-50, #f9fafb);
+  border-color: var(--color-base-200, #e5e7eb);
+}
+
+.mfu .mfu-preview-box img {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  border-radius: 0.25rem;
+}
+
+.mfu .mfu-status {
+  display: flex;
+}
+
+.mfu .mfu-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  padding: 0.1rem 0.55rem;
+  border-radius: 9999px;
+  border: 1px solid var(--color-base-200, #e5e7eb);
+  background: var(--color-base-50, #f9fafb);
+  color: var(--color-base-600, #4b5563);
+}
+
+.mfu .mfu-badge .material-symbols-outlined {
+  font-size: 1rem;
+}
+
+.mfu .mfu-badge-local {
+  color: #15803d;
+  border-color: #86efac;
+  background: rgba(134, 239, 172, 0.15);
+}
+
+.mfu .mfu-badge-external {
+  color: #b45309;
+  border-color: #fcd34d;
+  background: rgba(252, 211, 77, 0.15);
+}
+
+.mfu .mfu-urlrow,
+.mfu .mfu-filerow {
+  border-color: var(--color-base-200, #e5e7eb);
+  margin-bottom: 0.5rem;
+}
+
+.mfu .mfu-input {
+  background: var(--color-white, #ffffff);
+  color: var(--color-base-700, #374151);
+  border: 0;
+  outline: none;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.mfu .mfu-input::placeholder {
+  color: var(--color-base-400, #9ca3af);
+}
+
+.mfu .mfu-btn {
+  background: var(--color-primary-600, #2563eb);
+  color: var(--color-white, #ffffff);
+  border: 0;
+  border-left: 1px solid var(--color-base-200, #e5e7eb);
+}
+
+.mfu .mfu-btn:hover {
+  background: var(--color-primary-700, #1d4ed8);
+}
+
+.mfu .mfu-btn .material-symbols-outlined {
+  font-size: 1.1rem;
+}
+
+.mfu .mfu-iconbtn {
+  color: var(--color-base-400, #9ca3af);
+  padding: 0 0.35rem;
+  display: flex;
+  align-items: center;
+}
+
+.mfu .mfu-iconbtn:hover {
+  color: var(--color-base-700, #374151);
+}
+
+.mfu .mfu-upload-label {
+  padding-right: 0.6rem;
+}

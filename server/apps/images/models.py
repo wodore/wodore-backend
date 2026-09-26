@@ -80,7 +80,16 @@ class Image(TimeStampedModel):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
-    image = MetaImageField(upload_to="images/", meta_field="image_meta", blank=False)
+    image = MetaImageField(
+        upload_to="images/",
+        meta_field="image_meta",
+        blank=True,
+        help_text=_(
+            "Local image file. Pinned external images have no local file — "
+            "they are served from the source URL through imagor and can be "
+            "localized later via 'Download raw'."
+        ),
+    )
     image_meta = models.JSONField(
         blank=True, null=True, verbose_name=_("Image Metadata")
     )

@@ -25,14 +25,26 @@
       this.rootEl = elem;
       this.fileInput = elem.querySelector('input[type="file"]');
       this.urlInput = elem.querySelector("#url_upload");
+      this.downloadRawBtn = elem.querySelector(".mfu-download-raw");
       //this.metaInput = document.querySelector('.imagefocus-input[data-image-field="' + this.fileInput.name + '"]')
       // TODO this does not work with different meta field name
       this.metaInput = document.querySelector("#id_image_meta");
-      console.log(this.metaInput);
       this.imageFrame = elem.querySelector(".imagefocus-file-upload__image");
       this.removeAreaBtn = elem.querySelector(".imagefocus-file-remove-area");
       this.previewImage = this.imageFrame.querySelector("img");
       this.inputName = this.fileInput.name;
+    }
+
+    ensurePreviewImage() {
+      // Pinned external images render their raw URL; a brand-new form has no
+      // image at all — create the element on demand so URL input and focal
+      // selection always have something to work with.
+      if (!this.previewImage) {
+        this.previewImage = document.createElement("img");
+        this.previewImage.id = "image-preview";
+        this.imageFrame.appendChild(this.previewImage);
+      }
+      return this.previewImage;
     }
 
     getFocusPointInputValue() {
@@ -62,6 +74,15 @@
       this.urlInput.addEventListener("input", (evnt) =>
         this.handleUrlChange(evnt),
       );
+      if (this.downloadRawBtn) {
+        this.downloadRawBtn.addEventListener("click", () => {
+          // "Download raw": localize a pinned external image — fills the URL
+          // input with the source URL and reuses the regular upload-from-URL
+          // flow (live preview + server-side download on save).
+          this.urlInput.value = this.downloadRawBtn.dataset.rawUrl;
+          this.urlInput.dispatchEvent(new Event("input"));
+        });
+      }
       this.stage.listen("crop.change", (widget, evnt) =>
         this.handleFocusAreaClick(widget, evnt),
       );
@@ -96,8 +117,8 @@
       const metaValue = JSON.stringify({
         focal: this.focalArea,
         crop: this.cropArea,
-        width: this.previewImage.naturalWidth,
-        height: this.previewImage.naturalHeight,
+        width: this.previewImage ? this.previewImage.naturalWidth : undefined,
+        height: this.previewImage ? this.previewImage.naturalHeight : undefined,
       });
       this.metaInput.value = metaValue;
       this.metaInput.dispatchEvent(new Event("change"));
@@ -108,7 +129,7 @@
       if (!file) return;
       const reader = new FileReader();
       reader.onload = (evnt) => {
-        this.previewImage.src = evnt.target.result;
+        this.ensurePreviewImage().src = evnt.target.result;
         this.handleRemoveArea();
         this.updateMetadata();
       };
@@ -116,9 +137,7 @@
     }
 
     handleUrlChange(evnt) {
-      console.log(this.urlInput.value);
-      console.log(evnt);
-      this.previewImage.src = evnt.target.value;
+      this.ensurePreviewImage().src = evnt.target.value;
       this.updateMetadata();
       this.handleRemoveArea();
     }

@@ -105,6 +105,18 @@ class ImageAdmin(ModelAdmin):
             obj.uploaded_by_user = request.user  # pyright: ignore[reportAttributeAccessIssue]
         super().save_model(request, obj, form, change)
 
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        image_field = form.base_fields.get("image")
+        if image_field is not None and hasattr(image_field, "widget"):
+            # Pinned external images carry no local file — give the widget the
+            # raw source URL so it can preview it, allow focal point selection,
+            # and offer the one-click "Download raw" localization.
+            image_field.widget.raw_url = (
+                (getattr(obj, "source_url_raw", "") or "") if obj else ""
+            ) or None
+        return form
+
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request).prefetch_related("tags", "huts")
         return qs.select_related("license", "source_org")
@@ -145,6 +157,9 @@ class ImageAdmin(ModelAdmin):
         try:
             # obj.image.url  # does not work if removed?
             # img = f'<img width=120 heigh=60 src="{obj.image.url}"/>'
+            # Pinned external images have no local file — fall back to the
+            # raw source URL so the list thumbnail works for pins too.
+            source = obj.image if getattr(obj, "image", None) else obj.source_url_raw
             focal = obj.image_meta.get("focal") if obj.image_meta else None
             if focal:
                 focal_str = f"{focal.get('x1', 0)}x{focal.get('y1', 0)}:{focal.get('x2', 1)}x{focal.get('y2', 1)}"
@@ -152,7 +167,7 @@ class ImageAdmin(ModelAdmin):
                 focal_str = "0x0:1x1"
             crop_start, crop_stop = focal_str.split(":")
             img = (
-                ImagorImage(obj.image)
+                ImagorImage(source)
                 .transform(
                     size="100x60",
                     focal=focal_str,
