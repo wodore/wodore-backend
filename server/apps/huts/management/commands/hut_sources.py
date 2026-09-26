@@ -47,10 +47,12 @@ def add_hut_source_db(  # type: ignore[no-any-unimported]
             location=dbPoint(hut.location.lon_lat) if hut.location else None,
             organization=org,
             name=hut.name,
-            source_data=hut.source_data.model_dump(by_alias=True)
+            source_data=hut.source_data.model_dump(by_alias=True, mode="json")
             if hut.source_data is not None
             else {},
-            source_properties=hut.source_properties.model_dump(by_alias=True)
+            source_properties=hut.source_properties.model_dump(
+                by_alias=True, mode="json"
+            )
             if hut.source_properties
             else {},
         )
