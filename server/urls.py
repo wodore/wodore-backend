@@ -70,6 +70,26 @@ urlpatterns = [
     path("", index, name="index"),
 ]
 
+# Classic Zitadel relying-party routes (AUTH_PROVIDER=zitadel, the default
+# outside dev/test): mozilla-django-oidc endpoints + the admin login
+# redirect. #183 replaced the old OIDC_ENABLED block below with the
+# allauth surface but dropped this one - without it /oidc/authenticate/
+# is 404 and neither the admin SSO nor the SPA's Zitadel flow work.
+# Prepended for the same ordering reason as the allauth block below
+# ("admin/login/" must win over the admin site's own login view).
+if settings.ZITADEL_RP_ENABLED:
+    urlpatterns = [
+        path("oidc/", include("mozilla_django_oidc.urls")),
+        # admin hack, should not be needed (https://stackoverflow.com/questions/59881651/django-mozilla-django-oidc-and-admin)
+        path(
+            "admin/login/",
+            RedirectView.as_view(
+                url="/oidc/authenticate?next=/admin/", permanent=False
+            ),
+        ),
+        *urlpatterns,
+    ]
+
 # Built-in OIDC provider (DOT) + account management (allauth) + admin
 # login redirect (only when OIDC is enabled; when disabled the admin falls
 # back to Django's classic login form).
