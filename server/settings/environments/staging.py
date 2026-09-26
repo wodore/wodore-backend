@@ -38,10 +38,6 @@ MIDDLEWARE = list(MIDDLEWARE)  # pyright: ignore[reportUndefinedVariable]
 MIDDLEWARE.insert(0, "server.middleware.headers.RobotsTagMiddleware")
 MIDDLEWARE = tuple(MIDDLEWARE)  # pyright: ignore[reportUndefinedVariable]
 
-# Zitadel RP mode only (AUTH_PROVIDER=zitadel): refresh OIDC sessions.
-from server.settings.components.oidc import (
-    ZITADEL_RP_ENABLED,  # pyright: ignore[reportUndefinedVariable]
-)
-
-if ZITADEL_RP_ENABLED:
-    MIDDLEWARE += ("mozilla_django_oidc.middleware.SessionRefresh",)  # pyright: ignore[reportUndefinedVariable]
+# Note: the Zitadel SessionRefresh middleware is appended by
+# production.py (inherited above via `from ... import *`); do not add it
+# again here or it runs twice.
