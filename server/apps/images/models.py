@@ -197,10 +197,7 @@ class Image(TimeStampedModel):
         blank=True,
         null=True,
         verbose_name=_("Provider Synced At"),
-        help_text=_(
-            "When this image was last refreshed from its external provider "
-            "(openspec pin-external-images; null = not a pinned external image)."
-        ),
+        help_text=_("Last refresh from the external provider."),
     )
 
     class Meta:

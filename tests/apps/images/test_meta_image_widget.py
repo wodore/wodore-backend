@@ -34,7 +34,9 @@ def test_raw_fallback_preview_and_download_button():
 def test_no_raw_url_no_download_button():
     widget = MetaImageWidget()
     html = _render(widget)
-    assert "mfu-download-raw" not in html
+    # The button always renders; without a raw source (and no typed URL) the
+    # JS hides it — nothing to download.
+    assert 'data-raw-url=""' in html
     assert "mfu-badge-none" in html  # "No image yet" hint
     assert 'id="image-preview"' not in html
 

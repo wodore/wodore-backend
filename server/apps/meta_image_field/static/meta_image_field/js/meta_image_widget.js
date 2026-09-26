@@ -158,9 +158,14 @@
 
     updateDownloadButton() {
       if (!this.downloadRawBtn) return;
+      const hasRaw = !!this.downloadRawBtn.dataset.rawUrl;
+      const hasInput = !!this.urlInput.value.trim();
+      // Visible when there is something to download: a typed URL or the
+      // pinned raw source (raw is absent once a local file exists).
+      this.downloadRawBtn.hidden = !hasRaw && !hasInput;
       const label = this.downloadRawBtn.querySelector(".mfu-btn-label");
       if (!label) return;
-      label.textContent = this.urlInput.value.trim()
+      label.textContent = hasInput
         ? "Download"
         : this.downloadRawBtn.dataset.labelRaw || "Download raw";
     }

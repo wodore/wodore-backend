@@ -104,14 +104,19 @@ class ImageAdmin(ModelAdmin):
 
     @display(
         description=_("Serving"),  # pyright: ignore[reportArgumentType]  # _StrPromise vs unfold stub gap
+        label={
+            "local": "success",
+            "external": "warning",
+            "none": "danger",
+        },
     )
     def serving(self, obj):
         """Where the pixels come from: local file or external pin."""
         if getattr(obj, "image", None):
-            return (str(_("local file")), "success")
+            return "local"
         if obj.source_url_raw:
-            return (str(_("external")), "warning")
-        return (str(_("none")), "danger")
+            return "external"
+        return "none"
 
     def save_model(self, request, obj, form, change):
         if not obj.uploaded_by_user:  # pyright: ignore[reportAttributeAccessIssue]

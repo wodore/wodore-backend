@@ -58,17 +58,15 @@
                id="url_upload"
                class="mfu-input grow font-medium px-3 py-2"
                placeholder="{% trans 'Upload from URL' %}">
-        {% if widget.raw_url %}
-            <button type="button"
-                    class="mfu-btn mfu-download-raw flex items-center gap-2 px-3 py-2 text-sm cursor-pointer"
-                    data-raw-url="{{ widget.raw_url }}"
-                    data-label-raw="{% trans 'Download raw' %}"
-                    data-endpoint="{% url 'admin:images_image_download_raw' %}"
-                    title="{% trans 'Fetch the external source image and attach it as the local file (saved with the form)' %}">
-                <span class="material-symbols-outlined">download</span>
-                <span class="mfu-btn-label">{% trans "Download raw" %}</span>
-            </button>
-        {% endif %}
+        <button type="button"
+                class="mfu-btn mfu-download-raw flex items-center gap-2 px-3 py-2 text-sm cursor-pointer"
+                data-raw-url="{{ widget.raw_url|default:'' }}"
+                data-label-raw="{% trans 'Download raw' %}"
+                data-endpoint="{% url 'admin:images_image_download_raw' %}"
+                title="{% trans 'Fetch the URL image and attach it as the local file (saved with the form)' %}">
+            <span class="material-symbols-outlined">download</span>
+            <span class="mfu-btn-label">{% trans "Download raw" %}</span>
+        </button>
     </div>
 
     <div class="mfu-dl" hidden>

@@ -218,10 +218,7 @@ class Hut(TimeStampedModel):
         blank=True,
         null=True,
         verbose_name=_("Images pinned at"),
-        help_text=_(
-            "When external images were last pinned from providers "
-            "(openspec pin-external-images; null = never pinned)."
-        ),
+        help_text=_("Last pin sync from providers."),
     )
     image_set = models.ManyToManyField(
         Image,
