@@ -1,6 +1,8 @@
 # Caching
 # https://docs.djangoproject.com/en/4.2/topics/cache/
 
+from decouple import config
+
 CACHES = {
     "default": {
         # TODO: use some other cache in production,
@@ -42,3 +44,13 @@ CACHES = {
 # https://django-axes.readthedocs.io/en/latest/4_configuration.html#configuring-caches
 
 AXES_CACHE = "default"
+
+# Geo-images endpoint response cache (see server/apps/geometries/image_response_cache.py).
+# Fresh window = served directly; after that a stored response is only used as
+# stale fallback when recomputation fails. Storage TTL bounds the fallback.
+IMAGE_RESPONSE_CACHE_FRESH_SECONDS = config(
+    "IMAGE_RESPONSE_CACHE_FRESH_SECONDS", cast=int, default=15 * 60
+)
+IMAGE_RESPONSE_CACHE_STALE_SECONDS = config(
+    "IMAGE_RESPONSE_CACHE_STALE_SECONDS", cast=int, default=7 * 24 * 3600
+)
