@@ -74,7 +74,14 @@ class TestFlagDefaults:
 
     def test_production_defaults(self):
         out = _load_settings_env(
-            "production", extra={"LOCAL_AUTH_PRIVATE_KEY_JWK": _dev_key_json()}
+            "production",
+            extra={
+                "LOCAL_AUTH_PRIVATE_KEY_JWK": _dev_key_json(),
+                # Hermetic: CI does not carry the Zitadel machine-user key,
+                # and the rollback fail-fast would abort the load.
+                "ZITADEL_API_PRIVATE_KEY_JSON": '{"clientId":"x","keyId":"y","key":"z"}',
+                "OIDC_ENABLED": "true",
+            },
         )
         assert "OIDC_ENABLED=True" in out
         # Rollback defaults on outside dev/test until decommission.
