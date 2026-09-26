@@ -98,6 +98,7 @@ class ImageAdmin(ModelAdmin):
         "modified",
         "granted_date",
         "uploaded_date",
+        "provider_synced_at",
         # "image_meta",
     )
 
@@ -123,10 +124,12 @@ class ImageAdmin(ModelAdmin):
         if image_field is not None and hasattr(image_field, "widget"):
             # Pinned external images carry no local file — give the widget the
             # raw source URL so it can preview it, allow focal point selection,
-            # and offer the one-click "Download raw" localization.
+            # and offer the one-click "Download raw" localization. Once a local
+            # file exists, the raw UI is not needed.
+            raw = (getattr(obj, "source_url_raw", "") or "") if obj else ""
             image_field.widget.raw_url = (
-                (getattr(obj, "source_url_raw", "") or "") if obj else ""
-            ) or None
+                raw or None if not getattr(obj, "image", None) else None
+            )
         return form
 
     #: Hard cap for the raw-download proxy (bytes).
@@ -146,12 +149,12 @@ class ImageAdmin(ModelAdmin):
         return custom + urls
 
     def download_raw_view(self, request: HttpRequest):
-        """Stream a pinned image's raw source URL back to the admin widget.
+        """Stream an image URL back to the admin widget (same-origin proxy).
 
-        Same-origin proxy for the "Download raw" button: the browser fetches
-        this endpoint (progress bar via content-length) instead of the
-        external origin (CORS, referrer policies). SSRF guard: only URLs that
-        are a known ``Image.source_url_raw`` are fetched.
+        Lets the browser show a download progress bar regardless of the
+        origin's CORS policy. SSRF guard: known ``Image.source_url_raw``
+        values pass directly; any other URL must resolve to a public host
+        (private, loopback, link-local and reserved ranges are refused).
         """
         import requests
 
@@ -159,8 +162,11 @@ class ImageAdmin(ModelAdmin):
         from django.http import HttpResponse, JsonResponse
 
         url = (request.GET.get("url") or "").strip()
-        if not url or not self.model.objects.filter(source_url_raw=url).exists():
-            return JsonResponse({"error": "Unknown raw URL."}, status=400)
+        if not url:
+            return JsonResponse({"error": "Missing URL."}, status=400)
+        if not self.model.objects.filter(source_url_raw=url).exists():
+            if not self._is_public_http_url(url):
+                return JsonResponse({"error": "URL not allowed."}, status=400)
         try:
             upstream = requests.get(
                 url,
@@ -181,6 +187,32 @@ class ImageAdmin(ModelAdmin):
         )
         response["Content-Disposition"] = 'inline; filename="raw"'
         return response
+
+    @staticmethod
+    def _is_public_http_url(url: str) -> bool:
+        """http(s) URL whose host resolves to public addresses only."""
+        import ipaddress
+        import socket
+        from urllib.parse import urlsplit
+
+        parts = urlsplit(url)
+        if parts.scheme not in ("http", "https") or not parts.hostname:
+            return False
+        try:
+            infos = socket.getaddrinfo(parts.hostname, None, proto=socket.IPPROTO_TCP)
+        except socket.gaierror:
+            return False
+        addresses = {ipaddress.ip_address(info[4][0]) for info in infos}
+        return bool(addresses) and all(
+            not (
+                addr.is_private
+                or addr.is_loopback
+                or addr.is_link_local
+                or addr.is_reserved
+                or addr.is_multicast
+            )
+            for addr in addresses
+        )
 
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request).prefetch_related("tags", "huts")

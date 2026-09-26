@@ -89,6 +89,13 @@
         this.downloadRawBtn.addEventListener("click", () =>
           this.handleDownloadRaw(),
         );
+        // A manually entered URL takes precedence: the button becomes a
+        // plain "Download" for whatever is in the URL field; empty input
+        // falls back to "Download raw" for the pinned source URL.
+        this.urlInput.addEventListener("input", () =>
+          this.updateDownloadButton(),
+        );
+        this.updateDownloadButton();
       }
       this.stage.listen("crop.change", (widget, evnt) =>
         this.handleFocusAreaClick(widget, evnt),
@@ -149,12 +156,23 @@
       this.handleRemoveArea();
     }
 
+    updateDownloadButton() {
+      if (!this.downloadRawBtn) return;
+      const label = this.downloadRawBtn.querySelector(".mfu-btn-label");
+      if (!label) return;
+      label.textContent = this.urlInput.value.trim()
+        ? "Download"
+        : this.downloadRawBtn.dataset.labelRaw || "Download raw";
+    }
+
     async handleDownloadRaw() {
-      // "Download raw": fetch the external source through the admin proxy
+      // "Download"/"Download raw": fetch the URL (manual input takes
+      // precedence over the pinned raw URL) through the admin proxy
       // (same-origin, progress via content-length), then attach the bytes as
       // the form's file input — identical to picking a local file. Saving the
       // form persists it; no URL round-trip needed.
-      const rawUrl = this.downloadRawBtn.dataset.rawUrl;
+      const rawUrl =
+        this.urlInput.value.trim() || this.downloadRawBtn.dataset.rawUrl;
       const endpoint = this.downloadRawBtn.dataset.endpoint;
       const btnLabel = this.downloadRawBtn.querySelector(".mfu-btn-label");
       this.downloadRawBtn.disabled = true;

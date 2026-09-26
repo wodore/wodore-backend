@@ -99,14 +99,15 @@ class TestDownloadRawEndpoint:
             m for m in dj_settings.MIDDLEWARE if "debug_toolbar" not in m
         )
 
-    def test_unknown_url_rejected(self, admin_client, settings):
+    def test_private_url_rejected(self, admin_client, settings):
         from django.urls import reverse
 
         self._setup_admin(settings)
-        response = admin_client.get(
-            reverse("admin:images_image_download_raw"), {"url": "https://evil/x.jpg"}
-        )
-        assert response.status_code == 400
+        for url in ("http://127.0.0.1/x.jpg", "http://192.168.1.1/x.jpg"):
+            response = admin_client.get(
+                reverse("admin:images_image_download_raw"), {"url": url}
+            )
+            assert response.status_code == 400, url
 
     def test_missing_url_rejected(self, admin_client, settings):
         from django.urls import reverse

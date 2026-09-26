@@ -80,6 +80,19 @@ def _sanitize_url(url: str | None) -> str:
     return urlunsplit((parts.scheme, parts.netloc, path, query, ""))
 
 
+def _default_caption(source_id: str) -> str:
+    """Human-friendly fallback caption from an external source id.
+
+    ``File:Trail signs near X.jpg`` → ``Trail signs near X``.
+    """
+    import os
+    import re
+
+    name = os.path.splitext(source_id or "")[0]
+    name = re.sub(r"^(File|Image):", "", name, flags=re.IGNORECASE)
+    return name.replace("_", " ").strip()[:400]
+
+
 def _license_for(slug: str) -> License:
     license_obj, _created = License.objects.get_or_create(
         slug=slug,
@@ -161,7 +174,7 @@ def pin_place_images(place, results: list[ImageResult]) -> PinStats:
                 "author_url": result.author_url or "",
                 "source_url": _sanitize_url(result.source_url),
                 "source_url_raw": _sanitize_url(result.url_large),
-                "caption_en": (result.source_id or "")[:400],
+                "caption_en": _default_caption(result.source_id or ""),
                 "capture_date": result.captured_at,
                 "provider_synced_at": now,
                 "image_meta": _merge_image_meta_from_result(result),

@@ -383,3 +383,22 @@ class TestUrlSanitization:
 
         URLValidator()(image.source_url)
         URLValidator()(image.source_url_raw)
+
+
+class TestDefaultCaption:
+    def test_caption_cleaned_from_source_id(self, hut):
+        pin_place_images(hut, [_result(source_id="File:Trail signs near X.jpg")])
+        image = Image.objects.get(
+            source_ident="wikicommons:File:Trail signs near X.jpg"
+        )
+        assert image.caption_en == "Trail signs near X"
+
+    def test_caption_optional(self, seed_data):
+        from server.apps.images.models import Image, License
+
+        license_obj, _ = License.objects.get_or_create(
+            slug="cc-by-sa-4-0", defaults={"no_publication": False}
+        )
+        image = Image.objects.create(license=license_obj)  # no caption, no file
+        image.refresh_from_db()
+        assert image.caption == "" or image.caption is None

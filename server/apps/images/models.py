@@ -106,7 +106,15 @@ class Image(TimeStampedModel):
     author_url = models.URLField(
         blank=True, max_length=500, null=True, default="", verbose_name=_("Author URL")
     )
-    caption = models.TextField(max_length=400, verbose_name=_("Caption"), blank=False)
+    caption = models.TextField(
+        max_length=400,
+        verbose_name=_("Caption"),
+        blank=True,
+        default="",
+        help_text=_(
+            "Optional. Pinned external images default to a cleaned-up file name."
+        ),
+    )
     tags = models.ManyToManyField(
         ImageTag, related_name="images", verbose_name=_("Tags"), blank=True
     )
