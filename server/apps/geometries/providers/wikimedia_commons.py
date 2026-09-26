@@ -183,7 +183,7 @@ class WikimediaCommonsProvider(ImageProvider):
             if place_qids:
                 try:
                     qid_results = await self._fetch_wikidata_by_qids(
-                        place_qids, limit, httpx
+                        place_qids, lat, lon, limit, httpx
                     )
                     for result in qid_results:
                         if result.source_id not in seen_titles:
@@ -368,6 +368,8 @@ class WikimediaCommonsProvider(ImageProvider):
     async def _fetch_wikidata_by_qids(
         self,
         qids: set[str],
+        lat: float,
+        lon: float,
         limit: int,
         httpx,
     ) -> list[ImageResult]:
@@ -379,6 +381,8 @@ class WikimediaCommonsProvider(ImageProvider):
 
         Args:
             qids: Set of Wikidata QIDs to query
+            lat: Query latitude (true distances / category filter center)
+            lon: Query longitude
             limit: Maximum number of results to return
             httpx: HTTP client module
 
@@ -446,15 +450,17 @@ class WikimediaCommonsProvider(ImageProvider):
                                     matches_place_qid=True,  # Direct match!
                                 )
 
-                                # Create ImageResult with distance 0 (exact match)
+                                # Create ImageResult — true distance from the
+                                # file geotag to the QUERY point (was 0.0, which
+                                # #185 turned into haversine-vs-Null-Island).
                                 result = self._create_image_result(
                                     commons_title,
                                     img_data,
                                     qid,
                                     score,
-                                    0.0,
-                                    0.0,
-                                    distance_m=None,  # true distance from geotag, else 0
+                                    lat,
+                                    lon,
+                                    distance_m=None,
                                 )
                                 if result:
                                     results.append(result)
@@ -478,8 +484,8 @@ class WikimediaCommonsProvider(ImageProvider):
                     )
                     category_results = await self._fetch_commons_category_images(
                         category_name,
-                        0.0,  # lat (not used for category images)
-                        0.0,  # lon (not used)
+                        lat,
+                        lon,
                         limit,
                         httpx,
                     )
