@@ -5,7 +5,7 @@ This file is required and if development.py is present these
 values are overridden.
 """
 
-from server.settings.components.common import DJANGO_TRUSTED_DOMAINS
+from server.settings.components.common import DJANGO_TRUSTED_DOMAINS, MIDDLEWARE
 
 # Production flags:
 # https://docs.djangoproject.com/en/4.2/howto/deployment/
@@ -65,4 +65,4 @@ from server.settings.components.oidc import (
 )
 
 if ZITADEL_RP_ENABLED:
-    MIDDLEWARE += ("mozilla_django_oidc.middleware.SessionRefresh",)  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+    MIDDLEWARE += ("mozilla_django_oidc.middleware.SessionRefresh",)  # pyright: ignore[reportUndefinedVariable]
