@@ -37,6 +37,16 @@ Planning session that produced the OpenSpec change
 - User cutover is invite-based (Zitadel doesn't export passwords); watch for
   phishing look-alikes during the window.
 
+## Migration restructure (260926, later)
+
+User steer: phase 1 keeps Zitadel as rollback and promotes the existing
+`local_auth` flow to production *default* (both flows already exist — the
+change is defaults + production guards: gate removal, forced signing key,
+user import/invites, issuer-routed dual validation, throttling, password
+grant dev-only). allauth+DOT becomes phase 2 "modernize" under the SAME
+issuer URL (frontend config untouched; DOT emits legacy claim shape too);
+phase 3 decommissions Zitadel. See design.md Migration Plan + tasks.md.
+
 ## Open follow-ups
 
 - Login UX is phased (D2a): hosted allauth login at cutover (different

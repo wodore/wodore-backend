@@ -106,6 +106,11 @@ phased:
   solution (or consolidate hosts before building phase 2).
 - Token renewal uses rotated refresh tokens in both phases — no iframes or
   popups at any point.
+- With the phased migration (promote → modernize → decommission, below),
+  the hosted page at the default flip is the existing `local_auth` login
+  form (already popup-capable per its spec); renewal there stays the
+  session/`prompt=none` pattern until DOT's refresh tokens replace it in
+  the modernize phase. allauth/DOT template styling lands in that phase.
 
 ### D3: Claims — plain `roles` claim, groups stay authoritative in Django
 
@@ -119,22 +124,31 @@ Zitadel→Django sync direction disappears; `oidc_permission.py` is replaced
 by a thin claims hook reading Django groups. During migration the validator
 accepts both claim shapes.
 
-### D4: Token validation — local JWT verify, issuer-routed, dual-issuer window
+### D4: Token validation — local JWT verify, issuer-routed, dual-issuer from phase 1
 
-`_select_validator()` becomes issuer-accepting: DOT JWTs verify locally
-(JWKS cached, `iss` + `aud` checked, clock-skew tolerance); legacy Zitadel
-introspection stays active in parallel while users migrate. After cutover
-the introspection validator, `mozilla_django_oidc`, and Zitadel settings
-are deleted. No token arrives at an introspection endpoint anymore — the
-per-request HTTP dependency disappears.
+Validation becomes issuer-routed instead of mode-XOR: local provider JWTs
+verify locally (JWKS cached, `iss` + `aud` checked, clock-skew tolerance) —
+the existing `LocalJWTValidator` pattern, generalized; Zitadel
+introspection remains accepted in parallel whenever Zitadel is still
+enabled, so rollback is a frontend config repoint. This lands in the
+promote phase. After Zitadel decommission the introspection validator,
+`mozilla_django_oidc`, and Zitadel settings are deleted — no token
+validation does network calls anymore.
 
-### D5: Flags — one provider, always built-in
+### D5: Flags — promote first, consolidate last
 
-`OIDC_ENABLED` keeps its name and default polarity (on in prod/staging) but
-now activates the built-in DOT+allauth surface and is **also on in
-dev/test** (the built-in provider replaces `local_auth`). `LOCAL_AUTH_ENABLED`
-and its gate are removed. Tests that want "no auth" set `OIDC_ENABLED=false`
-and get the clean-401 path that already exists.
+The promote phase flips the default auth mode to the local provider:
+`LOCAL_AUTH_ENABLED` defaults to true in **all** environments, its
+dev/test-only hard gate is removed, and both flags may be active at the
+same time (issuer-routed validation, D4). Production gets guards in
+exchange for the lost gate: a real signing key
+(`LOCAL_AUTH_PRIVATE_KEY_JWK`) is required — fail-fast if unset or if the
+committed dev key would be used — and the password grant stays
+dev/test-only. `OIDC_ENABLED` (Zitadel) remains the explicit rollback
+mode. End state (decommission phase): the Zitadel surface is deleted; the
+built-in provider (DOT) is always on — `OIDC_ENABLED` keeps gating it,
+defaulting true everywhere; tests that want "no auth" set it false and
+get the clean-401 path that already exists.
 
 ### D6: Security hardening baseline
 
@@ -155,8 +169,9 @@ and get the clean-401 path that already exists.
 
 Export users from Zitadel (email, name, verified state, roles snapshot);
 create Django users with unusable passwords; map role snapshot → Django
-groups; send invite/password-set emails before cutover. Dual-issuer window
-covers stragglers until Zitadel decommission.
+groups; send invite/password-set emails — in the promote phase, **before**
+the frontend default flips (without real users the flip locks everyone
+out). Dual-issuer window covers stragglers until Zitadel decommission.
 
 ## Risks / Trade-offs
 
@@ -180,29 +195,42 @@ covers stragglers until Zitadel decommission.
 
 ## Migration Plan
 
-1. **Foundation (no behavior change)**: add deps, settings component,
-   Argon2, allauth apps + styled templates, DOT with signing key from
-   Infisical, dev fixture users adapted from `local_auth_users`, seed
-   groups/clients (SPA client first). Dual-validator behind flags; Zitadel
-   remains primary in prod.
-2. **Staging rehearsal**: frontend points a staging build at the new
-   issuer; verify login, token refresh, roles, protected endpoints.
-3. **User import + invites**: import from Zitadel export, groups mapped,
-   invites sent.
-4. **Cutover**: frontend default issuer → Django; `OIDC_ENABLED` semantics
-   flip to built-in; Zitadel RP code (`mozilla_django_oidc`,
-   introspection validator, `oidc_permission.py`) removed in a follow-up
-   release once metrics show no Zitadel tokens.
-5. **Cleanup**: delete `server.apps.local_auth` + `LOCAL_AUTH_ENABLED`
-   gate, remove authlib introspection dependency, decommission the Zitadel
-   instance and its secrets.
+Three phases; value lands early and every step stays rollback-safe.
 
-**Rollback**: during phases 1–4 the frontend can repoint to Zitadel while
-the instance lives; validator accepts both issuers. After Zitadel
-decommission (phase 5) rollback = re-provisioning Zitadel + re-inviting.
+1. **Promote (default flip)** — the existing local provider
+   (`server.apps.local_auth`) becomes the production default while
+   Zitadel stays fully functional as rollback: remove the dev/test gate
+   and add the production guards (real signing key required, password
+   grant dev/test-only, login throttling); make token validation
+   issuer-routed so both providers' tokens are accepted (D4); import
+   users and send invites (D7); style the login template; rehearse in
+   staging; then flip the frontend default issuer. The frontend change
+   is configuration only — it already speaks both providers today.
+2. **Modernize (allauth + DOT)** — allauth (accounts, MFA, password
+   reset, sessions) and DOT (refresh tokens, rotation, RFC 9700
+   hardening, key rotation) replace the `local_auth` internals **under
+   the same issuer URL**, so the frontend's discovery URL and client
+   config stay unchanged: DOT emits both the legacy Zitadel-shaped roles
+   claim (frontend continuity) and the plain `roles` claim;
+   refresh-token renewal replaces the session/`prompt=none` silent
+   renew; thin compatibility views cover endpoint differences (e.g.
+   `end_session`).
+3. **Decommission** — once token metrics show zero Zitadel usage: remove
+   the introspection validator and the Zitadel RP surface
+   (`mozilla_django_oidc`, `SessionRefresh`, `/oidc/` routes,
+   `ZITADEL_*` settings), drop the `local_auth` app remnants, decommission
+   the instance and its Infisical secrets.
+
+**Rollback**: through promote and modernize, rollback is a frontend
+config repoint to Zitadel (its instance stays live until decommission) —
+no re-provisioning. After decommission, rollback = re-provision Zitadel
++ re-invite (accepted).
 
 ## Open Questions
 
+- Promote-phase password-reset gap: `local_auth` has no self-service
+  reset — admin-driven resets until allauth lands, or build a minimal
+  reset flow during promote?
 - SPA host vs. backend host: do they share the registrable domain
   (`*.wodore.com`)? Decides whether phase 2 (SPA-hosted login per D2a) is
   feasible as specced or requires consolidating hosts; the issuer stays on
