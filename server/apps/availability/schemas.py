@@ -26,6 +26,11 @@ class AvailabilityDaySchema(BaseModel):
         description="Total number of places (null = not published by source)",
         ge=0,
     )
+    free_tolerance: int | None = Field(
+        None,
+        description="Plus/minus uncertainty on free places (0 = exact, null = unknown)",
+        ge=0,
+    )
     occupancy_percent: float | None = Field(
         None,
         description="Occupancy percentage (0-100), null if not computable",
@@ -130,6 +135,11 @@ class CurrentAvailabilityDaySchema(BaseModel):
         description="Total number of places (null = not published by source)",
         ge=0,
     )
+    free_tolerance: int | None = Field(
+        None,
+        description="Plus/minus uncertainty on free places (0 = exact, null = unknown)",
+        ge=0,
+    )
     occupancy_percent: float | None = Field(
         None,
         description="Occupancy percentage (0-100), null if not computable",
@@ -229,6 +239,11 @@ class AvailabilityTrendDaySchema(BaseModel):
     total: int | None = Field(
         None,
         description="Total number of places (null = not published by source)",
+        ge=0,
+    )
+    free_tolerance: int | None = Field(
+        None,
+        description="Plus/minus uncertainty on free places (0 = exact, null = unknown)",
         ge=0,
     )
     occupancy_percent: float | None = Field(
