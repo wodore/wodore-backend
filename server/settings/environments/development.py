@@ -217,3 +217,8 @@ EXTRA_CHECKS = {
 # Disable persistent DB connections
 # https://docs.djangoproject.com/en/4.2/ref/databases/#caveats
 DATABASES["default"]["CONN_MAX_AGE"] = 0
+
+# Development convenience: disable the django-axes login lockout (default:
+# 3 failures, permanent until `manage.py axes_reset`). Production keeps the
+# defaults; allauth's own rate limits still apply everywhere.
+AXES_ENABLED = False
