@@ -197,11 +197,11 @@ mkdir -p /code/static
 chown web:web /code/static
 chmod +x '/docker-entrypoint.sh'
 # collectstatic must work without runtime env or network access:
-# AUTH_PROVIDER=builtin skips the Zitadel discovery fetch in settings (it
-# fails at build time and - without set -e - silently shipped images with
-# an empty /code/static, breaking all /static/ serving under whitenoise).
+# DJANGO_ENV=test loads offline-safe settings: AUTH_PROVIDER defaults to
+# builtin (no Zitadel discovery fetch) and the committed dev signing key
+# is allowed (required when AUTH_PROVIDER=builtin).
 # (Was OIDC_ENABLED=false before the auth modernization, #183.)
-AUTH_PROVIDER=builtin python manage.py collectstatic --noinput
+DJANGO_ENV=test python manage.py collectstatic --noinput
 # Generate build timestamp automatically during build
 printf 'export BUILD_TIMESTAMP=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%S.%6NZ)" > /code/.build_timestamp
 chmod 644 /code/.build_timestamp
