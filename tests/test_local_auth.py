@@ -62,7 +62,7 @@ def local_users(django_db_setup, django_db_blocker):
 @pytest.fixture
 def logged_in_client(client, local_users):
     """Django test client with an authenticated admin session."""
-    admin = get_user_model().objects.get(username="admin@local.test")
+    admin = get_user_model().objects.get(email="admin@local.test")
     client.force_login(admin)
     return client
 
@@ -288,6 +288,15 @@ class TestLoginMethods:
     """The unified login page supports password, emailed one-time code and
     passkeys - email-only identifier, no username, no social, no phone."""
 
+    @pytest.fixture(autouse=True)
+    def _reset_axes(self):
+        # Failed-form tests count toward django-axes; the reused test DB
+        # would otherwise accumulate lockouts across runs.
+        from axes.models import AccessAttempt
+
+        AccessAttempt.objects.all().delete()
+        yield
+
     def test_login_page_renders(self, client, local_users):
         response = client.get("/accounts/login/")
         assert response.status_code == 200
@@ -307,7 +316,7 @@ class TestLoginMethods:
         assert response.status_code == 302, getattr(response, "context", None)
         # Direct logins land in the admin (SPA popup flow uses ?next instead).
         assert response["Location"] == "/admin/"
-        user = get_user_model().objects.get(username="admin@local.test")
+        user = get_user_model().objects.get(email="admin@local.test")
         assert user.is_authenticated
 
     def test_login_form_rejects_wrong_password(self, client, local_users):
@@ -318,10 +327,7 @@ class TestLoginMethods:
         assert response.status_code == 200  # form re-rendered with errors
 
     def test_email_only_identifier(self, settings):
-        assert settings.ACCOUNT_LOGIN_METHODS == {
-            "username": False,
-            "email": True,
-        }
+        assert settings.ACCOUNT_LOGIN_METHODS == {"email"}
 
     def test_one_time_code_login_enabled(self, settings):
         assert settings.ACCOUNT_LOGIN_BY_CODE_ENABLED is True

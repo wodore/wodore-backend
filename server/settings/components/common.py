@@ -138,6 +138,7 @@ INSTALLED_APPS: tuple[str, ...] = (
     "server.apps.geometries",
     "server.apps.external_links",
     "server.apps.api",
+    "server.apps.accounts",  # custom user model (email identity) — must always be installed
     # Extension:
     "psqlextra",  # https://django-postgres-extra.readthedocs.io/
     "pgtrigger",  # https://django-pgtrigger.readthedocs.io/
@@ -396,6 +397,9 @@ IMAGOR_MEDIA_URL = str(
 
 # Django authentication system
 # https://docs.djangoproject.com/en/4.2/topics/auth/
+
+# Email-identity custom user (spec: account-management).
+AUTH_USER_MODEL = "accounts.User"
 
 AUTHENTICATION_BACKENDS = (
     "axes.backends.AxesBackend",

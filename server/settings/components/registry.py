@@ -23,6 +23,7 @@ if OIDC_ENABLED:  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
         "allauth",
         "allauth.account",
         "allauth.mfa",
+        "allauth.usersessions",
     )
     if "django.contrib.sites" not in INSTALLED_APPS:
         INSTALLED_APPS += ("django.contrib.sites",)
@@ -33,6 +34,8 @@ if OIDC_ENABLED:  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
     MIDDLEWARE += (  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
         "allauth.account.middleware.AccountMiddleware",
+        # Sessions: logs out other sessions on password/MFA changes.
+        "allauth.usersessions.middleware.UserSessionsMiddleware",
     )
 
     AUTHENTICATION_BACKENDS += (  # noqa: F821  # pyright: ignore[reportUndefinedVariable]

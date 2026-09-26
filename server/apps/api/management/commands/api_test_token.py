@@ -8,7 +8,7 @@ DOT issues (roles from Django groups) - usable directly against
 from typing import Any
 
 from django.conf import settings
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 
 
@@ -47,22 +47,22 @@ class Command(BaseCommand):
                 "provider is not available."
             )
         if list_users:
-            for u in User.objects.filter(is_active=True).values_list(
-                "email", flat=True
+            for u in (
+                get_user_model()
+                .objects.filter(is_active=True)
+                .values_list("email", flat=True)
             ):
                 if u:
                     print(u)
             return
+        user_model = get_user_model()
         try:
-            user_obj = User.objects.get(username=user, is_active=True)
-        except User.DoesNotExist:
-            try:
-                user_obj = User.objects.get(email=user, is_active=True)
-            except User.DoesNotExist:
-                self.stdout.write(
-                    self.style.ERROR(f"user '{user}' not found (see --list-users)")
-                )
-                raise CommandError(1)
+            user_obj = user_model.objects.get(email=user, is_active=True)
+        except user_model.DoesNotExist:
+            self.stdout.write(
+                self.style.ERROR(f"user '{user}' not found (see --list-users)")
+            )
+            raise CommandError(1)
         token = tokens.issue_access_token(
             user_obj, issuer, settings.LOCAL_AUTH_CLIENT_ID
         )

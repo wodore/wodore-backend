@@ -112,7 +112,7 @@ class TestProtectedEndpoints:
 
         from server.apps.local_auth import tokens
 
-        admin = get_user_model().objects.get(username="admin@local.test")
+        admin = get_user_model().objects.get(email="admin@local.test")
         forged = tokens.issue_access_token(
             admin, "https://evil.example/oauth/local", "wodore-local-dev"
         )

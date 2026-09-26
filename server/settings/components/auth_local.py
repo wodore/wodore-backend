@@ -17,8 +17,11 @@ LOGIN_REDIRECT_URL = "/admin/"
 ACCOUNT_SIGNUP_ENABLED = False
 
 # Login identifiers: email only (no username).
+# NOTE: allauth expects an iterable of *enabled* method names ("email",
+# "username", "phone") - a {"username": False} dict would iterate its keys
+# and silently enable username login.
 # Methods: password, emailed one-time code, and passkey (below).
-ACCOUNT_LOGIN_METHODS = {"username": False, "email": True}
+ACCOUNT_LOGIN_METHODS = {"email"}
 
 # Login by emailed one-time code ("magic code") alongside the password.
 # Requires a working email backend in production.

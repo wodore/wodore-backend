@@ -77,6 +77,20 @@ phase 3 decommissions Zitadel. See design.md Migration Plan + tasks.md.
 - Full suite: 144 passed; `manage.py check` in production settings (with
   key env vars): 0 issues.
 
+## Custom user model (260926, added to phase 1)
+
+Email-identity `accounts.User` (USERNAME_FIELD=email, unique, no username),
+decided while no production users exist. Retrofit mechanics: 0001 copies
+auth_user rows (raw SQL - the swapped-out model has no manager) guarded on
+table existence (fresh DBs never create auth_user); 0002 re-points FK
+constraints from the shadow auth_user table to accounts_user (15 constraints
+on the lane); `bootstrap_user_model` performs the InconsistentMigrationHistory
+surgery on pre-switch DBs (run once on dev main + wodore_template + lanes).
+Test DBs with --reuse-db need --create-db once after the switch.
+Gotchas found: allauth LOGIN_METHODS iterates dict KEYS - use a set
+({"email"}); axes lockouts accumulate across reused test DBs (fixture
+resets); django-axes is the 3-strike lockout for browser logins.
+
 ## Open follow-ups
 
 - Login UX is phased (D2a): hosted allauth login at cutover (different

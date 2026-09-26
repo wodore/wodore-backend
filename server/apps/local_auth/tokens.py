@@ -25,7 +25,7 @@ from authlib.jose import JsonWebKey, jwt
 from django.conf import settings
 
 if TYPE_CHECKING:
-    from django.contrib.auth.models import User
+    from server.apps.accounts.models import User
 
 ACCESS_TOKEN_LIFETIME = 3600
 ID_TOKEN_LIFETIME = 300

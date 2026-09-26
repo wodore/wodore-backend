@@ -9,7 +9,8 @@ the retired hand-rolled provider).
 from typing import Any
 
 from django.conf import settings
-from django.contrib.auth.models import Group, User
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand, CommandParser
 
 ADMIN_USER = "admin@local.test"
@@ -89,13 +90,11 @@ class Command(BaseCommand):
         password: str,
         groups: list[Group],
         created: list[str],
-    ) -> User:
-        user, was_created = User.objects.get_or_create(
-            username=email, defaults={"email": email}
-        )
+    ) -> Any:
+        user_model = get_user_model()
+        user, was_created = user_model.objects.get_or_create(email=email)
         if was_created:
             created.append(email)
-        user.email = email
         user.is_active = True
         user.set_password(password)
         user.save()

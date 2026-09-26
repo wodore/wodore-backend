@@ -10,6 +10,8 @@
 - [x] 1.6 Claims bridge: DOT emits both the legacy Zitadel-shaped roles claim (frontend continuity) and the plain `roles` claim from Django groups; retire `server/core/oidc_permission.py` Zitadel sync
 - [x] 1.7 Token renewal: DOT refresh tokens replace the session/`prompt=none` silent renew (small dev/test frontend change); popup session re-login stays as convenience
 - [x] 1.8 Port fixture users to the successor idempotent dev command; keep dev/test token convenience (password-grant client dev-only, or `api_test_token` mints DOT tokens)
+- [x] 1.10 Add the custom user model (email as USERNAME_FIELD, unique email, no username) with a data migration preserving pks from auth.User, an FK-retarget migration for pre-switch databases, and a `bootstrap_user_model` surgery command for existing DBs (dev main, template, lanes)
+- [x] 1.11 Enable allauth session management (`allauth.usersessions` + middleware; nav link at /accounts/sessions/)
 - [x] 1.9 Port provider tests to DOT (authorize + PKCE, token, userinfo, JWKS, roles, refresh rotation); delete the `local_auth` views/tokens/urls behind the same paths; system checks report no `oauth2_provider` error findings in production settings
 
 ## 2. Promote: flip the production default to the built-in provider (Zitadel stays rollback)
