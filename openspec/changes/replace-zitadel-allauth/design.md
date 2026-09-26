@@ -79,25 +79,31 @@ simplest same-origin form of SPA-hosted login. Login UX is therefore
 phased:
 
 - **Phase 1 (cutover)**: hosted allauth login on the backend domain via the
-  standard top-level redirect flow (`/authorize` → allauth login → back to
-  the SPA `redirect_uri` with the code). All cookies stay first-party on
-  the backend domain — no `SameSite=None`, no credentialed CORS; only
-  plain (non-credentialed) CORS on `/o/token/` and `/o/userinfo/` for the
-  SPA origin. Same UX shape as Zitadel today, so the frontend change stays
-  minimal. Hosted templates are styled mobile-first — they are the primary
-  login surface for SPA users until phase 2 and remain the surface for the
-  future Android client.
+  standard authorization-code flow. Two equivalent UX modes: a full-page
+  redirect, or a **popup** (`window.open` → `/authorize`, as with Zitadel
+  today): the popup is a top-level browsing context on the backend domain,
+  so all cookies remain first-party and the different-domains problem
+  disappears; the popup lands on a registered SPA callback route which
+  `postMessage`s the code to the opener and closes. Popups must open from
+  a user gesture (blocker rules); mobile browsers use the redirect
+  fallback. No `SameSite=None`, no credentialed CORS — only plain
+  (non-credentialed) CORS on `/o/token/` and `/o/userinfo/` for the SPA
+  origin. A surviving backend session cookie (set inside the popup) makes
+  later logins a brief popup flash — no iframe silent renew (DOT lacks
+  `prompt=none`; irrelevant), routine renewal stays on rotated refresh
+  tokens. Hosted templates are styled mobile-first — they render inside
+  the popup at cutover and remain the surface for the future Android
+  client.
 - **Phase 2 (post-cutover, optional)**: the SPA renders its own
-  login/MFA/password-reset screens via allauth headless **browser mode**;
-  the subsequent `/authorize` roundtrip becomes an invisible 302 back to
-  the SPA — no popup, no iframe. Feasible **iff** SPA and backend share
-  the same registrable domain (e.g. `app.wodore.com` + `hub.wodore.com`):
-  the cross-origin fetch is then still *same-site*, so the session cookie
-  works with credentialed CORS + `CSRF_TRUSTED_ORIGINS` and no
-  `SameSite=None`. If the SPA sits on an unrelated registrable domain, the
-  session cookie would be third-party (blocked by Safari ITP and Chrome's
-  third-party-cookie restrictions) — in that case stay on hosted login or
-  consolidate hosts before building phase 2.
+  login/MFA/password-reset screens via allauth headless **browser mode**.
+  Feasible **iff** SPA and backend share the same registrable domain (e.g.
+  `app.wodore.com` + `hub.wodore.com`): the cross-origin fetch is then
+  still *same-site*, so the session cookie works with credentialed CORS +
+  `CSRF_TRUSTED_ORIGINS` and no `SameSite=None`. If the SPA sits on an
+  unrelated registrable domain, the session cookie would be third-party
+  (blocked by Safari ITP and Chrome's third-party-cookie restrictions) —
+  in that case the popup/redirect flow from phase 1 is the permanent
+  solution (or consolidate hosts before building phase 2).
 - Token renewal uses rotated refresh tokens in both phases — no iframes or
   popups at any point.
 

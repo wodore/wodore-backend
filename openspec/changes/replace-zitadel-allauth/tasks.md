@@ -10,7 +10,7 @@
 
 ## 2. Account management (allauth)
 
-- [ ] 2.1 Style the server-rendered allauth templates mobile-first (login, logout, password reset, email verification) — they are the primary SPA login surface at cutover (hosted redirect flow, per design D2a phase 1) and the future Android Custom Tab surface
+- [ ] 2.1 Style the server-rendered allauth templates mobile-first (login, logout, password reset, email verification) — they render inside the SPA login popup / redirect flow at cutover (design D2a phase 1) and in the future Android Custom Tab
 - [ ] 2.2 Enable MFA (TOTP + recovery codes) and session view/revoke for users; decide and record staff-MFA policy (open question in design)
 - [ ] 2.3 Redirect `/admin/` login to the unified account login preserving the continuation target
 - [ ] 2.4 Port `local_auth_users` into the successor idempotent dev fixture users command (users + groups + passwords)
@@ -35,7 +35,7 @@
 
 - [ ] 5.1 Write the user import command (Zitadel export → Django users with unusable passwords + group mapping from the roles snapshot); dry-run mode with diff output
 - [ ] 5.2 Invite/password-set email templates + audit logging on auth signals (login, logout, MFA changes, token failures); add `cleartokens` cron
-- [ ] 5.3 Rehearse in staging: frontend (wodore-frontend-quasar) points issuer to the backend provider; verify login, refresh rotation, roles on protected endpoints
+- [ ] 5.3 Rehearse in staging: frontend (wodore-frontend-quasar) points issuer to the backend provider; verify popup and redirect login (incl. the popup callback route as a registered redirect_uri), refresh rotation, roles on protected endpoints
 - [ ] 5.4 Production cutover: import users, send invites, flip frontend issuer; monitor for remaining Zitadel token usage during the dual-issuer window
 - [ ] 5.5 After token metrics are clean: remove the migration flag and the Zitadel introspection validator
 
