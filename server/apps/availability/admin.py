@@ -138,6 +138,7 @@ class HutAvailabilityHistoryInline(admin.TabularInline):
     fields = (
         "free",
         "total",
+        "free_tolerance",
         "occupancy_percent",
         "occupancy_status",
         "hut_type",
@@ -148,6 +149,7 @@ class HutAvailabilityHistoryInline(admin.TabularInline):
     readonly_fields = (
         "free",
         "total",
+        "free_tolerance",
         "occupancy_percent",
         "occupancy_status",
         "hut_type",
@@ -319,7 +321,9 @@ class HutAvailabilityViewInline(admin.TabularInline):
     def places_display(self, obj):
         free = "–" if obj.free is None else obj.free
         total = "–" if obj.total is None else obj.total
-        return f"{free}/{total}"
+        tolerance = obj.free_tolerance or 0
+        free_text = f"{free} ±{tolerance}" if tolerance else f"{free}"
+        return f"{free_text}/{total}"
 
     @display(description=_("Occupancy"), label=True)  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def occupancy_progress(self, obj):
@@ -443,7 +447,9 @@ class HutAvailabilityAdmin(ModelAdmin):
     def places_display(self, obj):
         free = "–" if obj.free is None else obj.free
         total = "–" if obj.total is None else obj.total
-        return f"{free}/{total}"
+        tolerance = obj.free_tolerance or 0
+        free_text = f"{free} ±{tolerance}" if tolerance else f"{free}"
+        return f"{free_text}/{total}"
 
     @display(description=_("Occupancy"), label=True)  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def occupancy_progress(self, obj):
@@ -609,7 +615,9 @@ class HutAvailabilityHistoryAdmin(ModelAdmin):
     def places_display(self, obj):
         free = "–" if obj.free is None else obj.free
         total = "–" if obj.total is None else obj.total
-        return f"{free}/{total}"
+        tolerance = obj.free_tolerance or 0
+        free_text = f"{free} ±{tolerance}" if tolerance else f"{free}"
+        return f"{free_text}/{total}"
 
     @display(description=_("Occupancy"), label=True)  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def occupancy_progress(self, obj):
