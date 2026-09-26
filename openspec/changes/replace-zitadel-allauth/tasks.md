@@ -10,7 +10,7 @@
 
 ## 2. Account management (allauth)
 
-- [ ] 2.1 Style allauth templates mobile-first (extend base templates; align with Wodore branding) for login, logout, password reset, email verification
+- [ ] 2.1 Enable allauth headless (browser mode) for SPA-driven login/MFA flows; style the server-rendered allauth templates mobile-first as fallback (expired-session deep links) and for the future Android Custom Tab (login, logout, password reset, email verification)
 - [ ] 2.2 Enable MFA (TOTP + recovery codes) and session view/revoke for users; decide and record staff-MFA policy (open question in design)
 - [ ] 2.3 Redirect `/admin/` login to the unified account login preserving the continuation target
 - [ ] 2.4 Port `local_auth_users` into the successor idempotent dev fixture users command (users + groups + passwords)

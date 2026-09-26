@@ -72,6 +72,19 @@ non-standard token endpoint = a worse B.
 - **Django Ninja + `AuthBearer`**: resource server — local JWT
   verification.
 
+### D2a: SPA-hosted login via allauth headless (browser mode)
+
+The SPA renders its own login (and MFA/password-reset) screens and drives
+them through allauth's headless **browser-mode** endpoints; on success the
+browser holds an authenticated Django session cookie, so the subsequent
+auth-code + PKCE roundtrip through `/authorize` is an invisible 302 back to
+the SPA — no hosted login page, no popup, no iframe silent renew (renewal
+uses rotated refresh tokens). The hosted templates are still styled as a
+fallback (expired-session deep links) and for the future Android client
+(Custom Tab). Requires the SPA and backend to be same-origin (or
+CORS-with-credentials + SameSite=None + CSRF trusted origins), which
+resolves the issuer-URL open question in favor of the same origin.
+
 ### D3: Claims — plain `roles` claim, groups stay authoritative in Django
 
 Replace the `urn:zitadel:iam:org:project:{project}:roles` shape with a plain
@@ -168,8 +181,9 @@ decommission (phase 5) rollback = re-provisioning Zitadel + re-inviting.
 
 ## Open Questions
 
-- Issuer URL: same origin as the API (`https://hub.wodore.com/oauth/…`) vs.
-  a dedicated auth host (cookie isolation vs. simpler CORS)?
+- ~~Issuer URL~~ — **Resolved by D2a**: same origin as the API
+  (`https://hub.wodore.com/…`) so the SPA's login gets the session cookie
+  without cross-origin cookie plumbing.
 - Enforce MFA for staff/admin accounts (allauth config) at cutover or later?
 - Should `api_test_token` mint DOT tokens directly (management command)
   once password grant is dev-only?
