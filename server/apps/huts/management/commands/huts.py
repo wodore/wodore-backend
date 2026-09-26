@@ -253,6 +253,8 @@ class Command(CRUDCommand):
                 {"source": "hrs", "no_review": True},
                 {"source": "ffcam", "no_review": True},
                 {"source": "tmb", "no_review": True},
+                {"source": "unico", "no_review": True},
+                {"source": "prenota", "no_review": True},
                 {"source": "refuges", "no_review": False},
                 {
                     "source": "wodore",

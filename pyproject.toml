@@ -54,7 +54,7 @@ dependencies = [
   "tzdata>=2025.3",                        # https://pypi.org/project/tzdata/
   "click==8.*",                            # https://pypi.org/project/click/
   "pyyaml==6.*",                           # https://pypi.org/project/PyYAML/
-  "hut-services>=0.2.0",          # https://github.com/wodore/hut-services (0.2: nullable PlacesSchema + is_bookable)
+  "hut-services>=0.3.0",          # https://github.com/wodore/hut-services (0.3: free_tolerance + TotalFallback; 0.2: nullable PlacesSchema + is_bookable)
   "django-computedfields>=0.3.0", # https://pypi.org/project/django-computedfields/
   "django-storages[s3]>=1.14.6",
   "django-pgtrigger>=4.17.0",

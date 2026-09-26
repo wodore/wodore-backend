@@ -342,8 +342,16 @@ class Image(TimeStampedModel):
 
         if image_format == "JPEG":
             extension = ".jpg"
+        elif image_format == "MPO":
+            # Multi Picture Object: a JPEG variant (stereo/sequential capture)
+            # some cameras emit — PIL serves it as JPEG; store as .jpg.
+            extension = ".jpg"
         elif image_format == "PNG":
             extension = ".png"
+        elif image_format == "WEBP":
+            # WordPress-served photos (e.g. Prenota Rifugi) come as webp;
+            # PIL and Imagor both handle it.
+            extension = ".webp"
         elif not image_format:
             # could not get image type
             return None
