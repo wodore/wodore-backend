@@ -10,9 +10,14 @@
     JS hooks (meta_image_widget.js depends on these):
     .imagefocus-file-upload, .imagefocus-file-upload__image, #image-preview,
     #url_upload (name="{{ widget.name }}_url"), .imagefocus-file-remove-area,
-    .meta-image-input, .mfu-download-raw
+    .meta-image-input, .mfu-download-raw, .mfu-filename, .mfu-badge-external,
+    .mfu-rawlink-row, .mfu-progress, .mfu-dl-msg
 {% endcomment %}
-<div class="imagefocus-file-upload mfu">
+<div class="imagefocus-file-upload mfu"
+     data-msg-downloaded="{% trans 'Downloaded — click Save to store the file locally.' %}"
+     data-msg-failed="{% trans 'Download failed' %}"
+     data-msg-fallback="{% trans 'The URL field was filled instead — saving will fetch it server-side.' %}"
+     data-label-local="{% trans 'Stored locally' %}">
     <div class="imagefocus-file-upload__image mfu-preview-box flex items-center justify-center mb-2 rounded-md border p-1 w-48">
         {% if widget.is_initial and widget.value and widget.value.url %}
             <img src="{{ widget.value.url }}" alt="{% trans 'Image preview' %}" id="image-preview" />
@@ -40,6 +45,13 @@
         {% endif %}
     </div>
 
+    {% if widget.raw_url %}
+        <div class="mfu-rawlink-row mb-2">
+            <span class="mfu-rawlabel">{% trans "Raw source" %}</span>
+            <a href="{{ widget.raw_url }}" target="_blank" rel="noopener" class="mfu-rawlink" title="{{ widget.raw_url }}">{{ widget.raw_url }}</a>
+        </div>
+    {% endif %}
+
     <div class="border flex items-center overflow-hidden rounded-md shadow-sm text-sm max-w-2xl mfu-urlrow">
         <input type="url"
                name="{{ widget.name }}_url"
@@ -50,17 +62,23 @@
             <button type="button"
                     class="mfu-btn mfu-download-raw flex items-center gap-2 px-3 py-2 text-sm cursor-pointer"
                     data-raw-url="{{ widget.raw_url }}"
-                    title="{% trans 'Fetch the external source image and store it locally (same as pasting the URL)' %}">
+                    data-endpoint="{% url 'admin:images_image_download_raw' %}"
+                    title="{% trans 'Fetch the external source image and attach it as the local file (saved with the form)' %}">
                 <span class="material-symbols-outlined">download</span>
-                <span>{% trans "Download raw" %}</span>
+                <span class="mfu-btn-label">{% trans "Download raw" %}</span>
             </button>
         {% endif %}
+    </div>
+
+    <div class="mfu-dl" hidden>
+        <div class="mfu-progress"><div class="mfu-progress-fill"></div></div>
+        <div class="mfu-dl-msg"></div>
     </div>
 
     <div class="border flex items-center overflow-hidden rounded-md shadow-sm text-sm max-w-2xl mfu-filerow">
         <input type="text"
                value="{% if widget.value and widget.value.name %}{{ widget.value.name }}{% if widget.value.width and widget.value.height %} ({{ widget.value.width }}x{{ widget.value.height }}){% endif %}{% else %}{% trans 'Choose file to upload' %}{% endif %}"
-               class="mfu-input grow font-medium px-3 py-2"
+               class="mfu-input mfu-filename grow font-medium px-3 py-2"
                readonly>
 
         <div class="flex items-center">

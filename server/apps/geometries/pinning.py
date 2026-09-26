@@ -54,6 +54,32 @@ def _source_ident(result: ImageResult) -> str:
     return f"{result.provider}:{result.source_id}"[:512]
 
 
+def _sanitize_url(url: str | None) -> str:
+    """Make a provider URL storable (URLField) and cache-stable.
+
+    Providers hand us partially-unencoded URLs (e.g. Commons file titles with
+    spaces/umlauts) and Wikimedia appends ``utm_*`` tracking params to thumb
+    URLs — those would fail admin validation and bust imagor's cache keys
+    whenever the params change. Encodes the path (preserving existing
+    percent-escapes) and strips ``utm_*`` query parameters.
+    """
+    from urllib.parse import quote, urlsplit, urlunsplit
+
+    if not url:
+        return ""
+    parts = urlsplit(url.strip())
+    path = quote(parts.path, safe="/%:")
+    query = ""
+    if parts.query:
+        kept = [
+            pair
+            for pair in parts.query.split("&")
+            if pair and not pair.lower().startswith("utm_")
+        ]
+        query = "&".join(kept)
+    return urlunsplit((parts.scheme, parts.netloc, path, query, ""))
+
+
 def _license_for(slug: str) -> License:
     license_obj, _created = License.objects.get_or_create(
         slug=slug,
@@ -133,8 +159,8 @@ def pin_place_images(place, results: list[ImageResult]) -> PinStats:
                 "license": license_obj,
                 "author": result.author or "",
                 "author_url": result.author_url or "",
-                "source_url": result.source_url or "",
-                "source_url_raw": result.url_large,
+                "source_url": _sanitize_url(result.source_url),
+                "source_url_raw": _sanitize_url(result.url_large),
                 "caption_en": (result.source_id or "")[:400],
                 "capture_date": result.captured_at,
                 "provider_synced_at": now,
@@ -146,9 +172,10 @@ def pin_place_images(place, results: list[ImageResult]) -> PinStats:
         else:
             # Refresh mutable fields; keep curated fields (review_status,
             # focal/crop via meta merge, tags, captions) untouched.
-            image.source_url_raw = result.url_large
-            if result.source_url:
-                image.source_url = result.source_url
+            image.source_url_raw = _sanitize_url(result.url_large)
+            sanitized_source = _sanitize_url(result.source_url)
+            if sanitized_source:
+                image.source_url = sanitized_source
             image.source_org = org
             image.license = license_obj
             image.capture_date = result.captured_at

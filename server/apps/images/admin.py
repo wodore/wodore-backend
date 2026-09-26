@@ -72,6 +72,7 @@ class ImageAdmin(ModelAdmin):
         "caption_short",
         "license_summary",
         "source",
+        "serving",
         "tag_list",
         "review_tag",
         "show_huts",
@@ -100,6 +101,17 @@ class ImageAdmin(ModelAdmin):
         # "image_meta",
     )
 
+    @display(
+        description=_("Serving"),  # pyright: ignore[reportArgumentType]  # _StrPromise vs unfold stub gap
+    )
+    def serving(self, obj):
+        """Where the pixels come from: local file or external pin."""
+        if getattr(obj, "image", None):
+            return (str(_("local file")), "success")
+        if obj.source_url_raw:
+            return (str(_("external")), "warning")
+        return (str(_("none")), "danger")
+
     def save_model(self, request, obj, form, change):
         if not obj.uploaded_by_user:  # pyright: ignore[reportAttributeAccessIssue]
             obj.uploaded_by_user = request.user  # pyright: ignore[reportAttributeAccessIssue]
@@ -116,6 +128,59 @@ class ImageAdmin(ModelAdmin):
                 (getattr(obj, "source_url_raw", "") or "") if obj else ""
             ) or None
         return form
+
+    #: Hard cap for the raw-download proxy (bytes).
+    DOWNLOAD_RAW_MAX_BYTES = 50 * 1024 * 1024
+
+    def get_urls(self):
+        from django.urls import path
+
+        urls = super().get_urls()
+        custom = [
+            path(
+                "download-raw/",
+                self.admin_site.admin_view(self.download_raw_view),
+                name="images_image_download_raw",
+            ),
+        ]
+        return custom + urls
+
+    def download_raw_view(self, request: HttpRequest):
+        """Stream a pinned image's raw source URL back to the admin widget.
+
+        Same-origin proxy for the "Download raw" button: the browser fetches
+        this endpoint (progress bar via content-length) instead of the
+        external origin (CORS, referrer policies). SSRF guard: only URLs that
+        are a known ``Image.source_url_raw`` are fetched.
+        """
+        import requests
+
+        from django.conf import settings
+        from django.http import HttpResponse, JsonResponse
+
+        url = (request.GET.get("url") or "").strip()
+        if not url or not self.model.objects.filter(source_url_raw=url).exists():
+            return JsonResponse({"error": "Unknown raw URL."}, status=400)
+        try:
+            upstream = requests.get(
+                url,
+                headers={"User-Agent": settings.BOT_AGENT},
+                timeout=30,
+                stream=True,
+            )
+            upstream.raise_for_status()
+            content = upstream.raw.read(
+                self.DOWNLOAD_RAW_MAX_BYTES + 1, decode_content=True
+            )
+            if len(content) > self.DOWNLOAD_RAW_MAX_BYTES:
+                return JsonResponse({"error": "Image too large."}, status=413)
+        except requests.RequestException as e:
+            return JsonResponse({"error": f"Upstream fetch failed: {e}"}, status=502)
+        response = HttpResponse(
+            content, content_type=upstream.headers.get("Content-Type", "image/jpeg")
+        )
+        response["Content-Disposition"] = 'inline; filename="raw"'
+        return response
 
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request).prefetch_related("tags", "huts")

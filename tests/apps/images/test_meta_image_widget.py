@@ -25,6 +25,10 @@ def test_raw_fallback_preview_and_download_button():
     assert "mfu-badge-external" in html  # "Served externally" hint
     assert "mfu-download-raw" in html
     assert f'data-raw-url="{RAW}"' in html
+    assert "data-endpoint=" in html  # same-origin download proxy
+    assert "mfu-rawlink" in html  # readonly clickable raw URL
+    assert f'href="{RAW}"' in html
+    assert "mfu-progress" in html  # progress bar markup
 
 
 def test_no_raw_url_no_download_button():
@@ -82,3 +86,65 @@ class TestImageAdminRawWiring:
         response = admin_client.get(f"/admin/images/image/{image.id}/change/")
         assert response.status_code == 200
         assert RAW.encode() in response.content  # raw fallback wired
+
+
+@pytest.mark.django_db
+class TestDownloadRawEndpoint:
+    """Same-origin proxy for the Download raw button (SSRF-guarded)."""
+
+    def _setup_admin(self, settings):
+        from django.conf import settings as dj_settings
+
+        settings.MIDDLEWARE = tuple(
+            m for m in dj_settings.MIDDLEWARE if "debug_toolbar" not in m
+        )
+
+    def test_unknown_url_rejected(self, admin_client, settings):
+        from django.urls import reverse
+
+        self._setup_admin(settings)
+        response = admin_client.get(
+            reverse("admin:images_image_download_raw"), {"url": "https://evil/x.jpg"}
+        )
+        assert response.status_code == 400
+
+    def test_missing_url_rejected(self, admin_client, settings):
+        from django.urls import reverse
+
+        self._setup_admin(settings)
+        response = admin_client.get(reverse("admin:images_image_download_raw"))
+        assert response.status_code == 400
+
+    def test_known_url_streams_content(self, admin_client, settings):
+        from unittest.mock import MagicMock, patch
+
+        from django.urls import reverse
+
+        from server.apps.images.models import Image, License
+
+        self._setup_admin(settings)
+        license_obj, _ = License.objects.get_or_create(
+            slug="cc-by-sa-4-0", defaults={"no_publication": False}
+        )
+        Image.objects.create(
+            source_ident="wikicommons:File:DownloadTest.jpg",
+            source_url_raw=RAW,
+            license=license_obj,
+        )
+        fake = MagicMock()
+        fake.raw.read.return_value = b"fake-image-bytes"
+        fake.headers = {"Content-Type": "image/jpeg"}
+        with patch("requests.get", return_value=fake):
+            response = admin_client.get(
+                reverse("admin:images_image_download_raw"), {"url": RAW}
+            )
+        assert response.status_code == 200
+        assert response.content == b"fake-image-bytes"
+        assert response["Content-Type"] == "image/jpeg"
+
+    def test_anonymous_denied(self, client, settings):
+        from django.urls import reverse
+
+        self._setup_admin(settings)
+        response = client.get(reverse("admin:images_image_download_raw"), {"url": RAW})
+        assert response.status_code in (301, 302)  # redirect to admin login

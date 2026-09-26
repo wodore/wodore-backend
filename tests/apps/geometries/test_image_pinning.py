@@ -323,3 +323,63 @@ class TestPlaceEndpointPins:
         assert fetch.calls == 1
         client.get(f"/place/{place.slug}?radius=50&lang=en&limit=10&update_cache=true")
         assert fetch.calls == 2
+
+
+class TestUrlSanitization:
+    """Provider URLs must be storable (URLField) and cache-stable."""
+
+    def test_encodes_spaces_and_umlauts(self):
+        from server.apps.geometries.pinning import _sanitize_url
+
+        assert _sanitize_url(
+            "https://commons.wikimedia.org/wiki/File:Trail signs near Lämmerenhutte.jpg"
+        ) == (
+            "https://commons.wikimedia.org/wiki/"
+            "File:Trail%20signs%20near%20L%C3%A4mmerenhutte.jpg"
+        )
+
+    def test_strips_utm_params_keeps_real_ones(self):
+        from server.apps.geometries.pinning import _sanitize_url
+
+        assert (
+            _sanitize_url(
+                "https://upload.wikimedia.org/x.jpg?utm_source=commons.wikimedia.org&width=400"
+            )
+            == "https://upload.wikimedia.org/x.jpg?width=400"
+        )
+
+    def test_already_encoded_untouched(self):
+        from server.apps.geometries.pinning import _sanitize_url
+
+        url = (
+            "https://upload.wikimedia.org/6/68/Trail_signs_near_L%C3%A4mmerenhutte.jpg"
+        )
+        assert _sanitize_url(url) == url
+
+    def test_empty(self):
+        from server.apps.geometries.pinning import _sanitize_url
+
+        assert _sanitize_url(None) == ""
+        assert _sanitize_url("") == ""
+
+    def test_pinned_urls_are_sanitized(self, hut):
+        raw_result = _result(
+            source_id="File:Trail signs.jpg",
+            url=(
+                "https://upload.wikimedia.org/x/Trail_signs.jpg"
+                "?utm_source=commons.wikimedia.org&utm_campaign=imageinfo"
+            ),
+        )
+        raw_result.source_url = (
+            "https://commons.wikimedia.org/wiki/File:Trail signs.jpg"
+        )
+        pin_place_images(hut, [raw_result])
+        image = Image.objects.get(source_ident="wikicommons:File:Trail signs.jpg")
+        assert image.source_url == (
+            "https://commons.wikimedia.org/wiki/File:Trail%20signs.jpg"
+        )
+        assert image.source_url_raw == "https://upload.wikimedia.org/x/Trail_signs.jpg"
+        from django.core.validators import URLValidator
+
+        URLValidator()(image.source_url)
+        URLValidator()(image.source_url_raw)
