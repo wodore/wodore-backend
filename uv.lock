@@ -1784,7 +1784,7 @@ wheels = [
 [[package]]
 name = "hut-services-private"
 version = "0.2.0"
-source = { git = "ssh://git@github.com/wodore/hut-services-private?branch=feat%2Fdict-total-fallback#e57f85a7b334728639b14bdd1e65257c45fa4c2c" }
+source = { git = "ssh://git@github.com/wodore/hut-services-private?branch=main#7a2223ed05b64593a5c89b3b3babd8a95c9b3848" }
 dependencies = [
     { name = "httpx" },
     { name = "hut-services" },
@@ -4493,7 +4493,7 @@ requires-dist = [
     { name = "gunicorn", specifier = "==25.*" },
     { name = "httpx", specifier = ">=0.25.0" },
     { name = "hut-services", specifier = ">=0.3.0" },
-    { name = "hut-services-private", marker = "extra == 'private'", git = "ssh://git@github.com/wodore/hut-services-private?branch=feat%2Fdict-total-fallback" },
+    { name = "hut-services-private", marker = "extra == 'private'", git = "ssh://git@github.com/wodore/hut-services-private?branch=main" },
     { name = "jinja2", specifier = "==3.*" },
     { name = "load-dotenv", specifier = "==0.1.*" },
     { name = "mozilla-django-oidc", specifier = "==5.*" },

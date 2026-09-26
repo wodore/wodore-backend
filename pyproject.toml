@@ -145,8 +145,7 @@ dev = [
 
 [tool.uv.sources]
 django-postgres-extra = { git = "https://github.com/armonge/django-postgres-extra.git", branch = "feat/django-6" }
-hut-services-private = { git = "ssh://git@github.com/wodore/hut-services-private", branch = "feat/dict-total-fallback" }  # temporary until #24 merges
-# hut-services-private = { git = "ssh://git@github.com/wodore/hut-services-private", branch = "main" }
+hut-services-private = { git = "ssh://git@github.com/wodore/hut-services-private", branch = "main" }
 # hut-services-private = { path = "/home/tobias/git/wodore/hut-services-private", editable = true }
 # hut-services = { git = "ssh://git@github.com/wodore/hut-services", branch = "main" }
 # hut-services = { path = "/home/tobias/git/wodore/hut-services", editable = true } # local DEV
