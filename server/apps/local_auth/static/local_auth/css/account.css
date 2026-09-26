@@ -75,7 +75,7 @@ body {
 .account-card {
   margin: auto;
   width: 100%;
-  max-width: 380px;
+  max-width: 560px;
   padding: 1.75rem;
   padding-top: max(1.75rem, env(safe-area-inset-top));
 }
@@ -265,9 +265,4 @@ dd {
   padding: 0;
   display: grid;
   gap: 0.5rem;
-}
-
-/* Wider card for content pages (account overview, sessions tables). */
-.account-card--wide {
-  max-width: 560px;
 }
