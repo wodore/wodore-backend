@@ -73,6 +73,7 @@ class ImageAdmin(ModelAdmin):
         "license_summary",
         "source",
         "serving",
+        "quick_actions",
         "tag_list",
         "review_tag",
         "show_huts",
@@ -140,6 +141,16 @@ class ImageAdmin(ModelAdmin):
     #: Hard cap for the raw-download proxy (bytes).
     DOWNLOAD_RAW_MAX_BYTES = 50 * 1024 * 1024
 
+    class Media:
+        css = {"all": ("meta_image_field/css/style.css",)}
+
+    actions = (
+        "approve_selected_images",
+        "disable_selected_images",
+        "reject_selected_images",
+        "download_raw_selected_images",
+    )
+
     def get_urls(self):
         from django.urls import path
 
@@ -150,8 +161,145 @@ class ImageAdmin(ModelAdmin):
                 self.admin_site.admin_view(self.download_raw_view),
                 name="images_image_download_raw",
             ),
+            path(
+                "download-raw/<uuid:object_id>/",
+                self.admin_site.admin_view(self.download_raw_row_view),
+                name="images_image_download_raw_row",
+            ),
+            path(
+                "set-review/<uuid:object_id>/<str:status>/",
+                self.admin_site.admin_view(self.set_review_view),
+                name="images_image_set_review",
+            ),
         ]
         return custom + urls
+
+    def _redirect_back(self, request, fallback="admin:images_image_changelist"):
+        """Back to the list (or the page the quick-action was clicked from)."""
+        from django.shortcuts import redirect
+
+        referer = request.META.get("HTTP_REFERER")
+        if referer and referer.startswith(request.build_absolute_uri("/")[:8]):
+            return redirect(referer)
+        return redirect(fallback)
+
+    def _fetch_image_bytes(self, url: str) -> tuple[bytes, str]:
+        """Download ``url`` (bounded) → (content, content_type)."""
+        import requests
+
+        from django.conf import settings
+
+        upstream = requests.get(
+            url, headers={"User-Agent": settings.BOT_AGENT}, timeout=30, stream=True
+        )
+        upstream.raise_for_status()
+        content = upstream.raw.read(
+            self.DOWNLOAD_RAW_MAX_BYTES + 1, decode_content=True
+        )
+        if len(content) > self.DOWNLOAD_RAW_MAX_BYTES:
+            raise ValueError("Image too large.")
+        return content, upstream.headers.get("Content-Type", "image/jpeg")
+
+    def _store_local_file(self, obj, content: bytes, raw_url: str) -> str:
+        """Attach downloaded bytes as the image's local file; returns name."""
+        from django.core.files.base import ContentFile
+
+        from server.apps.meta_image_field.forms import _sanitize_file_name
+
+        name = _sanitize_file_name(raw_url.split("?")[0].split("/")[-1])
+        obj.image.save(name, ContentFile(content), save=True)
+        return name
+
+    def download_raw_row_view(self, request: HttpRequest, object_id):
+        """Quick action: download an external pin's raw image and store it."""
+        from django.contrib import messages
+
+        obj = self.get_object(request, object_id)
+        if obj is None:
+            messages.error(request, "Image not found.")
+            return self._redirect_back(request)
+        if obj.image or not obj.source_url_raw:
+            messages.info(request, f"{obj}: no external raw URL to download.")
+            return self._redirect_back(request)
+        try:
+            content, _ctype = self._fetch_image_bytes(obj.source_url_raw)
+            name = self._store_local_file(obj, content, obj.source_url_raw)
+        except Exception as e:
+            messages.error(request, f"{obj}: download failed ({e}).")
+            return self._redirect_back(request)
+        messages.success(request, f"{obj}: stored '{name}' locally.")
+        return self._redirect_back(request)
+
+    def set_review_view(self, request: HttpRequest, object_id, status: str):
+        """Quick action: set the review status from the changelist."""
+        from django.contrib import messages
+
+        obj = self.get_object(request, object_id)
+        valid = [s for s, _lbl in Image.ReviewStatusChoices.choices]
+        if obj is None or status not in valid:
+            messages.error(request, "Invalid image or review status.")
+            return self._redirect_back(request)
+        obj.review_status = status
+        obj.save(update_fields=["review_status"])
+        messages.success(request, f"{obj}: review status set to {status}.")
+        return self._redirect_back(request)
+
+    @display(description="")
+    def quick_actions(self, obj):
+        """Per-row review buttons + download-raw for external pins."""
+        from django.urls import reverse as _reverse
+
+        buttons = []
+        for status, icon, title in (
+            ("approved", "check_circle", "Approve"),
+            ("disabled", "pause_circle", "Disable"),
+            ("rejected", "cancel", "Reject"),
+        ):
+            url = _reverse("admin:images_image_set_review", args=[obj.pk, status])
+            buttons.append(
+                f'<a href="{url}" class="mfu-qa mfu-qa-{status}" title="{title}">'
+                f'<span class="material-symbols-outlined">{icon}</span></a>'
+            )
+        if not obj.image and obj.source_url_raw:
+            url = _reverse("admin:images_image_download_raw_row", args=[obj.pk])
+            buttons.append(
+                f'<a href="{url}" class="mfu-qa mfu-qa-download" title="Download raw">'
+                '<span class="material-symbols-outlined">download</span></a>'
+            )
+        return mark_safe("".join(buttons))
+
+    @admin.action(description=_("Approve selected images"))
+    def approve_selected_images(self, request, queryset):
+        updated = queryset.update(review_status=Image.ReviewStatusChoices.approved)
+        self.message_user(request, f"Approved {updated} images.")
+
+    @admin.action(description=_("Disable selected images"))
+    def disable_selected_images(self, request, queryset):
+        updated = queryset.update(review_status=Image.ReviewStatusChoices.disabled)
+        self.message_user(request, f"Disabled {updated} images.")
+
+    @admin.action(description=_("Reject selected images"))
+    def reject_selected_images(self, request, queryset):
+        updated = queryset.update(review_status=Image.ReviewStatusChoices.rejected)
+        self.message_user(request, f"Rejected {updated} images.")
+
+    @admin.action(description=_("Download raw for selected images"))
+    def download_raw_selected_images(self, request, queryset):
+        done = failed = skipped = 0
+        for obj in queryset:
+            if obj.image or not obj.source_url_raw:
+                skipped += 1
+                continue
+            try:
+                content, _ctype = self._fetch_image_bytes(obj.source_url_raw)
+                self._store_local_file(obj, content, obj.source_url_raw)
+                done += 1
+            except Exception:
+                failed += 1
+        self.message_user(
+            request,
+            f"Downloaded {done}, skipped {skipped}, failed {failed}.",
+        )
 
     def download_raw_view(self, request: HttpRequest):
         """Stream an image URL back to the admin widget (same-origin proxy).
@@ -163,7 +311,6 @@ class ImageAdmin(ModelAdmin):
         """
         import requests
 
-        from django.conf import settings
         from django.http import HttpResponse, JsonResponse
 
         url = (request.GET.get("url") or "").strip()
@@ -173,23 +320,12 @@ class ImageAdmin(ModelAdmin):
             if not self._is_public_http_url(url):
                 return JsonResponse({"error": "URL not allowed."}, status=400)
         try:
-            upstream = requests.get(
-                url,
-                headers={"User-Agent": settings.BOT_AGENT},
-                timeout=30,
-                stream=True,
-            )
-            upstream.raise_for_status()
-            content = upstream.raw.read(
-                self.DOWNLOAD_RAW_MAX_BYTES + 1, decode_content=True
-            )
-            if len(content) > self.DOWNLOAD_RAW_MAX_BYTES:
-                return JsonResponse({"error": "Image too large."}, status=413)
+            content, content_type = self._fetch_image_bytes(url)
         except requests.RequestException as e:
             return JsonResponse({"error": f"Upstream fetch failed: {e}"}, status=502)
-        response = HttpResponse(
-            content, content_type=upstream.headers.get("Content-Type", "image/jpeg")
-        )
+        except ValueError as e:
+            return JsonResponse({"error": str(e)}, status=413)
+        response = HttpResponse(content, content_type=content_type)
         response["Content-Disposition"] = 'inline; filename="raw"'
         return response
 

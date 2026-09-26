@@ -151,3 +151,97 @@ class TestDownloadRawEndpoint:
         self._setup_admin(settings)
         response = client.get(reverse("admin:images_image_download_raw"), {"url": RAW})
         assert response.status_code in (301, 302)  # redirect to admin login
+
+
+@pytest.mark.django_db
+class TestQuickActions:
+    """Changelog quick buttons: review status, download raw, bulk actions."""
+
+    def _no_toolbar(self, settings):
+        from django.conf import settings as dj_settings
+
+        settings.MIDDLEWARE = tuple(
+            m for m in dj_settings.MIDDLEWARE if "debug_toolbar" not in m
+        )
+
+    def _pin(self):
+        from server.apps.images.models import Image, License
+
+        license_obj, _ = License.objects.get_or_create(
+            slug="cc-by-sa-4-0", defaults={"no_publication": False}
+        )
+        return Image.objects.create(
+            source_ident="wikicommons:File:QuickTest.jpg",
+            source_url="https://commons.wikimedia.org/wiki/File:QuickTest.jpg",
+            source_url_raw=RAW,
+            license=license_obj,
+            review_status=Image.ReviewStatusChoices.pending,
+        )
+
+    def test_set_review(self, admin_client, settings):
+        from django.urls import reverse
+
+        from server.apps.images.models import Image
+
+        self._no_toolbar(settings)
+        pin = self._pin()
+        response = admin_client.get(
+            reverse("admin:images_image_set_review", args=[pin.pk, "approved"])
+        )
+        assert response.status_code == 302
+        pin.refresh_from_db()
+        assert pin.review_status == Image.ReviewStatusChoices.approved
+
+    def test_set_review_invalid_status(self, admin_client, settings):
+        from django.urls import reverse
+
+        self._no_toolbar(settings)
+        pin = self._pin()
+        response = admin_client.get(
+            reverse("admin:images_image_set_review", args=[pin.pk, "bogus"])
+        )
+        assert response.status_code == 302
+        pin.refresh_from_db()
+        assert pin.review_status == "pending"  # unchanged
+
+    def test_download_raw_row(self, admin_client, settings):
+        from unittest.mock import MagicMock, patch
+
+        from django.urls import reverse
+
+        self._no_toolbar(settings)
+        pin = self._pin()
+        fake = MagicMock()
+        fake.raw.read.return_value = b"fake-image-bytes"
+        fake.headers = {"Content-Type": "image/jpeg"}
+        with patch("requests.get", return_value=fake):
+            response = admin_client.get(
+                reverse("admin:images_image_download_raw_row", args=[pin.pk])
+            )
+        assert response.status_code == 302
+        pin.refresh_from_db()
+        assert bool(pin.image) is True
+        assert pin.image.name.startswith("images/")
+        assert "%C3%" not in pin.image.name  # sanitized ASCII name
+
+    def test_bulk_download_action(self, admin_client, settings):
+        from unittest.mock import MagicMock, patch
+
+        from django.urls import reverse
+
+        self._no_toolbar(settings)
+        pin = self._pin()
+        fake = MagicMock()
+        fake.raw.read.return_value = b"fake-image-bytes"
+        fake.headers = {"Content-Type": "image/jpeg"}
+        with patch("requests.get", return_value=fake):
+            response = admin_client.post(
+                reverse("admin:images_image_changelist"),
+                {
+                    "action": "download_raw_selected_images",
+                    "_selected_action": [str(pin.pk)],
+                },
+            )
+        assert response.status_code == 302
+        pin.refresh_from_db()
+        assert bool(pin.image) is True
