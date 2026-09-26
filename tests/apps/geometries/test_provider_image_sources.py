@@ -287,3 +287,30 @@ class TestConstrainedSize:
         assert MEDIUM_SOURCE_MAX_DIMENSION == WIKIMEDIA_MEDIUM_THUMB_WIDTH == 500
         assert WIKIMEDIA_LARGE_THUMB_WIDTH == 1920
         assert WIKIMEDIA_LARGEST_THUMB_WIDTH == 3840
+
+
+class TestTrueDistances:
+    """Distances come from the file geotag when the metadata carried one."""
+
+    @pytest.fixture
+    def provider(self):
+        return WikimediaCommonsProvider()
+
+    def test_distance_from_geotag(self, provider):
+        result = provider._create_image_result(
+            "File:Huette.jpg",
+            _img_data(lat=46.501, lon=7.5),  # ~111 m north of the query point
+            None,
+            50,
+            46.5,
+            7.5,
+        )
+        assert result is not None
+        assert 90 < result.distance_m < 130
+
+    def test_distance_zero_without_geotag(self, provider):
+        result = provider._create_image_result(
+            "File:Huette.jpg", _img_data(), None, 50, 46.5, 7.5
+        )
+        assert result is not None
+        assert result.distance_m == 0.0

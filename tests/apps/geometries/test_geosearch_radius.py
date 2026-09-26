@@ -123,3 +123,102 @@ class TestWikidataSpatialRadius:
 
     def test_larger_radius_passed_through(self):
         assert self._radius_in_query(250) == pytest.approx(0.25)
+
+
+class _CategoryPage:
+    """Canned Commons API responses for category member + metadata calls."""
+
+    # (title, lat, lon) — lon None means "no geotag"
+    members: list[tuple[str, float | None, float | None]] = []
+
+
+class _DispatchingFakeClient:
+    """Answers categorymembers listings and per-title metadata requests."""
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        pass
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        pass
+
+    async def get(self, url: str, params: dict) -> _Response:
+        if params.get("list") == "categorymembers":
+            return _Response(
+                {
+                    "query": {
+                        "categorymembers": [
+                            {"title": t} for t, _, _ in _CategoryPage.members
+                        ]
+                    }
+                }
+            )
+        title = params.get("titles", "")
+        meta = {t: (la, lo) for t, la, lo in _CategoryPage.members}.get(title)
+        if meta is None:
+            return _Response({"query": {"pages": {"-1": {"title": title}}}})
+        lat, lon = meta
+        page: dict = {
+            "title": title,
+            "imageinfo": [
+                {
+                    "url": "https://upload.wikimedia.org/wikipedia/commons/a/ab/Huette.jpg",
+                    "thumburl": (
+                        "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/"
+                        "Huette.jpg/500px-Huette.jpg"
+                    ),
+                    "width": 4000,
+                    "height": 3000,
+                    "size": 5_000_000,
+                    "mime": "image/jpeg",
+                    "extmetadata": {},
+                }
+            ],
+        }
+        if lat is not None and lon is not None:
+            page["coordinates"] = [{"lat": lat, "lon": lon}]
+        return _Response({"query": {"pages": {"1": page}}})
+
+
+class _DispatchingHttpx:
+    AsyncClient = _DispatchingFakeClient
+
+
+class TestCategoryImageDistance:
+    """Category members: drop far geotags, keep untagged, true distances."""
+
+    def _fetch(self, members, lat=46.5, lon=7.5):
+        _CategoryPage.members = members
+        provider = WikimediaCommonsProvider()
+        return asyncio.run(
+            provider._fetch_commons_category_images(
+                category_name="Testhütte",
+                lat=lat,
+                lon=lon,
+                limit=10,
+                httpx=_DispatchingHttpx,
+            )
+        )
+
+    def test_far_geotag_dropped(self):
+        results = self._fetch([("File:Far.jpg", 46.55, 7.5)])  # ~5.5 km
+        assert [r.source_id for r in results] == []
+
+    def test_near_geotag_kept_with_true_distance(self):
+        results = self._fetch([("File:Near.jpg", 46.501, 7.5)])  # ~111 m
+        assert len(results) == 1
+        assert 90 < results[0].distance_m < 130
+
+    def test_untagged_kept_with_zero_distance(self):
+        results = self._fetch([("File:Untagged.jpg", None, None)])
+        assert len(results) == 1
+        assert results[0].distance_m == 0.0
+
+    def test_boundary_at_500m(self):
+        # 0.0044° lat ≈ 490 m — inside; 0.006° ≈ 667 m — outside
+        results = self._fetch(
+            [("File:At500m.jpg", 46.5044, 7.5), ("File:Over500m.jpg", 46.506, 7.5)]
+        )
+        assert [r.source_id for r in results] == ["File:At500m.jpg"]
