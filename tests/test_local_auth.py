@@ -284,6 +284,32 @@ class TestUserinfo:
         assert response.status_code == 401
 
 
+class TestLoginMethods:
+    """The unified login page supports password, emailed one-time code and
+    passkeys - email-only identifier, no username, no social, no phone."""
+
+    def test_login_page_renders(self, client, local_users):
+        response = client.get("/accounts/login/")
+        assert response.status_code == 200
+
+    def test_email_only_identifier(self, settings):
+        assert settings.ACCOUNT_LOGIN_METHODS == {
+            "username": False,
+            "email": True,
+        }
+
+    def test_one_time_code_login_enabled(self, settings):
+        assert settings.ACCOUNT_LOGIN_BY_CODE_ENABLED is True
+
+    def test_passkey_and_totp_mfa_enabled(self, settings):
+        assert settings.MFA_PASSKEY_LOGIN_ENABLED is True
+        assert set(settings.MFA_SUPPORTED_TYPES) == {
+            "totp",
+            "webauthn",
+            "recovery_codes",
+        }
+
+
 class TestEndSession:
     def test_end_session_logs_out(self, logged_in_client, local_users):
         response = logged_in_client.get(

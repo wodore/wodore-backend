@@ -26,6 +26,9 @@ if OIDC_ENABLED:  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
     )
     if "django.contrib.sites" not in INSTALLED_APPS:
         INSTALLED_APPS += ("django.contrib.sites",)
+    # allauth's MFA/WebAuthn templates use humanize filters.
+    if "django.contrib.humanize" not in INSTALLED_APPS:
+        INSTALLED_APPS += ("django.contrib.humanize",)
     SITE_ID = 1
 
     MIDDLEWARE += (  # noqa: F821  # pyright: ignore[reportUndefinedVariable]

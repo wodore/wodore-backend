@@ -50,7 +50,7 @@ def _load_settings_env(env: str, extra: dict[str, str] | None = None) -> str:
         capture_output=True,
         text=True,
         env=environ,
-        timeout=90,
+        timeout=120,
     )
     return result.stdout + result.stderr
 

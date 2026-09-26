@@ -11,13 +11,24 @@ environment files, so ``environments/test.py`` can still override
 # Accounts are created by admins / the fixture command; no self-signup.
 ACCOUNT_SIGNUP_ENABLED = False
 
-# Email is the login identifier (matches the fixture users and the
-# frontend's Zitadel-era username field).
+# Login identifiers: email only (no username).
+# Methods: password, emailed one-time code, and passkey (below).
 ACCOUNT_LOGIN_METHODS = {"username": False, "email": True}
+
+# Login by emailed one-time code ("magic code") alongside the password.
+# Requires a working email backend in production.
+ACCOUNT_LOGIN_BY_CODE_ENABLED = True
 
 # No self-service email verification yet (admin-created accounts);
 # revisit when self-registration opens up.
 ACCOUNT_EMAIL_VERIFICATION = "none"
+
+# MFA: authenticator apps (TOTP), WebAuthn security keys / passkeys, and
+# recovery codes. Passkeys additionally work as a passwordless *login*
+# method on the unified login page. (Phone/SMS and social login are
+# deliberately not enabled.)
+MFA_SUPPORTED_TYPES = ["totp", "webauthn", "recovery_codes"]
+MFA_PASSKEY_LOGIN_ENABLED = True
 
 # Do not reveal whether an account exists (login/reset responses).
 ACCOUNT_PREVENT_ENUMERATION = True
