@@ -274,7 +274,7 @@ UNFOLD = {
                     {
                         "title": _("Users"),
                         "icon": "person",
-                        "link": reverse_lazy("admin:auth_user_changelist"),
+                        "link": reverse_lazy("admin:accounts_user_changelist"),
                         "permission": lambda request: request.user.is_superuser,
                     },
                 ],

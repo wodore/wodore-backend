@@ -37,3 +37,11 @@ MIDDLEWARE = list(MIDDLEWARE)  # pyright: ignore[reportUndefinedVariable]
 # Add robots tag to prevent indexing (environment header is already in common.py)
 MIDDLEWARE.insert(0, "server.middleware.headers.RobotsTagMiddleware")
 MIDDLEWARE = tuple(MIDDLEWARE)  # pyright: ignore[reportUndefinedVariable]
+
+# Zitadel RP mode only (AUTH_PROVIDER=zitadel): refresh OIDC sessions.
+from server.settings.components.oidc import (
+    ZITADEL_RP_ENABLED,  # pyright: ignore[reportUndefinedVariable]
+)
+
+if ZITADEL_RP_ENABLED:
+    MIDDLEWARE += ("mozilla_django_oidc.middleware.SessionRefresh",)  # pyright: ignore[reportUndefinedVariable]

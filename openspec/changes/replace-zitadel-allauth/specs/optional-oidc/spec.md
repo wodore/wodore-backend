@@ -50,16 +50,19 @@ form, and settings import SHALL NOT require any external network request.
 ## REMOVED Requirements
 
 ### Requirement: Zitadel RP surface is conditional
-**Reason**: The Zitadel relying-party integration (mozilla-django-oidc URLs,
-admin redirect to `/oidc/authenticate/`, OIDC PermissionBackend,
-SessionRefresh) is removed together with Zitadel; the provider is now built
-in.
-**Migration**: The conditional-surface behavior for the built-in provider is
-covered by the new "Provider surface is conditional" requirement; no
+**Reason**: The Zitadel relying-party integration is retired with the
+migration; the built-in provider replaces it.
+**Migration**: During the transition (until the Zitadel decommission) the RP
+surface stays available and is the production default behind
+`AUTH_PROVIDER=zitadel` (mozilla-django-oidc URLs, admin redirect,
+PermissionBackend, SessionRefresh); it disappears with the decommission.
+After that, the conditional-surface behavior for the built-in provider is
+covered by the "Provider surface is conditional" requirement and no
 `/oidc/` routes exist anymore at all.
 
 ### Requirement: Fail-fast when OIDC is enabled but unreachable
-**Reason**: There is no external OIDC provider to reach at startup anymore;
-the built-in provider's fail-fast condition is a missing signing key.
-**Migration**: Startup validation is covered by the "Signing key management"
-requirement in the `oidc-provider` capability.
+**Reason**: The built-in provider needs no external discovery; its fail-fast
+condition is a missing signing key. The Zitadel discovery fail-fast remains
+in force while `AUTH_PROVIDER=zitadel` (transition).
+**Migration**: Startup validation for the built-in provider is covered by
+the "Signing key management" requirement in the `oidc-provider` capability.

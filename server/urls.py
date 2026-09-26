@@ -20,6 +20,7 @@ from django.urls import include, path
 from django.views.generic import RedirectView, TemplateView
 
 from .apps.api.api_v1 import api as api_v1
+from .apps.local_auth import account_views
 from .apps.main import urls as django_admin_urls
 from .apps.main.views import index
 
@@ -69,29 +70,28 @@ urlpatterns = [
     path("", index, name="index"),
 ]
 
-# Zitadel RP routes + admin login redirect (only when OIDC is enabled; when
-# disabled the admin falls back to Django's classic login form).
+# Built-in OIDC provider (DOT) + account management (allauth) + admin
+# login redirect (only when OIDC is enabled; when disabled the admin falls
+# back to Django's classic login form).
 # Prepended, not appended: "admin/login/" must be matched BEFORE
 # path("admin/", admin.site.urls) in the base list above, otherwise the
 # admin site's own login form shadows the redirect and the admin silently
 # falls back to the classic password form (regression introduced in #150).
 if settings.OIDC_ENABLED:
     urlpatterns = [
-        path("oidc/", include("mozilla_django_oidc.urls")),
-        # admin hack, should not be needed (https://stackoverflow.com/questions/59881651/django-mozilla-django-oidc-and-admin)
+        # Unified login (allauth); "?next=/admin/" so staff land in the
+        # admin after signing in.
         path(
             "admin/login/",
-            RedirectView.as_view(
-                url="/oidc/authenticate?next=/admin/", permanent=False
-            ),
+            RedirectView.as_view(url="/accounts/login/?next=/admin/", permanent=False),
         ),
+        path("oauth/local/", include("server.apps.local_auth.urls")),
+        # Self-service account overview (exact match, before the allauth
+        # include which serves all /accounts/<sub> flows).
+        path("accounts/", account_views.account_overview),
+        path("accounts/", include("allauth.urls")),
         *urlpatterns,
     ]
-
-# Local dev/test auth provider (frontend authenticates directly against
-# Django when Zitadel is not available).
-if settings.LOCAL_AUTH_ENABLED:
-    urlpatterns += [path("oauth/local/", include("server.apps.local_auth.urls"))]
 
 if settings.DEBUG:  # pragma: no cover
     try:
