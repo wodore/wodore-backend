@@ -266,3 +266,8 @@ dd {
   display: grid;
   gap: 0.5rem;
 }
+
+/* Wider card for content pages (account overview, sessions tables). */
+.account-card--wide {
+  max-width: 560px;
+}

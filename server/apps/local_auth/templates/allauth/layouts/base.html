@@ -19,7 +19,7 @@ inside the SPA's login popup.
 </head>
 <body>
   {% block body %}
-    <main class="account-card">
+    <main class="account-card {% block card_class %}{% endblock card_class %}">
       <div class="account-brand">wodore</div>
       {% if user.is_authenticated %}
         <nav class="account-nav">
