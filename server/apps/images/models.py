@@ -176,6 +176,15 @@ class Image(TimeStampedModel):
         default=ReviewStatusChoices.approved,
         verbose_name=_("Review status"),
     )
+    provider_synced_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        verbose_name=_("Provider Synced At"),
+        help_text=_(
+            "When this image was last refreshed from its external provider "
+            "(openspec pin-external-images; null = not a pinned external image)."
+        ),
+    )
 
     class Meta:
         verbose_name = _("Image")

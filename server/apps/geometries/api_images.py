@@ -442,28 +442,83 @@ def images_for_hut(
     logger.debug(f"Fetching images for Hut '{hut_slug}'")
     logger.debug(f"Radius: {radius}m, Sources: {sources_list}")
 
-    try:
-        # Fetch images and place info
-        results, place_info = asyncio.run(
-            fetch_images_for_place(
-                place_slug=hut_slug,
-                place_type="hut",
-                radius=radius,
-                sources=sources_list,
-                limit=limit,
-                update_cache=update_cache,  # Pass update_cache flag
+    from server.apps.huts.models import Hut
+
+    from .pinning import hut_has_visible_pins, pin_hut_images
+
+    hut = Hut.objects.filter(slug=hut_slug, is_active=True, is_public=True).first()
+
+    # Pins fast path (openspec pin-external-images): the hut already has
+    # pinned/uploaded images — serve them from the DB via the internal
+    # Wodore provider only; no external provider is contacted.
+    serve_from_pins = bool(
+        hut and not sources_list and not update_cache and hut_has_visible_pins(hut)
+    )
+
+    if serve_from_pins and hut is not None:
+        try:
+            # Pure-DB fast path: the internal Wodore provider converts the
+            # hut's associations (uploads + pins) to results — no external
+            # provider, no async machinery needed.
+            results = WodoreProvider(place_type="hut")._fetch_sync(
+                [], hut.location.y, hut.location.x, radius
             )
-        )
-        logger.debug(f"Total raw results from all providers: {len(results)} images")
-    except Exception as e:
-        logger.error(f"Error fetching images for hut '{hut_slug}': {e}")
-        cached, _fresh = image_response_cache.get_response(resp_key)
-        if cached is not None:
-            logger.warning(
-                f"Stale fallback: serving cached response for hut '{hut_slug}'"
+            place_info = {"location": {"lat": hut.location.y, "lon": hut.location.x}}
+            logger.debug(
+                f"Serving {len(results)} pinned/local images for hut '{hut_slug}'"
             )
-            return cached
-        raise
+        except Exception as e:
+            logger.error(f"Error fetching pinned images for hut '{hut_slug}': {e}")
+            cached, _fresh = image_response_cache.get_response(resp_key)
+            if cached is not None:
+                logger.warning(
+                    f"Stale fallback: serving cached response for hut '{hut_slug}'"
+                )
+                return cached
+            raise
+    else:
+        try:
+            # Fetch images and place info
+            results, place_info = asyncio.run(
+                fetch_images_for_place(
+                    place_slug=hut_slug,
+                    place_type="hut",
+                    radius=radius,
+                    sources=sources_list,
+                    limit=limit,
+                    update_cache=update_cache,  # Pass update_cache flag
+                )
+            )
+            logger.debug(f"Total raw results from all providers: {len(results)} images")
+        except Exception as e:
+            logger.error(f"Error fetching images for hut '{hut_slug}': {e}")
+            cached, _fresh = image_response_cache.get_response(resp_key)
+            if cached is not None:
+                logger.warning(
+                    f"Stale fallback: serving cached response for hut '{hut_slug}'"
+                )
+                return cached
+            raise
+
+        # Lazy pin-on-first-visit / forced re-pin: persist provider results
+        # (full default runs only — explicit `sources` queries stay ephemeral).
+        if hut is not None and not sources_list:
+            try:
+                stats = pin_hut_images(hut, results)
+                logger.info(f"Pinned images for hut '{hut_slug}': {stats}")
+                # Pinning bumped the response-cache version — recompute the
+                # key so this response is stored (and later read) at the
+                # new version.
+                resp_key = image_response_cache.response_key(
+                    "hut",
+                    hut_slug,
+                    radius=radius,
+                    sources=sources,
+                    lang=lang,
+                    limit=limit,
+                )
+            except Exception as e:
+                logger.error(f"Error pinning images for hut '{hut_slug}': {e}")
 
     # Deduplicate results
     # Sort by score (primary), then by distance (secondary)

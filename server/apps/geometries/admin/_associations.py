@@ -43,7 +43,7 @@ class GeoPlaceExternalLinkAdmin(ModelAdmin):
 
 @admin.register(GeoPlaceImageAssociation)
 class GeoPlaceImageAssociationAdmin(ModelAdmin):
-    list_display = ("geo_place", "image", "order")
+    list_display = ("geo_place", "image", "score")
     search_fields = ("geo_place__name", "geo_place__slug")
     autocomplete_fields = ("geo_place", "image")
 
