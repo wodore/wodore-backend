@@ -31,7 +31,7 @@ dependencies = [
   "django-extensions==4.*",    # https://pypi.org/project/django-extensions/
   #"django-unfold==0.43.*",            # https://pypi.org/project/django-unfold/
   "django-unfold==0.87.*",                 # https://pypi.org/project/django-unfold/
-  "django-q2>=1.8.0",                      # https://pypi.org/project/django-q2/
+  "django-q2>=1.11.0",                     # https://pypi.org/project/django-q2/
   "django-admin-runner[django-q2,unfold]", # https://github.com/burgdev/django-admin-runner
   "msgspec==0.20.*",                       # https://pypi.org/project/msgspec/
   "python-benedict==0.35.*",               # https://pypi.org/project/python-benedict/

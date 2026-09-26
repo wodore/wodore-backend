@@ -523,6 +523,11 @@ Q_CLUSTER = {
     # heavy. Defaults to node CPU count if unset (too many on a VPS), so set
     # it explicitly (burginfra: WD_QCLUSTER_WORKERS -> Q_CLUSTER_WORKERS).
     "workers": config("Q_CLUSTER_WORKERS", cast=int, default=3),
+    # Replace a worker process after it has processed this many tasks:
+    # workers never return their peak memory (Python arenas + copy-on-write
+    # divergence after heavy commands like update_availability), so
+    # recycling bounds the qcluster's memory growth.
+    "recycle": 5,
     # Shared (database) cache so the sentinel's cluster status is visible
     # to the web/admin processes (see components/caches.py, "shared").
     "cache": "shared",
