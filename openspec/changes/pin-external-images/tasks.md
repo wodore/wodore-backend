@@ -1,10 +1,10 @@
 ## 1. Response cache (PR A — independent, behavior-neutral)
 
-- [ ] 1.1 Add response-cache helper: key builder `(endpoint, slug, radius, sources, lang, limit)`, get/set wrappers over the persistent cache, configurable max TTL (default 15 min)
-- [ ] 1.2 Wire caching into `images_for_hut`, `images_for_place`, `nearby_images` in `server/apps/geometries/api_images.py`
-- [ ] 1.3 Implement stale-fallback: on provider failure return last good cached response if present
-- [ ] 1.4 Add cache invalidation hook callable from pin sync and curation signals
-- [ ] 1.5 Tests: cache hit path, parameter separation, stale fallback, TTL expiry, invalidation
+- [x] 1.1 Add response-cache helper: key builder `(endpoint, slug, radius, sources, lang, limit)`, get/set wrappers over the persistent cache, configurable max TTL (default 15 min)
+- [x] 1.2 Wire caching into `images_for_hut`, `images_for_place`, `nearby_images` in `server/apps/geometries/api_images.py`
+- [x] 1.3 Implement stale-fallback: on provider failure return last good cached response if present
+- [x] 1.4 Add cache invalidation hook callable from pin sync and curation signals
+- [x] 1.5 Tests: cache hit path, parameter separation, stale fallback, TTL expiry, invalidation
 
 ## 2. Data model groundwork (PR B — start)
 
