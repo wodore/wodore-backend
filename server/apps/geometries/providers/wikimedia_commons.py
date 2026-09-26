@@ -267,7 +267,12 @@ class WikimediaCommonsProvider(ImageProvider):
         Returns:
             List of ImageResult objects
         """
-        radius_km = max(1, radius / 1000)  # At least 1km
+        # The hut's own images arrive via the direct-QID path (Strategy 1,
+        # radius-independent); this spatial fallback must not sweep
+        # NEIGHBORING huts — honor the requested radius with a 50 m floor
+        # for coordinate/rounding safety only (empirically 50 m still matches
+        # the co-located hut item; the old 1 km floor pulled in neighbors).
+        radius_km = max(50, radius) / 1000
 
         sparql = f"""
         SELECT ?item ?itemLabel ?image ?category WHERE {{
@@ -503,7 +508,11 @@ class WikimediaCommonsProvider(ImageProvider):
         Returns:
             List of ImageResult objects
         """
-        radius_km = max(0.5, radius / 1000)  # At least 500m
+        # MediaWiki GeoData expects ggsradius in METERS, bounded 10–10000;
+        # the endpoint's radius is meters — clamp to the API bounds instead
+        # of converting (the old km value was out of range for every query,
+        # so geosearch silently returned nothing).
+        ggsradius_m = min(max(radius, 10), 10_000)
 
         params = {
             "action": "query",
@@ -511,7 +520,7 @@ class WikimediaCommonsProvider(ImageProvider):
             "ggsnamespace": 6,  # File namespace
             "ggsprimary": "all",
             "ggscoord": f"{lat}|{lon}",
-            "ggsradius": radius_km,
+            "ggsradius": ggsradius_m,
             "ggslimit": min(limit, 50),
             "prop": "imageinfo",
             "iiprop": "url|extmetadata|size",
