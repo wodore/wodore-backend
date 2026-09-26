@@ -15,6 +15,7 @@ from django.views.decorators.cache import cache_control
 
 from server.apps.translations import LanguageParam, activate, with_language_param
 
+from . import image_response_cache
 from .models import GeoPlace
 from .providers import (
     CamptocampProvider,
@@ -114,6 +115,20 @@ def nearby_images(
     if sources:
         sources_list = [s.strip() for s in sources.split(",")]
 
+    resp_key = image_response_cache.response_key(
+        "nearby",
+        image_response_cache.center_ident(lat, lon),
+        radius=radius,
+        sources=sources,
+        lang=lang,
+        limit=limit,
+        precision=precision,
+    )
+    if not update_cache:
+        cached, fresh = image_response_cache.get_response(resp_key)
+        if cached is not None and fresh:
+            return cached
+
     # Step 1: Find GeoPlaces and Huts within 10m radius
     query_point = Point(lon, lat, srid=4326)
 
@@ -209,6 +224,12 @@ def nearby_images(
         logger.debug(f"Total raw results from all providers: {len(results)} images")
     except Exception as e:
         logger.error(f"Error fetching images from providers: {e}")
+        cached, _fresh = image_response_cache.get_response(resp_key)
+        if cached is not None:
+            logger.warning(
+                f"Stale fallback: serving cached response for nearby ({lat},{lon})"
+            )
+            return cached
         results = []
 
     # Step 3: Sort by score (primary), then by distance (secondary)
@@ -233,9 +254,11 @@ def nearby_images(
         huts_found=len(huts),
     )
 
-    return ImageCollectionResponse(
+    response = ImageCollectionResponse(
         type="FeatureCollection", features=features, metadata=metadata
     )
+    image_response_cache.set_response(resp_key, response)
+    return response
 
 
 @router.get(
@@ -290,6 +313,14 @@ def images_for_place(
     if sources:
         sources_list = [s.strip() for s in sources.split(",")]
 
+    resp_key = image_response_cache.response_key(
+        "place", place_slug, radius=radius, sources=sources, lang=lang, limit=limit
+    )
+    if not update_cache:
+        cached, fresh = image_response_cache.get_response(resp_key)
+        if cached is not None and fresh:
+            return cached
+
     logger.debug(f"Fetching images for GeoPlace '{place_slug}'")
     logger.debug(f"Radius: {radius}m, Sources: {sources_list}")
 
@@ -308,6 +339,12 @@ def images_for_place(
         logger.debug(f"Total raw results from all providers: {len(results)} images")
     except Exception as e:
         logger.error(f"Error fetching images for place '{place_slug}': {e}")
+        cached, _fresh = image_response_cache.get_response(resp_key)
+        if cached is not None:
+            logger.warning(
+                f"Stale fallback: serving cached response for place '{place_slug}'"
+            )
+            return cached
         raise
 
     # Sort by score (primary), then by distance (secondary)
@@ -335,9 +372,11 @@ def images_for_place(
         huts_found=0,
     )
 
-    return ImageCollectionResponse(
+    response = ImageCollectionResponse(
         type="FeatureCollection", features=features, metadata=metadata
     )
+    image_response_cache.set_response(resp_key, response)
+    return response
 
 
 @router.get(
@@ -392,6 +431,14 @@ def images_for_hut(
     if sources:
         sources_list = [s.strip() for s in sources.split(",")]
 
+    resp_key = image_response_cache.response_key(
+        "hut", hut_slug, radius=radius, sources=sources, lang=lang, limit=limit
+    )
+    if not update_cache:
+        cached, fresh = image_response_cache.get_response(resp_key)
+        if cached is not None and fresh:
+            return cached
+
     logger.debug(f"Fetching images for Hut '{hut_slug}'")
     logger.debug(f"Radius: {radius}m, Sources: {sources_list}")
 
@@ -410,6 +457,12 @@ def images_for_hut(
         logger.debug(f"Total raw results from all providers: {len(results)} images")
     except Exception as e:
         logger.error(f"Error fetching images for hut '{hut_slug}': {e}")
+        cached, _fresh = image_response_cache.get_response(resp_key)
+        if cached is not None:
+            logger.warning(
+                f"Stale fallback: serving cached response for hut '{hut_slug}'"
+            )
+            return cached
         raise
 
     # Deduplicate results
@@ -438,6 +491,8 @@ def images_for_hut(
         huts_found=1,
     )
 
-    return ImageCollectionResponse(
+    response = ImageCollectionResponse(
         type="FeatureCollection", features=features, metadata=metadata
     )
+    image_response_cache.set_response(resp_key, response)
+    return response

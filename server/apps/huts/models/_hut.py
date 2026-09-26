@@ -508,7 +508,7 @@ class Hut(TimeStampedModel):
             if (hut_db.elevation or 0) < 3000:
                 hut_db.hut_type_closed = HutTypeHelper.values["selfhut"]
             else:
-                hut_db.hut_type_closed = HutTypeHelper.values["bicouac"]
+                hut_db.hut_type_closed = HutTypeHelper.values["bivouac"]
         ## Owner stuff -> add to Owner
         src_hut_owner = hut_schema.owner
         owner = None
@@ -1040,6 +1040,7 @@ class Hut(TimeStampedModel):
                 reservation_status=avail.reservation_status,
                 free=avail.free,
                 total=avail.total,
+                free_tolerance=avail.free_tolerance or 0,
                 occupancy_percent=avail.occupancy_percent,
                 occupancy_steps=avail.occupancy_steps,
                 occupancy_status=avail.occupancy_status,
