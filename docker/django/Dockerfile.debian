@@ -186,7 +186,13 @@ COPY --chown=web:web tile_server/styles /code/tile_server/styles
 
 # Generate build timestamp automatically during build
 RUN <<EOF
-python manage.py collectstatic --noinput
+set -e
+mkdir -p /code/static
+chown web:web /code/static
+# OIDC_ENABLED=false: see Dockerfile.alpine (no network/runtime env at
+# build time; without this collectstatic fails and - without set -e -
+# silently ships images with an empty /code/static).
+OIDC_ENABLED=false python manage.py collectstatic --noinput
 printf 'export BUILD_TIMESTAMP=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%S.%6NZ)" > /code/.build_timestamp
 chmod 644 /code/.build_timestamp
 EOF

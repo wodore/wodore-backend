@@ -1,6 +1,5 @@
 import io
 import logging
-import mimetypes
 import os
 import time
 import uuid
@@ -324,27 +323,38 @@ class Image(TimeStampedModel):
         except:
             raise  # Re-raise the exception if it's not a 404 error
         image_content = response.content
-        mime_type = mimetypes.guess_type(photo_schema.raw_url)[0]
 
-        if mime_type == "image/jpeg":
+        # Determine the image type from the CONTENT, not the URL: photo URLs
+        # are not always file-like (e.g. FFCAM minisite photos are
+        # ".../resizer.php?filename=...jpg" — the URL suffix is .php while
+        # the response body is a real image). Pillow reads the format and
+        # the dimensions from the image header in one lazy open.
+        try:
+            pil_image = PILImage.open(io.BytesIO(image_content))
+            image_format = (pil_image.format or "").upper()
+            width, height = pil_image.size
+        except Exception:
+            logging.warning(
+                "Unidentified image content from %s. Skipping this one.",
+                photo_schema.raw_url,
+            )
+            return None
+
+        if image_format == "JPEG":
             extension = ".jpg"
-        elif mime_type == "image/png":
+        elif image_format == "PNG":
             extension = ".png"
-        elif mime_type is None:
+        elif not image_format:
             # could not get image type
             return None
         else:
-            msg = f"Unsupported image type: {mime_type}"
+            msg = f"Unsupported image type: {image_format}"
             raise ValueError(msg)
 
         image_uuid = uuid.uuid4()
         image_file = ContentFile(
             image_content, name=os.path.join(path, f"{image_uuid}{extension}")
         )
-
-        # Get the image dimensions using Pillow
-        pil_image = PILImage.open(io.BytesIO(image_content))
-        width, height = pil_image.size
 
         img_review_status = Image.ReviewStatusChoices.approved
         # Create a new Image instance

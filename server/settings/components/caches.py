@@ -22,6 +22,19 @@ CACHES = {
             "CULL_FREQUENCY": 4,  # Remove 25% of oldest entries when full
         },
     },
+    "shared": {
+        # Cross-process cache for django-q2 cluster status (sentinel and
+        # worker stats). LocMem is per-process: without a shared backend
+        # the web/admin process can never see the running qcluster.
+        # The table is created by `manage.py createcachetable` (the no-args
+        # form creates a table for every DatabaseCache alias).
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "django_cache_shared",
+        "TIMEOUT": 3600,
+        "OPTIONS": {
+            "MAX_ENTRIES": 1000,
+        },
+    },
 }
 
 

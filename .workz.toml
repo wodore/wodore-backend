@@ -2,7 +2,8 @@
 # Docs: https://github.com/rohansx/workz — repo usage: AGENTS.md § Worktrees / workz
 #
 # What workz defaults already do: copy `.env`/`.env.*`/`.envrc` +
-# tool-version files, symlink `.venv` (shared virtualenv — never commit it).
+# tool-version files. `.venv` is deliberately NOT symlinked (see ignore_add
+# below) — every lane gets its own venv via the post_start hook.
 [sync]
 # Gitignored repo files that must ride along into every worktree.
 # NOTE: workz copy_add only handles regular files — directories are not
@@ -12,13 +13,23 @@ copy_add = [
     ".infisical.json",          # infisical project link (needed by the `app` wrapper)
     ".geoplaces*",
 ]
+# Per-lane venvs instead of a symlinked shared one: a shared venv's editable
+# install pins the MAIN checkout on sys.path (app/manage silently ran main
+# code inside lanes), and any lane running `uv sync` re-pointed that editable
+# for everyone. uv makes own venvs cheap: hardlinked from the shared cache
+# (~6 MB marginal disk, ~0.2 s warm sync).
+# scripts/lane-venv.sh syncs (--frozen --extra private) and patches the
+# activate script with a lane-aware `app()` that targets the LANE database
+# (the main checkout's `inv update-venv --infisical` function wraps
+# infisical, which injects the DEV database — wrong target for lanes).
+ignore_add = [".venv"]
 
 [hooks]
 # Lane DB lives on the SHARED dev postgres (django-local-postgis:5432) under
 # its own name, cloned from the quiescent `wodore_template` snapshot —
 # same state as the dev main DB. Need current data? Refresh first:
 #   scripts/db-refresh-template.sh
-post_start = 'scripts/lane-db.sh create && scripts/sync-martin.sh'
+post_start = 'scripts/lane-venv.sh && scripts/lane-db.sh create && scripts/sync-martin.sh'
 pre_done = 'scripts/lane-martin.sh stop && scripts/lane-db.sh drop'
 
 [isolation]
