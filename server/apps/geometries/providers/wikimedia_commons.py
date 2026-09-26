@@ -503,7 +503,11 @@ class WikimediaCommonsProvider(ImageProvider):
         Returns:
             List of ImageResult objects
         """
-        radius_km = max(0.5, radius / 1000)  # At least 500m
+        # MediaWiki GeoData expects ggsradius in METERS, bounded 10–10000;
+        # the endpoint's radius is meters — clamp to the API bounds instead
+        # of converting (the old km value was out of range for every query,
+        # so geosearch silently returned nothing).
+        ggsradius_m = min(max(radius, 10), 10_000)
 
         params = {
             "action": "query",
@@ -511,7 +515,7 @@ class WikimediaCommonsProvider(ImageProvider):
             "ggsnamespace": 6,  # File namespace
             "ggsprimary": "all",
             "ggscoord": f"{lat}|{lon}",
-            "ggsradius": radius_km,
+            "ggsradius": ggsradius_m,
             "ggslimit": min(limit, 50),
             "prop": "imageinfo",
             "iiprop": "url|extmetadata|size",
