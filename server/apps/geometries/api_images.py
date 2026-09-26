@@ -444,7 +444,7 @@ def images_for_hut(
 
     from server.apps.huts.models import Hut
 
-    from .pinning import hut_has_visible_pins, pin_hut_images
+    from .pinning import pin_place_images, place_has_visible_pins
 
     hut = Hut.objects.filter(slug=hut_slug, is_active=True, is_public=True).first()
 
@@ -452,7 +452,7 @@ def images_for_hut(
     # pinned/uploaded images — serve them from the DB via the internal
     # Wodore provider only; no external provider is contacted.
     serve_from_pins = bool(
-        hut and not sources_list and not update_cache and hut_has_visible_pins(hut)
+        hut and not sources_list and not update_cache and place_has_visible_pins(hut)
     )
 
     if serve_from_pins and hut is not None:
@@ -504,7 +504,7 @@ def images_for_hut(
         # (full default runs only — explicit `sources` queries stay ephemeral).
         if hut is not None and not sources_list:
             try:
-                stats = pin_hut_images(hut, results)
+                stats = pin_place_images(hut, results)
                 logger.info(f"Pinned images for hut '{hut_slug}': {stats}")
                 # Pinning bumped the response-cache version — recompute the
                 # key so this response is stored (and later read) at the

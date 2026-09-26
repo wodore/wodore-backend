@@ -283,6 +283,15 @@ class GeoPlace(TimeStampedModel):
         related_name="geo_places",
     )
 
+    images_pinned_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        verbose_name=_("Images pinned at"),
+        help_text=_(
+            "When external images were last pinned from providers "
+            "(openspec pin-external-images; null = never pinned)."
+        ),
+    )
     image_set = models.ManyToManyField(
         Image,
         through="GeoPlaceImageAssociation",

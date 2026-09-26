@@ -11,7 +11,7 @@ from django.contrib.gis.geos import Point
 
 from server.apps.geometries import image_response_cache as irc
 from server.apps.geometries.api_images import router
-from server.apps.geometries.pinning import hut_has_visible_pins, pin_hut_images
+from server.apps.geometries.pinning import pin_place_images, place_has_visible_pins
 from server.apps.geometries.providers.base import ImageResult
 from server.apps.huts.models import Hut, HutImageAssociation
 from server.apps.images.models import Image
@@ -68,7 +68,7 @@ def hut(seed_data):
 
 class TestPinService:
     def test_creates_image_and_association(self, hut):
-        stats = pin_hut_images(
+        stats = pin_place_images(
             hut, [_result(score=80), _result(source_id="File:Other.jpg", score=60)]
         )
         assert stats.created == 2
@@ -84,9 +84,9 @@ class TestPinService:
         assert hut.images_pinned_at is not None
 
     def test_resync_updates_instead_of_duplicating(self, hut):
-        pin_hut_images(hut, [_result()])
+        pin_place_images(hut, [_result()])
         new_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/Test_3840.jpg"
-        stats = pin_hut_images(hut, [_result(url=new_url, score=90)])
+        stats = pin_place_images(hut, [_result(url=new_url, score=90)])
         assert stats.created == 0
         assert stats.updated == 1
         assert (
@@ -97,28 +97,30 @@ class TestPinService:
         assert image.image_meta["provider_score"] == 90
 
     def test_manual_score_survives_sync(self, hut):
-        pin_hut_images(hut, [_result(score=80)])
+        pin_place_images(hut, [_result(score=80)])
         assoc = HutImageAssociation.objects.get(
             hut=hut, image__source_ident="wikicommons:File:Test.jpg"
         )
         assoc.score = 1  # curator pushes the image to the back
         assoc.save()
-        pin_hut_images(hut, [_result(score=95)])
+        pin_place_images(hut, [_result(score=95)])
         assoc.refresh_from_db()
         assert assoc.score == 1  # never overwritten
 
     def test_internal_results_skipped(self, hut):
-        stats = pin_hut_images(hut, [_result(provider="wodore", source_id="some-uuid")])
+        stats = pin_place_images(
+            hut, [_result(provider="wodore", source_id="some-uuid")]
+        )
         assert stats.skipped == 1
         assert stats.created == 0
         assert not HutImageAssociation.objects.filter(hut=hut).exists()
 
     def test_meta_merge_preserves_curated_focal(self, hut):
-        pin_hut_images(hut, [_result()])
+        pin_place_images(hut, [_result()])
         image = Image.objects.get(source_ident="wikicommons:File:Test.jpg")
         image.image_meta["focal"] = {"x1": 0.1, "y1": 0.1, "x2": 0.5, "y2": 0.5}
         image.save(update_fields=["image_meta"])
-        pin_hut_images(hut, [_result(score=70)])
+        pin_place_images(hut, [_result(score=70)])
         image.refresh_from_db()
         assert image.image_meta["focal"] == {"x1": 0.1, "y1": 0.1, "x2": 0.5, "y2": 0.5}
         assert image.image_meta["provider_score"] == 70  # refreshed
@@ -158,7 +160,7 @@ class TestPinsEndpoint:
             raise AssertionError("live path must not run when pins exist")
 
         monkeypatch.setattr(api_images, "fetch_images_for_place", _boom)
-        pin_hut_images(
+        pin_place_images(
             hut, [_result(score=80), _result(source_id="File:Low.jpg", score=30)]
         )
         response = client.get(f"/hut/{hut.slug}?radius=50&lang=en&limit=10")
@@ -178,13 +180,13 @@ class TestPinsEndpoint:
         assert scores == sorted(scores, reverse=True)
 
     def test_lazy_pins_on_first_visit(self, client, hut, fetch):
-        assert not hut_has_visible_pins(hut)
+        assert not place_has_visible_pins(hut)
         first = client.get(f"/hut/{hut.slug}?radius=50&lang=en&limit=10")
         assert first.status_code == 200
         assert fetch.calls == 1
         # Two external results pinned; the internal wodore result skipped.
         assert Image.objects.filter(provider_synced_at__isnull=False).count() == 2
-        assert hut_has_visible_pins(hut)
+        assert place_has_visible_pins(hut)
         hut.refresh_from_db()
         assert hut.images_pinned_at is not None
 
@@ -201,7 +203,7 @@ class TestPinsEndpoint:
         assert Image.objects.filter(provider_synced_at__isnull=False).count() == 2
 
     def test_sources_bypasses_pin_path(self, client, hut, fetch):
-        pin_hut_images(hut, [_result()])
+        pin_place_images(hut, [_result()])
         response = client.get(
             f"/hut/{hut.slug}?radius=50&lang=en&limit=10&sources=wikicommons"
         )
@@ -209,7 +211,7 @@ class TestPinsEndpoint:
         assert fetch.calls == 1  # explicit provider selection goes live
 
     def test_hidden_pin_excluded(self, client, hut, fetch):
-        pin_hut_images(
+        pin_place_images(
             hut, [_result(score=80), _result(source_id="File:Hidden.jpg", score=70)]
         )
         image = Image.objects.get(source_ident="wikicommons:File:Hidden.jpg")
@@ -220,3 +222,45 @@ class TestPinsEndpoint:
         source_ids = [f["properties"]["source_id"] for f in response.json()["features"]]
         assert "wikicommons:File:Hidden.jpg" not in source_ids
         assert "wikicommons:File:Test.jpg" in source_ids
+
+
+class TestPinGeoplace:
+    """The pin service is place-generic (huts and geoplaces share it)."""
+
+    def test_pins_geoplace(self, seed_data):
+        from server.apps.geometries.models import GeoPlace, GeoPlaceImageAssociation
+
+        place = GeoPlace.objects.filter(is_active=True, is_public=True).first()
+        assert place is not None, "seed data provides no public geoplace"
+        stats = pin_place_images(place, [_result(score=70)])
+        assert stats.created == 1
+        assoc = GeoPlaceImageAssociation.objects.get(
+            geo_place=place, image__source_ident="wikicommons:File:Test.jpg"
+        )
+        assert assoc.score == 70
+        place.refresh_from_db()
+        assert place.images_pinned_at is not None
+        assert place_has_visible_pins(place)
+
+    def test_same_image_two_places_independent_scores(self, hut, seed_data):
+        from server.apps.geometries.models import GeoPlace
+
+        place = GeoPlace.objects.filter(is_active=True, is_public=True).first()
+        assert place is not None
+        pin_place_images(hut, [_result(score=90)])
+        stats = pin_place_images(place, [_result(score=40)])
+        assert stats.created == 0  # same Image row reused
+        assert stats.associations_created == 1
+        assert (
+            Image.objects.filter(source_ident="wikicommons:File:Test.jpg").count() == 1
+        )
+        hut_assoc = HutImageAssociation.objects.get(
+            hut=hut, image__source_ident="wikicommons:File:Test.jpg"
+        )
+        from server.apps.geometries.models import GeoPlaceImageAssociation
+
+        place_assoc = GeoPlaceImageAssociation.objects.get(
+            geo_place=place, image__source_ident="wikicommons:File:Test.jpg"
+        )
+        assert hut_assoc.score == 90
+        assert place_assoc.score == 40  # per-place curation

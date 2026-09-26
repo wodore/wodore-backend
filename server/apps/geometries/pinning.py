@@ -3,8 +3,10 @@
 Materializes provider ``ImageResult`` objects into the existing Image model
 (metadata only — the file field stays empty, pixels keep streaming from the
 origin through imagor). Deduplicated by ``source_ident`` across syncs; the
-hut association carries the provider score, which manual curation may
-override (syncs never overwrite an existing association's score).
+place association carries the provider score, which manual curation may
+override (syncs never overwrite an existing association's score). Works for
+both Huts and GeoPlaces — the same external image can be pinned to several
+places with independent per-place scores.
 
 See openspec change ``pin-external-images``.
 """
@@ -15,18 +17,19 @@ import structlog
 
 from django.utils import timezone
 
+from server.apps.geometries.models import GeoPlaceImageAssociation
 from server.apps.huts.models import HutImageAssociation
 from server.apps.images.models import Image
 from server.apps.licenses.models import License
 from server.apps.organizations.models import Organization
 
-from .image_response_cache import invalidate_for_hut
+from .image_response_cache import invalidate_for_hut, invalidate_for_place
 from .providers.base import ImageResult
 
 logger = structlog.get_logger()
 
 #: Provider slug that marks internal results (uploads / hut import) — those
-#: images are already associated with the hut and must never be re-pinned.
+#: images are already associated with the place and must never be re-pinned.
 INTERNAL_PROVIDER_SLUG = "wodore"
 
 
@@ -80,14 +83,37 @@ def _merge_image_meta(image: Image, result: ImageResult) -> dict:
     return meta
 
 
-def pin_hut_images(hut, results: list[ImageResult]) -> PinStats:
-    """Pin provider results to a hut and stamp the hut's pin marker.
+def _merge_image_meta_from_result(result: ImageResult) -> dict:
+    meta: dict = {"provider_score": result.score}
+    if result.width:
+        meta["width"] = result.width
+    if result.height:
+        meta["height"] = result.height
+    return meta
+
+
+def _association_for(place):
+    """Resolve (association model, place FK field name, cache invalidator)."""
+    from server.apps.geometries.models import GeoPlace
+    from server.apps.huts.models import Hut
+
+    if isinstance(place, Hut):
+        return HutImageAssociation, "hut", invalidate_for_hut
+    if isinstance(place, GeoPlace):
+        return GeoPlaceImageAssociation, "geo_place", invalidate_for_place
+    raise TypeError(f"Unsupported place type for pinning: {type(place)!r}")
+
+
+def pin_place_images(place, results: list[ImageResult]) -> PinStats:
+    """Pin provider results to a place (Hut or GeoPlace).
 
     Existing pins get their mutable fields refreshed (URLs can change when a
     file is re-uploaded at the origin); association scores are only ever set
     once — manual curation survives later syncs. Internal (``wodore``)
-    results are skipped: those images already live in our DB.
+    results are skipped: those images already live in our DB. The same image
+    can be pinned to several places; scores are per association.
     """
+    assoc_model, place_field, invalidate = _association_for(place)
     stats = PinStats()
     now = timezone.now()
 
@@ -131,21 +157,23 @@ def pin_hut_images(hut, results: list[ImageResult]) -> PinStats:
             image.save()
             stats.updated += 1
 
-        assoc, assoc_created = HutImageAssociation.objects.get_or_create(
+        assoc, assoc_created = assoc_model.objects.get_or_create(
             image=image,
-            hut=hut,
             defaults={"score": min(max(result.score, 0), 32767)},
+            **{place_field: place},
         )
         if assoc_created:
             stats.associations_created += 1
         # Never overwrite an existing score — manual curation wins.
 
-    hut.images_pinned_at = now
-    hut.save(update_fields=["images_pinned_at"])
-    invalidate_for_hut(hut.slug)
+    if hasattr(place, "images_pinned_at"):
+        place.images_pinned_at = now
+        place.save(update_fields=["images_pinned_at"])
+    invalidate(place.slug)
     logger.info(
-        "hut_images_pinned",
-        hut=hut.slug,
+        "place_images_pinned",
+        place_type=type(place).__name__,
+        place=place.slug,
         created=stats.created,
         updated=stats.updated,
         skipped=stats.skipped,
@@ -154,22 +182,16 @@ def pin_hut_images(hut, results: list[ImageResult]) -> PinStats:
     return stats
 
 
-def _merge_image_meta_from_result(result: ImageResult) -> dict:
-    meta: dict = {"provider_score": result.score}
-    if result.width:
-        meta["width"] = result.width
-    if result.height:
-        meta["height"] = result.height
-    return meta
-
-
-def hut_has_visible_pins(hut) -> bool:
-    """Whether the hut has at least one servable pinned/associated image."""
+def place_has_visible_pins(place) -> bool:
+    """Whether the place has at least one servable pinned/associated image."""
+    assoc_model, place_field, _invalidator = _association_for(place)
     return (
-        HutImageAssociation.objects.filter(
-            hut=hut,
-            image__is_active=True,
-            image__review_status=Image.ReviewStatusChoices.approved,
+        assoc_model.objects.filter(
+            **{
+                place_field: place,
+                "image__is_active": True,
+                "image__review_status": Image.ReviewStatusChoices.approved,
+            }
         )
         .exclude(image__license__no_publication=True)
         .exists()
