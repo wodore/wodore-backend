@@ -521,3 +521,37 @@
     config: {}
     props_schema: {}
     order: 16
+- model: organizations.organization
+  pk: 16
+  fields:
+    i18n:
+      name_en: Huetten-Holiday
+      name_fr: Huetten-Holiday
+      name_it: Huetten-Holiday
+      fullname_en: Huetten-Holiday.de GmbH
+      fullname_fr: Huetten-Holiday.de GmbH
+      fullname_it: Huetten-Holiday.de GmbH
+      description_en: >-
+        Booking platform for mountain huts from various operators in Germany,
+        Austria and Italy.
+      description_fr: >-
+        Plateforme de réservation de refuges de montagne de différents
+        opérateurs en Allemagne, Autriche et Italie.
+      description_it: ""
+    slug: hhde
+    is_active: true
+    is_public: true
+    name: Huetten-Holiday
+    fullname: Huetten-Holiday.de GmbH
+    description: >-
+      Reservationsplattform für Berghütten verschiedener Betreiber in
+      Deutschland, Österreich und Italien.
+    url: https://www.huetten-holiday.com
+    attribution: ""
+    link_hut_pattern: https://www.huetten-holiday.com/huts/{{id}}
+    logo: organizations/logos/missing.png
+    color_light: "#2f7d32"
+    color_dark: "#a5d6a7"
+    config: {}
+    props_schema: {}
+    order: 17
