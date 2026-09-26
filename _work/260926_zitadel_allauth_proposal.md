@@ -37,6 +37,18 @@ Planning session that produced the OpenSpec change
 - User cutover is invite-based (Zitadel doesn't export passwords); watch for
   phishing look-alikes during the window.
 
+## Migration restructure — final order (260926, latest steer)
+
+No production users exist yet → no user migration at all. Order is now:
+1) **modernize** allauth+DOT in dev/test under the SAME issuer URL
+   (local_auth deleted behind its URLs; production untouched),
+2) **flip** the production default once (flags per D5; dual issuer-routed
+   validation for Zitadel rollback; bootstrap accounts directly),
+3) **decommission** Zitadel.
+The earlier "promote local_auth first" idea was dropped — productionizing
+the hand-rolled provider would have been throwaway work without a user
+base to migrate.
+
 ## Migration restructure (260926, later)
 
 User steer: phase 1 keeps Zitadel as rollback and promotes the existing

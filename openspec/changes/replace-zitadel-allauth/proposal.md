@@ -26,8 +26,8 @@ surface the Quasar SPA speaks today — and that a future native Android app
 - **BREAKING** — API token validation switches from Zitadel introspection to
   local JWT signature verification (multi-issuer routing during migration).
 - **BREAKING** — frontend issuer URL changes from Zitadel to the Django
-  backend; passwords cannot be exported from Zitadel, so the user cutover is
-  invite/password-reset based.
+  backend. No user migration is needed (production has no user base yet);
+  initial accounts are bootstrapped directly.
 - Replace the `urn:zitadel:iam:org:project:{project}:roles` claim shape with
   a plain `roles` claim; Django groups become the single source of truth for
   authorization (no more Zitadel→Django sync).
@@ -73,9 +73,9 @@ surface the Quasar SPA speaks today — and that a future native Android app
   (deleted), admin login flow, Unfold tab wiring.
 - **Frontend** (`wodore-frontend-quasar`): issuer URL, roles claim shape,
   mobile-friendly login templates — coordinated release.
-- **Data/ops**: user import from Zitadel (emails + metadata, not passwords),
-  OIDC signing keys stored in Infisical, token-table cleanup cron,
-  Zitadel instance decommissioned after cutover.
+- **Data/ops**: OIDC signing keys stored in Infisical, token-table cleanup
+  cron, Zitadel instance decommissioned after cutover; no user import —
+  production has no user base yet.
 - **Security posture**: password hashes move into the app DB (mitigations:
   Argon2, throttling, hardened DOT settings per RFC 9700 gates); local JWT
   verification removes the per-request introspection dependency.

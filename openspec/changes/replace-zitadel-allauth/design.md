@@ -106,11 +106,11 @@ phased:
   solution (or consolidate hosts before building phase 2).
 - Token renewal uses rotated refresh tokens in both phases — no iframes or
   popups at any point.
-- With the phased migration (promote → modernize → decommission, below),
-  the hosted page at the default flip is the existing `local_auth` login
-  form (already popup-capable per its spec); renewal there stays the
-  session/`prompt=none` pattern until DOT's refresh tokens replace it in
-  the modernize phase. allauth/DOT template styling lands in that phase.
+- With the phased migration (modernize → flip → decommission, below), the
+  allauth templates serve from day one of the production flip; the
+  existing `local_auth` login form only bridges dev/test until DOT
+  replaces it under the same URLs, and renewal switches to refresh tokens
+  in that same step.
 
 ### D3: Claims — plain `roles` claim, groups stay authoritative in Django
 
@@ -135,20 +135,20 @@ promote phase. After Zitadel decommission the introspection validator,
 `mozilla_django_oidc`, and Zitadel settings are deleted — no token
 validation does network calls anymore.
 
-### D5: Flags — promote first, consolidate last
+### D5: Flags — modernize first, flip once
 
-The promote phase flips the default auth mode to the local provider:
-`LOCAL_AUTH_ENABLED` defaults to true in **all** environments, its
-dev/test-only hard gate is removed, and both flags may be active at the
-same time (issuer-routed validation, D4). Production gets guards in
-exchange for the lost gate: a real signing key
-(`LOCAL_AUTH_PRIVATE_KEY_JWK`) is required — fail-fast if unset or if the
-committed dev key would be used — and the password grant stays
-dev/test-only. `OIDC_ENABLED` (Zitadel) remains the explicit rollback
-mode. End state (decommission phase): the Zitadel surface is deleted; the
-built-in provider (DOT) is always on — `OIDC_ENABLED` keeps gating it,
-defaulting true everywhere; tests that want "no auth" set it false and
-get the clean-401 path that already exists.
+Production has no user base yet, so there is nothing to migrate and no
+reason to productionize the hand-rolled provider: the built-in stack
+(allauth + DOT) is built and exercised in dev/test first — replacing
+`local_auth` under the same issuer URL — and only then does the
+production default flip, once, to the final stack. During modernize,
+`LOCAL_AUTH_ENABLED` keeps gating the built-in provider in dev/test
+(semantics unchanged for frontends). At the flip it is retired together
+with the `local_auth` app and its dev/test gate: `OIDC_ENABLED` gates the
+built-in provider, defaults true everywhere, and Zitadel remains
+selectable via explicit configuration as rollback until decommission
+(issuer-routed validation, D4, accepts both). Tests that want "no auth"
+set `OIDC_ENABLED=false` and get the clean-401 path that already exists.
 
 ### D6: Security hardening baseline
 
@@ -165,13 +165,13 @@ get the clean-401 path that already exists.
 - Ops: `cleartokens` cron for token/grant tables; audit logging on auth
   signals (login, logout, MFA changes, token issuance failures).
 
-### D7: User migration — import + invite
+### D7: Users — no migration needed
 
-Export users from Zitadel (email, name, verified state, roles snapshot);
-create Django users with unusable passwords; map role snapshot → Django
-groups; send invite/password-set emails — in the promote phase, **before**
-the frontend default flips (without real users the flip locks everyone
-out). Dual-issuer window covers stragglers until Zitadel decommission.
+Production has no user base yet, so there is no import/invite cutover:
+initial accounts (admin/editor) are bootstrapped directly with the dev
+fixture-style command before the flip. The invite/password-set email
+machinery drops off the critical path; allauth's email verification
+remains for future self-registration.
 
 ## Risks / Trade-offs
 
@@ -195,49 +195,47 @@ out). Dual-issuer window covers stragglers until Zitadel decommission.
 
 ## Migration Plan
 
-Three phases; value lands early and every step stays rollback-safe.
+Three phases. Production has no user base yet, so there is no user
+migration to schedule — the final stack is built first and the production
+default flips once.
 
-1. **Promote (default flip)** — the existing local provider
-   (`server.apps.local_auth`) becomes the production default while
-   Zitadel stays fully functional as rollback: remove the dev/test gate
-   and add the production guards (real signing key required, password
-   grant dev/test-only, login throttling); make token validation
-   issuer-routed so both providers' tokens are accepted (D4); import
-   users and send invites (D7); style the login template; rehearse in
-   staging; then flip the frontend default issuer. The frontend change
-   is configuration only — it already speaks both providers today.
-2. **Modernize (allauth + DOT)** — allauth (accounts, MFA, password
+1. **Modernize (dev/test first)** — allauth (accounts, MFA, password
    reset, sessions) and DOT (refresh tokens, rotation, RFC 9700
-   hardening, key rotation) replace the `local_auth` internals **under
-   the same issuer URL**, so the frontend's discovery URL and client
-   config stay unchanged: DOT emits both the legacy Zitadel-shaped roles
+   hardening, key management) replace the `local_auth` internals **under
+   the same issuer URL**, so dev/test frontends keep their discovery URL
+   and client config: DOT emits both the legacy Zitadel-shaped roles
    claim (frontend continuity) and the plain `roles` claim;
    refresh-token renewal replaces the session/`prompt=none` silent
    renew; thin compatibility views cover endpoint differences (e.g.
-   `end_session`).
+   `end_session`). The `local_auth` app is deleted behind its URLs.
+   Production is untouched in this phase.
+2. **Promote (default flip)** — the production default flips to the
+   built-in provider: flags per D5 (`OIDC_ENABLED` gates the built-in
+   provider, default true; `LOCAL_AUTH_ENABLED` retired with its gate);
+   issuer-routed dual token validation (D4) accepts built-in JWTs and
+   Zitadel tokens side by side; initial accounts are bootstrapped
+   directly (D7); staging rehearsal; then the frontend default issuer
+   flips — configuration only. Zitadel stays fully functional as
+   rollback.
 3. **Decommission** — once token metrics show zero Zitadel usage: remove
    the introspection validator and the Zitadel RP surface
    (`mozilla_django_oidc`, `SessionRefresh`, `/oidc/` routes,
-   `ZITADEL_*` settings), drop the `local_auth` app remnants, decommission
-   the instance and its Infisical secrets.
+   `ZITADEL_*` settings), decommission the instance and its Infisical
+   secrets.
 
-**Rollback**: through promote and modernize, rollback is a frontend
-config repoint to Zitadel (its instance stays live until decommission) —
-no re-provisioning. After decommission, rollback = re-provision Zitadel
-+ re-invite (accepted).
+**Rollback**: modernize touches no production system; during promote,
+rollback is a frontend config repoint (Zitadel stays live). After
+decommission, rollback = re-provision Zitadel (accepted).
 
 ## Open Questions
 
-- Promote-phase password-reset gap: `local_auth` has no self-service
-  reset — admin-driven resets until allauth lands, or build a minimal
-  reset flow during promote?
 - SPA host vs. backend host: do they share the registrable domain
   (`*.wodore.com`)? Decides whether phase 2 (SPA-hosted login per D2a) is
   feasible as specced or requires consolidating hosts; the issuer stays on
   the backend origin either way.
-- Enforce MFA for staff/admin accounts (allauth config) at cutover or later?
+- Enforce MFA for staff/admin accounts (allauth config) at the flip or later?
 - Should `api_test_token` mint DOT tokens directly (management command)
   once password grant is dev-only?
 - Android client registration timing (row only — can be added anytime).
-- Email sender/branding for invite + verification mails (uses existing
+- Email sender/branding for account + verification mails (uses existing
   Django email config; needs a template pass).
