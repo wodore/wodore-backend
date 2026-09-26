@@ -305,6 +305,8 @@ class TestLoginMethods:
             data={"login": "admin@local.test", "password": "admin-dev"},
         )
         assert response.status_code == 302, getattr(response, "context", None)
+        # Direct logins land in the admin (SPA popup flow uses ?next instead).
+        assert response["Location"] == "/admin/"
         user = get_user_model().objects.get(username="admin@local.test")
         assert user.is_authenticated
 

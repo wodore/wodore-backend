@@ -8,6 +8,11 @@ environment files, so ``environments/test.py`` can still override
 ``PASSWORD_HASHERS`` with the fast MD5 hasher.
 """
 
+# Where a direct (browser) login lands. The SPA popup flow is unaffected:
+# it carries ?next=<authorize-url>. Staff-centric landing, matching the
+# pre-migration Zitadel behavior.
+LOGIN_REDIRECT_URL = "/admin/"
+
 # Accounts are created by admins / the fixture command; no self-signup.
 ACCOUNT_SIGNUP_ENABLED = False
 
