@@ -343,6 +343,8 @@ def _focal_crop_params(image):
 def _variant_meta_urls(image) -> dict[str, str]:
     """Signed imagor metadata URLs computing the thumbhash per variant."""
 
+    from django.conf import settings
+
     from server.apps.geometries.providers.base import _calculate_constrained_size
     from server.apps.images.transfomer import ImagorImage
 
@@ -363,17 +365,24 @@ def _variant_meta_urls(image) -> dict[str, str]:
         if thumb:  # focal wins over the curated crop for thumbs
             cs = params["focal_start"] or params["crop_start"]
             ce = params["focal_stop"] or params["crop_stop"]
-        url = img.transform(
+        # The /meta/ prefix must be part of the SIGNED path — build the
+        # operations path first, then sign the whole thing.
+        ops = img._build_path(
             size=size,
-            focal=params["focal_point"] or "smart",
             crop_start=cs,
             crop_stop=ce,
+            fit=False,
+            stretch=False,
+            halign=None,
+            valign=None,
+            focal=params["focal_point"] or "smart",
+            quality=None,
+            blur=None,
             filters=["thumbhash()"],
-        ).get_full_url()
-        # /meta/ goes right after the signature, before the operations
-        scheme, rest = url.split("://", 1)
-        base, _, tail = rest.partition("/")
-        return f"{scheme}://{base}/{tail.split('/', 1)[0]}/meta/{tail.split('/', 1)[1]}"
+        )
+        full = f"meta/{ops}"
+        signature = ImagorImage.sign_path(full) or "unsafe"
+        return f"{settings.IMAGOR_URL}/{signature}/{full}"
 
     urls = {
         "thumb_square": meta_url(200, 200, thumb=True),
