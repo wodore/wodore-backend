@@ -119,8 +119,11 @@ class ImageAdmin(ModelAdmin):
         "none": "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400",
     }
 
+    #: Display labels for the serving states.
+    SERVING_LABELS = {"local": "local", "external": "extern", "none": "none"}
+
     def _serving_html(self, obj) -> str:
-        """Serving pill (unfold markup) + download-raw button when external."""
+        """Serving pill (unfold markup) + inline download button when external."""
         from django.urls import reverse as _reverse
         from django.utils.safestring import mark_safe
 
@@ -130,10 +133,11 @@ class ImageAdmin(ModelAdmin):
             state = "external"
         else:
             state = "none"
+        label = self.SERVING_LABELS[state]
         pill = (
             f'<span class="inline-block font-semibold rounded-default text-[11px] '
             f'uppercase whitespace-nowrap h-6 leading-6 px-2 {self.SERVING_PILLS[state]}" '
-            f">{state}</span>"
+            f">{label}</span>"
         )
         if state == "external":
             url = _reverse("admin:images_image_download_raw_row", args=[obj.pk])
@@ -142,7 +146,7 @@ class ImageAdmin(ModelAdmin):
                 f'title="Download raw and store locally">'
                 f'<span class="material-symbols-outlined">download</span></a>'
             )
-        return mark_safe(pill)
+        return mark_safe(f'<div class="mfu-inline">{pill}</div>')
 
     @display(description=_("Serving"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs unfold stub gap
     def serving(self, obj):

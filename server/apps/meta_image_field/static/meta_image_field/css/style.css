@@ -518,3 +518,12 @@ html.dark .text-amber-700 {
   display: flex;
   gap: 0.1rem;
 }
+
+/* ----- Serving cell: pill and download button on one line ----- */
+.mfu-inline {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.2rem;
+  white-space: nowrap;
+}

@@ -366,7 +366,7 @@ class TestServingCell:
         admin = ImageAdmin(Image, None)
         html = admin._serving_html(self._image(local=False))
         assert "mfu-qa-download" in html
-        assert "external" in html
+        assert "extern" in html
 
     def test_local_has_no_download_button(self, admin_client, settings):
         from server.apps.images.admin import ImageAdmin
