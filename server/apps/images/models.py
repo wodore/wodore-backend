@@ -199,6 +199,37 @@ class Image(TimeStampedModel):
         verbose_name=_("Provider Synced At"),
         help_text=_("Last refresh from the external provider."),
     )
+    phash = models.CharField(
+        max_length=16,
+        blank=True,
+        null=True,
+        db_index=True,
+        verbose_name=_("Perceptual Hash"),
+        help_text=_(
+            "64-bit dHash (hex) of the cached thumbnail — near-duplicates "
+            "sit within a small Hamming distance."
+        ),
+    )
+    thumbhash = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        verbose_name=_("ThumbHash"),
+        help_text=_(
+            "Compact placeholder encoding (~30 chars, computed by imagor) served "
+            "response so clients can render instant placeholders."
+        ),
+    )
+    quality_score = models.PositiveSmallIntegerField(
+        blank=True,
+        null=True,
+        db_index=True,
+        verbose_name=_("Quality Score"),
+        help_text=_(
+            "Technical image quality 0–100 (blur, exposure, contrast, "
+            "resolution) — computed, not curated."
+        ),
+    )
 
     class Meta:
         verbose_name = _("Image")

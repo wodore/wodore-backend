@@ -371,3 +371,159 @@ html.dark a.mfu-qa-rejected {
 html.dark a.mfu-qa-download {
   color: #6dc59f;
 }
+
+/* ----- Changelog AJAX quick actions ----- */
+a.mfu-qa.mfu-qa-busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+a.mfu-qa.mfu-qa-busy .material-symbols-outlined {
+  animation: mfu-qa-spin 1s linear infinite;
+}
+
+@keyframes mfu-qa-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+a.mfu-qa.mfu-qa-active {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+  border-radius: 6px;
+}
+
+html.dark a.mfu-qa.mfu-qa-active {
+  outline-color: currentColor;
+}
+
+.mfu-pill {
+  display: inline-block;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  padding: 0.05rem 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+}
+
+.mfu-pill-success {
+  color: #15803d;
+  border-color: #86efac;
+  background: rgba(134, 239, 172, 0.15);
+}
+
+.mfu-pill-warning {
+  color: #b45309;
+  border-color: #fcd34d;
+  background: rgba(252, 211, 77, 0.15);
+}
+
+.mfu-pill-danger {
+  color: #b91c1c;
+  border-color: #fca5a5;
+  background: rgba(252, 165, 165, 0.15);
+}
+
+html.dark .mfu-pill-success {
+  color: #4ade80;
+}
+
+html.dark .mfu-pill-warning {
+  color: #fbbf24;
+}
+
+html.dark .mfu-pill-danger {
+  color: #f87171;
+}
+
+/* ----- Widget: dark input surfaces (the base-* variables do not flip) ----- */
+html.dark .mfu .mfu-urlrow,
+html.dark .mfu .mfu-filerow {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+html.dark .mfu .mfu-urlrow:focus-within,
+html.dark .mfu .mfu-filerow:focus-within {
+  border-color: rgba(109, 197, 159, 0.6);
+}
+
+html.dark .mfu .mfu-input {
+  color: #e5e7eb;
+}
+
+html.dark .mfu .mfu-input::placeholder {
+  color: #6b7280;
+}
+
+html.dark .mfu .mfu-preview-box {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* ----- ThumbHash previews: one horizontal row ----- */
+.mfu-th-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: flex-end;
+}
+
+.mfu-th {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.mfu-th small {
+  font-size: 0.65rem;
+  color: var(--color-base-400, #9ca3af);
+}
+
+/* ----- Unfold pill classes missing from the compiled CSS (amber set) -----
+   The admin's JIT build only contains classes its own templates use; the
+   warning/external pills need amber, which never occurs there. Standard
+   tailwind values, scoped to pills we render. */
+.bg-amber-100 {
+  background-color: #fef3c7;
+}
+
+.text-amber-700 {
+  color: #b45309;
+}
+
+html.dark .bg-amber-100 {
+  background-color: rgba(245, 158, 11, 0.2);
+}
+
+html.dark .text-amber-700 {
+  color: #fbbf24;
+}
+
+/* ----- Status cell: pill on line 1, quick buttons on line 2 ----- */
+.mfu-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+}
+
+.mfu-cell-actions {
+  display: flex;
+  gap: 0.1rem;
+}
+
+/* ----- Serving cell: pill and download button on one line ----- */
+.mfu-inline {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.2rem;
+  white-space: nowrap;
+}

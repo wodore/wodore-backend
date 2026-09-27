@@ -4,6 +4,7 @@ Defines the unified image schema returned by all providers.
 """
 
 from datetime import datetime
+from typing import Any
 
 from geojson_pydantic import Feature, FeatureCollection, Point
 from hut_services import LocationSchema
@@ -152,6 +153,27 @@ class ImagePropertiesSchema(BaseModel):
     # Optional: Link back to GeoPlace (if image is associated with a place)
     place: ImagePlaceReferenceSchema | None = Field(
         None, description="Associated GeoPlace or Hut reference"
+    )
+
+    # Placeholder rendering primitives (from technical assessment)
+    thumbhash: str | None = Field(
+        None,
+        description=(
+            "ThumbHash placeholder (~30 chars) — decode for an instant "
+            "blurred preview while the image loads (computed by imagor)"
+        ),
+    )
+    thumbhashes: dict[str, str] | None = Field(
+        None,
+        description=(
+            "ThumbHash per rendering context (thumb_square, thumb_landscape, "
+            "thumb_portrait, preview) — computed on the exact transformed variant"
+        ),
+    )
+
+    # Provider-specific extras (quality_score, duplicate_of, ...)
+    extra: dict[str, Any] | None = Field(
+        None, description="Additional provider/assessment data"
     )
 
 

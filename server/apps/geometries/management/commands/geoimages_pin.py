@@ -79,12 +79,21 @@ class Command(BaseCommand):
                 "this makes the first visitor's render instant."
             ),
         )
+        parser.add_argument(
+            "--assess",
+            action="store_true",
+            help=(
+                "After syncing, run quality assessment (phash, quality score, "
+                "thumbhash, duplicate detection) on the place's pins."
+            ),
+        )
 
     def handle(self, *args, **options):
         if not options["place"] and not options["all"]:
             raise CommandError("Nothing to do: pass --place=<slug> or --all.")
         check_origins = bool(options["check_origins"])
         warmup = bool(options["warmup_image_cache"])
+        assess = bool(options["assess"])
         dry_run = bool(options["dry_run"])
 
         if options["place"]:
@@ -110,6 +119,11 @@ class Command(BaseCommand):
                 continue
             synced += 1
             self.stdout.write(f"synced {label}: {stats}")
+            if assess:
+                from server.apps.images.assessment import assess_place_pins
+
+                assess_stats = assess_place_pins(place)
+                self.stdout.write(f"  assessed pins for {label}: {assess_stats}")
             if warmup:
                 warmed = warmup_place_image_cache(place)
                 self.stdout.write(f"  warmed {warmed} imagor variants for {label}")

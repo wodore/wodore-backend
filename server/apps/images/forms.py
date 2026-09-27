@@ -49,7 +49,9 @@ ImageAdminFieldsets = [
             "classes": ["tab"],
             "fields": [
                 ("image_meta"),
+                ("thumbhash_preview",),
                 ("capture_date", "provider_synced_at"),
+                ("phash", "quality_score"),
                 ("granted_by_anonym", "granted_by_user", "granted_date"),
                 ("uploaded_by_anonym", "uploaded_by_user", "uploaded_date"),
                 ("created", "modified"),
