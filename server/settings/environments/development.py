@@ -17,6 +17,9 @@ from server.settings.components.common import (
     MIDDLEWARE,
 )
 from server.settings.components.csp import CONTENT_SECURITY_POLICY
+from server.settings.components.oidc import (
+    ZITADEL_RP_ENABLED,
+)
 
 # Setting the development status:
 
@@ -224,9 +227,6 @@ DATABASES["default"]["CONN_MAX_AGE"] = 0
 AXES_ENABLED = False
 
 # Zitadel RP mode only (AUTH_PROVIDER=zitadel): refresh OIDC sessions.
-from server.settings.components.oidc import (
-    ZITADEL_RP_ENABLED,  # pyright: ignore[reportUndefinedVariable]
-)
 
 if ZITADEL_RP_ENABLED:
     MIDDLEWARE += ("mozilla_django_oidc.middleware.SessionRefresh",)  # pyright: ignore[reportUndefinedVariable]

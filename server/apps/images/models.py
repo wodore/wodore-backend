@@ -80,7 +80,16 @@ class Image(TimeStampedModel):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
-    image = MetaImageField(upload_to="images/", meta_field="image_meta", blank=False)
+    image = MetaImageField(
+        upload_to="images/",
+        meta_field="image_meta",
+        blank=True,
+        help_text=_(
+            "Local image file. Pinned external images have no local file — "
+            "they are served from the source URL through imagor and can be "
+            "localized later via 'Download raw'."
+        ),
+    )
     image_meta = models.JSONField(
         blank=True, null=True, verbose_name=_("Image Metadata")
     )
@@ -97,7 +106,15 @@ class Image(TimeStampedModel):
     author_url = models.URLField(
         blank=True, max_length=500, null=True, default="", verbose_name=_("Author URL")
     )
-    caption = models.TextField(max_length=400, verbose_name=_("Caption"), blank=False)
+    caption = models.TextField(
+        max_length=400,
+        verbose_name=_("Caption"),
+        blank=True,
+        default="",
+        help_text=_(
+            "Optional. Pinned external images default to a cleaned-up file name."
+        ),
+    )
     tags = models.ManyToManyField(
         ImageTag, related_name="images", verbose_name=_("Tags"), blank=True
     )
@@ -175,6 +192,12 @@ class Image(TimeStampedModel):
         choices=ReviewStatusChoices.choices,
         default=ReviewStatusChoices.approved,
         verbose_name=_("Review status"),
+    )
+    provider_synced_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        verbose_name=_("Provider Synced At"),
+        help_text=_("Last refresh from the external provider."),
     )
 
     class Meta:

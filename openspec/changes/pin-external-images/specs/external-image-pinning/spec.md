@@ -50,20 +50,21 @@ request; no prior warm-up run SHALL be required.
 - **THEN** the response is served from pins without provider involvement
 
 ### Requirement: Queued refresh for stale pins
-When a request finds a hut's pins older than 24 hours, the system SHALL only
-enqueue a background refresh task (django-q2) and respond immediately from the
-existing pins. The refresh SHALL be debounced per hut. Provider calls SHALL
-occur exclusively in sync paths (background refresh, forced sync, lazy first
-visit), never on the plain hot path.
+The system SHALL support background refresh for both huts and GeoPlaces.
+When a request finds a place's pins older than 24 hours, the system SHALL
+only enqueue a background refresh task (django-q2) and respond immediately
+from the existing pins. The refresh SHALL be debounced per place. Provider
+calls SHALL occur exclusively in sync paths (background refresh, forced
+sync, lazy first visit), never on the plain hot path.
 
 #### Scenario: Stale pins enqueue, visitor is not delayed
 
-- **WHEN** a request arrives for a hut whose pins are 25 hours old
-- **THEN** the response returns from pins/response cache without waiting for providers and at most one refresh task is enqueued for that hut within the debounce window
+- **WHEN** a request arrives for a place (hut or geoplace) whose pins are 25 hours old
+- **THEN** the response returns from pins/response cache without waiting for providers and at most one refresh task is enqueued for that place within the debounce window
 
 #### Scenario: Fresh pins enqueue nothing
 
-- **WHEN** a request arrives for a hut whose pins are 1 hour old
+- **WHEN** a request arrives for a place whose pins are 1 hour old
 - **THEN** no background task is enqueued
 
 ### Requirement: Pin visibility control
@@ -85,3 +86,15 @@ hygiene sweep of rarely visited huts.
 
 - **WHEN** `geoimages_pin --hut=laemmeren --dry-run` runs
 - **THEN** it reports the pins it would create/update without writing
+
+### Requirement: Dead-origin flagging
+The pin sync SHALL be able to verify pinned images against their origins.
+When enabled, pins that are missing from fresh provider results get their
+origin URL checked; a dead origin (HTTP 404/410) SHALL move the pin to
+`review_status=pending` with an explanatory review comment. Pins are never
+auto-deleted.
+
+#### Scenario: Dead origin moves pin to review
+
+- **WHEN** a sync with origin checking runs and a pinned image's origin returns HTTP 404
+- **THEN** the pin's review status becomes pending and its review comment names the dead origin

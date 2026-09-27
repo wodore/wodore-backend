@@ -5,7 +5,10 @@ This file is required and if development.py is present these
 values are overridden.
 """
 
-from server.settings.components.common import DJANGO_TRUSTED_DOMAINS
+from server.settings.components.common import DJANGO_TRUSTED_DOMAINS, MIDDLEWARE
+from server.settings.components.oidc import (
+    ZITADEL_RP_ENABLED,
+)
 
 # Production flags:
 # https://docs.djangoproject.com/en/4.2/howto/deployment/
@@ -60,9 +63,6 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 ]
 
 # Zitadel RP mode only (AUTH_PROVIDER=zitadel): refresh OIDC sessions.
-from server.settings.components.oidc import (
-    ZITADEL_RP_ENABLED,  # pyright: ignore[reportUndefinedVariable]
-)
 
 if ZITADEL_RP_ENABLED:
-    MIDDLEWARE += ("mozilla_django_oidc.middleware.SessionRefresh",)  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+    MIDDLEWARE += ("mozilla_django_oidc.middleware.SessionRefresh",)  # pyright: ignore[reportUndefinedVariable]

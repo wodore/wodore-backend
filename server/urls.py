@@ -70,12 +70,17 @@ urlpatterns = [
     path("", index, name="index"),
 ]
 
-# Auth provider surfaces. Both blocks are prepended, not appended:
-# "admin/login/" must be matched BEFORE path("admin/", admin.site.urls)
-# in the base list above, otherwise the admin site's own login form shadows
-# the redirect and the admin silently falls back to the classic password
-# form (regression introduced in #150). The admin-login bridge preserves
-# the deep-link ?next= target through to the provider's login page.
+# Classic Zitadel relying-party routes (AUTH_PROVIDER=zitadel, the default
+# outside dev/test): mozilla-django-oidc endpoints + the admin login
+# redirect. #183 replaced the old OIDC_ENABLED block below with the
+# allauth surface but dropped this one - without it /oidc/authenticate/
+# is 404 and neither the admin SSO nor the SPA's Zitadel flow work.
+# The admin-login bridge (in both provider blocks) preserves the
+# deep-link ?next= target through to the provider's login page.
+# Prepended, not appended: "admin/login/" must be matched BEFORE
+# path("admin/", admin.site.urls) in the base list above, otherwise the
+# admin site's own login form shadows the redirect and the admin silently
+# falls back to the classic password form (regression introduced in #150).
 if settings.ZITADEL_RP_ENABLED:
     urlpatterns = [
         path("oidc/", include("mozilla_django_oidc.urls")),
@@ -87,10 +92,10 @@ if settings.ZITADEL_RP_ENABLED:
         *urlpatterns,
     ]
 
+# Built-in OIDC provider (DOT) + account management (allauth): direct
+# logins without a ?next= target land in the admin (LOGIN_REDIRECT_URL).
 if settings.OIDC_ENABLED:
     urlpatterns = [
-        # Unified login (allauth): direct logins without a ?next= target
-        # land in the admin (LOGIN_REDIRECT_URL).
         path(
             "admin/login/",
             account_views.admin_login_redirect,

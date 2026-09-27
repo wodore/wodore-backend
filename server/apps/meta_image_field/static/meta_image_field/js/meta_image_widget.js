@@ -25,14 +25,37 @@
       this.rootEl = elem;
       this.fileInput = elem.querySelector('input[type="file"]');
       this.urlInput = elem.querySelector("#url_upload");
+      this.downloadRawBtn = elem.querySelector(".mfu-download-raw");
+      this.fileNameInput = elem.querySelector(".mfu-filename");
+      this.rawLinkRow = elem.querySelector(".mfu-rawlink-row");
+      this.dlBox = elem.querySelector(".mfu-dl");
+      this.dlBar = elem.querySelector(".mfu-progress-fill");
+      this.dlMsg = elem.querySelector(".mfu-dl-msg");
+      this.rootMsg = {
+        downloaded: elem.dataset.msgDownloaded,
+        failed: elem.dataset.msgFailed,
+        fallback: elem.dataset.msgFallback,
+        local: elem.dataset.labelLocal,
+      };
       //this.metaInput = document.querySelector('.imagefocus-input[data-image-field="' + this.fileInput.name + '"]')
       // TODO this does not work with different meta field name
       this.metaInput = document.querySelector("#id_image_meta");
-      console.log(this.metaInput);
       this.imageFrame = elem.querySelector(".imagefocus-file-upload__image");
       this.removeAreaBtn = elem.querySelector(".imagefocus-file-remove-area");
       this.previewImage = this.imageFrame.querySelector("img");
       this.inputName = this.fileInput.name;
+    }
+
+    ensurePreviewImage() {
+      // Pinned external images render their raw URL; a brand-new form has no
+      // image at all — create the element on demand so URL input and focal
+      // selection always have something to work with.
+      if (!this.previewImage) {
+        this.previewImage = document.createElement("img");
+        this.previewImage.id = "image-preview";
+        this.imageFrame.appendChild(this.previewImage);
+      }
+      return this.previewImage;
     }
 
     getFocusPointInputValue() {
@@ -62,6 +85,18 @@
       this.urlInput.addEventListener("input", (evnt) =>
         this.handleUrlChange(evnt),
       );
+      if (this.downloadRawBtn) {
+        this.downloadRawBtn.addEventListener("click", () =>
+          this.handleDownloadRaw(),
+        );
+        // A manually entered URL takes precedence: the button becomes a
+        // plain "Download" for whatever is in the URL field; empty input
+        // falls back to "Download raw" for the pinned source URL.
+        this.urlInput.addEventListener("input", () =>
+          this.updateDownloadButton(),
+        );
+        this.updateDownloadButton();
+      }
       this.stage.listen("crop.change", (widget, evnt) =>
         this.handleFocusAreaClick(widget, evnt),
       );
@@ -96,8 +131,8 @@
       const metaValue = JSON.stringify({
         focal: this.focalArea,
         crop: this.cropArea,
-        width: this.previewImage.naturalWidth,
-        height: this.previewImage.naturalHeight,
+        width: this.previewImage ? this.previewImage.naturalWidth : undefined,
+        height: this.previewImage ? this.previewImage.naturalHeight : undefined,
       });
       this.metaInput.value = metaValue;
       this.metaInput.dispatchEvent(new Event("change"));
@@ -108,7 +143,7 @@
       if (!file) return;
       const reader = new FileReader();
       reader.onload = (evnt) => {
-        this.previewImage.src = evnt.target.result;
+        this.ensurePreviewImage().src = evnt.target.result;
         this.handleRemoveArea();
         this.updateMetadata();
       };
@@ -116,11 +151,135 @@
     }
 
     handleUrlChange(evnt) {
-      console.log(this.urlInput.value);
-      console.log(evnt);
-      this.previewImage.src = evnt.target.value;
+      this.ensurePreviewImage().src = evnt.target.value;
       this.updateMetadata();
       this.handleRemoveArea();
+    }
+
+    updateDownloadButton() {
+      if (!this.downloadRawBtn) return;
+      const hasRaw = !!this.downloadRawBtn.dataset.rawUrl;
+      const hasInput = !!this.urlInput.value.trim();
+      // Visible when there is something to download: a typed URL or the
+      // pinned raw source (raw is absent once a local file exists).
+      this.downloadRawBtn.hidden = !hasRaw && !hasInput;
+      const label = this.downloadRawBtn.querySelector(".mfu-btn-label");
+      if (!label) return;
+      label.textContent = hasInput
+        ? "Download"
+        : this.downloadRawBtn.dataset.labelRaw || "Download raw";
+    }
+
+    async handleDownloadRaw() {
+      // "Download"/"Download raw": fetch the URL (manual input takes
+      // precedence over the pinned raw URL) through the admin proxy
+      // (same-origin, progress via content-length), then attach the bytes as
+      // the form's file input — identical to picking a local file. Saving the
+      // form persists it; no URL round-trip needed.
+      const rawUrl =
+        this.urlInput.value.trim() || this.downloadRawBtn.dataset.rawUrl;
+      const endpoint = this.downloadRawBtn.dataset.endpoint;
+      const btnLabel = this.downloadRawBtn.querySelector(".mfu-btn-label");
+      this.downloadRawBtn.disabled = true;
+      this.setDlProgress(0, "indeterminate");
+      this.setDlMessage("");
+      try {
+        const resp = await fetch(
+          `${endpoint}?url=${encodeURIComponent(rawUrl)}`,
+        );
+        if (!resp.ok) {
+          let detail = `HTTP ${resp.status}`;
+          try {
+            const body = await resp.json();
+            if (body && body.error) detail = body.error;
+          } catch (_e) {
+            /* not JSON */
+          }
+          throw new Error(detail);
+        }
+        const total = Number(resp.headers.get("content-length")) || 0;
+        const reader = resp.body.getReader();
+        const chunks = [];
+        let received = 0;
+        while (true) {
+          // eslint-disable-next-line no-await-in-loop
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          received += value.length;
+          this.setDlProgress(
+            total ? Math.round((received / total) * 100) : 0,
+            total ? "determinate" : "indeterminate",
+          );
+        }
+        const blob = new Blob(chunks);
+        const name =
+          decodeURIComponent(rawUrl.split("/").pop().split("?")[0]) ||
+          "download.jpg";
+        const file = new File([blob], name, {
+          type: blob.type || "image/jpeg",
+        });
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        this.fileInput.files = dt.files;
+        this.fileInput.dispatchEvent(new Event("change"));
+        if (this.fileNameInput) {
+          this.fileNameInput.value = file.name;
+        }
+        this.markAsLocal();
+        this.urlInput.value = "";
+        this.setDlProgress(100, "done");
+        this.setDlMessage(this.rootMsg.downloaded, "success");
+      } catch (err) {
+        // Fall back to the classic flow: the URL field carries the source,
+        // saving downloads it server-side.
+        this.urlInput.value = rawUrl;
+        this.urlInput.dispatchEvent(new Event("input"));
+        this.setDlProgress(0, "error");
+        this.setDlMessage(
+          `${this.rootMsg.failed}: ${err.message}. ${this.rootMsg.fallback}`,
+          "error",
+        );
+      } finally {
+        this.downloadRawBtn.disabled = false;
+        if (btnLabel) btnLabel.textContent = btnLabel.textContent; // no-op keeps label
+      }
+    }
+
+    setDlProgress(percent, mode) {
+      if (!this.dlBox) return;
+      this.dlBox.hidden = false;
+      if (!this.dlBar) return;
+      if (mode === "indeterminate") {
+        this.dlBar.classList.add("mfu-progress-indeterminate");
+        this.dlBar.style.width = "100%";
+      } else {
+        this.dlBar.classList.remove("mfu-progress-indeterminate");
+        this.dlBar.style.width = `${percent}%`;
+        this.dlBar.classList.toggle("mfu-progress-done", mode === "done");
+        this.dlBar.classList.toggle("mfu-progress-error", mode === "error");
+      }
+    }
+
+    setDlMessage(text, kind) {
+      if (!this.dlMsg) return;
+      this.dlMsg.textContent = text;
+      this.dlMsg.className = `mfu-dl-msg${kind ? ` mfu-dl-msg-${kind}` : ""}`;
+    }
+
+    markAsLocal() {
+      // Flip the serving hint and drop the raw link/download UI.
+      const badge = this.rootEl.querySelector(".mfu-badge-external");
+      if (badge) {
+        badge.classList.remove("mfu-badge-external");
+        badge.classList.add("mfu-badge-local");
+        const icon = badge.querySelector(".material-symbols-outlined");
+        if (icon) icon.textContent = "cloud_done";
+        const label = badge.lastChild;
+        if (label) label.textContent = this.rootMsg.local || "";
+      }
+      if (this.rawLinkRow) this.rawLinkRow.hidden = true;
+      if (this.downloadRawBtn) this.downloadRawBtn.hidden = true;
     }
   }
 
