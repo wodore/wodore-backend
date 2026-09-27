@@ -154,11 +154,11 @@ class TestAssessImage:
 
 class TestAssessPlace:
     def test_duplicates_marked_weaker_twin(self, hut, monkeypatch):
-        from server.apps.images import assessment
-
         # Two pins whose fetch returns the same pixels, plus one smooth
         # gradient (guaranteed far from noise in dhash space).
         import numpy as np
+
+        from server.apps.images import assessment
 
         gradient = PILImage.fromarray(
             np.tile(np.linspace(0, 255, 360, dtype=np.uint8), (240, 1))[
