@@ -19,6 +19,19 @@ from .schemas import GeoPlaceSchema
 logger = structlog.get_logger()
 
 
+def _assessment_extra(img) -> dict | None:
+    """Assessment payload served as feature properties.extra."""
+    extra: dict = {}
+    if getattr(img, "blurhash", None):
+        extra["blurhash"] = img.blurhash
+    if getattr(img, "quality_score", None) is not None:
+        extra["quality_score"] = img.quality_score
+    meta = img.image_meta or {}
+    if meta.get("duplicate_of"):
+        extra["duplicate_of"] = meta["duplicate_of"]
+    return extra or None
+
+
 class WodoreProvider(ImageProvider):
     """
     Provider for internal Wodore database images.
@@ -125,6 +138,7 @@ class WodoreProvider(ImageProvider):
                     img = assoc.image
                     # Association score = display order (openspec pin-external-images)
                     result_score = assoc.score if assoc.score is not None else 50
+                    extra = _assessment_extra(img)
                     # Filter: must be active, approved, and not marked for no publication
                     if not img.is_active:
                         continue
@@ -220,6 +234,7 @@ class WodoreProvider(ImageProvider):
                         score=result_score,  # association score; 50 fallback for uncurated
                         width=width,
                         height=height,
+                        extra=extra,
                         focal=focal_area,
                         crop=crop_area,
                     )
@@ -328,6 +343,7 @@ class WodoreProvider(ImageProvider):
                 for assoc in assocs:
                     img = assoc.image
                     result_score = assoc.score if assoc.score is not None else 50
+                    extra = _assessment_extra(img)
                     distance_m = (
                         hut.distance.m if hasattr(hut.distance, "m") else hut.distance  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
                     )
@@ -413,6 +429,7 @@ class WodoreProvider(ImageProvider):
                         score=result_score,  # association score; 50 fallback for uncurated
                         width=width,
                         height=height,
+                        extra=extra,
                         focal=focal_area,
                         crop=crop_area,
                     )

@@ -149,6 +149,7 @@ class ImageAdmin(ModelAdmin):
         "disable_selected_images",
         "reject_selected_images",
         "download_raw_selected_images",
+        "assess_selected_images",
     )
 
     def get_urls(self):
@@ -299,6 +300,24 @@ class ImageAdmin(ModelAdmin):
         self.message_user(
             request,
             f"Downloaded {done}, skipped {skipped}, failed {failed}.",
+        )
+
+    @admin.action(description=_("Assess selected images (quality, phash, blurhash)"))
+    def assess_selected_images(self, request, queryset):
+        from server.apps.images.assessment import assess_image
+
+        assessed = skipped = failed = 0
+        for obj in queryset:
+            try:
+                if assess_image(obj):
+                    assessed += 1
+                else:
+                    skipped += 1  # already carries phash + quality
+            except Exception:
+                failed += 1
+        self.message_user(
+            request,
+            f"Assessed {assessed}, skipped {skipped}, failed {failed}.",
         )
 
     def download_raw_view(self, request: HttpRequest):

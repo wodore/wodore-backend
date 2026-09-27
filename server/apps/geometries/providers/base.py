@@ -1457,9 +1457,14 @@ def post_process_images(
                 },
             }
 
-            # Add extra data if present
+            # Add extra data if present; blurhash is a rendering primitive
+            # every client wants — promote it to a first-class property.
             if result.extra:
-                feature["properties"]["extra"] = result.extra
+                extra = dict(result.extra)
+                if "blurhash" in extra:
+                    feature["properties"]["blurhash"] = extra.pop("blurhash")
+                if extra:
+                    feature["properties"]["extra"] = extra
 
             final_results.append(feature)
 
