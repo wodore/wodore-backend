@@ -210,13 +210,13 @@ class Image(TimeStampedModel):
             "sit within a small Hamming distance."
         ),
     )
-    blurhash = models.CharField(
+    thumbhash = models.CharField(
         max_length=50,
         blank=True,
         null=True,
-        verbose_name=_("BlurHash"),
+        verbose_name=_("ThumbHash"),
         help_text=_(
-            "Compact placeholder encoding (~30 chars) served with the API "
+            "Compact placeholder encoding (~30 chars, computed by imagor) served "
             "response so clients can render instant placeholders."
         ),
     )

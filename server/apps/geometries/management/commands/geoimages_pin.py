@@ -84,7 +84,7 @@ class Command(BaseCommand):
             action="store_true",
             help=(
                 "After syncing, run quality assessment (phash, quality score, "
-                "blurhash, duplicate detection) on the place's pins."
+                "thumbhash, duplicate detection) on the place's pins."
             ),
         )
 

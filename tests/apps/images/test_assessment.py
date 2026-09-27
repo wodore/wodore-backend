@@ -1,4 +1,4 @@
-"""Tests for technical image assessment (phash, quality, blurhash, duplicates).
+"""Tests for technical image assessment (phash, quality, thumbhash, duplicates).
 
 All pixel fixtures are generated with PIL/numpy — no network, no models.
 """
@@ -20,7 +20,6 @@ from server.apps.images.assessment import (
     assess_image,
     assess_place_pins,
     dhash64,
-    encode_blurhash,
     hamming_distance,
     quality_metrics,
     technical_score,
@@ -67,12 +66,6 @@ class TestPrimitives:
         assert hamming_distance(original, shifted) <= DUPLICATE_HAMMING_DISTANCE
         assert hamming_distance(original, unrelated) > DUPLICATE_HAMMING_DISTANCE
 
-    def test_blurhash_format(self):
-        digest = encode_blurhash(_textured())
-        assert len(digest) == 28  # 4x3 components: 6 + 2*11 base-83 chars
-        assert digest == encode_blurhash(_textured())  # deterministic
-        assert digest != encode_blurhash(_textured(seed=7))
-
     def test_quality_sharp_beats_blurred(self):
         sharp = quality_metrics(_textured())
         blurry = quality_metrics(_blurred(_textured()))
@@ -114,17 +107,17 @@ def _imagor(settings, monkeypatch):
     settings.IMAGOR_URL = "http://imagor.test"
     settings.IMAGOR_KEY = ""
 
-    def _fake_get(url, timeout=None):
-        class _Resp:
-            status_code = 200
-            content = _pil_bytes(_textured())
+    class _Resp:
+        status_code = 200
+        content = _pil_bytes(_textured())
 
-            def raise_for_status(self):
-                return None
+        def raise_for_status(self):
+            return None
 
-        return _Resp()
+        def json(self):
+            return {"thumbhash": "F/gJNQJXh493Z4lneYqHd4ZwZAk2"}
 
-    monkeypatch.setattr(assessment.requests, "get", _fake_get)
+    monkeypatch.setattr(assessment.requests, "get", lambda url, timeout=None: _Resp())
 
 
 class TestAssessImage:
@@ -147,7 +140,7 @@ class TestAssessImage:
         image = self._image()
         assert assess_image(image) is True
         assert len(image.phash) == 16
-        assert len(image.blurhash) == 28
+        assert image.thumbhash == "F/gJNQJXh493Z4lneYqHd4ZwZAk2"  # from imagor meta
         assert 0 <= image.quality_score <= 100
         assert "sharpness" in image.image_meta["quality"]
         assert "assessed_at" in image.image_meta
@@ -163,15 +156,36 @@ class TestAssessPlace:
     def test_duplicates_marked_weaker_twin(self, hut, monkeypatch):
         from server.apps.images import assessment
 
-        # Two pins whose fetch returns the same pixels, plus one distinct.
+        # Two pins whose fetch returns the same pixels, plus one smooth
+        # gradient (guaranteed far from noise in dhash space).
+        import numpy as np
+
+        gradient = PILImage.fromarray(
+            np.tile(np.linspace(0, 255, 360, dtype=np.uint8), (240, 1))[
+                :, :, None
+            ].repeat(3, axis=2)
+        )
         payloads = [
             _pil_bytes(_textured(seed=1)),
             _pil_bytes(_textured(seed=1)),  # near-duplicate
-            _pil_bytes(_textured(seed=2)),
+            _pil_bytes(gradient),
         ]
         calls = {"n": 0}
 
         def _fake_get(url, timeout=None):
+            if "/meta/" in url:  # thumbhash metadata request
+
+                class _Meta:
+                    status_code = 200
+
+                    def raise_for_status(self):
+                        return None
+
+                    def json(self):
+                        return {"thumbhash": "F/gJNQJXh493Z4lneYqHd4ZwZAk2"}
+
+                return _Meta()
+
             class _Resp:
                 status_code = 200
                 content = payloads[calls["n"] % 3]
@@ -202,14 +216,20 @@ class TestAssessPlace:
         )
         stats = assess_place_pins(hut)
         assert stats["duplicates"] == 1
-        dup = Image.objects.get(source_ident="wikicommons:File:Duplicate.jpg")
-        assert dup.image_meta["duplicate_of"] == "wikicommons:File:Test.jpg"
+        twin_a = Image.objects.get(source_ident="wikicommons:File:Test.jpg")
+        twin_b = Image.objects.get(source_ident="wikicommons:File:Duplicate.jpg")
+        marked = [img for img in (twin_a, twin_b) if img.image_meta.get("duplicate_of")]
+        unmarked = [
+            img for img in (twin_a, twin_b) if not img.image_meta.get("duplicate_of")
+        ]
+        assert len(marked) == 1 and len(unmarked) == 1  # exactly one twin marked
+        assert marked[0].image_meta["duplicate_of"] == unmarked[0].source_ident
         distinct = Image.objects.get(source_ident="wikicommons:File:Distinct.jpg")
-        assert "duplicate_of" not in distinct.image_meta
+        assert not distinct.image_meta.get("duplicate_of")
 
 
 class TestResponsePassthrough:
-    def test_blurhash_first_class_in_features(self, hut, monkeypatch):
+    def test_thumbhash_first_class_in_features(self, hut, monkeypatch):
         from ninja.testing import TestClient
 
         from server.apps.geometries.api_images import router
@@ -220,7 +240,7 @@ class TestResponsePassthrough:
         response = client.get(f"/hut/{hut.slug}?radius=50&lang=en&limit=10")
         assert response.status_code == 200
         props = response.json()["features"][0]["properties"]
-        assert len(props["blurhash"]) == 28  # first-class, not nested
+        assert props["thumbhash"] == "F/gJNQJXh493Z4lneYqHd4ZwZAk2"  # first-class
         assert "quality_score" in props["extra"]
 
 
@@ -237,4 +257,4 @@ class TestCommand:
         pin_place_images(hut, [_result(score=80)])
         call_command("geoimages_assess", place=hut.slug)
         image = Image.objects.get(source_ident="wikicommons:File:Test.jpg")
-        assert image.phash and image.blurhash
+        assert image.phash and image.thumbhash

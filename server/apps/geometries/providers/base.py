@@ -1457,12 +1457,12 @@ def post_process_images(
                 },
             }
 
-            # Add extra data if present; blurhash is a rendering primitive
+            # Add extra data if present; thumbhash is a rendering primitive
             # every client wants — promote it to a first-class property.
             if result.extra:
                 extra = dict(result.extra)
-                if "blurhash" in extra:
-                    feature["properties"]["blurhash"] = extra.pop("blurhash")
+                if "thumbhash" in extra:
+                    feature["properties"]["thumbhash"] = extra.pop("thumbhash")
                 if extra:
                     feature["properties"]["extra"] = extra
 

@@ -8,7 +8,9 @@ columns plus a per-signal breakdown in ``image_meta.quality``.
 Near-duplicates are detected within a place by Hamming distance of the
 hashes (≤ ``DUPLICATE_HAMMING_DISTANCE``); the weaker twin(s) get a
 ``duplicate_of`` marker in ``image_meta`` — never hidden or deleted
-automatically.
+automatically. The ThumbHash placeholder is computed by imagor itself
+(``/meta/filters:thumbhash()``) — the image pipeline already decodes
+the pixels there.
 """
 
 import io
@@ -50,92 +52,6 @@ def dhash64(image: PILImage.Image) -> str:
 def hamming_distance(hash_a: str, hash_b: str) -> int:
     """Hamming distance between two hex hashes."""
     return (int(hash_a, 16) ^ int(hash_b, 16)).bit_count()
-
-
-_BLUR_ALPHABET = (
-    "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-    "#$%*+,-.:;=?@[]^_{|}~"
-)
-
-
-def _b83(value: int, length: int) -> str:
-    out = []
-    for i in range(1, length + 1):
-        out.append(_BLUR_ALPHABET[(value // (83 ** (length - i))) % 83])
-    return "".join(out)
-
-
-def _sign_pow(value: float, exponent: float) -> float:
-    return (abs(value) ** exponent) * (1 if value >= 0 else -1)
-
-
-def encode_blurhash(
-    image: PILImage.Image, components_x: int = 4, components_y: int = 3
-) -> str:
-    """BlurHash placeholder string (standard algorithm, numpy only).
-
-    Encodes the image's low-frequency DCT components as ~30 base-83
-    characters; clients decode it into an instant blurred placeholder
-    while the real image loads.
-    """
-    import numpy as np
-
-    img = image.convert("RGB").resize((32, 32), PILImage.Resampling.LANCZOS)
-    srgb = np.asarray(img, dtype=np.float32)
-    linear = np.where(
-        srgb <= 0.04045 * 255,
-        srgb / (255 * 12.92),
-        ((srgb / 255 + 0.055) / 1.055) ** 2.4,
-    )
-
-    y_grid, x_grid = np.mgrid[0:32, 0:32]
-    factors = np.zeros((components_y, components_x, 3), dtype=np.float32)
-    for j in range(components_y):
-        for i in range(components_x):
-            basis = np.cos(np.pi * i * x_grid / 31.0) * np.cos(
-                np.pi * j * y_grid / 31.0
-            )
-            normalisation = 1.0 if (i == 0 and j == 0) else 2.0
-            factors[j, i] = normalisation * (basis[..., None] * linear).mean(
-                axis=(0, 1)
-            )
-
-    def _to_srgb(value: float) -> int:
-        v = max(0.0, min(1.0, value))
-        if v <= 0.0031308:
-            return int(v * 255 + 0.5)
-        return int((1.055 * v ** (1 / 2.4) - 0.055) * 255 + 0.5)
-
-    dc = factors[0, 0]
-    ac = factors.reshape(-1, 3)[1:]
-
-    maximum = max(float(np.abs(ac).max(initial=0.0)), 0.0)
-    quantised_maximum = max(0, min(82, int(maximum * 166 - 0.5)))
-    maximum_value = (quantised_maximum + 1) / 166
-
-    parts = [
-        _b83((components_x - 1) + (components_y - 1) * 9, 1),
-        _b83(quantised_maximum, 1),
-    ]
-    dc_value = (
-        (_to_srgb(float(dc[0])) << 16)
-        + (_to_srgb(float(dc[1])) << 8)
-        + _to_srgb(float(dc[2]))
-    )
-    parts.append(_b83(dc_value, 4))
-    for component in ac:
-        quantised = [
-            max(
-                0,
-                min(
-                    18,
-                    int(_sign_pow(float(c) / maximum_value, 0.5) * 9 + 9.5),
-                ),
-            )
-            for c in component
-        ]
-        parts.append(_b83(quantised[0] * 19 * 19 + quantised[1] * 19 + quantised[2], 2))
-    return "".join(parts)
 
 
 def quality_metrics(image: PILImage.Image) -> dict:
@@ -217,8 +133,44 @@ def _thumb_url(image) -> str | None:
     )
 
 
+def _meta_url(image) -> str | None:
+    """Signed imagor metadata URL computing the ThumbHash placeholder.
+
+    ``GET {imagor}/{sig}/meta/filters:thumbhash()/<source>`` returns JSON
+    with ``thumbhash`` — the pixel decoding happens in imagor, which has
+    the source cached anyway.
+    """
+    from django.conf import settings
+
+    from server.apps.images.transfomer import ImagorImage
+
+    source = image.image if getattr(image, "image", None) else image.source_url_raw
+    if not source:
+        return None
+    path = (
+        f"meta/filters:thumbhash()/"
+        f"{ImagorImage.url_quote(str(source).strip('/'), quote='yes')}"
+    )
+    signature = ImagorImage.sign_path(path) or "unsafe"
+    return f"{settings.IMAGOR_URL}/{signature}/{path}"
+
+
+def _fetch_thumbhash(image) -> str | None:
+    """ThumbHash from imagor's metadata endpoint (None on any failure)."""
+    url = _meta_url(image)
+    if not url:
+        return None
+    try:
+        response = requests.get(url, timeout=20)
+        response.raise_for_status()
+        return response.json().get("thumbhash")
+    except Exception as e:
+        logger.debug("thumbhash_fetch_failed", image_id=str(image.id), error=str(e))
+        return None
+
+
 def assess_image(image, *, force: bool = False) -> bool:
-    """Compute phash + quality for one image; returns True when written.
+    """Compute phash + quality + thumbhash for one image; True when written.
 
     Skips images that already carry both values unless ``force``.
     """
@@ -244,7 +196,7 @@ def assess_image(image, *, force: bool = False) -> bool:
     meta["quality"] = metrics
     meta["assessed_at"] = timezone.now().isoformat()
     image.phash = dhash64(pil)
-    image.blurhash = encode_blurhash(pil)
+    image.thumbhash = _fetch_thumbhash(image)
     image.quality_score = technical_score(
         metrics, meta.get("width"), meta.get("height")
     )

@@ -1,9 +1,9 @@
-"""Assess pinned images: perceptual hash, quality score, blurhash, duplicates.
+"""Assess pinned images: perceptual hash, quality score, thumbhash, duplicates.
 
 Runs on pixels from our own imagor only (cached thumbnails); pure
 Pillow/numpy — no models, no external services. Results land on the
 Image rows (columns + image_meta breakdown) and are served through the
-image endpoints (properties.blurhash / properties.extra).
+image endpoints (properties.thumbhash / properties.extra).
 
 Schedulable via the Schedule admin (django-admin-runner, group
 "Images"); usually combined with geoimages_pin --assess.
@@ -68,7 +68,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--force-recompute",
             action="store_true",
-            help="Re-assess images that already carry phash/quality/blurhash.",
+            help="Re-assess images that already carry phash/quality/thumbhash.",
         )
 
     def handle(self, *args, **options):

@@ -156,11 +156,11 @@ class ImagePropertiesSchema(BaseModel):
     )
 
     # Placeholder rendering primitive (from technical assessment)
-    blurhash: str | None = Field(
+    thumbhash: str | None = Field(
         None,
         description=(
-            "BlurHash placeholder (~30 chars) — decode for an instant "
-            "blurred preview while the image loads"
+            "ThumbHash placeholder (~30 chars) — decode for an instant "
+            "blurred preview while the image loads (computed by imagor)"
         ),
     )
 

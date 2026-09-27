@@ -302,7 +302,7 @@ class ImageAdmin(ModelAdmin):
             f"Downloaded {done}, skipped {skipped}, failed {failed}.",
         )
 
-    @admin.action(description=_("Assess selected images (quality, phash, blurhash)"))
+    @admin.action(description=_("Assess selected images (quality, phash, thumbhash)"))
     def assess_selected_images(self, request, queryset):
         from server.apps.images.assessment import assess_image
 
