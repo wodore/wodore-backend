@@ -282,7 +282,11 @@ class TestQuickActionsAjax:
             headers={"X-Requested-With": "XMLHttpRequest"},
         )
         assert response.status_code == 200
-        assert response.json() == {"status": "ok", "review_status": "approved"}
+        body = response.json()
+        assert body["status"] == "ok"
+        assert body["review_status"] == "approved"
+        assert 'data-status="approved"' in body["review_html"]
+        assert "mfu-qa-approved" in body["review_html"]  # buttons included
         pin.refresh_from_db()
         assert pin.review_status == "approved"
 

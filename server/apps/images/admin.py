@@ -14,7 +14,12 @@ from django.urls import reverse
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
-from unfold.contrib.filters.admin import ChoicesCheckboxFilter
+from unfold.contrib.filters.admin import (
+    AutocompleteSelectFilter as UnfoldAutocompleteSelectFilter,
+)
+from unfold.contrib.filters.admin import (
+    ChoicesCheckboxFilter,
+)
 from unfold.decorators import display
 
 from server.apps.manager.admin import ModelAdmin
@@ -74,10 +79,8 @@ class ImageAdmin(ModelAdmin):
         "source",
         "serving",
         "quality_display",
-        "quick_actions",
         "tag_list",
         "review_tag",
-        "show_huts",
     )
     list_display_links = ("thumb", "caption_short")
     search_fields = ("author", "caption_i18n")
@@ -91,6 +94,7 @@ class ImageAdmin(ModelAdmin):
         "tags",
         "uploaded_by_user",
         "uploaded_by_anonym",
+        ("details__hut", UnfoldAutocompleteSelectFilter),
     )
     readonly_fields = (
         "id",
@@ -354,7 +358,14 @@ class ImageAdmin(ModelAdmin):
         obj.review_status = status
         obj.save(update_fields=["review_status"])
         if self._is_ajax(request):
-            return JsonResponse({"status": "ok", "review_status": status})
+            obj.refresh_from_db()
+            return JsonResponse(
+                {
+                    "status": "ok",
+                    "review_status": status,
+                    "review_html": self._review_tag_html(obj),
+                }
+            )
         messages.success(request, f"{obj}: review status set to {status}.")
         return self._redirect_back(request)
 
@@ -367,24 +378,6 @@ class ImageAdmin(ModelAdmin):
         if obj.quality_score is None:
             return "—"
         return obj.quality_score
-
-    @display(description="")
-    def quick_actions(self, obj):
-        """Per-row review buttons (download-raw lives in the Serving cell)."""
-        from django.urls import reverse as _reverse
-
-        buttons = []
-        for status, icon, title in (
-            ("approved", "check_circle", "Approve"),
-            ("disabled", "pause_circle", "Disable"),
-            ("rejected", "cancel", "Reject"),
-        ):
-            url = _reverse("admin:images_image_set_review", args=[obj.pk, status])
-            buttons.append(
-                f'<a href="{url}" class="mfu-qa mfu-qa-{status}" title="{title}">'
-                f'<span class="material-symbols-outlined">{icon}</span></a>'
-            )
-        return mark_safe("".join(buttons))
 
     @admin.action(description=_("Approve selected images"))
     def approve_selected_images(self, request, queryset):
@@ -567,16 +560,46 @@ class ImageAdmin(ModelAdmin):
 
     @display(
         description=_("Status"),  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-        ordering="status",
-        label={
-            Image.ReviewStatusChoices.approved: "success",
-            Image.ReviewStatusChoices.pending: "warning",  # green
-            Image.ReviewStatusChoices.rejected: "info",
-            # Image.ReviewStatusChoices.disabled: "info",
-        },
+        ordering="review_status",
     )
     def review_tag(self, obj):
-        return obj.review_status
+        """Status pill (unfold markup) + review quick buttons below it."""
+        return self._review_tag_html(obj)
+
+    #: Unfold pill classes per review status — same rendering as a reload.
+    REVIEW_PILLS = {
+        "approved": "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400",
+        "pending": "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
+        "disabled": "bg-base-500/8 text-base-700 dark:bg-base-500/20 dark:text-base-200",
+        "rejected": "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400",
+    }
+
+    def _review_tag_html(self, obj) -> str:
+        from django.urls import reverse as _reverse
+        from django.utils.safestring import mark_safe
+
+        status = obj.review_status
+        pill = (
+            '<span class="inline-block font-semibold rounded-default text-[11px] '
+            "uppercase whitespace-nowrap h-6 leading-6 px-2 "
+            f'{self.REVIEW_PILLS.get(status, "")}" data-status="{status}">{status}</span>'
+        )
+        buttons = []
+        for state, icon, title in (
+            ("approved", "check_circle", "Approve"),
+            ("disabled", "pause_circle", "Disable"),
+            ("rejected", "cancel", "Reject"),
+        ):
+            url = _reverse("admin:images_image_set_review", args=[obj.pk, state])
+            active = " mfu-qa-active" if state == status else ""
+            buttons.append(
+                f'<a href="{url}" class="mfu-qa mfu-qa-{state}{active}" title="{title}">'
+                f'<span class="material-symbols-outlined">{icon}</span></a>'
+            )
+        return mark_safe(
+            f'<div class="mfu-cell">{pill}'
+            f'<div class="mfu-cell-actions">{"".join(buttons)}</div></div>'
+        )
 
     @display(description=_("Huts"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def show_huts(self, obj):

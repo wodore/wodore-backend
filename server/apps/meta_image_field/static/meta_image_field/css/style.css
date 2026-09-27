@@ -485,3 +485,36 @@ html.dark .mfu .mfu-preview-box {
   font-size: 0.65rem;
   color: var(--color-base-400, #9ca3af);
 }
+
+/* ----- Unfold pill classes missing from the compiled CSS (amber set) -----
+   The admin's JIT build only contains classes its own templates use; the
+   warning/external pills need amber, which never occurs there. Standard
+   tailwind values, scoped to pills we render. */
+.bg-amber-100 {
+  background-color: #fef3c7;
+}
+
+.text-amber-700 {
+  color: #b45309;
+}
+
+html.dark .bg-amber-100 {
+  background-color: rgba(245, 158, 11, 0.2);
+}
+
+html.dark .text-amber-700 {
+  color: #fbbf24;
+}
+
+/* ----- Status cell: pill on line 1, quick buttons on line 2 ----- */
+.mfu-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+}
+
+.mfu-cell-actions {
+  display: flex;
+  gap: 0.1rem;
+}

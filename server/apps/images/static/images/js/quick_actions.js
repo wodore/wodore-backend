@@ -7,13 +7,6 @@
  * needed — both operations complete within the single request.
  * */
 (function () {
-  function statusOf(btn) {
-    if (btn.classList.contains("mfu-qa-approved")) return "approved";
-    if (btn.classList.contains("mfu-qa-disabled")) return "disabled";
-    if (btn.classList.contains("mfu-qa-rejected")) return "rejected";
-    return null;
-  }
-
   function setBusy(btn, busy) {
     const icon = btn.querySelector(".material-symbols-outlined");
     if (!icon) return;
@@ -52,15 +45,13 @@
       ">local</span>";
   }
 
-  function updateReviewPill(row, status) {
+  function updateReviewPill(row, reviewHtml) {
     const cell = row && row.querySelector("td.field-review_tag");
     if (!cell) return;
-    const label = {
-      approved: "success",
-      disabled: "warning",
-      rejected: "danger",
-    }[status];
-    cell.innerHTML = `<span class="mfu-pill mfu-pill-${label}">${status}</span>`;
+    // Server-rendered snippet: pill + buttons, identical to a reload.
+    if (reviewHtml) {
+      cell.innerHTML = reviewHtml;
+    }
   }
 
   document.addEventListener("click", async (event) => {
@@ -82,14 +73,7 @@
         btn.remove();
         updateServingCell(row, data.serving_html);
       } else {
-        const status = statusOf(btn);
-        row
-          .querySelectorAll(
-            ".mfu-qa-approved, .mfu-qa-disabled, .mfu-qa-rejected",
-          )
-          .forEach((other) => other.classList.remove("mfu-qa-active"));
-        btn.classList.add("mfu-qa-active");
-        updateReviewPill(row, status);
+        updateReviewPill(row, data.review_html);
       }
     } catch (error) {
       flashError(btn);
