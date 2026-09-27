@@ -16,7 +16,7 @@
 
 - [x] 3.1 Implement `pin_hut_images(hut, image_results)`: `get_or_create` by `(source_org, source_ident)`, update mutable fields, attach with `score = provider_score` (never overwrite existing), stamp `provider_synced_at`/`images_pinned_at`
 - [x] 3.2 Map `ImageResult` → `Image` fields (URLs, license, author, attribution, dimensions, capture date, captions)
-- [ ] 3.3 Dead-origin flagging: sync marks pins whose origin disappeared for review (no auto-delete)
+- [x] 3.3 Dead-origin flagging: sync marks pins whose origin disappeared for review (no auto-delete)
 - [x] 3.4 Tests: dedupe across syncs, mutable-field refresh, score semantics (new pin placement, manual curation survives), visibility filtering
 
 ## 4. Endpoint serving (PR B)
@@ -27,13 +27,14 @@
 - [x] 4.4 Invalidate response cache on pin writes (sync completion, curation changes)
 - [x] 4.5 Tests: fast-path isolation (no provider module touched), lazy write-through, forced sync, hidden-pin exclusion
 
-## 5. Background refresh + command (PR C)
+## 5. Background refresh + command (PR C — place-generic: huts and geoplaces)
 
-- [ ] 5.1 q2 task `sync_hut_images(slug)` running providers → pin service → cache invalidation
-- [ ] 5.2 Enqueue-only refresh in `images_for_hut` when pins older than 24 h, debounced per hut (cache-key lock)
-- [ ] 5.3 Management command `geoimages_pin` with `--all`, `--hut=<slug>`, `--dry-run` (django-admin-runner registration)
-- [ ] 5.4 Monthly q2 Schedule for the hygiene sweep (rarely visited huts)
-- [ ] 5.5 Tests: enqueue conditions (24 h boundary, debounce), task execution, command modes
+- [x] 5.1 q2 task `sync_place_images_task(place_type, slug)` running providers → pin service → cache invalidation, for huts and geoplaces
+- [x] 5.2 Enqueue-only refresh in `images_for_hut` and `images_for_place` when pins older than 24 h, debounced per place (cache-key lock)
+- [x] 5.3 Management command `geoimages_pin` with `--all`, `--place=<slug> --type={hut,geoplace,all}`, `--dry-run`, `--check-origins` (django-admin-runner registration)
+- [x] 5.4 Monthly q2 Schedule for the hygiene sweep (rarely visited places; created via the Schedule admin)
+- [x] 5.5 Dead-origin flagging: pins missing from fresh results with dead origins (HEAD 404/410) move to review — no auto-delete
+- [x] 5.6 Tests: enqueue conditions (24 h boundary, debounce), task execution for both place types, command modes, dead-origin flagging
 
 ## 6. Staging verification & rollout
 
