@@ -343,6 +343,11 @@ def images_for_place(
     )
 
     if serve_from_pins and place is not None:
+        # Queued refresh (never in-request): stale pins enqueue a q2 task;
+        # this visitor gets the current pins, the next one the fresh set.
+        from .pinning import maybe_enqueue_place_refresh
+
+        maybe_enqueue_place_refresh(place)
         try:
             # Pure-DB fast path — same as the hut endpoint.
             results = WodoreProvider(place_type="geoplace")._fetch_sync(
@@ -514,6 +519,11 @@ def images_for_hut(
     )
 
     if serve_from_pins and hut is not None:
+        # Queued refresh (never in-request): stale pins enqueue a q2 task;
+        # this visitor gets the current pins, the next one the fresh set.
+        from .pinning import maybe_enqueue_place_refresh
+
+        maybe_enqueue_place_refresh(hut)
         try:
             # Pure-DB fast path: the internal Wodore provider converts the
             # hut's associations (uploads + pins) to results — no external

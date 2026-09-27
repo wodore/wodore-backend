@@ -236,3 +236,250 @@ def place_has_visible_pins(place) -> bool:
         .exclude(image__license__no_publication=True)
         .exists()
     )
+
+
+# ---------------------------------------------------------------------------
+# Background refresh (openspec pin-external-images §5) — huts and geoplaces.
+# ---------------------------------------------------------------------------
+
+#: Canonical sync radius — matches the hut page requests (the QID/category
+#: strategies are radius-independent; only fallback strategies honor it).
+PIN_SYNC_RADIUS_M = 50
+
+#: A place's pins count as stale after this long; a visit then enqueues a
+#: background refresh (the visitor is never delayed). External pressure stays
+#: bounded by the provider-layer TTLs (7 d wikimedia / 30 d camp2camp).
+PIN_REFRESH_TTL_S = 24 * 3600
+
+#: One refresh task per place per window, regardless of visitor bursts.
+PIN_REFRESH_DEBOUNCE_S = 15 * 60
+
+
+def _pin_cache():
+    from django.core.cache import caches
+
+    return caches["persistent"]
+
+
+def place_type_of(place) -> str:
+    """'hut' or 'geoplace' for a supported place instance."""
+    from server.apps.geometries.models import GeoPlace
+    from server.apps.huts.models import Hut
+
+    if isinstance(place, Hut):
+        return "hut"
+    if isinstance(place, GeoPlace):
+        return "geoplace"
+    raise TypeError(f"Unsupported place type for pinning: {type(place)!r}")
+
+
+def sync_place_images(place, *, radius: float = PIN_SYNC_RADIUS_M, check_origins=False):
+    """Run the live provider pipeline for a place and pin the results.
+
+    Background counterpart of the endpoints' lazy write-through: same
+    provider call, same dedupe/score semantics. Provider-layer caches are
+    respected (``update_cache=False``) — the TTL layering keeps upstream
+    requests bounded (24 h pins ≤ 7 d wikimedia ≤ 30 d camp2camp).
+    """
+    import asyncio
+
+    from .providers import fetch_images_for_place
+
+    place_type = place_type_of(place)
+    results, _place_info = asyncio.run(
+        fetch_images_for_place(
+            place_slug=place.slug,
+            place_type=place_type,
+            radius=radius,
+            sources=None,
+            limit=100,
+            update_cache=False,
+        )
+    )
+    stats = pin_place_images(place, results)
+    if check_origins:
+        _flag_dead_origins(place, {r.provider + ":" + r.source_id for r in results})
+    return stats
+
+
+def sync_place_images_task(place_type: str, slug: str):
+    """django-q2 entrypoint: refresh a place's pins in the background."""
+    try:
+        place = _place_by_slug(place_type, slug)
+        if place is None:
+            logger.warning("place_sync_not_found", place_type=place_type, place=slug)
+            return
+        stats = sync_place_images(place)
+        logger.info(
+            "place_images_synced", place_type=place_type, place=slug, stats=str(stats)
+        )
+    except Exception:
+        logger.exception("place_sync_failed", place_type=place_type, place=slug)
+
+
+def _place_by_slug(place_type: str, slug: str):
+    if place_type == "hut":
+        from server.apps.huts.models import Hut
+
+        return Hut.objects.filter(slug=slug, is_active=True, is_public=True).first()
+    if place_type == "geoplace":
+        from server.apps.geometries.models import GeoPlace
+
+        return GeoPlace.objects.filter(
+            slug=slug, is_active=True, is_public=True
+        ).first()
+    raise ValueError(f"Unsupported place type: {place_type}")
+
+
+def maybe_enqueue_place_refresh(place) -> bool:
+    """Enqueue a background refresh if the place's pins are stale.
+
+    Never blocks or raises: the caller serves the response immediately and
+    the next visitor sees the fresh pins. Returns True when a task was
+    enqueued.
+    """
+    from django.utils import timezone
+
+    stamped = getattr(place, "images_pinned_at", None)
+    if stamped is None:
+        return False  # never pinned — lazy write-through owns the first visit
+    age = (timezone.now() - stamped).total_seconds()
+    if age <= PIN_REFRESH_TTL_S:
+        return False
+
+    place_type = place_type_of(place)
+    debounce_key = f"geoimages:pinrefresh:{place_type}:{place.slug}"
+    if _pin_cache().get(debounce_key):
+        return False
+    try:
+        from django_q.tasks import async_task
+
+        async_task(
+            "server.apps.geometries.pinning.sync_place_images_task",
+            place_type,
+            place.slug,
+            task_name=f"pin-sync {place_type}:{place.slug}",
+        )
+    except Exception:
+        logger.exception(
+            "place_refresh_enqueue_failed", place_type=place_type, place=place.slug
+        )
+        return False
+    _pin_cache().set(debounce_key, 1, timeout=PIN_REFRESH_DEBOUNCE_S)
+    logger.info(
+        "place_refresh_enqueued",
+        place_type=place_type,
+        place=place.slug,
+        age_h=round(age / 3600, 1),
+    )
+    return True
+
+
+def _flag_dead_origins(place, fresh_idents: set[str]) -> int:
+    """Move pins with dead origins (HEAD 404/410) to review — never delete.
+
+    A pin missing from fresh provider results is NOT considered dead (our own
+    radius/category filters legitimately drop far-away images); only an
+    origin that answers 404/410 is.
+    """
+    import requests
+
+    from django.conf import settings
+    from django.utils import timezone
+
+    assoc_model, place_field, _inv = _association_for(place)
+    flagged = 0
+    assocs = assoc_model.objects.filter(
+        **{place_field: place},
+        image__provider_synced_at__isnull=False,
+    ).exclude(image__source_ident__in=fresh_idents)
+    for assoc in assocs.select_related("image"):
+        image = assoc.image
+        if not image.source_url_raw:
+            continue
+        try:
+            head = requests.head(
+                image.source_url_raw,
+                headers={"User-Agent": settings.BOT_AGENT},
+                timeout=10,
+                allow_redirects=True,
+            )
+        except requests.RequestException:
+            continue
+        if head.status_code in (404, 410):
+            note = (
+                f"Origin gone (HTTP {head.status_code}) at "
+                f"{timezone.now():%Y-%m-%d}: {image.source_url_raw}"
+            )
+            image.review_comment = (image.review_comment + "\n" + note).strip()
+            image.review_status = Image.ReviewStatusChoices.pending
+            image.save(update_fields=["review_status", "review_comment"])
+            flagged += 1
+    if flagged:
+        logger.info(
+            "dead_origins_flagged",
+            place=place.slug,
+            place_type=place_type_of(place),
+            count=flagged,
+        )
+    return flagged
+
+
+#: Timeout for imagor warm-up requests (our own service, usually instant).
+WARMUP_TIMEOUT_S = 20
+
+#: First-rendered variants to pre-fetch (matches the hut page gallery/hero).
+WARMUP_VARIANTS = ("preview", "medium")
+
+
+def warmup_place_image_cache(
+    place, *, variants: tuple[str, ...] = WARMUP_VARIANTS
+) -> int:
+    """Pre-fetch imagor variant URLs for a place's pins.
+
+    Pinning is metadata-only by design (fast, provider API calls only) —
+    imagor stays cold until the first visitor. This requests the
+    first-rendered variants (preview/medium in each image's own
+    orientation) so the hot path is instant. Pixels come from our own
+    imagor; failures (dead origins return 404) are ignored.
+    """
+    import requests
+
+    from .providers import post_process_images
+    from .providers.wodore import WodoreProvider
+
+    place_type = place_type_of(place)
+    results = WodoreProvider(place_type=place_type)._fetch_sync(
+        [], place.location.y, place.location.x, PIN_SYNC_RADIUS_M
+    )
+    features = post_process_images(results)
+    warmed = 0
+    for feature in features:
+        props = feature.get("properties", {})
+        urls = props.get("urls", {})
+        group = "portrait" if props.get("is_portrait") else "landscape"
+        for variant in variants:
+            url = (urls.get(group) or {}).get(variant)
+            if not url:
+                continue
+            try:
+                response = requests.get(url, timeout=WARMUP_TIMEOUT_S)
+            except requests.RequestException as e:
+                logger.debug("warmup_request_failed", url=url, error=str(e))
+                continue
+            if response.status_code == 200:
+                warmed += 1
+            else:
+                logger.debug(
+                    "warmup_variant_unavailable",
+                    url=url,
+                    status=response.status_code,
+                )
+    if warmed:
+        logger.info(
+            "imagor_cache_warmed",
+            place=place.slug,
+            place_type=place_type,
+            variants=warmed,
+        )
+    return warmed
