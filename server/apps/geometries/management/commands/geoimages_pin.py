@@ -21,6 +21,7 @@ from django.db.models import Q
 from server.apps.geometries.pinning import (
     GeoPlaceImageAssociation,
     sync_place_images,
+    warmup_place_image_cache,
 )
 
 HELP_TYPE = "Which place type to sync: hut, geoplace or all (default)."
@@ -69,11 +70,21 @@ class Command(BaseCommand):
                 "(404/410) move to review instead of being deleted."
             ),
         )
+        parser.add_argument(
+            "--warmup-image-cache",
+            action="store_true",
+            help=(
+                "After syncing, pre-fetch the imagor variant URLs (preview/medium) "
+                "for each place's pins — the sync itself stays metadata-only; "
+                "this makes the first visitor's render instant."
+            ),
+        )
 
     def handle(self, *args, **options):
         if not options["place"] and not options["all"]:
             raise CommandError("Nothing to do: pass --place=<slug> or --all.")
         check_origins = bool(options["check_origins"])
+        warmup = bool(options["warmup_image_cache"])
         dry_run = bool(options["dry_run"])
 
         if options["place"]:
@@ -99,6 +110,9 @@ class Command(BaseCommand):
                 continue
             synced += 1
             self.stdout.write(f"synced {label}: {stats}")
+            if warmup:
+                warmed = warmup_place_image_cache(place)
+                self.stdout.write(f"  warmed {warmed} imagor variants for {label}")
         if not dry_run:
             self.stdout.write(
                 self.style.SUCCESS(f"Done: {synced} synced, {failed} failed.")

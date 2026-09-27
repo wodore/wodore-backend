@@ -423,3 +423,63 @@ def _flag_dead_origins(place, fresh_idents: set[str]) -> int:
             count=flagged,
         )
     return flagged
+
+
+#: Timeout for imagor warm-up requests (our own service, usually instant).
+WARMUP_TIMEOUT_S = 20
+
+#: First-rendered variants to pre-fetch (matches the hut page gallery/hero).
+WARMUP_VARIANTS = ("preview", "medium")
+
+
+def warmup_place_image_cache(
+    place, *, variants: tuple[str, ...] = WARMUP_VARIANTS
+) -> int:
+    """Pre-fetch imagor variant URLs for a place's pins.
+
+    Pinning is metadata-only by design (fast, provider API calls only) —
+    imagor stays cold until the first visitor. This requests the
+    first-rendered variants (preview/medium in each image's own
+    orientation) so the hot path is instant. Pixels come from our own
+    imagor; failures (dead origins return 404) are ignored.
+    """
+    import requests
+
+    from .providers import post_process_images
+    from .providers.wodore import WodoreProvider
+
+    place_type = place_type_of(place)
+    results = WodoreProvider(place_type=place_type)._fetch_sync(
+        [], place.location.y, place.location.x, PIN_SYNC_RADIUS_M
+    )
+    features = post_process_images(results)
+    warmed = 0
+    for feature in features:
+        props = feature.get("properties", {})
+        urls = props.get("urls", {})
+        group = "portrait" if props.get("is_portrait") else "landscape"
+        for variant in variants:
+            url = (urls.get(group) or {}).get(variant)
+            if not url:
+                continue
+            try:
+                response = requests.get(url, timeout=WARMUP_TIMEOUT_S)
+            except requests.RequestException as e:
+                logger.debug("warmup_request_failed", url=url, error=str(e))
+                continue
+            if response.status_code == 200:
+                warmed += 1
+            else:
+                logger.debug(
+                    "warmup_variant_unavailable",
+                    url=url,
+                    status=response.status_code,
+                )
+    if warmed:
+        logger.info(
+            "imagor_cache_warmed",
+            place=place.slug,
+            place_type=place_type,
+            variants=warmed,
+        )
+    return warmed

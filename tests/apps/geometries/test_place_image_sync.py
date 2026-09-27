@@ -260,3 +260,63 @@ class TestGeoimagesPinCommand:
         )
         call_command("geoimages_pin", all=True)
         assert hut.slug in seen and place.slug in seen
+
+
+class TestImagorWarmup:
+    """--warmup-image-cache: metadata-only sync stays, pixels prefetched."""
+
+    def _settings(self, settings):
+        settings.IMAGOR_URL = "http://imagor.test"
+        settings.IMAGOR_KEY = ""
+
+    def test_warms_preview_and_medium(self, hut, monkeypatch, settings):
+        from unittest.mock import MagicMock
+
+        from server.apps.geometries.pinning import warmup_place_image_cache
+
+        self._settings(settings)
+        pin_place_images(
+            hut, [_result(score=80), _result(source_id="File:B.jpg", score=40)]
+        )
+
+        fetched = []
+        fake = MagicMock()
+        fake.status_code = 200
+
+        def _get(url, **kwargs):
+            fetched.append(url)
+            return fake
+
+        monkeypatch.setattr("requests.get", _get)
+        warmed = warmup_place_image_cache(hut)
+        assert warmed == 4  # 2 pins x (preview + medium)
+        assert all(url.startswith("http://imagor.test/") for url in fetched)
+        assert len(fetched) == 4
+
+    def test_dead_origin_ignored(self, hut, monkeypatch, settings):
+        from unittest.mock import MagicMock
+
+        from server.apps.geometries.pinning import warmup_place_image_cache
+
+        self._settings(settings)
+        pin_place_images(hut, [_result(score=80)])
+
+        fake = MagicMock()
+        fake.status_code = 404
+        monkeypatch.setattr("requests.get", MagicMock(return_value=fake))
+        assert warmup_place_image_cache(hut) == 0  # tolerated, not an error
+
+    def test_command_flag_calls_warmup(self, hut, monkeypatch, settings):
+        from unittest.mock import MagicMock
+
+        self._settings(settings)
+        stub = _FetchStub([_result(score=55)])
+        monkeypatch.setattr(
+            "server.apps.geometries.providers.fetch_images_for_place", stub
+        )
+        warmed = MagicMock(return_value=2)
+        monkeypatch.setattr(
+            "server.apps.geometries.pinning.warmup_place_image_cache", warmed
+        )
+        call_command("geoimages_pin", place=hut.slug, warmup_image_cache=True)
+        warmed.assert_called_once()
