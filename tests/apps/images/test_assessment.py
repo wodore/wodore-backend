@@ -10,6 +10,7 @@ from PIL import Image as PILImage
 
 from tests.apps.geometries.test_image_pinning import _result
 
+from django.contrib.gis.geos import Point
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
@@ -115,9 +116,18 @@ def _imagor(settings, monkeypatch):
             return None
 
         def json(self):
-            return {"thumbhash": "F/gJNQJXh493Z4lneYqHd4ZwZAk2"}
+            if "/meta/" in self.url:
+                return {"thumbhash": "F/gJNQJXh493Z4lneYqHd4ZwZAk2"}
+            return {}
 
-    monkeypatch.setattr(assessment.requests, "get", lambda url, timeout=None: _Resp())
+        url = ""
+
+    def _get(url, timeout=None):
+        resp = _Resp()
+        resp.url = url
+        return resp
+
+    monkeypatch.setattr(assessment.requests, "get", _get)
 
 
 class TestAssessImage:
@@ -145,11 +155,120 @@ class TestAssessImage:
         assert "sharpness" in image.image_meta["quality"]
         assert "assessed_at" in image.image_meta
 
+    def test_variant_thumbhashes_naming(self):
+        image = self._image()  # 1920x1080 landscape
+        assert assess_image(image) is True
+        hashes = image.image_meta["thumbhashes"]
+        assert set(hashes) == {
+            "thumb_square",
+            "thumb_landscape",
+            "thumb_portrait",
+            "preview",
+        }
+
     def test_skips_already_assessed(self):
         image = self._image()
         assert assess_image(image) is True
         assert assess_image(image) is False  # cached, not recomputed
         assert assess_image(image, force=True) is True
+
+
+class TestCommand:
+    def test_requires_scope(self):
+        with pytest.raises(CommandError):
+            call_command("geoimages_assess")
+
+    def test_dry_run(self, hut, capsys):
+        call_command("geoimages_assess", place=hut.slug, dry_run=True)
+        assert "would assess" in capsys.readouterr().out
+
+    def test_assesses_place(self, hut):
+        pin_place_images(hut, [_result(score=80)])
+        call_command("geoimages_assess", place=hut.slug)
+        image = Image.objects.get(source_ident="wikicommons:File:Test.jpg")
+        assert image.phash and image.thumbhash
+
+
+class TestThumbhashDecoder:
+    def test_decodes_live_hash(self):
+        from server.apps.images.assessment import thumbhash_to_image
+
+        image = thumbhash_to_image("F/gJNQJXh493Z4lneYqHd4ZwZAk2")
+        assert image.mode == "RGBA"
+        assert image.size[1] == 32  # portrait ratio caps height at 32
+        assert image.size[0] < image.size[1]
+
+
+class TestThumbCropPrecedence:
+    def test_thumb_prefers_focal_over_crop(self):
+        from server.apps.geometries.providers.base import (
+            ImageArea,
+            ImageResult,
+            post_process_images,
+        )
+
+        result = ImageResult(
+            provider="wikicommons",
+            source_id="File:P.jpg",
+            source_url=None,
+            image_type="flat",
+            captured_at=None,
+            location=Point(7.5, 46.5),
+            distance_m=0.0,
+            license_slug="cc-by-sa-4-0",
+            attribution="x",
+            author=None,
+            author_url=None,
+            url_large="https://upload.wikimedia.org/x/P.jpg",
+            width=1920,
+            height=1080,
+            focal=ImageArea(x1=0.1, y1=0.1, x2=0.5, y2=0.5),
+            crop=ImageArea(x1=0.0, y1=0.0, x2=0.8, y2=1.0),
+        )
+        features = post_process_images([result])
+        urls = features[0]["properties"]["urls"]
+        thumb = urls["landscape"]["thumb"]
+        preview = urls["landscape"]["preview"]
+        assert "0.10x0.10:0.50x0.50" in thumb  # focal area crops the thumb
+        assert "0.00x0.00:0.80x1.00" in preview  # curated crop applies to preview
+        assert "0.10x0.10:0.50x0.50" not in preview.split("filters:")[0]
+
+
+class TestAdminSaveHook:
+    def test_save_triggers_reassessment(self, admin_client, settings, monkeypatch):
+        from unittest.mock import patch
+
+        from django.conf import settings as dj_settings
+
+        from server.apps.licenses.models import License
+
+        settings.MIDDLEWARE = tuple(
+            m for m in dj_settings.MIDDLEWARE if "debug_toolbar" not in m
+        )
+        license_obj, _ = License.objects.get_or_create(
+            slug="cc-by-sa-4-0", defaults={"no_publication": False}
+        )
+        image = Image.objects.create(
+            source_ident="wikicommons:File:Hook.jpg",
+            source_url_raw="https://upload.wikimedia.org/x/Hook.jpg",
+            license=license_obj,
+        )
+        with patch(
+            "server.apps.images.assessment.assess_image", return_value=True
+        ) as mock_assess:
+            response = admin_client.post(
+                f"/admin/images/image/{image.id}/change/",
+                {
+                    "source_url": "https://example.org/hut",
+                    "license": str(license_obj.id),
+                    "caption_en": "x",
+                    "review_status": "approved",
+                    "_continue": "1",
+                },
+            )
+        assert response.status_code in (200, 302)
+        mock_assess.assert_called_once()
+        assert mock_assess.call_args.kwargs.get("force") is True
 
 
 class TestAssessPlace:
@@ -242,19 +361,3 @@ class TestResponsePassthrough:
         props = response.json()["features"][0]["properties"]
         assert props["thumbhash"] == "F/gJNQJXh493Z4lneYqHd4ZwZAk2"  # first-class
         assert "quality_score" in props["extra"]
-
-
-class TestCommand:
-    def test_requires_scope(self):
-        with pytest.raises(CommandError):
-            call_command("geoimages_assess")
-
-    def test_dry_run(self, hut, capsys):
-        call_command("geoimages_assess", place=hut.slug, dry_run=True)
-        assert "would assess" in capsys.readouterr().out
-
-    def test_assesses_place(self, hut):
-        pin_place_images(hut, [_result(score=80)])
-        call_command("geoimages_assess", place=hut.slug)
-        image = Image.objects.get(source_ident="wikicommons:File:Test.jpg")
-        assert image.phash and image.thumbhash

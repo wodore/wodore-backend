@@ -155,12 +155,19 @@ class ImagePropertiesSchema(BaseModel):
         None, description="Associated GeoPlace or Hut reference"
     )
 
-    # Placeholder rendering primitive (from technical assessment)
+    # Placeholder rendering primitives (from technical assessment)
     thumbhash: str | None = Field(
         None,
         description=(
             "ThumbHash placeholder (~30 chars) — decode for an instant "
             "blurred preview while the image loads (computed by imagor)"
+        ),
+    )
+    thumbhashes: dict[str, str] | None = Field(
+        None,
+        description=(
+            "ThumbHash per rendering context (thumb_square, thumb_landscape, "
+            "thumb_portrait, preview) — computed on the exact transformed variant"
         ),
     )
 

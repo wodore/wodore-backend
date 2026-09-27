@@ -100,6 +100,7 @@ class ImageAdmin(ModelAdmin):
         "granted_date",
         "uploaded_date",
         "provider_synced_at",
+        "thumbhash_preview",
         # "image_meta",
     )
 
@@ -123,6 +124,53 @@ class ImageAdmin(ModelAdmin):
         if not obj.uploaded_by_user:  # pyright: ignore[reportAttributeAccessIssue]
             obj.uploaded_by_user = request.user  # pyright: ignore[reportAttributeAccessIssue]
         super().save_model(request, obj, form, change)
+        if change:
+            # Manual edits (file swap, focal/crop, URLs) change the pixels or
+            # the transforms — re-run the assessment stack (phash, quality,
+            # thumbhash + variants) so the row serves fresh data.
+            try:
+                from server.apps.images.assessment import assess_image
+
+                assess_image(obj, force=True)
+            except Exception as e:
+                self.message_user(request, f"Re-assessment failed: {e}", "warning")
+
+    @display(description=_("ThumbHashes"))
+    def thumbhash_preview(self, obj):
+        """Decoded ThumbHash placeholders: primary + one per variant."""
+        import base64
+        import io as _io
+
+        from django.utils.safestring import mark_safe as _safe
+
+        from server.apps.images.assessment import thumbhash_to_image
+
+        entries = []
+        if obj.thumbhash:
+            entries.append(("full", obj.thumbhash))
+        entries.extend(sorted((obj.image_meta or {}).get("thumbhashes", {}).items()))
+        if not entries:
+            return "—"
+        parts = []
+        for label, value in entries:
+            try:
+                image = thumbhash_to_image(value)
+                buffer = _io.BytesIO()
+                image.save(buffer, format="PNG")
+                uri = (
+                    "data:image/png;base64,"
+                    + base64.b64encode(buffer.getvalue()).decode()
+                )
+                parts.append(
+                    f'<span class="mfu-th"><img src="{uri}" '
+                    f'style="image-rendering:pixelated;width:48px;height:auto;'
+                    f'border-radius:4px;display:block"/><small>{label}</small></span>'
+                )
+            except Exception:
+                parts.append(
+                    f'<span class="mfu-th"><small>{label}: invalid</small></span>'
+                )
+        return _safe(f'<div class="mfu-th-row">{"".join(parts)}</div>')
 
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)

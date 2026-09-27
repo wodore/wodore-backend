@@ -29,6 +29,8 @@ def _assessment_extra(img) -> dict | None:
     meta = img.image_meta or {}
     if meta.get("duplicate_of"):
         extra["duplicate_of"] = meta["duplicate_of"]
+    if meta.get("thumbhashes"):
+        extra["thumbhashes"] = meta["thumbhashes"]
     return extra or None
 
 

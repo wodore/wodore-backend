@@ -197,6 +197,9 @@ def assess_image(image, *, force: bool = False) -> bool:
     meta["assessed_at"] = timezone.now().isoformat()
     image.phash = dhash64(pil)
     image.thumbhash = _fetch_thumbhash(image)
+    variant_hashes = fetch_variant_thumbhashes(image)
+    if variant_hashes:
+        meta["thumbhashes"] = variant_hashes
     image.quality_score = technical_score(
         metrics, meta.get("width"), meta.get("height")
     )
@@ -282,3 +285,239 @@ def assess_place_task(place_type: str, slug: str):
         assess_place_pins(place)
     except Exception:
         logger.exception("assess_place_failed", place_type=place_type, place=slug)
+
+
+# ---------------------------------------------------------------------------
+# Variant thumbhashes — one per rendering context (computed by imagor on the
+# exact transformed URL, so each placeholder matches what its box shows).
+# ---------------------------------------------------------------------------
+
+#: image_meta.thumbhashes keys → (width, height) of the transformed variant.
+THUMBHASH_VARIANT_SIZES = {
+    "thumb_square": (200, 200),
+    "thumb_landscape": (200, 133),
+    "thumb_portrait": (133, 200),
+    "preview_landscape": (400, 267),
+    "preview_portrait": (300, 450),
+}
+
+
+def _focal_crop_params(image):
+    """Focal/crop areas from image_meta, mirroring the serving pipeline.
+
+    Serving semantics: thumbs crop to the focal area when defined (else the
+    curated crop, else nothing); preview/medium/large only apply the curated
+    crop, with focal (or smart) guiding imagor's aspect crop.
+    """
+    meta = image.image_meta or {}
+    focal = meta.get("focal") or None
+    crop = meta.get("crop") or None
+    width = meta.get("width")
+    height = meta.get("height")
+    is_portrait = bool(width and height and height > width)
+
+    focal_point = None
+    focal_start = focal_stop = None
+    if focal:
+        focal_point = (
+            f"{focal.get('x1', 0):.2f}x{focal.get('y1', 0):.2f}:"
+            f"{focal.get('x2', 1):.2f}x{focal.get('y2', 1):.2f}"
+        ).replace("0.", ".")
+        focal_start, focal_stop = focal_point.split(":")
+    crop_start = crop_stop = None
+    if crop:
+        crop_start = f"{crop.get('x1', 0):g}x{crop.get('y1', 0):g}"
+        crop_stop = f"{crop.get('x2', 1):g}x{crop.get('y2', 1):g}"
+    return {
+        "focal_point": focal_point,
+        "focal_start": focal_start,
+        "focal_stop": focal_stop,
+        "crop_start": crop_start,
+        "crop_stop": crop_stop,
+        "is_portrait": is_portrait,
+        "width": width,
+        "height": height,
+    }
+
+
+def _variant_meta_urls(image) -> dict[str, str]:
+    """Signed imagor metadata URLs computing the thumbhash per variant."""
+
+    from server.apps.geometries.providers.base import _calculate_constrained_size
+    from server.apps.images.transfomer import ImagorImage
+
+    source = image.image if getattr(image, "image", None) else image.source_url_raw
+    if not source:
+        return {}
+    params = _focal_crop_params(image)
+    img = ImagorImage(str(source))
+
+    def meta_url(target_w, target_h, *, thumb: bool):
+        size = "x".join(
+            str(v)
+            for v in _calculate_constrained_size(
+                target_w, target_h, params["width"], params["height"]
+            )
+        )
+        cs, ce = params["crop_start"], params["crop_stop"]
+        if thumb:  # focal wins over the curated crop for thumbs
+            cs = params["focal_start"] or params["crop_start"]
+            ce = params["focal_stop"] or params["crop_stop"]
+        url = img.transform(
+            size=size,
+            focal=params["focal_point"] or "smart",
+            crop_start=cs,
+            crop_stop=ce,
+            filters=["thumbhash()"],
+        ).get_full_url()
+        # /meta/ goes right after the signature, before the operations
+        scheme, rest = url.split("://", 1)
+        base, _, tail = rest.partition("/")
+        return f"{scheme}://{base}/{tail.split('/', 1)[0]}/meta/{tail.split('/', 1)[1]}"
+
+    urls = {
+        "thumb_square": meta_url(200, 200, thumb=True),
+        "thumb_landscape": meta_url(200, 133, thumb=True),
+        "thumb_portrait": meta_url(133, 200, thumb=True),
+    }
+    if params["is_portrait"]:
+        urls["preview"] = meta_url(300, 450, thumb=False)
+    else:
+        urls["preview"] = meta_url(400, 267, thumb=False)
+    return urls
+
+
+def fetch_variant_thumbhashes(image) -> dict[str, str]:
+    """One thumbhash per rendering context, from imagor metadata calls."""
+    hashes: dict[str, str] = {}
+    for variant, url in _variant_meta_urls(image).items():
+        try:
+            response = requests.get(url, timeout=20)
+            response.raise_for_status()
+            value = response.json().get("thumbhash")
+        except Exception as e:
+            logger.debug(
+                "variant_thumbhash_failed",
+                image_id=str(image.id),
+                variant=variant,
+                error=str(e),
+            )
+            continue
+        if value:
+            hashes[variant] = value
+    return hashes
+
+
+def thumbhash_to_image(thumbhash: str):
+    """Decode a ThumbHash to a PIL RGBA placeholder (reference port)."""
+    import base64
+    from math import cos, pi
+
+    hash_ = base64.b64decode(thumbhash)
+    header24 = hash_[0] | (hash_[1] << 8) | (hash_[2] << 16)
+    header16 = hash_[3] | (hash_[4] << 8)
+    l_dc = (header24 & 63) / 63
+    p_dc = ((header24 >> 6) & 63) / 31.5 - 1
+    q_dc = ((header24 >> 12) & 63) / 31.5 - 1
+    l_scale = ((header24 >> 18) & 31) / 31
+    has_alpha = header24 >> 23
+    p_scale = ((header16 >> 3) & 63) / 63
+    q_scale = ((header16 >> 9) & 63) / 63
+    is_landscape = header16 >> 15
+    lx = max(3, (5 if has_alpha else 7) if is_landscape else (header16 & 7))
+    ly = max(3, (header16 & 7) if is_landscape else (5 if has_alpha else 7))
+    a_dc = (hash_[5] & 15) / 15 if has_alpha else 1
+    a_scale = (hash_[5] >> 4) / 15
+
+    ac_start = 6 if has_alpha else 5
+    state = {"i": 0}
+
+    def decode_channel(nx, ny, scale):
+        ac = []
+        for cy in range(ny):
+            start_cx = 0 if cy else 1
+            for cx in range(start_cx, nx):
+                if not (cx * ny < nx * (ny - cy)):
+                    break
+                byte = hash_[ac_start + (state["i"] >> 1)]
+                shift = (state["i"] & 1) << 2
+                state["i"] += 1
+                ac.append((((byte >> shift) & 15) / 7.5 - 1) * scale)
+        return ac
+
+    l_ac = decode_channel(lx, ly, l_scale)
+    p_ac = decode_channel(3, 3, p_scale * 1.25)
+    q_ac = decode_channel(3, 3, q_scale * 1.25)
+    a_ac = decode_channel(5, 5, a_scale) if has_alpha else None
+
+    ratio = thumbhash_aspect_ratio(thumbhash)
+    w = round(32 if ratio > 1 else 32 * ratio)
+    h = round(32 / ratio if ratio > 1 else 32)
+
+    pixels = []
+    for y in range(h):
+        fy = [
+            cos(pi / h * (y + 0.5) * cy) for cy in range(max(ly, 5 if has_alpha else 3))
+        ]
+        for x in range(w):
+            fx = [
+                cos(pi / w * (x + 0.5) * cx)
+                for cx in range(max(lx, 5 if has_alpha else 3))
+            ]
+            l, p, q, a = l_dc, p_dc, q_dc, a_dc
+            j = 0
+            for cy in range(ly):
+                start_cx = 0 if cy else 1
+                fy2 = fy[cy] * 2
+                for cx in range(start_cx, lx):
+                    if not (cx * ly < lx * (ly - cy)):
+                        break
+                    l += l_ac[j] * fx[cx] * fy2
+                    j += 1
+            j = 0
+            for cy in range(3):
+                start_cx = 0 if cy else 1
+                fy2 = fy[cy] * 2
+                for cx in range(start_cx, 3 - cy):
+                    f = fx[cx] * fy2
+                    p += p_ac[j] * f
+                    q += q_ac[j] * f
+                    j += 1
+            if has_alpha:
+                j = 0
+                for cy in range(5):
+                    start_cx = 0 if cy else 1
+                    fy2 = fy[cy] * 2
+                    for cx in range(start_cx, 5 - cy):
+                        a += a_ac[j] * fx[cx] * fy2
+                        j += 1
+            b = l - 2 / 3 * p
+            r = (3 * l - b + q) / 2
+            g = r - q
+            pixels.append(
+                (
+                    max(0, min(255, round(255 * max(0, min(1, r))))),
+                    max(0, min(255, round(255 * max(0, min(1, g))))),
+                    max(0, min(255, round(255 * max(0, min(1, b))))),
+                    max(0, min(255, round(255 * max(0, min(1, a))))),
+                )
+            )
+    return _put_pixels(w, h, pixels)
+
+
+def _put_pixels(w, h, pixels):
+    image = PILImage.new("RGBA", (w, h))
+    image.putdata(pixels)
+    return image
+
+
+def thumbhash_aspect_ratio(thumbhash: str) -> float:
+    """Approximate aspect ratio (w/h) encoded in a ThumbHash."""
+    import base64
+
+    hash_ = base64.b64decode(thumbhash)
+    has_alpha = bool(hash_[2] & 0x80)
+    is_landscape = bool(hash_[4] & 0x80)
+    lx = (5 if has_alpha else 7) if is_landscape else (hash_[3] & 7)
+    ly = (hash_[3] & 7) if is_landscape else (5 if has_alpha else 7)
+    return lx / ly

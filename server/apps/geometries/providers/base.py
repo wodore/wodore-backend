@@ -1057,19 +1057,19 @@ def post_process_images(
             # Use focal area if available, otherwise default to smart detection
             focal_point = result.focal.to_imagor_area() if result.focal else "smart"
 
-            # Determine crop parameters
-            # If result.crop is defined, use it for all crops
-            # Otherwise, use result.focal for avatar/thumb if focal_point is not smart
+            # Determine crop parameters. Serving semantics: thumbs crop to
+            # the focal area when defined (else the curated crop, else nothing);
+            # preview/medium/large only apply the curated crop, with the focal
+            # filter (or smart) guiding imagor's aspect crop.
             crop_start = None
             crop_stop = None
             focal_start = None
             focal_stop = None
             if result.crop:
-                # Parse crop string "x1,y1:x2,y2" into start and stop
-                crop_start, crop_stop = result.crop.to_imagor_area()
-            elif focal_point != "smart" and result.focal:
-                # If no explicit crop but focal exists, use focal area for avatar/thumb only
-                focal_start, focal_stop = result.focal.to_imagor_area()
+                # "x1,y1:x2,y2" area string → start and stop segments
+                crop_start, crop_stop = result.crop.to_imagor_area().split(":")
+            if result.focal:
+                focal_start, focal_stop = result.focal.to_imagor_area().split(":")
 
             # Generate URLs with @2x variants
             quality = 85
@@ -1102,32 +1102,32 @@ def post_process_images(
                         96,
                         quality=quality,
                         focal=focal_point,
-                        crop_start=focal_start,
-                        crop_stop=focal_stop,
+                        crop_start=focal_start or crop_start,
+                        crop_stop=focal_stop or crop_stop,
                     ).get_full_url(),
                     "avatar@2x": transform_for(
                         192,
                         192,
                         quality=quality,
                         focal=focal_point,
-                        crop_start=focal_start,
-                        crop_stop=focal_stop,
+                        crop_start=focal_start or crop_start,
+                        crop_stop=focal_stop or crop_stop,
                     ).get_full_url(),
                     "thumb": transform_for(
                         200,
                         200,
                         quality=quality,
                         focal=focal_point,
-                        crop_start=focal_start,
-                        crop_stop=focal_stop,
+                        crop_start=focal_start or crop_start,
+                        crop_stop=focal_stop or crop_stop,
                     ).get_full_url(),
                     "thumb@2x": transform_for(
                         400,
                         400,
                         quality=quality,
                         focal=focal_point,
-                        crop_start=focal_start,
-                        crop_stop=focal_stop,
+                        crop_start=focal_start or crop_start,
+                        crop_stop=focal_stop or crop_stop,
                     ).get_full_url(),
                     "preview": transform_for(
                         400,
@@ -1206,16 +1206,16 @@ def post_process_images(
                         133,
                         quality=quality,
                         focal=focal_point,
-                        crop_start=focal_start,
-                        crop_stop=focal_stop,
+                        crop_start=focal_start or crop_start,
+                        crop_stop=focal_stop or crop_stop,
                     ).get_full_url(),
                     "thumb@2x": transform_for(
                         400,
                         266,
                         quality=quality,
                         focal=focal_point,
-                        crop_start=focal_start,
-                        crop_stop=focal_stop,
+                        crop_start=focal_start or crop_start,
+                        crop_stop=focal_stop or crop_stop,
                     ).get_full_url(),
                     "preview": transform_for(
                         400,
@@ -1294,7 +1294,7 @@ def post_process_images(
                         200,
                         quality=quality,
                         focal=focal_point,
-                        crop_start=focal_start,
+                        crop_start=focal_start or crop_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
                     "thumb@2x": transform_for(
@@ -1302,7 +1302,7 @@ def post_process_images(
                         400,
                         quality=quality,
                         focal=focal_point,
-                        crop_start=focal_start,
+                        crop_start=focal_start or crop_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
                     "preview": transform_for(
@@ -1463,6 +1463,8 @@ def post_process_images(
                 extra = dict(result.extra)
                 if "thumbhash" in extra:
                     feature["properties"]["thumbhash"] = extra.pop("thumbhash")
+                if "thumbhashes" in extra:
+                    feature["properties"]["thumbhashes"] = extra.pop("thumbhashes")
                 if extra:
                     feature["properties"]["extra"] = extra
 
