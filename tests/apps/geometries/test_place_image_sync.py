@@ -316,7 +316,9 @@ class TestImagorWarmup:
         )
         warmed = MagicMock(return_value=2)
         monkeypatch.setattr(
-            "server.apps.geometries.pinning.warmup_place_image_cache", warmed
+            "server.apps.geometries.management.commands.geoimages_pin"
+            ".warmup_place_image_cache",
+            warmed,
         )
         call_command("geoimages_pin", place=hut.slug, warmup_image_cache=True)
         warmed.assert_called_once()
