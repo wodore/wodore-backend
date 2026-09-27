@@ -138,6 +138,7 @@ INSTALLED_APPS: tuple[str, ...] = (
     "server.apps.geometries",
     "server.apps.external_links",
     "server.apps.api",
+    "server.apps.accounts",  # custom user model (email identity) — must always be installed
     # Extension:
     "psqlextra",  # https://django-postgres-extra.readthedocs.io/
     "pgtrigger",  # https://django-pgtrigger.readthedocs.io/
@@ -182,7 +183,6 @@ INSTALLED_APPS: tuple[str, ...] = (
     "django_admin_runner",  # https://github.com/burgdev/django-admin-runner
     # Security:
     "axes",
-    "mozilla_django_oidc",  # Load after auth https://github.com/mozilla/mozilla-django-oidc
     "csp",
     # Health checks:
     # You may want to enable other checks as well,
@@ -398,10 +398,13 @@ IMAGOR_MEDIA_URL = str(
 # Django authentication system
 # https://docs.djangoproject.com/en/4.2/topics/auth/
 
+# Email-identity custom user (spec: account-management).
+AUTH_USER_MODEL = "accounts.User"
+
 AUTHENTICATION_BACKENDS = (
     "axes.backends.AxesBackend",
     "django.contrib.auth.backends.ModelBackend",
-    # OIDC PermissionBackend is appended by components/oidc.py when OIDC_ENABLED
+    # allauth backend is appended by components/registry.py when OIDC_ENABLED
 )
 
 PASSWORD_HASHERS = [

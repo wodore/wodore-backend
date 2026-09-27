@@ -33,6 +33,7 @@ _base_settings = (
     "components/unfold.py",
     "components/caches.py",
     "components/oidc.py",
+    "components/auth_local.py",
     "components/email.py",
     # Select the right env:
     f"environments/{_ENV}.py",

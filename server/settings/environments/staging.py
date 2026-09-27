@@ -37,3 +37,7 @@ MIDDLEWARE = list(MIDDLEWARE)  # pyright: ignore[reportUndefinedVariable]
 # Add robots tag to prevent indexing (environment header is already in common.py)
 MIDDLEWARE.insert(0, "server.middleware.headers.RobotsTagMiddleware")
 MIDDLEWARE = tuple(MIDDLEWARE)  # pyright: ignore[reportUndefinedVariable]
+
+# Note: the Zitadel SessionRefresh middleware is appended by
+# production.py (inherited above via `from ... import *`); do not add it
+# again here or it runs twice.
