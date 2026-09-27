@@ -245,3 +245,79 @@ class TestQuickActions:
         assert response.status_code == 302
         pin.refresh_from_db()
         assert bool(pin.image) is True
+
+
+@pytest.mark.django_db
+class TestQuickActionsAjax:
+    """AJAX mode: JSON instead of redirects, for in-place row updates."""
+
+    def _no_toolbar(self, settings):
+        from django.conf import settings as dj_settings
+
+        settings.MIDDLEWARE = tuple(
+            m for m in dj_settings.MIDDLEWARE if "debug_toolbar" not in m
+        )
+
+    def _pin(self):
+        from server.apps.images.models import Image, License
+
+        license_obj, _ = License.objects.get_or_create(
+            slug="cc-by-sa-4-0", defaults={"no_publication": False}
+        )
+        return Image.objects.create(
+            source_ident="wikicommons:File:AjaxTest.jpg",
+            source_url="https://commons.wikimedia.org/wiki/File:AjaxTest.jpg",
+            source_url_raw=RAW,
+            license=license_obj,
+            review_status=Image.ReviewStatusChoices.pending,
+        )
+
+    def test_set_review_ajax_returns_json(self, admin_client, settings):
+        from django.urls import reverse
+
+        self._no_toolbar(settings)
+        pin = self._pin()
+        response = admin_client.get(
+            reverse("admin:images_image_set_review", args=[pin.pk, "approved"]),
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok", "review_status": "approved"}
+        pin.refresh_from_db()
+        assert pin.review_status == "approved"
+
+    def test_download_ajax_returns_json(self, admin_client, settings):
+        from unittest.mock import MagicMock, patch
+
+        from django.urls import reverse
+
+        self._no_toolbar(settings)
+        pin = self._pin()
+        fake = MagicMock()
+        fake.raw.read.return_value = b"fake-image-bytes"
+        fake.headers = {"Content-Type": "image/jpeg"}
+        with patch("requests.get", return_value=fake):
+            response = admin_client.get(
+                reverse("admin:images_image_download_raw_row", args=[pin.pk]),
+                headers={"X-Requested-With": "XMLHttpRequest"},
+            )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "ok" and body["local"] is True
+        pin.refresh_from_db()
+        assert bool(pin.image) is True
+
+    def test_download_ajax_error_json(self, admin_client, settings):
+        from unittest.mock import patch
+
+        from django.urls import reverse
+
+        self._no_toolbar(settings)
+        pin = self._pin()
+        with patch("requests.get", side_effect=RuntimeError("boom")):
+            response = admin_client.get(
+                reverse("admin:images_image_download_raw_row", args=[pin.pk]),
+                headers={"X-Requested-With": "XMLHttpRequest"},
+            )
+        assert response.status_code == 502
+        assert response.json()["status"] == "error"

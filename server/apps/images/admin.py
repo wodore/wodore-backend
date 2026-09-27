@@ -73,6 +73,7 @@ class ImageAdmin(ModelAdmin):
         "license_summary",
         "source",
         "serving",
+        "quality_display",
         "quick_actions",
         "tag_list",
         "review_tag",
@@ -101,6 +102,8 @@ class ImageAdmin(ModelAdmin):
         "uploaded_date",
         "provider_synced_at",
         "thumbhash_preview",
+        "phash",
+        "quality_score",
         # "image_meta",
     )
 
@@ -191,6 +194,7 @@ class ImageAdmin(ModelAdmin):
 
     class Media:
         css = {"all": ("meta_image_field/css/style.css",)}
+        js = ("images/js/quick_actions.js",)
 
     actions = (
         "approve_selected_images",
@@ -259,39 +263,80 @@ class ImageAdmin(ModelAdmin):
         obj.image.save(name, ContentFile(content), save=True)
         return name
 
-    def download_raw_row_view(self, request: HttpRequest, object_id):
-        """Quick action: download an external pin's raw image and store it."""
-        from django.contrib import messages
+    @staticmethod
+    def _is_ajax(request: HttpRequest) -> bool:
+        return request.headers.get("x-requested-with") == "XMLHttpRequest"
 
+    def download_raw_row_view(self, request: HttpRequest, object_id):
+        """Quick action: download an external pin's raw image and store it.
+
+        AJAX requests get JSON (the changelist updates in place); regular
+        requests redirect back with a message.
+        """
+        from django.contrib import messages
+        from django.http import JsonResponse
+
+        def _json(payload, status=200):
+            return JsonResponse(payload, status=status)
+
+        ajax = self._is_ajax(request)
         obj = self.get_object(request, object_id)
         if obj is None:
+            if ajax:
+                return _json({"status": "error", "message": "Image not found."}, 404)
             messages.error(request, "Image not found.")
             return self._redirect_back(request)
         if obj.image or not obj.source_url_raw:
+            if ajax:
+                return _json(
+                    {"status": "error", "message": "No external raw URL."}, 400
+                )
             messages.info(request, f"{obj}: no external raw URL to download.")
             return self._redirect_back(request)
         try:
             content, _ctype = self._fetch_image_bytes(obj.source_url_raw)
             name = self._store_local_file(obj, content, obj.source_url_raw)
         except Exception as e:
+            if ajax:
+                return _json({"status": "error", "message": str(e)}, 502)
             messages.error(request, f"{obj}: download failed ({e}).")
             return self._redirect_back(request)
+        if ajax:
+            return _json({"status": "ok", "stored": name, "local": True})
         messages.success(request, f"{obj}: stored '{name}' locally.")
         return self._redirect_back(request)
 
     def set_review_view(self, request: HttpRequest, object_id, status: str):
         """Quick action: set the review status from the changelist."""
         from django.contrib import messages
+        from django.http import JsonResponse
 
         obj = self.get_object(request, object_id)
         valid = [s for s, _lbl in Image.ReviewStatusChoices.choices]
         if obj is None or status not in valid:
+            if self._is_ajax(request):
+                return JsonResponse(
+                    {"status": "error", "message": "Invalid image or status."},
+                    status=400,
+                )
             messages.error(request, "Invalid image or review status.")
             return self._redirect_back(request)
         obj.review_status = status
         obj.save(update_fields=["review_status"])
+        if self._is_ajax(request):
+            return JsonResponse({"status": "ok", "review_status": status})
         messages.success(request, f"{obj}: review status set to {status}.")
         return self._redirect_back(request)
+
+    @display(
+        description=_("Quality"),  # pyright: ignore[reportArgumentType]  # _StrPromise vs unfold stub gap
+        ordering="quality_score",
+    )
+    def quality_display(self, obj):
+        """Technical quality score from assessment (sortable)."""
+        if obj.quality_score is None:
+            return "—"
+        return obj.quality_score
 
     @display(description="")
     def quick_actions(self, obj):
