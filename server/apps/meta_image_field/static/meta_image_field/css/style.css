@@ -3,7 +3,6 @@
   display: block;
   width: 100%;
   height: auto;
-  /* margin: 0; */
   max-width: 30rem;
 }
 
@@ -12,4 +11,363 @@
   width: 100%;
   height: auto;
   margin: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Meta image widget — semantic styling for the unfold admin.
+   The template only uses tailwind utilities that actually exist in the
+   admin's compiled CSS (unfold JIT-builds its own templates only). Unfold's
+   dark mode is the `dark` class on <html> with :where(.dark,.dark *) utility
+   rules — its CSS variables do NOT flip — so dark surfaces are explicit
+   `html.dark` overrides below.
+   --------------------------------------------------------------------------- */
+.mfu {
+  max-width: 42rem;
+  font-size: 0.875rem;
+}
+
+/* Preview */
+.mfu .mfu-preview-box {
+  min-height: 8rem;
+  width: 100%;
+  max-width: 24rem;
+  background: var(--color-base-100);
+  border: 1px solid var(--color-base-200);
+}
+
+.mfu .mfu-preview-box img {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  border-radius: 0.25rem;
+}
+
+/* Serving hint badge */
+.mfu .mfu-status {
+  display: flex;
+}
+
+.mfu .mfu-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  padding: 0.1rem 0.55rem;
+  border-radius: 9999px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  color: #4b5563;
+  white-space: nowrap;
+}
+
+.mfu .mfu-badge .material-symbols-outlined {
+  font-size: 1rem;
+}
+
+.mfu .mfu-badge-local {
+  color: #15803d;
+  border-color: #86efac;
+  background: rgba(134, 239, 172, 0.15);
+}
+
+.mfu .mfu-badge-external {
+  color: #b45309;
+  border-color: #fcd34d;
+  background: rgba(252, 211, 77, 0.15);
+}
+
+/* Raw source link (readonly, clickable) */
+.mfu .mfu-rawlink-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  max-width: 42rem;
+}
+
+.mfu .mfu-rawlabel {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  flex: none;
+}
+
+.mfu .mfu-rawlink {
+  font-size: 0.75rem;
+  color: #2563eb;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.mfu .mfu-rawlink:hover {
+  text-decoration: underline;
+}
+
+/* Input rows (URL + file) */
+.mfu .mfu-urlrow,
+.mfu .mfu-filerow {
+  background: var(--color-base-100);
+  border-color: var(--color-base-200);
+  border-radius: var(--border-radius, 6px);
+  margin-bottom: 0.5rem;
+  transition:
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.mfu .mfu-urlrow:focus-within,
+.mfu .mfu-filerow:focus-within {
+  border-color: var(--color-primary-500, #2563eb);
+  box-shadow: 0 0 0 1px var(--color-primary-500, #2563eb);
+}
+
+.mfu .mfu-input {
+  background: transparent;
+  color: var(--color-base-500);
+  border: 0;
+  outline: none;
+  text-overflow: ellipsis;
+  min-width: 0;
+  padding-inline: calc(var(--spacing, 0.25rem) * 3);
+  padding-block: calc(var(--spacing, 0.25rem) * 2);
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.mfu .mfu-input::placeholder {
+  color: var(--color-base-400);
+}
+
+/* Download button */
+.mfu .mfu-btn {
+  background: #2563eb;
+  color: #ffffff;
+  border: 0;
+  border-left: 1px solid #e5e7eb;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.mfu .mfu-btn:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.mfu .mfu-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.mfu .mfu-btn .material-symbols-outlined {
+  font-size: 1.1rem;
+}
+
+/* Icon buttons (remove / view / upload) */
+.mfu .mfu-iconbtn {
+  color: #9ca3af;
+  padding: 0.5rem 0.4rem;
+  display: flex;
+  align-items: center;
+  background: transparent;
+}
+
+.mfu .mfu-iconbtn:hover {
+  color: #374151;
+}
+
+.mfu .mfu-upload-label {
+  padding-right: 0.6rem;
+  cursor: pointer;
+}
+
+/* Download progress + messages */
+.mfu .mfu-dl {
+  margin: 0.4rem 0 0.6rem;
+  max-width: 42rem;
+}
+
+.mfu .mfu-progress {
+  height: 0.35rem;
+  border-radius: 9999px;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+
+.mfu .mfu-progress-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 9999px;
+  background: #2563eb;
+  transition: width 0.15s ease;
+}
+
+.mfu .mfu-progress-fill.mfu-progress-done {
+  background: #16a34a;
+}
+
+.mfu .mfu-progress-fill.mfu-progress-error {
+  background: #dc2626;
+}
+
+.mfu .mfu-progress-fill.mfu-progress-indeterminate {
+  animation: mfu-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes mfu-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.mfu .mfu-dl-msg {
+  font-size: 0.75rem;
+  margin-top: 0.3rem;
+  color: #4b5563;
+}
+
+.mfu .mfu-dl-msg-success {
+  color: #16a34a;
+}
+
+.mfu .mfu-dl-msg-error {
+  color: #dc2626;
+}
+
+/* ----- Dark theme (unfold toggles `dark` on <html>; vars do not flip) ----- */
+html.dark .mfu .mfu-badge {
+  color: #d1d5db;
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+html.dark .mfu .mfu-badge-local {
+  color: #4ade80;
+}
+
+html.dark .mfu .mfu-badge-external {
+  color: #fbbf24;
+}
+
+html.dark .mfu .mfu-rawlabel {
+  color: #6b7280;
+}
+
+html.dark .mfu .mfu-rawlink {
+  color: #6dc59f;
+}
+
+html.dark .mfu .mfu-btn {
+  background: #2a5b46;
+  border-left-color: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+html.dark .mfu .mfu-btn:hover:not(:disabled) {
+  background: #346751;
+}
+
+html.dark .mfu .mfu-btn:disabled {
+  opacity: 0.5;
+}
+
+html.dark .mfu .mfu-iconbtn {
+  color: #6b7280;
+}
+
+html.dark .mfu .mfu-iconbtn:hover {
+  color: #d1d5db;
+}
+
+html.dark .mfu .mfu-progress {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+html.dark .mfu .mfu-progress-fill {
+  background: #6dc59f;
+}
+
+html.dark .mfu .mfu-dl-msg {
+  color: #9ca3af;
+}
+
+html.dark .mfu .mfu-dl-msg-success {
+  color: #4ade80;
+}
+
+html.dark .mfu .mfu-dl-msg-error {
+  color: #f87171;
+}
+
+/* ----- Changelog quick actions (images changelist: review + download raw) ----- */
+a.mfu-qa {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem;
+  margin-inline-start: 0.15rem;
+  border-radius: 6px;
+  color: var(--color-base-400);
+  text-decoration: none;
+}
+
+a.mfu-qa:hover {
+  color: var(--color-base-700);
+  background: var(--color-base-100);
+}
+
+a.mfu-qa .material-symbols-outlined {
+  font-size: 1.15rem;
+}
+
+a.mfu-qa-approved {
+  color: #16a34a;
+}
+
+a.mfu-qa-approved:hover {
+  color: #15803d;
+}
+
+a.mfu-qa-disabled {
+  color: #b45309;
+}
+
+a.mfu-qa-disabled:hover {
+  color: #92400e;
+}
+
+a.mfu-qa-rejected {
+  color: #dc2626;
+}
+
+a.mfu-qa-rejected:hover {
+  color: #b91c1c;
+}
+
+a.mfu-qa-download {
+  color: var(--color-primary-600, #2563eb);
+}
+
+html.dark a.mfu-qa:hover {
+  color: #d1d5db;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+html.dark a.mfu-qa-approved {
+  color: #4ade80;
+}
+
+html.dark a.mfu-qa-disabled {
+  color: #fbbf24;
+}
+
+html.dark a.mfu-qa-rejected {
+  color: #f87171;
+}
+
+html.dark a.mfu-qa-download {
+  color: #6dc59f;
 }
