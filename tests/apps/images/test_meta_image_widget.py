@@ -321,3 +321,75 @@ class TestQuickActionsAjax:
             )
         assert response.status_code == 502
         assert response.json()["status"] == "error"
+
+
+@pytest.mark.django_db
+class TestServingCell:
+    """Serving column: pill + in-cell download button (external only)."""
+
+    def _no_toolbar(self, settings):
+        from django.conf import settings as dj_settings
+
+        settings.MIDDLEWARE = tuple(
+            m for m in dj_settings.MIDDLEWARE if "debug_toolbar" not in m
+        )
+
+    def _image(self, *, local: bool):
+        import io as _io
+
+        from django.core.files.base import ContentFile
+
+        from server.apps.images.models import Image, License
+
+        license_obj, _ = License.objects.get_or_create(
+            slug="cc-by-sa-4-0", defaults={"no_publication": False}
+        )
+        kwargs = dict(
+            source_url_raw=RAW,
+            license=license_obj,
+        )
+        if local:
+            kwargs["image"] = ContentFile(
+                _io.BytesIO(b"filebytes").read(), name="images/test_local.jpg"
+            )
+        return Image.objects.create(**kwargs)
+
+    def test_external_shows_download_in_serving(self, admin_client, settings):
+        from server.apps.images.admin import ImageAdmin
+        from server.apps.images.models import Image
+
+        self._no_toolbar(settings)
+        admin = ImageAdmin(Image, None)
+        html = admin._serving_html(self._image(local=False))
+        assert "mfu-qa-download" in html
+        assert "external" in html
+
+    def test_local_has_no_download_button(self, admin_client, settings):
+        from server.apps.images.admin import ImageAdmin
+        from server.apps.images.models import Image
+
+        self._no_toolbar(settings)
+        admin = ImageAdmin(Image, None)
+        html = admin._serving_html(self._image(local=True))
+        assert "mfu-qa-download" not in html
+        assert "local" in html
+
+    def test_download_ajax_returns_serving_html(self, admin_client, settings):
+        from unittest.mock import MagicMock, patch
+
+        from django.urls import reverse
+
+        self._no_toolbar(settings)
+        pin = self._image(local=False)
+        fake = MagicMock()
+        fake.raw.read.return_value = b"fake-image-bytes"
+        fake.headers = {"Content-Type": "image/jpeg"}
+        with patch("requests.get", return_value=fake):
+            response = admin_client.get(
+                reverse("admin:images_image_download_raw_row", args=[pin.pk]),
+                headers={"X-Requested-With": "XMLHttpRequest"},
+            )
+        body = response.json()
+        assert body["status"] == "ok"
+        assert ">local</span>" in body["serving_html"]
+        assert "mfu-qa-download" not in body["serving_html"]

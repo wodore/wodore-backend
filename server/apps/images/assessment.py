@@ -322,7 +322,7 @@ def _focal_crop_params(image):
         focal_point = (
             f"{focal.get('x1', 0):.2f}x{focal.get('y1', 0):.2f}:"
             f"{focal.get('x2', 1):.2f}x{focal.get('y2', 1):.2f}"
-        ).replace("0.", ".")
+        )  # same format as ImageArea.to_imagor_area()
         focal_start, focal_stop = focal_point.split(":")
     crop_start = crop_stop = None
     if crop:
@@ -352,7 +352,7 @@ def _variant_meta_urls(image) -> dict[str, str]:
     if not source:
         return {}
     params = _focal_crop_params(image)
-    img = ImagorImage(str(source))
+    img = ImagorImage(source)  # FieldFile or URL string — the init maps media paths
 
     def meta_url(target_w, target_h, *, thumb: bool):
         size = "x".join(

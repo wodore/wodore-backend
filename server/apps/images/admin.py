@@ -107,21 +107,43 @@ class ImageAdmin(ModelAdmin):
         # "image_meta",
     )
 
-    @display(
-        description=_("Serving"),  # pyright: ignore[reportArgumentType]  # _StrPromise vs unfold stub gap
-        label={
-            "local": "success",
-            "external": "warning",
-            "none": "danger",
-        },
-    )
+    #: Exact unfold pill classes per serving state — single source of truth
+    #: for the changelist cell AND the AJAX refresh snippet.
+    SERVING_PILLS = {
+        "local": "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400",
+        "external": "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
+        "none": "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400",
+    }
+
+    def _serving_html(self, obj) -> str:
+        """Serving pill (unfold markup) + download-raw button when external."""
+        from django.urls import reverse as _reverse
+        from django.utils.safestring import mark_safe
+
+        if getattr(obj, "image", None):
+            state = "local"
+        elif obj.source_url_raw:
+            state = "external"
+        else:
+            state = "none"
+        pill = (
+            f'<span class="inline-block font-semibold rounded-default text-[11px] '
+            f'uppercase whitespace-nowrap h-6 leading-6 px-2 {self.SERVING_PILLS[state]}" '
+            f">{state}</span>"
+        )
+        if state == "external":
+            url = _reverse("admin:images_image_download_raw_row", args=[obj.pk])
+            pill += (
+                f'<a href="{url}" class="mfu-qa mfu-qa-download" '
+                f'title="Download raw and store locally">'
+                f'<span class="material-symbols-outlined">download</span></a>'
+            )
+        return mark_safe(pill)
+
+    @display(description=_("Serving"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs unfold stub gap
     def serving(self, obj):
         """Where the pixels come from: local file or external pin."""
-        if getattr(obj, "image", None):
-            return "local"
-        if obj.source_url_raw:
-            return "external"
-        return "none"
+        return self._serving_html(obj)
 
     def save_model(self, request, obj, form, change):
         if not obj.uploaded_by_user:  # pyright: ignore[reportAttributeAccessIssue]
@@ -302,7 +324,15 @@ class ImageAdmin(ModelAdmin):
             messages.error(request, f"{obj}: download failed ({e}).")
             return self._redirect_back(request)
         if ajax:
-            return _json({"status": "ok", "stored": name, "local": True})
+            obj.refresh_from_db()
+            return _json(
+                {
+                    "status": "ok",
+                    "stored": name,
+                    "local": True,
+                    "serving_html": self._serving_html(obj),
+                }
+            )
         messages.success(request, f"{obj}: stored '{name}' locally.")
         return self._redirect_back(request)
 
@@ -340,7 +370,7 @@ class ImageAdmin(ModelAdmin):
 
     @display(description="")
     def quick_actions(self, obj):
-        """Per-row review buttons + download-raw for external pins."""
+        """Per-row review buttons (download-raw lives in the Serving cell)."""
         from django.urls import reverse as _reverse
 
         buttons = []
@@ -353,12 +383,6 @@ class ImageAdmin(ModelAdmin):
             buttons.append(
                 f'<a href="{url}" class="mfu-qa mfu-qa-{status}" title="{title}">'
                 f'<span class="material-symbols-outlined">{icon}</span></a>'
-            )
-        if not obj.image and obj.source_url_raw:
-            url = _reverse("admin:images_image_download_raw_row", args=[obj.pk])
-            buttons.append(
-                f'<a href="{url}" class="mfu-qa mfu-qa-download" title="Download raw">'
-                '<span class="material-symbols-outlined">download</span></a>'
             )
         return mark_safe("".join(buttons))
 

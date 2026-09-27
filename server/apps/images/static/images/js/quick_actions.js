@@ -37,12 +37,19 @@
     }, 2000);
   }
 
-  function updateServingCell(row) {
+  function updateServingCell(row, servingHtml) {
     const cell = row && row.querySelector("td.field-serving");
     if (!cell) return;
+    // Prefer the server-rendered snippet — identical markup to a fresh page.
+    if (servingHtml) {
+      cell.innerHTML = servingHtml;
+      return;
+    }
     cell.innerHTML =
-      '<span class="mfu-badge mfu-badge-local">' +
-      '<span class="material-symbols-outlined">cloud_done</span> local</span>';
+      '<span class="inline-block font-semibold rounded-default text-[11px] ' +
+      "uppercase whitespace-nowrap h-6 leading-6 px-2 " +
+      'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400" ' +
+      ">local</span>";
   }
 
   function updateReviewPill(row, status) {
@@ -73,7 +80,7 @@
       }
       if (isDownload) {
         btn.remove();
-        updateServingCell(row);
+        updateServingCell(row, data.serving_html);
       } else {
         const status = statusOf(btn);
         row
