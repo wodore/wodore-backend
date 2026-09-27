@@ -5,6 +5,7 @@ This file is required and if development.py is present these
 values are overridden.
 """
 
+from server.settings.components import config
 from server.settings.components.common import DJANGO_TRUSTED_DOMAINS, MIDDLEWARE
 from server.settings.components.oidc import (
     ZITADEL_RP_ENABLED,
@@ -60,6 +61,14 @@ CSRF_COOKIE_SECURE = True
 
 CORS_ALLOWED_ORIGIN_REGEXES = [
     *[f"^https?://{d}" for d in DJANGO_TRUSTED_DOMAINS],
+]
+
+# Exact-match CORS origins from the environment (comma-separated) -
+# django-cors-headers unions them with the regexes above. Used for
+# WebView origins that the ^https?:// regex cannot express, e.g. the
+# Capacitor app: capacitor://localhost (iOS), https://localhost (Android).
+CORS_ALLOWED_ORIGINS = [
+    o.strip() for o in config("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()
 ]
 
 # Zitadel RP mode only (AUTH_PROVIDER=zitadel): refresh OIDC sessions.
