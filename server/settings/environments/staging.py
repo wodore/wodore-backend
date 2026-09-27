@@ -41,3 +41,13 @@ MIDDLEWARE = tuple(MIDDLEWARE)  # pyright: ignore[reportUndefinedVariable]
 # Note: the Zitadel SessionRefresh middleware is appended by
 # production.py (inherited above via `from ... import *`); do not add it
 # again here or it runs twice.
+
+# Capacitor app builds (Android/iOS) call the API from the WebView origin,
+# not from the site domain: iOS sends capacitor://localhost, Android
+# (scheme https + hostname localhost) sends https://localhost. Exact
+# matches; django-cors-headers unions these with the regexes from
+# production.py. Staging only - production is added when the app ships.
+CORS_ALLOWED_ORIGINS = [
+    "capacitor://localhost",
+    "https://localhost",
+]
