@@ -350,6 +350,85 @@ class TestLoginMethods:
         }
 
 
+class TestLoginRedirects:
+    """Deep links requiring login land back at the original page - not the
+    admin index (the admin sends /admin/login/?next=<original path>)."""
+
+    def test_admin_deep_link_roundtrip(self, client, local_users):
+        from django.urls import reverse
+
+        deep_link = reverse("admin:accounts_user_changelist")
+        # 1. Anonymous deep link -> admin redirects to its login with next
+        response = client.get(deep_link)
+        assert response.status_code == 302
+        location = response["Location"]
+        assert location.startswith("/admin/login/")
+        assert f"next={deep_link}" in location
+        # 2. Our bridge forwards to the allauth login, still carrying next
+        response = client.get(location)
+        assert response.status_code == 302
+        login_url = response["Location"]
+        assert login_url.startswith("/accounts/login/")
+        assert f"next={deep_link}" in login_url
+        # 3. Signing in returns to the original deep link
+        response = client.post(
+            login_url,
+            data={"login": "admin@local.test", "password": "admin-dev"},
+        )
+        assert response.status_code == 302
+        assert response["Location"] == deep_link
+
+    def test_account_deep_link_roundtrip(self, client, local_users):
+        target = "/accounts/2fa/"
+        response = client.get(target)
+        assert response.status_code == 302
+        login_url = response["Location"]
+        assert login_url.startswith("/accounts/login/")
+        assert "next=/accounts/2fa/" in login_url
+        response = client.post(
+            login_url,
+            data={"login": "admin@local.test", "password": "admin-dev"},
+        )
+        assert response.status_code == 302
+        assert response["Location"] == target
+
+    def test_admin_login_bridge_rejects_open_redirects(self, client):
+        response = client.get("/admin/login/", {"next": "https://evil.example/phish"})
+        assert response.status_code == 302
+        # Un-safe targets fall back to the admin, never an external host.
+        assert "evil.example" not in response["Location"]
+        assert "next=/admin/" in response["Location"]
+
+    def test_zitadel_rp_urls_mounted(self, settings):
+        """The Zitadel RP surface (AUTH_PROVIDER=zitadel, the production
+        default) must mount /oidc/ routes and forward the admin login to
+        the RP authenticate view - guarding against urlconf regressions."""
+        from importlib import reload
+
+        from django.test import Client
+        from django.urls import clear_url_caches, resolve
+
+        import server.urls as server_urls
+
+        settings.ZITADEL_RP_ENABLED = True
+        settings.OIDC_ENABLED = False
+        clear_url_caches()
+        try:
+            reload(server_urls)
+            assert (
+                resolve("/oidc/authenticate/").view_name == "oidc_authentication_init"
+            )
+            bridge = Client().get("/admin/login/", {"next": "/admin/huts/hut/"})
+            assert bridge.status_code == 302
+            assert bridge["Location"].startswith("/oidc/authenticate")
+            assert "next=/admin/huts/hut/" in bridge["Location"]
+        finally:
+            settings.ZITADEL_RP_ENABLED = False
+            settings.OIDC_ENABLED = True
+            clear_url_caches()
+            reload(server_urls)
+
+
 class TestEndSession:
     def test_end_session_logs_out(self, logged_in_client, local_users):
         response = logged_in_client.get(
