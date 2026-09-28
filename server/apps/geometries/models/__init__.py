@@ -1,3 +1,4 @@
+from ..visit_counter import ObjectVisitDay
 from ._admin_detail import AdminDetail
 from ._amenity_detail import AmenityDetail, MonthStatus, OperatingStatus
 from ._associations import (
@@ -23,6 +24,7 @@ __all__ = [
     "GeoPlaceImageAssociation",
     "GeoPlaceSourceAssociation",
     "MonthStatus",
+    "ObjectVisitDay",
     "OperatingStatus",
     "UpdatePolicy",
 ]
