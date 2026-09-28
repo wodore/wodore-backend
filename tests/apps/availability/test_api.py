@@ -4,6 +4,10 @@ The availability endpoints read the cached ``HutAvailability`` table
 (no external calls at request time), so rows from the
 AvailabilityFactory give deterministic data. Assertions stay flexible
 (status + shape), per the external-source nature of the data.
+
+The factory rows reference seed-data organizations: fixture-loaded
+rows leave the pk sequences behind, so creating new organizations
+from factories collides with existing ids.
 """
 
 import pytest
@@ -13,6 +17,7 @@ from tests.factories.availability import AvailabilityFactory
 from django.utils import timezone
 
 from server.apps.huts.models import Hut
+from server.apps.organizations.models import Organization
 
 pytestmark = pytest.mark.django_db
 
@@ -21,8 +26,10 @@ pytestmark = pytest.mark.django_db
 def hut_with_availability(seed_data):
     hut = Hut.objects.first()
     assert hut is not None
+    org = Organization.objects.first()
+    assert org is not None
     today = timezone.localdate()
-    AvailabilityFactory(hut=hut, availability_date=today)
+    AvailabilityFactory(hut=hut, source_organization=org, availability_date=today)
     return hut, today
 
 

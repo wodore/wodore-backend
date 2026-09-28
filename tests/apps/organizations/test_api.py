@@ -2,8 +2,6 @@
 
 import pytest
 
-from tests.factories import OrganizationFactory
-
 pytestmark = pytest.mark.django_db
 
 
@@ -17,10 +15,13 @@ class TestOrganizationsApi:
             assert org["slug"]
 
     def test_organization_detail(self, seed_data, client):
-        # Use a factory-made organization so the detail lookup is
-        # deterministic regardless of seed visibility filters.
-        org = OrganizationFactory()
-        response = client.get(f"/v1/organizations/{org.slug}")
+        # Pick a listed organization instead of factory-making one:
+        # fixture-loaded rows leave pk sequences behind and factory
+        # inserts collide with existing ids. Being listed also proves
+        # the row passes the endpoint's visibility filters.
+        listed = client.get("/v1/organizations/").json()
+        assert listed, "No organizations listed - seed data incomplete"
+        slug = listed[0]["slug"]
+        response = client.get(f"/v1/organizations/{slug}")
         assert response.status_code == 200
-        data = response.json()
-        assert data["slug"] == org.slug
+        assert response.json()["slug"] == slug
