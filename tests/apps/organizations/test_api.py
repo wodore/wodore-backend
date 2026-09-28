@@ -2,6 +2,8 @@
 
 import pytest
 
+from tests.factories import OrganizationFactory
+
 pytestmark = pytest.mark.django_db
 
 
@@ -25,3 +27,11 @@ class TestOrganizationsApi:
         response = client.get(f"/v1/organizations/{slug}")
         assert response.status_code == 200
         assert response.json()["slug"] == slug
+
+    def test_organization_factory_after_seeded_fixtures(self, seed_data):
+        # Regression: fixture-loaded organizations carry explicit pks and
+        # left the pk sequence behind, so factory inserts collided with
+        # existing ids (duplicate key violations). conftest resets the
+        # sequences after seeding - this locks that in.
+        org = OrganizationFactory()
+        assert org.pk
