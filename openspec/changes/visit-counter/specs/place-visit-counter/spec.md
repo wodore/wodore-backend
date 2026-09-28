@@ -28,8 +28,10 @@ counted. Counting failures SHALL NOT affect the observed response.
 Visits SHALL be stored as one row per `(content_type, object_id, day)`
 with a count, attached via Django contenttypes (GenericForeignKey),
 uniquely constrained, with an index supporting top-N-per-day queries. The
-counter SHALL work for any model without schema changes. Rows SHALL NOT
-reference counted objects by hard foreign key (counters outlive them).
+model SHALL use the project's TimeStampedModel (created/modified) for row
+debugging. The counter SHALL work for any model without schema changes.
+Rows SHALL NOT reference counted objects by hard foreign key (counters
+outlive them).
 
 #### Scenario: Flush aggregates the buffer
 

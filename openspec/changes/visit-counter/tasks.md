@@ -1,6 +1,6 @@
 ## 1. Counter model + write path (PR A)
 
-- [ ] 1.1 `ObjectVisitDay` model (content_type FK + object_id + GenericForeignKey, day, count; unique (content_type, object_id, day), day/count-desc index), migration
+- [ ] 1.1 `ObjectVisitDay` model (TimeStampedModel; content_type FK + object_id + GenericForeignKey, day, count; unique (content_type, object_id, day), day/count-desc index), migration
 - [ ] 1.2 `record_visit(obj)` (GenericFK-aware) — visitor-window dedup (ip+ua hash key, ~1 h TTL) then cache-buffer increment + threshold/first-hit flush enqueue (enqueue-only, never in-request flush)
 - [ ] 1.3 q2 flush task `flush_visit_counters()` — atomic read-and-clear per key, single upsert per (place, day)
 - [ ] 1.4 Crawler/operator guard: skip `update_cache` requests and a short static prefetch-UA list

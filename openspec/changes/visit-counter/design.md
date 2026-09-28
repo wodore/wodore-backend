@@ -69,7 +69,9 @@ top-N-per-day queries. This is Django's built-in mechanism for
 migration (which rewrites `content_type` in a data migration), and
 avails/orgs later without schema changes. No hard FKs to the counted
 models (counters outlive their objects); helpers resolve
-`popular_places` by filtering on the place content type.
+`popular_places` by filtering on the place content type. The model uses
+the project's TimeStampedModel — `created`/`modified` reflect first/last
+flush of a day's row, useful for debugging, not analytics.
 
 ### D4 — Admin + sweep consumption
 
