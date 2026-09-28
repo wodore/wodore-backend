@@ -1,7 +1,7 @@
 """HTTP-level smoke tests for the huts API endpoints.
 
 These guard the public read surface (list, detail, geojson, bookings,
-hut types) against model/API drift: e.g. #190 replaced
+categories) against model/API drift: e.g. #190 replaced
 HutImageAssociation.order with score but missed the JSONBAgg ordering
 in get_huts/get_hut, 500-ing every hut request on staging (#202) -
 any single request here would have caught it at queryset compilation
@@ -13,6 +13,7 @@ organizations and image associations).
 
 import pytest
 
+from server.apps.categories.models import Category
 from server.apps.huts.models import Hut
 
 
@@ -51,28 +52,49 @@ class TestHutsApi:
         assert "features" in data
         assert isinstance(data["features"], list)
 
-    def test_hut_types_list(self, seed_data, client):
-        response = client.get("/v1/huts/types/list")
-        assert response.status_code == 200
-        assert isinstance(response.json(), list)
-
-    def test_hut_types_records(self, seed_data, client):
-        response = client.get("/v1/huts/types/records")
-        assert response.status_code == 200
-        assert isinstance(response.json(), dict)
-
 
 @pytest.mark.django_db
 class TestHutBookingsApi:
-    """Deprecated but still live endpoints (used until the frontend fully
-    migrates to availability.geojson)."""
+    """Deprecated but still live endpoints (until the frontend fully
+    migrates to availability.geojson).
+
+    The booking data comes from external provider APIs which are not
+    reachable from the test environment: with no data the endpoint
+    returns its documented 503. Both 200 and 503 prove the endpoint
+    compiled and executed its query path - a FieldError-class bug
+    (see #202) would surface as 500 instead.
+    """
 
     def test_hut_bookings(self, seed_data, client):
         response = client.get("/v1/huts/bookings")
-        assert response.status_code == 200
-        assert isinstance(response.json(), list)
+        assert response.status_code in (200, 503)
+        if response.status_code == 200:
+            assert isinstance(response.json(), list)
 
     def test_hut_bookings_geojson(self, seed_data, client):
         response = client.get("/v1/huts/bookings.geojson")
+        assert response.status_code in (200, 503)
+        if response.status_code == 200:
+            assert "features" in response.json()
+
+
+@pytest.mark.django_db
+class TestCategoriesApi:
+    """Categories replaced the removed hut-types endpoints as the
+    type taxonomy source (see server/apps/huts/api/__init__.py)."""
+
+    @pytest.fixture()
+    def root_category(self, seed_data):
+        root = Category.objects.filter(parent__isnull=True).first()
+        assert root is not None, "No root category - seed data incomplete"
+        return root
+
+    def test_category_tree(self, root_category, client):
+        response = client.get(f"/v1/categories/tree/{root_category.slug}")
         assert response.status_code == 200
-        assert "features" in response.json()
+        assert isinstance(response.json(), list)
+
+    def test_category_list(self, root_category, client):
+        response = client.get(f"/v1/categories/list/{root_category.slug}")
+        assert response.status_code == 200
+        assert isinstance(response.json(), list)
