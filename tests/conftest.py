@@ -10,6 +10,37 @@ def pytest_configure(config):
     os.environ.setdefault("DJANGO_ENV", "test")
 
 
+def _reset_pk_sequences() -> None:
+    """Advance Postgres pk sequences past fixture-loaded explicit ids.
+
+    Fixture files (e.g. organizations.yaml) carry explicit ``pk:``
+    values; loading them does not advance the sequences, so later
+    factory/ORM inserts collide with existing ids (duplicate key
+    violations - seen live in CI and on staging). Idempotent.
+    """
+    from django.apps import apps
+    from django.db import connection
+
+    qn = connection.ops.quote_name
+    with connection.cursor() as cursor:
+        for model in apps.get_models():
+            field = model._meta.auto_field
+            if field is None:
+                continue
+            table = model._meta.db_table
+            cursor.execute(
+                "SELECT pg_get_serial_sequence(%s, %s)", [table, field.column]
+            )
+            seq = cursor.fetchone()[0]
+            if not seq:
+                continue
+            cursor.execute(
+                f"SELECT setval(%s, COALESCE((SELECT MAX({qn(field.column)})"
+                f" FROM {qn(table)}), 0) + 1, false)",
+                [seq],
+            )
+
+
 def _seed_file_hash() -> str:
     """Compute a hash of all seed YAML files to detect changes."""
     from tests.seed.loader import SEED_DIR
@@ -54,6 +85,12 @@ def seed_data(django_db_setup, django_db_blocker):
             from django.core.cache import cache
 
             cache.set("test_seed_hash", _seed_file_hash())
-            return results
+        else:
+            results = {}
 
-    return {}
+        # App fixtures load with explicit pks and leave sequences behind
+        # (management base); reset on every session regardless of whether
+        # seeds were (re)loaded. Must run inside the unblocked context.
+        _reset_pk_sequences()
+
+    return results
