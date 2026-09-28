@@ -555,3 +555,69 @@
     config: {}
     props_schema: {}
     order: 17
+- model: organizations.organization
+  pk: 17
+  fields:
+    i18n:
+      name_en: Unico Rifugi
+      name_fr: Unico Rifugi
+      name_it: Unico Rifugi
+      fullname_en: Club Alpino Italiano
+      fullname_fr: Club Alpino Italiano
+      fullname_it: Club Alpino Italiano
+      description_en: >-
+        Catalog of CAI huts and shelters in Italy (Club Alpino Italiano).
+      description_fr: >-
+        Catalogue des refuges du CAI en Italie (Club Alpino Italiano).
+      description_it: >-
+        Catalogo dei rifugi del CAI in Italia (Club Alpino Italiano).
+    slug: unico
+    is_active: true
+    is_public: true
+    name: Unico Rifugi
+    fullname: Club Alpino Italiano
+    description: >-
+      Katalog der CAI-Hütten und Schutzhütten in Italien (Club Alpino
+      Italiano).
+    url: https://rifugi.cai.it
+    attribution: ""
+    link_hut_pattern: https://rifugi.cai.it/shelters/{{id}}
+    logo: organizations/logos/unico_icon.png
+    color_light: "#1c3f94"
+    color_dark: "#a8c0ee"
+    config: {}
+    props_schema: {}
+    order: 18
+- model: organizations.organization
+  pk: 18
+  fields:
+    i18n:
+      name_en: Prenota Rifugi
+      name_fr: Prenota Rifugi
+      name_it: Prenota Rifugi
+      fullname_en: Club Alpino Italiano
+      fullname_fr: Club Alpino Italiano
+      fullname_it: Club Alpino Italiano
+      description_en: >-
+        CAI booking platform for huts in Italy with online reservation.
+      description_fr: >-
+        Plateforme de réservation du CAI pour les refuges en Italie.
+      description_it: >-
+        Piattaforma di prenotazione del CAI per i rifugi in Italia.
+    slug: prenota
+    is_active: true
+    is_public: true
+    name: Prenota Rifugi
+    fullname: Club Alpino Italiano
+    description: >-
+      Reservierungsplattform des CAI für Hütten in Italien mit
+      Online-Reservierung.
+    url: https://www.prenotarifugi.cai.it
+    attribution: ""
+    link_hut_pattern: https://www.prenotarifugi.cai.it/dettaglio/?id={{id}}
+    logo: organizations/logos/prenota_icon.png
+    color_light: "#b01e2e"
+    color_dark: "#f0b6bd"
+    config: {}
+    props_schema: {}
+    order: 19

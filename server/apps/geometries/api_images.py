@@ -15,6 +15,7 @@ from django.views.decorators.cache import cache_control
 
 from server.apps.translations import LanguageParam, activate, with_language_param
 
+from . import image_response_cache
 from .models import GeoPlace
 from .providers import (
     CamptocampProvider,
@@ -114,6 +115,20 @@ def nearby_images(
     if sources:
         sources_list = [s.strip() for s in sources.split(",")]
 
+    resp_key = image_response_cache.response_key(
+        "nearby",
+        image_response_cache.center_ident(lat, lon),
+        radius=radius,
+        sources=sources,
+        lang=lang,
+        limit=limit,
+        precision=precision,
+    )
+    if not update_cache:
+        cached, fresh = image_response_cache.get_response(resp_key)
+        if cached is not None and fresh:
+            return cached
+
     # Step 1: Find GeoPlaces and Huts within 10m radius
     query_point = Point(lon, lat, srid=4326)
 
@@ -209,6 +224,12 @@ def nearby_images(
         logger.debug(f"Total raw results from all providers: {len(results)} images")
     except Exception as e:
         logger.error(f"Error fetching images from providers: {e}")
+        cached, _fresh = image_response_cache.get_response(resp_key)
+        if cached is not None:
+            logger.warning(
+                f"Stale fallback: serving cached response for nearby ({lat},{lon})"
+            )
+            return cached
         results = []
 
     # Step 3: Sort by score (primary), then by distance (secondary)
@@ -233,9 +254,11 @@ def nearby_images(
         huts_found=len(huts),
     )
 
-    return ImageCollectionResponse(
+    response = ImageCollectionResponse(
         type="FeatureCollection", features=features, metadata=metadata
     )
+    image_response_cache.set_response(resp_key, response)
+    return response
 
 
 @router.get(
@@ -290,25 +313,102 @@ def images_for_place(
     if sources:
         sources_list = [s.strip() for s in sources.split(",")]
 
+    resp_key = image_response_cache.response_key(
+        "place", place_slug, radius=radius, sources=sources, lang=lang, limit=limit
+    )
+    if not update_cache:
+        cached, fresh = image_response_cache.get_response(resp_key)
+        if cached is not None and fresh:
+            return cached
+
     logger.debug(f"Fetching images for GeoPlace '{place_slug}'")
     logger.debug(f"Radius: {radius}m, Sources: {sources_list}")
 
-    try:
-        # Fetch images and place info
-        results, place_info = asyncio.run(
-            fetch_images_for_place(
-                place_slug=place_slug,
-                place_type="geoplace",
-                radius=radius,
-                sources=sources_list,
-                limit=limit,
-                update_cache=update_cache,  # Pass update_cache flag
+    from server.apps.geometries.models import GeoPlace
+
+    from .pinning import pin_place_images, place_has_visible_pins
+
+    place = GeoPlace.objects.filter(
+        slug=place_slug, is_active=True, is_public=True
+    ).first()
+
+    # Pins fast path (openspec pin-external-images): the place already has
+    # pinned/uploaded images — serve them from the DB via the internal
+    # Wodore provider only; no external provider is contacted.
+    serve_from_pins = bool(
+        place
+        and not sources_list
+        and not update_cache
+        and place_has_visible_pins(place)
+    )
+
+    if serve_from_pins and place is not None:
+        # Queued refresh (never in-request): stale pins enqueue a q2 task;
+        # this visitor gets the current pins, the next one the fresh set.
+        from .pinning import maybe_enqueue_place_refresh
+
+        maybe_enqueue_place_refresh(place)
+        try:
+            # Pure-DB fast path — same as the hut endpoint.
+            results = WodoreProvider(place_type="geoplace")._fetch_sync(
+                [], place.location.y, place.location.x, radius
             )
-        )
-        logger.debug(f"Total raw results from all providers: {len(results)} images")
-    except Exception as e:
-        logger.error(f"Error fetching images for place '{place_slug}': {e}")
-        raise
+            place_info = {
+                "location": {"lat": place.location.y, "lon": place.location.x}
+            }
+            logger.debug(
+                f"Serving {len(results)} pinned/local images for place '{place_slug}'"
+            )
+        except Exception as e:
+            logger.error(f"Error fetching pinned images for place '{place_slug}': {e}")
+            cached, _fresh = image_response_cache.get_response(resp_key)
+            if cached is not None:
+                logger.warning(
+                    f"Stale fallback: serving cached response for place '{place_slug}'"
+                )
+                return cached
+            raise
+    else:
+        try:
+            # Fetch images and place info
+            results, place_info = asyncio.run(
+                fetch_images_for_place(
+                    place_slug=place_slug,
+                    place_type="geoplace",
+                    radius=radius,
+                    sources=sources_list,
+                    limit=limit,
+                    update_cache=update_cache,  # Pass update_cache flag
+                )
+            )
+            logger.debug(f"Total raw results from all providers: {len(results)} images")
+        except Exception as e:
+            logger.error(f"Error fetching images for place '{place_slug}': {e}")
+            cached, _fresh = image_response_cache.get_response(resp_key)
+            if cached is not None:
+                logger.warning(
+                    f"Stale fallback: serving cached response for place '{place_slug}'"
+                )
+                return cached
+            raise
+
+        # Lazy pin-on-first-visit / forced re-pin (full default runs only).
+        if place is not None and not sources_list:
+            try:
+                stats = pin_place_images(place, results)
+                logger.info(f"Pinned images for place '{place_slug}': {stats}")
+                # Pinning bumped the response-cache version — recompute the
+                # key so this response is stored at the new version.
+                resp_key = image_response_cache.response_key(
+                    "place",
+                    place_slug,
+                    radius=radius,
+                    sources=sources,
+                    lang=lang,
+                    limit=limit,
+                )
+            except Exception as e:
+                logger.error(f"Error pinning images for place '{place_slug}': {e}")
 
     # Sort by score (primary), then by distance (secondary)
     results.sort(key=lambda r: (-r.score, r.distance_m))
@@ -335,9 +435,11 @@ def images_for_place(
         huts_found=0,
     )
 
-    return ImageCollectionResponse(
+    response = ImageCollectionResponse(
         type="FeatureCollection", features=features, metadata=metadata
     )
+    image_response_cache.set_response(resp_key, response)
+    return response
 
 
 @router.get(
@@ -392,25 +494,99 @@ def images_for_hut(
     if sources:
         sources_list = [s.strip() for s in sources.split(",")]
 
+    resp_key = image_response_cache.response_key(
+        "hut", hut_slug, radius=radius, sources=sources, lang=lang, limit=limit
+    )
+    if not update_cache:
+        cached, fresh = image_response_cache.get_response(resp_key)
+        if cached is not None and fresh:
+            return cached
+
     logger.debug(f"Fetching images for Hut '{hut_slug}'")
     logger.debug(f"Radius: {radius}m, Sources: {sources_list}")
 
-    try:
-        # Fetch images and place info
-        results, place_info = asyncio.run(
-            fetch_images_for_place(
-                place_slug=hut_slug,
-                place_type="hut",
-                radius=radius,
-                sources=sources_list,
-                limit=limit,
-                update_cache=update_cache,  # Pass update_cache flag
+    from server.apps.huts.models import Hut
+
+    from .pinning import pin_place_images, place_has_visible_pins
+
+    hut = Hut.objects.filter(slug=hut_slug, is_active=True, is_public=True).first()
+
+    # Pins fast path (openspec pin-external-images): the hut already has
+    # pinned/uploaded images — serve them from the DB via the internal
+    # Wodore provider only; no external provider is contacted.
+    serve_from_pins = bool(
+        hut and not sources_list and not update_cache and place_has_visible_pins(hut)
+    )
+
+    if serve_from_pins and hut is not None:
+        # Queued refresh (never in-request): stale pins enqueue a q2 task;
+        # this visitor gets the current pins, the next one the fresh set.
+        from .pinning import maybe_enqueue_place_refresh
+
+        maybe_enqueue_place_refresh(hut)
+        try:
+            # Pure-DB fast path: the internal Wodore provider converts the
+            # hut's associations (uploads + pins) to results — no external
+            # provider, no async machinery needed.
+            results = WodoreProvider(place_type="hut")._fetch_sync(
+                [], hut.location.y, hut.location.x, radius
             )
-        )
-        logger.debug(f"Total raw results from all providers: {len(results)} images")
-    except Exception as e:
-        logger.error(f"Error fetching images for hut '{hut_slug}': {e}")
-        raise
+            place_info = {"location": {"lat": hut.location.y, "lon": hut.location.x}}
+            logger.debug(
+                f"Serving {len(results)} pinned/local images for hut '{hut_slug}'"
+            )
+        except Exception as e:
+            logger.error(f"Error fetching pinned images for hut '{hut_slug}': {e}")
+            cached, _fresh = image_response_cache.get_response(resp_key)
+            if cached is not None:
+                logger.warning(
+                    f"Stale fallback: serving cached response for hut '{hut_slug}'"
+                )
+                return cached
+            raise
+    else:
+        try:
+            # Fetch images and place info
+            results, place_info = asyncio.run(
+                fetch_images_for_place(
+                    place_slug=hut_slug,
+                    place_type="hut",
+                    radius=radius,
+                    sources=sources_list,
+                    limit=limit,
+                    update_cache=update_cache,  # Pass update_cache flag
+                )
+            )
+            logger.debug(f"Total raw results from all providers: {len(results)} images")
+        except Exception as e:
+            logger.error(f"Error fetching images for hut '{hut_slug}': {e}")
+            cached, _fresh = image_response_cache.get_response(resp_key)
+            if cached is not None:
+                logger.warning(
+                    f"Stale fallback: serving cached response for hut '{hut_slug}'"
+                )
+                return cached
+            raise
+
+        # Lazy pin-on-first-visit / forced re-pin: persist provider results
+        # (full default runs only — explicit `sources` queries stay ephemeral).
+        if hut is not None and not sources_list:
+            try:
+                stats = pin_place_images(hut, results)
+                logger.info(f"Pinned images for hut '{hut_slug}': {stats}")
+                # Pinning bumped the response-cache version — recompute the
+                # key so this response is stored (and later read) at the
+                # new version.
+                resp_key = image_response_cache.response_key(
+                    "hut",
+                    hut_slug,
+                    radius=radius,
+                    sources=sources,
+                    lang=lang,
+                    limit=limit,
+                )
+            except Exception as e:
+                logger.error(f"Error pinning images for hut '{hut_slug}': {e}")
 
     # Deduplicate results
     # Sort by score (primary), then by distance (secondary)
@@ -438,6 +614,8 @@ def images_for_hut(
         huts_found=1,
     )
 
-    return ImageCollectionResponse(
+    response = ImageCollectionResponse(
         type="FeatureCollection", features=features, metadata=metadata
     )
+    image_response_cache.set_response(resp_key, response)
+    return response

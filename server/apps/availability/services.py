@@ -83,6 +83,9 @@ class AvailabilityService:
         from hut_services.core.schema import (
             HutBookingsSchema as HutServiceBookingSchema,
         )
+        from hut_services.core.schema import (
+            TotalFallback,
+        )
 
         from server.apps.huts.schemas_booking import HutBookingsSchema
 
@@ -114,6 +117,24 @@ class AvailabilityService:
                 if not service_source_ids:
                     continue
 
+                # Per-hut total fallback from the hut's own capacities:
+                # lets the service overwrite scraped/stale page totals
+                # (e.g. Prenota's prober also caps its ladder at the real
+                # total). Huts without a capacity stay absent from the dict
+                # and fall back to the service's own hut-detail chain.
+                capacity_rows = obj.filter(
+                    orgs_source__organization__slug=src_name,
+                    orgs_source__source_id__in=service_source_ids,
+                ).values("orgs_source__source_id", "capacity_open", "capacity_closed")
+                total_fallbacks: dict[str, TotalFallback] = {}
+                for row in capacity_rows:
+                    sid = str(row["orgs_source__source_id"])
+                    if row["capacity_open"] is not None:
+                        total_fallbacks[sid] = TotalFallback(
+                            standard=row["capacity_open"],
+                            reduced=row["capacity_closed"] or row["capacity_open"],
+                        )
+
                 # Fetch bookings from service (service handles request_interval internally)
                 # The service's get_bookings already handles progress per hut internally
                 service_bookings = service.get_bookings(
@@ -124,6 +145,8 @@ class AvailabilityService:
                     request_interval=request_interval,
                     progress_callback=progress_callback,  # Pass through for per-hut updates
                     cached=False,  # Disable cache to enable true batched fetching
+                    total_fallback=total_fallbacks
+                    or None,  # per-hut capacities (ignored by exact sources)
                 )
                 bookings.update(service_bookings)
 
@@ -556,6 +579,7 @@ class AvailabilityService:
                             source_id=source_hut_id,
                             free=booking.free,
                             total=booking.total,
+                            free_tolerance=booking.free_tolerance,
                             occupancy_percent=booking.occupancy_percent,
                             occupancy_steps=booking.occupancy_steps,
                             occupancy_status=occupancy_status,
@@ -572,6 +596,7 @@ class AvailabilityService:
                         changed = (
                             availability.free != booking.free
                             or availability.total != booking.total
+                            or availability.free_tolerance != booking.free_tolerance
                             or availability.hut_type != hut_type_obj
                             or availability.reservation_status != reservation_status
                         )
@@ -585,6 +610,7 @@ class AvailabilityService:
                                     availability_date=availability.availability_date,
                                     free=booking.free,
                                     total=booking.total,
+                                    free_tolerance=booking.free_tolerance,
                                     occupancy_percent=booking.occupancy_percent,
                                     occupancy_status=occupancy_status,
                                     reservation_status=reservation_status,
@@ -597,6 +623,7 @@ class AvailabilityService:
                             # Update current state
                             availability.free = booking.free
                             availability.total = booking.total
+                            availability.free_tolerance = booking.free_tolerance
                             availability.occupancy_percent = booking.occupancy_percent
                             availability.occupancy_steps = booking.occupancy_steps
                             availability.occupancy_status = occupancy_status
@@ -806,6 +833,7 @@ class AvailabilityService:
                         source_id=source_hut_id,
                         free=booking.free,
                         total=booking.total,
+                        free_tolerance=booking.free_tolerance,
                         occupancy_percent=booking.occupancy_percent,
                         occupancy_steps=booking.occupancy_steps,
                         occupancy_status=occupancy_status,
@@ -821,6 +849,7 @@ class AvailabilityService:
                     changed = (
                         availability.free != booking.free
                         or availability.total != booking.total
+                        or availability.free_tolerance != booking.free_tolerance
                         or availability.hut_type != hut_type_obj
                         or availability.reservation_status != reservation_status
                     )
@@ -834,6 +863,7 @@ class AvailabilityService:
                                 availability_date=availability.availability_date,
                                 free=booking.free,
                                 total=booking.total,
+                                free_tolerance=booking.free_tolerance,
                                 occupancy_percent=booking.occupancy_percent,
                                 occupancy_status=occupancy_status,
                                 reservation_status=reservation_status,
@@ -846,6 +876,7 @@ class AvailabilityService:
                         # Update current state
                         availability.free = booking.free
                         availability.total = booking.total
+                        availability.free_tolerance = booking.free_tolerance
                         availability.occupancy_percent = booking.occupancy_percent
                         availability.occupancy_steps = booking.occupancy_steps
                         availability.occupancy_status = occupancy_status

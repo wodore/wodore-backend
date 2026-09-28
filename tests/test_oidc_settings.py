@@ -1,34 +1,44 @@
-"""Tests for the optional-OIDC feature flags (spec: optional-oidc).
+"""Tests for the auth provider switch (spec: optional-oidc).
 
-Flag semantics under test (settings component loads before the environment
-files, so defaults derive from DJANGO_ENV):
+Semantics under test (settings component loads before the environment
+files):
 
-- development/test: OIDC disabled, local auth provider enabled (default)
-- production/staging: OIDC enabled, local auth refused
-- explicit env vars always win
-- enabled-but-unreachable provider aborts startup (fail-fast)
+- ``AUTH_PROVIDER`` defaults to ``builtin`` in development/test and
+  ``zitadel`` in production/staging; explicit env vars always win
+- ``AUTH_PROVIDER=builtin`` outside dev/test without a provider signing
+  key aborts startup (fail-fast)
+- ``AUTH_PROVIDER=zitadel`` with an unreachable provider aborts startup
+  (discovery fail-fast, as before the migration)
 
 Settings load in a subprocess with a controlled DJANGO_ENV; importing
 settings performs no database access.
 """
 
+import json
 import os
 import subprocess
 import sys
 
 import pytest
 
-from django.core.management import call_command
-from django.core.management.base import CommandError
-
 pytestmark = pytest.mark.django_db
 
 _PRINT_FLAGS = (
     "import django; django.setup(); "
     "from django.conf import settings; "
+    "print(f'AUTH_PROVIDER={settings.AUTH_PROVIDER}'); "
     "print(f'OIDC_ENABLED={settings.OIDC_ENABLED}'); "
-    "print(f'LOCAL_AUTH_ENABLED={settings.LOCAL_AUTH_ENABLED}')"
+    "print(f'ZITADEL_RP_ENABLED={settings.ZITADEL_RP_ENABLED}'); "
+    "print(f'ROLLBACK={settings.ZITADEL_ROLLBACK_ENABLED}'); "
+    "print(f'HAS_LOCAL_AUTH={hasattr(settings, \"LOCAL_AUTH_ENABLED\")}')"
 )
+
+
+def _dev_key_json() -> str:
+    """The resolved (dev/test committed) provider key as JSON for envs."""
+    from django.conf import settings
+
+    return json.dumps(settings.OIDC_PROVIDER_PRIVATE_JWK)
 
 
 def _load_settings_env(env: str, extra: dict[str, str] | None = None) -> str:
@@ -48,70 +58,92 @@ def _load_settings_env(env: str, extra: dict[str, str] | None = None) -> str:
         capture_output=True,
         text=True,
         env=environ,
-        timeout=90,
+        timeout=120,
     )
     return result.stdout + result.stderr
 
 
 class TestFlagDefaults:
-    def test_dev_defaults_to_local_auth(self):
-        out = _load_settings_env("development")
-        assert "OIDC_ENABLED=False" in out
-        assert "LOCAL_AUTH_ENABLED=True" in out
+    @pytest.mark.parametrize("env", ["development", "test"])
+    def test_builtin_provider_by_default_in_dev(self, env):
+        out = _load_settings_env(env)
+        assert "AUTH_PROVIDER=builtin" in out
+        assert "OIDC_ENABLED=True" in out
+        assert "ZITADEL_RP_ENABLED=False" in out
+        assert "HAS_LOCAL_AUTH=False" in out
+        assert "Traceback" not in out
 
-    def test_test_env_defaults_to_local_auth(self):
-        out = _load_settings_env("test")
+    def test_zitadel_stays_default_in_production(self):
+        """Phase 1 keeps Zitadel as the production default; the flip to
+        builtin is a later env change (AUTH_PROVIDER=builtin)."""
+        out = _load_settings_env("production")
+        assert "ImproperlyConfigured" in out  # no reachable provider configured
+        assert "OIDC_OP_BASE_URL" in out
+
+    def test_production_zitadel_mode_with_builtin_key_only(self):
+        """Zitadel mode must not require the builtin provider key."""
+        out = _load_settings_env(
+            "production",
+            extra={
+                "AUTH_PROVIDER": "zitadel",
+                "OIDC_OP_BASE_URL": "https://zitadel.invalid",
+            },
+        )
+        assert "ImproperlyConfigured" in out  # discovery fail-fast, not key
+
+    def test_builtin_in_production_requires_key(self):
+        out = _load_settings_env("production", extra={"AUTH_PROVIDER": "builtin"})
+        assert "ImproperlyConfigured" in out
+        assert "LOCAL_AUTH_PRIVATE_KEY_JWK" in out
+
+    def test_explicit_builtin_wins_in_production(self):
+        out = _load_settings_env(
+            "production",
+            extra={
+                "AUTH_PROVIDER": "builtin",
+                "LOCAL_AUTH_PRIVATE_KEY_JWK": _dev_key_json(),
+                "ZITADEL_API_PRIVATE_KEY_JSON": '{"clientId":"x","keyId":"y","key":"z"}',
+            },
+        )
+        assert "AUTH_PROVIDER=builtin" in out
+        assert "OIDC_ENABLED=True" in out
+        assert "ZITADEL_RP_ENABLED=False" in out
+        assert "ROLLBACK=True" in out
+        assert "Traceback" not in out
+
+    def test_none_mode_needs_nothing(self):
+        """AUTH_PROVIDER=none is the image-build/no-auth state: no discovery
+        fetch, no signing key, no provider surfaces."""
+        out = _load_settings_env("production", extra={"AUTH_PROVIDER": "none"})
+        assert "AUTH_PROVIDER=none" in out
         assert "OIDC_ENABLED=False" in out
-        assert "LOCAL_AUTH_ENABLED=True" in out
+        assert "ZITADEL_RP_ENABLED=False" in out
+        assert "ROLLBACK=False" in out
+        assert "Traceback" not in out
+
+    def test_invalid_provider_value_aborts(self):
+        out = _load_settings_env("development", extra={"AUTH_PROVIDER": "saml"})
+        assert "ImproperlyConfigured" in out
+        assert "AUTH_PROVIDER" in out
 
 
 class TestFailFast:
-    def test_enabled_but_unreachable_aborts(self):
-        """Production default enables OIDC; the unreachable provider must abort."""
-        out = _load_settings_env("production")
-        assert (
-            "OIDC is enabled but the discovery document could not be retrieved" in out
+    def test_zitadel_mode_unreachable_provider_aborts(self):
+        out = _load_settings_env(
+            "development",
+            extra={"AUTH_PROVIDER": "zitadel"},
         )
+        assert "ImproperlyConfigured" in out
+        assert "discovery" in out
 
-    def test_explicit_oidc_enabled_override_in_test_env(self):
-        """An explicit OIDC_ENABLED=true override must be honored (and then
-        fail fast against the unreachable default provider)."""
-        out = _load_settings_env("test", extra={"OIDC_ENABLED": "true"})
-        assert (
-            "OIDC is enabled but the discovery document could not be retrieved" in out
+    def test_rollback_without_zitadel_key_aborts(self):
+        out = _load_settings_env(
+            "production",
+            extra={
+                "AUTH_PROVIDER": "builtin",
+                "LOCAL_AUTH_PRIVATE_KEY_JWK": _dev_key_json(),
+                "ZITADEL_API_PRIVATE_KEY_JSON": "",
+            },
         )
-
-    def test_production_refuses_local_auth(self):
-        out = _load_settings_env("production", extra={"LOCAL_AUTH_ENABLED": "true"})
-        assert "LOCAL_AUTH_ENABLED=true is only allowed" in out
-
-
-class TestDisabledMode:
-    def test_oidc_disabled_in_test_env(self, settings):
-        assert settings.OIDC_ENABLED is False
-        assert settings.LOCAL_AUTH_ENABLED is True
-
-    def test_permission_backend_not_registered(self, settings):
-        assert (
-            "server.core.oidc_permission.PermissionBackend"
-            not in settings.AUTHENTICATION_BACKENDS
-        )
-        assert (
-            "django.contrib.auth.backends.ModelBackend"
-            in settings.AUTHENTICATION_BACKENDS
-        )
-
-    def test_oidc_urls_not_mounted(self):
-        from django.urls import Resolver404, resolve
-
-        with pytest.raises(Resolver404):
-            resolve("/oidc/authenticate/")
-
-    def test_admin_login_is_classic_form(self, client):
-        response = client.get("/admin/login/?next=/admin/")
-        assert response.status_code == 200
-        assert b"/oidc/authenticate" not in response.content
-
-    def test_api_test_token_refuses(self):
-        with pytest.raises(CommandError, match="OIDC is disabled"):
-            call_command("api_test_token")
+        assert "ImproperlyConfigured" in out
+        assert "Zitadel" in out

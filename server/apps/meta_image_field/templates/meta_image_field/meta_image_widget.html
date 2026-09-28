@@ -1,55 +1,105 @@
 {% load i18n %}
-<div class="imagefocus-file-upload">
-    <div class="imagefocus-file-upload__image bg-gray-50 border flex items-center justify-center mb-4 min-h-32 p-1 rounded-md w-48 dark:bg-white/2 dark:border-gray-700">
+{% comment %}
+    Meta image widget (unfold admin).
+
+    Styling note: only tailwind utilities that exist in the admin's compiled
+    CSS are used here (verified against unfold/static/unfold/css/styles.css);
+    everything else is styled via meta_image_field/css/style.css using the
+    admin theme's CSS variables, so light/dark themes both work.
+
+    JS hooks (meta_image_widget.js depends on these):
+    .imagefocus-file-upload, .imagefocus-file-upload__image, #image-preview,
+    #url_upload (name="{{ widget.name }}_url"), .imagefocus-file-remove-area,
+    .meta-image-input, .mfu-download-raw, .mfu-filename, .mfu-badge-external,
+    .mfu-rawlink-row, .mfu-progress, .mfu-dl-msg
+{% endcomment %}
+<div class="imagefocus-file-upload mfu"
+     data-msg-downloaded="{% trans 'Downloaded — click Save to store the file locally.' %}"
+     data-msg-failed="{% trans 'Download failed' %}"
+     data-msg-fallback="{% trans 'The URL field was filled instead — saving will fetch it server-side.' %}"
+     data-label-local="{% trans 'Stored locally' %}">
+    <div class="imagefocus-file-upload__image mfu-preview-box flex items-center justify-center mb-2 rounded-md border p-1 w-48">
         {% if widget.is_initial and widget.value and widget.value.url %}
-            <img src="{{ widget.value.url }}" alt="{% trans 'Image preview' %}" class="block rounded" id="image-preview" />
+            <img src="{{ widget.value.url }}" alt="{% trans 'Image preview' %}" id="image-preview" />
+        {% elif widget.raw_url %}
+            <img src="{{ widget.raw_url }}" alt="{% trans 'Image preview (external source)' %}" id="image-preview" />
         {% endif %}
     </div>
 
-    <div class="border flex items-center overflow-hidden rounded-md shadow-sm text-sm max-w-2xl dark:border-gray-700">
-        {% if widget.is_initial and not widget.required and False %}
-            <div class="bg-gray-50 border-r flex flex-none items-center self-stretch px-3 dark:bg-white/2 dark:border-gray-700 dark:text-gray-400">
-                <label for="{{ widget.checkbox_id }}" class="flex items-center">
-                    <input type="checkbox"{% if widget.class %} class="{{ widget.class }}"{% endif %} name="{{ widget.checkbox_name }}" id="{{ widget.checkbox_id }}" />
-                    <span class="ml-2 text-gray-500 dark:text-gray-400">
-                        {{ widget.clear_checkbox_label }}
-                    </span>
-                </label>
-            </div>
+    <div class="mfu-status mb-2">
+        {% if widget.is_initial and widget.value and widget.value.url %}
+            <span class="mfu-badge mfu-badge-local">
+                <span class="material-symbols-outlined">cloud_done</span>
+                {% trans "Stored locally" %}
+            </span>
+        {% elif widget.raw_url %}
+            <span class="mfu-badge mfu-badge-external">
+                <span class="material-symbols-outlined">cloud</span>
+                {% trans "Served externally — no local file" %}
+            </span>
+        {% else %}
+            <span class="mfu-badge mfu-badge-none">
+                <span class="material-symbols-outlined">cloud_off</span>
+                {% trans "No image yet" %}
+            </span>
         {% endif %}
+    </div>
 
+    {% if widget.raw_url %}
+        <div class="mfu-rawlink-row mb-2">
+            <span class="mfu-rawlabel">{% trans "Raw source" %}</span>
+            <a href="{{ widget.raw_url }}" target="_blank" rel="noopener" class="mfu-rawlink" title="{{ widget.raw_url }}">{{ widget.raw_url }}</a>
+        </div>
+    {% endif %}
+
+    <div class="border flex items-center overflow-hidden rounded-md shadow-sm text-sm max-w-2xl mfu-urlrow">
+        <input type="url"
+               name="{{ widget.name }}_url"
+               id="url_upload"
+               class="mfu-input grow font-medium px-3 py-2"
+               placeholder="{% trans 'Upload from URL' %}">
+        <button type="button"
+                class="mfu-btn mfu-download-raw flex items-center gap-2 px-3 py-2 text-sm cursor-pointer"
+                data-raw-url="{{ widget.raw_url|default:'' }}"
+                data-label-raw="{% trans 'Download raw' %}"
+                data-endpoint="{% url 'admin:images_image_download_raw' %}"
+                title="{% trans 'Fetch the URL image and attach it as the local file (saved with the form)' %}">
+            <span class="material-symbols-outlined">download</span>
+            <span class="mfu-btn-label">{% trans "Download raw" %}</span>
+        </button>
+    </div>
+
+    <div class="mfu-dl" hidden>
+        <div class="mfu-progress"><div class="mfu-progress-fill"></div></div>
+        <div class="mfu-dl-msg"></div>
+    </div>
+
+    <div class="border flex items-center overflow-hidden rounded-md shadow-sm text-sm max-w-2xl mfu-filerow">
         <input type="text"
                value="{% if widget.value and widget.value.name %}{{ widget.value.name }}{% if widget.value.width and widget.value.height %} ({{ widget.value.width }}x{{ widget.value.height }}){% endif %}{% else %}{% trans 'Choose file to upload' %}{% endif %}"
-               class="bg-white grow font-medium px-3 py-2 text-ellipsis dark:bg-gray-900 {% if widget.value %}text-gray-500 dark:text-gray-400{% else %}text-gray-300 dark:text-gray-400{% endif %}"
+               class="mfu-input mfu-filename grow font-medium px-3 py-2"
                readonly>
 
-        <div class="flex flex-none items-center leading-none self-stretch">
+        <div class="flex items-center">
             <input id="{{ widget.name }}"
                    type="{{ widget.type }}"
                    name="{{ widget.name }}"
                    class="hidden meta-image-input"
                    {% include "django/forms/widgets/attrs.html" %} />
 
-            <a class="imagefocus-file-remove-area">
-                <span class="material-symbols-outlined cursor-pointer text-gray-400 px-1 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200">cancel_presentation</span>
+            <a class="imagefocus-file-remove-area mfu-iconbtn cursor-pointer">
+                <span class="material-symbols-outlined">cancel_presentation</span>
             </a>
 
             {% if widget.is_initial and widget.value and widget.value.url %}
-                <a href="{{ widget.value.url }}" target="_blank" class="flex items-center">
-                    <span class="material-symbols-outlined cursor-pointer text-gray-400 px-1 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200">visibility</span>
+                <a href="{{ widget.value.url }}" target="_blank" class="mfu-iconbtn">
+                    <span class="material-symbols-outlined">visibility</span>
                 </a>
             {% endif %}
 
-            <label for="{{ widget.name }}" class="cursor-pointer text-gray-400 pr-3 pl-1 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200">
+            <label for="{{ widget.name }}" class="mfu-iconbtn mfu-upload-label cursor-pointer">
                 <span class="material-symbols-outlined">file_upload</span>
             </label>
         </div>
-    </div>
-    <div class="border flex items-center overflow-hidden rounded-md shadow-sm text-sm max-w-2xl dark:border-gray-700">
-        <input type="url"
-               name="{{ widget.name }}_url"
-               id="url_upload"
-               class="bg-white grow font-medium px-3 py-2 text-ellipsis dark:bg-gray-900 text-gray-300 dark:text-gray-400 meta-image-input"
-               placeholder="{% trans 'Upload from URL' %}">
     </div>
 </div>

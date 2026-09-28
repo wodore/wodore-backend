@@ -214,6 +214,12 @@ class Hut(TimeStampedModel):
     photos_attribution = models.CharField(
         blank=True, default="", max_length=1000, verbose_name=_("Hut photo attribution")
     )
+    images_pinned_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        verbose_name=_("Images pinned at"),
+        help_text=_("Last pin sync from providers."),
+    )
     image_set = models.ManyToManyField(
         Image,
         through=HutImageAssociation,
@@ -508,7 +514,7 @@ class Hut(TimeStampedModel):
             if (hut_db.elevation or 0) < 3000:
                 hut_db.hut_type_closed = HutTypeHelper.values["selfhut"]
             else:
-                hut_db.hut_type_closed = HutTypeHelper.values["bicouac"]
+                hut_db.hut_type_closed = HutTypeHelper.values["bivouac"]
         ## Owner stuff -> add to Owner
         src_hut_owner = hut_schema.owner
         owner = None
@@ -585,10 +591,17 @@ class Hut(TimeStampedModel):
             src_hut_photos = hut_schema.photos
             last_img = (
                 HutImageAssociation.objects.filter(hut=hut_db)
-                .order_by("-order")
+                .order_by("-score")
                 .first()
             )
-            photo_order = 0 if not last_img else last_img.order + 1
+            photo_score = (
+                HutImageAssociation.UPLOAD_DEFAULT_SCORE
+                if not last_img
+                else max(
+                    last_img.score or 0, HutImageAssociation.UPLOAD_DEFAULT_SCORE - 1
+                )
+                + 1
+            )
             for photo in src_hut_photos:
                 img = Image.create_image_from_schema(
                     photo,
@@ -599,8 +612,8 @@ class Hut(TimeStampedModel):
                 if img:
                     img.save()
                     img.refresh_from_db()
-                    pa = HutImageAssociation(image=img, hut=hut_db, order=photo_order)
-                    photo_order += 1
+                    pa = HutImageAssociation(image=img, hut=hut_db, score=photo_score)
+                    photo_score += 1
                     pa.save()
                     # hut_db.image_set.add(img)
         return hut_db
@@ -737,18 +750,26 @@ class Hut(TimeStampedModel):
                 if f == "images":  # type: ignore[attr-defined]
                     last_img = (
                         HutImageAssociation.objects.filter(hut=hut_db)
-                        .order_by("-order")
+                        .order_by("-score")
                         .first()
                     )
-                    photo_order = 0 if not last_img else (last_img.order or 0) + 1
+                    photo_score = (
+                        HutImageAssociation.UPLOAD_DEFAULT_SCORE
+                        if not last_img
+                        else max(
+                            last_img.score or 0,
+                            HutImageAssociation.UPLOAD_DEFAULT_SCORE - 1,
+                        )
+                        + 1
+                    )
                     for img in v:
                         img.save()
                         img.refresh_from_db()
                         _assoc, created = HutImageAssociation.objects.update_or_create(
-                            image=img, hut=hut_db, defaults={"order": photo_order}
+                            image=img, hut=hut_db, defaults={"score": photo_score}
                         )
                         # pa.save()
-                        photo_order += 1
+                        photo_score += 1
                         # hut_db.image_set.add(i)
                         if created:
                             updated = UpdateCreateStatus.updated
@@ -1040,6 +1061,7 @@ class Hut(TimeStampedModel):
                 reservation_status=avail.reservation_status,
                 free=avail.free,
                 total=avail.total,
+                free_tolerance=avail.free_tolerance or 0,
                 occupancy_percent=avail.occupancy_percent,
                 occupancy_steps=avail.occupancy_steps,
                 occupancy_status=avail.occupancy_status,

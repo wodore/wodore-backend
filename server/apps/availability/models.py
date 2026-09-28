@@ -133,6 +133,16 @@ class HutAvailability(TimeStampedModel):
         verbose_name=_("Total Places"),
         help_text=_("Total number of places (null = not published by source)"),
     )
+    free_tolerance = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        default=0,
+        verbose_name=_("Free Places Tolerance"),
+        help_text=_(
+            "Plus/minus uncertainty on free places (0 = exact, null = unknown); "
+            "estimated sources report free ± tolerance"
+        ),
+    )
 
     # Computed fields from HutBookingSchema (stored for fast retrieval)
     occupancy_percent = models.FloatField(
@@ -227,6 +237,7 @@ class HutAvailability(TimeStampedModel):
         total: int,
         hut_type: Category | None = None,
         reservation_status: str | None = None,
+        free_tolerance: int | None = None,
     ) -> bool:
         """Check if availability data has changed"""
         changed = self.free != free or self.total != total
@@ -234,6 +245,7 @@ class HutAvailability(TimeStampedModel):
             changed = changed or self.hut_type != hut_type
         if reservation_status is not None:
             changed = changed or self.reservation_status != reservation_status
+        changed = changed or self.free_tolerance != free_tolerance
         return changed
 
     def record_change(
@@ -244,6 +256,7 @@ class HutAvailability(TimeStampedModel):
         occupancy_status: str = "unknown",
         reservation_status: str = "unknown",
         hut_type: Category | None = None,
+        free_tolerance: int | None = None,
     ) -> "HutAvailabilityHistory":
         """
         Record a change to history.
@@ -259,6 +272,7 @@ class HutAvailability(TimeStampedModel):
             availability_date=self.availability_date,
             free=free,
             total=total,
+            free_tolerance=free_tolerance,
             occupancy_percent=occupancy_percent,
             occupancy_status=occupancy_status,
             reservation_status=reservation_status,
@@ -278,13 +292,16 @@ class HutAvailability(TimeStampedModel):
         reservation_status: str = "unknown",
         link: str = "",
         hut_type: Category | None = None,
+        free_tolerance: int | None = None,
     ) -> tuple[bool, "HutAvailabilityHistory | None"]:
         """
         Update availability with change detection.
         Returns (changed, history_entry).
         """
         now = timezone.now()
-        changed = self.has_changed(free, total, hut_type, reservation_status)
+        changed = self.has_changed(
+            free, total, hut_type, reservation_status, free_tolerance
+        )
         history = None
 
         if changed:
@@ -296,10 +313,12 @@ class HutAvailability(TimeStampedModel):
                 occupancy_status=occupancy_status,
                 reservation_status=reservation_status,
                 hut_type=hut_type,
+                free_tolerance=free_tolerance,
             )
             # Update current state
             self.free = free
             self.total = total
+            self.free_tolerance = free_tolerance
             self.occupancy_percent = occupancy_percent
             self.occupancy_steps = occupancy_steps
             self.occupancy_status = occupancy_status
@@ -365,6 +384,11 @@ class HutAvailabilityHistory(TimeStampedModel):
     total = models.PositiveSmallIntegerField(
         null=True,
         verbose_name=_("Total Places"),
+    )
+    free_tolerance = models.PositiveSmallIntegerField(
+        null=True,
+        default=0,
+        verbose_name=_("Free Places Tolerance"),
     )
 
     # Computed fields for trend analysis

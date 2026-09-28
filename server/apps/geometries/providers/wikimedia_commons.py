@@ -42,6 +42,22 @@ WIKIMEDIA_MEDIUM_THUMB_WIDTH = 500
 # returns the original URL when the original is not larger than the step.
 WIKIMEDIA_LARGE_THUMB_WIDTH = 1920
 WIKIMEDIA_LARGEST_THUMB_WIDTH = 3840
+# Commons category members are human-curated as hut-related but their geotags
+# can sit well off the hut (camera GPS, motive vs. position). Distance sanity
+# limit for category images — far looser than the strict geosearch radius.
+WIKIMEDIA_CATEGORY_DISTANCE_LIMIT_M = 500
+
+
+def _haversine_distance_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Distance between two points in meters."""
+    from math import asin, cos, radians, sin, sqrt
+
+    radius = 6371000
+    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
+    return radius * 2 * asin(sqrt(a))
 
 
 def _select_large_source(
@@ -167,7 +183,7 @@ class WikimediaCommonsProvider(ImageProvider):
             if place_qids:
                 try:
                     qid_results = await self._fetch_wikidata_by_qids(
-                        place_qids, limit, httpx
+                        place_qids, lat, lon, limit, httpx
                     )
                     for result in qid_results:
                         if result.source_id not in seen_titles:
@@ -267,7 +283,12 @@ class WikimediaCommonsProvider(ImageProvider):
         Returns:
             List of ImageResult objects
         """
-        radius_km = max(1, radius / 1000)  # At least 1km
+        # The hut's own images arrive via the direct-QID path (Strategy 1,
+        # radius-independent); this spatial fallback must not sweep
+        # NEIGHBORING huts — honor the requested radius with a 50 m floor
+        # for coordinate/rounding safety only (empirically 50 m still matches
+        # the co-located hut item; the old 1 km floor pulled in neighbors).
+        radius_km = max(50, radius) / 1000
 
         sparql = f"""
         SELECT ?item ?itemLabel ?image ?category WHERE {{
@@ -347,6 +368,8 @@ class WikimediaCommonsProvider(ImageProvider):
     async def _fetch_wikidata_by_qids(
         self,
         qids: set[str],
+        lat: float,
+        lon: float,
         limit: int,
         httpx,
     ) -> list[ImageResult]:
@@ -358,6 +381,8 @@ class WikimediaCommonsProvider(ImageProvider):
 
         Args:
             qids: Set of Wikidata QIDs to query
+            lat: Query latitude (true distances / category filter center)
+            lon: Query longitude
             limit: Maximum number of results to return
             httpx: HTTP client module
 
@@ -425,15 +450,17 @@ class WikimediaCommonsProvider(ImageProvider):
                                     matches_place_qid=True,  # Direct match!
                                 )
 
-                                # Create ImageResult with distance 0 (exact match)
+                                # Create ImageResult — true distance from the
+                                # file geotag to the QUERY point (was 0.0, which
+                                # #185 turned into haversine-vs-Null-Island).
                                 result = self._create_image_result(
                                     commons_title,
                                     img_data,
                                     qid,
                                     score,
-                                    0.0,
-                                    0.0,  # Coordinates don't matter for exact match
-                                    distance_m=0.0,  # Exact QID match
+                                    lat,
+                                    lon,
+                                    distance_m=None,
                                 )
                                 if result:
                                     results.append(result)
@@ -457,8 +484,8 @@ class WikimediaCommonsProvider(ImageProvider):
                     )
                     category_results = await self._fetch_commons_category_images(
                         category_name,
-                        0.0,  # lat (not used for category images)
-                        0.0,  # lon (not used)
+                        lat,
+                        lon,
                         limit,
                         httpx,
                     )
@@ -503,7 +530,11 @@ class WikimediaCommonsProvider(ImageProvider):
         Returns:
             List of ImageResult objects
         """
-        radius_km = max(0.5, radius / 1000)  # At least 500m
+        # MediaWiki GeoData expects ggsradius in METERS, bounded 10–10000;
+        # the endpoint's radius is meters — clamp to the API bounds instead
+        # of converting (the old km value was out of range for every query,
+        # so geosearch silently returned nothing).
+        ggsradius_m = min(max(radius, 10), 10_000)
 
         params = {
             "action": "query",
@@ -511,9 +542,9 @@ class WikimediaCommonsProvider(ImageProvider):
             "ggsnamespace": 6,  # File namespace
             "ggsprimary": "all",
             "ggscoord": f"{lat}|{lon}",
-            "ggsradius": radius_km,
+            "ggsradius": ggsradius_m,
             "ggslimit": min(limit, 50),
-            "prop": "imageinfo",
+            "prop": "imageinfo|coordinates",
             "iiprop": "url|extmetadata|size",
             "iiurlwidth": 500,
             "format": "json",
@@ -622,7 +653,7 @@ class WikimediaCommonsProvider(ImageProvider):
         params = {
             "action": "query",
             "titles": commons_title,
-            "prop": "imageinfo|categories",
+            "prop": "imageinfo|categories|coordinates",
             "iiprop": "url|extmetadata|size",
             "iiurlwidth": 500,
             "cllimit": 20,
@@ -727,6 +758,27 @@ class WikimediaCommonsProvider(ImageProvider):
                     if not img_data:
                         continue
 
+                    # Distance sanity filter: category membership is human
+                    # curation and can be loose — drop members geotagged far
+                    # from the hut (e.g. generic trail photos from the same
+                    # upload series). Untagged members are kept (no signal).
+                    member_dist: float | None = None
+                    if (
+                        img_data.get("lat") is not None
+                        and img_data.get("lon") is not None
+                    ):
+                        member_dist = _haversine_distance_m(
+                            lat, lon, float(img_data["lat"]), float(img_data["lon"])
+                        )
+                        if member_dist > WIKIMEDIA_CATEGORY_DISTANCE_LIMIT_M:
+                            logger.debug(
+                                "category_image_too_far",
+                                title=commons_title,
+                                distance_m=round(member_dist),
+                                limit_m=WIKIMEDIA_CATEGORY_DISTANCE_LIMIT_M,
+                            )
+                            continue
+
                     # Calculate score (lower than P18 main image)
                     score = self._score_commons_image(
                         img_data,
@@ -737,7 +789,13 @@ class WikimediaCommonsProvider(ImageProvider):
 
                     # Create ImageResult
                     result = self._create_image_result(
-                        commons_title, img_data, None, score, lat, lon
+                        commons_title,
+                        img_data,
+                        None,
+                        score,
+                        lat,
+                        lon,
+                        distance_m=member_dist,
                     )
                     if result:
                         results.append(result)
@@ -843,6 +901,10 @@ class WikimediaCommonsProvider(ImageProvider):
         metadata = {
             "url": imageinfo.get("url"),
             "thumb_url": imageinfo.get("thumburl"),
+            # File geotag (GeoData): drives true distances and the category
+            # distance sanity filter. Files without coordinates get None.
+            "lat": (page_data.get("coordinates") or [{}])[0].get("lat"),
+            "lon": (page_data.get("coordinates") or [{}])[0].get("lon"),
             "width": width,
             "height": height,
             "size": imageinfo.get("size"),
@@ -994,25 +1056,18 @@ class WikimediaCommonsProvider(ImageProvider):
             ImageResult or None
         """
         try:
-            # Extract coordinates if available (not always in Commons)
-            # For now, use query coordinates
-            from math import asin, cos, radians, sin, sqrt
-
-            def haversine_distance(lat1, lon1, lat2, lon2):
-                """Calculate distance between two points in meters."""
-                R = 6371000
-                lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
-                dlat = lat2 - lat1
-                dlon = lon2 - lon1
-                a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
-                c = 2 * asin(sqrt(a))
-                return R * c
-
-            # Use pre-calculated distance if provided, otherwise calculate it
+            # Distance: pre-calculated if provided, otherwise from the file's
+            # own geotag when the metadata carried one (true distance for
+            # sorting/display), else 0 (treated as at-the-place).
             if distance_m is None:
-                distance_m = haversine_distance(
-                    query_lat, query_lon, query_lat, query_lon
-                )
+                geo_lat = img_data.get("lat")
+                geo_lon = img_data.get("lon")
+                if geo_lat is not None and geo_lon is not None:
+                    distance_m = _haversine_distance_m(
+                        query_lat, query_lon, float(geo_lat), float(geo_lon)
+                    )
+                else:
+                    distance_m = 0.0
 
             # Parse date - Wikimedia Commons uses various date formats
             # Common formats: "2023-08-15 12:34:56", "15 August 2023", "2023-08-15"
