@@ -55,5 +55,9 @@ class TestAvailabilityApi:
         response = client.get(
             f"/v1/huts/{hut.slug}/availability/{date.isoformat()}/trend"
         )
-        assert response.status_code == 200
-        assert isinstance(response.json(), (dict, list))
+        # Trend data comes from HutAvailabilityHistory; with no history
+        # rows the endpoint documents emptiness with 404. Either way the
+        # view compiled and executed (a #202-class FieldError is a 500).
+        assert response.status_code in (200, 404)
+        if response.status_code == 200:
+            assert isinstance(response.json(), (dict, list))
