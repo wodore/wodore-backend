@@ -34,11 +34,12 @@ is additive and doesn't change `external-image-pinning` requirements)
 
 ## Impact
 
-- **New model**: `PlaceVisitLog`-style daily counter (place_type, slug or
-  FK polymorphic, date, count) in a small app or `geometries`
-- **Write path**: middleware or endpoint hook on hut/place detail requests →
-  cache-batched async increment (django-q2 or a cache-flush task), never in
-  the request path
+- **New model**: `ObjectVisitDay` generic daily counter (content_type +
+  object_id via Django contenttypes / GenericForeignKey, day, count) in a
+  small app or `geometries`
+- **Write path**: endpoint hook on the place/hut images requests →
+  visitor-window dedup (ip+ua hash, cache-only) then cache-buffered async
+  increment, never in the request path
 - **Read path**: admin column + `geoimages_pin` ordering; internal helper
   `popular_places(limit)` for future consumers
 - **Dependencies**: django-q2 (already in prod); no new infrastructure

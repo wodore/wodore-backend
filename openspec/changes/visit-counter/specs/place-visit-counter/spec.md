@@ -1,9 +1,11 @@
 ## ADDED Requirements
 
-### Requirement: Best-effort visit counting on hut detail views
-The system SHALL count visits per hut per day, incremented when the hut
-images endpoint serves a hut page request. Counting SHALL NOT add a
-database write to the request path; increments are buffered in the cache
+### Requirement: Best-effort visit counting with visitor dedup
+The system SHALL count visits per object per day, incremented when an
+images endpoint serves a place or hut page request, at most once per
+visitor per object within a short dedup window (opaque visitor key derived
+from request properties, kept only in the cache). Counting SHALL NOT add
+a database write to the request path; increments are buffered in the cache
 and flushed asynchronously. Requests with `update_cache=true` SHALL NOT be
 counted. Counting failures SHALL NOT affect the observed response.
 
@@ -12,16 +14,22 @@ counted. Counting failures SHALL NOT affect the observed response.
 - **WHEN** a visitor loads a hut page (images endpoint hit for an existing hut)
 - **THEN** the hut's daily counter is incremented via the async buffer and the response is served normally
 
+#### Scenario: Repeat fetches within the window count once
+
+- **WHEN** the same visitor hits the images endpoint for the same place several times within the dedup window
+- **THEN** the place's counter is incremented exactly once for that window
+
 #### Scenario: Operator refresh is not counted
 
 - **WHEN** the images endpoint is called with `update_cache=true`
 - **THEN** no visit is counted
 
-### Requirement: Daily aggregated counter storage
-Visits SHALL be stored as one row per `(place_type, place_id, day)` with a
-count, uniquely constrained, with an index supporting top-N-per-day
-queries. Rows SHALL NOT reference places by foreign key (counters outlive
-their places).
+### Requirement: Generic daily counter storage
+Visits SHALL be stored as one row per `(content_type, object_id, day)`
+with a count, attached via Django contenttypes (GenericForeignKey),
+uniquely constrained, with an index supporting top-N-per-day queries. The
+counter SHALL work for any model without schema changes. Rows SHALL NOT
+reference counted objects by hard foreign key (counters outlive them).
 
 #### Scenario: Flush aggregates the buffer
 

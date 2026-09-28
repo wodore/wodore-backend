@@ -1,11 +1,14 @@
 ## Context
 
-Hut/place pages are served by the frontend, which fetches hut details and
-images from the API (`/v1/huts/…`, `/v1/geo/images/hut/{slug}`). We control
-both sides, so the cheapest reliable counting point is the backend API
-itself. django-q2 runs in prod; the persistent cache (DatabaseCache) is
-available for batching. Hut uses integer PKs, GeoPlace too — a shared
-counter table with `(place_type, place_id, day)` is simple and indexed.
+Place (and, until the hut→place migration lands, hut) pages are served by
+the frontend, which fetches images from the API (`/v1/geo/images/place/…`,
+`/v1/geo/images/hut/…`). We control both sides, so the cheapest reliable
+counting point is the backend API itself. django-q2 runs in prod; the
+default cache is available for batching and visitor dedup. Places are the
+strategic model (huts migrate into them eventually), and other models may
+want counting later — the counter therefore attaches via Django's
+contenttypes framework (GenericForeignKey) instead of a hand-rolled
+place_type enum.
 
 ## Goals / Non-Goals
 
@@ -26,37 +29,47 @@ counter table with `(place_type, place_id, day)` is simple and indexed.
 
 ## Decisions
 
-### D1 — Count in the hut/place detail API, not middleware
+### D1 — Count in the images endpoints, place-first, not middleware
 
-The hut detail endpoint (`/v1/huts/{slug}`) and the images-for-place/hut
-endpoints are the canonical "someone looked at this place" signals.
-Counting there (not in global middleware) keeps the surface explicit,
-skips admin/map-tile/autocomplete traffic for free, and gives us the slug
-without URL parsing. Images-for-hut is the strongest signal (every hut
-page fetches it) — count on that endpoint only, once per request, skipping
+The images endpoints are the canonical "someone looked at this place"
+signals — every place/hut page fetches them. Counting there (not in global
+middleware) keeps the surface explicit, skips admin/map-tile/autocomplete
+traffic for free, and gives us the object without URL parsing. Count on
+`images_for_place` and `images_for_hut` alike (huts become places at the
+migration; until then they are simply a second content type), skipping
 `update_cache` (operator) requests.
 
-### D2 — Cache-batched async flush, never a row lock in the request
+### D2 — Visitor-window dedup + cache-batched async flush, no writes in the request
 
-Increment in the request = `INSERT … ON CONFLICT DO UPDATE count += 1` —
-correct but adds a write to the hot path. Instead: bump a per-(place, day)
-counter in the **default cache** (locmem per worker — merges are
-acceptable; best-effort), and enqueue a single q2 flush task when a
-counter crosses a small threshold (e.g. every 10 hits) or on first hit of
-a place. The flush task reads-and-clears the cache keys and upserts the
-DB rows. Lost counts on worker restart are acceptable (±single digits).
+One request per fetch would inflate counts (gallery refetches,
+back-navigation, retries). Before buffering, dedup per visitor: derive an
+opaque key from `hash(ip + user_agent)` and mark
+`(visitor, content_type, object_id)` in the **default cache** with a ~1 h
+TTL — only the first hit in the window buffers an increment. No cookies
+(a `Set-Cookie` from the images endpoint would defeat the response
+cache), no PII stored, NAT/proxy merging acceptable for a popularity
+signal.
+
+Buffered increments then live in a per-(object, day) cache counter and a
+single q2 flush task is enqueued when a counter crosses a small threshold
+(e.g. every 10 hits) or on the object's first buffered visit. The flush
+task reads-and-clears the keys and upserts the DB rows. Lost counts on
+worker restart are acceptable (±single digits).
 
 Alternative rejected: synchronous upsert per request — a write on every
 hut-page hit, hot-row contention on popular places.
 
-### D3 — One polymorphic counter table
+### D3 — Generic counter table via contenttypes
 
-`PlaceVisitDay(place_type: 'hut'|'geoplace', place_id: int, day: date,
-count: int)` with unique `(place_type, place_id, day)` and an index on
-`(day, -count)` for "top today" style queries. No FKs (places can be
-deleted; counters outlive them harmlessly) — `place_type` + `place_id`
-with a helper resolving slugs. A `total` convenience column is derived
-(sum query) rather than stored, to avoid a second hot row.
+`ObjectVisitDay(content_type: FK[ContentType], object_id: int, day: date,
+count: int)` with a `GenericForeignKey` and unique
+`(content_type, object_id, day)`, plus an index on `(day, -count)` for
+top-N-per-day queries. This is Django's built-in mechanism for
+"belongs to any model" — places today, huts until the hut→place
+migration (which rewrites `content_type` in a data migration), and
+avails/orgs later without schema changes. No hard FKs to the counted
+models (counters outlive their objects); helpers resolve
+`popular_places` by filtering on the place content type.
 
 ### D4 — Admin + sweep consumption
 
@@ -83,8 +96,10 @@ signal; documented as approximate.
   billing; flush threshold small
 - [Popular place row contention during flush] → single upsert per flush
   batch, not per hit; fine at our scale
-- [Counter inflation from broken clients retrying] → acceptable noise;
-  daily aggregation smooths spikes
+- [Counter inflation from broken clients retrying] → dampened by the
+  visitor-window dedup; daily aggregation smooths the rest
+- [IP-hash dedup merges users behind NAT] → acceptable: approximate
+  popularity signal, not analytics
 
 ## Migration Plan
 
