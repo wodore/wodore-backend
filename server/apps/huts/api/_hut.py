@@ -381,7 +381,10 @@ def get_huts(  # type: ignore
                 attribution=Value(""),
                 # tags="image_set__tag_set",
             ),
-            ordering="image_set__details__order",
+            ordering=(
+                F("image_set__details__score").desc(nulls_last=True),
+                "image_set__details__id",
+            ),
         ),
         translations=JSONObject(
             description=JSONObject(
@@ -751,7 +754,10 @@ def get_hut(
                 attribution=Value(""),
                 # tags="image_set__tag_set",
             ),
-            ordering="image_set__details__order",
+            ordering=(
+                F("image_set__details__score").desc(nulls_last=True),
+                "image_set__details__id",
+            ),
         ),
         translations=JSONObject(
             description=JSONObject(
