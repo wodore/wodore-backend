@@ -188,10 +188,10 @@ set -e
 mkdir -p /code/static
 chown web:web /code/static
 chmod +x '/docker-entrypoint.sh'
-# OIDC_ENABLED=false: see Dockerfile.alpine (no network/runtime env at
-# build time; without this collectstatic fails and - without set -e -
-# silently ships images with an empty /code/static).
-OIDC_ENABLED=false python manage.py collectstatic --noinput
+# DJANGO_ENV=test: see Dockerfile.alpine (offline-safe settings; no
+# network, no production signing key needed - without this the
+# auth settings raise at build time).
+DJANGO_ENV=test python manage.py collectstatic --noinput
 # Generate build timestamp automatically during build
 printf 'export BUILD_TIMESTAMP=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%S.%6NZ)" > /code/.build_timestamp
 chmod 644 /code/.build_timestamp

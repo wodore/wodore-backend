@@ -11,11 +11,27 @@ from asgiref.sync import sync_to_async
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
+from django.db.models import F
 
 from .base import ImageArea, ImageProvider, ImageResult
 from .schemas import GeoPlaceSchema
 
 logger = structlog.get_logger()
+
+
+def _assessment_extra(img) -> dict | None:
+    """Assessment payload served as feature properties.extra."""
+    extra: dict = {}
+    if getattr(img, "thumbhash", None):
+        extra["thumbhash"] = img.thumbhash
+    if getattr(img, "quality_score", None) is not None:
+        extra["quality_score"] = img.quality_score
+    meta = img.image_meta or {}
+    if meta.get("duplicate_of"):
+        extra["duplicate_of"] = meta["duplicate_of"]
+    if meta.get("thumbhashes"):
+        extra["thumbhashes"] = meta["thumbhashes"]
+    return extra or None
 
 
 class WodoreProvider(ImageProvider):
@@ -122,6 +138,9 @@ class WodoreProvider(ImageProvider):
                 # Get images through association model
                 for assoc in place.image_associations.all():  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
                     img = assoc.image
+                    # Association score = display order (openspec pin-external-images)
+                    result_score = assoc.score if assoc.score is not None else 50
+                    extra = _assessment_extra(img)
                     # Filter: must be active, approved, and not marked for no publication
                     if not img.is_active:
                         continue
@@ -191,7 +210,7 @@ class WodoreProvider(ImageProvider):
 
                     result = ImageResult(
                         provider=provider_slug,  # Use source_org slug (e.g., "sac", "wikimedia")
-                        source_id=str(img.id),
+                        source_id=img.source_ident or str(img.id),
                         source_url=img.source_url,
                         image_type="flat",  # Default for wodore images
                         captured_at=img.capture_date,
@@ -214,9 +233,10 @@ class WodoreProvider(ImageProvider):
                         }
                         if place
                         else None,
-                        score=50,  # Wodore images are high quality (internal, curated)
+                        score=result_score,  # association score; 50 fallback for uncurated
                         width=width,
                         height=height,
+                        extra=extra,
                         focal=focal_area,
                         crop=crop_area,
                     )
@@ -232,18 +252,14 @@ class WodoreProvider(ImageProvider):
             return results
 
         elif self.place_type == "hut":
-            from server.apps.huts.models import Hut
+            from server.apps.huts.models import Hut, HutImageAssociation
 
             # Get Huts within 10m radius
-            huts = (
-                Hut.objects.filter(
-                    is_active=True,
-                    is_public=True,
-                    location__distance_lte=(query_point, D(m=10)),
-                )
-                .annotate(distance=Distance("location", query_point))
-                .prefetch_related("image_set__license")
-            )
+            huts = Hut.objects.filter(
+                is_active=True,
+                is_public=True,
+                location__distance_lte=(query_point, D(m=10)),
+            ).annotate(distance=Distance("location", query_point))
 
             results = []
             for hut in huts:
@@ -314,46 +330,22 @@ class WodoreProvider(ImageProvider):
                     qid=hut_qid,
                 )
 
-                # Get images through reverse relation
-                for img in hut.image_set.all():
-                    logger.debug(
-                        "Evaluating image",
-                        image_id=img.id,
-                        is_active=img.is_active,
-                        review_status=img.review_status,
-                        license_no_publication=img.license.no_publication
-                        if img.license
-                        else None,
-                        has_license=bool(img.license),
+                # Get images through the association (score = display order,
+                # pinned external images carry their provider score).
+                assocs = (
+                    HutImageAssociation.objects.filter(
+                        hut=hut,
+                        image__is_active=True,
+                        image__review_status="approved",
                     )
-
-                    # Filter: must be active, approved, and not marked for no publication
-                    if not img.is_active:
-                        logger.debug("Skipped image (not active)", image_id=img.id)
-                        continue
-                    if img.review_status != "approved":
-                        logger.debug(
-                            "Skipped image (not approved)",
-                            image_id=img.id,
-                            review_status=img.review_status,
-                        )
-                        continue
-                    if img.license.no_publication:
-                        logger.debug(
-                            "Skipped image (no publication)",
-                            image_id=img.id,
-                            license_slug=img.license.slug,
-                        )
-                        continue
-
-                    caption_preview = (
-                        img.caption_i18n[:50] if img.caption_i18n else None
-                    )
-                    logger.debug(
-                        "Included image",
-                        image_id=img.id,
-                        caption_preview=caption_preview,
-                    )
+                    .select_related("image__license", "image__source_org")
+                    .exclude(image__license__no_publication=True)
+                    .order_by(F("score").desc(nulls_last=True), "id")
+                )
+                for assoc in assocs:
+                    img = assoc.image
+                    result_score = assoc.score if assoc.score is not None else 50
+                    extra = _assessment_extra(img)
                     distance_m = (
                         hut.distance.m if hasattr(hut.distance, "m") else hut.distance  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
                     )
@@ -413,7 +405,7 @@ class WodoreProvider(ImageProvider):
 
                     result = ImageResult(
                         provider=provider_slug,  # Use source_org slug (e.g., "sac", "wikimedia")
-                        source_id=str(img.id),
+                        source_id=img.source_ident or str(img.id),
                         source_url=img.source_url,
                         image_type="flat",  # Default for wodore images
                         captured_at=img.capture_date,
@@ -436,9 +428,10 @@ class WodoreProvider(ImageProvider):
                         }
                         if hut
                         else None,
-                        score=50,  # Wodore images are high quality (internal, curated)
+                        score=result_score,  # association score; 50 fallback for uncurated
                         width=width,
                         height=height,
+                        extra=extra,
                         focal=focal_area,
                         crop=crop_area,
                     )

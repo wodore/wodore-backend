@@ -1,5 +1,20 @@
 ## ADDED Requirements
 
+### Requirement: Email-identity custom user model
+The system SHALL use a custom user model where the email address is the
+identifier (`USERNAME_FIELD`, unique at the database level) and the legacy
+username field is absent. Existing pre-migration databases SHALL be migrated
+with primary keys preserved and their foreign-key constraints re-pointed to
+the new table; fresh databases SHALL create the new model from the start.
+
+#### Scenario: Unique email enforced
+- **WHEN** two users are created with the same email address
+- **THEN** the database rejects the second one via the unique constraint
+
+#### Scenario: Login by email only
+- **WHEN** a user logs in via any supported method
+- **THEN** the identifier used is the email address, and no username field exists to log in with
+
 ### Requirement: Account lifecycle flows
 The system SHALL provide django-allauth account flows for login, logout,
 password reset, and email address verification, usable by both admin and end

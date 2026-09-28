@@ -14,7 +14,12 @@ from django.urls import reverse
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
-from unfold.contrib.filters.admin import ChoicesCheckboxFilter
+from unfold.contrib.filters.admin import (
+    AutocompleteSelectFilter as UnfoldAutocompleteSelectFilter,
+)
+from unfold.contrib.filters.admin import (
+    ChoicesCheckboxFilter,
+)
 from unfold.decorators import display
 
 from server.apps.manager.admin import ModelAdmin
@@ -72,9 +77,10 @@ class ImageAdmin(ModelAdmin):
         "caption_short",
         "license_summary",
         "source",
+        "serving",
+        "quality_display",
         "tag_list",
         "review_tag",
-        "show_huts",
     )
     list_display_links = ("thumb", "caption_short")
     search_fields = ("author", "caption_i18n")
@@ -88,6 +94,7 @@ class ImageAdmin(ModelAdmin):
         "tags",
         "uploaded_by_user",
         "uploaded_by_anonym",
+        ("details__hut", UnfoldAutocompleteSelectFilter),
     )
     readonly_fields = (
         "id",
@@ -97,13 +104,389 @@ class ImageAdmin(ModelAdmin):
         "modified",
         "granted_date",
         "uploaded_date",
+        "provider_synced_at",
+        "thumbhash_preview",
+        "phash",
+        "quality_score",
         # "image_meta",
     )
+
+    #: Exact unfold pill classes per serving state — single source of truth
+    #: for the changelist cell AND the AJAX refresh snippet.
+    SERVING_PILLS = {
+        "local": "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400",
+        "external": "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
+        "none": "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400",
+    }
+
+    #: Display labels for the serving states.
+    SERVING_LABELS = {"local": "local", "external": "extern", "none": "none"}
+
+    def _serving_html(self, obj) -> str:
+        """Serving pill (unfold markup) + inline download button when external."""
+        from django.urls import reverse as _reverse
+        from django.utils.safestring import mark_safe
+
+        if getattr(obj, "image", None):
+            state = "local"
+        elif obj.source_url_raw:
+            state = "external"
+        else:
+            state = "none"
+        label = self.SERVING_LABELS[state]
+        pill = (
+            f'<span class="inline-block font-semibold rounded-default text-[11px] '
+            f'uppercase whitespace-nowrap h-6 leading-6 px-2 {self.SERVING_PILLS[state]}" '
+            f">{label}</span>"
+        )
+        if state == "external":
+            url = _reverse("admin:images_image_download_raw_row", args=[obj.pk])
+            pill += (
+                f'<a href="{url}" class="mfu-qa mfu-qa-download" '
+                f'title="Download raw and store locally">'
+                f'<span class="material-symbols-outlined">download</span></a>'
+            )
+        return mark_safe(f'<div class="mfu-inline">{pill}</div>')
+
+    @display(description=_("Serving"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs unfold stub gap
+    def serving(self, obj):
+        """Where the pixels come from: local file or external pin."""
+        return self._serving_html(obj)
 
     def save_model(self, request, obj, form, change):
         if not obj.uploaded_by_user:  # pyright: ignore[reportAttributeAccessIssue]
             obj.uploaded_by_user = request.user  # pyright: ignore[reportAttributeAccessIssue]
         super().save_model(request, obj, form, change)
+        if change:
+            # Manual edits (file swap, focal/crop, URLs) change the pixels or
+            # the transforms — re-run the assessment stack (phash, quality,
+            # thumbhash + variants) so the row serves fresh data.
+            try:
+                from server.apps.images.assessment import assess_image
+
+                assess_image(obj, force=True)
+            except Exception as e:
+                self.message_user(request, f"Re-assessment failed: {e}", "warning")
+
+    @display(description=_("ThumbHashes"))
+    def thumbhash_preview(self, obj):
+        """Decoded ThumbHash placeholders: primary + one per variant."""
+        import base64
+        import io as _io
+
+        from django.utils.safestring import mark_safe as _safe
+
+        from server.apps.images.assessment import thumbhash_to_image
+
+        entries = []
+        if obj.thumbhash:
+            entries.append(("full", obj.thumbhash))
+        entries.extend(sorted((obj.image_meta or {}).get("thumbhashes", {}).items()))
+        if not entries:
+            return "—"
+        parts = []
+        for label, value in entries:
+            try:
+                image = thumbhash_to_image(value)
+                buffer = _io.BytesIO()
+                image.save(buffer, format="PNG")
+                uri = (
+                    "data:image/png;base64,"
+                    + base64.b64encode(buffer.getvalue()).decode()
+                )
+                parts.append(
+                    f'<span class="mfu-th"><img src="{uri}" '
+                    f'style="image-rendering:pixelated;width:48px;height:auto;'
+                    f'border-radius:4px;display:block"/><small>{label}</small></span>'
+                )
+            except Exception:
+                parts.append(
+                    f'<span class="mfu-th"><small>{label}: invalid</small></span>'
+                )
+        return _safe(f'<div class="mfu-th-row">{"".join(parts)}</div>')
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        image_field = form.base_fields.get("image")
+        if image_field is not None and hasattr(image_field, "widget"):
+            # Pinned external images carry no local file — give the widget the
+            # raw source URL so it can preview it, allow focal point selection,
+            # and offer the one-click "Download raw" localization. Once a local
+            # file exists, the raw UI is not needed.
+            raw = (getattr(obj, "source_url_raw", "") or "") if obj else ""
+            image_field.widget.raw_url = (
+                raw or None if not getattr(obj, "image", None) else None
+            )
+        return form
+
+    #: Hard cap for the raw-download proxy (bytes).
+    DOWNLOAD_RAW_MAX_BYTES = 50 * 1024 * 1024
+
+    class Media:
+        css = {"all": ("meta_image_field/css/style.css",)}
+        js = ("images/js/quick_actions.js",)
+
+    actions = (
+        "approve_selected_images",
+        "disable_selected_images",
+        "reject_selected_images",
+        "download_raw_selected_images",
+        "assess_selected_images",
+    )
+
+    def get_urls(self):
+        from django.urls import path
+
+        urls = super().get_urls()
+        custom = [
+            path(
+                "download-raw/",
+                self.admin_site.admin_view(self.download_raw_view),
+                name="images_image_download_raw",
+            ),
+            path(
+                "download-raw/<uuid:object_id>/",
+                self.admin_site.admin_view(self.download_raw_row_view),
+                name="images_image_download_raw_row",
+            ),
+            path(
+                "set-review/<uuid:object_id>/<str:status>/",
+                self.admin_site.admin_view(self.set_review_view),
+                name="images_image_set_review",
+            ),
+        ]
+        return custom + urls
+
+    def _redirect_back(self, request, fallback="admin:images_image_changelist"):
+        """Back to the list (or the page the quick-action was clicked from)."""
+        from django.shortcuts import redirect
+
+        referer = request.META.get("HTTP_REFERER")
+        if referer and referer.startswith(request.build_absolute_uri("/")[:8]):
+            return redirect(referer)
+        return redirect(fallback)
+
+    def _fetch_image_bytes(self, url: str) -> tuple[bytes, str]:
+        """Download ``url`` (bounded) → (content, content_type)."""
+        import requests
+
+        from django.conf import settings
+
+        upstream = requests.get(
+            url, headers={"User-Agent": settings.BOT_AGENT}, timeout=30, stream=True
+        )
+        upstream.raise_for_status()
+        content = upstream.raw.read(
+            self.DOWNLOAD_RAW_MAX_BYTES + 1, decode_content=True
+        )
+        if len(content) > self.DOWNLOAD_RAW_MAX_BYTES:
+            raise ValueError("Image too large.")
+        return content, upstream.headers.get("Content-Type", "image/jpeg")
+
+    def _store_local_file(self, obj, content: bytes, raw_url: str) -> str:
+        """Attach downloaded bytes as the image's local file; returns name."""
+        from django.core.files.base import ContentFile
+
+        from server.apps.meta_image_field.forms import _sanitize_file_name
+
+        name = _sanitize_file_name(raw_url.split("?")[0].split("/")[-1])
+        obj.image.save(name, ContentFile(content), save=True)
+        return name
+
+    @staticmethod
+    def _is_ajax(request: HttpRequest) -> bool:
+        return request.headers.get("x-requested-with") == "XMLHttpRequest"
+
+    def download_raw_row_view(self, request: HttpRequest, object_id):
+        """Quick action: download an external pin's raw image and store it.
+
+        AJAX requests get JSON (the changelist updates in place); regular
+        requests redirect back with a message.
+        """
+        from django.contrib import messages
+        from django.http import JsonResponse
+
+        def _json(payload, status=200):
+            return JsonResponse(payload, status=status)
+
+        ajax = self._is_ajax(request)
+        obj = self.get_object(request, object_id)
+        if obj is None:
+            if ajax:
+                return _json({"status": "error", "message": "Image not found."}, 404)
+            messages.error(request, "Image not found.")
+            return self._redirect_back(request)
+        if obj.image or not obj.source_url_raw:
+            if ajax:
+                return _json(
+                    {"status": "error", "message": "No external raw URL."}, 400
+                )
+            messages.info(request, f"{obj}: no external raw URL to download.")
+            return self._redirect_back(request)
+        try:
+            content, _ctype = self._fetch_image_bytes(obj.source_url_raw)
+            name = self._store_local_file(obj, content, obj.source_url_raw)
+        except Exception as e:
+            if ajax:
+                return _json({"status": "error", "message": str(e)}, 502)
+            messages.error(request, f"{obj}: download failed ({e}).")
+            return self._redirect_back(request)
+        if ajax:
+            obj.refresh_from_db()
+            return _json(
+                {
+                    "status": "ok",
+                    "stored": name,
+                    "local": True,
+                    "serving_html": self._serving_html(obj),
+                }
+            )
+        messages.success(request, f"{obj}: stored '{name}' locally.")
+        return self._redirect_back(request)
+
+    def set_review_view(self, request: HttpRequest, object_id, status: str):
+        """Quick action: set the review status from the changelist."""
+        from django.contrib import messages
+        from django.http import JsonResponse
+
+        obj = self.get_object(request, object_id)
+        valid = [s for s, _lbl in Image.ReviewStatusChoices.choices]
+        if obj is None or status not in valid:
+            if self._is_ajax(request):
+                return JsonResponse(
+                    {"status": "error", "message": "Invalid image or status."},
+                    status=400,
+                )
+            messages.error(request, "Invalid image or review status.")
+            return self._redirect_back(request)
+        obj.review_status = status
+        obj.save(update_fields=["review_status"])
+        if self._is_ajax(request):
+            obj.refresh_from_db()
+            return JsonResponse(
+                {
+                    "status": "ok",
+                    "review_status": status,
+                    "review_html": self._review_tag_html(obj),
+                }
+            )
+        messages.success(request, f"{obj}: review status set to {status}.")
+        return self._redirect_back(request)
+
+    @display(
+        description=_("Quality"),  # pyright: ignore[reportArgumentType]  # _StrPromise vs unfold stub gap
+        ordering="quality_score",
+    )
+    def quality_display(self, obj):
+        """Technical quality score from assessment (sortable)."""
+        if obj.quality_score is None:
+            return "—"
+        return obj.quality_score
+
+    @admin.action(description=_("Approve selected images"))
+    def approve_selected_images(self, request, queryset):
+        updated = queryset.update(review_status=Image.ReviewStatusChoices.approved)
+        self.message_user(request, f"Approved {updated} images.")
+
+    @admin.action(description=_("Disable selected images"))
+    def disable_selected_images(self, request, queryset):
+        updated = queryset.update(review_status=Image.ReviewStatusChoices.disabled)
+        self.message_user(request, f"Disabled {updated} images.")
+
+    @admin.action(description=_("Reject selected images"))
+    def reject_selected_images(self, request, queryset):
+        updated = queryset.update(review_status=Image.ReviewStatusChoices.rejected)
+        self.message_user(request, f"Rejected {updated} images.")
+
+    @admin.action(description=_("Download raw for selected images"))
+    def download_raw_selected_images(self, request, queryset):
+        done = failed = skipped = 0
+        for obj in queryset:
+            if obj.image or not obj.source_url_raw:
+                skipped += 1
+                continue
+            try:
+                content, _ctype = self._fetch_image_bytes(obj.source_url_raw)
+                self._store_local_file(obj, content, obj.source_url_raw)
+                done += 1
+            except Exception:
+                failed += 1
+        self.message_user(
+            request,
+            f"Downloaded {done}, skipped {skipped}, failed {failed}.",
+        )
+
+    @admin.action(description=_("Assess selected images (quality, phash, thumbhash)"))
+    def assess_selected_images(self, request, queryset):
+        from server.apps.images.assessment import assess_image
+
+        assessed = skipped = failed = 0
+        for obj in queryset:
+            try:
+                if assess_image(obj):
+                    assessed += 1
+                else:
+                    skipped += 1  # already carries phash + quality
+            except Exception:
+                failed += 1
+        self.message_user(
+            request,
+            f"Assessed {assessed}, skipped {skipped}, failed {failed}.",
+        )
+
+    def download_raw_view(self, request: HttpRequest):
+        """Stream an image URL back to the admin widget (same-origin proxy).
+
+        Lets the browser show a download progress bar regardless of the
+        origin's CORS policy. SSRF guard: known ``Image.source_url_raw``
+        values pass directly; any other URL must resolve to a public host
+        (private, loopback, link-local and reserved ranges are refused).
+        """
+        import requests
+
+        from django.http import HttpResponse, JsonResponse
+
+        url = (request.GET.get("url") or "").strip()
+        if not url:
+            return JsonResponse({"error": "Missing URL."}, status=400)
+        if not self.model.objects.filter(source_url_raw=url).exists():
+            if not self._is_public_http_url(url):
+                return JsonResponse({"error": "URL not allowed."}, status=400)
+        try:
+            content, content_type = self._fetch_image_bytes(url)
+        except requests.RequestException as e:
+            return JsonResponse({"error": f"Upstream fetch failed: {e}"}, status=502)
+        except ValueError as e:
+            return JsonResponse({"error": str(e)}, status=413)
+        response = HttpResponse(content, content_type=content_type)
+        response["Content-Disposition"] = 'inline; filename="raw"'
+        return response
+
+    @staticmethod
+    def _is_public_http_url(url: str) -> bool:
+        """http(s) URL whose host resolves to public addresses only."""
+        import ipaddress
+        import socket
+        from urllib.parse import urlsplit
+
+        parts = urlsplit(url)
+        if parts.scheme not in ("http", "https") or not parts.hostname:
+            return False
+        try:
+            infos = socket.getaddrinfo(parts.hostname, None, proto=socket.IPPROTO_TCP)
+        except socket.gaierror:
+            return False
+        addresses = {ipaddress.ip_address(info[4][0]) for info in infos}
+        return bool(addresses) and all(
+            not (
+                addr.is_private
+                or addr.is_loopback
+                or addr.is_link_local
+                or addr.is_reserved
+                or addr.is_multicast
+            )
+            for addr in addresses
+        )
 
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request).prefetch_related("tags", "huts")
@@ -145,6 +528,9 @@ class ImageAdmin(ModelAdmin):
         try:
             # obj.image.url  # does not work if removed?
             # img = f'<img width=120 heigh=60 src="{obj.image.url}"/>'
+            # Pinned external images have no local file — fall back to the
+            # raw source URL so the list thumbnail works for pins too.
+            source = obj.image if getattr(obj, "image", None) else obj.source_url_raw
             focal = obj.image_meta.get("focal") if obj.image_meta else None
             if focal:
                 focal_str = f"{focal.get('x1', 0)}x{focal.get('y1', 0)}:{focal.get('x2', 1)}x{focal.get('y2', 1)}"
@@ -152,7 +538,7 @@ class ImageAdmin(ModelAdmin):
                 focal_str = "0x0:1x1"
             crop_start, crop_stop = focal_str.split(":")
             img = (
-                ImagorImage(obj.image)
+                ImagorImage(source)
                 .transform(
                     size="100x60",
                     focal=focal_str,
@@ -178,16 +564,46 @@ class ImageAdmin(ModelAdmin):
 
     @display(
         description=_("Status"),  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-        ordering="status",
-        label={
-            Image.ReviewStatusChoices.approved: "success",
-            Image.ReviewStatusChoices.pending: "warning",  # green
-            Image.ReviewStatusChoices.rejected: "info",
-            # Image.ReviewStatusChoices.disabled: "info",
-        },
+        ordering="review_status",
     )
     def review_tag(self, obj):
-        return obj.review_status
+        """Status pill (unfold markup) + review quick buttons below it."""
+        return self._review_tag_html(obj)
+
+    #: Unfold pill classes per review status — same rendering as a reload.
+    REVIEW_PILLS = {
+        "approved": "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400",
+        "pending": "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
+        "disabled": "bg-base-500/8 text-base-700 dark:bg-base-500/20 dark:text-base-200",
+        "rejected": "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400",
+    }
+
+    def _review_tag_html(self, obj) -> str:
+        from django.urls import reverse as _reverse
+        from django.utils.safestring import mark_safe
+
+        status = obj.review_status
+        pill = (
+            '<span class="inline-block font-semibold rounded-default text-[11px] '
+            "uppercase whitespace-nowrap h-6 leading-6 px-2 "
+            f'{self.REVIEW_PILLS.get(status, "")}" data-status="{status}">{status}</span>'
+        )
+        buttons = []
+        for state, icon, title in (
+            ("approved", "check_circle", "Approve"),
+            ("disabled", "pause_circle", "Disable"),
+            ("rejected", "cancel", "Reject"),
+        ):
+            url = _reverse("admin:images_image_set_review", args=[obj.pk, state])
+            active = " mfu-qa-active" if state == status else ""
+            buttons.append(
+                f'<a href="{url}" class="mfu-qa mfu-qa-{state}{active}" title="{title}">'
+                f'<span class="material-symbols-outlined">{icon}</span></a>'
+            )
+        return mark_safe(
+            f'<div class="mfu-cell">{pill}'
+            f'<div class="mfu-cell-actions">{"".join(buttons)}</div></div>'
+        )
 
     @display(description=_("Huts"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def show_huts(self, obj):

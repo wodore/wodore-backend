@@ -143,11 +143,13 @@ reason to productionize the hand-rolled provider: the built-in stack
 `local_auth` under the same issuer URL — and only then does the
 production default flip, once, to the final stack. During modernize,
 `LOCAL_AUTH_ENABLED` keeps gating the built-in provider in dev/test
-(semantics unchanged for frontends). At the flip it is retired together
-with the `local_auth` app and its dev/test gate: `OIDC_ENABLED` gates the
-built-in provider, defaults true everywhere, and Zitadel remains
-selectable via explicit configuration as rollback until decommission
-(issuer-routed validation, D4, accepts both). Tests that want "no auth"
+(semantics unchanged for frontends). At the flip the `local_auth`
+gate is long retired: a single ``AUTH_PROVIDER`` env selects the provider -
+``zitadel`` (the production default until the flip is rehearsed) or
+``builtin``. ``OIDC_ENABLED`` derives from it and gates the built-in
+surface; ``ZITADEL_ROLLBACK_ENABLED`` keeps introspection validation alive
+after the flip until decommission (issuer-routed validation, D4, accepts
+both token types). Tests that want "no auth"
 set `OIDC_ENABLED=false` and get the clean-401 path that already exists.
 
 ### D6: Security hardening baseline

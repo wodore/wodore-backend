@@ -39,14 +39,18 @@ class GeoPlaceImageAssociation(TimeStampedModel):
         db_index=True,
         related_name="image_associations",
     )
-    order = models.PositiveSmallIntegerField(blank=True, null=True)
+    score = models.PositiveSmallIntegerField(
+        blank=True,
+        null=True,
+        help_text=_("Display score — higher is shown first."),
+    )
 
     def __str__(self) -> str:
         return f"{self.geo_place} <> {self.image}"
 
     class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = _("Image and Geo Place Association")
-        ordering = ("geo_place__name", "order")
+        ordering = ("geo_place__name", "-score", "id")
         constraints = (
             models.UniqueConstraint(
                 name="%(app_label)s_%(class)s_unique_relationships",

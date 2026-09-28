@@ -38,20 +38,30 @@ class HutContactAssociation(TimeStampedModel):
 
 
 class HutImageAssociation(TimeStampedModel):
+    # Uploaded/imported images outrank pinned external images (provider scores
+    # are 0–100; curation is deliberate content — see openspec pin-external-images).
+    UPLOAD_DEFAULT_SCORE = 1000
+
     image = models.ForeignKey(
         Image, on_delete=models.CASCADE, db_index=True, related_name="details"
     )
     hut = models.ForeignKey(
         "Hut", on_delete=models.CASCADE, db_index=True, related_name="huts"
     )
-    order = models.PositiveSmallIntegerField(blank=True, null=True)
+    score = models.PositiveSmallIntegerField(
+        blank=True,
+        null=True,
+        help_text=_(
+            "Display score — higher is shown first; pinned external images carry their provider score."
+        ),
+    )
 
     def __str__(self) -> str:
         return f"{self.hut} <> {self.image}"
 
     class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = _("Image and Hut Association")
-        ordering = ("hut__name", "order")
+        ordering = ("hut__name", "-score", "id")
         app_label = "huts"
         constraints = (
             models.UniqueConstraint(

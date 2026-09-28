@@ -63,11 +63,18 @@ class HutImageAssociationEditInline(unfold_admin.TabularInline):
 
     model = Hut.image_set.through
     # tab = False
-    fields = ("image", "order")
+    fields = ("image", "score")
     autocomplete_fields = ("image",)
     extra = 0
     verbose_name = _("Image")
     # template = "huts/image_inline.html"
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        # New uploads outrank pinned external images by default (provider
+        # scores live in 0–100; deliberate content sits above that range).
+        if db_field.name == "score":
+            kwargs["initial"] = HutImageAssociation.UPLOAD_DEFAULT_SCORE
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
 
 
 class ContactHutAssociationEditInline(unfold_admin.TabularInline):
@@ -147,7 +154,7 @@ class HutContactAssociationsAdmin(ModelAdmin):
 
 @admin.register(HutImageAssociation)
 class HutImageAssociationAdmin(ModelAdmin):
-    list_display = ("hut", "image", "order")
+    list_display = ("hut", "image", "score")
     autocomplete_fields = ("hut", "image")
 
 

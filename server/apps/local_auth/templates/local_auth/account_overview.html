@@ -1,0 +1,41 @@
+{% extends "allauth/layouts/base.html" %}
+{% load i18n %}
+
+{% block head_title %}{% trans "Account" %}{% endblock head_title %}
+
+{% block content %}
+  <h1>{% trans "Your account" %}</h1>
+
+  <dl>
+    <dt>{% trans "Email" %}</dt>
+    <dd>{{ account_user.email }}</dd>
+    <dt>{% trans "Name" %}</dt>
+    <dd>{% if account_user.get_full_name %}{{ account_user.get_full_name }}{% else %}<span class="muted">{% trans "not set" %}</span>{% endif %}</dd>
+    <dt>{% trans "Groups" %}</dt>
+    <dd>
+      {% for group in account_user.groups.all %}
+        <span class="chip">{{ group.name }}</span>
+      {% empty %}
+        <span class="muted">–</span>
+      {% endfor %}
+    </dd>
+    <dt>{% trans "Two-factor authentication" %}</dt>
+    <dd>
+      {% if mfa_types %}
+        {% for t in mfa_types %}<span class="chip">{{ t }}</span>{% endfor %}
+      {% else %}
+        <span class="muted">{% trans "not configured" %}</span>
+      {% endif %}
+    </dd>
+  </dl>
+
+  <hr>
+
+  <ul class="account-links">
+    <li><a href="/accounts/password/change/">{% trans "Change password" %}</a></li>
+    <li><a href="/accounts/2fa/">{% trans "Manage two-factor authentication" %}</a></li>
+    <li><a href="/accounts/sessions/">{% trans "Active sessions" %}</a></li>
+    <li><a href="/accounts/email/">{% trans "Email addresses" %}</a></li>
+    <li><a href="/admin/">{% trans "Admin" %}</a></li>
+  </ul>
+{% endblock content %}

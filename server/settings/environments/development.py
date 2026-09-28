@@ -17,7 +17,9 @@ from server.settings.components.common import (
     MIDDLEWARE,
 )
 from server.settings.components.csp import CONTENT_SECURITY_POLICY
-from server.settings.components.oidc import discovery_info
+from server.settings.components.oidc import (
+    ZITADEL_RP_ENABLED,
+)
 
 # Setting the development status:
 
@@ -133,8 +135,6 @@ if WITH_DEV:
         "querycount.middleware.QueryCountMiddleware",
     )
 
-if discovery_info:  # use only if setup correct
-    MIDDLEWARE += ("mozilla_django_oidc.middleware.SessionRefresh",)
 
 # https://django-debug-toolbar.readthedocs.io/en/stable/installation.html#configure-internal-ips
 try:  # This might fail on some OS
@@ -220,3 +220,13 @@ EXTRA_CHECKS = {
 # Disable persistent DB connections
 # https://docs.djangoproject.com/en/4.2/ref/databases/#caveats
 DATABASES["default"]["CONN_MAX_AGE"] = 0
+
+# Development convenience: disable the django-axes login lockout (default:
+# 3 failures, permanent until `manage.py axes_reset`). Production keeps the
+# defaults; allauth's own rate limits still apply everywhere.
+AXES_ENABLED = False
+
+# Zitadel RP mode only (AUTH_PROVIDER=zitadel): refresh OIDC sessions.
+
+if ZITADEL_RP_ENABLED:
+    MIDDLEWARE += ("mozilla_django_oidc.middleware.SessionRefresh",)  # pyright: ignore[reportUndefinedVariable]
