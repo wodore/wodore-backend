@@ -88,8 +88,9 @@ def seed_data(django_db_setup, django_db_blocker):
         else:
             results = {}
 
-    # App fixtures load with explicit pks and leave sequences behind;
-    # app fixtures load outside this fixture (management base), so reset
-    # on every session regardless of whether seeds were (re)loaded.
-    _reset_pk_sequences()
+        # App fixtures load with explicit pks and leave sequences behind
+        # (management base); reset on every session regardless of whether
+        # seeds were (re)loaded. Must run inside the unblocked context.
+        _reset_pk_sequences()
+
     return results
