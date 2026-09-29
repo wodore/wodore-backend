@@ -1109,18 +1109,10 @@ def post_process_images(
                         400,
                         quality=quality,
                         focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
+                        crop_start=focal_start or crop_start,
+                        crop_stop=focal_stop or crop_stop,
                     ).get_full_url(),
                     "md": transform_for(
-                        800,
-                        800,
-                        quality=quality,
-                        focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
-                    ).get_full_url(),
-                    "lg": transform_for(
                         1200,
                         1200,
                         quality=quality,
@@ -1129,9 +1121,18 @@ def post_process_images(
                         crop_stop=crop_stop,
                         no_upscale=True,
                     ).get_full_url(),
+                    "lg": transform_for(
+                        2000,
+                        2000,
+                        quality=quality,
+                        focal=focal_point,
+                        crop_start=crop_start,
+                        crop_stop=crop_stop,
+                        no_upscale=True,
+                    ).get_full_url(),
                     "xl": transform_for(
-                        2000,
-                        2000,
+                        4000,
+                        4000,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
@@ -1153,18 +1154,10 @@ def post_process_images(
                         267,
                         quality=quality,
                         focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
+                        crop_start=focal_start or crop_start,
+                        crop_stop=focal_stop or crop_stop,
                     ).get_full_url(),
                     "md": transform_for(
-                        800,
-                        534,
-                        quality=quality,
-                        focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
-                    ).get_full_url(),
-                    "lg": transform_for(
                         1200,
                         800,
                         quality=quality,
@@ -1172,9 +1165,17 @@ def post_process_images(
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
-                    "xl": transform_for(
+                    "lg": transform_for(
                         2000,
                         1333,
+                        quality=quality,
+                        focal=focal_point,
+                        crop_start=crop_start,
+                        crop_stop=crop_stop,
+                    ).get_full_url(),
+                    "xl": transform_for(
+                        4000,
+                        2666,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
@@ -1191,22 +1192,14 @@ def post_process_images(
                         crop_stop=focal_stop or crop_stop,
                     ).get_full_url(),
                     "sm": transform_for(
-                        300,
-                        450,
+                        267,
+                        400,
                         quality=quality,
                         focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
+                        crop_start=focal_start or crop_start,
+                        crop_stop=focal_stop or crop_stop,
                     ).get_full_url(),
                     "md": transform_for(
-                        600,
-                        900,
-                        quality=quality,
-                        focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
-                    ).get_full_url(),
-                    "lg": transform_for(
                         900,
                         1350,
                         quality=quality,
@@ -1214,9 +1207,17 @@ def post_process_images(
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
-                    "xl": transform_for(
+                    "lg": transform_for(
                         1500,
                         2250,
+                        quality=quality,
+                        focal=focal_point,
+                        crop_start=crop_start,
+                        crop_stop=crop_stop,
+                    ).get_full_url(),
+                    "xl": transform_for(
+                        3000,
+                        4500,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
@@ -1304,14 +1305,13 @@ def post_process_images(
                 },
             }
 
-            # Assessment payload: thumbhashes and quality data are
-            # first-class properties; the rest stays in extra.
-            if result.extra:
-                extra = dict(result.extra)
-                if "thumbhashes" in extra:
-                    feature["properties"]["thumbhashes"] = extra.pop("thumbhashes")
-                if extra:
-                    feature["properties"]["extra"] = extra
+            # Assessment payload: thumbhashes and extra are always present
+            # (individual hashes/quality may be null when not assessed).
+            raw_extra = result.extra or {}
+            feature["properties"]["thumbhashes"] = raw_extra.get("thumbhashes") or {}
+            feature["properties"]["extra"] = {
+                k: v for k, v in raw_extra.items() if k != "thumbhashes"
+            }
 
             final_results.append(feature)
 

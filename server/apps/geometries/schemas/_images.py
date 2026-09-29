@@ -79,8 +79,8 @@ class ImageVariantUrlsSchema(BaseModel):
     Five t-shirt sizes forming a small-to-large chain:
     xs (~200px) → sm (~400px) → md (~800px) → lg (~1200px) → xl (~2000px).
 
-    `xs` uses the focal area crop (zoomed for tiny cards);
-    `sm`–`xl` use the curated crop (or full frame).
+    `xs` and `sm` use the focal area crop (zoomed for small displays);
+    `md`–`xl` use the curated crop (or full frame).
     For retina displays, use the next size up:
     `sizes[min(index + (pixelRatio > 1 ? 1 : 0), 4)]`.
     Use `thumbhashes` for loading placeholders.
@@ -88,23 +88,23 @@ class ImageVariantUrlsSchema(BaseModel):
 
     xs: str = Field(
         ...,
-        description="Extra small (~200px) — cards, thumbnails. Focal-cropped (zoomed).",
+        description="Extra small (~200px) — cards, thumbnails. Focal-cropped.",
     )
     sm: str = Field(
         ...,
-        description="Small (~400px) — previews, 2x thumbnails",
+        description="Small (~400px) — previews, 2x thumbnails. Focal-cropped.",
     )
     md: str = Field(
         ...,
-        description="Medium (~800px) — 2x previews, small heroes",
+        description="Medium (~1200px) — gallery, 2x previews",
     )
     lg: str = Field(
         ...,
-        description="Large (~1200px) — gallery, hero images",
+        description="Large (~2000px) — hero images, 2x gallery",
     )
     xl: str = Field(
         ...,
-        description="Extra large (~2000px+) — fullscreen, 2x heroes",
+        description="Extra large (~4000px) — fullscreen, 2x heroes",
     )
 
 
@@ -120,15 +120,15 @@ class ImageUrlsSchema(BaseModel):
         ...,
         description="Original image URLs (raw source + imagor proxy)",
     )
-    square: ImageVariantUrlsSchema | None = Field(
+    square: ImageVariantUrlsSchema = Field(
         None,
         description="Square (1:1) variant URLs for cards and avatars",
     )
-    landscape: ImageVariantUrlsSchema | None = Field(
+    landscape: ImageVariantUrlsSchema = Field(
         None,
         description="Landscape (3:2) variant URLs — use when `is_portrait` is false",
     )
-    portrait: ImageVariantUrlsSchema | None = Field(
+    portrait: ImageVariantUrlsSchema = Field(
         None,
         description="Portrait (2:3) variant URLs — use when `is_portrait` is true",
     )
@@ -264,17 +264,17 @@ class ImagePropertiesSchema(BaseModel):
         None, description="Associated GeoPlace or Hut reference (if pinned)"
     )
 
-    thumbhashes: ImageThumbhashesSchema | None = Field(
-        None,
+    thumbhashes: ImageThumbhashesSchema = Field(
+        default_factory=ImageThumbhashesSchema,
         description=(
             "ThumbHash placeholder per rendering context. Decode the variant "
             "matching your display box for an instant blurred preview. "
-            "Null when the image has not been assessed."
+            "Individual hashes are null when not yet assessed."
         ),
     )
 
-    extra: ImageExtraSchema | None = Field(
-        None,
+    extra: ImageExtraSchema = Field(
+        default_factory=ImageExtraSchema,
         description="Assessment metadata (quality score, duplicate detection)",
     )
 

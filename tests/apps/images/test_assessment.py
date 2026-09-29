@@ -227,11 +227,13 @@ class TestThumbCropPrecedence:
         )
         features = post_process_images([result])
         urls = features[0]["properties"]["urls"]
-        thumb = urls["landscape"]["xs"]
-        preview = urls["landscape"]["sm"]
-        assert "0.10x0.10:0.50x0.50" in thumb  # focal area crops the thumb
-        assert "0.00x0.00:0.80x1.00" in preview  # curated crop applies to preview
-        assert "0.10x0.10:0.50x0.50" not in preview.split("filters:")[0]
+        xs = urls["landscape"]["xs"]
+        sm = urls["landscape"]["sm"]
+        md = urls["landscape"]["md"]
+        assert "0.10x0.10:0.50x0.50" in xs  # focal area crops xs
+        assert "0.10x0.10:0.50x0.50" in sm  # focal area crops sm too
+        assert "0.00x0.00:0.80x1.00" in md  # curated crop applies to md+
+        assert "0.10x0.10:0.50x0.50" not in md.split("filters:")[0]
 
 
 class TestAdminSaveHook:
