@@ -1,1 +1,0 @@
-{"event": "No GeoPlaces or Huts found within 100m, using coordinate only", "timestamp": "2026-09-29T00:48:40.923558Z", "level": "warning", "logger": "server.apps.geometries.api_images", "filename": "api_images.py", "lineno": 198, "func_name": "nearby_images", "module": "api_images"}
