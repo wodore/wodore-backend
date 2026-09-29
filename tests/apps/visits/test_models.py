@@ -17,10 +17,10 @@ from django.test import RequestFactory
 from django.utils import timezone as djtz
 
 from server.apps.geometries import image_response_cache as irc
-from server.apps.geometries import visit_counter as vc
 from server.apps.geometries.api_images import router
 from server.apps.geometries.pinning import pin_place_images
-from server.apps.geometries.visit_counter import (
+from server.apps.visits import models as vc
+from server.apps.visits.models import (
     ObjectVisitDay,
     flush_visit_counters,
     popular_places,
@@ -101,7 +101,7 @@ class TestRecordVisit:
             assert record_visit(_request(), hut) is True
         finally:
             qtasks.async_task = original
-        assert enqueued == ["server.apps.geometries.visit_counter.flush_visit_counters"]
+        assert enqueued == ["server.apps.visits.models.flush_visit_counters"]
         assert ObjectVisitDay.objects.count() == 0  # no DB write in-request
 
     def test_repeat_within_window_counts_once(self, hut):

@@ -726,7 +726,7 @@ def get_amenity(
     activate(lang)
 
     # Count the visit once we know the place exists (best-effort, async).
-    from .visit_counter import record_visit
+    from server.apps.visits.models import record_visit
 
     visit_place = (
         GeoPlace.objects.filter(id=place_id, is_active=True).only("id").first()

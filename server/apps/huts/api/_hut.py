@@ -649,7 +649,7 @@ def get_hut(
 
     # Count the visit (best-effort, async — separate lightweight query
     # so it doesn't interfere with the main select_related/only chain).
-    from server.apps.geometries.visit_counter import record_visit
+    from server.apps.visits.models import record_visit
 
     visit_hut = (
         Hut.objects.filter(is_active=True, is_public=True, slug=slug).only("id").first()

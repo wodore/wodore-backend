@@ -105,7 +105,7 @@ def record_visit(request, obj) -> bool:
             from django_q.tasks import async_task
 
             async_task(
-                "server.apps.geometries.visit_counter.flush_visit_counters",
+                "server.apps.visits.models.flush_visit_counters",
                 buffer_key,
                 task_name="visit-counter flush",
             )
@@ -176,3 +176,6 @@ def popular_places(limit: int = 20, days: int = 30):
         .annotate(total=Coalesce(Sum("count"), 0))
         .order_by("-total")[:limit]
     )
+
+
+# Re-export for callers that imported from the old location.
