@@ -646,6 +646,17 @@ def get_hut(
 ) -> Hut:
     """Get a hut by its slug."""
     activate(lang)
+
+    # Count the visit (best-effort, async — separate lightweight query
+    # so it doesn't interfere with the main select_related/only chain).
+    from server.apps.visits.models import record_visit
+
+    visit_hut = (
+        Hut.objects.filter(is_active=True, is_public=True, slug=slug).only("id").first()
+    )
+    if visit_hut is not None:
+        record_visit(request, visit_hut)
+
     qs = (
         Hut.objects.select_related("hut_owner")
         .all()

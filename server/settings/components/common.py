@@ -123,6 +123,7 @@ INSTALLED_APPS: tuple[str, ...] = (
     "server.apps.main",
     "server.apps.meta_image_field",
     "server.apps.images",
+    "server.apps.visits",
     "server.apps.symbols",
     "server.apps.organizations",
     "server.apps.licenses",
