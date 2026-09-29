@@ -76,26 +76,35 @@ class ImageOriginalUrlsSchema(BaseModel):
 class ImageVariantUrlsSchema(BaseModel):
     """Transformed variant URLs for one aspect group.
 
-    A small-to-large chain: thumb → preview → medium → large,
-    each with a `_2x` retina variant. Use `thumbhashes` for loading
-    placeholders instead of requesting a separate placeholder image.
+    Five t-shirt sizes forming a small-to-large chain:
+    xs (~200px) → sm (~400px) → md (~800px) → lg (~1200px) → xl (~2000px).
+
+    `xs` uses the focal area crop (zoomed for tiny cards);
+    `sm`–`xl` use the curated crop (or full frame).
+    For retina displays, use the next size up:
+    `sizes[min(index + (pixelRatio > 1 ? 1 : 0), 4)]`.
+    Use `thumbhashes` for loading placeholders.
     """
 
-    thumb: str = Field(
-        ..., description="Small card/thumbnail URL (e.g., 200x133 landscape)"
+    xs: str = Field(
+        ...,
+        description="Extra small (~200px) — cards, thumbnails. Focal-cropped (zoomed).",
     )
-    thumb_2x: str = Field(..., description="Retina thumb URL (2x resolution)")
-    preview: str = Field(
-        ..., description="Medium preview URL (e.g., 400x267 landscape)"
+    sm: str = Field(
+        ...,
+        description="Small (~400px) — previews, 2x thumbnails",
     )
-    preview_2x: str = Field(..., description="Retina preview URL")
-    medium: str = Field(..., description="Large display URL (e.g., 1200x800 landscape)")
-    medium_2x: str = Field(
-        ..., description="Retina medium URL (e.g., 2400x1600 landscape)"
+    md: str = Field(
+        ...,
+        description="Medium (~800px) — 2x previews, small heroes",
     )
-    large: str = Field(..., description="Full detail URL (e.g., 2000x1333 landscape)")
-    large_2x: str = Field(
-        ..., description="Retina large URL (e.g., 4000x2666 landscape)"
+    lg: str = Field(
+        ...,
+        description="Large (~1200px) — gallery, hero images",
+    )
+    xl: str = Field(
+        ...,
+        description="Extra large (~2000px+) — fullscreen, 2x heroes",
     )
 
 

@@ -209,10 +209,10 @@ class TestPostProcessSourceSelection:
         urls = feature["properties"]["urls"]
 
         for variant in (
-            urls["square"]["thumb"],
-            urls["square"]["thumb_2x"],
-            urls["landscape"]["preview"],
-            urls["portrait"]["thumb"],
+            urls["square"]["xs"],
+            urls["square"]["sm"],
+            urls["landscape"]["sm"],
+            urls["portrait"]["xs"],
         ):
             assert _quoted(THUMB_500_URL) in variant
 
@@ -222,9 +222,9 @@ class TestPostProcessSourceSelection:
         urls = feature["properties"]["urls"]
 
         for variant in (
-            urls["square"]["medium"],
-            urls["landscape"]["large"],
-            urls["portrait"]["preview_2x"],
+            urls["square"]["lg"],
+            urls["landscape"]["xl"],
+            urls["portrait"]["md"],
         ):
             assert _quoted(ORIGINAL_URL) in variant
         # original.raw is the direct source URL (not through imagor)
@@ -242,7 +242,7 @@ class TestPostProcessSourceSelection:
         urls = feature["properties"]["urls"]
 
         assert _calculate_constrained_size(1000, 1000, 800, 460) == (460, 460)
-        assert _quoted(THUMB_500_URL) in urls["square"]["medium"]
+        assert _quoted(THUMB_500_URL) in urls["square"]["lg"]
 
     def test_original_raw_is_large_source_not_true_original(self, patched_lookups):
         """For Wikimedia the provider already points url_large at a thumb."""
@@ -259,8 +259,8 @@ class TestPostProcessSourceSelection:
 
         # Golden pair: square thumb and landscape large must embed the
         # (single) source URL exactly as the old always-url_large behavior did.
-        assert _quoted(ORIGINAL_URL) in urls["square"]["thumb"]
-        assert _quoted(ORIGINAL_URL) in urls["landscape"]["large"]
+        assert _quoted(ORIGINAL_URL) in urls["square"]["xs"]
+        assert _quoted(ORIGINAL_URL) in urls["landscape"]["xl"]
         # No variant may fall back to an empty or different source.
         for orientation in ("square", "landscape", "portrait"):
             for name, variant in urls[orientation].items():
@@ -272,8 +272,8 @@ class TestPostProcessSourceSelection:
         [feature] = post_process_images([result])
         urls = feature["properties"]["urls"]
 
-        assert _quoted(THUMB_500_URL) in urls["square"]["preview"]  # 400
-        assert _quoted(ORIGINAL_URL) in urls["square"]["preview_2x"]  # 800
+        assert _quoted(THUMB_500_URL) in urls["square"]["sm"]  # 400
+        assert _quoted(ORIGINAL_URL) in urls["square"]["md"]  # 800
 
 
 class TestConstrainedSize:

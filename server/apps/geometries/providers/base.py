@@ -1096,7 +1096,7 @@ def post_process_images(
                     "proxy": large_img.transform().get_full_url(),
                 },
                 "square": {
-                    "thumb": transform_for(
+                    "xs": transform_for(
                         200,
                         200,
                         quality=quality,
@@ -1104,15 +1104,7 @@ def post_process_images(
                         crop_start=focal_start or crop_start,
                         crop_stop=focal_stop or crop_stop,
                     ).get_full_url(),
-                    "thumb_2x": transform_for(
-                        400,
-                        400,
-                        quality=quality,
-                        focal=focal_point,
-                        crop_start=focal_start or crop_start,
-                        crop_stop=focal_stop or crop_stop,
-                    ).get_full_url(),
-                    "preview": transform_for(
+                    "sm": transform_for(
                         400,
                         400,
                         quality=quality,
@@ -1120,7 +1112,7 @@ def post_process_images(
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
-                    "preview_2x": transform_for(
+                    "md": transform_for(
                         800,
                         800,
                         quality=quality,
@@ -1128,36 +1120,18 @@ def post_process_images(
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
-                    "medium": transform_for(
-                        1000,
-                        1000,
+                    "lg": transform_for(
+                        1200,
+                        1200,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                         no_upscale=True,
                     ).get_full_url(),
-                    "medium_2x": transform_for(
+                    "xl": transform_for(
                         2000,
                         2000,
-                        quality=quality,
-                        focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
-                        no_upscale=True,
-                    ).get_full_url(),
-                    "large": transform_for(
-                        2000,
-                        2000,
-                        quality=quality,
-                        focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
-                        no_upscale=True,
-                    ).get_full_url(),
-                    "large_2x": transform_for(
-                        4000,
-                        4000,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
@@ -1166,7 +1140,7 @@ def post_process_images(
                     ).get_full_url(),
                 },
                 "landscape": {
-                    "thumb": transform_for(
+                    "xs": transform_for(
                         200,
                         133,
                         quality=quality,
@@ -1174,15 +1148,7 @@ def post_process_images(
                         crop_start=focal_start or crop_start,
                         crop_stop=focal_stop or crop_stop,
                     ).get_full_url(),
-                    "thumb_2x": transform_for(
-                        400,
-                        266,
-                        quality=quality,
-                        focal=focal_point,
-                        crop_start=focal_start or crop_start,
-                        crop_stop=focal_stop or crop_stop,
-                    ).get_full_url(),
-                    "preview": transform_for(
+                    "sm": transform_for(
                         400,
                         267,
                         quality=quality,
@@ -1190,7 +1156,7 @@ def post_process_images(
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
-                    "preview_2x": transform_for(
+                    "md": transform_for(
                         800,
                         534,
                         quality=quality,
@@ -1198,61 +1164,33 @@ def post_process_images(
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
-                    "medium": transform_for(
+                    "lg": transform_for(
                         1200,
                         800,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
-                        no_upscale=False,
                     ).get_full_url(),
-                    "medium_2x": transform_for(
-                        2400,
-                        1600,
-                        quality=quality,
-                        focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
-                        no_upscale=False,
-                    ).get_full_url(),
-                    "large": transform_for(
+                    "xl": transform_for(
                         2000,
                         1333,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
-                        no_upscale=False,
-                    ).get_full_url(),
-                    "large_2x": transform_for(
-                        4000,
-                        2666,
-                        quality=quality,
-                        focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
-                        no_upscale=False,
                     ).get_full_url(),
                 },
                 "portrait": {
-                    "thumb": transform_for(
+                    "xs": transform_for(
                         133,
                         200,
                         quality=quality,
                         focal=focal_point,
                         crop_start=focal_start or crop_start,
-                        crop_stop=crop_stop,
+                        crop_stop=focal_stop or crop_stop,
                     ).get_full_url(),
-                    "thumb_2x": transform_for(
-                        266,
-                        400,
-                        quality=quality,
-                        focal=focal_point,
-                        crop_start=focal_start or crop_start,
-                        crop_stop=crop_stop,
-                    ).get_full_url(),
-                    "preview": transform_for(
+                    "sm": transform_for(
                         300,
                         450,
                         quality=quality,
@@ -1260,7 +1198,7 @@ def post_process_images(
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
-                    "preview_2x": transform_for(
+                    "md": transform_for(
                         600,
                         900,
                         quality=quality,
@@ -1268,41 +1206,21 @@ def post_process_images(
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
-                    "medium": transform_for(
+                    "lg": transform_for(
                         900,
                         1350,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
-                        no_upscale=False,
                     ).get_full_url(),
-                    "medium_2x": transform_for(
-                        1800,
-                        2700,
-                        quality=quality,
-                        focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
-                        no_upscale=False,
-                    ).get_full_url(),
-                    "large": transform_for(
+                    "xl": transform_for(
                         1500,
                         2250,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
-                        no_upscale=False,
-                    ).get_full_url(),
-                    "large_2x": transform_for(
-                        3000,
-                        4500,
-                        quality=quality,
-                        focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
-                        no_upscale=False,
                     ).get_full_url(),
                 },
             }
