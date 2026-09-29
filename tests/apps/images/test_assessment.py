@@ -348,7 +348,7 @@ class TestAssessPlace:
 
 
 class TestResponsePassthrough:
-    def test_thumbhash_first_class_in_features(self, hut, monkeypatch):
+    def test_thumbhashes_in_features(self, hut, monkeypatch):
         from ninja.testing import TestClient
 
         from server.apps.geometries.api_images import router
@@ -359,5 +359,5 @@ class TestResponsePassthrough:
         response = client.get(f"/hut/{hut.slug}?radius=50&lang=en&limit=10")
         assert response.status_code == 200
         props = response.json()["features"][0]["properties"]
-        assert props["thumbhash"] == "F/gJNQJXh493Z4lneYqHd4ZwZAk2"  # first-class
-        assert "quality_score" in props["extra"]
+        assert props["thumbhashes"]["thumb_square"] == "F/gJNQJXh493Z4lneYqHd4ZwZAk2"
+        assert props["extra"]["quality_score"] is not None

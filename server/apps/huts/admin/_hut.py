@@ -244,7 +244,7 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         img_html = "<div>"
         for i, img in enumerate(
             obj.image_set.select_related("source_org", "license")
-            .order_by("details__order")
+            .order_by("details__score")
             .all()
         ):
             link = reverse("admin:images_image_change", args=[img.pk])
@@ -304,7 +304,7 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
                 .get_html()
             )
 
-        img = obj.image_set.order_by("details__order").first()
+        img = obj.image_set.order_by("details__score").first()
         if img:
             return img.get_image_tag(radius=15, height=50, width=50)
         return ""

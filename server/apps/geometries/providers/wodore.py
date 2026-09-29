@@ -22,8 +22,6 @@ logger = structlog.get_logger()
 def _assessment_extra(img) -> dict | None:
     """Assessment payload served as feature properties.extra."""
     extra: dict = {}
-    if getattr(img, "thumbhash", None):
-        extra["thumbhash"] = img.thumbhash
     if getattr(img, "quality_score", None) is not None:
         extra["quality_score"] = img.quality_score
     meta = img.image_meta or {}

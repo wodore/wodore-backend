@@ -1457,12 +1457,10 @@ def post_process_images(
                 },
             }
 
-            # Add extra data if present; thumbhash is a rendering primitive
-            # every client wants — promote it to a first-class property.
+            # Assessment payload: thumbhashes and quality data are
+            # first-class properties; the rest stays in extra.
             if result.extra:
                 extra = dict(result.extra)
-                if "thumbhash" in extra:
-                    feature["properties"]["thumbhash"] = extra.pop("thumbhash")
                 if "thumbhashes" in extra:
                     feature["properties"]["thumbhashes"] = extra.pop("thumbhashes")
                 if extra:
