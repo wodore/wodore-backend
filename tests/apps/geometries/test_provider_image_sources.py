@@ -209,8 +209,8 @@ class TestPostProcessSourceSelection:
         urls = feature["properties"]["urls"]
 
         for variant in (
-            urls["square"]["avatar"],
-            urls["square"]["thumb@2x"],
+            urls["square"]["thumb"],
+            urls["square"]["thumb_2x"],
             urls["landscape"]["preview"],
             urls["portrait"]["thumb"],
         ):
@@ -224,10 +224,11 @@ class TestPostProcessSourceSelection:
         for variant in (
             urls["square"]["medium"],
             urls["landscape"]["large"],
-            urls["portrait"]["preview@2x"],
-            urls["original"]["proxy"],
+            urls["portrait"]["preview_2x"],
         ):
             assert _quoted(ORIGINAL_URL) in variant
+        # original.raw is the direct source URL (not through imagor)
+        assert urls["original"]["raw"] == ORIGINAL_URL
 
     def test_constrained_not_nominal_size_selects_source(self, patched_lookups):
         """Discriminator: selection must use the CONSTRAINED target size.
@@ -249,7 +250,6 @@ class TestPostProcessSourceSelection:
         [feature] = post_process_images([result])
         original = feature["properties"]["urls"]["original"]
         assert original["raw"] == THUMB_1920_URL
-        assert _quoted(THUMB_1920_URL) in original["proxy"]
 
     def test_without_url_medium_all_variants_use_large(self, patched_lookups):
         """Providers that do not set url_medium keep their previous URLs."""
@@ -273,7 +273,7 @@ class TestPostProcessSourceSelection:
         urls = feature["properties"]["urls"]
 
         assert _quoted(THUMB_500_URL) in urls["square"]["preview"]  # 400
-        assert _quoted(ORIGINAL_URL) in urls["square"]["preview@2x"]  # 800
+        assert _quoted(ORIGINAL_URL) in urls["square"]["preview_2x"]  # 800
 
 
 class TestConstrainedSize:

@@ -60,23 +60,12 @@ class ImageAttributionSchema(BaseModel):
     )
 
 
-class ImageOriginalUrlsSchema(BaseModel):
-    """Original (untransformed) image URLs."""
-
-    raw: str = Field(
-        ..., description="Direct URL to the source image (never fed through imagor)"
-    )
-    proxy: str = Field(
-        ..., description="Imagor-proxied full-size URL (JPEG even for TIFF sources)"
-    )
-
-
 class ImageVariantUrlsSchema(BaseModel):
     """Transformed variant URLs for one aspect group.
 
-    Each variant has a base and a @2x (retina) URL. The `placeholder`
-    is a low-quality blurred JPEG used as a loading fallback
-    (deprecated in favour of ThumbHashes).
+    A small-to-large chain: thumb → preview → medium → large,
+    each with a `_2x` retina variant (medium/large 2x on demand).
+    Use `thumbhashes` for loading placeholders.
     """
 
     thumb: str = Field(
@@ -87,46 +76,39 @@ class ImageVariantUrlsSchema(BaseModel):
         ..., description="Medium preview URL (e.g., 400x267 landscape)"
     )
     preview_2x: str = Field(..., description="Retina preview URL")
-    placeholder: str = Field(
-        ...,
-        description="Blurred low-quality placeholder URL (deprecated: use thumbhashes)",
-    )
-    placeholder_2x: str = Field(..., description="Retina placeholder URL (deprecated)")
     medium: str = Field(..., description="Large display URL (e.g., 1200x800 landscape)")
-    medium_2x: str = Field(..., description="Retina medium URL")
+    medium_2x: str | None = Field(
+        None, description="Retina medium URL (null unless emitted on demand)"
+    )
     large: str = Field(..., description="Full detail URL (e.g., 2000x1333 landscape)")
-    large_2x: str = Field(..., description="Retina large URL")
+    large_2x: str | None = Field(
+        None, description="Retina large URL (null unless emitted on demand)"
+    )
 
 
 class ImageUrlsSchema(BaseModel):
     """Image URLs grouped by aspect ratio.
 
-    Each group contains the same keys:
-    `thumb`, `thumb@2x`, `preview`, `preview@2x`,
-    `placeholder`, `placeholder@2x` (deprecated — use thumbhashes),
-    `medium`, `medium@2x`, `large`, `large@2x`.
-    The `square` group additionally has `avatar` and `avatar@2x`.
+    The orientation group (landscape/portrait) is chosen via `is_portrait`.
+    Each group provides a small-to-large chain: thumb → preview → medium → large,
+    each with a `_2x` retina variant.
     """
 
     original: dict[str, str] = Field(
         ...,
-        description="Original image URLs: `raw` (direct source) and `proxy` (imagor full-size)",
+        description="Original image URL: `raw` (direct source, never through imagor)",
     )
-    square: dict[str, str] | None = Field(
+    square: ImageVariantUrlsSchema | None = Field(
         None,
-        description="Square (1:1) URLs — keys: avatar, avatar@2x, thumb, thumb@2x, preview, preview@2x, placeholder, placeholder@2x, medium, medium@2x, large, large@2x",
+        description="Square (1:1) variant URLs for cards and avatars",
     )
-    landscape: dict[str, str] | None = Field(
+    landscape: ImageVariantUrlsSchema | None = Field(
         None,
-        description="Landscape (3:2) URLs — keys: thumb, thumb@2x, preview, preview@2x, placeholder, placeholder@2x, medium, medium@2x, large, large@2x",
+        description="Landscape (3:2) variant URLs — use when `is_portrait` is false",
     )
-    portrait: dict[str, str] | None = Field(
+    portrait: ImageVariantUrlsSchema | None = Field(
         None,
-        description="Portrait (2:3) URLs — keys: thumb, thumb@2x, preview, preview@2x, placeholder, placeholder@2x, medium, medium@2x, large, large@2x",
-    )
-    preferred: str | None = Field(
-        None,
-        description="URL of the preferred variant for this image's own orientation",
+        description="Portrait (2:3) variant URLs — use when `is_portrait` is true",
     )
 
 
