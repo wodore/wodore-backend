@@ -182,7 +182,20 @@ class TestPopularPlaces:
 
 
 class TestEndpointCounting:
-    def test_hut_endpoint_counts_visit(self, hut, monkeypatch):
+    """Visit counting on the hut detail endpoint, not the images endpoint."""
+
+    def test_hut_detail_counts_visit(self, hut, client, monkeypatch):
+        calls = []
+        monkeypatch.setattr(
+            "django_q.tasks.async_task",
+            lambda func, *a, **kw: calls.append(func),
+        )
+        response = client.get(f"/v1/huts/{hut.slug}")
+        assert response.status_code == 200
+        assert calls  # flush task enqueued via the buffer
+        assert ObjectVisitDay.objects.count() == 0  # still no in-request write
+
+    def test_images_endpoint_does_not_count(self, hut, monkeypatch):
         calls = []
         monkeypatch.setattr(
             "django_q.tasks.async_task",
@@ -192,5 +205,4 @@ class TestEndpointCounting:
         client = TestClient(router)
         response = client.get(f"/hut/{hut.slug}?radius=50&lang=en&limit=10")
         assert response.status_code == 200
-        assert calls  # flush task enqueued via the buffer
-        assert ObjectVisitDay.objects.count() == 0  # still no in-request write
+        assert not [c for c in calls if "visit" in str(c)]  # no visit flush

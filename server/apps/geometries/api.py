@@ -725,6 +725,15 @@ def get_amenity(
     """
     activate(lang)
 
+    # Count the visit once we know the place exists (best-effort, async).
+    from .visit_counter import record_visit
+
+    visit_place = (
+        GeoPlace.objects.filter(id=place_id, is_active=True).only("id").first()
+    )
+    if visit_place is not None:
+        record_visit(request, visit_place)
+
     # Get the place with amenity detail
     try:
         place = (

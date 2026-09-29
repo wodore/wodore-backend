@@ -342,11 +342,6 @@ def images_for_place(
         and place_has_visible_pins(place)
     )
 
-    from .visit_counter import record_visit
-
-    if place is not None:
-        record_visit(request, place)  # best-effort, async, never blocks
-
     if serve_from_pins and place is not None:
         # Queued refresh (never in-request): stale pins enqueue a q2 task;
         # this visitor gets the current pins, the next one the fresh set.
@@ -522,11 +517,6 @@ def images_for_hut(
     serve_from_pins = bool(
         hut and not sources_list and not update_cache and place_has_visible_pins(hut)
     )
-
-    from .visit_counter import record_visit
-
-    if hut is not None:
-        record_visit(request, hut)  # best-effort, async, never blocks
 
     if serve_from_pins and hut is not None:
         # Queued refresh (never in-request): stale pins enqueue a q2 task;
