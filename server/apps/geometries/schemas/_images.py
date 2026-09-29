@@ -60,12 +60,25 @@ class ImageAttributionSchema(BaseModel):
     )
 
 
+class ImageOriginalUrlsSchema(BaseModel):
+    """Original (untransformed) image URLs."""
+
+    raw: str = Field(
+        ...,
+        description="Direct URL to the source image. For Wikimedia this is a bounded thumb (not the true original). Never fed through imagor.",
+    )
+    proxy: str = Field(
+        ...,
+        description="Imagor-proxied full-size URL (JPEG even for TIFF sources — browsers cannot render TIFF)",
+    )
+
+
 class ImageVariantUrlsSchema(BaseModel):
     """Transformed variant URLs for one aspect group.
 
     A small-to-large chain: thumb → preview → medium → large,
-    each with a `_2x` retina variant (medium/large 2x on demand).
-    Use `thumbhashes` for loading placeholders.
+    each with a `_2x` retina variant. Use `thumbhashes` for loading
+    placeholders instead of requesting a separate placeholder image.
     """
 
     thumb: str = Field(
@@ -77,12 +90,12 @@ class ImageVariantUrlsSchema(BaseModel):
     )
     preview_2x: str = Field(..., description="Retina preview URL")
     medium: str = Field(..., description="Large display URL (e.g., 1200x800 landscape)")
-    medium_2x: str | None = Field(
-        None, description="Retina medium URL (null unless emitted on demand)"
+    medium_2x: str = Field(
+        ..., description="Retina medium URL (e.g., 2400x1600 landscape)"
     )
     large: str = Field(..., description="Full detail URL (e.g., 2000x1333 landscape)")
-    large_2x: str | None = Field(
-        None, description="Retina large URL (null unless emitted on demand)"
+    large_2x: str = Field(
+        ..., description="Retina large URL (e.g., 4000x2666 landscape)"
     )
 
 
@@ -94,9 +107,9 @@ class ImageUrlsSchema(BaseModel):
     each with a `_2x` retina variant.
     """
 
-    original: dict[str, str] = Field(
+    original: ImageOriginalUrlsSchema = Field(
         ...,
-        description="Original image URL: `raw` (direct source, never through imagor)",
+        description="Original image URLs (raw source + imagor proxy)",
     )
     square: ImageVariantUrlsSchema | None = Field(
         None,
