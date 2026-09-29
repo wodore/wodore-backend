@@ -246,15 +246,6 @@ class ImagePropertiesSchema(BaseModel):
         description="True if height > width (portrait-oriented). Determines which urls group to use.",
     )
 
-    focal: ImageAreaSchema | None = Field(
-        None,
-        description="Normalized focal area (x1, y1, x2, y2) — the region of interest used for smart cropping",
-    )
-    crop: ImageAreaSchema | None = Field(
-        None,
-        description="Normalized crop area (x1, y1, x2, y2) — explicit curated crop applied to preview/medium/large variants",
-    )
-
     source_found: list[str] | None = Field(
         None,
         description="Provider sources where this image was found (e.g., ['osm', 'wikidata'])",

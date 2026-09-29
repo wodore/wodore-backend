@@ -1233,25 +1233,6 @@ def post_process_images(
             license_info = _get_license_info(result.license_slug)
 
             # Build focal and crop metadata
-            focal_metadata = None
-            crop_metadata = None
-
-            if result.focal:
-                focal_metadata = {
-                    "x1": result.focal.x1,
-                    "y1": result.focal.y1,
-                    "x2": result.focal.x2,
-                    "y2": result.focal.y2,
-                }
-
-            if result.crop:
-                crop_metadata = {
-                    "x1": result.crop.x1,
-                    "y1": result.crop.y1,
-                    "x2": result.crop.x2,
-                    "y2": result.crop.y2,
-                }
-
             # Build GeoJSON Feature
             feature = {
                 "type": "Feature",
@@ -1299,8 +1280,6 @@ def post_process_images(
                     "height": result.height,
                     "is_portrait": is_portrait,
                     "score": result.score,
-                    "focal": focal_metadata,
-                    "crop": crop_metadata,
                     "place": result.place,
                 },
             }
