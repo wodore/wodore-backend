@@ -159,22 +159,26 @@ def _persist(buffer_key: str, hits: int):
         )
 
 
-def popular_places(limit: int = 20, days: int = 30):
-    """Top places (GeoPlace content type) by visit sum over the window."""
+def visit_totals(model_or_ct, *, days: int = 30):
+    """Visit sums per object_id for a given model (or ContentType),
+    ordered by descending total over the window. Generic — knows
+    nothing about which model it's counting."""
     from datetime import timedelta
 
     from django.db.models import Sum
     from django.db.models.functions import Coalesce
 
-    from server.apps.geometries.models import GeoPlace
-
-    ct = ContentType.objects.get_for_model(GeoPlace)
+    ct = (
+        model_or_ct
+        if isinstance(model_or_ct, ContentType)
+        else ContentType.objects.get_for_model(model_or_ct)
+    )
     since = datetime.now(tz=timezone.utc).date() - timedelta(days=days)
     return (
         ObjectVisitDay.objects.filter(content_type=ct, day__gte=since)
         .values("object_id")
         .annotate(total=Coalesce(Sum("count"), 0))
-        .order_by("-total")[:limit]
+        .order_by("-total")
     )
 
 

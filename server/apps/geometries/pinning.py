@@ -483,3 +483,11 @@ def warmup_place_image_cache(
             variants=warmed,
         )
     return warmed
+
+
+def popular_places(limit: int = 20, days: int = 30):
+    """Top places by visit sum over the window (visits app, place domain)."""
+    from server.apps.geometries.models import GeoPlace
+    from server.apps.visits.models import visit_totals
+
+    return visit_totals(GeoPlace, days=days)[:limit]

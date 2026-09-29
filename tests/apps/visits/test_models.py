@@ -18,12 +18,11 @@ from django.utils import timezone as djtz
 
 from server.apps.geometries import image_response_cache as irc
 from server.apps.geometries.api_images import router
-from server.apps.geometries.pinning import pin_place_images
+from server.apps.geometries.pinning import pin_place_images, popular_places
 from server.apps.visits import models as vc
 from server.apps.visits.models import (
     ObjectVisitDay,
     flush_visit_counters,
-    popular_places,
     record_visit,
 )
 
