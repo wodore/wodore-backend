@@ -1300,8 +1300,6 @@ def post_process_images(
                     "sizes": _build_sizes(result, get_size),
                     "is_portrait": is_portrait,
                     "score": result.score,
-                    "quality": (result.extra or {}).get("quality_score"),
-                    "source_score": (result.extra or {}).get("provider_score"),
                     "place": result.place,
                 },
             }

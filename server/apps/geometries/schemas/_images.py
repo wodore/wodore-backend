@@ -214,18 +214,6 @@ class ImagePropertiesSchema(BaseModel):
         le=100,
         description="Display order — higher appears first. Admin-adjustable curation position.",
     )
-    quality: int | None = Field(
-        None,
-        ge=0,
-        le=100,
-        description="Technical quality (0–100) from blur, exposure, contrast, resolution. Null when not assessed.",
-    )
-    source_score: int | None = Field(
-        None,
-        ge=0,
-        le=100,
-        description="Original provider ranking before curation. Null for uploads.",
-    )
 
     thumbhashes: ImageThumbhashesSchema = Field(
         default_factory=ImageThumbhashesSchema,

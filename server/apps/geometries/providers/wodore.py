@@ -20,16 +20,11 @@ logger = structlog.get_logger()
 
 
 def _assessment_extra(img) -> dict | None:
-    """Assessment payload served as feature properties."""
-    extra: dict = {}
-    if getattr(img, "quality_score", None) is not None:
-        extra["quality_score"] = img.quality_score
+    """Thumbhashes for the serving pipeline (quality stays backend-only)."""
     meta = img.image_meta or {}
-    if meta.get("provider_score") is not None:
-        extra["provider_score"] = meta["provider_score"]
     if meta.get("thumbhashes"):
-        extra["thumbhashes"] = meta["thumbhashes"]
-    return extra or None
+        return {"thumbhashes": meta["thumbhashes"]}
+    return None
 
 
 class WodoreProvider(ImageProvider):

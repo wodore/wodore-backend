@@ -364,4 +364,3 @@ class TestResponsePassthrough:
         assert response.status_code == 200
         props = response.json()["features"][0]["properties"]
         assert props["thumbhashes"]["thumb_square"] == "F/gJNQJXh493Z4lneYqHd4ZwZAk2"
-        assert props["quality"] is not None
