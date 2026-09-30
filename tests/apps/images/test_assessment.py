@@ -163,7 +163,9 @@ class TestAssessImage:
             "thumb_square",
             "thumb_landscape",
             "thumb_portrait",
-            "preview",
+            "preview_square",
+            "preview_landscape",
+            "preview_portrait",
         }
 
     def test_skips_already_assessed(self):
@@ -362,4 +364,4 @@ class TestResponsePassthrough:
         assert response.status_code == 200
         props = response.json()["features"][0]["properties"]
         assert props["thumbhashes"]["thumb_square"] == "F/gJNQJXh493Z4lneYqHd4ZwZAk2"
-        assert props["extra"]["quality_score"] is not None
+        assert props["score"]["quality"] is not None

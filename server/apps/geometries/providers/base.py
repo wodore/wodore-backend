@@ -975,6 +975,27 @@ async def fetch_images_for_place(
     return results, place_info
 
 
+def _build_sizes(result, get_size_fn) -> dict:
+    """Per-variant pixel dimensions for the image's own orientation."""
+    if not result.width or not result.height:
+        return {"raw": {"width": 0, "height": 0}}
+    portrait = result.height > result.width
+    targets = {
+        "xs": (133, 200) if portrait else (200, 133),
+        "sm": (267, 400) if portrait else (400, 267),
+        "md": (900, 1350) if portrait else (1200, 800),
+        "lg": (1500, 2250) if portrait else (2000, 1333),
+        "xl": (3000, 4500) if portrait else (4000, 2666),
+    }
+    sizes = {
+        "raw": {"width": result.width, "height": result.height},
+    }
+    for key, (tw, th) in targets.items():
+        cw, ch = _calculate_constrained_size(tw, th, result.width, result.height)
+        sizes[key] = {"width": cw, "height": ch}
+    return sizes
+
+
 def post_process_images(
     results: list[ImageResult],
     force_provider_refresh: bool = False,
@@ -1276,21 +1297,23 @@ def post_process_images(
                         "raw": result.author_raw if result.author_raw else None,
                     },
                     "urls": urls,
-                    "width": result.width,
-                    "height": result.height,
+                    "sizes": _build_sizes(result, get_size),
                     "is_portrait": is_portrait,
-                    "score": result.score,
+                    "score": {
+                        "display": result.score,
+                        "quality": (result.extra or {}).get("quality_score"),
+                        "source": (result.image_meta or {}).get("provider_score")
+                        if hasattr(result, "image_meta")
+                        else None,
+                    },
                     "place": result.place,
                 },
             }
 
-            # Assessment payload: thumbhashes and extra are always present
-            # (individual hashes/quality may be null when not assessed).
-            raw_extra = result.extra or {}
-            feature["properties"]["thumbhashes"] = raw_extra.get("thumbhashes") or {}
-            feature["properties"]["extra"] = {
-                k: v for k, v in raw_extra.items() if k != "thumbhashes"
-            }
+            # Thumbhashes: always present (individual hashes may be null)
+            feature["properties"]["thumbhashes"] = (result.extra or {}).get(
+                "thumbhashes"
+            ) or {}
 
             final_results.append(feature)
 

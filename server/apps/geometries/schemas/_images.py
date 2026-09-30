@@ -155,43 +155,61 @@ class ImageAreaSchema(BaseModel):
 class ImageThumbhashesSchema(BaseModel):
     """ThumbHash placeholder per rendering context.
 
-    Each hash is a ~30-char base64 string. Decode with a ThumbHash
-    decoder (https://evanw.github.io/thumbhash/) for an instant blurred
-    preview matching the exact crop of that variant. Null when the
-    image has not been assessed yet.
+    Two crop styles × three aspect groups = six hashes. `thumb_*` variants
+    use the focal area crop (zoomed, matching xs/sm URLs); `preview_*`
+    variants use the curated crop (or full frame, matching md+ URLs).
+    Decode with https://evanw.github.io/thumbhash/ for an instant blurred
+    preview. Individual hashes are null when not yet assessed.
     """
 
     thumb_square: str | None = Field(
-        None,
-        description="ThumbHash of the square (1:1) thumb variant",
+        None, description="ThumbHash of the square (1:1) focal-cropped thumb"
     )
     thumb_landscape: str | None = Field(
-        None,
-        description="ThumbHash of the landscape (3:2) thumb variant",
+        None, description="ThumbHash of the landscape (3:2) focal-cropped thumb"
     )
     thumb_portrait: str | None = Field(
-        None,
-        description="ThumbHash of the portrait (2:3) thumb variant",
+        None, description="ThumbHash of the portrait (2:3) focal-cropped thumb"
     )
-    preview: str | None = Field(
-        None,
-        description="ThumbHash of the preview variant in the image's own orientation",
+    preview_square: str | None = Field(
+        None, description="ThumbHash of the square (1:1) curated-crop preview"
+    )
+    preview_landscape: str | None = Field(
+        None, description="ThumbHash of the landscape (3:2) curated-crop preview"
+    )
+    preview_portrait: str | None = Field(
+        None, description="ThumbHash of the portrait (2:3) curated-crop preview"
     )
 
 
-class ImageExtraSchema(BaseModel):
-    """Assessment metadata (from the technical quality pipeline)."""
+class ImageScoreSchema(BaseModel):
+    """Composite score: display order, technical quality, and original provider ranking."""
 
-    quality_score: int | None = Field(
+    display: int = Field(
+        ...,
+        ge=0,
+        le=100,
+        description="Curation display order — higher appears first. Admin-adjustable.",
+    )
+    quality: int | None = Field(
         None,
         ge=0,
         le=100,
-        description="Technical quality score (0–100) from blur, exposure, contrast, resolution and saturation signals. Null when not yet assessed.",
+        description="Technical quality (0–100) from blur, exposure, contrast, resolution. Null when not assessed.",
     )
-    duplicate_of: str | None = Field(
+    source: int | None = Field(
         None,
-        description="Source identifier of the primary image this is a near-duplicate of (perceptual hash). Null when unique.",
+        ge=0,
+        le=100,
+        description="Original provider score before curation adjustments. Null for uploads.",
     )
+
+
+class ImageDimensionsSchema(BaseModel):
+    """Pixel dimensions of one variant."""
+
+    width: int = Field(..., description="Width in pixels")
+    height: int = Field(..., description="Height in pixels")
 
 
 class ImagePropertiesSchema(BaseModel):
@@ -232,23 +250,17 @@ class ImagePropertiesSchema(BaseModel):
         description="Image URLs for all sizes and orientations, grouped by aspect ratio",
     )
 
-    score: int = Field(
-        default=0,
-        ge=0,
-        le=100,
-        description="Curation score (0–100). For pinned images this is the admin-adjustable display order; higher appears first.",
+    score: ImageScoreSchema = Field(
+        ...,
+        description="Composite score: display order, quality, provider ranking",
     )
-
-    width: int | None = Field(None, description="Original image width in pixels")
-    height: int | None = Field(None, description="Original image height in pixels")
+    sizes: dict[str, ImageDimensionsSchema] = Field(
+        ...,
+        description="Pixel dimensions per size key (raw, xs, sm, md, lg, xl) for the image's own orientation",
+    )
     is_portrait: bool | None = Field(
         None,
         description="True if height > width (portrait-oriented). Determines which urls group to use.",
-    )
-
-    source_found: list[str] | None = Field(
-        None,
-        description="Provider sources where this image was found (e.g., ['osm', 'wikidata'])",
     )
 
     place: ImagePlaceReferenceSchema | None = Field(
@@ -258,15 +270,9 @@ class ImagePropertiesSchema(BaseModel):
     thumbhashes: ImageThumbhashesSchema = Field(
         default_factory=ImageThumbhashesSchema,
         description=(
-            "ThumbHash placeholder per rendering context. Decode the variant "
-            "matching your display box for an instant blurred preview. "
+            "ThumbHash placeholder per rendering context (6 variants). "
             "Individual hashes are null when not yet assessed."
         ),
-    )
-
-    extra: ImageExtraSchema = Field(
-        default_factory=ImageExtraSchema,
-        description="Assessment metadata (quality score, duplicate detection)",
     )
 
 
