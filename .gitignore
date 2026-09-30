@@ -197,3 +197,6 @@ cython_debug/
 .env.local
 # ruff cache: directory form and the workz-provisioned symlink
 .ruff_cache
+
+# Local working notes (AGENTS.md § Documentation) — never commit
+/_work/
