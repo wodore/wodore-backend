@@ -163,7 +163,9 @@ class TestAssessImage:
             "thumb_square",
             "thumb_landscape",
             "thumb_portrait",
-            "preview",
+            "preview_square",
+            "preview_landscape",
+            "preview_portrait",
         }
 
     def test_skips_already_assessed(self):
@@ -227,11 +229,13 @@ class TestThumbCropPrecedence:
         )
         features = post_process_images([result])
         urls = features[0]["properties"]["urls"]
-        thumb = urls["landscape"]["thumb"]
-        preview = urls["landscape"]["preview"]
-        assert "0.10x0.10:0.50x0.50" in thumb  # focal area crops the thumb
-        assert "0.00x0.00:0.80x1.00" in preview  # curated crop applies to preview
-        assert "0.10x0.10:0.50x0.50" not in preview.split("filters:")[0]
+        xs = urls["landscape"]["xs"]
+        sm = urls["landscape"]["sm"]
+        md = urls["landscape"]["md"]
+        assert "0.10x0.10:0.50x0.50" in xs  # focal area crops xs
+        assert "0.10x0.10:0.50x0.50" in sm  # focal area crops sm too
+        assert "0.00x0.00:0.80x1.00" in md  # curated crop applies to md+
+        assert "0.10x0.10:0.50x0.50" not in md.split("filters:")[0]
 
 
 class TestAdminSaveHook:
@@ -348,7 +352,7 @@ class TestAssessPlace:
 
 
 class TestResponsePassthrough:
-    def test_thumbhash_first_class_in_features(self, hut, monkeypatch):
+    def test_thumbhashes_in_features(self, hut, monkeypatch):
         from ninja.testing import TestClient
 
         from server.apps.geometries.api_images import router
@@ -359,5 +363,4 @@ class TestResponsePassthrough:
         response = client.get(f"/hut/{hut.slug}?radius=50&lang=en&limit=10")
         assert response.status_code == 200
         props = response.json()["features"][0]["properties"]
-        assert props["thumbhash"] == "F/gJNQJXh493Z4lneYqHd4ZwZAk2"  # first-class
-        assert "quality_score" in props["extra"]
+        assert props["thumbhashes"]["thumb_square"] == "F/gJNQJXh493Z4lneYqHd4ZwZAk2"

@@ -292,13 +292,16 @@ def assess_place_task(place_type: str, slug: str):
 # exact transformed URL, so each placeholder matches what its box shows).
 # ---------------------------------------------------------------------------
 
-#: image_meta.thumbhashes keys → (width, height) of the transformed variant.
+#: image_meta.thumbhashes keys → (width, height, focal_crop) of the variant.
+#: thumb_* variants use the focal area crop (matching xs/sm URLs);
+#: preview_* variants use the curated crop (matching md+ URLs).
 THUMBHASH_VARIANT_SIZES = {
-    "thumb_square": (200, 200),
-    "thumb_landscape": (200, 133),
-    "thumb_portrait": (133, 200),
-    "preview_landscape": (400, 267),
-    "preview_portrait": (300, 450),
+    "thumb_square": (200, 200, True),
+    "thumb_landscape": (200, 133, True),
+    "thumb_portrait": (133, 200, True),
+    "preview_square": (400, 400, False),
+    "preview_landscape": (400, 267, False),
+    "preview_portrait": (300, 450, False),
 }
 
 
@@ -384,15 +387,9 @@ def _variant_meta_urls(image) -> dict[str, str]:
         signature = ImagorImage.sign_path(full) or "unsafe"
         return f"{settings.IMAGOR_URL}/{signature}/{full}"
 
-    urls = {
-        "thumb_square": meta_url(200, 200, thumb=True),
-        "thumb_landscape": meta_url(200, 133, thumb=True),
-        "thumb_portrait": meta_url(133, 200, thumb=True),
-    }
-    if params["is_portrait"]:
-        urls["preview"] = meta_url(300, 450, thumb=False)
-    else:
-        urls["preview"] = meta_url(400, 267, thumb=False)
+    urls = {}
+    for name, (tw, th, focal_crop) in THUMBHASH_VARIANT_SIZES.items():
+        urls[name] = meta_url(tw, th, thumb=focal_crop)
     return urls
 
 

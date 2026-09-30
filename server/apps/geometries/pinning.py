@@ -429,7 +429,7 @@ def _flag_dead_origins(place, fresh_idents: set[str]) -> int:
 WARMUP_TIMEOUT_S = 20
 
 #: First-rendered variants to pre-fetch (matches the hut page gallery/hero).
-WARMUP_VARIANTS = ("preview", "medium")
+WARMUP_VARIANTS = ("sm", "lg")
 
 
 def warmup_place_image_cache(

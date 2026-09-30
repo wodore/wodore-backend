@@ -52,7 +52,6 @@ provider_registry.register(CamptocampProvider())
 @router.get(
     "nearby",
     response=ImageCollectionResponse,
-    exclude_unset=True,
     operation_id="nearby_images",
 )
 @decorate_view(cache_control(max_age=300))  # 5 minutes cache
@@ -264,7 +263,6 @@ def nearby_images(
 @router.get(
     "place/{place_slug}",
     response={200: ImageCollectionResponse},
-    exclude_unset=True,
     operation_id="images_for_place",
 )
 @decorate_view(cache_control(max_age=300))  # 5 minutes cache
@@ -445,7 +443,6 @@ def images_for_place(
 @router.get(
     "hut/{hut_slug}",
     response={200: ImageCollectionResponse},
-    exclude_unset=True,
     operation_id="images_for_hut",
 )
 @decorate_view(cache_control(max_age=300))  # 5 minutes cache
