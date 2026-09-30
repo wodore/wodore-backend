@@ -25,6 +25,8 @@ def _assessment_extra(img) -> dict | None:
     if getattr(img, "quality_score", None) is not None:
         extra["quality_score"] = img.quality_score
     meta = img.image_meta or {}
+    if meta.get("provider_score") is not None:
+        extra["provider_score"] = meta["provider_score"]
     if meta.get("thumbhashes"):
         extra["thumbhashes"] = meta["thumbhashes"]
     return extra or None

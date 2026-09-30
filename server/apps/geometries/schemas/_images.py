@@ -16,192 +16,138 @@ class ImageLicenseSchema(BaseModel):
 
     slug: str = Field(..., description="License slug (e.g., 'cc-by-sa-4-0', 'cc0')")
     name: str = Field(..., description="Human-readable license name")
-    url: str | None = Field(None, description="Link to license text")
-    icon: str | None = Field(None, description="URL to license icon image")
+    url: str | None = Field(None, description="Link to the license text")
+    icon: str | None = Field(None, description="URL to a license icon")
 
 
 class ImageProviderSchema(BaseModel):
-    """Provider/organization information for an image."""
+    """Provider that sourced the image."""
 
     slug: str = Field(
         ..., description="Provider slug (e.g., 'wikicommons', 'camptocamp', 'wodore')"
     )
     name: str = Field(..., description="Provider display name")
     url: str | None = Field(None, description="Provider website URL")
-    icon: str | None = Field(
-        None, description="Provider icon/logo URL (128x128 via imagor)"
-    )
-    description: str | None = Field(None, description="Provider description")
+    icon: str | None = Field(None, description="Provider icon (128x128 via imagor)")
+    description: str | None = Field(None, description="Short provider description")
 
 
 class ImageAuthorSchema(BaseModel):
-    """Author information for an image."""
+    """Photographer/author of the image."""
 
     name: str | None = Field(None, description="Author name")
     url: str | None = Field(None, description="Author profile URL")
 
 
 class ImageAttributionSchema(BaseModel):
-    """Comprehensive attribution information for an image."""
+    """Ready-to-display attribution."""
 
-    short: str = Field(
-        ...,
-        description="Short HTML attribution with license icon, license link, and provider link",
-    )
+    short: str = Field(..., description="Short HTML attribution (license icon + links)")
     full: str = Field(
-        ...,
-        description="Full attribution string (e.g., 'CC BY-SA 4.0, Author Name')",
+        ..., description="Full attribution text (e.g., 'CC BY-SA 4.0, Author Name')"
     )
-    license_icon: str | None = Field(None, description="URL to license icon image")
+    license_icon: str | None = Field(None, description="URL to the license icon")
     license_short: str = Field(..., description="Short license name")
     license_full: str = Field(..., description="Full license name")
     author: str = Field(
-        ..., description="Author name with provider (e.g., 'Name on Wikimedia')"
+        ..., description="Author with provider (e.g., 'Name on Wikimedia')"
     )
 
 
 class ImageOriginalUrlsSchema(BaseModel):
-    """Original (untransformed) image URLs."""
+    """Untransformed source URLs."""
 
     raw: str = Field(
         ...,
-        description="Direct URL to the source image. For Wikimedia this is a bounded thumb (not the true original). Never fed through imagor.",
+        description="Direct URL to the source image (for Wikimedia, a bounded thumb — never the true original)",
     )
     proxy: str = Field(
         ...,
-        description="Imagor-proxied full-size URL (JPEG even for TIFF sources — browsers cannot render TIFF)",
+        description="Full-size image served through imagor (JPEG — browsers cannot render TIFF)",
     )
 
 
 class ImageVariantUrlsSchema(BaseModel):
-    """Transformed variant URLs for one aspect group.
+    """URLs for one aspect group, sized xs through xl.
 
-    Five t-shirt sizes forming a small-to-large chain:
-    xs (~200px) → sm (~400px) → md (~800px) → lg (~1200px) → xl (~2000px).
+    | Key | ~Size (long edge) | Crop |
+    |-----|-------------------|------|
+    | xs  | ~200px            | focal area |
+    | sm  | ~400px            | focal area |
+    | md  | ~1200px           | curated crop |
+    | lg  | ~2000px           | curated crop |
+    | xl  | ~4000px           | curated crop |
 
-    `xs` and `sm` use the focal area crop (zoomed for small displays);
-    `md`–`xl` use the curated crop (or full frame).
-    For retina displays, use the next size up:
-    `sizes[min(index + (pixelRatio > 1 ? 1 : 0), 4)]`.
+    For retina, use the next size up: `sizes[min(i + (dpr > 1), 4)]`.
     Use `thumbhashes` for loading placeholders.
     """
 
     xs: str = Field(
-        ...,
-        description="Extra small (~200px) — cards, thumbnails. Focal-cropped.",
+        ..., description="Extra small (~200px) — cards, thumbnails. Focal-cropped."
     )
     sm: str = Field(
-        ...,
-        description="Small (~400px) — previews, 2x thumbnails. Focal-cropped.",
+        ..., description="Small (~400px) — previews, 2x thumbnails. Focal-cropped."
     )
-    md: str = Field(
-        ...,
-        description="Medium (~1200px) — gallery, 2x previews",
-    )
-    lg: str = Field(
-        ...,
-        description="Large (~2000px) — hero images, 2x gallery",
-    )
-    xl: str = Field(
-        ...,
-        description="Extra large (~4000px) — fullscreen, 2x heroes",
-    )
+    md: str = Field(..., description="Medium (~1200px) — gallery, 2x previews")
+    lg: str = Field(..., description="Large (~2000px) — hero images, 2x gallery")
+    xl: str = Field(..., description="Extra large (~4000px) — fullscreen, 2x heroes")
 
 
 class ImageUrlsSchema(BaseModel):
     """Image URLs grouped by aspect ratio.
 
-    The orientation group (landscape/portrait) is chosen via `is_portrait`.
-    Each group provides a small-to-large chain: thumb → preview → medium → large,
-    each with a `_2x` retina variant.
+    Pick the group via `is_portrait`; each group has xs–xl sizes.
+    Square variants are always width == height.
     """
 
     original: ImageOriginalUrlsSchema = Field(
         ...,
-        description="Original image URLs (raw source + imagor proxy)",
+        description="Untransformed source URLs (raw + imagor proxy)",
     )
     square: ImageVariantUrlsSchema = Field(
-        None,
-        description="Square (1:1) variant URLs for cards and avatars",
+        ...,
+        description="Square (1:1) variants — for cards and thumbnails",
     )
     landscape: ImageVariantUrlsSchema = Field(
-        None,
-        description="Landscape (3:2) variant URLs — use when `is_portrait` is false",
+        ...,
+        description="Landscape (3:2) variants — use when `is_portrait` is false",
     )
     portrait: ImageVariantUrlsSchema = Field(
-        None,
-        description="Portrait (2:3) variant URLs — use when `is_portrait` is true",
+        ...,
+        description="Portrait (2:3) variants — use when `is_portrait` is true",
     )
 
 
 class ImagePlaceReferenceSchema(BaseModel):
-    """Brief reference to a GeoPlace or Hut associated with an image."""
+    """The GeoPlace or Hut this image is pinned to."""
 
     id: int | None = Field(None, description="Place database ID")
-    slug: str = Field(..., description="Place slug identifier")
+    slug: str = Field(..., description="Place slug")
     name: str = Field(..., description="Place name")
     location: LocationSchema = Field(..., description="Place coordinates")
-
-
-class ImageAreaSchema(BaseModel):
-    """Normalized (0–1) rectangular area within an image."""
-
-    x1: float = Field(..., ge=0, le=1, description="Left edge (0–1)")
-    y1: float = Field(..., ge=0, le=1, description="Top edge (0–1)")
-    x2: float = Field(..., ge=0, le=1, description="Right edge (0–1)")
-    y2: float = Field(..., ge=0, le=1, description="Bottom edge (0–1)")
 
 
 class ImageThumbhashesSchema(BaseModel):
     """ThumbHash placeholder per rendering context.
 
-    Two crop styles × three aspect groups = six hashes. `thumb_*` variants
-    use the focal area crop (zoomed, matching xs/sm URLs); `preview_*`
-    variants use the curated crop (or full frame, matching md+ URLs).
-    Decode with https://evanw.github.io/thumbhash/ for an instant blurred
-    preview. Individual hashes are null when not yet assessed.
+    Two crop styles × three aspect groups = six hashes.
+    `thumb_*` = focal-cropped (matches xs/sm URLs);
+    `preview_*` = curated crop (matches md+ URLs).
+    Decode with https://evanw.github.io/thumbhash/ for instant blurred
+    previews. Individual hashes are null when not yet assessed.
     """
 
-    thumb_square: str | None = Field(
-        None, description="ThumbHash of the square (1:1) focal-cropped thumb"
-    )
+    thumb_square: str | None = Field(None, description="Square (1:1) focal-cropped")
     thumb_landscape: str | None = Field(
-        None, description="ThumbHash of the landscape (3:2) focal-cropped thumb"
+        None, description="Landscape (3:2) focal-cropped"
     )
-    thumb_portrait: str | None = Field(
-        None, description="ThumbHash of the portrait (2:3) focal-cropped thumb"
-    )
-    preview_square: str | None = Field(
-        None, description="ThumbHash of the square (1:1) curated-crop preview"
-    )
+    thumb_portrait: str | None = Field(None, description="Portrait (2:3) focal-cropped")
+    preview_square: str | None = Field(None, description="Square (1:1) curated crop")
     preview_landscape: str | None = Field(
-        None, description="ThumbHash of the landscape (3:2) curated-crop preview"
+        None, description="Landscape (3:2) curated crop"
     )
     preview_portrait: str | None = Field(
-        None, description="ThumbHash of the portrait (2:3) curated-crop preview"
-    )
-
-
-class ImageScoreSchema(BaseModel):
-    """Composite score: display order, technical quality, and original provider ranking."""
-
-    display: int = Field(
-        ...,
-        ge=0,
-        le=100,
-        description="Curation display order — higher appears first. Admin-adjustable.",
-    )
-    quality: int | None = Field(
-        None,
-        ge=0,
-        le=100,
-        description="Technical quality (0–100) from blur, exposure, contrast, resolution. Null when not assessed.",
-    )
-    source: int | None = Field(
-        None,
-        ge=0,
-        le=100,
-        description="Original provider score before curation adjustments. Null for uploads.",
+        None, description="Portrait (2:3) curated crop"
     )
 
 
@@ -216,109 +162,116 @@ class ImagePropertiesSchema(BaseModel):
     """Properties for an image GeoJSON feature."""
 
     provider: ImageProviderSchema = Field(
-        ..., description="Provider/organization information"
+        ..., description="Provider that sourced the image"
     )
     source_id: str = Field(
         ...,
-        description="Unique ID in the source system (e.g., 'File:Example.jpg' for Wikimedia, 'waypoint_123' for camp2camp)",
+        description="Unique ID in the source system (e.g., 'File:Example.jpg' for Wikimedia)",
     )
     source_url: str | None = Field(
         None, description="Deep link to the source page (attribution/provenance)"
     )
-
     image_type: Literal["flat", "360"] = Field(
-        ..., description="Image type: 'flat' (standard photo) or '360' (panorama)"
+        ..., description="'flat' (standard photo) or '360' (panorama)"
     )
     captured_at: datetime | None = Field(
         None, description="When the photo was taken (EXIF or provider metadata)"
     )
-
     distance_m: float = Field(
         ..., description="Distance from the query coordinate in meters"
     )
-
     attribution: ImageAttributionSchema = Field(
-        ..., description="Attribution information for display"
+        ..., description="Ready-to-display attribution"
     )
     author: ImageAuthorSchema | None = Field(
-        None, description="Image author/photographer details"
+        None, description="Image author/photographer"
     )
-    license: ImageLicenseSchema = Field(..., description="Image license information")
+    license: ImageLicenseSchema = Field(..., description="License information")
 
     urls: ImageUrlsSchema = Field(
         ...,
-        description="Image URLs for all sizes and orientations, grouped by aspect ratio",
-    )
-
-    score: ImageScoreSchema = Field(
-        ...,
-        description="Composite score: display order, quality, provider ranking",
+        description="Image URLs for all sizes, grouped by aspect ratio (square/landscape/portrait)",
     )
     sizes: dict[str, ImageDimensionsSchema] = Field(
         ...,
-        description="Pixel dimensions per size key (raw, xs, sm, md, lg, xl) for the image's own orientation",
+        description=(
+            "Pixel dimensions per size key (raw, xs, sm, md, lg, xl) "
+            "for the image's own orientation. Square variants are always "
+            "width == height; derive from sizes.raw constrained to a square."
+        ),
     )
     is_portrait: bool | None = Field(
         None,
-        description="True if height > width (portrait-oriented). Determines which urls group to use.",
+        description="True if the original is portrait (height > width). Pick urls.portrait when true, urls.landscape when false.",
+    )
+    place: ImagePlaceReferenceSchema | None = Field(
+        None, description="The place this image is pinned to (if any)"
     )
 
-    place: ImagePlaceReferenceSchema | None = Field(
-        None, description="Associated GeoPlace or Hut reference (if pinned)"
+    score: int = Field(
+        ...,
+        ge=0,
+        le=100,
+        description="Display order — higher appears first. Admin-adjustable curation position.",
+    )
+    quality: int | None = Field(
+        None,
+        ge=0,
+        le=100,
+        description="Technical quality (0–100) from blur, exposure, contrast, resolution. Null when not assessed.",
+    )
+    source_score: int | None = Field(
+        None,
+        ge=0,
+        le=100,
+        description="Original provider ranking before curation. Null for uploads.",
     )
 
     thumbhashes: ImageThumbhashesSchema = Field(
         default_factory=ImageThumbhashesSchema,
         description=(
-            "ThumbHash placeholder per rendering context (6 variants). "
+            "ThumbHash placeholder per rendering context (6 variants: "
+            "thumb/preview × square/landscape/portrait). "
             "Individual hashes are null when not yet assessed."
         ),
     )
 
 
-# GeoJSON types for nearby_images endpoint
+# GeoJSON types
 ImageFeature = Feature[Point, ImagePropertiesSchema]
 
 
 class ImageCenterSchema(BaseModel):
     """Query center point."""
 
-    lat: float = Field(..., description="Latitude of the query center")
-    lon: float = Field(..., description="Longitude of the query center")
+    lat: float = Field(..., description="Latitude")
+    lon: float = Field(..., description="Longitude")
 
 
 class ImageMetadataSchema(BaseModel):
-    """Metadata for the image collection response."""
+    """Query metadata."""
 
-    total: int = Field(
-        ..., description="Total number of images returned in the collection"
-    )
+    total: int = Field(..., description="Number of images returned")
     sources_queried: list[str] = Field(
-        ..., description="List of provider sources that were queried"
+        ..., description="Provider sources that were queried"
     )
-    query_radius_m: float = Field(
-        ..., description="Search radius used for the query in meters"
-    )
-    center: ImageCenterSchema = Field(..., description="Center point of the query")
+    query_radius_m: float = Field(..., description="Search radius in meters")
+    center: ImageCenterSchema = Field(..., description="Query center point")
     geoplaces_found: int = Field(
-        ..., description="Number of GeoPlaces found within search radius"
+        ..., description="GeoPlaces found within the search radius"
     )
-    huts_found: int = Field(
-        ..., description="Number of Huts found within search radius"
-    )
+    huts_found: int = Field(..., description="Huts found within the search radius")
 
 
 class ImageFeatureCollection(FeatureCollection[ImageFeature]):
-    """GeoJSON FeatureCollection of images from multiple providers."""
+    """GeoJSON FeatureCollection of images."""
 
 
 class ImageCollectionResponse(BaseModel):
-    """Complete response for nearby_images endpoint including metadata."""
+    """Response for the image endpoints."""
 
     type: Literal["FeatureCollection"] = "FeatureCollection"
     features: list[ImageFeature] = Field(
-        ..., description="Image features ordered by curation score (descending)"
+        ..., description="Image features, ordered by score (descending)"
     )
-    metadata: ImageMetadataSchema = Field(
-        ..., description="Query metadata and source information"
-    )
+    metadata: ImageMetadataSchema = Field(..., description="Query metadata")

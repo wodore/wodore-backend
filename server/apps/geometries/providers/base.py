@@ -1299,13 +1299,9 @@ def post_process_images(
                     "urls": urls,
                     "sizes": _build_sizes(result, get_size),
                     "is_portrait": is_portrait,
-                    "score": {
-                        "display": result.score,
-                        "quality": (result.extra or {}).get("quality_score"),
-                        "source": (result.image_meta or {}).get("provider_score")
-                        if hasattr(result, "image_meta")
-                        else None,
-                    },
+                    "score": result.score,
+                    "quality": (result.extra or {}).get("quality_score"),
+                    "source_score": (result.extra or {}).get("provider_score"),
                     "place": result.place,
                 },
             }
