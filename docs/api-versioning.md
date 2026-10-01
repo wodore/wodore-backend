@@ -19,6 +19,48 @@ were built against until that version is sunset.
 - Transforms are keyed by `operation_id` — endpoints with transforms must have an
   explicit `operation_id` (a system check fails startup otherwise).
 
+### What counts as breaking?
+
+Litmus test: **would a client pinned to the current version behave differently
+after this deploy?** Yes → breaking (new version). No — it simply never
+encounters the new functionality → additive (label `api:added`, live in all
+versions).
+
+| Change | Classification |
+|---|---|
+| New endpoint | additive |
+| New optional query/body param (default preserves current behavior) | additive |
+| New optional response field | additive* |
+| Loosening validation (accepting more values) | additive |
+| Removing/renaming fields, params or endpoints | **breaking** |
+| New *required* request param | **breaking** (old requests start 400ing) |
+| Tightening validation on an existing param (e.g. lowering `limit` max) | **breaking** |
+| Changing a field's type or format | **breaking** |
+| Changing observable defaults (sort order, pagination semantics) | **breaking** |
+| Changing error codes/shape for existing conditions | **breaking** |
+| New enum value in an existing *response* field | **breaking** (clients switch on enums) |
+
+\* Assumes tolerant readers (JSON clients that ignore unknown fields — our
+mobile/web apps are). If a strict-schema third party ever depends on the API,
+revisit this row.
+
+You are never "too late to pin": the `VersionChange` and its downgrade
+transforms are written in the **same PR** as the breaking change — older
+shapes are reconstructed from the new code at the edge, not frozen.
+
+### Docs-only changes (help text, descriptions)
+
+Descriptions in the live schema (`/v1/openapi.json`, `/v1/docs`) are generated
+from the code at request time — improvements are visible immediately. Label
+`type:docs`; **no new version, no snapshot regeneration, no `api:*` label**.
+
+Committed snapshots are frozen at release: they document the contract as
+shipped with that version and intentionally lag behind docs improvements; the
+next version's snapshot picks them up. CI checks snapshot *presence*, not
+content, so this drift is expected. (Regenerating the current snapshot on docs
+PRs is allowed but not recommended — it churns the frozen baseline the
+`oasdiff` guard diffs against.)
+
 ### Introducing a breaking change
 
 1. Add a `VersionChange` to `server/apps/apiversions/registry.py` (date,
