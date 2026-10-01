@@ -4,9 +4,10 @@ Two variants:
 
 * ``og_photo_url`` — a real photo, resized to the 'large' preset
   (1800x1200, focal-aware) exactly like the JSON detail endpoint, with
-  the Wodore wordmark watermarked bottom-left (branding per owner
-  decision; the messenger already shows title/description text next to
-  the image, so the name is deliberately NOT drawn into the image).
+  the Wodore logo watermarked bottom-left (icon only, per owner
+  preference — switch OG_WATERMARK_PATH to the wordmark variant to
+  include the "wodore" text; the messenger already shows
+  title/description text next to the image).
 * ``og_card_url`` — the branded default image (map + wordmark artwork,
   1200x630) for entities without a usable photo.
 
@@ -33,6 +34,11 @@ OG_PHOTO_SIZE = "1800x1200"
 # Generated card — the recommended social preview aspect ratio.
 OG_CARD_SIZE = "1200x630"
 
+# Photo watermark: icon-only by default. Alternatives in the frontend
+# repo (public/logos/): wodore_wordmark_white.png (icon + "wodore"
+# text), wodore_icon.png (original colors, for light backgrounds).
+OG_WATERMARK_PATH = "logos/wodore_icon_white.png"
+
 
 def _frontend(path: str) -> str:
     return f"{settings.FRONTEND_DOMAIN.rstrip('/')}/{path.lstrip('/')}"
@@ -49,9 +55,9 @@ def og_photo_url(image_url: str, focal: dict | None = None) -> str:
     filters = [
         # NOTE: the watermark URL stays RAW — the transformer encodes the
         # whole filter path, pre-encoding it here would double-encode.
-        # x=40 (from left), y=-40 (from bottom), alpha 90 (10% faded),
-        # w_ratio 18 (percent of the image width).
-        f"watermark({_frontend('logos/wodore_wordmark_white.png')},40,-40,90,18)",
+        # x=40 (from left), y=-40 (from bottom), alpha 85 (15% faded),
+        # w_ratio 9 (percent of the image width — icon only).
+        f"watermark({_frontend(OG_WATERMARK_PATH)},40,-40,85,9)",
     ]
     return (
         ImagorImage(image_url)
