@@ -12,6 +12,7 @@ for older supported versions (api-docs spec).
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
@@ -32,6 +33,26 @@ def load_snapshot(version: str) -> dict | None:
     return json.loads(path.read_text())
 
 
+def is_released(version: str) -> bool:
+    """A version is released once its `api/<version>` tag exists.
+
+    Snapshots of released versions are frozen release records — regenerating
+    one would rewrite history (docs drift is intentional, see the runbook).
+    While a version is still unreleased (PR iteration, no tag yet),
+    regenerating is free.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "tag", "-l", f"api/{version}"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):  # pragma: no cover
+        return False  # git unavailable: don't block on environment quirks
+    return bool(result.stdout.strip())
+
+
 class Command(BaseCommand):
     help = "Write a frozen OpenAPI snapshot for the current API version."
 
@@ -40,6 +61,12 @@ class Command(BaseCommand):
             "--check",
             action="store_true",
             help="Do not write; fail if the current version has no snapshot.",
+        )
+        parser.add_argument(
+            "--force",
+            action="store_true",
+            help="Overwrite the snapshot even if this version is already "
+            "released (tag api/<version> exists).",
         )
         parser.add_argument(
             "--output-dir",
@@ -65,6 +92,14 @@ class Command(BaseCommand):
                 raise CommandError(msg)
             self.stdout.write(f"Snapshot present for {version}.")
             return
+
+        if target.exists() and not options["force"] and is_released(version):
+            msg = (
+                f"Snapshot for {version!r} is frozen (tag 'api/{version}' "
+                f"exists — released versions are never regenerated; docs "
+                f"drift is intentional). Use --force to override."
+            )
+            raise CommandError(msg)
 
         schema = api.get_openapi_schema()
         schema["info"]["version"] = version

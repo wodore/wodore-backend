@@ -173,6 +173,51 @@ def release(
         warning("Did not update to new version tag.")
 
 
+@task(
+    help={
+        "tag": "Create and push the api/<version> tag (default: yes)",
+        "changelog": "Regenerate CHANGELOG_API.md with git-cliff (default: yes)",
+    }
+)
+def api_release(c: Ctx, tag: bool = True, changelog: bool = True):
+    """Release the current API contract version (registry-driven).
+
+    Snapshot itself is committed in the breaking PR (CI enforces presence);
+    this cuts the release artifacts: the `api/<date>` tag (grouping anchor
+    for git-cliff) and the regenerated CHANGELOG_API.md. Run it in the
+    release that ships the version — or right after merging its PR.
+    """
+    from server.apps.apiversions.registry import current_version
+
+    version = current_version()
+    header(f"API release for version '{version}'")
+
+    snapshot = f"server/apps/apiversions/openapi/{version}.json"
+    if not Path(snapshot).exists():
+        error(
+            f"Snapshot {snapshot} missing — run 'app api_snapshot' and "
+            "commit it first (CI would fail too)."
+        )
+    success(f"Snapshot present: {snapshot}")
+
+    if tag:
+        existing = c.run(f"git tag -l 'api/{version}'", hide=True).stdout.strip()
+        if existing:
+            info(f"Tag 'api/{version}' already exists — skipping.")
+        else:
+            c.run(f"git tag 'api/{version}'")
+            c.run(f"git push origin 'api/{version}'")
+            success(f"Tagged and pushed 'api/{version}'.")
+
+    if changelog:
+        c.run("git-cliff --config cliff-api.toml -o CHANGELOG_API.md")
+        success("Regenerated 'CHANGELOG_API.md'.")
+        info(
+            "Check the entries and run: git commit -am "
+            f'"API changelog for api/{version}"'
+        )
+
+
 @task(help={"next": "Show next version"})
 def version(c: Ctx, next: bool = False):
     """Print current or next (--next) project version"""

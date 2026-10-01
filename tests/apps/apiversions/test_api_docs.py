@@ -94,6 +94,34 @@ class TestSnapshots:
         with pytest.raises(CommandError, match="snapshot"):
             call_command("api_snapshot", "--check")
 
+    @pytest.mark.django_db
+    def test_api_snapshot_refuses_released_overwrite(self, tmp_path, monkeypatch):
+        """Released versions' snapshots are frozen release records — the
+        command refuses regeneration once the api/<version> tag exists
+        (docs drift is intentional; see the runbook)."""
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        from server.apps.apiversions.management.commands.api_snapshot import (
+            is_released,
+        )
+
+        assert not is_released("2099-01-01")  # no such tag in this repo
+
+        monkeypatch.setattr(
+            "server.apps.apiversions.management.commands.api_snapshot.is_released",
+            lambda version: True,
+        )
+        # No --force: refuses even though the (output-dir) file exists.
+        target = tmp_path / f"{registry.current_version()}.json"
+        target.write_text("{}")
+        with pytest.raises(CommandError, match="frozen"):
+            call_command("api_snapshot", "--output-dir", tmp_path)
+        assert target.read_text() == "{}"
+        # --force: regenerates.
+        call_command("api_snapshot", "--force", "--output-dir", tmp_path)
+        assert target.read_text() != "{}"
+
 
 class TestSchemaServing:
     @pytest.mark.django_db

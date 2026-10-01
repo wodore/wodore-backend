@@ -77,17 +77,26 @@ PRs is allowed but not recommended — it churns the frozen baseline the
 
 ### Releasing an API version
 
+The **snapshot is committed in the breaking PR itself** (CI fails otherwise,
+since the registry entry and snapshot must land together):
+
 ```bash
 app api_snapshot          # freeze the schema for the current registry version
 git add server/apps/apiversions/openapi/<version>.json
-git commit -m "Snapshot API version <version>"
-git tag api/<version> && git push origin api/<version>
-git-cliff --config cliff-api.toml -o CHANGELOG_API.md   # needs GITHUB_TOKEN
-git commit CHANGELOG_API.md -m "Update API changelog"
+```
+
+The **release artifacts** (tag + API changelog) are cut with the release
+script — run it in the release that ships the version, or right after the
+PR merges:
+
+```bash
+inv api-release           # tags api/<version>, pushes it, regenerates CHANGELOG_API.md
 ```
 
 CI runs `app api_snapshot --check` — the build fails if the current registry
-version has no committed snapshot.
+version has no committed snapshot. Snapshots of released versions are frozen:
+`app api_snapshot` refuses to regenerate them once `api/<version>` is tagged
+(`--force` overrides — you should not need it).
 
 ### Sunsetting a version
 
