@@ -5,20 +5,19 @@ Two variants:
 * ``og_photo_url`` — a real photo, resized to the 'large' preset
   (1800x1200, focal-aware) exactly like the JSON detail endpoint.
 * ``og_card_url`` — a generated card for entities without a usable
-  photo: the brand map background (which carries the Wodore logo),
-  darkened for contrast, with the semi-transparent app icon centered
-  and the entity name drawn in white.
+  photo: the brand map background darkened for contrast, the app icon
+  as a semi-transparent watermark, and the entity name in the BRAND
+  FONT (Barlow Semi Condensed SemiBold) at the bottom.
 
-Imagor quirks verified live against the dev instance (see
-docker-compose: the imagor container needs fonts mounted or ``text()``
-silently renders nothing):
+Imagor requirements, verified live (see docker-compose.yml):
 
-* ``text()`` supports text/size/color only — x/y are ignored, the text
-  is always drawn top-center at full width. Long names therefore get a
-  smaller font size instead of wrapping.
-* ``watermark()`` DOES support ``center`` keywords and alpha/scale.
-* Multiple ``text()`` filters do not stack reliably — the card uses a
-  single text line ("Name · 2731 m").
+* ≥ v1.9 — the ``text()`` filter signature changed to
+  ``text(text, x, y[, font[, color[...]]])`` with keyword/percent
+  positioning and Pango font descriptions (hyphen-separated, size
+  included: ``Barlow-Semi-Condensed-SemiBold-72``).
+* Fonts must be mounted into the container — without any font,
+  ``text()`` silently renders nothing. The brand TTF lives in
+  ``docker/imagor/fonts/`` (OFL license alongside).
 """
 
 from __future__ import annotations
@@ -35,8 +34,11 @@ OG_PHOTO_SIZE = "1800x1200"
 # Generated card — the recommended social preview aspect ratio.
 OG_CARD_SIZE = "1200x630"
 
+# Brand font (Pango description without the size suffix, hyphenated).
+OG_CARD_FONT = "Barlow-Semi-Condensed-SemiBold"
+
 # Font sizes by combined text length (no wrapping: shrink instead).
-_TEXT_SIZES = ((28, 64), (42, 48), (10_000, 36))
+_TEXT_SIZES = ((28, 72), (42, 56), (10_000, 40))
 
 
 def _frontend(path: str) -> str:
@@ -71,7 +73,7 @@ def og_card_url(title: str, subtitle: str | None = None) -> str:
         # NOTE: the watermark URL stays RAW — the transformer encodes the
         # whole filter path, pre-encoding it here would double-encode.
         f"watermark({_frontend('icons/icon-512x512.png')},center,center,25,100)",
-        f"text({quote(text)},{size},ffffff)",
+        f"text({quote(text)},center,-60,{OG_CARD_FONT}-{size},ffffff)",
     ]
     return (
         ImagorImage(_frontend("meta/meta.jpg"))
