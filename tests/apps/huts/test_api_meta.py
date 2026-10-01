@@ -25,6 +25,13 @@ class TestHutMeta:
         assert data["name"] == hut.name
         assert data["page_url"] == f"https://wodore.com/hut/{hut.slug}"
         assert data["lang"] == "de"
+        # standard/reduced operation terminology (not open/closed season)
+        assert "type_standard" in data
+        assert "type_reduced" in data
+        assert "capacity_standard" in data
+        assert "capacity_reduced" in data
+        assert "type_open" not in data
+        assert "capacity_open" not in data
         # Ready-to-inline structured data.
         assert data["jsonld"]["@type"] == "LodgingBusiness"
         assert data["jsonld"]["url"] == data["page_url"]

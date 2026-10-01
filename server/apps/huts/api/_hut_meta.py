@@ -40,13 +40,22 @@ class HutMetaSchema(Schema):
     name: str = Field(description="Hut name (localized)")
     description: str = Field(description="Short meta description (localized)")
     lang: str = Field(description="Language the localized fields resolve to")
-    type_open: str | None = Field(None, description="Hut type in open season")
-    type_closed: str | None = Field(None, description="Hut type in closed season")
+    type_standard: str | None = Field(
+        None, description="Building/hut type in standard operation"
+    )
+    type_reduced: str | None = Field(
+        None,
+        description="Building/hut type during reduced operation (e.g. winter room)",
+    )
     elevation: float | None = Field(None, description="Elevation in meters")
     latitude: float | None = Field(None, description="WGS84 latitude")
     longitude: float | None = Field(None, description="WGS84 longitude")
-    capacity_open: int | None = Field(None, description="Capacity in open season")
-    capacity_closed: int | None = Field(None, description="Capacity in closed season")
+    capacity_standard: int | None = Field(
+        None, description="Capacity in standard operation"
+    )
+    capacity_reduced: int | None = Field(
+        None, description="Capacity during reduced operation"
+    )
     owner: str | None = Field(None, description="Owner name")
     image: str | None = Field(None, description="Social preview image (absolute URL)")
     page_url: str = Field(description="Canonical frontend page URL")
@@ -165,13 +174,13 @@ def get_hut_meta(
         "name": hut.name,
         "description": description,
         "lang": lang,
-        "type_open": hut.hut_type_open.name if hut.hut_type_open else None,
-        "type_closed": hut.hut_type_closed.name if hut.hut_type_closed else None,
+        "type_standard": hut.hut_type_open.name if hut.hut_type_open else None,
+        "type_reduced": hut.hut_type_closed.name if hut.hut_type_closed else None,
         "elevation": float(hut.elevation) if hut.elevation else None,
         "latitude": round(hut.location.y, 6) if hut.location else None,
         "longitude": round(hut.location.x, 6) if hut.location else None,
-        "capacity_open": hut.capacity_open,
-        "capacity_closed": hut.capacity_closed,
+        "capacity_standard": hut.capacity_open,
+        "capacity_reduced": hut.capacity_closed,
         "owner": hut.hut_owner.name if hut.hut_owner else None,
         "image": image,
         "page_url": page_url,
