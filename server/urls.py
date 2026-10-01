@@ -23,6 +23,7 @@ from .apps.api import api_v1 as api_v1_module
 from .apps.api.api_v1 import api as api_v1
 from .apps.local_auth import account_views
 from .apps.main import urls as django_admin_urls
+from .apps.main import views as main_views
 from .apps.main.views import index
 
 admin.autodiscover()
@@ -56,13 +57,8 @@ urlpatterns = [
     path("v1/openapi.json", api_v1_module.versioned_openapi_json),
     path("v1/", api_v1.urls),  # type: ignore
     # Text and xml static files:
-    path(
-        "robots.txt",
-        TemplateView.as_view(
-            template_name="txt/robots.txt",
-            content_type="text/plain",
-        ),
-    ),
+    path("robots.txt", main_views.robots_txt),
+    path("llms.txt", main_views.llms_txt),
     path(
         "humans.txt",
         TemplateView.as_view(

@@ -1,0 +1,33 @@
+# Wodore
+
+> Wodore is the hut directory of the Swiss Alps: an interactive map with
+> opening seasons, capacities, availability and booking sources for the
+> mountain huts, bivouacs and shelters of Switzerland.
+
+Web app: {{ frontend_url }}
+Hut pages: {{ frontend_url }}/hut/{slug}
+
+## API
+
+- OpenAPI documentation: {{ api_base }}/v1/docs
+- OpenAPI schema (JSON): {{ api_base }}/v1/openapi.json
+- Hut list (JSON): {{ api_base }}/v1/huts/huts
+- Hut detail (JSON): {{ api_base }}/v1/huts/{slug}?lang=de|en|fr|it
+- Hut detail (Markdown): {{ api_base }}/v1/huts/{slug}.md?lang=de|en|fr|it
+- Hut detail (Markdown, canonical URL): {{ frontend_url }}/hut/{slug}.md?lang=de|en|fr|it
+- Sitemap: {{ frontend_url }}/sitemap.xml
+
+## About the data
+
+Hut descriptions come from their respective sources (for example SAC-CAS)
+and are reproduced with attribution — keep the attribution line when
+quoting. Hut data is aggregated from public sources (OpenStreetMap, SAC,
+Alpsonline/HRS, refuges.info, Wikidata and others); the `sources` field
+of each hut lists provenance and deep links.
+
+## Usage
+
+All endpoints listed here are public and read-only. Responses are
+cacheable (ETag / Last-Modified where available). Please identify
+yourself with a reasonable User-Agent and keep request rates modest
+(around one request per second).
