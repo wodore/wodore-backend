@@ -5,9 +5,20 @@ Two variants:
 * ``og_photo_url`` — a real photo, resized to the 'large' preset
   (1800x1200, focal-aware) exactly like the JSON detail endpoint.
 * ``og_card_url`` — a generated card for entities without a usable
-  photo: the brand background (which carries the Wodore logo) with the
-  entity name drawn on top via imagor's ``text()`` filter. Verified
-  against the local imagor: the text argument must be URL-encoded.
+  photo: the brand map background (which carries the Wodore logo),
+  darkened for contrast, with the semi-transparent app icon centered
+  and the entity name drawn in white.
+
+Imagor quirks verified live against the dev instance (see
+docker-compose: the imagor container needs fonts mounted or ``text()``
+silently renders nothing):
+
+* ``text()`` supports text/size/color only — x/y are ignored, the text
+  is always drawn top-center at full width. Long names therefore get a
+  smaller font size instead of wrapping.
+* ``watermark()`` DOES support ``center`` keywords and alpha/scale.
+* Multiple ``text()`` filters do not stack reliably — the card uses a
+  single text line ("Name · 2731 m").
 """
 
 from __future__ import annotations
@@ -24,9 +35,12 @@ OG_PHOTO_SIZE = "1800x1200"
 # Generated card — the recommended social preview aspect ratio.
 OG_CARD_SIZE = "1200x630"
 
+# Font sizes by combined text length (no wrapping: shrink instead).
+_TEXT_SIZES = ((28, 64), (42, 48), (10_000, 36))
 
-def _og_card_background() -> str:
-    return f"{settings.FRONTEND_DOMAIN.rstrip('/')}/meta/meta.jpg"
+
+def _frontend(path: str) -> str:
+    return f"{settings.FRONTEND_DOMAIN.rstrip('/')}/{path.lstrip('/')}"
 
 
 def og_photo_url(image_url: str, focal: dict | None = None) -> str:
@@ -49,17 +63,16 @@ def og_photo_url(image_url: str, focal: dict | None = None) -> str:
 
 
 def og_card_url(title: str, subtitle: str | None = None) -> str:
-    """Signed imagor URL for a generated card: brand background + title.
-
-    The text arguments are URL-encoded (imagor requirement — a raw space
-    makes the whole URL invalid). Text is drawn in white; the subtitle
-    (e.g. elevation) is smaller, below the title.
-    """
-    filters = [f"text({quote(title)},56,ffffff,south)"]
-    if subtitle:
-        filters.append(f"text({quote(subtitle)},32,ffffff,south)")
+    """Signed imagor URL for a generated brand card with the title."""
+    text = f"{title} · {subtitle}" if subtitle else title
+    size = next(size for max_len, size in _TEXT_SIZES if len(text) <= max_len)
+    filters = [
+        "brightness(-30)",
+        f"watermark({quote(_frontend('icons/icon-512x512.png'), safe='')},center,center,25,100)",
+        f"text({quote(text)},{size},ffffff)",
+    ]
     return (
-        ImagorImage(_og_card_background())
+        ImagorImage(_frontend("meta/meta.jpg"))
         .transform(size=OG_CARD_SIZE, filters=filters)
         .get_full_url()
     )

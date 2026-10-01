@@ -122,67 +122,149 @@ class TestSitemapPlaces:
         for key in [
             "sitemap:index",
             "sitemap:places:count",
-            *[f"sitemap:places:{p}" for p in range(10)],
+            "sitemap:category-include-ids",
+            *[f"sitemap:places:{p_}" for p_ in range(10)],
         ]:
             cache.delete(key)
         yield
         for key in [
             "sitemap:index",
             "sitemap:places:count",
-            *[f"sitemap:places:{p}" for p in range(10)],
+            "sitemap:category-include-ids",
+            *[f"sitemap:places:{p_}" for p_ in range(10)],
         ]:
             cache.delete(key)
+
+    @pytest.fixture
+    def include_category(self):
+        from server.apps.categories.models import Category
+
+        return Category.objects.create(
+            slug="seo-include-test",
+            name="SEO Include",
+            seo_sitemap=Category.SeoSitemapChoices.include,
+        )
+
+    def _clear(self):
+        from django.core.cache import cache
+
+        cache.delete("sitemap:index")
+        cache.delete("sitemap:places:count")
+        cache.delete("sitemap:category-include-ids")
 
     def test_disabled_by_default(self, seed_data, client):
         response = client.get("/v1/sitemap.xml")
         assert b"sitemap-places" not in response.content
         assert client.get("/v1/sitemap-places-0.xml").status_code == 404
 
-    def test_enabled_lists_only_named_described_places(
-        self, seed_data, client, settings
+    def test_enabled_lists_places_with_name_and_include_category(
+        self, seed_data, client, settings, include_category
     ):
         settings.WODORE_SEO_PLACE_SITEMAP = True
-        from django.core.cache import cache
-
         from server.apps.geometries.models import GeoPlace
 
-        # Seed places carry no descriptions: make one qualify.
         place = GeoPlace.objects.filter(is_active=True, is_public=True).first()
         assert place is not None
         place.name = "Testplace"
-        place.description = "A described place for the sitemap test."
-        place.save()
-        cache.delete("sitemap:index")
-        cache.delete("sitemap:places:count")
+        place.description = ""  # description no longer required
+        place.categories.add(include_category)
+        self._clear()
 
-        response = client.get("/v1/sitemap.xml")
-        assert response.status_code == 200
-        assert b"sitemap-places-0.xml" in response.content
-
-        listed = GeoPlace.objects.filter(
-            is_active=True, is_public=True, name__gt="", description__gt=""
-        )
+        assert b"sitemap-places-0.xml" in client.get("/v1/sitemap.xml").content
         page = client.get("/v1/sitemap-places-0.xml")
         assert page.status_code == 200
-        assert page.content.count(b"<url>") == listed.count()
         assert place.slug.encode() in page.content
 
-    def test_enabled_small_pois_excluded(self, seed_data, client, settings):
+    def test_nameless_place_excluded(
+        self, seed_data, client, settings, include_category
+    ):
         settings.WODORE_SEO_PLACE_SITEMAP = True
-        from django.core.cache import cache
-
         from server.apps.geometries.models import GeoPlace
 
-        place = GeoPlace.objects.filter(is_active=True, is_public=True).first()
+        place = (
+            GeoPlace.objects.filter(is_active=True, is_public=True)
+            .exclude(name="")
+            .first()
+        )
         assert place is not None
-        place.name = "Toiletplace"
-        place.description = "temporarily described"
+        place.categories.add(include_category)
+        place.name = ""
         place.save()
-        cache.delete("sitemap:places:0")
-        assert place.slug.encode() in client.get("/v1/sitemap-places-0.xml").content
-
-        place.description = ""  # small POI: name only
-        place.save()
-        cache.delete("sitemap:places:0")
+        self._clear()
         page = client.get("/v1/sitemap-places-0.xml")
         assert place.slug.encode() not in page.content
+
+    def test_category_without_include_flag_excludes_places(
+        self, seed_data, client, settings
+    ):
+        """Tri-state: categories default to exclude (root None)."""
+        settings.WODORE_SEO_PLACE_SITEMAP = True
+        from server.apps.categories.models import Category
+        from server.apps.geometries.models import GeoPlace
+
+        category = Category.objects.create(slug="seo-none-test", name="No Flag")
+        place = GeoPlace.objects.filter(is_active=True, is_public=True).first()
+        assert place is not None
+        place.name = "Flagless"
+        place.save()
+        place.categories.add(category)
+        self._clear()
+        page = client.get("/v1/sitemap-places-0.xml")
+        assert place.slug.encode() not in page.content
+
+    def test_category_tri_state_inheritance(
+        self, seed_data, client, settings, include_category
+    ):
+        """Child with no value inherits the parent's include; explicit
+        exclude on the child wins over the parent's include."""
+        settings.WODORE_SEO_PLACE_SITEMAP = True
+        from server.apps.categories.models import Category
+        from server.apps.geometries.models import GeoPlace
+
+        inheriting_child = Category.objects.create(
+            slug="seo-child-inherit", name="Child", parent=include_category
+        )
+        excluded_child = Category.objects.create(
+            slug="seo-child-exclude",
+            name="Excluded Child",
+            parent=include_category,
+            seo_sitemap=Category.SeoSitemapChoices.exclude,
+        )
+
+        listed = GeoPlace.objects.filter(is_active=True, is_public=True)[0]
+        listed.name = "Listed Place"
+        listed.save()
+        listed.categories.add(inheriting_child)
+
+        excluded = GeoPlace.objects.filter(is_active=True, is_public=True)[1]
+        excluded.name = "Excluded Place"
+        excluded.save()
+        excluded.categories.add(excluded_child)
+
+        self._clear()
+        page = client.get("/v1/sitemap-places-0.xml")
+        assert listed.slug.encode() in page.content
+        assert excluded.slug.encode() not in page.content
+
+    def test_effective_seo_sitemap_resolution(self, seed_data, include_category):
+        from server.apps.categories.models import Category
+
+        # Root without value -> None (callers treat as exclude)
+        root = Category.objects.create(slug="seo-plain-root", name="Root")
+        assert root.effective_seo_sitemap() is None
+        # Child of include-root inherits include
+        child = Category.objects.create(
+            slug="seo-plain-child", name="Child", parent=include_category
+        )
+        assert child.effective_seo_sitemap() == Category.SeoSitemapChoices.include
+        # Grandchild of excluded child stays excluded
+        excluded_child = Category.objects.create(
+            slug="seo-exc-child",
+            name="Exc",
+            parent=root,
+            seo_sitemap=Category.SeoSitemapChoices.exclude,
+        )
+        grandchild = Category.objects.create(
+            slug="seo-grandchild", name="GC", parent=excluded_child
+        )
+        assert grandchild.effective_seo_sitemap() == Category.SeoSitemapChoices.exclude

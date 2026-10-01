@@ -25,6 +25,7 @@ from xml.sax.saxutils import escape
 from django.conf import settings
 from django.core.cache import cache
 
+from server.apps.categories.models import Category
 from server.apps.geometries.models import GeoPlace
 from server.apps.huts.models import Hut
 
@@ -64,13 +65,35 @@ def _public_huts_queryset():
     return Hut.objects.filter(is_active=True, is_public=True)
 
 
+def _seo_included_category_ids() -> frozenset[int]:
+    """Category IDs whose effective sitemap policy is include (cached).
+
+    Category trees are small and admin changes are rare — resolving the
+    tri-state inheritance in Python is cheap, cached with the index TTL.
+    """
+
+    def build() -> frozenset[int]:
+        return frozenset(
+            category.pk
+            for category in Category.objects.all()
+            if category.effective_seo_sitemap() == Category.SeoSitemapChoices.include
+        )
+
+    return cache.get_or_set("sitemap:category-include-ids", build, SITEMAP_INDEX_TTL)
+
+
 def _sitemap_places_queryset():
-    # Small POIs stay out of the sitemap: a place is listed only when it
-    # has BOTH a name and a description ("every toilet" is not a landing
-    # page). Flip per-category exclusions later if the rule is too coarse.
+    # Sitemap inclusion is category-driven: a place needs a name and at
+    # least one category whose effective seo_sitemap policy (tri-state,
+    # inherited from parents, roots default to exclude) is "include".
+    # Small POIs (toilets, ...) live in categories that nobody switched
+    # on — they stay out automatically.
     return GeoPlace.objects.filter(
-        is_active=True, is_public=True, name__gt="", description__gt=""
-    )
+        is_active=True,
+        is_public=True,
+        name__gt="",
+        categories__in=_seo_included_category_ids(),
+    ).distinct()
 
 
 def place_sitemap_enabled() -> bool:

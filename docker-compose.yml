@@ -29,6 +29,10 @@ services:
       - ./media:/mnt/data/source/media
       - ./media/imagor_data/storage:/mnt/data/storage
       - ./media/imagor_data/result:/mnt/data/result
+      # Fonts for the text() filter (og:image cards, server/apps/images/og.py):
+      # without a font available imagor silently draws NO text at all.
+      # Production imagor needs the same mount (or a baked-in font).
+      - /usr/share/fonts/truetype/dejavu:/usr/share/fonts/truetype/dejavu:ro
     environment:
       PORT: 8079
       DEBUG: 0
