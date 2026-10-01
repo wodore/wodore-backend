@@ -121,6 +121,7 @@ INSTALLED_APPS: tuple[str, ...] = (
     # my apps:
     "server.apps.manager",
     "server.apps.main",
+    "server.apps.apiversions",
     "server.apps.meta_image_field",
     "server.apps.images",
     "server.apps.visits",
@@ -199,6 +200,9 @@ MIDDLEWARE: tuple[str, ...] = (
     "server.settings.components.logging.LoggingContextVarsMiddleware",
     # Cross-Origin Resource Sharing (CORS)
     "corsheaders.middleware.CorsMiddleware",
+    # API contract versioning (must sit inside CORS so its 400/410
+    # responses keep CORS headers; design.md D5.4)
+    "server.apps.apiversions.middleware.ApiVersionMiddleware",
     # Content Security Policy:
     "csp.middleware.CSPMiddleware",
     # Django:
@@ -223,7 +227,9 @@ MIDDLEWARE: tuple[str, ...] = (
 )
 
 
-CORS_ALLOW_HEADERS = [*default_headers, "access-control-allow-origin"]
+CORS_ALLOW_HEADERS = [*default_headers, "access-control-allow-origin", "Api-Version"]
+# Version/lifecycle headers must be readable by browser (Capacitor/WebView) clients:
+CORS_EXPOSE_HEADERS = ("Api-Version", "Deprecation", "Sunset", "Link")
 
 ROOT_URLCONF = "server.urls"
 

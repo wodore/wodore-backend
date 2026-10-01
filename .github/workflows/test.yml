@@ -40,6 +40,14 @@ jobs:
       - name: Check out
         uses: actions/checkout@v6
 
+      - name: API registry release-state check
+        # At most one unreleased API version (the current one) — rejects
+        # stacking a new version on an unreleased one. Needs full tag
+        # history, hence the separate job (the tests checkout is shallow).
+        run: |
+          git fetch --tags --force
+          python3 -m server.apps.apiversions.registry_check
+
       - name: Resolve report context
         id: ctx
         run: |

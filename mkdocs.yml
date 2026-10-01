@@ -8,6 +8,7 @@ nav:
   - "Getting Started": index.md
   - "Links": infos.md
   - "API": api.md
+  - "API Versioning": api-versioning.md
   - Packages: packages.md
   #- API Reference:
   #    - server: reference/
