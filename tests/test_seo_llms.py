@@ -25,6 +25,7 @@ class TestLlmsTxt:
         # Key links for agents: app, markdown hut documents, sitemap.
         assert "https://wodore.com/hut/{slug}" in body
         assert "/v1/huts/{slug}.md" in body
+        assert "https://wodore.com/hut/{slug}.md" in body
         assert "https://wodore.com/sitemap.xml" in body
         assert "OpenAPI" in body
 

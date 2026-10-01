@@ -14,6 +14,7 @@ Hut pages: {{ frontend_url }}/hut/{slug}
 - Hut list (JSON): {{ api_base }}/v1/huts/huts
 - Hut detail (JSON): {{ api_base }}/v1/huts/{slug}?lang=de|en|fr|it
 - Hut detail (Markdown): {{ api_base }}/v1/huts/{slug}.md?lang=de|en|fr|it
+- Hut detail (Markdown, canonical URL): {{ frontend_url }}/hut/{slug}.md?lang=de|en|fr|it
 - Sitemap: {{ frontend_url }}/sitemap.xml
 
 ## About the data
