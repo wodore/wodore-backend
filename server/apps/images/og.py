@@ -37,16 +37,15 @@ OG_PHOTO_SIZE = "1200x630"
 # Generated card — the same og:image aspect ratio.
 OG_CARD_SIZE = "1200x630"
 
-# Logo watermark on photos. The raster PNG (frontend public/logos/) is
-# rendered at 800px from the SVG — vips' SVG rasterization composites
-# visibly pixelated at watermark sizes, the PNG stays crisp.
-OG_LOGO_URL_PATH = "logos/wodore_watermark.png"
-# Watermark geometry (owner-approved): 200px, horizontally centered,
-# 33px below the bottom edge line (survives 1:1 center crops), fully
+# Logo watermark on photos: the official watermark PNG in the frontend's
+# public/meta/ (next to meta.jpg), served from wodore.com/meta/.
+OG_LOGO_URL_PATH = "meta/wodore_watermark.png"
+# Watermark geometry (owner-approved): 270px raster, horizontally
+# centered, 10px from the bottom (survives 1:1 center crops), fully
 # opaque.
-OG_LOGO_SIZE_PX = 200
+OG_LOGO_SIZE_PX = 270
 OG_LOGO_POS = "center"
-OG_LOGO_POS_Y = "bottom--33"
+OG_LOGO_POS_Y = "bottom-10"
 OG_LOGO_ALPHA = 0
 
 
