@@ -12,12 +12,12 @@ for older supported versions (api-docs spec).
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 
 from server.apps.apiversions import registry
+from server.apps.apiversions.releases import is_released
 
 SNAPSHOT_DIR = Path(__file__).resolve().parent.parent.parent / "openapi"
 
@@ -31,26 +31,6 @@ def load_snapshot(version: str) -> dict | None:
     if not path.exists():
         return None
     return json.loads(path.read_text())
-
-
-def is_released(version: str) -> bool:
-    """A version is released once its `api/<version>` tag exists.
-
-    Snapshots of released versions are frozen release records — regenerating
-    one would rewrite history (docs drift is intentional, see the runbook).
-    While a version is still unreleased (PR iteration, no tag yet),
-    regenerating is free.
-    """
-    try:
-        result = subprocess.run(
-            ["git", "tag", "-l", f"api/{version}"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-    except (OSError, subprocess.CalledProcessError):  # pragma: no cover
-        return False  # git unavailable: don't block on environment quirks
-    return bool(result.stdout.strip())
 
 
 class Command(BaseCommand):

@@ -63,16 +63,27 @@ PRs is allowed but not recommended — it churns the frozen baseline the
 
 ### Introducing a breaking change
 
-1. Add a `VersionChange` to `server/apps/apiversions/registry.py` (date,
+1. **Check the current version's release state first** — `python3 -m
+   server.apps.apiversions.registry_check` (or look for the `api/<version>`
+   tag). If the current version is **still unreleased** (no tag yet — the
+   docker build hasn't shipped it), **amend it** instead of adding a new
+   version: merge/extend its `VersionChange` transforms, keep its version
+   date, regenerate its snapshot. A version no client ever received must
+   not become its own contract boundary, and CI would never tag it. CI
+   (test.yml `api-registry` step) rejects stacking a new version on an
+   unreleased one.
+2. Add a `VersionChange` to `server/apps/apiversions/registry.py` (date,
    description, `responses` downgrades keyed by operation id; `requests` upgrades
    if request shape changed). Mark the **previous** version
    `deprecation_date`/`sunset_date` (≥ 6 months out).
-2. Write downgrades defensively (`pop(key, None)`, tolerate missing/null fields).
+3. Write downgrades defensively (`pop(key, None)`, tolerate missing/null fields).
    For GeoJSON use the `feature_properties()` helper; for lists `each()`.
    Direct-write endpoints (`huts.geojson`, `availability/{date}.geojson`) already
    call `apply_response_transforms()` — just register the transform.
-3. Add contract tests validating the old version's responses against its snapshot.
-4. Label the PR `api:breaking` (CI fails if the registry has no matching change).
+4. Add contract tests validating the old version's responses against its snapshot.
+5. Label the PR `api:breaking` (plus its `type:*` label) — CI fails if the
+   registry has no matching change, and the `api-registry` step validates
+   the release-state invariant.
 5. Continue below with *Releasing an API version*.
 
 ### Releasing an API version

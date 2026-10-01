@@ -172,6 +172,19 @@ not by an exhaustive 54-op × N-version matrix.
   API entries between API tags land under a "Live in all versions" heading.
 - `VersionChange.description` must match its `api:breaking` changelog entry.
 
+### D12: At most one unreleased version
+
+Versions are cut at release time (the docker build shipping the current
+registry version cuts the `api/<date>` tag — new-api-version.yml). A
+breaking change merged while the current version is still unreleased
+AMENDS that version's `VersionChange` (merged transforms, same date,
+regenerated snapshot) instead of stacking a new one: a version no client
+ever received must not become its own contract boundary and would never be
+tagged. Enforced by `server/apps/apiversions/registry_check.py` (stdlib-only)
+on every PR (test.yml, full tag history) and re-checked in the tagging
+workflow. Not a pytest test: test checkouts are shallow and would see every
+version as unreleased.
+
 ## Resolved questions (were open in the source spec)
 
 - Q1 strict 400 on conflict: **yes** (equal values allowed). Q2 minimum deprecation:

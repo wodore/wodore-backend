@@ -21,6 +21,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # full tag history for the release-state check
+
+      - name: API registry release-state check
+        run: python3 -m server.apps.apiversions.registry_check
 
       - name: Extract current API version
         id: api-version
