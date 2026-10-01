@@ -29,10 +29,12 @@ from django.conf import settings
 
 from .transfomer import ImagorImage
 
-# Photo variant — same preset the JSON detail endpoint calls "large".
-OG_PHOTO_SIZE = "1800x1200"
+# Photo variant — 1200x630 (1.91:1): the og:image standard used by
+# Facebook/WhatsApp/LinkedIn/X. Formerly 1800x1200 (3:2), which platforms
+# center-crop vertically — risking the bottom-left logo.
+OG_PHOTO_SIZE = "1200x630"
 
-# Generated card — the recommended social preview aspect ratio.
+# Generated card — the same og:image aspect ratio.
 OG_CARD_SIZE = "1200x630"
 
 # Logo watermark on photos (SVG via the frontend host; PNG alternatives
@@ -59,9 +61,10 @@ def og_photo_url(image_url: str, focal: dict | None = None) -> str:
         focal_str = f"{focal['x1']}x{focal['y1']}:{focal['x2']}x{focal['y2']}"
         crop_start, crop_stop = focal_str.split(":")
     filters = [
-        # Nested path rasterizes the 42px SVG logo up to ~160px before
-        # compositing; alpha 15 = slightly faded.
-        _composite_image(_frontend(OG_LOGO_URL_PATH), 160, "left-40", "bottom-40", 15),
+        # Nested path rasterizes the 42px SVG logo up before compositing;
+        # ~210px on the 1200px canvas, 70px from the left, 35px from the
+        # bottom, alpha 12 (slightly faded).
+        _composite_image(_frontend(OG_LOGO_URL_PATH), 210, "left-70", "bottom-35", 12),
     ]
     return (
         ImagorImage(image_url)
