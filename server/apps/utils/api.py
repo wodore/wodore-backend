@@ -63,6 +63,42 @@ DJANGO_ENV = environ.get("DJANGO_ENV", "development")
 router = Router()
 
 
+class ApiVersionEntry(Schema):
+    version: str = Field(  # pyright: ignore[reportCallIssue]  # Django Ninja Annotated idiom
+        ...,
+        description="API contract version (YYYY-MM-DD)",
+        json_schema_extra={"example": "2026-10-01"},
+    )
+    status: str = Field(  # pyright: ignore[reportCallIssue]  # Django Ninja Annotated idiom
+        ...,
+        description="Lifecycle: current, default, deprecated or sunset",
+        json_schema_extra={"example": "deprecated"},
+    )
+    sunset: str | None = Field(  # pyright: ignore[reportCallIssue]  # Django Ninja Annotated idiom
+        None,
+        description="Sunset date (YYYY-MM-DD) of deprecated versions; after "
+        "this date the version answers 410.",
+        json_schema_extra={"example": "2027-04-01"},
+    )
+
+
+class ApiVersionsBlock(Schema):
+    current: str = Field(  # pyright: ignore[reportCallIssue]  # Django Ninja Annotated idiom
+        ...,
+        description="Newest registered API version",
+        json_schema_extra={"example": "2026-10-01"},
+    )
+    default: str = Field(  # pyright: ignore[reportCallIssue]  # Django Ninja Annotated idiom
+        ...,
+        description="Version served when a client pins nothing",
+        json_schema_extra={"example": "2026-10-01"},
+    )
+    supported: list[ApiVersionEntry] = Field(  # pyright: ignore[reportCallIssue]  # Django Ninja Annotated idiom
+        ...,
+        description="All registered API versions with lifecycle status",
+    )
+
+
 class VersionSchema(Schema):
     hash: str = Field(  # pyright: ignore[reportCallIssue]  # Django Ninja Annotated idiom
         ...,
@@ -88,17 +124,42 @@ class VersionSchema(Schema):
         description="Current environment (development, production)",
         json_schema_extra={"example": "production"},
     )
+    api: ApiVersionsBlock = Field(  # pyright: ignore[reportCallIssue]  # Django Ninja Annotated idiom
+        ...,
+        description="API contract versions (see the Api-Version header)",
+    )
 
 
-@router.get("/version", response=VersionSchema, tags=["version"])
+@router.get(
+    "/version", response=VersionSchema, tags=["version"], operation_id="get_version"
+)
 def get_version(request):
-    """Get version information including git short hash, full hash, package version, build timestamp, and environment."""
+    """Get version information including git short hash, full hash, package version, build timestamp, environment, and supported API versions."""
+    from server.apps.apiversions import registry
+
+    supported = [
+        {
+            "version": version,
+            "status": registry.version_status(version),
+            "sunset": (
+                change.sunset_date.isoformat()
+                if (change := registry.get_change(version)) and change.sunset_date
+                else None
+            ),
+        }
+        for version in registry.versions()
+    ]
     return {
         "hash": get_git_short_hash(),
         "hash_long": get_git_long_hash(),
         "version": PACKAGE_VERSION,
         "timestamp": datetime.fromisoformat(BUILD_TIMESTAMP),
         "environment": DJANGO_ENV,
+        "api": {
+            "current": registry.current_version(),
+            "default": registry.default_version(),
+            "supported": supported,
+        },
     }
 
 
