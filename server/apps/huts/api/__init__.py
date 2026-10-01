@@ -6,6 +6,7 @@ from server.apps.availability.api import get_hut_availability_geojson
 
 # Import other endpoint modules
 from ._booking import get_hut_bookings
+from ._hut_meta import get_hut_meta
 
 # Import hut endpoints last (contains /{slug} catch-all) — the Markdown
 # variant MUST register BEFORE the catch-all, or '{slug}.md' URLs are
