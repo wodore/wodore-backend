@@ -1,2 +1,34 @@
+{% if allow_ai_crawlers %}
+# The public website lives at {{ frontend_url|default:"https://wodore.com" }} —
+# see its robots.txt / sitemap.xml. This host serves the JSON API and
+# stays out of search indexes.
+
+# Default: deny everything.
 User-agent: *
 Disallow: /
+
+# Well-behaved AI crawlers and agents: public, read-only hut data is
+# explicitly allowed (hut JSON + Markdown, categories, geo, sitemap,
+# llms.txt). Everything else (admin, auth, media) stays disallowed.
+User-agent: GPTBot
+User-agent: OAI-SearchBot
+User-agent: ChatGPT-User
+User-agent: ClaudeBot
+User-agent: Claude-User
+User-agent: Claude-SearchBot
+User-agent: anthropic-ai
+User-agent: PerplexityBot
+User-agent: Perplexity-User
+User-agent: Google-Extended
+User-agent: Applebot-Extended
+Allow: /v1/huts/
+Allow: /v1/categories/
+Allow: /v1/geo/
+Allow: /v1/sitemap.xml
+Allow: /llms.txt
+Disallow: /
+{% else %}
+# Non-production environment: keep everything out.
+User-agent: *
+Disallow: /
+{% endif %}

@@ -7,6 +7,12 @@ from server.apps.availability.api import get_hut_availability_geojson
 # Import other endpoint modules
 from ._booking import get_hut_bookings
 
-# Import hut endpoints last (contains /{slug} catch-all)
+# Import hut endpoints last (contains /{slug} catch-all) — the Markdown
+# variant MUST register BEFORE the catch-all, or '{slug}.md' URLs are
+# swallowed by /{slug}. Import order is load-bearing; keep isort out.
+# isort: off
+from ._hut_markdown import get_hut_markdown
 from ._hut import get_huts
+
+# isort: on
 from ._router import router
