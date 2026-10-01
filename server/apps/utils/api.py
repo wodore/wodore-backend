@@ -5,6 +5,14 @@ from ninja import Field, Query, Router, Schema
 from ninja.errors import HttpError
 from ninja.orm import create_schema
 
+from django.http import HttpRequest, HttpResponse
+
+from server.apps.api.sitemap import (
+    SITEMAP_TTL,
+    sitemap_huts,
+    sitemap_index,
+    sitemap_static,
+)
 from server.settings.components.common import (
     BUILD_TIMESTAMP,
     get_git_long_hash,
@@ -91,6 +99,39 @@ def get_version(request):
         "timestamp": datetime.fromisoformat(BUILD_TIMESTAMP),
         "environment": DJANGO_ENV,
     }
+
+
+def _xml_response(document: str, ttl: int = SITEMAP_TTL) -> HttpResponse:
+    response = HttpResponse(document, content_type="application/xml; charset=utf-8")
+    response["Cache-Control"] = f"public, max-age={ttl}"
+    return response
+
+
+@router.get("/sitemap.xml", include_in_schema=False)
+def get_sitemap_index(request: HttpRequest) -> HttpResponse:
+    """Sitemap index for wodore.com (static pages + paginated hut sitemaps).
+
+    The frontend nginx proxies ``wodore.com/sitemap.xml`` here; all listed
+    URLs (and the child sitemaps) are absolute wodore.com URLs.
+    """
+    return _xml_response(sitemap_index())
+
+
+@router.get("/sitemap-static.xml", include_in_schema=False)
+def get_sitemap_static(request: HttpRequest) -> HttpResponse:
+    """Canonical frontend entry pages of wodore.com."""
+    return _xml_response(sitemap_static())
+
+
+@router.get("/sitemap-huts-{page}.xml", include_in_schema=False)
+def get_sitemap_huts(request: HttpRequest, page: int) -> HttpResponse:
+    """One page of public hut URLs (SITEMAP_PAGE_SIZE per file)."""
+    if page < 0:
+        raise HttpError(404, "Sitemap page numbers start at 0.")
+    document = sitemap_huts(page)
+    if document is None:
+        raise HttpError(404, f"No huts for sitemap page {page}.")
+    return _xml_response(document)
 
 
 # @abc
