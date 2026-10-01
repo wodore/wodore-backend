@@ -68,7 +68,9 @@ def og_card_url(title: str, subtitle: str | None = None) -> str:
     size = next(size for max_len, size in _TEXT_SIZES if len(text) <= max_len)
     filters = [
         "brightness(-30)",
-        f"watermark({quote(_frontend('icons/icon-512x512.png'), safe='')},center,center,25,100)",
+        # NOTE: the watermark URL stays RAW — the transformer encodes the
+        # whole filter path, pre-encoding it here would double-encode.
+        f"watermark({_frontend('icons/icon-512x512.png')},center,center,25,100)",
         f"text({quote(text)},{size},ffffff)",
     ]
     return (
