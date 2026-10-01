@@ -1,0 +1,5 @@
+limit: 7/10 — Solid hut description.
+limit1: 7/10 — Solid hut description.
+
+2 hut(s) processed, 2 assessed, 0 moved to rework
+✓ Assessing hut descriptions... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% • 0:00:00
