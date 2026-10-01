@@ -1304,10 +1304,15 @@ def post_process_images(
                 },
             }
 
-            # Thumbhashes: always present (individual hashes may be null)
-            feature["properties"]["thumbhashes"] = (result.extra or {}).get(
-                "thumbhashes"
-            ) or {}
+            # Thumbhashes: always fully populated — unassessed slots get a
+            # gray-gradient placeholder with the correct aspect ratio.
+            from ..schemas._images import DEFAULT_THUMBHASHES
+
+            raw_hashes = (result.extra or {}).get("thumbhashes") or {}
+            feature["properties"]["thumbhashes"] = {
+                key: raw_hashes.get(key) or getattr(DEFAULT_THUMBHASHES, key)
+                for key in DEFAULT_THUMBHASHES.model_fields
+            }
 
             final_results.append(feature)
 
