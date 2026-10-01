@@ -40,7 +40,7 @@ OG_CARD_SIZE = "1200x630"
 # Logo watermark on photos. The raster PNG (frontend public/logos/) is
 # rendered at 800px from the SVG — vips' SVG rasterization composites
 # visibly pixelated at watermark sizes, the PNG stays crisp.
-OG_LOGO_URL_PATH = "logos/wodore_icon.png"
+OG_LOGO_URL_PATH = "logos/wodore_watermark.png"
 # Watermark geometry (owner-approved): 200px, horizontally centered,
 # 33px below the bottom edge line (survives 1:1 center crops), fully
 # opaque.
