@@ -12,6 +12,7 @@ from server.apps.api.sitemap import (
     SITEMAP_TTL,
     sitemap_huts,
     sitemap_index,
+    sitemap_places,
     sitemap_static,
 )
 from server.settings.components.common import (
@@ -193,6 +194,17 @@ def get_sitemap_huts(request: HttpRequest, page: int) -> HttpResponse:
     document = sitemap_huts(page)
     if document is None:
         raise HttpError(404, f"No huts for sitemap page {page}.")
+    return _xml_response(document)
+
+
+@router.get("/sitemap-places-{page}.xml", include_in_schema=False)
+def get_sitemap_places(request: HttpRequest, page: int) -> HttpResponse:
+    """One page of place URLs (name+description places only, opt-in gate)."""
+    if page < 0:
+        raise HttpError(404, "Sitemap page numbers start at 0.")
+    document = sitemap_places(page)
+    if document is None:
+        raise HttpError(404, f"No places for sitemap page {page}.")
     return _xml_response(document)
 
 

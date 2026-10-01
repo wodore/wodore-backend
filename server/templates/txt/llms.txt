@@ -7,6 +7,12 @@
 Web app: {{ frontend_url }}
 Hut pages: {{ frontend_url }}/hut/{slug}
 
+## Places
+
+- Place detail (Markdown): {{ api_base }}/v1/geo/places/{slug}.md
+- Place metadata (JSON): {{ api_base }}/v1/geo/places/{slug}/meta
+- Category index (Markdown): {{ api_base }}/v1/categories/index.md
+
 ## API
 
 - OpenAPI documentation: {{ api_base }}/v1/docs

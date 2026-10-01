@@ -19,16 +19,13 @@ from ninja import Field, Schema
 from django.conf import settings
 from django.http import Http404, HttpRequest, HttpResponse
 
-from server.apps.images.transfomer import ImagorImage
+from server.apps.images.og import og_card_url, og_photo_url
 from server.apps.translations import LanguageParam, activate, with_language_param
 
 from ..models import Hut, HutImageAssociation
 from ._router import router
 
 CACHE_TTL = 60 * 60
-
-# OG image variant (same preset the JSON detail endpoint calls "large").
-OG_IMAGE_SIZE = "1800x1200"
 
 # Glue words for the short meta description.
 _PLACES = {"de": "Plätze", "en": "places", "fr": "places", "it": "posti"}
@@ -63,38 +60,26 @@ class HutMetaSchema(Schema):
     modified: str | None = Field(None, description="Last modification (ISO date)")
 
 
-def _og_image(hut: Hut) -> str | None:
-    """Preview image URL: the highest-scored image, 'large' preset."""
+def _og_image(hut: Hut) -> str:
+    """Preview image URL: the highest-scored image at the og size;
+    generated brand card (name + elevation) as fallback."""
     association = (
         HutImageAssociation.objects.filter(hut=hut)
         .select_related("image")
         .order_by("-score", "id")
         .first()
     )
-    if association is None:
-        return None
-    image = association.image
-    source = str(image.image)
-    if not source.startswith("http"):
-        source = f"{settings.MEDIA_URL}/{source}"
-    focal = (image.image_meta or {}).get("focal")
-    focal_str = (
-        f"{focal['x1']}x{focal['y1']}:{focal['x2']}x{focal['y2']}" if focal else None
-    )
-    crop_start, crop_stop = focal_str.split(":") if focal_str else (None, None)
     try:
-        return (
-            ImagorImage(source)
-            .transform(
-                size=OG_IMAGE_SIZE,
-                focal=focal_str,
-                crop_start=crop_start,
-                crop_stop=crop_stop,
-            )
-            .get_full_url()
-        )
+        if association is not None:
+            source = str(association.image.image)
+            if not source.startswith("http"):
+                source = f"{settings.MEDIA_URL}/{source}"
+            focal = (association.image.image_meta or {}).get("focal")
+            return og_photo_url(source, focal)
     except Exception:
-        return None
+        pass
+    subtitle = f"{int(hut.elevation)} m" if hut.elevation else None
+    return og_card_url(hut.name, subtitle)
 
 
 def _meta_description(hut: Hut, lang: str) -> str:

@@ -490,3 +490,46 @@ def get_category_symbol_svg(
     If the category doesn't have a symbol for the variant, returns 404.
     """
     return _get_category_symbol_redirect(variant, slug)
+
+
+@router.get(
+    "/index.md", include_in_schema=False, operation_id="get_categories_markdown"
+)
+def get_categories_markdown(request: HttpRequest) -> HttpResponse:
+    """The category tree as a compact Markdown index for LLM agents.
+
+    Categories are the entry vocabulary of the map (hut types, amenities,
+    overlays ...): agents use this to translate user terms ("bivouac",
+    "winter room") into API slugs before searching.
+    """
+    lines = [
+        "# Wodore categories",
+        "",
+        (
+            "Hierarchy by indentation; the slug is what the API expects"
+            " (e.g. `/v1/huts/huts?search=` or category filters)."
+        ),
+        "",
+    ]
+    categories = (
+        Category.objects.filter(is_active=True)
+        .select_related("parent")
+        .order_by("parent__slug", "order", "slug")
+    )
+    for category in categories:
+        indent = "  " if category.parent_id else ""
+        lines.append(f"- {indent}{category.name} — `{category.slug}`")
+    lines += [
+        "",
+        "---",
+        "",
+        (
+            "Data: [Wodore](https://wodore.com) · JSON tree:"
+            " /v1/categories/tree/{parent_slug}"
+        ),
+    ]
+    response = HttpResponse(
+        "\n".join(lines) + "\n", content_type="text/markdown; charset=utf-8"
+    )
+    response["Cache-Control"] = "public, max-age=3600"
+    return response

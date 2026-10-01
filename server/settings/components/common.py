@@ -113,6 +113,13 @@ DJANGO_ADMIN_URL = (
     else "http://localhost:8000"
 )
 
+# Frontend URL pattern for place pages (used by sitemap/meta URLs).
+PLACE_URL_PATTERN = config("PLACE_URL_PATTERN", "place/{slug}")
+# Places in the sitemap are opt-in: the frontend place routes do not
+# exist yet — flip to "1" once they ship (also requires name+description
+# per place, see server/apps/api/sitemap.py).
+WODORE_SEO_PLACE_SITEMAP = config("WODORE_SEO_PLACE_SITEMAP", False, cast=bool)
+
 # Application definition:
 
 INSTALLED_APPS: tuple[str, ...] = (

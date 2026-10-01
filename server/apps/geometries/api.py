@@ -872,3 +872,8 @@ def get_amenity(
             result["sources"] = sources
 
     return AmenitySchema(**result)
+
+
+# SEO/LLM surface (place meta + Markdown) — imported at the END to avoid
+# a circular import: api_seo registers on this module's router.
+from . import api_seo  # noqa: F401

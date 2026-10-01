@@ -25,6 +25,7 @@ from xml.sax.saxutils import escape
 from django.conf import settings
 from django.core.cache import cache
 
+from server.apps.geometries.models import GeoPlace
 from server.apps.huts.models import Hut
 
 # URLs per child sitemap (see module docstring for the scale rationale).
@@ -63,6 +64,21 @@ def _public_huts_queryset():
     return Hut.objects.filter(is_active=True, is_public=True)
 
 
+def _sitemap_places_queryset():
+    # Small POIs stay out of the sitemap: a place is listed only when it
+    # has BOTH a name and a description ("every toilet" is not a landing
+    # page). Flip per-category exclusions later if the rule is too coarse.
+    return GeoPlace.objects.filter(
+        is_active=True, is_public=True, name__gt="", description__gt=""
+    )
+
+
+def place_sitemap_enabled() -> bool:
+    # Opt-in: the frontend place routes do not exist yet — listing URLs
+    # that 404 would hurt more than help (see PLACE_URL_PATTERN).
+    return bool(settings.WODORE_SEO_PLACE_SITEMAP)
+
+
 def sitemap_page_count() -> int:
     """Number of hut child sitemaps (cached with the index TTL)."""
     count = cache.get_or_set(
@@ -73,14 +89,30 @@ def sitemap_page_count() -> int:
     return max(1, -(-int(count) // SITEMAP_PAGE_SIZE))
 
 
+def sitemap_place_page_count() -> int:
+    """Number of place child sitemaps (0 when the gate is off)."""
+    if not place_sitemap_enabled():
+        return 0
+    count = cache.get_or_set(
+        "sitemap:places:count",
+        lambda: _sitemap_places_queryset().count(),
+        SITEMAP_INDEX_TTL,
+    )
+    return -(-int(count) // SITEMAP_PAGE_SIZE)
+
+
 def sitemap_index() -> str:
-    """Sitemap index: static pages + all hut child sitemaps."""
+    """Sitemap index: static pages + hut (and place) child sitemaps."""
 
     def build() -> str:
         children = [frontend_url("sitemap-static.xml")]
         children += [
             frontend_url(f"sitemap-huts-{page}.xml")
             for page in range(sitemap_page_count())
+        ]
+        children += [
+            frontend_url(f"sitemap-places-{page}.xml")
+            for page in range(sitemap_place_page_count())
         ]
         entries = "".join(
             f"<sitemap><loc>{escape(c)}</loc></sitemap>" for c in children
@@ -129,3 +161,35 @@ def sitemap_huts(page: int = 0) -> str | None:
         )
 
     return cache.get_or_set(f"sitemap:huts:{page}", build, SITEMAP_TTL)
+
+
+def sitemap_places(page: int = 0) -> str | None:
+    """One page of place URLs (only name+description places, gated).
+
+    Returns ``None`` when disabled or out of range (caller answers 404).
+    """
+
+    def build() -> str | None:
+        if not place_sitemap_enabled():
+            return None
+        places = list(
+            _sitemap_places_queryset()
+            .order_by("pk")
+            .values_list("slug", "modified")[
+                page * SITEMAP_PAGE_SIZE : (page + 1) * SITEMAP_PAGE_SIZE
+            ]
+        )
+        if not places:
+            return None
+        pattern = settings.PLACE_URL_PATTERN
+        return _urlset(
+            [
+                _url(
+                    f"{settings.FRONTEND_DOMAIN.rstrip('/')}/{pattern.format(slug=slug)}",
+                    modified,
+                )
+                for slug, modified in places
+            ]
+        )
+
+    return cache.get_or_set(f"sitemap:places:{page}", build, SITEMAP_TTL)
