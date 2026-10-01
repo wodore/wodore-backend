@@ -7,6 +7,7 @@ first breaking change will rely on.
 """
 
 import json
+from datetime import date
 
 import pytest
 
@@ -23,6 +24,23 @@ def newer_version():
         version="2099-01-01",
         description="test-only newer version",
         responses={"get_huts": each(lambda hut: {**hut, "api_old_shape": True})},
+    )
+    registry.REGISTRY.append(change)
+    try:
+        yield change
+    finally:
+        registry.REGISTRY.remove(change)
+
+
+@pytest.fixture
+def sunset_old_version():
+    """A version whose sunset date has passed (410 everywhere except
+    /v1/version)."""
+    change = registry.VersionChange(
+        version="2020-01-01",
+        description="test-only sunset version",
+        deprecation_date=date(2020, 1, 1),
+        sunset_date=date(2020, 7, 1),
     )
     registry.REGISTRY.append(change)
     try:
@@ -101,6 +119,41 @@ class TestSchemaServing:
         response = client.get("/v1/docs")
         assert response.status_code == 200
         assert registry.current_version() in response.content.decode()
+
+    @pytest.mark.django_db
+    def test_unknown_api_version_on_schema_is_400(self, seed_data, client):
+        response = client.get("/v1/openapi.json", {"api_version": "not-a-date"})
+        assert response.status_code == 400
+        assert response.json()["code"] == "api_version_invalid"
+
+    @pytest.mark.django_db
+    def test_sunset_version_on_schema_is_410(
+        self, seed_data, client, sunset_old_version
+    ):
+        response = client.get(
+            "/v1/openapi.json", {"api_version": sunset_old_version.version}
+        )
+        assert response.status_code == 410
+        assert response.json()["code"] == "api_version_sunset"
+
+    @pytest.mark.django_db
+    def test_missing_snapshot_is_500_not_silent_live_schema(
+        self, seed_data, client, monkeypatch
+    ):
+        """A supported non-current version without a committed snapshot
+        must fail loudly, not silently serve the newest contract (review
+        P2)."""
+        orphan = registry.VersionChange(
+            version="2098-05-01", description="no snapshot for this one"
+        )
+        newest = registry.VersionChange(version="2099-01-01")
+        monkeypatch.setattr(
+            "server.apps.apiversions.registry.REGISTRY",
+            registry.REGISTRY + [orphan, newest],
+        )
+        response = client.get("/v1/openapi.json", {"api_version": "2098-05-01"})
+        assert response.status_code == 500
+        assert response.json()["code"] == "api_snapshot_missing"
 
 
 class TestContractPerVersion:

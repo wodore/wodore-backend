@@ -189,7 +189,11 @@ not by an exhaustive 54-op × N-version matrix.
 - [Wrong 304s across versions] → resolved version joins ETag key material (`additional_keys` + registry hash) and `Vary: Api-Version` (D11 below).
 
 ### D11: Caching correctness
-- Responses resolved from the header carry `Vary: Api-Version`. Query-resolved ones differ by URL.
+- Responses resolved from the header AND unpinned (default) responses carry
+  `Vary: Api-Version`: a stored unpinned response (current-version body) must
+  never be reused for a later pinned request on the same URL (RFC 9111 allows
+  exactly that without Vary). Query-resolved responses differ by URL and stay
+  Vary-free.
 - `huts.geojson` ETag key material gains the resolved version (and a registry content
   hash, so registering a new transform changes the ETag even before data changes).
 - `Cache-Control` values on geojson endpoints unchanged; `Vary` composes with them.

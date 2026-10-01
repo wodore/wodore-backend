@@ -26,6 +26,9 @@ def pinned_old_version():
             "get_huts_geojson": feature_properties(
                 lambda props: {**props, "api_old_shape": True}
             ),
+            "get_hut_availability_geojson": feature_properties(
+                lambda props: {**props, "api_old_shape": True}
+            ),
         },
     )
     registry.REGISTRY.append(change)
@@ -256,24 +259,59 @@ class TestBackwardTransforms:
             "api_old_shape" not in f["properties"] for f in fresh.json()["features"]
         )
 
+    @pytest.mark.django_db
+    def test_response_downgrade_direct_write_availability_geojson(
+        self, seed_data, client, pinned_old_version
+    ):
+        """The second direct-write endpoint (availability/{date}.geojson)
+        must honor transforms — deleting the explicit helper call in
+        server/apps/availability/api.py must fail this test (review P1)."""
+        from tests.factories.availability import AvailabilityFactory
+
+        from django.utils import timezone
+
+        from server.apps.huts.models import Hut
+        from server.apps.organizations.models import Organization
+
+        hut = Hut.objects.first()
+        org = Organization.objects.first()
+        today = timezone.localdate()
+        AvailabilityFactory(hut=hut, source_organization=org, availability_date=today)
+        old = max(v for v in registry.versions() if v != pinned_old_version.version)
+        response = client.get(
+            f"/v1/huts/availability/{today.isoformat()}.geojson",
+            headers={"Api-Version": old},
+        )
+        assert response.status_code == 200
+        features = response.json()["features"]
+        assert features, "availability fixture produced no features"
+        assert all(f["properties"]["api_old_shape"] is True for f in features)
+
     def test_transform_helpers_defensive(self):
         from server.apps.apiversions.transforms import downgrade_response
 
+        def downgrade_capacity(hut):
+            """Defensive rename: only converts when the source key is
+            present (design.md D4 rules)."""
+            if "capacity_open" in hut:
+                hut["capacity"] = hut.pop("capacity_open")
+            return hut
+
         change = registry.VersionChange(
             version="2099-01-01",
-            responses={
-                "get_hut": lambda hut: {
-                    **{k: v for k, v in hut.items() if k != "capacity_open"},
-                    "capacity": hut.pop("capacity_open", None),
-                }
-            },
+            responses={"get_hut": downgrade_capacity},
         )
         registry.REGISTRY.append(change)
         try:
             # Field omitted via include/exclude → transform must not fail
             # nor add the field (defensive pop rules, design.md D4).
             out = downgrade_response("2026-10-01", "get_hut", {"slug": "x"})
-            assert out == {"slug": "x", "capacity": None} or out == {"slug": "x"}
+            assert out == {"slug": "x"}
+            # Field present → renamed exactly
+            out = downgrade_response(
+                "2026-10-01", "get_hut", {"slug": "x", "capacity_open": 42}
+            )
+            assert out == {"slug": "x", "capacity": 42}
         finally:
             registry.REGISTRY.remove(change)
 
@@ -283,6 +321,27 @@ class TestBackwardTransforms:
         ordered = [c.version for c in changes_after("2026-10-01")]
         assert ordered == sorted(ordered, reverse=True)
         assert pinned_old_version.version in ordered
+
+    def test_request_upgrades_apply_oldest_to_newest(self):
+        """upgrade_request chain order (deferred machinery, unit-pinned —
+        review P2 test nit c)."""
+        from server.apps.apiversions.transforms import upgrade_request
+
+        first = registry.VersionChange(
+            version="2098-01-01",
+            requests={"get_hut": lambda d: {**d, "step": d.get("step", []) + ["2098"]}},
+        )
+        second = registry.VersionChange(
+            version="2099-01-01",
+            requests={"get_hut": lambda d: {**d, "step": d.get("step", []) + ["2099"]}},
+        )
+        registry.REGISTRY.extend([first, second])
+        try:
+            out = upgrade_request("2026-10-01", "get_hut", {"slug": "x"})
+            assert out["step"] == ["2098", "2099"]  # oldest → newest
+        finally:
+            registry.REGISTRY.remove(first)
+            registry.REGISTRY.remove(second)
 
 
 class TestCaching:
@@ -296,6 +355,13 @@ class TestCaching:
             headers={"Api-Version": registry.current_version()},
         )
         assert "Api-Version" in response["Vary"]
+
+    @pytest.mark.django_db
+    def test_vary_on_unpinned_response(self, seed_data, client):
+        """Stored unpinned (current-version) responses must not be reused
+        for later pinned requests on the same URL (review P2, RFC 9111)."""
+        response = client.get("/v1/huts/huts", {"limit": 1})
+        assert "Api-Version" in response.get("Vary", "")
 
     @pytest.mark.django_db
     def test_no_vary_on_query_resolved_response(self, seed_data, client):
@@ -313,6 +379,48 @@ class TestCaching:
         new_response = client.get("/v1/huts/huts.geojson")
         assert old_response.status_code == new_response.status_code == 200
         assert old_response["ETag"] != new_response["ETag"]
+
+    @pytest.mark.django_db
+    @pytest.mark.parametrize(
+        "path,headers",
+        [
+            ("/v1/huts/huts", {"Api-Version": "bogus"}),  # 400 invalid
+        ],
+    )
+    def test_error_responses_keep_cors_headers(self, seed_data, client, path, headers):
+        """The middleware's 400/410 responses unwind through
+        CorsMiddleware, so browser clients still see CORS headers
+        (design.md D5.4 / review P2)."""
+        from django.test import override_settings
+
+        with override_settings(CORS_ALLOWED_ORIGINS=["https://app.example.com"]):
+            response = client.get(
+                path,
+                {"limit": 1},
+                headers={"Origin": "https://app.example.com", **headers},
+            )
+            assert response.status_code == 400
+            assert response["Access-Control-Allow-Origin"] == (
+                "https://app.example.com"
+            )
+
+    @pytest.mark.django_db
+    def test_sunset_410_keeps_cors_headers(self, seed_data, client, sunset_old_version):
+        from django.test import override_settings
+
+        with override_settings(CORS_ALLOWED_ORIGINS=["https://app.example.com"]):
+            response = client.get(
+                "/v1/huts/huts",
+                {"limit": 1},
+                headers={
+                    "Origin": "https://app.example.com",
+                    "Api-Version": sunset_old_version.version,
+                },
+            )
+            assert response.status_code == 410
+            assert response["Access-Control-Allow-Origin"] == (
+                "https://app.example.com"
+            )
 
 
 class TestVersionDiscovery:

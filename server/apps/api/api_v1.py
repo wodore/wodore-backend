@@ -62,8 +62,24 @@ def versioned_openapi_json(request):
     version = getattr(request, "api_version", None)
     if version is not None and version != registry.current_version():
         snapshot = load_snapshot(version)
-        if snapshot is not None:
-            return JsonResponse(snapshot, json_dumps_params={"indent": 2}, safe=False)
+        if snapshot is None:
+            # Serving the live schema here would silently hand an
+            # old-pinned client the NEWEST contract — fail loudly instead
+            # (CI's snapshot check should prevent this from ever firing).
+            import structlog
+
+            structlog.get_logger("apiversions").error(
+                "api_snapshot_missing", version=version
+            )
+            return JsonResponse(
+                {
+                    "code": "api_snapshot_missing",
+                    "detail": "No committed OpenAPI snapshot for API "
+                    f"version {version!r}.",
+                },
+                status=500,
+            )
+        return JsonResponse(snapshot, json_dumps_params={"indent": 2}, safe=False)
     # Live schema — enforce info.version from the registry (the NinjaAPI
     # ``version`` attribute is frozen at import time; tests may import this
     # module while a temporary registry entry exists).

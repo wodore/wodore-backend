@@ -139,7 +139,12 @@ class ApiVersionMiddleware:
         if version is None:
             return
         response[VERSION_HEADER] = version
-        if getattr(request, "api_version_source", None) == "header":
+        # Vary for header-resolved AND unpinned (default) responses: a
+        # stored unpinned response (current-version body) must never be
+        # reused for a later pinned request on the same URL (RFC 9111
+        # allows exactly that without Vary). Query-resolved responses differ
+        # by URL and stay Vary-free per design.md D11.
+        if getattr(request, "api_version_source", None) in {"header", "default"}:
             # merge (corsheaders already varies on Origin)
             patch_vary_headers(response, (VERSION_HEADER,))
 

@@ -26,6 +26,8 @@ class VersionedRenderer(MsgSpecRenderer):
     def render(self, request: HttpRequest, data: Any, *, response_status: int) -> Any:
         version = getattr(request, "api_version", None)
         operation = getattr(request, "ninja_operation", None)
-        if version is not None and operation is not None:
+        if version is not None and operation is not None and response_status < 400:
+            # Error bodies (ninja routes them through create_response too)
+            # keep the latest shape: error contracts are not versioned.
             data = downgrade_response(version, effective_operation_id(operation), data)
         return super().render(request, data, response_status=response_status)
