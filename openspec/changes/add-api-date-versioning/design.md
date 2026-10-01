@@ -132,7 +132,7 @@ it entirely). Instead:
   sunset (each `VersionChange`/version entry stores its own `sunset` date; policy
   enforced in review, not code).
 - Headers: `Deprecation: @<unix-seconds>` (RFC 9745), `Sunset: <HTTP-date>` (RFC 8594),
-  `Link: <API_CHANGELOG anchor>; rel="deprecation"`.
+  `Link: <CHANGELOG_API anchor>; rel="deprecation"`.
 - Past sunset version → `410` `{"code": "api_version_sunset", "version": ...}`.
 - **Endpoint-level deprecation** uses the same headers: `/v1/huts/bookings` and
   `/v1/huts/bookings.geojson` get a concrete sunset = 6 months after this change's
@@ -166,7 +166,7 @@ Untransformed operations are covered by the snapshot drift guard (optional CI:
 not by an exhaustive 54-op × N-version matrix.
 
 ### D10: Changelogs
-- `API_CHANGELOG.md` from `cliff-api.toml`: `tag_pattern = "^api/[0-9]{4}-[0-9]{2}-[0-9]{2}"`,
+- `CHANGELOG_API.md` from `cliff-api.toml`: `tag_pattern = "^api/[0-9]{4}-[0-9]{2}-[0-9]{2}"`,
   `commit_parsers` on `github.pr_labels` (field name verified against the working
   `cliff.toml`): `api:breaking`, `api:added`, `api:deprecated`, `api:fixed`. Non-breaking
   API entries between API tags land under a "Live in all versions" heading.
@@ -199,7 +199,7 @@ not by an exhaustive 54-op × N-version matrix.
 1. Ship this change: registry with the single initial version (rollout date), zero
    transforms, resolution + headers + discovery + snapshot infra + bookings sunset
    date. All clients are effectively on the initial version.
-2. Release: `api_snapshot` + commit + tag `api/<date>` + generate `API_CHANGELOG.md`.
+2. Release: `api_snapshot` + commit + tag `api/<date>` + generate `CHANGELOG_API.md`.
 3. App starts sending `Api-Version` (frontend repos, separate changes).
 4. First breaking change follows the documented workflow (new `VersionChange` +
    snapshot + `api:breaking` label).

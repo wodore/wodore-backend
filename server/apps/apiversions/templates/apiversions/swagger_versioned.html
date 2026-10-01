@@ -1,0 +1,39 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <link type="text/css" rel="stylesheet" href="{% static 'ninja/swagger-ui.css' %}">
+    {% include "ninja/favicons.html" %}
+    <title>{{ api.title }}</title>
+    <style>
+      .api-version-bar {
+        display: flex; gap: .5rem; align-items: center;
+        padding: .5rem 1rem; font-family: sans-serif; font-size: .85rem;
+        border-bottom: 1px solid #ddd; background: #fafafa;
+      }
+      .api-version-bar a { padding: .15rem .5rem; border-radius: 4px; text-decoration: none; }
+      .api-version-bar a.selected { background: #4990e2; color: #fff; }
+    </style>
+</head>
+<body
+    data-csrf-token="{% if add_csrf %}{{ csrf_token }}{% endif %}"
+    data-api-csrf="{% if add_csrf %}true{% endif %}">
+
+    <div class="api-version-bar">
+      <strong>API version:</strong>
+      {% for v in api_versions %}
+        <a href="?api_version={{ v }}" class="{% if v == selected_api_version %}selected{% endif %}">{{ v }}</a>
+      {% endfor %}
+    </div>
+
+    <script type="application/json" id="swagger-settings">
+        {{ swagger_settings | safe }}
+    </script>
+
+    <div id="swagger-ui"></div>
+
+    <script src="{% static 'ninja/swagger-ui-bundle.js' %}"></script>
+    <script src="{% static 'ninja/swagger-ui-init.js' %}"></script>
+
+</body>
+</html>

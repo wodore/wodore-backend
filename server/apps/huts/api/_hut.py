@@ -19,6 +19,10 @@ from django.urls import reverse_lazy
 from django.views.decorators.cache import cache_control
 
 from server.apps.api.query import FieldsParam, TristateEnum
+from server.apps.apiversions.transforms import (
+    apply_response_transforms,
+    version_cache_key,
+)
 from server.apps.huts.schemas._hut import ImageMetaSchema
 from server.apps.translations import (
     LanguageParam,
@@ -279,6 +283,7 @@ def get_huts(  # type: ignore
         str(is_active.value),
         str(has_availability.value),
         lang,
+        version_cache_key(request),
     ]
 
     etag = generate_etag(
@@ -476,6 +481,7 @@ def get_huts_geojson(  # type: ignore
         str(include_has_availability),
         str(flat),
         lang,
+        version_cache_key(request),
     ]
 
     etag = generate_etag(
@@ -623,6 +629,7 @@ def get_huts_geojson(  # type: ignore
         ),
     )["geojson"]
     # TODO: maybe get it directly as str?
+    geojson = apply_response_transforms(request, "get_huts_geojson", geojson)
     response.write(msgspec.json.encode(geojson))
 
     # Set cache headers (ETag, Last-Modified, Cache-Control)
@@ -664,7 +671,7 @@ def get_hut(
     )
 
     # Generate ETag for this specific hut
-    additional_keys = [slug, lang]
+    additional_keys = [slug, lang, version_cache_key(request)]
 
     etag = generate_etag(
         include_huts=True,
