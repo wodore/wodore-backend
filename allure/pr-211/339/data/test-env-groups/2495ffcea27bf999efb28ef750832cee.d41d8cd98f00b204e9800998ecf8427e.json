@@ -1,1 +1,0 @@
-{"id":"2495ffcea27bf999efb28ef750832cee.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.test_api_auth.TestProtectedEndpoints#test_missing_token_rejected","name":"test_missing_token_rejected","status":"passed","testResultsByEnv":{"default":"6d2c9cfd4c5100de00a488d6af8c9508"}}
