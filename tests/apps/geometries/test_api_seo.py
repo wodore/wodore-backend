@@ -1,7 +1,5 @@
 """HTTP-level tests for the place SEO surface (meta + Markdown)."""
 
-from urllib.parse import quote
-
 import pytest
 
 from server.apps.geometries.models import GeoPlace
@@ -32,17 +30,15 @@ class TestPlaceMeta:
         assert data["jsonld"]["name"] == place.name
 
     def test_meta_always_has_image(self, seed_data, client):
-        """No photo -> generated og card (brand background + name)."""
+        """No photo -> branded default card (no text drawn)."""
         place = GeoPlace.objects.filter(
             is_active=True, is_public=True, name__gt=""
         ).first()
         assert place is not None
         data = client.get(f"/v1/geo/places/{place.slug}/meta").json()
         assert data["image"]
-        # Signed absolute imagor URL in prod; relative /unsafe/ path when
-        # IMAGOR_URL is unset (test env) — either way the name is drawn.
-        assert "text(" in data["image"]
-        assert quote(place.name) in data["image"]
+        assert "meta.jpg" in data["image"]
+        assert "text(" not in data["image"]
 
     def test_meta_unknown_slug_is_404(self, seed_data, client):
         assert client.get("/v1/geo/places/does-not-exist/meta").status_code == 404
@@ -84,8 +80,8 @@ class TestHutOgCardFallback:
         assert hut is not None
         data = client.get(f"/v1/huts/{hut.slug}/meta").json()
         assert data["image"]
-        # imagor text filter with the URL-encoded name
-        assert "text(" in data["image"]
+        # branded default card, no text drawn
+        assert "meta.jpg" in data["image"]
 
 
 class TestCategoriesMarkdown:

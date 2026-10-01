@@ -3,26 +3,25 @@
 Two variants:
 
 * ``og_photo_url`` — a real photo, resized to the 'large' preset
-  (1800x1200, focal-aware) exactly like the JSON detail endpoint.
-* ``og_card_url`` — a generated card for entities without a usable
-  photo: the brand map background darkened for contrast, the app icon
-  as a semi-transparent watermark, and the entity name in the BRAND
-  FONT (Barlow Semi Condensed SemiBold) at the bottom.
+  (1800x1200, focal-aware) exactly like the JSON detail endpoint, with
+  the Wodore wordmark watermarked bottom-left (branding per owner
+  decision; the messenger already shows title/description text next to
+  the image, so the name is deliberately NOT drawn into the image).
+* ``og_card_url`` — the branded default image (map + wordmark artwork,
+  1200x630) for entities without a usable photo.
 
 Imagor requirements, verified live (see docker-compose.yml):
 
-* ≥ v1.9 — the ``text()`` filter signature changed to
-  ``text(text, x, y[, font[, color[...]]])`` with keyword/percent
-  positioning and Pango font descriptions (hyphen-separated, size
-  included: ``Barlow-Semi-Condensed-SemiBold-72``).
-* Fonts must be mounted into the container — without any font,
-  ``text()`` silently renders nothing. The brand TTF lives in
-  ``docker/imagor/fonts/`` (OFL license alongside).
+* ≥ v1.9 (new ``text()``/``watermark()`` signatures with keyword
+  positioning). The dev container runs v1.9.6; production must match.
+* Raster watermark sources only — this imagor build has NO SVG loader:
+  SVG watermark URLs succeed with HTTP 200 but silently render nothing.
+  The wordmark PNGs live in the frontend repo (public/logos/), the
+  brand font TTF in docker/imagor/fonts/ (OFL) for any future text
+  use.
 """
 
 from __future__ import annotations
-
-from urllib.parse import quote
 
 from django.conf import settings
 
@@ -34,24 +33,26 @@ OG_PHOTO_SIZE = "1800x1200"
 # Generated card — the recommended social preview aspect ratio.
 OG_CARD_SIZE = "1200x630"
 
-# Brand font (Pango description without the size suffix, hyphenated).
-OG_CARD_FONT = "Barlow-Semi-Condensed-SemiBold"
-
-# Font sizes by combined text length (no wrapping: shrink instead).
-_TEXT_SIZES = ((28, 72), (42, 56), (10_000, 40))
-
 
 def _frontend(path: str) -> str:
     return f"{settings.FRONTEND_DOMAIN.rstrip('/')}/{path.lstrip('/')}"
 
 
 def og_photo_url(image_url: str, focal: dict | None = None) -> str:
-    """Signed imagor URL for a photo at the og:image size."""
+    """Signed imagor URL for a photo at the og:image size, with the
+    white Wodore wordmark watermarked bottom-left."""
     focal_str = None
     crop_start = crop_stop = None
     if focal:
         focal_str = f"{focal['x1']}x{focal['y1']}:{focal['x2']}x{focal['y2']}"
         crop_start, crop_stop = focal_str.split(":")
+    filters = [
+        # NOTE: the watermark URL stays RAW — the transformer encodes the
+        # whole filter path, pre-encoding it here would double-encode.
+        # x=40 (from left), y=-40 (from bottom), alpha 90 (10% faded),
+        # w_ratio 18 (percent of the image width).
+        f"watermark({_frontend('logos/wodore_wordmark_white.png')},40,-40,90,18)",
+    ]
     return (
         ImagorImage(image_url)
         .transform(
@@ -59,24 +60,22 @@ def og_photo_url(image_url: str, focal: dict | None = None) -> str:
             focal=focal_str,
             crop_start=crop_start,
             crop_stop=crop_stop,
+            filters=filters,
         )
         .get_full_url()
     )
 
 
-def og_card_url(title: str, subtitle: str | None = None) -> str:
-    """Signed imagor URL for a generated brand card with the title."""
-    text = f"{title} · {subtitle}" if subtitle else title
-    size = next(size for max_len, size in _TEXT_SIZES if len(text) <= max_len)
-    filters = [
-        "brightness(-30)",
-        # NOTE: the watermark URL stays RAW — the transformer encodes the
-        # whole filter path, pre-encoding it here would double-encode.
-        f"watermark({_frontend('icons/icon-512x512.png')},center,center,25,100)",
-        f"text({quote(text)},center,-60,{OG_CARD_FONT}-{size},ffffff)",
-    ]
+def og_card_url(title: str | None = None, subtitle: str | None = None) -> str:
+    """Signed imagor URL for the branded default card.
+
+    The default image (public/meta/meta.jpg) already carries the map and
+    the wordmark artwork — no text is drawn (the link preview shows the
+    entity name and description as text next to the image anyway).
+    ``title``/``subtitle`` are accepted and ignored for API stability.
+    """
     return (
         ImagorImage(_frontend("meta/meta.jpg"))
-        .transform(size=OG_CARD_SIZE, filters=filters)
+        .transform(size=OG_CARD_SIZE)
         .get_full_url()
     )
