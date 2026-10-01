@@ -60,8 +60,7 @@ def _place_image(place: GeoPlace) -> str | None:
             return og_photo_url(source, focal)
     except Exception:
         pass
-    subtitle = f"{place.elevation} m" if place.elevation else None
-    return og_card_url(place.name, subtitle)
+    return og_card_url()
 
 
 def _place_description(place: GeoPlace) -> str:

@@ -20,6 +20,7 @@ from django.conf import settings
 from django.http import Http404, HttpRequest, HttpResponse
 
 from server.apps.images.og import og_card_url, og_photo_url
+from server.apps.symbols.utils import resolve_symbol_urls
 from server.apps.translations import LanguageParam, activate, with_language_param
 
 from ..models import Hut, HutImageAssociation
@@ -60,7 +61,7 @@ class HutMetaSchema(Schema):
     modified: str | None = Field(None, description="Last modification (ISO date)")
 
 
-def _og_image(hut: Hut) -> str:
+def _og_image(hut: Hut, request: HttpRequest) -> str:
     """Preview image URL: the highest-scored image at the og size;
     generated brand card (name + elevation) as fallback."""
     association = (
@@ -78,8 +79,11 @@ def _og_image(hut: Hut) -> str:
             return og_photo_url(source, focal)
     except Exception:
         pass
-    subtitle = f"{int(hut.elevation)} m" if hut.elevation else None
-    return og_card_url(hut.name, subtitle)
+    symbol_url = None
+    if hut.hut_type_open is not None:
+        symbols = resolve_symbol_urls(hut.hut_type_open, {"request": request})
+        symbol_url = symbols.get("detailed") if symbols else None
+    return og_card_url(symbol_url)
 
 
 def _meta_description(hut: Hut, lang: str) -> str:
@@ -150,7 +154,7 @@ def get_hut_meta(
         raise Http404(msg)
 
     page_url = f"{settings.FRONTEND_DOMAIN.rstrip('/')}/hut/{hut.slug}"
-    image = _og_image(hut)
+    image = _og_image(hut, request)
     description = _meta_description(hut, lang)
 
     response["Cache-Control"] = f"public, max-age={CACHE_TTL}"
