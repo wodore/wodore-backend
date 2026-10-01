@@ -159,24 +159,13 @@ def release(
         )
         c.run(f"bump2version --allow-dirty --new-version {new_version} patch")
 
-        # Every API release is also a backend release (deploys need the
-        # docker build) — but not every backend release is an API release.
-        # So: if the registry carries an API version without its
-        # api/<version> tag yet, cut tag + CHANGELOG_API.md now, so they
-        # land in the same release commit.
+        # CI (.github/workflows/new-api-version.yml) cuts the api/<version>
+        # tag when the docker build that ships it succeeds — every API
+        # release is an app release, but not vice versa. This local step
+        # regenerates CHANGELOG_API.md (idempotent) so it lands in the
+        # release commit; tagging here is only a fallback if CI missed.
         try:
-            from server.apps.apiversions.registry import current_version
-
-            api_version = current_version()
-            tagged = c.run(f"git tag -l 'api/{api_version}'", hide=True).stdout.strip()
-            if tagged:
-                info(
-                    f"API version '{api_version}' already released — "
-                    "no API-side release steps."
-                )
-            else:
-                header(f"New API version '{api_version}' rides this release")
-                api_release(c)
+            api_release(c)
         except Exception as exc:
             error(
                 f"API release step failed: {exc!r}. Run 'inv api-release' "
@@ -204,12 +193,13 @@ def release(
     }
 )
 def api_release(c: Ctx, tag: bool = True, changelog: bool = True):
-    """Release the current API contract version (registry-driven).
+    """Release artifacts for the current API contract version.
 
-    Snapshot itself is committed in the breaking PR (CI enforces presence);
-    this cuts the release artifacts: the `api/<date>` tag (grouping anchor
-    for git-cliff) and the regenerated CHANGELOG_API.md. Run it in the
-    release that ships the version — or right after merging its PR.
+    The snapshot itself is committed in the breaking PR (CI enforces
+    presence); CI (new-api-version.yml) tags api/<version> when the docker
+    build shipping it succeeds. This task regenerates CHANGELOG_API.md
+    (idempotent — run by 'inv release', or standalone as a fallback that
+    also creates the tag if CI missed it).
     """
     from server.apps.apiversions.registry import current_version
 
@@ -235,11 +225,17 @@ def api_release(c: Ctx, tag: bool = True, changelog: bool = True):
 
     if changelog:
         c.run("git-cliff --config cliff-api.toml -o CHANGELOG_API.md")
-        success("Regenerated 'CHANGELOG_API.md'.")
-        info(
-            "Check the entries and run: git commit -am "
-            f'"API changelog for api/{version}"'
-        )
+        changed = c.run(
+            "git status --porcelain CHANGELOG_API.md", hide=True
+        ).stdout.strip()
+        if changed:
+            success("Regenerated 'CHANGELOG_API.md' (changed).")
+            info(
+                "Check the entries and run: git commit -am "
+                f'"API changelog for api/{version}"'
+            )
+        else:
+            info("'CHANGELOG_API.md' already up to date.")
 
 
 @task(help={"next": "Show next version"})
