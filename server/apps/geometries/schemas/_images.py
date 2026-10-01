@@ -134,21 +134,31 @@ class ImageThumbhashesSchema(BaseModel):
     `thumb_*` = focal-cropped (matches xs/sm URLs);
     `preview_*` = curated crop (matches md+ URLs).
     Decode with https://evanw.github.io/thumbhash/ for instant blurred
-    previews. Individual hashes are null when not yet assessed.
+    previews.
+
+    Unassessed images carry a neutral gray gradient placeholder with the
+    correct aspect ratio — the real hash replaces it after assessment.
     """
 
-    thumb_square: str | None = Field(None, description="Square (1:1) focal-cropped")
-    thumb_landscape: str | None = Field(
-        None, description="Landscape (3:2) focal-cropped"
-    )
-    thumb_portrait: str | None = Field(None, description="Portrait (2:3) focal-cropped")
-    preview_square: str | None = Field(None, description="Square (1:1) curated crop")
-    preview_landscape: str | None = Field(
-        None, description="Landscape (3:2) curated crop"
-    )
-    preview_portrait: str | None = Field(
-        None, description="Portrait (2:3) curated crop"
-    )
+    thumb_square: str = Field(..., description="Square (1:1) focal-cropped")
+    thumb_landscape: str = Field(..., description="Landscape (3:2) focal-cropped")
+    thumb_portrait: str = Field(..., description="Portrait (2:3) focal-cropped")
+    preview_square: str = Field(..., description="Square (1:1) curated crop")
+    preview_landscape: str = Field(..., description="Landscape (3:2) curated crop")
+    preview_portrait: str = Field(..., description="Portrait (2:3) curated crop")
+
+
+#: Neutral gray-gradient placeholder hashes (correct aspect ratio per group).
+#: Used when the real assessment hasn't run yet — the frontend always gets
+#: a decodable hash and never needs to check for null.
+DEFAULT_THUMBHASHES = ImageThumbhashesSchema(
+    thumb_square="IQgGBwB4eIiPiId4iJiIeIh4BwAAAAAA",
+    thumb_landscape="IQgGBYB4eHiPiIeIiJiIdwAAAAAA",
+    thumb_portrait="IQgGBQB4eI+HeIiIh4eIdwAAAAAA",
+    preview_square="IQgGBwB4eIiPiId4iJiIeIh4BwAAAAAA",
+    preview_landscape="IQgGBYB4eHiPiIeIiJiIdwAAAAAA",
+    preview_portrait="IQgGBQB4eI+HeIiIh4eIdwAAAAAA",
+)
 
 
 class ImageDimensionsSchema(BaseModel):
