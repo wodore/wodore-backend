@@ -154,6 +154,35 @@ Services are defined in `docker-compose.yml`:
 - Don't set fields to `None` if you want them excluded - simply don't add them to the result dict
 - Add detailed descriptions explaining what values mean, especially for numeric thresholds or enum options
 
+## API Versioning
+
+The API (`/v1/`) uses date-based contract versioning (`Api-Version` header /
+`api_version` query param). Registry: `server/apps/apiversions/registry.py`.
+Full runbook: `docs/api-versioning.md` (mkdocs: "API Versioning"). The rules
+that matter for any code change:
+
+- **Versions are created only for breaking changes** (remove/rename, new
+  required param, tightened validation, changed observable defaults, new
+  response enum value). Additive changes (new endpoints, optional
+  params/fields) need no version. Litmus test: would a client pinned to the
+  current version behave differently after the deploy?
+- **Breaking change PR** = new `VersionChange` (downgrade transforms keyed
+  by `operation_id` — explicit ids required, system check enforces) +
+  snapshot via `app api_snapshot` **committed in the PR** (CI checks
+  presence) + contract tests + labels `type:*` and `api:breaking`.
+- **At most one unreleased version**: if the current version has no
+  `api/<date>` tag yet, amend its `VersionChange` (merge transforms, keep
+  date, regenerate snapshot) — never stack a new version. CI gates this
+  (`python3 -m server.apps.apiversions.registry_check`).
+- **Release**: CI cuts the `api/<date>` tag when the docker build shipping
+  it succeeds (`new-api-version.yml`); `inv release` regenerates
+  `CHANGELOG_API.md`. API changes appear in BOTH changelogs (type label →
+  `CHANGELOG.md`, api label → `CHANGELOG_API.md`).
+- Direct-write GeoJSON endpoints (`huts.geojson`, `availability/*.geojson`)
+  bypass the renderer — they call `apply_response_transforms()` explicitly;
+  contract tests pin this. ETags on hut endpoints key on the resolved
+  version + registry hash.
+
 ## Testing
 
 After making changes, **always run the test suite** to verify nothing is broken:
