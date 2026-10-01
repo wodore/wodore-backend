@@ -37,9 +37,17 @@ OG_PHOTO_SIZE = "1200x630"
 # Generated card — the same og:image aspect ratio.
 OG_CARD_SIZE = "1200x630"
 
-# Logo watermark on photos (SVG via the frontend host; PNG alternatives
-# in public/logos/ of the frontend repo).
-OG_LOGO_URL_PATH = "logos/wodore_original.svg"
+# Logo watermark on photos. The raster PNG (frontend public/logos/) is
+# rendered at 800px from the SVG — vips' SVG rasterization composites
+# visibly pixelated at watermark sizes, the PNG stays crisp.
+OG_LOGO_URL_PATH = "logos/wodore_icon.png"
+# Watermark geometry (owner-approved): 200px, horizontally centered,
+# 33px below the bottom edge line (survives 1:1 center crops), fully
+# opaque.
+OG_LOGO_SIZE_PX = 200
+OG_LOGO_POS = "center"
+OG_LOGO_POS_Y = "bottom--33"
+OG_LOGO_ALPHA = 0
 
 
 def _frontend(path: str) -> str:
@@ -61,10 +69,13 @@ def og_photo_url(image_url: str, focal: dict | None = None) -> str:
         focal_str = f"{focal['x1']}x{focal['y1']}:{focal['x2']}x{focal['y2']}"
         crop_start, crop_stop = focal_str.split(":")
     filters = [
-        # Nested path rasterizes the 42px SVG logo up before compositing;
-        # ~210px on the 1200px canvas, 70px from the left, 35px from the
-        # bottom, alpha 12 (slightly faded).
-        _composite_image(_frontend(OG_LOGO_URL_PATH), 210, "left-70", "bottom-35", 12),
+        _composite_image(
+            _frontend(OG_LOGO_URL_PATH),
+            OG_LOGO_SIZE_PX,
+            OG_LOGO_POS,
+            OG_LOGO_POS_Y,
+            OG_LOGO_ALPHA,
+        ),
     ]
     return (
         ImagorImage(image_url)
