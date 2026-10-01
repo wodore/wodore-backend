@@ -132,7 +132,7 @@ it entirely). Instead:
   sunset (each `VersionChange`/version entry stores its own `sunset` date; policy
   enforced in review, not code).
 - Headers: `Deprecation: @<unix-seconds>` (RFC 9745), `Sunset: <HTTP-date>` (RFC 8594),
-  `Link: <API_CHANGELOG anchor>; rel="deprecation"`.
+  `Link: <CHANGELOG_API anchor>; rel="deprecation"`.
 - Past sunset version → `410` `{"code": "api_version_sunset", "version": ...}`.
 - **Endpoint-level deprecation** uses the same headers: `/v1/huts/bookings` and
   `/v1/huts/bookings.geojson` get a concrete sunset = 6 months after this change's
@@ -166,11 +166,24 @@ Untransformed operations are covered by the snapshot drift guard (optional CI:
 not by an exhaustive 54-op × N-version matrix.
 
 ### D10: Changelogs
-- `API_CHANGELOG.md` from `cliff-api.toml`: `tag_pattern = "^api/[0-9]{4}-[0-9]{2}-[0-9]{2}"`,
+- `CHANGELOG_API.md` from `cliff-api.toml`: `tag_pattern = "^api/[0-9]{4}-[0-9]{2}-[0-9]{2}"`,
   `commit_parsers` on `github.pr_labels` (field name verified against the working
   `cliff.toml`): `api:breaking`, `api:added`, `api:deprecated`, `api:fixed`. Non-breaking
   API entries between API tags land under a "Live in all versions" heading.
 - `VersionChange.description` must match its `api:breaking` changelog entry.
+
+### D12: At most one unreleased version
+
+Versions are cut at release time (the docker build shipping the current
+registry version cuts the `api/<date>` tag — new-api-version.yml). A
+breaking change merged while the current version is still unreleased
+AMENDS that version's `VersionChange` (merged transforms, same date,
+regenerated snapshot) instead of stacking a new one: a version no client
+ever received must not become its own contract boundary and would never be
+tagged. Enforced by `server/apps/apiversions/registry_check.py` (stdlib-only)
+on every PR (test.yml, full tag history) and re-checked in the tagging
+workflow. Not a pytest test: test checkouts are shallow and would see every
+version as unreleased.
 
 ## Resolved questions (were open in the source spec)
 
@@ -189,7 +202,11 @@ not by an exhaustive 54-op × N-version matrix.
 - [Wrong 304s across versions] → resolved version joins ETag key material (`additional_keys` + registry hash) and `Vary: Api-Version` (D11 below).
 
 ### D11: Caching correctness
-- Responses resolved from the header carry `Vary: Api-Version`. Query-resolved ones differ by URL.
+- Responses resolved from the header AND unpinned (default) responses carry
+  `Vary: Api-Version`: a stored unpinned response (current-version body) must
+  never be reused for a later pinned request on the same URL (RFC 9111 allows
+  exactly that without Vary). Query-resolved responses differ by URL and stay
+  Vary-free.
 - `huts.geojson` ETag key material gains the resolved version (and a registry content
   hash, so registering a new transform changes the ETag even before data changes).
 - `Cache-Control` values on geojson endpoints unchanged; `Vary` composes with them.
@@ -199,7 +216,7 @@ not by an exhaustive 54-op × N-version matrix.
 1. Ship this change: registry with the single initial version (rollout date), zero
    transforms, resolution + headers + discovery + snapshot infra + bookings sunset
    date. All clients are effectively on the initial version.
-2. Release: `api_snapshot` + commit + tag `api/<date>` + generate `API_CHANGELOG.md`.
+2. Release: `api_snapshot` + commit + tag `api/<date>` + generate `CHANGELOG_API.md`.
 3. App starts sending `Api-Version` (frontend repos, separate changes).
 4. First breaking change follows the documented workflow (new `VersionChange` +
    snapshot + `api:breaking` label).

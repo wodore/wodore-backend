@@ -1,0 +1,58 @@
+name: New API Version
+
+# Mirrors new-version.yml: every API release is also an app release (API
+# versions only reach production through the docker build), so the api/
+# tag is cut when the build that ships the registry's current version
+# succeeds — no local tagging rights needed, nothing to forget.
+
+on:
+  workflow_run:
+    workflows: ["Build Docker"]
+    types:
+      - completed
+
+jobs:
+  check-and-tag:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # full tag history for the release-state check
+
+      - name: API registry release-state check
+        run: python3 -m server.apps.apiversions.registry_check
+
+      - name: Extract current API version
+        id: api-version
+        # registry.py is stdlib-only (no Django, no venv needed)
+        run: |
+          VERSION=$(python3 -c "import sys; sys.path.insert(0, '.'); from server.apps.apiversions.registry import current_version; print(current_version())")
+          echo "Current API version: $VERSION"
+          echo "version=$VERSION" >> $GITHUB_ENV
+
+      - name: Check snapshot is committed
+        run: |
+          SNAPSHOT="server/apps/apiversions/openapi/${{ env.version }}.json"
+          if [ ! -f "$SNAPSHOT" ]; then
+            echo "::error::Snapshot $SNAPSHOT missing (run 'app api_snapshot' and commit it in the PR)"
+            exit 1
+          fi
+          echo "Snapshot present: $SNAPSHOT"
+
+      - name: Check if tag exists
+        uses: mukunku/tag-exists-action@v1.7.0
+        id: check-tag
+        with:
+          tag: "api/${{ env.version }}"
+
+      - name: Create and push tag if not exists
+        if: steps.check-tag.outputs.exists == 'false'
+        run: |
+          echo "Creating new API version tag: api/${{ env.version }}"
+          git tag "api/${{ env.version }}"
+          git push origin "api/${{ env.version }}"

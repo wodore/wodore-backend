@@ -19,6 +19,7 @@ from django.contrib.admindocs import urls as admindocs_urls
 from django.urls import include, path
 from django.views.generic import TemplateView
 
+from .apps.api import api_v1 as api_v1_module
 from .apps.api.api_v1 import api as api_v1
 from .apps.local_auth import account_views
 from .apps.main import urls as django_admin_urls
@@ -50,6 +51,10 @@ urlpatterns = [
     path("admin/doc/", include(admindocs_urls)),
     path("admin/", admin.site.urls),
     # Api:
+    # Version-addressable OpenAPI schema — exact path BEFORE the /v1/
+    # include so it shadows ninja's built-in openapi.json route (serves
+    # stored snapshots for ?api_version=, live schema otherwise).
+    path("v1/openapi.json", api_v1_module.versioned_openapi_json),
     path("v1/", api_v1.urls),  # type: ignore
     # Text and xml static files:
     path("robots.txt", main_views.robots_txt),
