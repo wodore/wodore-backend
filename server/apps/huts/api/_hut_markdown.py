@@ -83,16 +83,22 @@ def _hut_markdown(request: HttpRequest, hut: Hut) -> str:
     )
 
     overview: list[tuple[str, str]] = [
-        ("Type (open season)", hut.hut_type_open.name if hut.hut_type_open else None),
         (
-            "Type (closed season)",
+            "Type (standard operation)",
+            hut.hut_type_open.name if hut.hut_type_open else None,
+        ),
+        (
+            "Type (reduced operation)",
             hut.hut_type_closed.name if hut.hut_type_closed else None,
         ),
         ("Elevation", _fmt_elevation(hut.elevation)),
         ("Coordinates", _fmt_coordinates(hut.location)),
-        ("Capacity (open)", f"{hut.capacity_open}" if hut.capacity_open else None),
         (
-            "Capacity (closed)",
+            "Capacity (standard operation)",
+            f"{hut.capacity_open}" if hut.capacity_open else None,
+        ),
+        (
+            "Capacity (reduced operation)",
             f"{hut.capacity_closed}" if hut.capacity_closed else None,
         ),
         ("Owner", hut.hut_owner.name if hut.hut_owner else None),
