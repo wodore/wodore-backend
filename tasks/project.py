@@ -159,6 +159,30 @@ def release(
         )
         c.run(f"bump2version --allow-dirty --new-version {new_version} patch")
 
+        # Every API release is also a backend release (deploys need the
+        # docker build) — but not every backend release is an API release.
+        # So: if the registry carries an API version without its
+        # api/<version> tag yet, cut tag + CHANGELOG_API.md now, so they
+        # land in the same release commit.
+        try:
+            from server.apps.apiversions.registry import current_version
+
+            api_version = current_version()
+            tagged = c.run(f"git tag -l 'api/{api_version}'", hide=True).stdout.strip()
+            if tagged:
+                info(
+                    f"API version '{api_version}' already released — "
+                    "no API-side release steps."
+                )
+            else:
+                header(f"New API version '{api_version}' rides this release")
+                api_release(c)
+        except Exception as exc:
+            error(
+                f"API release step failed: {exc!r}. Run 'inv api-release' "
+                "manually before pushing the release."
+            )
+
         # only prepend new tag -- this way it is possible to edit it.
         # cl = c.run(f"git-cliff --bump {'--prepend CHANGELOG.md' if dry else '-o'}", hide=True).stdout.strip().split("\n")
     if new_tag:

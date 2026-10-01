@@ -85,13 +85,13 @@ app api_snapshot          # freeze the schema for the current registry version
 git add server/apps/apiversions/openapi/<version>.json
 ```
 
-The **release artifacts** (tag + API changelog) are cut with the release
-script — run it in the release that ships the version, or right after the
-PR merges:
-
-```bash
-inv api-release           # tags api/<version>, pushes it, regenerates CHANGELOG_API.md
-```
+The **release artifacts** (tag + API changelog) are cut automatically by
+`inv release`: every API release is also a backend release (deploys need
+the docker build), so whenever the registry carries an untagged version,
+`inv release` tags `api/<version>`, pushes the tag and regenerates
+`CHANGELOG_API.md` alongside the backend changelog — commit both together.
+`inv api-release` (standalone) remains available for cutting it manually,
+e.g. right after a PR merges.
 
 CI runs `app api_snapshot --check` — the build fails if the current registry
 version has no committed snapshot. Snapshots of released versions are frozen:
