@@ -30,11 +30,12 @@ from server.apps.huts.models import Hut
 # URLs per child sitemap (see module docstring for the scale rationale).
 SITEMAP_PAGE_SIZE = 5_000
 
-# Child sitemaps change only when huts change — 1 h is plenty for
-# crawlers. The index additionally encodes the hut count (it decides how
-# many children exist), so it refreshes a bit faster.
-SITEMAP_TTL = 60 * 60
-SITEMAP_INDEX_TTL = 60 * 10
+# Child sitemaps change only when huts change, and crawlers re-fetch
+# sitemaps at most daily — 48 h is plenty (hut data changes infrequently).
+# The index additionally encodes the hut count (it decides how many
+# children exist), so it refreshes faster to pick up new pages promptly.
+SITEMAP_TTL = 60 * 60 * 48
+SITEMAP_INDEX_TTL = 60 * 60
 
 
 def frontend_url(path: str = "") -> str:

@@ -8,6 +8,7 @@ from ninja.orm import create_schema
 from django.http import HttpRequest, HttpResponse
 
 from server.apps.api.sitemap import (
+    SITEMAP_INDEX_TTL,
     SITEMAP_TTL,
     sitemap_huts,
     sitemap_index,
@@ -114,13 +115,13 @@ def get_sitemap_index(request: HttpRequest) -> HttpResponse:
     The frontend nginx proxies ``wodore.com/sitemap.xml`` here; all listed
     URLs (and the child sitemaps) are absolute wodore.com URLs.
     """
-    return _xml_response(sitemap_index())
+    return _xml_response(sitemap_index(), SITEMAP_INDEX_TTL)
 
 
 @router.get("/sitemap-static.xml", include_in_schema=False)
 def get_sitemap_static(request: HttpRequest) -> HttpResponse:
     """Canonical frontend entry pages of wodore.com."""
-    return _xml_response(sitemap_static())
+    return _xml_response(sitemap_static(), SITEMAP_INDEX_TTL)
 
 
 @router.get("/sitemap-huts-{page}.xml", include_in_schema=False)
