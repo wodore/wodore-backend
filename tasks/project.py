@@ -159,6 +159,19 @@ def release(
         )
         c.run(f"bump2version --allow-dirty --new-version {new_version} patch")
 
+        # CI (.github/workflows/new-api-version.yml) cuts the api/<version>
+        # tag when the docker build that ships it succeeds — every API
+        # release is an app release, but not vice versa. This local step
+        # regenerates CHANGELOG_API.md (idempotent) so it lands in the
+        # release commit; tagging here is only a fallback if CI missed.
+        try:
+            api_release(c)
+        except Exception as exc:
+            error(
+                f"API release step failed: {exc!r}. Run 'inv api-release' "
+                "manually before pushing the release."
+            )
+
         # only prepend new tag -- this way it is possible to edit it.
         # cl = c.run(f"git-cliff --bump {'--prepend CHANGELOG.md' if dry else '-o'}", hide=True).stdout.strip().split("\n")
     if new_tag:
@@ -171,6 +184,58 @@ def release(
             c.run(f"git push origin '{new_tag}'")
     else:
         warning("Did not update to new version tag.")
+
+
+@task(
+    help={
+        "tag": "Create and push the api/<version> tag (default: yes)",
+        "changelog": "Regenerate CHANGELOG_API.md with git-cliff (default: yes)",
+    }
+)
+def api_release(c: Ctx, tag: bool = True, changelog: bool = True):
+    """Release artifacts for the current API contract version.
+
+    The snapshot itself is committed in the breaking PR (CI enforces
+    presence); CI (new-api-version.yml) tags api/<version> when the docker
+    build shipping it succeeds. This task regenerates CHANGELOG_API.md
+    (idempotent — run by 'inv release', or standalone as a fallback that
+    also creates the tag if CI missed it).
+    """
+    from server.apps.apiversions.registry import current_version
+
+    version = current_version()
+    header(f"API release for version '{version}'")
+
+    snapshot = f"server/apps/apiversions/openapi/{version}.json"
+    if not Path(snapshot).exists():
+        error(
+            f"Snapshot {snapshot} missing — run 'app api_snapshot' and "
+            "commit it first (CI would fail too)."
+        )
+    success(f"Snapshot present: {snapshot}")
+
+    if tag:
+        existing = c.run(f"git tag -l 'api/{version}'", hide=True).stdout.strip()
+        if existing:
+            info(f"Tag 'api/{version}' already exists — skipping.")
+        else:
+            c.run(f"git tag 'api/{version}'")
+            c.run(f"git push origin 'api/{version}'")
+            success(f"Tagged and pushed 'api/{version}'.")
+
+    if changelog:
+        c.run("git-cliff --config cliff-api.toml -o CHANGELOG_API.md")
+        changed = c.run(
+            "git status --porcelain CHANGELOG_API.md", hide=True
+        ).stdout.strip()
+        if changed:
+            success("Regenerated 'CHANGELOG_API.md' (changed).")
+            info(
+                "Check the entries and run: git commit -am "
+                f'"API changelog for api/{version}"'
+            )
+        else:
+            info("'CHANGELOG_API.md' already up to date.")
 
 
 @task(help={"next": "Show next version"})

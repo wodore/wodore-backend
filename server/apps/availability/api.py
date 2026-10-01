@@ -19,6 +19,7 @@ from django.db.models.functions import Coalesce, JSONObject
 from django.http import HttpRequest, HttpResponse
 from django.views.decorators.cache import cache_control
 
+from server.apps.apiversions.transforms import apply_response_transforms
 from server.apps.translations import LanguageParam, activate, with_language_param
 
 from .models import HutAvailability, HutAvailabilityHistory
@@ -243,6 +244,11 @@ def get_hut_availability_geojson(
     )["geojson"]
 
     # Write response directly - no Python post-processing needed
+    # (versioning: the explicit transform helper runs before encoding —
+    # this endpoint bypasses the VersionedRenderer, design.md D5.3)
+    geojson = apply_response_transforms(
+        request, "get_hut_availability_geojson", geojson
+    )
     response.write(msgspec.json.encode(geojson))
     return response
 

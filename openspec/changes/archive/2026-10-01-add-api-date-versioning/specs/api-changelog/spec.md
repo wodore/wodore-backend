@@ -3,7 +3,7 @@
 ## ADDED Requirements
 
 ### Requirement: Separate API changelog
-The project SHALL generate `API_CHANGELOG.md` with git-cliff from a dedicated `cliff-api.toml`, including only PRs labeled `api:breaking`, `api:added`, `api:deprecated` or `api:fixed`, grouped by API tags matching `api/YYYY-MM-DD`, independent of the backend `CHANGELOG.md`.
+The project SHALL generate `CHANGELOG_API.md` with git-cliff from a dedicated `cliff-api.toml`, including only PRs labeled `api:breaking`, `api:added`, `api:deprecated` or `api:fixed`, grouped by API tags matching `api/YYYY-MM-DD`, independent of the backend `CHANGELOG.md`.
 
 #### Scenario: Generating the API changelog
 - **WHEN** a maintainer runs git-cliff with `cliff-api.toml`
