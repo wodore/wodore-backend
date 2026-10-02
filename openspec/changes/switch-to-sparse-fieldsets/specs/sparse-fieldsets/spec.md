@@ -39,21 +39,29 @@ field narrowing, following JSON:API sparse fieldsets semantics.
 - **THEN** the response contains every field of the DTO, matching the
   endpoint's documented full schema
 
-### Requirement: include/exclude deprecation
+### Requirement: include/exclude removal
 
-The legacy `include`/`exclude` parameters SHALL keep their exact current
-behavior while being announced as deprecated.
+The legacy `include`/`exclude` parameters SHALL be removed together with
+the introduction of `fields[TYPE]` (sunset window: 0 — no deprecation
+period; no consumer exists).
 
-#### Scenario: Deprecation headers on legacy narrowing
+#### Scenario: Legacy parameters rejected on the new version
 
 - **WHEN** a client sends `include` or `exclude` to a narrowing endpoint
-- **THEN** the response carries `Deprecation` and `Sunset` headers
-- **AND** the OpenAPI schema marks both parameters `deprecated: true` with
-  the replacement documented
+  without pinning an old API version
+- **THEN** the response status is 400 with the `invalid_parameter` code
+- **AND** the error body names the `fields[TYPE]` replacement
 
 #### Scenario: Pinned old versions keep legacy parameters
 
-- **WHEN** a client pinned to a version registered before the sparse-fieldsets
-  version sends `include`/`exclude`
+- **WHEN** a client pinned to a version registered before this change sends
+  `include`/`exclude`
 - **THEN** the parameters keep working for that version for as long as the
   version is supported, per the version lifecycle
+
+#### Scenario: New version snapshot documents only fields
+
+- **WHEN** the OpenAPI snapshot of the version introducing this change is
+  generated
+- **THEN** `include`/`exclude` do not appear as parameters
+- **AND** the `fields` parameter is documented with `style: deepObject`

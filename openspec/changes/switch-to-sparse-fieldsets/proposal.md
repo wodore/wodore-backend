@@ -15,9 +15,10 @@ The JSON:API specification standardizes this pattern as **sparse fieldsets** (`?
   - type-scoped (`fields[huts]` vs `fields[sources]`); unknown type bracket is a 400
   - unknown field names are a 400 (allowlist, as today)
   - `__all__` keeps working as the explicit full selection
-- `include`/`exclude` keep working but are **deprecated** (Deprecation/Sunset headers, OpenAPI `deprecated: true` on the parameters) and are removed one version later.
+- `include`/`exclude` are **removed directly** with this change — no consumer exists yet (the frontend never sends them; verified). Their removal is the breaking change that registers the new API version. Clients pinned to existing versions keep them via those versions' frozen snapshots (`Sunset` window: 0 — the deprecation and the sunset are the same event).
 - The narrowing moves from response-schema projection to **serialization-time projection driven by the DTO type** (`model_dump(include=...)` keyed by the declared response type), so `fields[huts]` applies to the hut DTO and `fields[sources]` to nested source DTOs independently.
-- Registered as a **breaking change** (new `VersionChange`): clients pinned to older versions keep the include/exclude-only behavior; the fields parameter is accepted in all versions but the removal of include/exclude lands with the version after next.
+- Registered as a **breaking change** (new `VersionChange`): `fields[TYPE]` is additive and accepted in all versions; `include`/`exclude` disappear from the new version's schema and answer `400 invalid_parameter` (not silently ignored) so stale clients fail loudly.
+- Documented in Swagger UI as **one object-typed query parameter** `fields` with `style: deepObject, explode: true` (OpenAPI's standard encoding for `fields[huts]=slug,name`), labeled with the valid type names per endpoint.
 
 ## Capabilities
 
@@ -25,4 +26,4 @@ The JSON:API specification standardizes this pattern as **sparse fieldsets** (`?
 - `sparse-fieldsets`: JSON:API-style `fields[TYPE]` sparse fieldset query parameter with type scoping, allowlist validation, and DTO-driven serialization projection.
 
 ### Modified Capabilities
-- `include-exclude-narrowing` (existing include/exclude parameters): deprecated with Sunset headers, pinned clients unaffected until their version sunsets.
+- `include-exclude-narrowing` (existing include/exclude parameters): removed; pinned clients keep them via their version's snapshots until that version sunsets.

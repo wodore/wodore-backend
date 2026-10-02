@@ -14,7 +14,8 @@
 ## Goals / Non-Goals
 
 - Goals: JSON:API-conformant `fields[TYPE]`; type-scoped nesting; 400 on
-  unknown types/fields; deprecation path for include/exclude; frontend can
+  unknown types/fields; direct removal of include/exclude (no consumer);
+  Swagger-UI-visible documentation; frontend can
   derive narrowed types from the generated schema types.
 - Non-Goals: GraphQL-style arbitrary nesting depth (one level of type
   scoping); changing default field sets per endpoint.
@@ -36,8 +37,22 @@ Python identifiers, so `fields[huts]` cannot be a field name. Parse at the
 component level: a custom pydantic field `fields: dict[str, str] | None`
 plus a **before-validator** that collects all `fields[*]` keys from the raw
 query dict into the mapping. The validator rejects unknown types with 400
-(`invalid_field_type`). This keeps the dmr pattern (typed model, declarative
-docs via a companion `x-field-types` extension listing valid types).
+(`invalid_field_type`).
+
+### D2a — Swagger UI documentation (deepObject)
+
+dmr's parameter generator has no `deepObject` support (verified against
+0.16) and would render a bare `dict` as an opaque object. Document the
+parameter properly via the schema post-processing hook we already own
+(`api_v1.get_openapi_schema` — same place that prefixes operation
+titles): for every `fields` query parameter, set
+`style: deepObject, explode: true` and enrich the description with the
+endpoint's valid `TYPE` names. Swagger UI then renders `fields` as a
+key/value editor where a tester types `huts` → `slug,name`. This is the
+OpenAPI-standard encoding of JSON:API bracket params — no custom UI, no
+per-type literal parameter spam (`fields[huts]`, `fields[sources]`, … as
+separate rows would work too, but duplicates the type list in every
+endpoint and scales poorly).
 
 ### D3 — Projection: DTO-driven, serialization-time
 
@@ -49,27 +64,30 @@ docs via a companion `x-field-types` extension listing valid types).
 - produces `model_dump(include=...)` sets per nesting level; required fields
   always kept (as today)
 
-### D4 — Deprecation mechanics for include/exclude
+### D4 — include/exclude: direct removal (sunset = 0)
 
-- OpenAPI: mark `include`/`exclude` params `deprecated: true` with the
-  replacement note (dmr `@modify` parameter metadata).
-- Runtime: endpoint-level deprecation entries already exist for other cases
-  (registry `ENDPOINT_DEPRECATIONS` announce headers per endpoint); reuse
-  the same header mechanism via a dedicated `PARAMETER_DEPRECATIONS` table
-  announcing `Deprecation`/`Sunset`/`Link` on responses of endpoints that
-  receive include/exclude — 6-month sunset after the fields rollout,
-  matching the bookings precedent.
+No consumer exists (frontend verified; external consumers unknown but the
+API is pre-launch). Deprecation theatre would buy nothing: the parameters
+are **removed in the change**. The removal IS the breaking change that
+registers the new `VersionChange`. Stale clients sending `include`/
+`exclude` to the new version get `400 invalid_parameter` (dmr ignores
+unknown query keys by default — the query models explicitly reject them
+with `extra="forbid"` on the legacy names) so misuse fails loudly instead
+of silently returning un-narrowed payloads.
 
-### D5 — Versioning: accepted everywhere, removed versioned
+### D5 — Versioning
 
-`fields` is additive (no version needed to accept). Removing
-include/exclude IS breaking → lands as a `VersionChange` whose transforms
-translate `include`/`exclude` query semantics? No — request transforms do
-not apply to query params in this system. Instead: include/exclude keep
-answering for all existing versions; the removal registers a NEW version
-and the OpenAPI snapshots per version document which parameters exist.
-Clients pinned to old versions keep include/exclude indefinitely (their
-snapshots say so); new versions document only `fields`.
+`fields` is additive (accepted everywhere immediately). Removing
+include/exclude registers the NEW version: its snapshot documents only
+`fields`; old versions' frozen snapshots keep documenting include/exclude,
+and pinned clients keep getting them for as long as their version is
+supported. One codebase, newest shape — the projection helper implements
+only `fields`; include/exclude on old versions is handled by the snapshot
+contract, not by parallel code paths (the parameters are simply gone from
+the query models; old-version clients sending them receive the documented
+old snapshot's parameters... no — see D4: they receive 400 per the NEW
+version's contract when unpinned; pinned-old clients never send fields at
+all. The 400 is documented in the new version's schema).
 
 ### D6 — Frontend typing (the user's question)
 
@@ -94,17 +112,16 @@ compiler-enforced. Server-side JSON-schema narrowing is NOT attempted
 
 - Bracket params and some HTTP caches/CDNs: `fields[huts]` contains
   reserved chars `[]` — must be percent-encoded by clients; document it.
-- Two narrowing systems coexist during the deprecation window; the
-  projection helper is shared so behavior cannot diverge.
+- Single narrowing system only (no coexistence window) — simpler, but any
+  unknown external consumer breaks loudly at the 400; accepted
+  deliberately (pre-launch, sunset = 0).
 - pydantic `model_fields` remain the allowlist source (single truth).
 
 ## Migration Plan
 
-1. Implement `fields[TYPE]` + projection helper + tests (behavior parity
-   with include/exclude for the same selections).
-2. Deprecate include/exclude (headers + schema).
-3. On the NEXT registered version after rollout+6 months: remove
-   include/exclude, regenerate snapshots, `VersionChange` documents it.
+1. Implement `fields[TYPE]` + projection helper + tests.
+2. Remove `include`/`exclude` from the query models; new `VersionChange`;
+   regenerate snapshots; changelog entries.
 
 ## Open Questions
 
