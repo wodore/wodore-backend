@@ -1,15 +1,14 @@
 """Tests for the geo-images response cache (spec: image-response-cache).
-
 Unit tests cover the helper module; endpoint tests drive the ninja router
 with stubbed provider fetches to verify caching, parameter separation,
 stale-fallback, forced refresh, and invalidation.
 """
 
 import pytest
-from ninja.testing import TestClient
+
+from tests.helpers import PrefixedClient as TestClient
 
 from server.apps.geometries import image_response_cache as irc
-from server.apps.geometries.api_images import router
 from server.apps.geometries.image_response_cache import (
     center_ident,
     get_response,
@@ -24,7 +23,6 @@ from server.apps.geometries.schemas import ImageCollectionResponse, ImageMetadat
 @pytest.fixture(autouse=True)
 def _isolated_cache(monkeypatch):
     """Give every test a private locmem cache.
-
     Overriding ``CACHES`` via settings is unreliable here (the cache handler
     may keep serving the database backend and leak entries across runs), so
     patch the module's cache resolver to a fresh in-memory backend instead.
@@ -122,7 +120,7 @@ class _FetchStub:
 class TestEndpointCaching:
     @pytest.fixture
     def client(self):
-        return TestClient(router)
+        return TestClient("/v1/geo/images")
 
     @pytest.fixture
     def hut_slug(self, seed_data):
@@ -172,7 +170,6 @@ class TestEndpointCaching:
         url = f"/hut/{hut_slug}?radius=50&lang=en&limit=10"
         first = client.get(url)
         assert first.status_code == 200
-
         fetch.exc = RuntimeError("provider down")
         second = client.get(url)  # recompute fails → stale fallback
         assert second.status_code == 200
@@ -197,7 +194,7 @@ class TestEndpointCaching:
 
         stub = _FetchStub(returns_tuple=False)
         monkeypatch.setattr(api_images, "fetch_images_from_providers", stub)
-        client = TestClient(router)
+        client = TestClient("/v1/geo/images")
         url = "/nearby?lat=46.5&lon=7.5&radius=100&lang=en&limit=10"
         assert client.get(url).status_code == 200
         assert client.get(url).status_code == 200

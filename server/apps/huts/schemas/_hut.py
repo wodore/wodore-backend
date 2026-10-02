@@ -2,10 +2,11 @@ import typing as t
 from datetime import datetime
 
 from hut_services import LocationSchema, OpenMonthlySchema
-from ninja import Field, ModelSchema
 from pydantic import (
+    AliasChoices,
     BaseModel,
     ConfigDict,
+    Field,
     computed_field,
     field_validator,
     model_validator,
@@ -17,7 +18,6 @@ from django_countries import CountryTuple
 from django.conf import settings
 
 from server.apps.images.transfomer import ImagorImage
-from server.apps.owners.models import Owner
 
 # from server.apps.translations import TranslationSchema
 from ._hut_type import HutTypeSchema
@@ -37,12 +37,14 @@ _HUT_FIELDS = (
 )
 
 
-class OwnerSchema(ModelSchema):
-    name: str | None = Field(..., alias="name_i18n")
+class OwnerSchema(BaseModel):
+    """Owner reference (validated from the ORM)."""
 
-    class Meta:
-        model = Owner
-        fields = ("slug", "name", "url")
+    model_config = ConfigDict(from_attributes=True)
+
+    slug: str
+    name: str | None = Field(None, validation_alias=AliasChoices("name_i18n", "name"))
+    url: str | None = Field(None, validation_alias=AliasChoices("url_i18n", "url"))
 
 
 class OrganizationBaseSchema(BaseModel):
@@ -235,36 +237,51 @@ class HutSchemaOptional(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     # name_i18n: str | TranslationSchema | None = None
     slug: str
-    name: str | None = Field(..., alias="name_i18n")
-    description: str | None = Field(..., alias="description_i18n")
+    name: str | None = Field(..., validation_alias=AliasChoices("name_i18n", "name"))
+    description: str | None = Field(
+        ..., validation_alias=AliasChoices("description_i18n", "description")
+    )
     description_attribution: str
     # description: str | None = Field(None, alias="description_i18n")
     # note: str | None = Field(None, alias="note_i18n")
-    owner: OwnerSchema | None = Field(..., alias="hut_owner")
+    owner: OwnerSchema | None = Field(
+        ..., validation_alias=AliasChoices("hut_owner", "owner")
+    )
     review_status: str | None = None
     # review_comment: str | None = None
     is_public: bool | None = None
     is_active: bool | None = None
     is_modified: bool | None = None
-    type_open: HutTypeSchema | None = Field(None, alias="hut_type_open")
-    type_closed: HutTypeSchema | None = Field(None, alias="hut_type_closed")
+    type_open: HutTypeSchema | None = Field(
+        None, validation_alias=AliasChoices("hut_type_open", "type_open")
+    )
+    type_closed: HutTypeSchema | None = Field(
+        None, validation_alias=AliasChoices("hut_type_closed", "type_closed")
+    )
     elevation: float | None = None
     location: LocationSchema | None = None
     url: str | None = None
     country: CountryTuple | None = None
     capacity_open: int | None = None
     capacity_closed: int | None = None
-    sources: list[OrganizationBaseSchema] | None  # = Field(None, alias="orgs")
+    sources: list[OrganizationBaseSchema] | None = None
     photos: str = Field("")
     photos_attribution: str = Field("")
-    images: list[ImageInfoSchema] | None
+    images: list[ImageInfoSchema] | None = None
     open_monthly: OpenMonthlySchema | None = None
     has_availability: bool | None = None
-    availability_source: str | None = Field(None, alias="availability_source_ref__slug")
+    availability_source: str | None = Field(
+        None,
+        validation_alias=AliasChoices(
+            "availability_source_ref__slug", "availability_source"
+        ),
+    )
 
     @field_validator("country", mode="before")
     @classmethod
-    def retrun_country_name(cls, v: t.Any) -> CountryTuple:
+    def retrun_country_name(cls, v: t.Any) -> CountryTuple | None:
+        if v is None or not hasattr(v, "code"):
+            return None
         return CountryTuple(code=v.code, name=v.name)
 
     # class Meta:

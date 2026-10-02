@@ -35,6 +35,9 @@ _base_settings = (
     "components/oidc.py",
     "components/auth_local.py",
     "components/email.py",
+    # dmr (django-modern-rest) base settings (response validation is
+    # disabled for production inside the component):
+    "components/dmr.py",
     # Select the right env:
     f"environments/{_ENV}.py",
     # Optionally override some settings:

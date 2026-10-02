@@ -1,140 +1,55 @@
+"""Query helpers for the dmr API.
+
+``FieldsQuery`` replaces the former ``FieldsParam``: the include/exclude
+wire contract stays identical (same query parameter names, same
+``__all__`` handling, same 400 on unknown field names, same narrowed
+JSON output), but the implementation dropped the dynamic-schema
+machinery (``create_schema`` + ``TypeAdapter`` per request) in favour of
+one rule:
+
+    validate the object against the full (all-optional) response schema,
+    then dump it with ``model_dump(include=...)``.
+
+That is a straight projection over a fixed schema — no schema classes
+are built at request time.
+
+Design note (PoC evaluation): the frontend never sends ``include`` or
+``exclude`` (verified against wodore-frontend-quasar). The parameters
+exist for external consumers; if they are ever retired it must happen
+via a new API version (removing them makes responses observably larger).
+"""
+
 from collections.abc import Sequence
 from enum import Enum
-from typing import Any, Generic, Literal, TypeVar
+from http import HTTPStatus
+from typing import Any, TypeVar
 
-# if TYPE_CHECKING:
-from ninja import ModelSchema, Query, Schema
-from ninja.errors import HttpError
-from ninja.orm import create_schema
-from pydantic import TypeAdapter
-from pydantic.fields import FieldInfo
+import pydantic
+from dmr import APIError
+from pydantic import Field
 
-S_co = TypeVar("S_co", bound=Schema)  # , covariant=True)
-
-# this does not work
-# FieldsParam = Annotated[Fields[S_co], Query()]
-# tried https://docs.pydantic.dev/latest/concepts/types/#generics (did not work)
+_M = TypeVar("_M", bound=type[pydantic.BaseModel])
 
 
-class FieldsParam(Schema, Generic[S_co]):
-    """Specify which fields to return when query models."""
+class FieldsQuery(pydantic.BaseModel):
+    """``include``/``exclude`` field narrowing, shared by many endpoints."""
 
-    include: Any = Query(  # pyright: ignore[reportCallIssue]
+    model_config = pydantic.ConfigDict(extra="ignore")
+
+    include: str | None = Field(
         None,
-        description="Comma separated list with field names, use `__all__` in order to include every field.",
-        # example="__all__",
+        description=(
+            "Comma separated list with field names, use `__all__` in order "
+            "to include every field."
+        ),
     )
-    exclude: Any = Query(  # pyright: ignore[reportCallIssue]
+    exclude: str | None = Field(
         None,
-        description="Comma separated list with field names, if set it uses all fields except the excluded ones.",
+        description=(
+            "Comma separated list with field names, if set it uses all "
+            "fields except the excluded ones."
+        ),
     )
-
-    @property
-    def _schema(self) -> type[Schema] | None:
-        try:
-            return self.__pydantic_generic_metadata__["args"][0]
-        except (IndexError, ValueError):
-            return None
-
-    @property
-    def _db_model(self) -> type[ModelSchema] | None:
-        if self._schema is not None:
-            meta = getattr(self._schema, "Meta", None)
-            return meta.model if meta is not None else None
-        return None
-
-    @property
-    def available_field_names(self) -> list[str]:
-        return list(self._available_fields.keys())
-
-    @property
-    def required_field_names(self) -> list[str]:
-        return [
-            name for name, info in self._available_fields.items() if info.is_required()
-        ]
-
-    @property
-    def _available_fields(self) -> dict[str, FieldInfo]:
-        if self._schema is not None:
-            return self._schema.model_fields
-        return {}
-
-    def _check_fields(self, fields: list[str]):
-        """Check if all fields names are allowed, otherwise send error."""
-        fields_set = set(fields)
-        available_set = set(self.available_field_names)
-        missing_set = fields_set - available_set
-        if missing_set:
-            possible_names = f"Possible names: {', '.join(self.available_field_names)}."
-            if len(missing_set) == 1:
-                msg = f"'{next(iter(missing_set))}' is not a valid field name! {possible_names}"
-            else:
-                msg = f"'{', '.join(list(missing_set))}' are not valid field names! {possible_names}"
-            raise HttpError(400, msg)
-
-    def get_valid_fields(self, fields: list[str] | str | None) -> list[str]:
-        if isinstance(fields, str):
-            if fields == "__all__":
-                fields_list = self.available_field_names
-            else:
-                fields_list = [f.strip() for f in fields.split(",") if f.strip()]
-        elif fields is None:
-            fields_list = []
-        else:
-            fields_list = fields
-        self._check_fields(fields_list)
-        return fields_list
-
-    def get_include(self) -> list[str]:
-        include = self.get_valid_fields(self.include)
-        exclude = self.get_valid_fields(self.exclude)
-        if not include and exclude:
-            include = self.available_field_names
-        else:
-            include += self.required_field_names
-        ## add i18n use to get translations
-        i18n = getattr(self._db_model, "i18n", None) if self._db_model else None
-        if i18n is not None:
-            i18n_fields = list(i18n.field.fields)
-            include += [f"{i}_i18n" for i in include if i in i18n_fields]
-        return list(set(include) - set(exclude))
-
-    def get_schema(self) -> type[Schema] | None:
-        if self._db_model:
-            return create_schema(
-                self._db_model,  # pyright: ignore[reportArgumentType]
-                fields=self.get_include(),
-            )
-        return None
-
-    def type_adapter(self, _type: Any | None = None):
-        """Returns a pydantic TypeAdapter object."""
-        if _type is not None:
-            objs = TypeAdapter(
-                _type[self.get_schema()]
-            )  # .validate_python(list(Organization.objects.all()))
-        else:
-            objs = TypeAdapter(
-                self.get_schema()
-            )  # .validate_python(list(Organization.objects.all()))
-        return objs
-
-    def validate(  # pyright: ignore[reportIncompatibleMethodOverride]
-        self,
-        _obj: Any | None = None,
-        validator: Literal["python", "json", "strings"] = "python",
-    ) -> list[S_co]:
-        if isinstance(_obj, list):
-            return getattr(self.type_adapter(list), f"validate_{validator}")(_obj)
-        return getattr(self.type_adapter(), f"validate_{validator}")(_obj)
-
-    def update_default(self, include: str | Sequence[str]) -> None:
-        if not isinstance(include, str):
-            include = list(include[:])
-        if self.include is None and self.exclude is None:
-            if isinstance(include, list):
-                include = ",".join(include)
-            self.include = include
 
 
 class TristateEnum(str, Enum):
@@ -150,3 +65,103 @@ class TristateEnum(str, Enum):
         if self.value == "unset":
             return None
         return self.value == "true"
+
+
+def _parse(raw: str | None, available: list[str]) -> list[str]:
+    """Parse a comma list (or ``__all__``); 400 on unknown names."""
+    if raw is None:
+        return []
+    if raw == "__all__":
+        return list(available)
+    names = [part.strip() for part in raw.split(",") if part.strip()]
+    missing = [name for name in names if name not in available]
+    if missing:
+        possible = f"Possible names: {', '.join(available)}."
+        were = (
+            "is not a valid field name!"
+            if len(missing) == 1
+            else "are not valid field names!"
+        )
+        raise APIError(
+            {
+                "code": "invalid_field_name",
+                "detail": f"'{', '.join(missing)}' {were} {possible}",
+            },
+            status_code=HTTPStatus.BAD_REQUEST,
+        )
+    return names
+
+
+def include_set(
+    model: type[pydantic.BaseModel],
+    fields: FieldsQuery,
+    default_include: Sequence[str] | None = None,
+) -> set[str]:
+    """Resolve the effective include-set, mirroring ``FieldsParam``.
+
+    Rules (same as the old ``get_include`` after ``update_default``):
+    - neither include nor exclude given → ``default_include`` (or the
+      required fields only when no default exists)
+    - include given → those names plus required fields
+    - only exclude given → all fields
+    - i18n: including a translatable field also includes ``{name}_i18n``
+    - the result always subtracts ``exclude``
+    """
+    available = list(model.model_fields)
+    required = {name for name, info in model.model_fields.items() if info.is_required()}
+
+    include_raw = fields.include
+    exclude_raw = fields.exclude
+    if include_raw is None and exclude_raw is None and default_include is not None:
+        if isinstance(default_include, str):
+            include_raw = default_include  # '__all__' passes through
+        else:
+            include_raw = ",".join(default_include)
+
+    include = _parse(include_raw, available)
+    exclude = _parse(exclude_raw, available)
+
+    if not include and exclude:
+        include = list(available)
+    else:
+        include += list(required)
+
+    # i18n companion fields ride along with their translatable field
+    db_model = getattr(getattr(model, "Meta", None), "model", None)
+    i18n = getattr(db_model, "i18n", None) if db_model is not None else None
+    if i18n is not None:
+        i18n_fields = set(i18n.field.fields)
+        include += [f"{name}_i18n" for name in include if name in i18n_fields]
+
+    return set(include) - set(exclude)
+
+
+def dump_fields(
+    model: type[_M],
+    obj: Any,
+    fields: FieldsQuery,
+    default_include: Sequence[str] | None = None,
+    *,
+    context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Validate ``obj`` against ``model`` and dump the narrowed fields.
+
+    ``model`` must be an all-optional schema variant (the old
+    ``*Optional`` schemas) so that any narrowed subset validates.
+    ``context`` reaches nested validators (e.g. the hut-type symbol
+    resolver needs the request to build absolute URLs).
+    """
+    names = include_set(model, fields, default_include)
+    instance = model.model_validate(obj, context=context)
+    return instance.model_dump(include=names)
+
+
+def dump_fields_list(
+    model: type[_M],
+    objs: Sequence[Any],
+    fields: FieldsQuery,
+    default_include: Sequence[str] | None = None,
+) -> list[dict[str, Any]]:
+    """``dump_fields`` for a list of objects."""
+    names = include_set(model, fields, default_include)
+    return [model.model_validate(obj).model_dump(include=names) for obj in objs]

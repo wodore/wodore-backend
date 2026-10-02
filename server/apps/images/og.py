@@ -25,9 +25,14 @@ SVG compositing notes, verified live against imagor v1.9.6:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.conf import settings
 
 from .transfomer import ImagorImage
+
+if TYPE_CHECKING:
+    from .models import Image
 
 # Photo variant — 1200x630 (1.91:1): the og:image standard used by
 # Facebook/WhatsApp/LinkedIn/X. Formerly 1800x1200 (3:2), which platforms
@@ -66,6 +71,24 @@ def _composite_image(source_url: str, size_px: int, x: str, y: str, alpha: int) 
     from urllib.parse import quote
 
     return f"image(/unsafe/{size_px}x{size_px}/{quote(source_url, safe='')},{x},{y},{alpha})"
+
+
+def photo_source(image: Image) -> str | None:
+    """Servable source URL for an :class:`Image` row: the local file when
+    set, else the pinned external raw URL (pinned provider rows keep the
+    file field empty and the origin URL in ``source_url_raw``).
+
+    Returns ``None`` when the row has nothing servable — an empty source
+    would sign the bare imagor media alias (e.g. ``.../wd``) and 500 in
+    imagor, so callers must skip to the next candidate or fall back."""
+    source = str(image.image) if image.image else ""
+    if not source:
+        source = image.source_url_raw or ""
+    if not source:
+        return None
+    if not source.startswith("http"):
+        source = f"{settings.MEDIA_URL.rstrip('/')}/{source}"
+    return source
 
 
 def og_photo_url(image_url: str, focal: dict | None = None) -> str:

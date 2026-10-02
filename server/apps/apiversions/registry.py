@@ -14,6 +14,7 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
+from email.utils import formatdate
 from typing import Any
 
 Transform = Callable[[Any], Any]
@@ -202,3 +203,38 @@ def deprecation_unix(change: VersionChange) -> int | None:
             tzinfo=UTC,
         ).timestamp()
     )
+
+
+def guard_endpoint_sunset(operation_id: str) -> None:
+    """Answer 410 from a handler whose endpoint sunset has passed.
+
+    Replaces the old ``wrap_api`` monkey-wrapping: handlers of endpoints
+    listed in :data:`ENDPOINT_DEPRECATIONS` call this first — explicit
+    code instead of invisible framework patching. Before the sunset date
+    this is a no-op (the middleware announces the headers).
+    """
+    dep = ENDPOINT_DEPRECATIONS.get(operation_id)
+    if dep is None:
+        return
+    if datetime.now(tz=UTC).date() > dep.sunset:
+        from http import HTTPStatus
+
+        from dmr import APIError
+
+        sunset_ts = int(
+            datetime(
+                dep.sunset.year, dep.sunset.month, dep.sunset.day, tzinfo=UTC
+            ).timestamp()
+        )
+        raise APIError(
+            {
+                "code": "endpoint_sunset",
+                "detail": dep.detail,
+            },
+            status_code=HTTPStatus.GONE,
+            headers={
+                "Deprecation": f"@{dep.announced_unix}",
+                "Sunset": formatdate(sunset_ts, usegmt=True),
+                "Link": f'<{dep.link}>; rel="deprecation"',
+            },
+        )

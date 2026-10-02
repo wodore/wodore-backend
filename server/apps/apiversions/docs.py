@@ -1,45 +1,78 @@
-"""Swagger UI with a version switcher (api-docs spec: docs version switching).
+"""Version-aware Swagger UI documentation (dmr).
 
-Ninja's ``Swagger.render_page`` hardcodes the schema URL to the live
-``openapi.json``; this subclass points it at ``openapi.json?api_version=``
-for non-current versions and renders a small switcher bar listing all
-supported versions (ninja's Swagger template has no native ``urls``
-dropdown).
+Served at ``/v1/docs``.
+
+Version switching uses Swagger UI's **native** ``urls`` dropdown in the
+standalone topbar: every API version has a stable schema URL
+(``/v1/openapi.json?api_version=<v>`` — snapshots for old versions, live
+schema for the current one), so the dropdown switches client-side by
+fetching that URL. ``?api_version=`` deep links still work: the server
+pre-selects the matching entry via ``urls.primaryName``.
+
+The topbar is a Swagger UI component styled by its own stylesheet —
+it follows the page theme (light by default, dark under browser-level
+darkening) with no custom CSS of ours involved. A pinned-old version
+without a committed snapshot fails fast with an explicit 500 instead of
+letting Swagger fetch a silently-wrong schema.
 """
 
 from __future__ import annotations
 
-import json
-from typing import Any
-
-from ninja.openapi.docs import Swagger, render_template
+import structlog
+from dmr.openapi.views.swagger import SwaggerView
+from dmr.settings import Settings, resolve_setting
+from typing_extensions import override
 
 from django.http import HttpRequest, HttpResponse
+from django.shortcuts import render
 
 from server.apps.apiversions import registry
+from server.apps.apiversions.management.commands.api_snapshot import load_snapshot
+
+logger = structlog.get_logger("apiversions")
+
+OPENAPI_JSON_PATH = "/v1/openapi.json"
 
 
-class VersionedSwagger(Swagger):
-    template = "apiversions/swagger_versioned.html"
+def _missing_snapshot(version: str) -> HttpResponse:
+    """Explicit 500: never silently serve the newest contract to an
+    old-pinned client (CI's snapshot check should prevent this)."""
+    logger.error("api_snapshot_missing", version=version)
+    return HttpResponse(
+        '{"code": "api_snapshot_missing", "detail": '
+        f'"No committed OpenAPI snapshot for API version {version!r}."}}',
+        content_type="application/json",
+        status=500,
+    )
 
-    def render_page(
-        self, request: HttpRequest, api: Any, **kwargs: Any
-    ) -> HttpResponse:
+
+class VersionedSwagger(SwaggerView):
+    """Swagger UI with the API version dropdown pre-selected."""
+
+    template_name = "apiversions/swagger_versioned.html"
+
+    @override
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Render the Swagger UI page with the version dropdown."""
         current = registry.current_version()
         version = getattr(request, "api_version", None) or current
-        url = self.get_openapi_url(api, kwargs)
-        if version != current:
-            url = f"{url}?api_version={version}"
-        self.settings["url"] = url
 
-        from ninja.openapi.docs import _csrf_needed  # matching ninja's flow
+        if version != current and load_snapshot(version) is None:
+            return _missing_snapshot(version)
 
-        context = {
-            "swagger_settings": json.dumps(self.settings, indent=1),
-            "api": api,
-            "add_csrf": _csrf_needed(api),
-            "api_versions": sorted(registry.versions(), reverse=True),
-            "current_api_version": current,
-            "selected_api_version": version,
-        }
-        return render_template(request, self.template, self.template_cdn, context)
+        urls = [
+            {"url": f"{OPENAPI_JSON_PATH}?api_version={v}", "name": v}
+            for v in sorted(registry.versions(), reverse=True)
+        ]
+        return render(
+            request,
+            self.template_name,
+            context={
+                "title": self.schema.info.title,
+                "swagger_config": {"urls": urls, "primary": version},
+                "swagger_cdn": resolve_setting(Settings.openapi_static_cdn).get(
+                    "swagger"
+                ),
+            },
+            content_type=self.content_type,
+        )

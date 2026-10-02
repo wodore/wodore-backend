@@ -501,3 +501,46 @@ class TestRegistryIntegrity:
         from server.apps.apiversions import checks as av_checks
 
         assert av_checks.check_registry_operation_ids() == []
+
+    def test_url_name_without_operation_id_fails_check(self, monkeypatch):
+        """A route renamed without its @modify(operation_id=...) -> E003."""
+        from server.apps.apiversions import checks as av_checks
+
+        original = av_checks._collect_v1_url_names
+        monkeypatch.setattr(
+            av_checks,
+            "_collect_v1_url_names",
+            lambda: original() | {"renamed_endpoint"},
+        )
+        errors = av_checks.check_url_names_match_operation_ids()
+        assert any(e.id == "apiversions.E003" for e in errors)
+
+    def test_operation_id_without_url_name_fails_check(self, monkeypatch):
+        """An operationId the resolver cannot produce -> versioning dead (E004)."""
+        from server.apps.apiversions import checks as av_checks
+
+        original = av_checks._collect_schema_operation_ids
+        monkeypatch.setattr(
+            av_checks,
+            "_collect_schema_operation_ids",
+            lambda: original() | {"ghost_operation"},
+        )
+        errors = av_checks.check_url_names_match_operation_ids()
+        assert any(e.id == "apiversions.E004" for e in errors)
+
+    def test_names_match_operation_ids_passes_check(self):
+        """The invariant holds on the real wiring (hidden routes excluded)."""
+        from server.apps.apiversions import checks as av_checks
+
+        assert av_checks.check_url_names_match_operation_ids() == []
+
+    def test_hidden_url_names_actually_hidden(self):
+        """The HIDDEN_URL_NAMES allowlist must not rot: every entry is a
+        real named /v1 route that is genuinely absent from the schema."""
+        from server.apps.apiversions import checks as av_checks
+
+        url_names = av_checks._collect_v1_url_names()
+        schema_ids = av_checks._collect_schema_operation_ids()
+        for name in av_checks.HIDDEN_URL_NAMES:
+            assert name in url_names, f"{name} is not a route (remove it?)"
+            assert name not in schema_ids, f"{name} IS documented (remove from hidden)"

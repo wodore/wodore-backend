@@ -894,10 +894,12 @@ async def fetch_images_for_place(
         Tuple of (list of ImageResult objects, place info dict)
 
     Raises:
-        HttpError: If place is not found (404)
+        APIError: If place is not found (404)
     """
+    from http import HTTPStatus
+
     from asgiref.sync import sync_to_async
-    from ninja.errors import HttpError
+    from dmr import APIError
 
     # Fetch the place based on type (must be done in sync context)
     @sync_to_async
@@ -917,7 +919,13 @@ async def fetch_images_for_place(
             )
 
             if place is None:
-                raise HttpError(404, f"GeoPlace '{place_slug}' not found")
+                raise APIError(
+                    {
+                        "code": "not_found",
+                        "detail": f"GeoPlace '{place_slug}' not found",
+                    },
+                    status_code=HTTPStatus.NOT_FOUND,
+                )
 
             return {
                 "place": place,
@@ -943,7 +951,10 @@ async def fetch_images_for_place(
             )
 
             if place is None:
-                raise HttpError(404, f"Hut '{place_slug}' not found")
+                raise APIError(
+                    {"code": "not_found", "detail": f"Hut '{place_slug}' not found"},
+                    status_code=HTTPStatus.NOT_FOUND,
+                )
 
             return {
                 "place": place,
