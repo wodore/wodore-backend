@@ -27,7 +27,9 @@ class FeedbackController(ApiController):
         parsed_body: Body[FeedbackCreate],
         parsed_query: Query[FeedbackQuery],
     ) -> ResponseSchema:
-        """Submit feedback (stored, optionally mailed to the admins)."""
+        """Submit feedback.
+
+        Stored, optionally mailed to the admins."""
         payload = parsed_body
         if payload.urls is None:
             payload.urls = []

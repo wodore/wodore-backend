@@ -172,7 +172,9 @@ class HutMetaController(ApiController):
         parsed_path: Path[_HutSlugPath],
         parsed_query: Query[_MetaQuery],
     ) -> HutMetaSchema:
-        """Minimal hut metadata for HTML meta-tag injection at the edge."""
+        """Get hut meta tags.
+
+        Minimal hut metadata for HTML meta-tag injection at the edge."""
         activate(parsed_query.lang)
         hut = (
             Hut.objects.select_related("hut_owner", "hut_type_open", "hut_type_closed")

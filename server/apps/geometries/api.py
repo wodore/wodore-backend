@@ -282,9 +282,9 @@ class OverlayCategoriesController(ApiController):
         headers=cache_headers(300),
     )
     def get(self) -> list[dict]:
-        """Get available overlay categories for map tile filtering.
+        """List map overlay categories.
 
-        Returns root-level categories that can be used as overlay filters
+        Usable as overlay filters in vector tile requests; returns root-level categories that can be used as overlay filters
         in vector tile requests (via the `categories` parameter).
         """
         request = self.request
@@ -346,9 +346,9 @@ class GeoSearchController(ApiController):
         headers=cache_headers(60),
     )
     def get(self, parsed_query: Query[GeoSearchQuery]) -> list[GeoPlaceSearchSchema]:
-        """Search for geographic places using fuzzy text search.
+        """Search places.
 
-        Performance optimizations:
+        Fuzzy text search across all language fields. Performance optimizations:
         - Fast prefix matching using B-tree indexes (very fast)
         - Trigram similarity only when needed (slower)
         - Early exit if enough prefix matches found
@@ -556,7 +556,7 @@ class GeoNearbyController(ApiController):
         headers=cache_headers(60),
     )
     def get(self, parsed_query: Query[GeoNearbyQuery]) -> list[GeoPlaceNearbySchema]:
-        """Find places near coordinates within a radius, ordered by distance."""
+        """Find places near coordinates, ordered by distance."""
         from django.conf import settings
         from django.contrib.gis.db.models.functions import Distance
         from django.contrib.gis.geos import Point
@@ -638,9 +638,9 @@ class AmenityController(ApiController):
         parsed_path: Path[AmenityPath],
         parsed_query: Query[AmenityQuery],
     ) -> AmenitySchema:
-        """Get detailed information for an amenity place.
+        """Get an amenity place.
 
-        Returns base GeoPlace fields plus amenity-specific information
+        Returns detailed information base GeoPlace fields plus amenity-specific information
         like operating status, opening hours, websites, and phone numbers.
         """
 

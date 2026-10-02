@@ -243,7 +243,7 @@ class CategoryTreeController(ApiController):
         parsed_path: Path[_ParentSlugPath],
         parsed_query: Query[_CategoryTreeQuery],
     ) -> list[CategoryTreeSchema]:
-        """Get category hierarchy as a tree structure.
+        """Get the category tree.
 
         Supports dot or slash-notation slugs with max one parent
         (e.g., `map/transport`). The parent is optional but if slug is
@@ -302,9 +302,9 @@ class CategoryListController(ApiController):
         parsed_path: Path[_ParentSlugPath],
         parsed_query: Query[_CategoryQuery],
     ) -> list[CategoryListItemSchema]:
-        """Get flat list of categories.
+        """List categories.
 
-        Supports dot-notation slugs with max one parent
+        Returns a flat list. Supports dot-notation slugs with max one parent
         (e.g., 'accommodation.hut'). If slug is ambiguous, returns 400
         error with available paths. If slug is omitted, returns all
         categories. Always excludes the root from results (returns
@@ -353,9 +353,9 @@ class CategoryMapController(ApiController):
         parsed_path: Path[_ParentSlugPath],
         parsed_query: Query[_CategoryQuery],
     ) -> dict[str, CategoryMapSchema]:
-        """Get category hierarchy as a nested dictionary mapping.
+        """Get the category map.
 
-        Keys are category slugs, values contain category data with
+        Nested dict keyed by slug; keys are category slugs, values contain category data with
         nested 'children' dict. Supports dot-notation slugs with max one
         parent (e.g., 'accommodation.hut'). If slug is ambiguous, returns
         400 error with available paths. Always excludes the root from
@@ -458,7 +458,7 @@ class CategorySymbolSvgParentController(ApiController):
         headers=cache_headers(CACHE_MAX_AGE),
     )
     def get(self, parsed_path: Path[_SymbolSvgParentPath]) -> None:
-        """Redirect to the SVG icon for a category with explicit parent.
+        """Redirect to a category SVG (with parent).
 
         Variant options: detailed, simple, mono
         Example: /v1/categories/symbol/detailed/map/transport.svg

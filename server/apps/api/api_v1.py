@@ -87,26 +87,32 @@ def get_openapi_schema(request: HttpRequest | None = None) -> dict:
     ``info.version`` always reflects the *current* registry state —
     tests may register temporary versions after import time.
 
-    Operation titles use the endpoint slug: dmr derives ``summary``
-    from the handler docstring's first paragraph, which for most
-    endpoints is a full sentence — noisy as a list title in Swagger UI
-    and in generated clients. The slug (== operationId == URL name,
-    the versioning key) is the short stable name; the sentence moves
-    into ``description`` so nothing is lost.
+    Operation titles are ``slug — short title``: the slug (==
+    operationId == URL name, the versioning key) makes the versioning
+    key visible in Swagger UI and generated clients; the short title is
+    the handler docstring's first paragraph (kept short by convention —
+    long prose belongs in the following paragraphs, which dmr puts into
+    ``description``). "slug — title" never drops information: the
+    docstring title stays part of the summary, the detail stays in the
+    description.
     """
     schema = _cached_schema()
     schema.info.version = registry.current_version()
     document = schema.convert(skip_validation=True)
+    # NOTE: dmr's convert() returns a SHARED dict (verified), so this
+    # transform must be idempotent — repeated calls (system checks,
+    # snapshot command, every live request) re-run over the same
+    # structure and must not accumulate prefixes.
     for methods in document.get("paths", {}).values():
         for operation in methods.values():
             if not (isinstance(operation, dict) and "operationId" in operation):
                 continue
-            summary = operation.get("summary")
-            if not summary:
-                continue
-            if not operation.get("description"):
-                operation["description"] = summary
-            operation["summary"] = operation["operationId"]
+            op_id = operation["operationId"]
+            title = operation.get("summary") or ""
+            prefix = f"{op_id} — "
+            while title.startswith(prefix):
+                title = title[len(prefix) :]
+            operation["summary"] = f"{prefix}{title}" if title else op_id
     return document
 
 

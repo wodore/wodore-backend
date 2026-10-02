@@ -60,7 +60,9 @@ class SymbolsController(ApiController):
         self,
         parsed_query: Query[SymbolQuery],
     ) -> list[dict]:
-        """Get a list of all symbols. By default only returns active symbols."""
+        """List symbols.
+
+        By default only returns active symbols."""
         symbols = Symbol.objects.filter(is_active=parsed_query.is_active)
         symbols = symbols.select_related("license", "source_org", "uploaded_by_user")
         with override(parsed_query.lang):
@@ -142,9 +144,9 @@ class SymbolSvgController(ApiController):
 
     @modify(operation_id="get_symbol_svg", extra_responses=[_CACHE_SPEC])
     def get(self, parsed_path: Path[SymbolStylePath]) -> None:
-        """Redirect to the SVG file for a symbol by style and slug.
+        """Redirect to a symbol SVG.
 
-        Style options: detailed, simple, mono
+        By style and slug. Style options: detailed, simple, mono
         Example: /v1/symbols/detailed/mountain.svg
 
         If the symbol doesn't exist or has no SVG file, returns 404.

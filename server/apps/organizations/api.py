@@ -38,7 +38,7 @@ class OrganizationsController(ApiController):
         self,
         parsed_query: Query[OrganizationListQuery],
     ) -> list[dict]:
-        """Get a list of all organizations used for the huts."""
+        """List organizations used for the huts."""
         orgs = Organization.objects.all().filter(is_active=True)
         if isinstance(parsed_query.is_public, bool):
             orgs = orgs.filter(is_public=parsed_query.is_public)

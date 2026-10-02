@@ -135,7 +135,9 @@ class HutSearchController(ApiController):
         headers=cache_headers(60),
     )
     def get(self, parsed_query: Query[HutSearchQuery]) -> list[dict]:
-        """Search for huts using fuzzy text search across all language fields."""
+        """Search huts.
+
+        Fuzzy text search across all language fields."""
         request = self.request
         query = parsed_query
         activate(query.lang)
@@ -297,7 +299,7 @@ class HutsController(ApiController):
         exclude_validate_responses={HTTPStatus.NOT_MODIFIED},
     )
     def get(self, parsed_query: Query[HutListQuery]) -> HttpResponse:
-        """Get a list with huts."""
+        """List huts."""
         request = self.request
         query = parsed_query
         activate(query.lang)
@@ -515,7 +517,9 @@ class HutsGeojsonController(ApiController):
         exclude_validate_responses={HTTPStatus.NOT_MODIFIED},
     )
     def get(self, parsed_query: Query[HutGeojsonQuery]) -> HttpResponse:
-        """Get huts as GeoJSON (properties controlled by embed/include)."""
+        """Get huts as GeoJSON.
+
+        Properties controlled by embed/include parameters."""
         request = self.request
         query = parsed_query
         activate(query.lang)
@@ -726,7 +730,7 @@ class HutDetailController(ApiController):
         parsed_path: Path[_HutSlug],
         parsed_query: Query[HutDetailQuery],
     ) -> HttpResponse:
-        """Get a hut by its slug."""
+        """Get a hut."""
         request = self.request
         slug = parsed_path.slug
         lang = request.GET.get("lang", "de")

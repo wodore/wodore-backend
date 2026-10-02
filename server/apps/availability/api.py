@@ -125,7 +125,7 @@ class HutAvailabilityGeojsonController(ApiController):
         parsed_path: Path[DatePathParam],
         parsed_query: Query[AvailabilityGeoJSONQuery],
     ) -> HutAvailabilityFeatureCollection:
-        """Get availability data as GeoJSON FeatureCollection for map visualization."""
+        """Get availability as GeoJSON for map visualization."""
         activate(parsed_query.lang)
 
         start_datetime = parse_availability_date(parsed_path.date)
@@ -244,9 +244,9 @@ class HutAvailabilityCurrentController(ApiController):
         parsed_path: Path[_HutDatePath],
         parsed_query: Query[CurrentAvailabilityQuery],
     ) -> CurrentAvailabilitySchema:
-        """Get current availability data for a specific hut.
+        """Get current hut availability.
 
-        Includes detailed metadata and booking links.
+        Detailed data for a specific hut; includes detailed metadata and booking links.
         """
         slug = parsed_path.slug
         activate(parsed_query.lang)

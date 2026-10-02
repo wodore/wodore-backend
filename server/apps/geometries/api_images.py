@@ -141,9 +141,9 @@ class NearbyImagesController(ApiController):
         headers=cache_headers(300),  # 5 minutes cache
     )
     def get(self, parsed_query: Query[NearbyImagesQuery]) -> ImageCollectionResponse:
-        """Get images near a location from multiple sources as a GeoJSON FeatureCollection.
+        """Get nearby images.
 
-        Aggregates internal Wodore database images with external sources
+        GeoJSON FeatureCollection from multiple sources. Aggregates internal Wodore database images with external sources
         (Wikidata, Flickr, etc.). Returns GeoJSON Point features with full
         image metadata.
 
@@ -297,9 +297,9 @@ class PlaceImagesController(ApiController):
         parsed_path: Path[PlaceSlugPath],
         parsed_query: Query[_PlaceImagesQuery],
     ) -> ImageCollectionResponse:
-        """Get images for a specific GeoPlace from multiple sources.
+        """Get images for a place.
 
-        Wodore provider uses the place directly (very fast). External
+        From multiple sources; Wodore provider uses the place directly (very fast). External
         providers use the place's coordinates with the given radius.
 
         Returns GeoJSON Point features with full image metadata.
@@ -448,9 +448,9 @@ class HutImagesController(ApiController):
         parsed_path: Path[HutSlugPath],
         parsed_query: Query[_PlaceImagesQuery],
     ) -> ImageCollectionResponse:
-        """Get images for a specific Hut from multiple sources.
+        """Get images for a hut.
 
-        Wodore provider uses the hut directly (very fast). External
+        From multiple sources; Wodore provider uses the hut directly (very fast). External
         providers use the hut's coordinates with the given radius.
 
         Returns GeoJSON Point features with full image metadata.

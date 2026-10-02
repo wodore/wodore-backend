@@ -191,9 +191,9 @@ class WeatherCodesController(ApiController):
         headers=cache_headers(CACHE_MAX_AGE),
     )
     def get(self, parsed_query: Query[WeatherCodesQuery]) -> dict[int, dict]:
-        """Get all weather codes as a dictionary with WMO code as key.
+        """List weather codes.
 
-        Returns weather codes with symbols from the specified collection.
+        Dict keyed by WMO code. Returns weather codes with symbols from the specified collection.
         If a WMO code is missing from the collection, an error is raised.
         """
         request = self.request
@@ -374,9 +374,9 @@ class WeatherSvgController(ApiController):
         headers=cache_headers(CACHE_MAX_AGE),
     )
     def get(self, parsed_path: Path[WeatherSvgPath]) -> None:
-        """Redirect to the SVG icon for a weather code from a collection.
+        """Redirect to a weather code SVG.
 
-        Collection examples: weather-icons-outlined-mono, weather-icons-filled, meteoswiss-filled
+        From a specific collection. Collection examples: weather-icons-outlined-mono, weather-icons-filled, meteoswiss-filled
         Time options: day, night
 
         If the collection doesn't have a symbol for the WMO code, returns 404.

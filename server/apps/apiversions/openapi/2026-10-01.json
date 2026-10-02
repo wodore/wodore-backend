@@ -5300,7 +5300,7 @@
   "paths": {
     "/v1/categories/list/{parent_slug}": {
       "get": {
-        "description": "Supports dot-notation slugs with max one parent\n(e.g., 'accommodation.hut'). If slug is ambiguous, returns 400\nerror with available paths. If slug is omitted, returns all\ncategories. Always excludes the root from results (returns\nchildren).",
+        "description": "Returns a flat list. Supports dot-notation slugs with max one parent\n(e.g., 'accommodation.hut'). If slug is ambiguous, returns 400\nerror with available paths. If slug is omitted, returns all\ncategories. Always excludes the root from results (returns\nchildren).",
         "operationId": "get_category_list_all",
         "parameters": [
           {
@@ -5421,14 +5421,14 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_category_list_all",
+        "summary": "get_category_list_all \u2014 List categories.",
         "tags": ["category"]
       },
       "summary": "Flat list of categories."
     },
     "/v1/categories/map/{parent_slug}": {
       "get": {
-        "description": "Keys are category slugs, values contain category data with\nnested 'children' dict. Supports dot-notation slugs with max one\nparent (e.g., 'accommodation.hut'). If slug is ambiguous, returns\n400 error with available paths. Always excludes the root from\nresults (returns children).",
+        "description": "Nested dict keyed by slug; keys are category slugs, values contain category data with\nnested 'children' dict. Supports dot-notation slugs with max one\nparent (e.g., 'accommodation.hut'). If slug is ambiguous, returns\n400 error with available paths. Always excludes the root from\nresults (returns children).",
         "operationId": "get_category_map_all",
         "parameters": [
           {
@@ -5549,7 +5549,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_category_map_all",
+        "summary": "get_category_map_all \u2014 Get the category map.",
         "tags": ["category"]
       },
       "summary": "Category hierarchy as a nested dictionary mapping."
@@ -5649,7 +5649,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_category_symbol_svg_with_parent",
+        "summary": "get_category_symbol_svg_with_parent \u2014 Redirect to a category SVG (with parent).",
         "tags": ["category"]
       },
       "summary": "Redirect to the SVG icon for a category with explicit parent."
@@ -5739,7 +5739,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_category_symbol_svg",
+        "summary": "get_category_symbol_svg \u2014 Redirect to the SVG icon for a category.",
         "tags": ["category"]
       },
       "summary": "Redirect to the SVG icon for a category."
@@ -5867,14 +5867,14 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_category_tree",
+        "summary": "get_category_tree \u2014 Get the category tree.",
         "tags": ["category"]
       },
       "summary": "Category hierarchy as a tree structure."
     },
     "/v1/feedback/": {
       "post": {
-        "description": "Submit feedback (stored, optionally mailed to the admins).",
+        "description": "Stored, optionally mailed to the admins.",
         "operationId": "create_feedback",
         "parameters": [
           {
@@ -5942,14 +5942,14 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "create_feedback",
+        "summary": "create_feedback \u2014 Submit feedback.",
         "tags": ["feedback"]
       },
       "summary": "User feedback submission."
     },
     "/v1/geo/images/hut/{hut_slug}": {
       "get": {
-        "description": "Wodore provider uses the hut directly (very fast). External\nproviders use the hut's coordinates with the given radius.\n\nReturns GeoJSON Point features with full image metadata.",
+        "description": "From multiple sources; Wodore provider uses the hut directly (very fast). External\nproviders use the hut's coordinates with the given radius.\n\nReturns GeoJSON Point features with full image metadata.",
         "operationId": "images_for_hut",
         "parameters": [
           {
@@ -6092,14 +6092,14 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "images_for_hut",
+        "summary": "images_for_hut \u2014 Get images for a hut.",
         "tags": ["geoimages"]
       },
       "summary": "Images for a specific Hut from multiple sources."
     },
     "/v1/geo/images/nearby": {
       "get": {
-        "description": "Aggregates internal Wodore database images with external sources\n(Wikidata, Flickr, etc.). Returns GeoJSON Point features with full\nimage metadata.",
+        "description": "GeoJSON FeatureCollection from multiple sources. Aggregates internal Wodore database images with external sources\n(Wikidata, Flickr, etc.). Returns GeoJSON Point features with full\nimage metadata.",
         "operationId": "nearby_images",
         "parameters": [
           {
@@ -6260,14 +6260,14 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "nearby_images",
+        "summary": "nearby_images \u2014 Get nearby images.",
         "tags": ["geoimages"]
       },
       "summary": "Images near a location from multiple sources (GeoJSON)."
     },
     "/v1/geo/images/place/{place_slug}": {
       "get": {
-        "description": "Wodore provider uses the place directly (very fast). External\nproviders use the place's coordinates with the given radius.\n\nReturns GeoJSON Point features with full image metadata.",
+        "description": "From multiple sources; Wodore provider uses the place directly (very fast). External\nproviders use the place's coordinates with the given radius.\n\nReturns GeoJSON Point features with full image metadata.",
         "operationId": "images_for_place",
         "parameters": [
           {
@@ -6410,14 +6410,14 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "images_for_place",
+        "summary": "images_for_place \u2014 Get images for a place.",
         "tags": ["geoimages"]
       },
       "summary": "Images for a specific GeoPlace from multiple sources."
     },
     "/v1/geo/places/amenity/{place_id}": {
       "get": {
-        "description": "Returns base GeoPlace fields plus amenity-specific information\nlike operating status, opening hours, websites, and phone numbers.",
+        "description": "Returns detailed information base GeoPlace fields plus amenity-specific information\nlike operating status, opening hours, websites, and phone numbers.",
         "operationId": "get_amenity",
         "parameters": [
           {
@@ -6514,14 +6514,13 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_amenity",
+        "summary": "get_amenity \u2014 Get an amenity place.",
         "tags": ["geometries"]
       },
       "summary": "Amenity place details (opening hours, websites, phones)."
     },
     "/v1/geo/places/nearby": {
       "get": {
-        "description": "Find places near coordinates within a radius, ordered by distance.",
         "operationId": "nearby_geoplaces",
         "parameters": [
           {
@@ -6720,14 +6719,14 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "nearby_geoplaces",
+        "summary": "nearby_geoplaces \u2014 Find places near coordinates, ordered by distance.",
         "tags": ["geometries"]
       },
       "summary": "Places near coordinates, ordered by distance."
     },
     "/v1/geo/places/overlays": {
       "get": {
-        "description": "Returns root-level categories that can be used as overlay filters\nin vector tile requests (via the `categories` parameter).",
+        "description": "Usable as overlay filters in vector tile requests; returns root-level categories that can be used as overlay filters\nin vector tile requests (via the `categories` parameter).",
         "operationId": "get_overlay_categories",
         "responses": {
           "200": {
@@ -6773,14 +6772,14 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_overlay_categories",
+        "summary": "get_overlay_categories \u2014 List map overlay categories.",
         "tags": ["geometries"]
       },
       "summary": "Overlay categories for map tile filtering."
     },
     "/v1/geo/places/search": {
       "get": {
-        "description": "Performance optimizations:\n- Fast prefix matching using B-tree indexes (very fast)\n- Trigram similarity only when needed (slower)\n- Early exit if enough prefix matches found",
+        "description": "Fuzzy text search across all language fields. Performance optimizations:\n- Fast prefix matching using B-tree indexes (very fast)\n- Trigram similarity only when needed (slower)\n- Early exit if enough prefix matches found",
         "operationId": "search_geoplaces",
         "parameters": [
           {
@@ -6999,14 +6998,13 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "search_geoplaces",
+        "summary": "search_geoplaces \u2014 Search places.",
         "tags": ["geometries"]
       },
       "summary": "Fuzzy place search across all language fields."
     },
     "/v1/huts/availability/{date}.geojson": {
       "get": {
-        "description": "Get availability data as GeoJSON FeatureCollection for map visualization.",
         "operationId": "get_hut_availability_geojson",
         "parameters": [
           {
@@ -7155,7 +7153,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_hut_availability_geojson",
+        "summary": "get_hut_availability_geojson \u2014 Get availability as GeoJSON for map visualization.",
         "tags": ["hut"]
       },
       "summary": "Availability as GeoJSON FeatureCollection for map visualization."
@@ -7327,7 +7325,7 @@
             "description": "Booking service unavailable. Please retry later."
           }
         },
-        "summary": "get_hut_bookings",
+        "summary": "get_hut_bookings \u2014 Get hut bookings (deprecated)",
         "tags": ["hut"]
       },
       "summary": "Hut bookings as a list (deprecated)."
@@ -7496,7 +7494,7 @@
             "description": "Booking service unavailable. Please retry later."
           }
         },
-        "summary": "get_hut_bookings_geojson",
+        "summary": "get_hut_bookings_geojson \u2014 Get hut bookings as GeoJSON (deprecated)",
         "tags": ["hut"]
       },
       "summary": "Hut bookings as GeoJSON (deprecated)."
@@ -7689,7 +7687,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_huts",
+        "summary": "get_huts \u2014 List huts.",
         "tags": ["hut"]
       },
       "summary": "All huts (annotated, ETag-cached)."
@@ -7948,14 +7946,14 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_huts_geojson",
+        "summary": "get_huts_geojson \u2014 Get huts as GeoJSON.",
         "tags": ["hut"]
       },
       "summary": "All public huts as a GeoJSON FeatureCollection."
     },
     "/v1/huts/search": {
       "get": {
-        "description": "Search for huts using fuzzy text search across all language fields.",
+        "description": "Fuzzy text search across all language fields.",
         "operationId": "search_huts",
         "parameters": [
           {
@@ -8108,7 +8106,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "search_huts",
+        "summary": "search_huts \u2014 Search huts.",
         "tags": ["hut"]
       },
       "summary": "Fuzzy hut search across all language fields."
@@ -8286,14 +8284,14 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_hut",
+        "summary": "get_hut \u2014 Get a hut.",
         "tags": ["hut"]
       },
       "summary": "A single hut by slug (full detail, ETag-cached)."
     },
     "/v1/huts/{slug}/availability/{date}": {
       "get": {
-        "description": "Includes detailed metadata and booking links.",
+        "description": "Detailed data for a specific hut; includes detailed metadata and booking links.",
         "operationId": "get_hut_availability_current",
         "parameters": [
           {
@@ -8404,7 +8402,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_hut_availability_current",
+        "summary": "get_hut_availability_current \u2014 Get current hut availability.",
         "tags": ["hut"]
       },
       "summary": "Current availability for a hut with booking links."
@@ -8522,7 +8520,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_hut_availability_trend",
+        "summary": "get_hut_availability_trend \u2014 Get historical availability trend data.",
         "tags": ["hut"]
       },
       "summary": "Historical availability trend for a target date."
@@ -8616,14 +8614,14 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_hut_meta",
+        "summary": "get_hut_meta \u2014 Get hut meta tags.",
         "tags": ["hut"]
       },
       "summary": "Minimal hut metadata for the edge."
     },
     "/v1/meteo/symbol/{collection}/{time}/{code}.svg": {
       "get": {
-        "description": "Collection examples: weather-icons-outlined-mono, weather-icons-filled, meteoswiss-filled\nTime options: day, night\n\nIf the collection doesn't have a symbol for the WMO code, returns 404.",
+        "description": "From a specific collection. Collection examples: weather-icons-outlined-mono, weather-icons-filled, meteoswiss-filled\nTime options: day, night\n\nIf the collection doesn't have a symbol for the WMO code, returns 404.",
         "operationId": "get_weather_code_svg",
         "parameters": [
           {
@@ -8719,14 +8717,14 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_weather_code_svg",
+        "summary": "get_weather_code_svg \u2014 Redirect to a weather code SVG.",
         "tags": ["meteo"]
       },
       "summary": "Redirect to the SVG icon for a weather code."
     },
     "/v1/meteo/weather_codes": {
       "get": {
-        "description": "Returns weather codes with symbols from the specified collection.\nIf a WMO code is missing from the collection, an error is raised.",
+        "description": "Dict keyed by WMO code. Returns weather codes with symbols from the specified collection.\nIf a WMO code is missing from the collection, an error is raised.",
         "operationId": "get_weather_codes",
         "parameters": [
           {
@@ -8855,14 +8853,13 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_weather_codes",
+        "summary": "get_weather_codes \u2014 List weather codes.",
         "tags": ["meteo"]
       },
       "summary": "All weather codes, keyed by WMO code."
     },
     "/v1/meteo/weather_codes/{code}": {
       "get": {
-        "description": "Get a specific weather code by WMO code.",
         "operationId": "get_weather_code",
         "parameters": [
           {
@@ -8991,14 +8988,13 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_weather_code",
+        "summary": "get_weather_code \u2014 Get a specific weather code by WMO code.",
         "tags": ["meteo"]
       },
       "summary": "A single weather code by WMO code."
     },
     "/v1/organizations/": {
       "get": {
-        "description": "Get a list of all organizations used for the huts.",
         "operationId": "get_organizations",
         "parameters": [
           {
@@ -9113,14 +9109,13 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_organizations",
+        "summary": "get_organizations \u2014 List organizations used for the huts.",
         "tags": ["organization"]
       },
       "summary": "Organizations used for the huts."
     },
     "/v1/organizations/{slug}": {
       "get": {
-        "description": "Get a single organization by its slug.",
         "operationId": "get_organization",
         "parameters": [
           {
@@ -9236,14 +9231,14 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_organization",
+        "summary": "get_organization \u2014 Get a single organization by its slug.",
         "tags": ["organization"]
       },
       "summary": "A single organization by slug."
     },
     "/v1/symbols/": {
       "get": {
-        "description": "Get a list of all symbols. By default only returns active symbols.",
+        "description": "By default only returns active symbols.",
         "operationId": "get_symbols",
         "parameters": [
           {
@@ -9352,14 +9347,13 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_symbols",
+        "summary": "get_symbols \u2014 List symbols.",
         "tags": ["symbols"]
       },
       "summary": "All symbols, by default only active ones."
     },
     "/v1/symbols/by-id/{id}": {
       "get": {
-        "description": "Get a single symbol by UUID.",
         "operationId": "get_symbol_by_id",
         "parameters": [
           {
@@ -9486,7 +9480,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_symbol_by_id",
+        "summary": "get_symbol_by_id \u2014 Get a single symbol by UUID.",
         "tags": ["symbols"]
       },
       "summary": "A single symbol by UUID."
@@ -9641,7 +9635,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_symbols_by_slug",
+        "summary": "get_symbols_by_slug \u2014 Get all style variants for a symbol by slug.",
         "tags": ["symbols"]
       },
       "summary": "All style variants for a symbol slug."
@@ -9786,14 +9780,14 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_symbol_by_style_and_slug",
+        "summary": "get_symbol_by_style_and_slug \u2014 Get a single symbol by style and slug.",
         "tags": ["symbols"]
       },
       "summary": "A single symbol by style and slug."
     },
     "/v1/symbols/{style_slug}/{slug}.svg": {
       "get": {
-        "description": "Style options: detailed, simple, mono\nExample: /v1/symbols/detailed/mountain.svg\n\nIf the symbol doesn't exist or has no SVG file, returns 404.",
+        "description": "By style and slug. Style options: detailed, simple, mono\nExample: /v1/symbols/detailed/mountain.svg\n\nIf the symbol doesn't exist or has no SVG file, returns 404.",
         "operationId": "get_symbol_svg",
         "parameters": [
           {
@@ -9895,7 +9889,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_symbol_svg",
+        "summary": "get_symbol_svg \u2014 Redirect to a symbol SVG.",
         "tags": ["symbols"]
       },
       "summary": "Redirect to a symbol's SVG file by style and slug."
@@ -9936,7 +9930,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "get_version",
+        "summary": "get_version \u2014 Get version information.",
         "tags": ["version"]
       },
       "summary": "Build/runtime/API version information."
