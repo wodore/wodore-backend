@@ -71,8 +71,8 @@ class TestPlaceMarkdown:
 
 
 class TestHutOgCardFallback:
-    def test_hut_meta_image_falls_back_to_generated_card(self, seed_data, client):
-        """Huts without a photo get the generated card, not an empty image."""
+    def test_hut_meta_image_falls_back_to_static_map(self, seed_data, client):
+        """Huts without a photo get the static map card (map.png)."""
         from server.apps.huts.models import Hut, HutImageAssociation
 
         HutImageAssociation.objects.all().delete()
@@ -80,8 +80,7 @@ class TestHutOgCardFallback:
         assert hut is not None
         data = client.get(f"/v1/huts/{hut.slug}/meta").json()
         assert data["image"]
-        # branded default card, no text drawn
-        assert "meta.jpg" in data["image"]
+        assert "map.png" in data["image"]
 
 
 class TestCategoriesMarkdown:

@@ -19,7 +19,7 @@ from ninja import Field, Schema
 from django.conf import settings
 from django.http import Http404, HttpRequest, HttpResponse
 
-from server.apps.images.og import og_card_url, og_photo_url
+from server.apps.images.og import og_card_url, og_map_card_url, og_photo_url
 from server.apps.symbols.utils import resolve_symbol_urls
 from server.apps.translations import LanguageParam, activate, with_language_param
 
@@ -83,6 +83,13 @@ def _og_image(hut: Hut, request: HttpRequest) -> str:
     if hut.hut_type_open is not None:
         symbols = resolve_symbol_urls(hut.hut_type_open, {"request": request})
         symbol_url = symbols.get("detailed") if symbols else None
+    if hut.location is not None:
+        # Static map card (OpenTopoMap) centered on the hut; ?v=<modified>
+        # busts the imagor cache on any hut change, ETag-style.
+        map_url = request.build_absolute_uri(
+            f"/v1/huts/{hut.slug}/map.png?v={hut.modified:%Y%m%dT%H%M%S}"
+        )
+        return og_map_card_url(map_url, symbol_url)
     return og_card_url(symbol_url)
 
 
