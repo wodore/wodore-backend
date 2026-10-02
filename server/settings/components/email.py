@@ -13,6 +13,7 @@ from server.settings.components import config
 DJANGO_ADMIN_EMAILS = [
     [x.replace(">", "").strip() for x in a.split("<")]
     for a in config("DJANGO_ADMIN_EMAILS", "").split(",")
+    if a.strip()  # filter out empty entries (no admin emails configured)
 ]
 SERVER_EMAIL = config("EMAIL_ADMIN_FROM_EMAIL", "")
 DEFAULT_FROM_EMAIL = config("EMAIL_DEFAULT_FROM_EMAIL", "")
