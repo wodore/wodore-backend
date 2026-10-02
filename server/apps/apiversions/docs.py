@@ -39,7 +39,7 @@ def _missing_snapshot(version: str) -> HttpResponse:
     old-pinned client (CI's snapshot check should prevent this)."""
     logger.error("api_snapshot_missing", version=version)
     return HttpResponse(
-        '{"code": ErrorCode.api_snapshot_missing, "detail": '
+        '{"code": ErrorCode.internal_error, "detail": '
         f'"No committed OpenAPI snapshot for API version {version!r}."}}',
         content_type="application/json",
         status=500,

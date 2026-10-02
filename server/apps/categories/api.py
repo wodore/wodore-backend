@@ -189,7 +189,7 @@ def _resolve_parent_or_raise(parent_slug: str, is_active: bool) -> Category:
         if paths:
             raise APIError(
                 {
-                    "code": ErrorCode.ambiguous_category,
+                    "code": ErrorCode.validation_error,
                     "detail": f"Slug '{parent_slug}' is not unique. "
                     f"Use one of: {', '.join(paths)}",
                 },
@@ -426,7 +426,7 @@ def _category_symbol_redirect(
         if paths:
             raise APIError(
                 {
-                    "code": ErrorCode.ambiguous_category,
+                    "code": ErrorCode.validation_error,
                     "detail": f"Slug '{slug}' is not unique. "
                     f"Use one of: {', '.join(paths)}",
                 },

@@ -243,7 +243,7 @@ def guard_endpoint_sunset(operation_id: str) -> None:
         )
         raise APIError(
             {
-                "code": ErrorCode.endpoint_sunset,
+                "code": ErrorCode.gone,
                 "detail": dep.detail,
             },
             status_code=HTTPStatus.GONE,

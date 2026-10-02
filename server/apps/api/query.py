@@ -53,7 +53,7 @@ def _parse(raw: str | None, available: list[str]) -> list[str]:
         )
         raise APIError(
             {
-                "code": ErrorCode.invalid_field_name,
+                "code": ErrorCode.validation_error,
                 "detail": f"'{', '.join(missing)}' {were} {possible}",
             },
             status_code=HTTPStatus.BAD_REQUEST,
@@ -128,7 +128,7 @@ class SparseFieldsQuery(pydantic.BaseModel):
             if legacy in data:
                 raise APIError(
                     {
-                        "code": ErrorCode.invalid_parameter,
+                        "code": ErrorCode.validation_error,
                         "detail": (
                             f"The '{legacy}' parameter was removed. Use "
                             "'fields[TYPE]=name1,name2' (sparse fieldsets) "
@@ -147,7 +147,7 @@ class SparseFieldsQuery(pydantic.BaseModel):
                     valid = ", ".join(sorted(cls.FIELD_TYPES))
                     raise APIError(
                         {
-                            "code": ErrorCode.invalid_field_type,
+                            "code": ErrorCode.validation_error,
                             "detail": (
                                 f"'{type_name}' is not a valid field type. "
                                 f"Valid types: {valid}."

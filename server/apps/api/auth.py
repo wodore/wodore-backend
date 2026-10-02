@@ -130,7 +130,7 @@ class BaseTokenValidator:
         if not token:
             raise ValidatorError(
                 {
-                    "code": ErrorCode.invalid_token_revoked,
+                    "code": ErrorCode.not_authenticated,
                     "description": "Token was revoked.",
                 },
                 401,
@@ -138,7 +138,7 @@ class BaseTokenValidator:
         if not token.get("active"):
             raise ValidatorError(
                 {
-                    "code": ErrorCode.invalid_token_inactive,
+                    "code": ErrorCode.not_authenticated,
                     "description": "Token is inactive.",
                 },
                 401,
@@ -146,7 +146,7 @@ class BaseTokenValidator:
         if token["exp"] < now:
             raise ValidatorError(
                 {
-                    "code": ErrorCode.invalid_token_expired,
+                    "code": ErrorCode.not_authenticated,
                     "description": "Token has expired.",
                 },
                 401,
@@ -154,7 +154,7 @@ class BaseTokenValidator:
         if not self.match_token_scopes(token, scopes):
             raise ValidatorError(
                 {
-                    "code": ErrorCode.insufficient_scope,
+                    "code": ErrorCode.insufficient_permission,
                     "description": f"Token has insufficient scope. Scopes required: {scopes}",
                 },
                 401,
@@ -464,7 +464,7 @@ class AuthBearer(BearerSyncAuth):
         if not self.validators:
             raise APIError(
                 {
-                    "code": ErrorCode.auth_not_configured,
+                    "code": ErrorCode.not_authenticated,
                     "detail": "Authentication is not configured on this "
                     "server (OIDC is disabled).",
                 },

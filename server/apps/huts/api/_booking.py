@@ -102,7 +102,7 @@ class _BookingsController(ApiController):
             if not res:
                 raise APIError(
                     {
-                        "code": ErrorCode.booking_service_unavailable,
+                        "code": ErrorCode.service_unavailable,
                         "detail": "Booking service unavailable. Please retry later.",
                     },
                     status_code=HTTPStatus.SERVICE_UNAVAILABLE,
@@ -161,7 +161,7 @@ class HutBookingsGeojsonController(_BookingsController):
         if not res:
             raise APIError(
                 {
-                    "code": ErrorCode.booking_service_unavailable,
+                    "code": ErrorCode.service_unavailable,
                     "detail": "Booking service unavailable. Please retry later.",
                 },
                 status_code=HTTPStatus.SERVICE_UNAVAILABLE,

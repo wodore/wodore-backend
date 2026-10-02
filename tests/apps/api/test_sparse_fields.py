@@ -32,21 +32,21 @@ class TestParsing:
 
         with pytest.raises(APIError) as exc:
             OrgQuery.model_validate({"fields[nope]": "slug"})
-        assert exc.value.raw_data["code"] == "invalid_field_type"
+        assert exc.value.raw_data["code"] == "validation_error"
 
-    def test_legacy_include_is_400_invalid_parameter(self):
+    def test_legacy_include_is_400_validation_error(self):
         from dmr import APIError
 
         with pytest.raises(APIError) as exc:
             OrgQuery.model_validate({"include": "slug"})
-        assert exc.value.raw_data["code"] == "invalid_parameter"
+        assert exc.value.raw_data["code"] == "validation_error"
 
-    def test_legacy_exclude_is_400_invalid_parameter(self):
+    def test_legacy_exclude_is_400_validation_error(self):
         from dmr import APIError
 
         with pytest.raises(APIError) as exc:
             OrgQuery.model_validate({"exclude": "slug"})
-        assert exc.value.raw_data["code"] == "invalid_parameter"
+        assert exc.value.raw_data["code"] == "validation_error"
 
 
 class TestProjection:
@@ -136,17 +136,17 @@ class TestEndpoints:
         response = client.get("/v1/organizations/", {"include": "slug"})
         assert response.status_code == 400
         body = response.json()
-        assert body["code"] == "invalid_parameter"
+        assert body["code"] == "validation_error"
 
     def test_exclude_parameter_removed(self, seed_data, client):
         response = client.get("/v1/organizations/", {"exclude": "slug"})
         assert response.status_code == 400
-        assert response.json()["code"] == "invalid_parameter"
+        assert response.json()["code"] == "validation_error"
 
     def test_unknown_type_on_endpoint(self, seed_data, client):
         response = client.get("/v1/organizations/", {"fields[huts]": "slug"})
         assert response.status_code == 400
-        assert response.json()["code"] == "invalid_field_type"
+        assert response.json()["code"] == "validation_error"
 
     def test_symbols_fields(self, seed_data, client):
         response = client.get("/v1/symbols/", {"fields[symbols]": "slug,style"})

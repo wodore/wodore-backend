@@ -206,7 +206,7 @@ class TestSchemaServing:
         )
         response = client.get("/v1/openapi.json", {"api_version": "2098-05-01"})
         assert response.status_code == 500
-        assert response.json()["code"] == "api_snapshot_missing"
+        assert response.json()["code"] == "internal_error"
 
 
 class TestContractPerVersion:

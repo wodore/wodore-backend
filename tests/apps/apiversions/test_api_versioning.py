@@ -222,7 +222,7 @@ class TestLifecycle:
         )
         response = client.get("/v1/huts/bookings", {"slugs": "nothing"})
         assert response.status_code == 410
-        assert response.json()["code"] == "endpoint_sunset"
+        assert response.json()["code"] == "gone"
 
 
 class TestBackwardTransforms:

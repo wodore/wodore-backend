@@ -220,7 +220,7 @@ class WeatherCodesController(ApiController):
 
                         raise APIError(
                             {
-                                "code": ErrorCode.ambiguous_category,
+                                "code": ErrorCode.validation_error,
                                 "detail": f"Category slug '{query.category}' is not "
                                 f"unique. Use one of: {', '.join(paths)}",
                             },
