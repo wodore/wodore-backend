@@ -288,7 +288,7 @@ class TestCategoriesIndexLang:
         default = client.get("/v1/categories/index.md")
         assert default.status_code == 200
         body = default.content.decode()
-        assert body.startswith("# Wodore categories")
+        assert body.startswith("# Wodore place categories")
         # the param is accepted (validated against the language choices)
         english = client.get("/v1/categories/index.md", {"lang": "en"})
         assert english.status_code == 200

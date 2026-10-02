@@ -1,8 +1,8 @@
 # Wodore
 
-> Wodore is the hut directory of the Swiss Alps: an interactive map with
-> opening seasons, capacities, availability and booking sources for the
-> mountain huts, bivouacs and shelters of Switzerland.
+> Wodore is the international hut directory: an interactive map with
+> opening seasons, capacities, availability and booking sources for
+> mountain huts, bivouacs and shelters.
 
 Web app: {{ frontend_url }}
 Hut pages: {{ frontend_url }}/{lang}/hut/{slug} for lang in
@@ -26,6 +26,30 @@ Hut pages: {{ frontend_url }}/{lang}/hut/{slug} for lang in
 - Hut detail (Markdown): {{ api_base }}/v1/huts/{slug}.md?lang=de|en|fr|it
 - Hut detail (Markdown, canonical URL): {{ frontend_url }}/hut/{slug}.md?lang=de|en|fr|it
 - Sitemap: {{ frontend_url }}/sitemap.xml
+
+## Finding huts
+
+- By name (fuzzy, all languages): {{ api_base }}/v1/huts/search?q=rotond
+- By map area: filter the hut/place listings to a bounding box with
+  bbox=minLon,minLat,maxLon,maxLat (WGS84) — e.g.
+  {{ api_base }}/v1/huts/huts.geojson?bbox=7.6,45.9,8.1,46.2
+  (accepted on hut search, hut list, both GeoJSON dumps and place
+  search; paginate with offset and limit)
+
+## Live availability
+
+Bed availability per hut and day, aggregated from booking sources
+(SAC, HRS, ...):
+
+- One hut, next 7 days (JSON):
+  {{ api_base }}/v1/huts/{slug}/availability/today?days=7
+- Many huts at once (GeoJSON):
+  {{ api_base }}/v1/huts/availability/weekend.geojson?days=2&slugs=aarbiwak,rotondohuette
+
+Dates accept ISO (2026-07-18), European (18.07.2026) or the keywords
+now, today and weekend. Each day carries free/total beds,
+occupancy_status (empty | low | medium | high | full) and
+reservation_status (possible | not_possible | not_online | unknown).
 
 ## About the data
 

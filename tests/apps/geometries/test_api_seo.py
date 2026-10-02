@@ -146,10 +146,53 @@ class TestPlaceOgPinnedImage:
 
 
 class TestCategoriesMarkdown:
-    def test_categories_index(self, seed_data, client):
-        response = client.get("/v1/categories/index.md")
-        assert response.status_code == 200
-        assert response.headers["Content-Type"].startswith("text/markdown")
-        body = response.content.decode()
-        assert body.startswith("# Wodore categories")
-        assert "`" in body  # slugs
+    def test_categories_index_lists_sitemap_categories_with_counts(
+        self, seed_data, client
+    ):
+        """Only seo_sitemap-include categories, with public place counts."""
+        from server.apps.categories.models import Category
+
+        # Roots default to exclude: the seed categories start hidden.
+        peak = Category.objects.filter(slug="peak").first()
+        assert peak is not None
+        peak.seo_sitemap = "include"
+        peak.save()
+        try:
+            public_places = GeoPlace.objects.filter(
+                is_active=True, is_public=True, categories=peak
+            ).count()
+            assert public_places > 0
+
+            response = client.get("/v1/categories/index.md")
+            assert response.status_code == 200
+            assert response.headers["Content-Type"].startswith("text/markdown")
+            body = response.content.decode()
+            assert body.startswith("# Wodore place categories")
+            plural = "s" if public_places != 1 else ""
+            assert f"`peak` ({public_places} place{plural})" in body
+            # Categories without an effective include policy stay out.
+            assert "`lake`" not in body
+        finally:
+            # Session-scoped seed DB: restore the default-exclude policy
+            # so sitemap tests picking these places stay deterministic.
+            peak.seo_sitemap = None
+            peak.save()
+
+    def test_categories_index_inherits_parent_policy(self, seed_data, client):
+        """Children inherit the include policy from their parent."""
+        from server.apps.categories.models import Category
+
+        # Fresh categories (no seeded ones): mutating `accommodation`
+        # would leak into sibling tests via the session-scoped seed DB.
+        root = Category.objects.create(slug="seo-index-root", name="SEO Index Root")
+        Category.objects.create(
+            slug="seo-index-child", name="SEO Index Child", parent=root
+        )
+        root.seo_sitemap = "include"
+        root.save()
+
+        body = client.get("/v1/categories/index.md").content.decode()
+        assert body.startswith("# Wodore place categories")
+        # The child inherits "include" without its own flag.
+        assert "- SEO Index Root `seo-index-root` (0 places)" in body
+        assert "-   SEO Index Child `seo-index-child` (0 places)" in body

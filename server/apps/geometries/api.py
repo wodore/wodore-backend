@@ -9,6 +9,7 @@ from django.views.decorators.cache import cache_page
 
 from server.apps.api.controller import ApiController, cache_headers, raise_not_found
 from server.apps.api.enums import IncludeModeEnum
+from server.apps.api.query import BboxQuery, bbox_polygon
 from server.apps.geometries.presenters import (
     annotate_sources,
     apply_type_filters,
@@ -61,7 +62,7 @@ class _GeoSearchQuery(LanguageQuery):
     )
 
 
-class GeoSearchQuery(_GeoSearchQuery):
+class GeoSearchQuery(_GeoSearchQuery, BboxQuery):
     """Query parameters for the place search endpoint."""
 
     q: str = Field(
@@ -262,6 +263,9 @@ class GeoSearchController(ApiController):
             "importance",
             "country_code",
         )
+
+        if query.bbox:
+            queryset = queryset.filter(location__intersects=bbox_polygon(query.bbox))
 
         if query.min_importance > 0:
             queryset = queryset.filter(importance__gte=query.min_importance)
