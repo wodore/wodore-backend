@@ -89,29 +89,6 @@ def og_photo_url(image_url: str, focal: dict | None = None) -> str:
     )
 
 
-def og_map_card_url(map_png_url: str, symbol_url: str | None = None) -> str:
-    """Signed imagor URL for a static-map card: the rendered map PNG
-    (from /v1/huts/{slug}/map.png) with the type symbol right of center
-    and the watermark on the left (owner-approved geometry)."""
-    filters = []
-    if symbol_url:
-        filters.append(_composite_image(symbol_url, 170, "0.60", "center", 10))
-    filters.append(
-        _composite_image(
-            _frontend(OG_LOGO_URL_PATH),
-            OG_LOGO_SIZE_PX,
-            "0.18",
-            OG_LOGO_POS_Y,
-            OG_LOGO_ALPHA,
-        )
-    )
-    return (
-        ImagorImage(map_png_url)
-        .transform(size=OG_CARD_SIZE, filters=filters)
-        .get_full_url()
-    )
-
-
 def og_card_url(symbol_url: str | None = None) -> str:
     """Signed imagor URL for the branded default card, optionally with
     the entity's type symbol (SVG) composited large and centered."""

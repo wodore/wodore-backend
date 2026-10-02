@@ -16,7 +16,7 @@ from ninja import Field, Schema
 from django.conf import settings
 from django.http import Http404, HttpRequest, HttpResponse
 
-from server.apps.images.og import og_card_url, og_photo_url
+from server.apps.images.og import og_photo_url
 
 from .api import router
 from .models import GeoPlace, GeoPlaceImageAssociation
@@ -43,7 +43,7 @@ def _place_url(place: GeoPlace) -> str:
     return f"{settings.FRONTEND_DOMAIN.rstrip('/')}/{pattern.format(slug=place.slug)}"
 
 
-def _place_image(place: GeoPlace) -> str | None:
+def _place_image(place: GeoPlace, request: HttpRequest) -> str | None:
     """Highest-scored image as og:image; generated card as fallback."""
     association = (
         GeoPlaceImageAssociation.objects.filter(geo_place=place)
@@ -60,7 +60,18 @@ def _place_image(place: GeoPlace) -> str | None:
             return og_photo_url(source, focal)
     except Exception:
         pass
-    return og_card_url()
+    # Complete static-map card from the generic endpoint; v=<modified>
+    # busts the render cache on ANY place change, ETag-style.
+    from urllib.parse import urlencode
+
+    query = urlencode(
+        {
+            "place": place.slug,
+            "zoom": 16,
+            "v": f"{place.modified:%Y%m%dT%H%M%S}",
+        }
+    )
+    return request.build_absolute_uri(f"/v1/geo/map/static?{query}")
 
 
 def _place_description(place: GeoPlace) -> str:
@@ -120,7 +131,7 @@ def get_place_meta(request: HttpRequest, response: HttpResponse, slug: str) -> d
     """Minimal place metadata for HTML meta-tag injection at the edge."""
     place = _get_public_place(slug)
     page_url = _place_url(place)
-    image = _place_image(place)
+    image = _place_image(place, request)
     description = _place_description(place)
 
     response["Cache-Control"] = f"public, max-age={CACHE_TTL}"

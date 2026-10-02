@@ -874,6 +874,7 @@ def get_amenity(
     return AmenitySchema(**result)
 
 
-# SEO/LLM surface (place meta + Markdown) — imported at the END to avoid
-# a circular import: api_seo registers on this module's router.
-from . import api_seo  # noqa: F401
+# SEO/LLM surface (place meta + Markdown) and the generic static-map
+# endpoint — imported at the END to avoid a circular import: both
+# register on this module's router.
+from . import api_map, api_seo  # noqa: F401
