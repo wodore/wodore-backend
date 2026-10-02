@@ -5,8 +5,8 @@
 > mountain huts, bivouacs and shelters of Switzerland.
 
 Web app: {{ frontend_url }}
-Hut pages: {{ frontend_url }}/hut/{slug} (German; locale-prefixed
-  variants /en|/fr|/it/hut/{slug} serve the same page with localized
+Hut pages: {{ frontend_url }}/hut/{slug} (English; locale-prefixed
+  variants /de|/fr|/it/hut/{slug} serve the same page with localized
   metadata — the app picks its display language from stored user
   preference first, then the path)
 

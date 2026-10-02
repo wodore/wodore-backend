@@ -51,18 +51,25 @@ def _url(loc: str, lastmod=None) -> str:
     return f"<url><loc>{escape(loc)}</loc>{lastmod_xml}</url>"
 
 
-# Non-default language prefixes for the frontend's locale-prefixed routes
-# (German, the default, stays at the root — cartoload-style
-# prefix_default_language=False; the edge 301s /de/ to bare).
-LANG_PREFIXES = ("en", "fr", "it")
+# Language routing derives entirely from the existing i18n config:
+# settings.DEFAULT_LANG is the default language served at the bare
+# (unprefixed) URL — English — and every other language in
+# settings.LANGUAGES gets a locale-prefixed route (/de|/fr|it/...).
+# The edge 301s the default language's own prefix back to bare.
+DEFAULT_LANG = settings.DEFAULT_LANG
+LANG_PREFIXES = tuple(
+    code for code, _name in settings.LANGUAGES if code != DEFAULT_LANG
+)
 
 
 def _lang_alternates(bare_path: str) -> str:
     """xhtml:link hreflang cluster for a frontend path: the bare URL is
-    German and x-default, each non-default language gets its prefixed
-    URL (frontend routes /en|/fr|/it/...)."""
+    the default language and x-default, every other language gets its
+    prefixed URL."""
     base = frontend_url(bare_path)
-    links = [f'<xhtml:link rel="alternate" hreflang="de" href="{escape(base)}"/>']
+    links = [
+        f'<xhtml:link rel="alternate" hreflang="{DEFAULT_LANG}" href="{escape(base)}"/>'
+    ]
     for lang in LANG_PREFIXES:
         href = frontend_url(f"{lang}/{bare_path}")
         links.append(

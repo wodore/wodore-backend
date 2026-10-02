@@ -301,9 +301,18 @@ STORAGES = {
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 
-# LANGUAGE_CODE = 'en-us'
+# LANGUAGE_CODE is the language of the BASE (non-suffixed) model
+# columns — the master data is German. Many data paths (translation
+# service, imports, the tiles SQL function, the i18n field descriptors)
+# route by it; changing it requires a data migration. Do not touch.
 LANGUAGE_CODE = "de"
-# LANGUAGE_CODE = 'fr'
+
+# DEFAULT_LANG is the default REQUEST language: the default of every
+# API `lang` parameter and the language served at the bare
+# (unprefixed) frontend URL. Every other language in LANGUAGES gets a
+# locale-prefixed route (see apps/api/sitemap.py and the frontend's
+# njs edge).
+DEFAULT_LANG = "en"
 
 # USE_I18N = True
 USE_I18N = True

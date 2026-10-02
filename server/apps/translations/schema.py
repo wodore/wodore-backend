@@ -12,9 +12,8 @@ LANGUAGE_CODES = [lang[0] for lang in settings.LANGUAGES]
 LanguageParam = t.Annotated[
     str,
     Query(  # pyright: ignore[reportCallIssue]  # ninja dynamic marker
-        "de",
-        description=f"Select language code: {', '.join(LANGUAGE_CODES)}.",  # or _empty_ for all.",
-        # example=settings.LANGUAGE_CODE,
+        settings.DEFAULT_LANG,
+        description=f"Select language code: {', '.join(LANGUAGE_CODES)}.",
         pattern=f"({'|'.join(LANGUAGE_CODES)})",
     ),
 ]
