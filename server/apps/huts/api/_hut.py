@@ -40,6 +40,8 @@ from ..schemas import (
     LicenseInfoSchema,
 )
 from .etag_utils import (
+    cached_200,
+    cached_304,
     check_etag_match,
     check_if_modified_since,
     generate_etag,
@@ -332,15 +334,7 @@ class HutsController(ApiController):
         if check_etag_match(request, etag) and not check_if_modified_since(
             request, last_modified
         ):
-            return self.to_response(
-                None,
-                status_code=304,
-                headers={
-                    "ETag": etag,
-                    "Last-Modified": last_modified,
-                    "Cache-Control": "public, max-age=60",
-                },
-            )
+            return cached_304(self, etag, last_modified, max_age=60)
 
         if query.is_modified != TristateEnum.unset:
             huts_db = huts_db.filter(is_modified=query.is_modified.bool)
@@ -438,14 +432,7 @@ class HutsController(ApiController):
             HutSchemaList.model_validate(hut, context={"request": request})
             for hut in huts_db
         ]
-        return self.to_response(
-            validated,
-            headers={
-                "ETag": etag,
-                "Last-Modified": last_modified,
-                "Cache-Control": "public, max-age=60",
-            },
-        )
+        return cached_200(self, validated, etag, last_modified, max_age=60)
 
 
 # ---------------------------------------------------------------------------
@@ -563,15 +550,7 @@ class HutsGeojsonController(ApiController):
         if check_etag_match(request, etag) and not check_if_modified_since(
             request, last_modified
         ):
-            return self.to_response(
-                None,
-                status_code=304,
-                headers={
-                    "ETag": etag,
-                    "Last-Modified": last_modified,
-                    "Cache-Control": "public, max-age=60",
-                },
-            )
+            return cached_304(self, etag, last_modified, max_age=60)
 
         has_availability_annotated = False
         if (
@@ -679,14 +658,7 @@ class HutsGeojsonController(ApiController):
         )["geojson"]
         # Version downgrades are applied uniformly by the API-version
         # middleware for every JSON response.
-        return self.to_response(
-            geojson,
-            headers={
-                "ETag": etag,
-                "Last-Modified": last_modified,
-                "Cache-Control": "public, max-age=60",
-            },
-        )
+        return cached_200(self, geojson, etag, last_modified, max_age=60)
 
 
 # ---------------------------------------------------------------------------
@@ -772,15 +744,7 @@ class HutDetailController(ApiController):
         if check_etag_match(request, etag) and not check_if_modified_since(
             request, last_modified
         ):
-            return self.to_response(
-                None,
-                status_code=304,
-                headers={
-                    "ETag": etag,
-                    "Last-Modified": last_modified,
-                    "Cache-Control": "public, max-age=60",
-                },
-            )
+            return cached_304(self, etag, last_modified, max_age=60)
 
         media_abs_url = request.build_absolute_uri(settings.MEDIA_URL)
         qs = qs.select_related(
@@ -949,14 +913,7 @@ class HutDetailController(ApiController):
             default_include="__all__",
             context={"request": request},
         )
-        return self.to_response(
-            data,
-            headers={
-                "ETag": etag,
-                "Last-Modified": last_modified,
-                "Cache-Control": "public, max-age=15",
-            },
-        )
+        return cached_200(self, data, etag, last_modified, max_age=15)
 
 
 # ---------------------------------------------------------------------------
