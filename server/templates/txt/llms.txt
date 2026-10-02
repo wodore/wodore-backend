@@ -37,8 +37,6 @@ Bed availability per hut and day, aggregated from booking sources
 
 - One hut, next 7 days (JSON):
   {{ api_base }}/v1/huts/{slug}/availability/today?days=7
-- Recent occupancy trend:
-  {{ api_base }}/v1/huts/{slug}/availability/today/trend?limit=14
 - Many huts at once (GeoJSON):
   {{ api_base }}/v1/huts/availability/weekend.geojson?days=2&slugs=aarbiwak,rotondohuette
 
