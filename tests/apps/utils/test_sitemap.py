@@ -82,7 +82,7 @@ class TestSitemapHuts:
         first = public_huts.order_by("pk").first()
         assert first is not None
         assert (
-            f"<loc>https://wodore.com/hut/{first.slug}</loc>".encode()
+            f"<loc>https://wodore.com/en/hut/{first.slug}</loc>".encode()
             in response.content
         )
         # Every public hut appears on page 0 when they fit one page.
@@ -103,7 +103,9 @@ class TestSitemapHuts:
 
         response = client.get("/v1/sitemap-huts-0.xml")
         assert response.status_code == 200
-        assert f"https://wodore.com/hut/{hidden.slug}".encode() not in response.content
+        assert (
+            f"https://wodore.com/en/hut/{hidden.slug}".encode() not in response.content
+        )
 
     def test_out_of_range_page_is_404(self, seed_data, client):
         response = client.get("/v1/sitemap-huts-9999.xml")
@@ -272,6 +274,8 @@ class TestSitemapPlaces:
 
 class TestHreflangAlternates:
     def test_hut_urls_carry_alternates(self, seed_data, client):
+        """Full-prefix model: every language has a prefixed, indexed URL;
+        the bare URL is a user alias and does not appear."""
         from django.conf import settings
         from django.core.cache import cache
 
@@ -284,20 +288,21 @@ class TestHreflangAlternates:
         assert 'xmlns:xhtml="http://www.w3.org/1999/xhtml"' in body
         # Derived from the lang config, not hardcoded lists.
         assert DEFAULT_LANG == settings.DEFAULT_LANG == "en"
-        assert LANG_PREFIXES == (
-            "de",
-            "fr",
-            "it",
-        )
-        for lang in (DEFAULT_LANG, *LANG_PREFIXES, "x-default"):
+        assert LANG_PREFIXES == tuple(code for code, _ in settings.LANGUAGES)
+        for lang in (*LANG_PREFIXES, "x-default"):
             assert f'hreflang="{lang}"' in body
         hut = Hut.objects.filter(is_active=True, is_public=True).order_by("pk").first()
-        # Prefixed variants exist for every non-default language, and the
-        # bare <loc> is the default language.
+        # Prefixed variants exist for every language (including the
+        # default), the <loc> is the default language's prefixed URL and
+        # x-default points there too — the bare URL never appears.
         for lang in LANG_PREFIXES:
             assert f"https://wodore.com/{lang}/hut/{hut.slug}" in body
-        assert f"https://wodore.com/hut/{hut.slug}</loc>" in body
-        assert f"https://wodore.com/{DEFAULT_LANG}/hut/{hut.slug}" not in body
+        assert f"https://wodore.com/{DEFAULT_LANG}/hut/{hut.slug}</loc>" in body
+        assert (
+            f'hreflang="x-default" href="https://wodore.com/{DEFAULT_LANG}/hut/{hut.slug}"'
+            in body
+        )
+        assert f"https://wodore.com/hut/{hut.slug}</loc>" not in body
 
     def test_static_pages_no_alternates(self, seed_data, client):
         from django.core.cache import cache

@@ -308,10 +308,11 @@ STORAGES = {
 LANGUAGE_CODE = "de"
 
 # DEFAULT_LANG is the default REQUEST language: the default of every
-# API `lang` parameter and the language served at the bare
-# (unprefixed) frontend URL. Every other language in LANGUAGES gets a
-# locale-prefixed route (see apps/api/sitemap.py and the frontend's
-# njs edge).
+# API `lang` parameter and the language of the bare (unprefixed)
+# frontend URL, which canonicalizes to this language's prefixed route.
+# Every language in LANGUAGES has a locale-prefixed route — those are
+# the indexed URLs (see apps/api/sitemap.py and the frontend's njs
+# edge).
 DEFAULT_LANG = "en"
 
 # USE_I18N = True
