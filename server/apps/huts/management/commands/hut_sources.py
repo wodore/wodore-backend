@@ -42,11 +42,10 @@ def add_hut_source_db(  # type: ignore[no-any-unimported]
         UpdateCreateStatus.ignored: 0,
     }
     for number, hut in enumerate(huts, start=number):
-        if hut.location is None:
-            continue  # DB requires location (NOT NULL) — skip coordinate-less huts
+        no_location = hut.location is None
         shut = HutSource(
             source_id=hut.source_id,
-            location=dbPoint(hut.location.lon_lat),
+            location=None if no_location else dbPoint(hut.location.lon_lat),
             organization=org,
             name=hut.name,
             source_data=hut.source_data.model_dump(by_alias=True, mode="json")
@@ -63,7 +62,21 @@ def add_hut_source_db(  # type: ignore[no-any-unimported]
             if init
             else HutSource.ReviewStatusChoices.new
         )
+        if no_location:
+            # coordinate-less huts stay in review — they cannot become Hut
+            # entries (no location) until coordinates are added manually
+            review_status = HutSource.ReviewStatusChoices.review
         shut, status = HutSource.add(shut, new_review_status=review_status)
+        if no_location and status in (
+            UpdateCreateStatus.created,
+            UpdateCreateStatus.updated,
+        ):
+            shut.review_comment = (
+                "No coordinates from the source — add a location in the admin "
+                "to make this hut importable (hut_sources without location "
+                "are skipped by the hut import)."
+            )
+            shut.save(update_fields=["review_comment"])
         _hut_name = shut.name if len(shut.name) < 18 else shut.name[:15] + ".."
         _name = f"  Hut {number!s: <3} {'`' + shut.source_id + '`':<15} {_hut_name:<20} {'(' + str(shut.organization) + ')':<8}"
         click.echo(f"{_name: <48}", nl=False)
