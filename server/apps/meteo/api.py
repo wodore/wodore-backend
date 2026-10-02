@@ -6,6 +6,7 @@ from dmr.routing import path
 from pydantic import Field
 
 from server.apps.api.controller import ApiController, cache_headers, raise_not_found
+from server.apps.api.error_codes import ErrorCode
 from server.apps.categories.models import Category
 from server.apps.translations import LanguageQuery, override
 
@@ -219,7 +220,7 @@ class WeatherCodesController(ApiController):
 
                         raise APIError(
                             {
-                                "code": "ambiguous_category",
+                                "code": ErrorCode.ambiguous_category,
                                 "detail": f"Category slug '{query.category}' is not "
                                 f"unique. Use one of: {', '.join(paths)}",
                             },
