@@ -53,6 +53,14 @@ OG_LOGO_POS = "center"
 OG_LOGO_POS_Y = "bottom-10"
 OG_LOGO_ALPHA = 0
 
+# Static-map og cards (hut/place meta fallbacks): render with the
+# spotlight effect (desaturated blurred map behind the sharp rounded
+# inset) and the type-symbol marker at 0.8x — owner-approved preview
+# look. Both are plain query params on /v1/geo/map/static and part of
+# its render cache key, so existing cards re-render on URL change.
+OG_MAP_EFFECT = "spotlight"
+OG_MAP_MARKER_SCALE = "0.8"
+
 
 def _frontend(path: str) -> str:
     return f"{settings.FRONTEND_DOMAIN.rstrip('/')}/{path.lstrip('/')}"
