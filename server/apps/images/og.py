@@ -55,8 +55,17 @@ def _frontend(path: str) -> str:
 
 def _composite_image(source_url: str, size_px: int, x: str, y: str, alpha: int) -> str:
     """``image()`` filter string: pre-rasterize an SVG/overlay source to
-    ``size_px`` via a nested unsafe path, then composite at x/y/alpha."""
-    return f"image(/unsafe/{size_px}x{size_px}/{source_url},{x},{y},{alpha})"
+    ``size_px`` via a nested unsafe path, then composite at x/y/alpha.
+
+    The nested URL MUST be percent-encoded: a raw ``https://`` inside
+    the filter contains ``//`` which nginx (ingress, merge_slashes on by
+    default) collapses to ``/`` before the request reaches imagor —
+    changing the bytes the signature was computed over and 403-ing the
+    URL. Escaped, the path passes any proxy untouched and imagor
+    unescapes the filter argument itself."""
+    from urllib.parse import quote
+
+    return f"image(/unsafe/{size_px}x{size_px}/{quote(source_url, safe='')},{x},{y},{alpha})"
 
 
 def og_photo_url(image_url: str, focal: dict | None = None) -> str:
