@@ -3,6 +3,7 @@
 import pytest
 
 from server.apps.huts.models import Hut
+from server.apps.organizations.models import Organization
 
 pytestmark = [pytest.mark.django_db]
 
@@ -60,6 +61,36 @@ class TestHutMarkdown:
         hut.save()
         response = client.get(f"/v1/huts/{hut.slug}.md")
         assert response.status_code == 404
+
+    def test_markdown_links_live_availability_when_sourced(self, seed_data, client):
+        """Huts with an availability source link the live availability API."""
+        hut = Hut.objects.filter(
+            is_active=True, is_public=True, availability_source_ref=None
+        ).first()
+        assert hut is not None
+        org = Organization.objects.first()
+        if org is None:
+            org = Organization.objects.create(
+                slug="test-avail-org", name="Test Avail Org"
+            )
+        hut.availability_source_ref = org
+        hut.save()
+        try:
+            body = client.get(f"/v1/huts/{hut.slug}.md").content.decode()
+            assert "Live bed availability (JSON):" in body
+            assert f"/v1/huts/{hut.slug}/availability/today?days=7" in body
+        finally:
+            # Session-scoped seed DB: leave the hut unsourced again.
+            hut.availability_source_ref = None
+            hut.save()
+
+    def test_markdown_without_availability_source_has_no_link(self, seed_data, client):
+        hut = Hut.objects.filter(
+            is_active=True, is_public=True, availability_source_ref=None
+        ).first()
+        assert hut is not None
+        body = client.get(f"/v1/huts/{hut.slug}.md").content.decode()
+        assert "availability/today" not in body
 
     def test_json_detail_still_works_for_same_slug(self, seed_data, client):
         """The /{slug} catch-all must not swallow or break .md handling."""

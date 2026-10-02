@@ -129,6 +129,15 @@ def _hut_markdown(request: HttpRequest, hut: Hut) -> str:
     )
 
     open_info_url = (hut.open_monthly or {}).get("url")
+    # Live bed availability only exists for huts with a booking source;
+    # link the per-hut endpoint (static URL, safe for the 1 h cache).
+    availability_url = (
+        request.build_absolute_uri(
+            f"/v1/huts/{quote(hut.slug)}/availability/today?days=7"
+        )
+        if hut.availability_source_ref_id
+        else None
+    )
     attribution = _attribution_as_markdown(hut.description_attribution)
     attribution_line = f"\n*Description: {attribution}*\n" if attribution else ""
 
@@ -147,6 +156,7 @@ def _hut_markdown(request: HttpRequest, hut: Hut) -> str:
 > {subtitle}
 
 Interactive map: {app_url}
+{f"Live bed availability (JSON): {availability_url}" if availability_url else ""}
 
 ## Overview
 
