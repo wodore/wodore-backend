@@ -6,21 +6,23 @@ from dmr.routing import path
 from pydantic import Field
 
 from server.apps.api.controller import ApiController, raise_not_found
-from server.apps.api.query import FieldsQuery, dump_fields, dump_fields_list
+from server.apps.api.query import dump_sparse, dump_sparse_list, sparse_fields_query
 from server.apps.translations import override
 from server.apps.translations.schema import LanguageQuery
 
 from .models import Organization
 from .schema import OrganizationOptional
 
+OrganizationFields = sparse_fields_query(organizations=OrganizationOptional)
 
-class OrganizationListQuery(LanguageQuery, FieldsQuery):
+
+class OrganizationListQuery(LanguageQuery, OrganizationFields):
     """Query parameters for the organization list."""
 
     is_public: bool | None = None
 
 
-class OrganizationDetailQuery(LanguageQuery, FieldsQuery):
+class OrganizationDetailQuery(LanguageQuery, OrganizationFields):
     """Query parameters for the organization detail endpoint."""
 
 
@@ -43,10 +45,11 @@ class OrganizationsController(ApiController):
         if isinstance(parsed_query.is_public, bool):
             orgs = orgs.filter(is_public=parsed_query.is_public)
         with override(parsed_query.lang):
-            return dump_fields_list(
+            return dump_sparse_list(
                 OrganizationOptional,
                 list(orgs),
                 parsed_query,
+                "organizations",
                 default_include=["slug", "url", "logo", "name", "fullname"],
             )
 
@@ -65,8 +68,12 @@ class OrganizationDetailController(ApiController):
         if org is None:
             raise_not_found(f"Organization {parsed_path.slug!r} not found.")
         with override(parsed_query.lang):
-            return dump_fields(
-                OrganizationOptional, org, parsed_query, default_include="__all__"
+            return dump_sparse(
+                OrganizationOptional,
+                org,
+                parsed_query,
+                "organizations",
+                default_include="__all__",
             )
 
 

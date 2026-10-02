@@ -144,6 +144,7 @@ dev = [
   "scour>=0.38.2",
   "lxml>=6.0.2",
   "allure-pytest>=2.15.3",
+  "schemathesis>=4.29.0",
 ]
 
 [tool.uv.sources]
@@ -159,6 +160,9 @@ minversion = "7.0"
 DJANGO_SETTINGS_MODULE = "server.settings"
 addopts = "--reuse-db"
 testpaths = ["tests"]
+markers = [
+    "api_contract: property-based contract tests (schemathesis) - slower, run via -m api_contract",
+]
 
 [tool.docker]
 registry = "ghcr.io/wodore"

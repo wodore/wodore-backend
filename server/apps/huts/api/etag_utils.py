@@ -255,3 +255,28 @@ def set_cache_headers(
     response["Last-Modified"] = last_modified
     response["Cache-Control"] = f"public, max-age={max_age}"
     return response
+
+
+def cached_304(controller, etag: str, last_modified: str, *, max_age: int):
+    """Empty 304 with the caching headers (shared hut-endpoint dance)."""
+    return controller.to_response(
+        None,
+        status_code=304,
+        headers={
+            "ETag": etag,
+            "Last-Modified": last_modified,
+            "Cache-Control": f"public, max-age={max_age}",
+        },
+    )
+
+
+def cached_200(controller, data, etag: str, last_modified: str, *, max_age: int):
+    """Data response with ETag/Last-Modified/Cache-Control set."""
+    return controller.to_response(
+        data,
+        headers={
+            "ETag": etag,
+            "Last-Modified": last_modified,
+            "Cache-Control": f"public, max-age={max_age}",
+        },
+    )
