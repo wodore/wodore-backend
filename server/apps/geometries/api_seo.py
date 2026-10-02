@@ -20,7 +20,8 @@ from django.conf import settings
 from django.http import Http404, HttpRequest, HttpResponse
 
 from server.apps.api.controller import ApiController, cache_headers
-from server.apps.images.og import og_map_card_url, og_photo_url
+from server.apps.images.models import Image
+from server.apps.images.og import og_map_card_url, og_photo_url, photo_source
 
 from .models import GeoPlace, GeoPlaceImageAssociation
 
@@ -78,22 +79,35 @@ def _place_url(place: GeoPlace) -> str:
 
 
 def _place_image(place: GeoPlace, request: HttpRequest) -> str | None:
-    """Highest-scored image as og:image; generated card as fallback."""
-    association = (
-        GeoPlaceImageAssociation.objects.filter(geo_place=place)
+    """Highest-scored *servable* image as og:image; static-map card as
+    fallback.
+
+    Same visibility filters and source resolution as the hut meta
+    endpoint (``_hut_meta._og_image``): pinned external images serve
+    from ``source_url_raw``, rows with no source are skipped instead of
+    signing an empty path."""
+    associations = (
+        GeoPlaceImageAssociation.objects.filter(
+            geo_place=place,
+            image__is_active=True,
+            image__review_status=Image.ReviewStatusChoices.approved,
+        )
+        .exclude(image__license__no_publication=True)
         .select_related("image")
         .order_by("-score", "id")
-        .first()
     )
-    try:
-        if association is not None:
-            source = str(association.image.image)
-            if not source.startswith("http"):
-                source = f"{settings.MEDIA_URL}/{source}"
-            focal = (association.image.image_meta or {}).get("focal")
-            return og_photo_url(source, focal)
-    except Exception:  # preview image is best-effort
-        pass
+    for association in associations:
+        source = photo_source(association.image)
+        if source is None:
+            continue
+        focal = (association.image.image_meta or {}).get("focal")
+        og_url = None
+        try:  # preview image is best-effort
+            og_url = og_photo_url(source, focal)
+        except Exception:
+            og_url = None
+        if og_url:
+            return og_url
     # Complete static-map card from the generic endpoint; v=<modified>
     # busts the render cache on ANY place change, ETag-style.
     from urllib.parse import urlencode

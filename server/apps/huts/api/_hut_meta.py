@@ -23,7 +23,13 @@ from django.conf import settings
 from django.http import Http404, HttpRequest
 
 from server.apps.api.controller import ApiController, cache_headers
-from server.apps.images.og import og_card_url, og_map_card_url, og_photo_url
+from server.apps.images.models import Image
+from server.apps.images.og import (
+    og_card_url,
+    og_map_card_url,
+    og_photo_url,
+    photo_source,
+)
 from server.apps.symbols.utils import resolve_symbol_urls
 from server.apps.translations import LanguageQuery, activate
 
@@ -124,23 +130,37 @@ class _MetaQuery(LanguageQuery):
 
 
 def _og_image(hut: Hut, request: HttpRequest) -> str:
-    """Preview image URL: the highest-scored image at the og size;
-    generated brand card (name + elevation) as fallback."""
-    association = (
-        HutImageAssociation.objects.filter(hut=hut)
+    """Preview image URL: the highest-scored *servable* image at the og
+    size; generated brand card (name + elevation) as fallback.
+
+    Only publicly visible images count (same filters as the detail
+    endpoint): inactive, unapproved or no-publication rows are skipped.
+    Pinned external images keep their file field empty — their origin
+    URL (``source_url_raw``) is the source. Rows with no source at all
+    are skipped instead of signing an empty path (which resolves to the
+    bare imagor media alias and 500s)."""
+    associations = (
+        HutImageAssociation.objects.filter(
+            hut=hut,
+            image__is_active=True,
+            image__review_status=Image.ReviewStatusChoices.approved,
+        )
+        .exclude(image__license__no_publication=True)
         .select_related("image")
         .order_by("-score", "id")
-        .first()
     )
-    try:
-        if association is not None:
-            source = str(association.image.image)
-            if not source.startswith("http"):
-                source = f"{settings.MEDIA_URL}/{source}"
-            focal = (association.image.image_meta or {}).get("focal")
-            return og_photo_url(source, focal)
-    except Exception:  # preview image is best-effort
-        pass
+    for association in associations:
+        source = photo_source(association.image)
+        if source is None:
+            continue
+        focal = (association.image.image_meta or {}).get("focal")
+        og_url = None
+        try:  # preview image is best-effort
+            og_url = og_photo_url(source, focal)
+        except Exception:
+            og_url = None
+        if og_url:
+            return og_url
     symbol_url = None
     if hut.hut_type_open is not None:
         symbols = resolve_symbol_urls(hut.hut_type_open, {"request": request})
