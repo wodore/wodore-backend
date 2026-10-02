@@ -13,7 +13,9 @@
 * ``marker`` (``symbol`` default when a place is given, ``none``)
 * ``marker_scale`` (multiplier, default 1)
 * ``effect`` (``none`` | ``blur_border`` | ``spotlight`` | ``vignette``
-  | ``rounded``)
+  | ``blurred_edges`` | ``rounded``)
+* ``attribution`` (default true — OpenTopoMap license requires it on
+  published maps; opt out only for non-published uses)
 * ``v`` — free-form cache buster (the caller's last-modified); any
   change produces a fresh render, ETag-style
 
@@ -56,6 +58,7 @@ class StaticMapParams(Schema):
     marker: str | None = None
     marker_scale: float = 1.0
     effect: str = "none"
+    attribution: bool = True
     v: str | None = None
 
 
@@ -149,6 +152,7 @@ def get_static_map(
             "marker": marker_mode,
             "marker_scale": f"{params.marker_scale:g}",
             "effect": params.effect,
+            "attribution": str(params.attribution).lower(),
             "v": params.v,
             "symbol": symbol_url,
         }
@@ -169,6 +173,7 @@ def get_static_map(
             marker=marker_img,
             marker_scale=params.marker_scale,
             watermark=fetch_watermark(),
+            attribution=params.attribution,
         )
         default_storage.save(name, ContentFile(data))
     with default_storage.open(name) as stored:

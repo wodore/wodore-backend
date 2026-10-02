@@ -92,7 +92,14 @@ class TestStaticMapEndpoint:
         assert offline_render["tiles"] > tiles_first
 
     def test_effects_and_params_validated(self, seed_data, client, offline_render):
-        for effect in ("none", "blur_border", "spotlight", "vignette", "rounded"):
+        for effect in (
+            "none",
+            "blur_border",
+            "spotlight",
+            "vignette",
+            "blurred_edges",
+            "rounded",
+        ):
             response = client.get(
                 "/v1/geo/map/static",
                 {"lat": 46.5, "lon": 8.1, "effect": effect, "v": f"e-{effect}"},
@@ -196,6 +203,17 @@ class TestSizeParameter:
 
         img = Image.open(io.BytesIO(response.content))
         assert img.size == (1200, 630)
+
+    def test_attribution_param(self, seed_data, client, offline_render):
+        with_attr = client.get(
+            "/v1/geo/map/static", {"lat": 46.5, "lon": 8.1, "v": "attr-on"}
+        )
+        without_attr = client.get(
+            "/v1/geo/map/static",
+            {"lat": 46.5, "lon": 8.1, "attribution": "false", "v": "attr-off"},
+        )
+        assert with_attr.status_code == without_attr.status_code == 200
+        assert len(with_attr.content) > len(without_attr.content)  # text stripped
 
     def test_bad_size_404(self, seed_data, client, offline_render):
         assert (

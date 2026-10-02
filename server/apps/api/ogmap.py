@@ -13,7 +13,10 @@ Effects (``effect=`` parameter):
 * ``spotlight`` — same layout, but the border copy is desaturated
   (color stays only inside)
 * ``vignette`` — radial darkening towards the edges
-* ``rounded`` — just rounded corners
+* ``blurred_edges`` — vignette-style falloff with BLUR instead of
+  darkness: sharp inside, increasingly blurred towards the edges
+* ``rounded`` — rounded corners over a light backdrop (visible on the
+  flat JPEG)
 
 OpenTopoMap tiles are keyless; the license attribution is baked into
 the bottom-right corner of every card.
@@ -40,7 +43,7 @@ CARD_WIDTH = 1200
 CARD_HEIGHT = 630
 CARD_ASPECT = CARD_WIDTH / CARD_HEIGHT
 CARD_ZOOM = 16
-EFFECTS = ("none", "blur_border", "spotlight", "vignette", "rounded")
+EFFECTS = ("none", "blur_border", "spotlight", "vignette", "blurred_edges", "rounded")
 
 # Marker/watermark geometry (owner-approved): symbol right of center,
 # watermark on the left at the bottom.
@@ -126,6 +129,23 @@ def _apply_effect(card: Image.Image, effect: str, scale: float = 1.0) -> Image.I
         out.paste(dark, (0, 0), Image.eval(mask, lambda v: 255 - v))
         return out.convert("RGB")
 
+    if effect == "blurred_edges":
+        blurred = card.filter(ImageFilter.GaussianBlur(int(10 * scale)))
+        mask = Image.new("L", card.size, 0)
+        ImageDraw.Draw(mask).rounded_rectangle(
+            [
+                int(card.width * 0.14),
+                int(card.height * 0.14),
+                int(card.width * 0.86),
+                int(card.height * 0.86),
+            ],
+            radius=int(200 * scale),
+            fill=255,
+        )
+        mask = mask.filter(ImageFilter.GaussianBlur(int(90 * scale)))
+        card.paste(blurred, (0, 0), Image.eval(mask, lambda v: 255 - v))
+        return card
+
     # blur_border / spotlight: blurred (and optionally desaturated) copy
     # of the map fills the frame, the sharp rounded map sits on top.
     margin = int(26 * scale)
@@ -162,6 +182,7 @@ def render_static_map(
     marker: Image.Image | None = None,
     marker_scale: float = 1.0,
     watermark: Image.Image | None = None,
+    attribution: bool = True,
 ) -> bytes:
     """Render a complete og card of width x height, centered on (lat, lon).
 
@@ -195,7 +216,10 @@ def render_static_map(
     )
 
     if effect == "rounded":
-        card = _rounded(card, int(44 * scale)).convert("RGB")
+        backdrop = Image.new("RGB", (width, height), (238, 242, 239))
+        inner = _rounded(card, int(48 * scale))
+        backdrop.paste(inner, (0, 0), inner)
+        card = backdrop
     elif effect != "none":
         card = _apply_effect(card, effect, scale)
 
@@ -227,25 +251,26 @@ def render_static_map(
         )
 
     card = card.convert("RGB")
-    draw = ImageDraw.Draw(card, "RGBA")
-    font_size = max(12, int(18 * scale))
-    try:
-        font = ImageFont.truetype(str(_FONT_PATH), font_size)
-    except OSError:
-        font = ImageFont.load_default()
-    bbox = draw.textbbox((0, 0), ATTRIBUTION, font=font)
-    tw = bbox[2] - bbox[0]
-    pad = max(4, int(6 * scale))
-    draw.rectangle(
-        [width - tw - pad * 3, height - int(26 * scale), width, height],
-        fill=(255, 255, 255, 170),
-    )
-    draw.text(
-        (width - tw - pad * 2, height - int(24 * scale)),
-        ATTRIBUTION,
-        font=font,
-        fill=(60, 60, 60, 220),
-    )
+    if attribution:
+        draw = ImageDraw.Draw(card, "RGBA")
+        font_size = max(10, int(13 * scale))
+        try:
+            font = ImageFont.truetype(str(_FONT_PATH), font_size)
+        except OSError:
+            font = ImageFont.load_default()
+        bbox = draw.textbbox((0, 0), ATTRIBUTION, font=font)
+        tw = bbox[2] - bbox[0]
+        pad = max(4, int(6 * scale))
+        draw.rectangle(
+            [width - tw - pad * 3, height - int(20 * scale), width, height],
+            fill=(255, 255, 255, 120),
+        )
+        draw.text(
+            (width - tw - pad * 2, height - int(19 * scale)),
+            ATTRIBUTION,
+            font=font,
+            fill=(110, 110, 110, 170),
+        )
 
     buffer = io.BytesIO()
     # JPEG: flat (no transparency) photographic-like content, ~5x smaller
