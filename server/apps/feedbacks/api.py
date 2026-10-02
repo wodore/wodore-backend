@@ -3,6 +3,8 @@
 import pydantic
 from dmr import Body, Query, modify
 from dmr.routing import path
+from dmr.throttling import Rate, SyncThrottle
+from dmr.throttling.cache_keys import RemoteAddr
 from pydantic import Field
 
 from django.conf import settings
@@ -21,7 +23,14 @@ class FeedbackQuery(pydantic.BaseModel):
 class FeedbackController(ApiController):
     """User feedback submission."""
 
-    @modify(operation_id="create_feedback")
+    @modify(
+        operation_id="create_feedback",
+        # Public, unauthenticated, stores a row AND sends admin email:
+        # brute-force/spam protection before anything else lands on it.
+        throttling=[
+            SyncThrottle(5, Rate.minute, cache_key=RemoteAddr()),
+        ],
+    )
     def post(
         self,
         parsed_body: Body[FeedbackCreate],
@@ -55,7 +64,9 @@ class FeedbackController(ApiController):
                 f'{feedback.id}/change/">edit message</a><br/>'
                 f"<small>{feedback.created}</small></p>"
             )
-            recipient = [a[1] for a in settings.DJANGO_ADMIN_EMAILS]
+            recipient = [
+                a[1] if len(a) > 1 else a[0] for a in settings.DJANGO_ADMIN_EMAILS if a
+            ]
             msg = EmailMessage(
                 subject=subject,
                 body=text,

@@ -251,3 +251,23 @@ class TestContractPerVersion:
         data = response.json()
         assert all("slug" in hut for hut in data)  # old shape preserved
         assert all(hut["api_old_shape"] is True for hut in data)  # downgrade
+
+
+class TestJsonErrorsForUnknownPaths:
+    """dmr 404/500 handlers: unknown /v1/* paths answer JSON (contract).
+
+    Found by the schemathesis contract run: Django's default handler
+    produced an HTML 404 (with content-type text/html), violating the
+    documented error schema. handler404/handler500 are wired in
+    server/urls.py; they only engage outside DEBUG, which the test
+    environment guarantees.
+    """
+
+    def test_unknown_v1_path_is_json_404(self, client):
+        import json
+
+        response = client.get("/v1/no-such-endpoint")
+        assert response.status_code == 404
+        assert response["Content-Type"].startswith("application/json")
+        body = json.loads(response.content)
+        assert "detail" in body or "code" in body

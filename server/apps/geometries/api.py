@@ -1,7 +1,5 @@
 """GeoPlace search and query endpoints on dmr."""
 
-from enum import Enum
-
 import pydantic
 from dmr import Path, Query, modify
 from dmr.routing import path
@@ -10,6 +8,16 @@ from pydantic import Field
 from django.views.decorators.cache import cache_page
 
 from server.apps.api.controller import ApiController, cache_headers, raise_not_found
+from server.apps.api.enums import IncludeModeEnum
+from server.apps.api.query import BboxQuery, bbox_polygon
+from server.apps.geometries.presenters import (
+    annotate_sources,
+    apply_type_filters,
+    base_result,
+    build_categories_data,
+    build_sources,
+    prefetch_categories,
+)
 from server.apps.translations import LanguageQuery
 
 from .models import GeoPlace
@@ -18,15 +26,6 @@ from .schemas import (
     GeoPlaceNearbySchema,
     GeoPlaceSearchSchema,
 )
-
-
-class IncludeModeEnum(str, Enum):
-    """Include mode for search endpoint - controls level of detail."""
-
-    no = "no"
-    slug = "slug"
-    all = "all"
-
 
 __all__ = ["paths", "IncludeModeEnum"]
 
@@ -63,7 +62,7 @@ class _GeoSearchQuery(LanguageQuery):
     )
 
 
-class GeoSearchQuery(_GeoSearchQuery):
+class GeoSearchQuery(_GeoSearchQuery, BboxQuery):
     """Query parameters for the place search endpoint."""
 
     q: str = Field(
@@ -135,138 +134,6 @@ class AmenityPath(pydantic.BaseModel):
     """Amenity place id path parameter."""
 
     place_id: int = Field(description="GeoPlace id")
-
-
-# ---------------------------------------------------------------------------
-# Shared queryset/result-building helpers (business logic unchanged)
-# ---------------------------------------------------------------------------
-
-
-def _apply_type_filters(queryset, types, categories):
-    if categories:
-        queryset = queryset.filter(categories__parent__slug__in=categories)
-    if types:
-        from django.db.models import Q
-
-        type_conditions = Q()
-        for type_slug in types:
-            if "." in type_slug:
-                parent_slug, child_slug = type_slug.split(".", 1)
-                type_conditions |= Q(
-                    categories__parent__slug=parent_slug, categories__slug=child_slug
-                )
-            else:
-                # Could be either parent or child category
-                type_conditions |= Q(categories__slug=type_slug) | Q(
-                    categories__parent__slug=type_slug
-                )
-        queryset = queryset.filter(type_conditions)
-    if categories or types:
-        queryset = queryset.distinct()
-    return queryset
-
-
-def _prefetch_categories(queryset):
-    return queryset.prefetch_related(
-        "categories",
-        "categories__parent",
-        "categories__symbol_detailed",
-        "categories__symbol_simple",
-        "categories__symbol_mono",
-    )
-
-
-def _annotate_sources(queryset, include_sources: IncludeModeEnum):
-    from django.contrib.postgres.aggregates import JSONBAgg
-    from django.db.models import F
-    from django.db.models.functions import JSONObject
-
-    if include_sources == IncludeModeEnum.slug:
-        return queryset.annotate(
-            source_slugs=JSONBAgg(F("source_set__slug"), distinct=True),
-            source_ids=JSONBAgg(F("source_associations__source_id"), distinct=True),
-        )
-    if include_sources == IncludeModeEnum.all:
-        return queryset.annotate(
-            sources_data=JSONBAgg(
-                JSONObject(
-                    slug="source_set__slug",
-                    name="source_set__name_i18n",
-                    logo="source_set__logo",
-                    source_id="source_associations__source_id",
-                ),
-                distinct=True,
-            )
-        )
-    return queryset
-
-
-def _build_categories_data(place, request):
-    from server.apps.symbols.utils import resolve_symbol_urls
-
-    categories_data = []
-    for category in place.categories.all():
-        category_data = {
-            "slug": category.slug,
-            "name": category.name_i18n,  # noqa: WPS308  # modeltranslation
-            "description": category.description_i18n,  # noqa: WPS308
-        }
-        symbol_data = resolve_symbol_urls(category, {"request": request})
-        if symbol_data:
-            category_data["symbol"] = symbol_data
-        categories_data.append(category_data)
-    return categories_data
-
-
-def _build_sources(result: dict, place, media_url: str, include_sources) -> None:
-    from server.apps.organizations.schema import (
-        OrganizationSourceIdDetailSchema,
-        OrganizationSourceIdSlugSchema,
-    )
-
-    if include_sources == IncludeModeEnum.slug:
-        slugs = [slug for slug in (place.source_slugs or []) if slug is not None]
-        ids = [sid for sid in (place.source_ids or []) if sid is not None]
-        sources_list = []
-        for i, slug in enumerate(slugs):
-            source_item = OrganizationSourceIdSlugSchema(
-                source=slug, source_id=ids[i] if i < len(ids) and ids[i] else None
-            )
-            sources_list.append(source_item.dict(exclude_unset=True))
-        if sources_list:
-            result["sources"] = sources_list
-    elif include_sources == IncludeModeEnum.all:
-        sources = []
-        for src in place.sources_data or []:
-            if src.get("slug") is not None:
-                org_data = {
-                    "slug": src["slug"],
-                    "name": src.get("name"),
-                    "logo": (f"{media_url}{src['logo']}" if src.get("logo") else None),
-                }
-                source_item = OrganizationSourceIdDetailSchema(
-                    source=org_data,  # type: ignore[arg-type]
-                    source_id=src.get("source_id"),
-                )
-                sources.append(
-                    source_item.dict(exclude_unset=True, exclude={"source": {"logo"}})
-                )
-        if sources:
-            result["sources"] = sources
-
-
-def _base_result(place, media_url: str) -> dict:
-    return {
-        "name": place.name_i18n,  # noqa: WPS308  # modeltranslation
-        "country_code": str(place.country_code) if place.country_code else None,
-        "id": place.id,
-        "elevation": place.elevation,
-        "importance": place.importance,
-        "location": {
-            "lat": place.location.y if place.location else None,
-            "lon": place.location.x if place.location else None,
-        },
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -397,6 +264,9 @@ class GeoSearchController(ApiController):
             "country_code",
         )
 
+        if query.bbox:
+            queryset = queryset.filter(location__intersects=bbox_polygon(query.bbox))
+
         if query.min_importance > 0:
             queryset = queryset.filter(importance__gte=query.min_importance)
         if query.countries:
@@ -404,12 +274,12 @@ class GeoSearchController(ApiController):
                 country_code__in=[c.upper() for c in query.countries]
             )
 
-        queryset = _apply_type_filters(queryset, query.types, query.categories)
+        queryset = apply_type_filters(queryset, query.types, query.categories)
 
         if query.include_categories != IncludeModeEnum.no:
-            queryset = _prefetch_categories(queryset)
+            queryset = prefetch_categories(queryset)
 
-        queryset = _annotate_sources(queryset, query.include_sources)
+        queryset = annotate_sources(queryset, query.include_sources)
 
         # Fuzzy search using trigram similarity
         requested_language = query.lang
@@ -527,7 +397,7 @@ class GeoSearchController(ApiController):
             media_url = request.build_absolute_uri(media_url)
 
         for place in queryset:
-            result = _base_result(place, media_url)
+            result = base_result(place, media_url)
             result["score"] = place.rank_score
 
             if query.include_categories == IncludeModeEnum.slug:
@@ -535,11 +405,11 @@ class GeoSearchController(ApiController):
                     category.slug for category in place.categories.all()
                 ]
             elif query.include_categories == IncludeModeEnum.all:
-                categories_data = _build_categories_data(place, request)
+                categories_data = build_categories_data(place, request)
                 if categories_data:
                     result["categories"] = categories_data
 
-            _build_sources(result, place, media_url, query.include_sources)
+            build_sources(result, place, media_url, query.include_sources)
             results.append(result)
 
         return [
@@ -584,12 +454,12 @@ class GeoNearbyController(ApiController):
         if query.min_importance > 0:
             queryset = queryset.filter(importance__gte=query.min_importance)
 
-        queryset = _apply_type_filters(queryset, query.types, query.categories)
+        queryset = apply_type_filters(queryset, query.types, query.categories)
 
         if query.include_categories != IncludeModeEnum.no:
-            queryset = _prefetch_categories(queryset)
+            queryset = prefetch_categories(queryset)
 
-        queryset = _annotate_sources(queryset, query.include_sources)
+        queryset = annotate_sources(queryset, query.include_sources)
 
         queryset = queryset.annotate(distance=Distance("location", point)).order_by(
             "distance"
@@ -605,7 +475,7 @@ class GeoNearbyController(ApiController):
                 place.distance.m if hasattr(place.distance, "m") else place.distance
             )
 
-            result = _base_result(place, media_url)
+            result = base_result(place, media_url)
             result["distance"] = round(distance_m, 2) if distance_m else None
 
             if query.include_categories == IncludeModeEnum.slug:
@@ -613,11 +483,11 @@ class GeoNearbyController(ApiController):
                     category.slug for category in place.categories.all()
                 ]
             elif query.include_categories == IncludeModeEnum.all:
-                categories_data = _build_categories_data(place, request)
+                categories_data = build_categories_data(place, request)
                 if categories_data:
                     result["categories"] = categories_data
 
-            _build_sources(result, place, media_url, query.include_sources)
+            build_sources(result, place, media_url, query.include_sources)
             results.append(result)
 
         return [
@@ -736,12 +606,12 @@ class AmenityController(ApiController):
                 place.source_ids = getattr(annotated, "source_ids", None)
                 place.sources_data = getattr(annotated, "sources_data", None)
 
-        result = _base_result(place, media_url)
+        result = base_result(place, media_url)
         result["description"] = place.description_i18n  # noqa: WPS308
         result["detail_type"] = place.detail_type
         result["review_status"] = place.review_status
 
-        categories_data = _build_categories_data(place, request)
+        categories_data = build_categories_data(place, request)
         if categories_data:
             result["categories"] = categories_data
 
@@ -755,7 +625,7 @@ class AmenityController(ApiController):
                 "extra": place.amenity_detail.extra or {},
             }
 
-        _build_sources(result, place, media_url, parsed_query.include_sources)
+        build_sources(result, place, media_url, parsed_query.include_sources)
 
         return AmenitySchema(**result)
 

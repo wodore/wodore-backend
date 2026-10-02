@@ -21,7 +21,14 @@ from django.http import Http404, HttpRequest, HttpResponse
 
 from server.apps.api.controller import ApiController, cache_headers
 from server.apps.images.models import Image
-from server.apps.images.og import og_map_card_url, og_photo_url, photo_source
+from server.apps.images.og import (
+    OG_MAP_EFFECT,
+    OG_MAP_MARKER_SCALE,
+    OG_MAP_ZOOM,
+    og_map_card_url,
+    og_photo_url,
+    photo_source,
+)
 
 from .models import GeoPlace, GeoPlaceImageAssociation
 
@@ -115,7 +122,9 @@ def _place_image(place: GeoPlace, request: HttpRequest) -> str | None:
     query = urlencode(
         {
             "place": place.slug,
-            "zoom": 16,
+            "zoom": OG_MAP_ZOOM,
+            "effect": OG_MAP_EFFECT,
+            "marker_scale": OG_MAP_MARKER_SCALE,
             "v": f"{place.modified:%Y%m%dT%H%M%S}",
         }
     )

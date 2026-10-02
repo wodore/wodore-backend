@@ -5,7 +5,11 @@
 > mountain huts, bivouacs and shelters.
 
 Web app: {{ frontend_url }}
-Hut pages: {{ frontend_url }}/hut/{slug}
+Hut pages: {{ frontend_url }}/{lang}/hut/{slug} for lang in
+  en, de, fr, it — each serves the page with localized metadata. The
+  bare {{ frontend_url }}/hut/{slug} is the app's user-facing alias
+  (the app strips the prefix after loading; display language follows
+  the stored user preference first, then the path)
 
 ## Places
 

@@ -9,6 +9,7 @@ This examples uses Django's default media
 files serving technique in development.
 """
 
+from dmr.routing import build_404_handler, build_500_handler
 from health_check import Cache, Database, Storage
 from health_check.views import HealthCheckView
 
@@ -20,6 +21,7 @@ from django.urls import include, path
 from django.views.generic import TemplateView
 
 from .apps.api import api_v1 as api_v1_module
+from .apps.api.serializer import WodoreSerializer
 from .apps.apiversions.docs import VersionedSwagger
 from .apps.local_auth import account_views
 from .apps.main import urls as django_admin_urls
@@ -27,6 +29,11 @@ from .apps.main import views as main_views
 from .apps.main.views import index
 
 admin.autodiscover()
+
+# API-style JSON errors for unknown /v1/* paths (found by the schemathesis
+# contract run: Django's default HTML 404 violated the documented schema).
+handler404 = build_404_handler("v1/", serializer=WodoreSerializer)
+handler500 = build_500_handler("v1/", serializer=WodoreSerializer)
 
 # Define base URL patterns
 urlpatterns = [

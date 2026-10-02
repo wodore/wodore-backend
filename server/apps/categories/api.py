@@ -10,6 +10,7 @@ from pydantic import Field
 
 from django.db.models import Count, Q
 from django.http import HttpRequest, HttpResponse
+from django.views.decorators.cache import cache_page
 
 from server.apps.api.controller import ApiController, cache_headers, raise_not_found
 from server.apps.translations import LanguageQuery, override
@@ -75,6 +76,14 @@ def build_category_dict(
     return data
 
 
+def _ordered_children(category: Category, is_active: bool):
+    """Active-filtered, order-stable children queryset (shared by tree/flat/map)."""
+    children_qs = category.children.all()
+    if is_active:
+        children_qs = children_qs.filter(is_active=True)
+    return children_qs.order_by("order", "slug")
+
+
 def get_descendants_tree(
     category: Category,
     request: HttpRequest,
@@ -92,9 +101,7 @@ def get_descendants_tree(
         result["children"] = category.has_children()
         return result
 
-    children_qs = category.children.all()
-    if is_active:
-        children_qs = children_qs.filter(is_active=True)
+    children_qs = _ordered_children(category, is_active)
 
     tree_children = [
         get_descendants_tree(
@@ -129,11 +136,7 @@ def get_descendants_flat(
     if max_level is not None and current_level >= max_level:
         return result
 
-    children_qs = category.children.all()
-    if is_active:
-        children_qs = children_qs.filter(is_active=True)
-
-    for child in children_qs.order_by("order", "slug"):
+    for child in _ordered_children(category, is_active):
         result.extend(
             get_descendants_flat(
                 child,
@@ -166,12 +169,8 @@ def get_descendants_map(
         result["children_count"] = 0
         return result
 
-    children_qs = category.children.all()
-    if is_active:
-        children_qs = children_qs.filter(is_active=True)
-
     children_map = {}
-    for child in children_qs.order_by("order", "slug"):
+    for child in _ordered_children(category, is_active):
         children_map[child.slug] = get_descendants_map(
             child, request, max_level, is_active, media_mode, base_level
         )
@@ -586,19 +585,21 @@ paths: list[Any] = [
         openapi=None,
         name="get_categories_markdown",
     ),
+    # Server-side page cache: the tree is a multi-MB recursive traversal
+    # of a slowly-changing table (parity with the geo endpoints).
     path(
         "tree/<path:parent_slug>",
-        CategoryTreeController.as_view(),
+        cache_page(3600)(CategoryTreeController.as_view()),
         name="get_category_tree",
     ),
     path(
         "list/<path:parent_slug>",
-        CategoryListController.as_view(),
+        cache_page(3600)(CategoryListController.as_view()),
         name="get_category_list_all",
     ),
     path(
         "map/<path:parent_slug>",
-        CategoryMapController.as_view(),
+        cache_page(3600)(CategoryMapController.as_view()),
         name="get_category_map_all",
     ),
     path(
