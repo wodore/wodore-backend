@@ -47,7 +47,7 @@ Two feature flags (see `server/settings/components/oidc.py`):
 
 - **Django Apps**: `server/apps/` (e.g., `huts/`, `availbility/`, `organizations/`)
 - **Settings**: `server/settings/components/` (modular settings files)
-- **API**: Django Ninja (not DRF) - endpoints typically in `api.py`
+- **API**: django-modern-rest (dmr, not DRF) - Controllers in `api.py` modules, each exporting a `paths` list
 - **Admin**: Django Unfold - configuration in `server/settings/components/unfold.py`
 
 ## Documentation
@@ -65,7 +65,7 @@ OpenAPI schema available at:
 
 ## Tech Stack
 
-- **Framework**: Django with Django Ninja for API
+- **Framework**: Django with django-modern-rest (dmr) for API
 - **Admin**: Django Unfold (customized admin interface) - [Documentation](https://unfoldadmin.com/docs/)
 - **Database**: PostgreSQL with PostGIS
 - **Dependencies**: hut-services library for external hut information and booking data
@@ -135,24 +135,24 @@ Services are defined in `docker-compose.yml`:
 - Inherit from `server.core.managers.BaseManager`
 - Define custom querysets for complex queries
 
-### API Endpoints (Django Ninja)
+### API Endpoints (dmr Controllers)
 
-**Documentation Style:**
+**Structure:**
 
-- **Function docstring**: Keep it simple, usually one line describing what the endpoint does
-- **Parameters**: Use `Query()` from `ninja` to add detailed descriptions for each parameter
-- **Examples**: Only add examples if helpful (not for simple integers, bools, or obvious values). Use `example="value"` (singular), not `examples=[...]`
-- **Response**: Set `exclude_unset=True` on the router decorator to exclude fields that are not set (avoids null fields in response)
-
-**Key Points:**
-
-- Use `Query(...)` for required parameters with description (NOT `Field()` - that's for Pydantic schemas)
-- Use `Query(default_value, description=...)` for optional parameters
-- Add `example="value"` only when it helps clarify usage (e.g., for search strings, special formats, or non-obvious numeric values)
-- Skip examples for obvious types like simple integers, booleans, or enums (Swagger UI shows these well)
-- `exclude_unset=True` works by not adding fields to the response dict when they shouldn't be included
-- Don't set fields to `None` if you want them excluded - simply don't add them to the result dict
-- Add detailed descriptions explaining what values mean, especially for numeric thresholds or enum options
+- One `Controller[...]` class per path (subclass `server.apps.api.controller.ApiController`)
+- Method per HTTP verb (`def get(...)`, `def post(...)`); docstring = description, endpoint slug = title
+- Typed components: `parsed_query: Query[YourQueryModel]`, `parsed_body: Body[X]`, `parsed_path: Path[X]`
+  (parameter names MUST be `parsed_*` - dmr silently skips others)
+- Query/path models are plain pydantic models composed from `LanguageQuery` / `FieldsQuery`
+  (`server.apps.translations.schema`, `server.apps.api.query`); descriptions via `Field(..., description=...)`,
+  examples via `json_schema_extra={'example': ...}`
+- **Every route sets `name=` on `dmr.routing.path` equal to `@modify(operation_id=...)`**
+  (versioning keys on it; startup checks E003/E004 enforce the invariant)
+- Response headers (Cache-Control etc.) via `@modify(headers=cache_headers(max_age=...))`
+- Errors: `raise_not_found(...)`, `APIError({'code', 'detail'}, status_code=...)` - one error contract everywhere
+- Serialization: `WodoreSerializer` dumps with `exclude_unset` - construct minimal DTOs/dicts,
+  unset optional fields are absent from the JSON (not null). Keep that when adding fields
+- Endpoints returning `HttpResponse` (ETag/304 paths) use `@validate(ResponseSpec(...))` + `self.to_response(...)`
 
 ## API Versioning
 
@@ -178,10 +178,11 @@ that matter for any code change:
   it succeeds (`new-api-version.yml`); `inv release` regenerates
   `CHANGELOG_API.md`. API changes appear in BOTH changelogs (type label →
   `CHANGELOG.md`, api label → `CHANGELOG_API.md`).
-- Direct-write GeoJSON endpoints (`huts.geojson`, `availability/*.geojson`)
-  bypass the renderer — they call `apply_response_transforms()` explicitly;
-  contract tests pin this. ETags on hut endpoints key on the resolved
-  version + registry hash.
+- Response downgrades for pinned-old versions are applied by
+  `ApiVersionMiddleware` uniformly to every JSON response (dmr controllers
+  and GeoJSON endpoints alike); contract tests pin this. Endpoint identity
+  is the URL name == operationId (startup checks E003/E004 enforce it).
+  ETags on hut endpoints key on the resolved version + registry hash.
 
 ## Testing
 

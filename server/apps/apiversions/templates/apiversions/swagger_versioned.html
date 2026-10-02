@@ -12,29 +12,13 @@
     <link rel="icon" type="image/png" href="{% static 'dmr/swagger/5.32.1/favicon-32x32.png' %}" sizes="32x32" />
     <link rel="icon" type="image/png" href="{% static 'dmr/swagger/5.32.1/favicon-16x16.png' %}" sizes="16x16" />
   {% endif %}
-  <style>
-    .api-version-bar {
-      display: flex; gap: .5rem; align-items: center;
-      padding: .5rem 1rem; font-family: sans-serif; font-size: .85rem;
-      border-bottom: 1px solid #ddd; background: #fafafa;
-    }
-    .api-version-bar a { padding: .15rem .5rem; border-radius: 4px; text-decoration: none; color: #4990e2; }
-    .api-version-bar a.selected { background: #4990e2; color: #fff; }
-  </style>
 </head>
 <body>
-  <div class="api-version-bar">
-    <strong>API version:</strong>
-    {% for v in api_versions %}
-      <a href="?api_version={{ v }}" class="{% if v == selected_api_version %}selected{% endif %}">{{ v }}</a>
-    {% endfor %}
-  </div>
-
   <div
     id="swagger-app"
     data-csrf-token="{{ csrf_token }}"
   ></div>
-  {{ schema|json_script:"swagger-schema" }}
+  {{ swagger_config|json_script:"swagger-config" }}
 
   {% if swagger_cdn %}
     <script src="{{ swagger_cdn }}/swagger-ui-bundle.js" charset="UTF-8"></script>
@@ -44,6 +28,47 @@
     <script src="{% static 'dmr/swagger/5.32.1/swagger-ui-standalone-preset.js' %}" charset="UTF-8"></script>
   {% endif %}
 
-  <script src="{% static 'dmr/swagger/init.js' %}"></script>
+  {# Version switching via Swagger UI's native urls dropdown (topbar): #}
+  {# each version has a stable schema URL; the selected one is pinned #}
+  {# through urls.primaryName from the ?api_version= deep link. #}
+  <script>
+    (() => {
+      const app = document.getElementById('swagger-app');
+      const configNode = document.getElementById('swagger-config');
+      const SwaggerUIBundle = window.SwaggerUIBundle;
+      const SwaggerUIStandalonePreset = window.SwaggerUIStandalonePreset;
+
+      if (!app || !configNode || !SwaggerUIBundle || !SwaggerUIStandalonePreset) return;
+
+      try {
+        const config = JSON.parse(configNode.textContent ?? '');
+        if (!config || !Array.isArray(config.urls) || !config.urls.length) return;
+
+        SwaggerUIBundle({
+          urls: config.urls,
+          'urls.primaryName': config.primary,
+          dom_id: '#swagger-app',
+          deepLinking: true,
+          presets: [
+            SwaggerUIBundle.presets.apis,
+            SwaggerUIStandalonePreset,
+          ],
+          plugins: [
+            SwaggerUIBundle.plugins.DownloadUrl,
+          ],
+          layout: 'StandaloneLayout',
+          requestInterceptor: (req) => {
+            const csrfToken = app.dataset.csrfToken;
+            if (csrfToken) {
+              req.headers['X-CSRFToken'] = csrfToken;
+            }
+            return req;
+          },
+        });
+      } catch (e) {
+        console.error('Invalid swagger config:', e);
+      }
+    })();
+  </script>
 </body>
 </html>
