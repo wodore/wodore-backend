@@ -106,6 +106,18 @@ REGISTRY: list[VersionChange] = [
         version=INITIAL_VERSION,
         description="Initial version: rollout of the versioning system.",
     ),
+    VersionChange(
+        version="2026-10-02",
+        description=(
+            "Replace the include/exclude query parameters with JSON:API "
+            "sparse fieldsets (fields[TYPE]=name1,name2). include/exclude "
+            "are removed (no consumer existed; sunset window 0): sending "
+            "them answers 400 invalid_parameter naming the replacement. "
+            "The 2026-10-01 snapshot still documents them as historical "
+            "record; pinned clients of that version are unaffected until "
+            "it sunsets."
+        ),
+    ),
 ]
 
 

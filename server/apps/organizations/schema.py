@@ -3,7 +3,7 @@
 from typing import Any
 
 import pydantic
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 
 from django.conf import settings
 from django.http import HttpRequest
@@ -59,7 +59,7 @@ class OrganizationOptional(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(from_attributes=True)
 
     slug: str | None = None
-    name: str | None = Field(None, validation_alias="name_i18n")
+    name: str | None = Field(..., validation_alias=AliasChoices("name_i18n", "name"))
     fullname: str | None = Field(None, validation_alias="fullname_i18n")
     description: str | None = Field(None, validation_alias="description_i18n")
     url: str | None = Field(None, validation_alias="url_i18n")

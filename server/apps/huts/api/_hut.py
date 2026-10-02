@@ -27,7 +27,7 @@ from django.urls import reverse_lazy
 
 from server.apps.api.controller import ApiController, cache_headers
 from server.apps.api.enums import IncludeModeEnum
-from server.apps.api.query import FieldsQuery, TristateEnum, dump_fields
+from server.apps.api.query import TristateEnum, dump_sparse, sparse_fields_query
 from server.apps.huts.schemas._hut import ImageMetaSchema
 from server.apps.translations import LanguageQuery, activate
 
@@ -38,6 +38,7 @@ from ..schemas import (
     HutSearchResultSchema,
     ImageInfoSchema,
     LicenseInfoSchema,
+    OrganizationBaseSchema,
 )
 from .etag_utils import (
     cached_200,
@@ -666,7 +667,14 @@ class HutsGeojsonController(ApiController):
 # ---------------------------------------------------------------------------
 
 
-class HutDetailQuery(LanguageQuery, FieldsQuery):
+HutDetailFields = sparse_fields_query(
+    huts=HutSchemaDetails,
+    sources=OrganizationBaseSchema,
+    images=ImageInfoSchema,
+)
+
+
+class HutDetailQuery(LanguageQuery, HutDetailFields):
     """Query parameters for the hut detail endpoint."""
 
 
@@ -906,10 +914,11 @@ class HutDetailController(ApiController):
             modified_timestamp, tz=datetime.timezone.utc
         )
 
-        data = dump_fields(
+        data = dump_sparse(
             HutSchemaDetails,
             hut_db,
             parsed_query,
+            "huts",
             default_include="__all__",
             context={"request": request},
         )

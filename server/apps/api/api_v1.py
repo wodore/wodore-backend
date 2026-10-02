@@ -113,6 +113,17 @@ def get_openapi_schema(request: HttpRequest | None = None) -> dict:
             while title.startswith(prefix):
                 title = title[len(prefix) :]
             operation["summary"] = f"{prefix}{title}" if title else op_id
+            # Sparse fieldsets: dmr 0.16 has no deepObject support — mark
+            # the fields parameter so Swagger UI renders a key/value editor
+            # for fields[TYPE]=a,b (openspec switch-to-sparse-fieldsets D2a).
+            for parameter in operation.get("parameters", []):
+                if (
+                    isinstance(parameter, dict)
+                    and parameter.get("name") == "fields"
+                    and parameter.get("in") == "query"
+                ):
+                    parameter["style"] = "deepObject"
+                    parameter["explode"] = True
     return document
 
 
