@@ -21,7 +21,7 @@ from pydantic import Field
 from django.conf import settings
 from django.contrib.postgres.aggregates import JSONBAgg
 from django.db.models import Case, F, Value, When
-from django.db.models.functions import Coalesce, Concat, JSONObject
+from django.db.models.functions import JSONObject
 from django.http import Http404, HttpRequest, HttpResponse
 from django.urls import reverse_lazy
 
@@ -40,6 +40,7 @@ from ..schemas import (
     LicenseInfoSchema,
     OrganizationBaseSchema,
 )
+from .annotations import annotate_hut_images, annotate_hut_sources
 from .etag_utils import (
     cached_200,
     cached_304,
@@ -359,53 +360,8 @@ class HutsController(ApiController):
                 default=Value(False),
             ),
             availability_source_ref__slug=F("availability_source_ref__slug"),
-            sources=JSONBAgg(
-                JSONObject(
-                    logo=Concat(Value(media_url), F("org_set__logo")),
-                    fullname="org_set__fullname_i18n",
-                    slug="org_set__slug",
-                    name="org_set__name_i18n",
-                    link="orgs_source__link",
-                    source_id="orgs_source__source_id",
-                    public="org_set__is_public",
-                ),
-                distinct=True,
-            ),
-            images=JSONBAgg(
-                JSONObject(
-                    image="image_set__image",
-                    image_url=Concat(Value(iam_media_url), F("image_set__image")),
-                    image_meta=JSONObject(
-                        crop="image_set__image_meta__crop",
-                        focal="image_set__image_meta__focal",
-                        width="image_set__image_meta__width",
-                        height="image_set__image_meta__height",
-                    ),
-                    caption="image_set__caption_i18n",
-                    license=JSONObject(
-                        slug="image_set__license__slug",
-                        name="image_set__license__name_i18n",
-                        fullname="image_set__license__fullname_i18n",
-                        description="image_set__license__description_i18n",
-                        url="image_set__license__url_i18n",
-                    ),
-                    author="image_set__author",
-                    author_url="image_set__author_url",
-                    source_url="image_set__source_url",
-                    organization=JSONObject(
-                        logo=Concat(Value(media_url), F("image_set__source_org__logo")),
-                        fullname="image_set__source_org__fullname_i18n",
-                        slug="image_set__source_org__slug",
-                        name="image_set__source_org__name_i18n",
-                        url="image_set__source_org__url",
-                    ),
-                    attribution=Value(""),
-                ),
-                ordering=(
-                    F("image_set__details__score").desc(nulls_last=True),
-                    "image_set__details__id",
-                ),
-            ),
+            sources=annotate_hut_sources(media_url=media_url),
+            images=annotate_hut_images(media_url=iam_media_url),
             translations=JSONObject(
                 description=JSONObject(
                     de="description_de",
@@ -763,66 +719,8 @@ class HutDetailController(ApiController):
                 default=Value(False),
             ),
             availability_source_ref__slug=F("availability_source_ref__slug"),
-            sources=JSONBAgg(
-                JSONObject(
-                    logo=Concat(Value(media_abs_url), F("org_set__logo")),
-                    fullname="org_set__fullname_i18n",
-                    slug="org_set__slug",
-                    name="org_set__name_i18n",
-                    link="orgs_source__link",
-                    source_id="orgs_source__source_id",
-                    public="org_set__is_public",
-                    active="org_set__is_active",
-                    order="org_set__order",
-                ),
-                distinct=True,
-            ),
-            images=JSONBAgg(
-                JSONObject(
-                    image="image_set__image",
-                    image_meta=JSONObject(
-                        crop="image_set__image_meta__crop",
-                        focal="image_set__image_meta__focal",
-                        width="image_set__image_meta__width",
-                        height="image_set__image_meta__height",
-                    ),
-                    review_status="image_set__review_status",
-                    caption="image_set__caption_i18n",
-                    license=JSONObject(
-                        slug="image_set__license__slug",
-                        is_active="image_set__license__is_active",
-                        name=Coalesce(
-                            "image_set__license__name_i18n",
-                            "image_set__license__slug",
-                        ),
-                        fullname=Coalesce(
-                            "image_set__license__fullname_i18n",
-                            "image_set__license__name_i18n",
-                            "image_set__license__slug",
-                        ),
-                        description="image_set__license__description_i18n",
-                        url="image_set__license__url_i18n",
-                        no_publication="image_set__license__no_publication",
-                    ),
-                    author="image_set__author",
-                    author_url="image_set__author_url",
-                    source_url="image_set__source_url",
-                    organization=JSONObject(
-                        logo=Concat(
-                            Value(media_abs_url), F("image_set__source_org__logo")
-                        ),
-                        fullname="image_set__source_org__fullname_i18n",
-                        slug="image_set__source_org__slug",
-                        name="image_set__source_org__name_i18n",
-                        url="image_set__source_org__url",
-                    ),
-                    attribution=Value(""),
-                ),
-                ordering=(
-                    F("image_set__details__score").desc(nulls_last=True),
-                    "image_set__details__id",
-                ),
-            ),
+            sources=annotate_hut_sources(media_url=media_abs_url, detail=True),
+            images=annotate_hut_images(detail=True),
             translations=JSONObject(
                 description=JSONObject(
                     de="description_de",
