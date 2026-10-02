@@ -65,6 +65,12 @@ OG_MAP_MARKER_SCALE = "0.8"
 # context instead of a rooftop close-up.
 OG_MAP_ZOOM = 15
 
+# Watermark x on map cards: left of center (owner preference), far
+# enough right to survive WhatsApp's 1:1 center crop — 0.33 of the free
+# space puts a 270px logo at ~26–48% of card width (crop zone starts
+# at ~24%). The photo variant stays dead-center (OG_LOGO_POS).
+OG_MAP_LOGO_POS = "0.33"
+
 
 def _frontend(path: str) -> str:
     return f"{settings.FRONTEND_DOMAIN.rstrip('/')}/{path.lstrip('/')}"
@@ -136,15 +142,14 @@ def og_photo_url(image_url: str, focal: dict | None = None) -> str:
 def og_map_card_url(map_url: str) -> str:
     """Signed imagor URL for a static-map og card: the generic
     static-map endpoint as source, with the Wodore watermark composited
-    bottom-center — same geometry as the photo variant (horizontally
-    centered survives WhatsApp's tighter center crops; the old
-    left-of-center 0.18 was cut off in WhatsApp previews). The endpoint
-    itself stays logo-free (also used directly by the image APIs)."""
+    at the bottom, left of center (OG_MAP_LOGO_POS — the old 0.18 was
+    cut off in WhatsApp's tighter center crops). The endpoint itself
+    stays logo-free (also used directly by the image APIs)."""
     filters = [
         _composite_image(
             _frontend(OG_LOGO_URL_PATH),
             OG_LOGO_SIZE_PX,
-            OG_LOGO_POS,
+            OG_MAP_LOGO_POS,
             OG_LOGO_POS_Y,
             OG_LOGO_ALPHA,
         )
