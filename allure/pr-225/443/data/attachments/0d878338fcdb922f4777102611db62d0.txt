@@ -1,1 +1,0 @@
-{"place_type": "hut", "place": "does-not-exist", "event": "place_sync_not_found", "timestamp": "2026-10-02T16:24:00.355293Z", "level": "warning", "logger": "server.apps.geometries.pinning", "filename": "pinning.py", "lineno": 310, "func_name": "sync_place_images_task", "module": "pinning"}
