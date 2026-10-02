@@ -8,6 +8,7 @@ import logging
 from ninja import Query, Router
 from ninja.decorators import decorate_view
 
+from django.conf import settings
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
 from django.http import HttpRequest, HttpResponse
@@ -30,6 +31,7 @@ from .providers import (
     provider_registry,
 )
 from .schemas import (
+    DEFAULT_THUMBHASHES,
     ImageCollectionResponse,
     ImageMetadataSchema,
 )
@@ -260,6 +262,103 @@ def nearby_images(
     return response
 
 
+def _map_fallback_feature(
+    request: HttpRequest,
+    *,
+    slug: str,
+    lat: float,
+    lon: float,
+    modified,
+    place_type: str,
+) -> dict:
+    """Static-map fallback feature for entities without any images
+    (only included when the caller passes fallback=true)."""
+    from urllib.parse import urlencode
+
+    def map_url(size: str) -> str:
+        query = urlencode(
+            {
+                "place": slug,
+                "place_type": place_type,
+                "size": size,
+                "v": f"{modified:%Y%m%dT%H%M%S}",
+            }
+        )
+        return request.build_absolute_uri(f"/v1/geo/map/static?{query}")
+
+    landscape_sm, landscape_md = map_url("600x315"), map_url("1200x630")
+    square_sm = map_url("600x600")
+    attribution_short = (
+        "© OpenTopoMap (CC-BY-SA) · © SRTM · © OpenStreetMap contributors"
+    )
+    return {
+        "type": "Feature",
+        "geometry": {"type": "Point", "coordinates": [lon, lat]},
+        "properties": {
+            "provider": {
+                "slug": "wodore-map",
+                "name": "Static map",
+                "url": settings.FRONTEND_DOMAIN,
+                "icon": None,
+                "description": "Generated OpenTopoMap card (no photo available)",
+            },
+            "source_id": f"static-map:{slug}",
+            "source_url": None,
+            "image_type": "flat",
+            "captured_at": None,
+            "distance_m": 0.0,
+            "attribution": {
+                "short": attribution_short,
+                "full": attribution_short,
+                "license_icon": None,
+                "license_short": "CC-BY-SA",
+                "license_full": "CC BY-SA 4.0",
+                "author": "OpenTopoMap / OpenStreetMap contributors",
+            },
+            "author": None,
+            "license": {
+                "slug": "cc-by-sa-4-0",
+                "name": "CC BY-SA 4.0 (map data)",
+                "url": "https://creativecommons.org/licenses/by-sa/4.0/",
+                "icon": None,
+            },
+            "urls": {
+                "original": {"raw": landscape_md, "proxy": landscape_md},
+                "square": {
+                    "xs": square_sm,
+                    "sm": square_sm,
+                    "md": square_sm,
+                    "lg": square_sm,
+                    "xl": square_sm,
+                },
+                "landscape": {
+                    "xs": landscape_sm,
+                    "sm": landscape_sm,
+                    "md": landscape_md,
+                    "lg": landscape_md,
+                    "xl": landscape_md,
+                },
+                "portrait": {
+                    "xs": landscape_sm,
+                    "sm": landscape_sm,
+                    "md": landscape_md,
+                    "lg": landscape_md,
+                    "xl": landscape_md,
+                },
+            },
+            "sizes": {
+                "sm": {"width": 600, "height": 315},
+                "md": {"width": 1200, "height": 630},
+            },
+            "is_portrait": False,
+            "place": None,
+            "score": 0,
+            "is_fallback": True,
+            "thumbhashes": DEFAULT_THUMBHASHES.model_dump(),
+        },
+    }
+
+
 @router.get(
     "place/{place_slug}",
     response={200: ImageCollectionResponse},
@@ -293,6 +392,10 @@ def images_for_place(
         False,
         description="Force cache refresh - bypass cache and update all cached data from providers",
     ),
+    fallback: bool = Query(
+        False,
+        description="When the entity has no images, include the generated static-map card as a single feature (is_fallback=true)",
+    ),
 ) -> ImageCollectionResponse:
     """
     Get images for a specific GeoPlace from multiple sources.
@@ -312,7 +415,13 @@ def images_for_place(
         sources_list = [s.strip() for s in sources.split(",")]
 
     resp_key = image_response_cache.response_key(
-        "place", place_slug, radius=radius, sources=sources, lang=lang, limit=limit
+        "place",
+        place_slug,
+        radius=radius,
+        sources=sources,
+        lang=lang,
+        limit=limit,
+        fallback=fallback,
     )
     if not update_cache:
         cached, fresh = image_response_cache.get_response(resp_key)
@@ -432,6 +541,18 @@ def images_for_place(
         geoplaces_found=1,
         huts_found=0,
     )
+    if fallback and not features and place is not None and place.location:
+        features = [
+            _map_fallback_feature(
+                request,
+                slug=place.slug,
+                lat=place.location.y,
+                lon=place.location.x,
+                modified=place.modified,
+                place_type="geoplace",
+            )
+        ]
+        metadata.total = 1
 
     response = ImageCollectionResponse(
         type="FeatureCollection", features=features, metadata=metadata
@@ -473,6 +594,13 @@ def images_for_hut(
         False,
         description="Force cache refresh - bypass cache and update all cached data from providers",
     ),
+    fallback: bool = Query(
+        False,
+        description=(
+            "When the entity has no images, include the generated static-map card "
+            "as a single feature (is_fallback=true)"
+        ),
+    ),
 ) -> ImageCollectionResponse:
     """
     Get images for a specific Hut from multiple sources.
@@ -492,7 +620,13 @@ def images_for_hut(
         sources_list = [s.strip() for s in sources.split(",")]
 
     resp_key = image_response_cache.response_key(
-        "hut", hut_slug, radius=radius, sources=sources, lang=lang, limit=limit
+        "hut",
+        hut_slug,
+        radius=radius,
+        sources=sources,
+        lang=lang,
+        limit=limit,
+        fallback=fallback,
     )
     if not update_cache:
         cached, fresh = image_response_cache.get_response(resp_key)
@@ -610,6 +744,18 @@ def images_for_hut(
         geoplaces_found=0,
         huts_found=1,
     )
+    if fallback and not features and hut is not None and hut.location:
+        features = [
+            _map_fallback_feature(
+                request,
+                slug=hut.slug,
+                lat=hut.location.y,
+                lon=hut.location.x,
+                modified=hut.modified,
+                place_type="hut",
+            )
+        ]
+        metadata.total = 1
 
     response = ImageCollectionResponse(
         type="FeatureCollection", features=features, metadata=metadata

@@ -225,6 +225,15 @@ class ImagePropertiesSchema(BaseModel):
         description="Display order — higher appears first. Admin-adjustable curation position.",
     )
 
+    is_fallback: bool = Field(
+        False,
+        description=(
+            "True when this is not a photo but the generated static-map "
+            "fallback card (only included when the request asked for "
+            "fallbacks and the entity has no images)."
+        ),
+    )
+
     thumbhashes: ImageThumbhashesSchema = Field(
         default_factory=ImageThumbhashesSchema,
         description=(
