@@ -136,6 +136,24 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # ── Guard: no un-migrated model changes ────────────────────────────
+
+      - name: Check for un-migrated model changes
+        # Fails the PR if first-party models changed without a matching
+        # migration (e.g. #205 moved ObjectVisitDay to the visits app but
+        # left it in geometries). Scoped to server.apps.*: third-party
+        # apps can drift from their own shipped migrations (currently
+        # django_admin_runner 0.2.0) — not ours to fix here.
+        run: |
+          APPS=$(uv run python -c "
+            import os, django
+            os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'server.settings')
+            django.setup()
+            from django.conf import settings
+            print(' '.join(a.rsplit('.', 1)[-1] for a in settings.INSTALLED_APPS if a.startswith('server.apps.')))
+          ")
+          uv run python manage.py makemigrations --check --dry-run $APPS
+
       # ── Run tests ───────────────────────────────────────────────────────
 
       - name: Run tests
