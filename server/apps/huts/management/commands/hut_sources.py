@@ -42,9 +42,11 @@ def add_hut_source_db(  # type: ignore[no-any-unimported]
         UpdateCreateStatus.ignored: 0,
     }
     for number, hut in enumerate(huts, start=number):
+        if hut.location is None:
+            continue  # DB requires location (NOT NULL) — skip coordinate-less huts
         shut = HutSource(
             source_id=hut.source_id,
-            location=dbPoint(hut.location.lon_lat) if hut.location else None,
+            location=dbPoint(hut.location.lon_lat),
             organization=org,
             name=hut.name,
             source_data=hut.source_data.model_dump(by_alias=True, mode="json")
