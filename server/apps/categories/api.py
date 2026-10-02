@@ -495,13 +495,20 @@ def get_category_symbol_svg(
 @router.get(
     "/index.md", include_in_schema=False, operation_id="get_categories_markdown"
 )
-def get_categories_markdown(request: HttpRequest) -> HttpResponse:
+@with_language_param("lang")
+def get_categories_markdown(request: HttpRequest, lang: LanguageParam) -> HttpResponse:
     """The category tree as a compact Markdown index for LLM agents.
 
     Categories are the entry vocabulary of the map (hut types, amenities,
     overlays ...): agents use this to translate user terms ("bivouac",
-    "winter room") into API slugs before searching.
+    "winter room") into API slugs before searching. Localized via the
+    same lang parameter as the JSON API (category names are modeltrans).
     """
+    with override(lang):
+        return _categories_markdown(request)
+
+
+def _categories_markdown(request: HttpRequest) -> HttpResponse:
     lines = [
         "# Wodore categories",
         "",

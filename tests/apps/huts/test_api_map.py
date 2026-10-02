@@ -257,3 +257,38 @@ class TestTileThrottling:
         tiles = ogmap._fetch_tiles(16, [(1, i) for i in range(8)])
         assert len(tiles) == 8
         assert len(seen) == 8
+
+
+class TestMarkdownLanguageLinks:
+    def test_hut_markdown_links_languages(self, seed_data, client):
+        hut = Hut.objects.filter(is_active=True, is_public=True).first()
+        assert hut is not None
+        body = client.get(f"/v1/huts/{hut.slug}.md").content.decode()
+        assert "Languages:" in body
+        for label in ("Deutsch", "English", "Français", "Italiano"):
+            assert label in body
+        assert f"/hut/{hut.slug}.md?lang=en" in body
+
+    def test_place_markdown_links_languages(self, seed_data, client):
+        from server.apps.geometries.models import GeoPlace
+
+        place = GeoPlace.objects.filter(
+            is_active=True, is_public=True, name__gt=""
+        ).first()
+        assert place is not None
+        body = client.get(f"/v1/geo/places/{place.slug}.md").content.decode()
+        assert "Languages:" in body
+        assert f"/geo/places/{place.slug}.md?lang=fr" in body
+
+
+class TestCategoriesIndexLang:
+    def test_categories_index_lang_param(self, seed_data, client):
+        default = client.get("/v1/categories/index.md")
+        assert default.status_code == 200
+        body = default.content.decode()
+        assert body.startswith("# Wodore categories")
+        # the param is accepted (validated against the language choices)
+        english = client.get("/v1/categories/index.md", {"lang": "en"})
+        assert english.status_code == 200
+        bad = client.get("/v1/categories/index.md", {"lang": "xx"})
+        assert bad.status_code == 422

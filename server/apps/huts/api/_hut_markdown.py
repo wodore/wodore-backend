@@ -27,6 +27,14 @@ _ANCHOR_RE = re.compile(
     r"<a\s[^>]*href=[\"']([^\"']*)[\"'][^>]*>(.*?)</a>", re.IGNORECASE | re.DOTALL
 )
 
+# Endonym labels for the language variant links in the Markdown footer.
+_LANGUAGE_LABELS = {
+    "de": "Deutsch",
+    "en": "English",
+    "fr": "Français",
+    "it": "Italiano",
+}
+
 # Cacheable like the JSON surface: hut data changes, but slowly.
 CACHE_TTL = 60 * 60
 
@@ -65,6 +73,15 @@ def _months_row(open_monthly: dict | None) -> str:
         value = (open_monthly or {}).get(f"month_{month:02d}", "unknown")
         values.append(str(value))
     return "| " + " | ".join(values) + " |"
+
+
+def _languages_line(slug: str) -> str:
+    """Footer links to this document in every supported language."""
+    base = f"{settings.FRONTEND_DOMAIN.rstrip('/')}/hut/{quote(slug)}.md"
+    links = [
+        f"[{label}]({base}?lang={code})" for code, label in _LANGUAGE_LABELS.items()
+    ]
+    return " · ".join(links)
 
 
 def _hut_markdown(request: HttpRequest, hut: Hut) -> str:
@@ -149,6 +166,8 @@ Interactive map: {app_url}
 ## Sources
 
 {sources_block}
+
+Languages: {_languages_line(hut.slug)}
 
 ---
 

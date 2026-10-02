@@ -23,6 +23,14 @@ from .models import GeoPlace, GeoPlaceImageAssociation
 
 CACHE_TTL = 60 * 60
 
+# Endonym labels for the language variant links in the Markdown footer.
+_LANGUAGE_LABELS = {
+    "de": "Deutsch",
+    "en": "English",
+    "fr": "Français",
+    "it": "Italiano",
+}
+
 
 class PlaceMetaSchema(Schema):
     slug: str = Field(description="Place slug")
@@ -188,6 +196,8 @@ Map: {page_url}
 ## Description
 
 {place.description or "—"}
+
+Languages: {" · ".join(f"[{label}]({settings.FRONTEND_DOMAIN.rstrip('/')}/geo/places/{place.slug}.md?lang={code})" for code, label in _LANGUAGE_LABELS.items())}
 
 ---
 
