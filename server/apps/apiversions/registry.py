@@ -14,9 +14,8 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
+from email.utils import formatdate
 from typing import Any
-
-from django.utils.http import http_date
 
 Transform = Callable[[Any], Any]
 
@@ -235,7 +234,7 @@ def guard_endpoint_sunset(operation_id: str) -> None:
             status_code=HTTPStatus.GONE,
             headers={
                 "Deprecation": f"@{dep.announced_unix}",
-                "Sunset": http_date(sunset_ts),
+                "Sunset": formatdate(sunset_ts, usegmt=True),
                 "Link": f'<{dep.link}>; rel="deprecation"',
             },
         )
