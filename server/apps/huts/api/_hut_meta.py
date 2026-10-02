@@ -19,7 +19,7 @@ from ninja import Field, Schema
 from django.conf import settings
 from django.http import Http404, HttpRequest, HttpResponse
 
-from server.apps.images.og import og_card_url, og_photo_url
+from server.apps.images.og import og_card_url, og_map_card_url, og_photo_url
 from server.apps.symbols.utils import resolve_symbol_urls
 from server.apps.translations import LanguageParam, activate, with_language_param
 
@@ -97,7 +97,9 @@ def _og_image(hut: Hut, request: HttpRequest) -> str:
                 "v": f"{hut.modified:%Y%m%dT%H%M%S}",
             }
         )
-        return request.build_absolute_uri(f"/v1/geo/map/static?{query}")
+        return og_map_card_url(
+            request.build_absolute_uri(f"/v1/geo/map/static?{query}")
+        )
     return og_card_url(symbol_url)
 
 

@@ -13,7 +13,10 @@
 * ``marker`` (``symbol`` default when a place is given, ``none``)
 * ``marker_scale`` (multiplier, default 1)
 * ``effect`` (``none`` | ``blur_border`` | ``spotlight`` | ``vignette``
-  | ``blurred_edges`` | ``rounded``)
+  | ``blurred_edges``)
+* ``offset`` (``X,Y`` pixels, default ``0,0``) — shifts the map view:
+  positive X moves the view right (the entity moves left on the card),
+  positive Y moves the view down (entity moves up)
 * ``attribution`` (default true — OpenTopoMap license requires it on
   published maps; opt out only for non-published uses)
 * ``v`` — free-form cache buster (the caller's last-modified); any
@@ -22,6 +25,8 @@
 The rendered card is complete (map + marker + watermark + effect +
 attribution), stored once per parameter set via the default storage.
 """
+
+import re
 
 from ninja import Query, Schema
 
@@ -33,7 +38,6 @@ from server.apps.api.ogmap import (
     CARD_ZOOM,
     EFFECTS,
     fetch_marker,
-    fetch_watermark,
     render_static_map,
     static_map_cache_key,
 )
@@ -59,6 +63,7 @@ class StaticMapParams(Schema):
     marker_scale: float = 1.0
     effect: str = "none"
     attribution: bool = True
+    offset: str = "0,0"
     v: str | None = None
 
 
@@ -124,8 +129,6 @@ def get_static_map(
         raise Http404("Unknown basemap or effect.")
     if not 5 <= params.zoom <= 17:
         raise Http404("Zoom out of range.")
-    import re
-
     size_match = re.fullmatch(r"(\d{3,4})x(\d{3,4})", params.size)
     if size_match is None:
         raise Http404("Size must be WIDTHxHEIGHT (100-4000 px).")
@@ -142,6 +145,11 @@ def get_static_map(
 
     marker_mode = params.marker or ("symbol" if params.place else "none")
 
+    offset_match = re.fullmatch(r"(-?\d{1,4}),(-?\d{1,4})", params.offset)
+    if offset_match is None:
+        raise Http404("Offset must be X,Y pixels.")
+    offset_x, offset_y = (int(g) for g in offset_match.groups())
+
     name = static_map_cache_key(
         {
             "lat": f"{lat:.6f}",
@@ -153,6 +161,7 @@ def get_static_map(
             "marker_scale": f"{params.marker_scale:g}",
             "effect": params.effect,
             "attribution": str(params.attribution).lower(),
+            "offset": params.offset,
             "v": params.v,
             "symbol": symbol_url,
         }
@@ -172,8 +181,9 @@ def get_static_map(
             effect=params.effect,
             marker=marker_img,
             marker_scale=params.marker_scale,
-            watermark=fetch_watermark(),
             attribution=params.attribution,
+            offset_x=offset_x,
+            offset_y=offset_y,
         )
         default_storage.save(name, ContentFile(data))
     with default_storage.open(name) as stored:

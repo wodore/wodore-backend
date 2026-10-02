@@ -1,9 +1,9 @@
 """Static-map card rendering for og:image fallbacks (OpenTopoMap).
 
-Renders the COMPLETE card in Pillow: map canvas, optional marker (the
-entity's type symbol raster), optional watermark, and optional visual
-effects — callers get a final 1200x630 JPEG, no imagor compositing
-needed (imagor is only used to rasterize symbol SVGs at render time).
+Renders the map card in Pillow: canvas, optional marker (the entity's
+type symbol raster) and optional visual effects — callers get a final
+1200x630 JPEG. The Wodore logo is NOT baked in: og consumers composite
+it via imagor on top of this endpoint's output.
 
 Effects (``effect=`` parameter):
 
@@ -15,8 +15,6 @@ Effects (``effect=`` parameter):
 * ``vignette`` — radial darkening towards the edges
 * ``blurred_edges`` — vignette-style falloff with BLUR instead of
   darkness: sharp inside, increasingly blurred towards the edges
-* ``rounded`` — rounded corners over a light backdrop (visible on the
-  flat JPEG)
 
 OpenTopoMap tiles are keyless; the license attribution is baked into
 the bottom-right corner of every card.
@@ -43,15 +41,11 @@ CARD_WIDTH = 1200
 CARD_HEIGHT = 630
 CARD_ASPECT = CARD_WIDTH / CARD_HEIGHT
 CARD_ZOOM = 16
-EFFECTS = ("none", "blur_border", "spotlight", "vignette", "blurred_edges", "rounded")
+EFFECTS = ("none", "blur_border", "spotlight", "vignette", "blurred_edges")
 
-# Marker/watermark geometry (owner-approved): symbol right of center,
-# watermark on the left at the bottom.
+# Marker geometry (owner-approved): symbol right of center.
 MARKER_SIZE_PX = 170
 MARKER_X = 0.60
-WATERMARK_SIZE_PX = 270
-WATERMARK_X = 0.18
-WATERMARK_BOTTOM_PX = 10
 
 _FONT_PATH = (
     Path(settings.BASE_DIR) / "docker/imagor/fonts/BarlowSemiCondensed-SemiBold.ttf"
@@ -75,8 +69,41 @@ def _fetch_tile(zoom: int, x: int, y: int) -> Image.Image:
         return Image.open(response).convert("RGB")
 
 
+TILE_WORKERS = 4
+TILE_ATTEMPTS = 3
+
+
+def _fetch_tile_retry(zoom: int, x: int, y: int) -> Image.Image:
+    """One tile with 429 backoff (OpenTopoMap throttles bursts — honor
+    Retry-After when present, exponential otherwise)."""
+    import time
+    import urllib.error
+
+    for attempt in range(TILE_ATTEMPTS):
+        try:
+            return _fetch_tile(zoom, x, y)
+        except urllib.error.HTTPError as error:
+            if error.code == 429 and attempt < TILE_ATTEMPTS - 1:
+                wait = error.headers.get("Retry-After") if error.headers else None
+                time.sleep(float(wait) if wait else 0.5 * (2**attempt))
+                continue
+            raise
+    raise RuntimeError("unreachable")  # pragma: no cover
+
+
+def _fetch_tiles(zoom: int, coords: list[tuple[int, int]]) -> list[Image.Image]:
+    """Fetch tiles in parallel (bounded — OTM is community-hosted; a
+    modest worker pool keeps bursts polite while cutting wall time)."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    if len(coords) == 1:
+        return [_fetch_tile_retry(zoom, *coords[0])]
+    with ThreadPoolExecutor(max_workers=min(TILE_WORKERS, len(coords))) as pool:
+        return list(pool.map(lambda c: _fetch_tile_retry(zoom, *c), coords))
+
+
 def _fetch_url(url: str) -> Image.Image | None:
-    """Fetch an image URL (marker raster / watermark); None on failure."""
+    """Fetch an image URL (marker raster); None on failure."""
     try:
         request = Request(url, headers={"User-Agent": USER_AGENT})
         with urlopen(request, timeout=10) as response:
@@ -85,18 +112,29 @@ def _fetch_url(url: str) -> Image.Image | None:
         return None
 
 
-def fetch_watermark() -> Image.Image | None:
-    """The Wodore watermark PNG from the frontend host."""
-    return _fetch_url(
-        f"{settings.FRONTEND_DOMAIN.rstrip('/')}/meta/wodore_watermark.png"
-    )
-
-
 def fetch_marker(symbol_url: str, size_px: int) -> Image.Image | None:
-    """Rasterize a symbol SVG via imagor (signing handled by the transformer)."""
+    """Fetch the symbol as a sharp, transparent raster via imagor.
+
+    Empirically (imagor v1.9.6 + libvips):
+    * a plain WxH transform flattens SVG transparency to opaque black,
+    * fit-in alone returns the SVG at its intrinsic 48px,
+    * ``dpi(n)`` is the only lever that scales the SVG rasterization —
+      dpi(1440) renders the 48px symbols at 960px with alpha preserved
+      (fit-in + format(png) required alongside).
+    Callers downscale from the high-res raster with LANCZOS — the
+    marker stays sharp at any size, as a vector should.
+    """
     from server.apps.images.transfomer import ImagorImage
 
-    url = ImagorImage(symbol_url).transform(size=f"{size_px}x{size_px}").get_full_url()
+    url = (
+        ImagorImage(symbol_url)
+        .transform(
+            size=f"{size_px * 2}x{size_px * 2}",
+            fit=True,
+            filters=["dpi(1440)", "format(png)"],
+        )
+        .get_full_url()
+    )
     return _fetch_url(url)
 
 
@@ -181,72 +219,59 @@ def render_static_map(
     effect: str = "none",
     marker: Image.Image | None = None,
     marker_scale: float = 1.0,
-    watermark: Image.Image | None = None,
     attribution: bool = True,
+    offset_x: int = 0,
+    offset_y: int = 0,
 ) -> bytes:
     """Render a complete og card of width x height, centered on (lat, lon).
 
-    Marker, watermark, effects and attribution scale with the size
-    (relative to the 1200x630 reference card).
+    Marker, effects and attribution scale with the size (relative to
+    the 1200x630 reference card). The Wodore logo is NOT baked in —
+    og consumers composite it via imagor.
     """
     scale = width / CARD_WIDTH
     xt, yt = _deg_to_tile(lat, lon, zoom)
-    nx = math.ceil((width * 1.3) / TILE_SIZE) + 1
-    ny = math.ceil((height * 1.3) / TILE_SIZE) + 1
+    # Just enough tiles to cover the card wherever the coordinate lands
+    # within the center tile (the old 1.3x slack fetched 40 tiles).
+    nx = math.ceil(width / TILE_SIZE) + 2
+    ny = math.ceil(height / TILE_SIZE) + 2
     x0 = math.floor(xt) - nx // 2
     y0 = math.floor(yt) - ny // 2
 
+    coords = [(x0 + dx, y0 + dy) for dx in range(nx) for dy in range(ny)]
+    tiles = _fetch_tiles(zoom, coords)
     canvas = Image.new("RGB", (nx * TILE_SIZE, ny * TILE_SIZE))
-    for dx in range(nx):
-        for dy in range(ny):
-            canvas.paste(
-                _fetch_tile(zoom, x0 + dx, y0 + dy), (dx * TILE_SIZE, dy * TILE_SIZE)
-            )
+    for (dx, dy), tile in zip(
+        ((dx, dy) for dx in range(nx) for dy in range(ny)), tiles
+    ):
+        canvas.paste(tile, (dx * TILE_SIZE, dy * TILE_SIZE))
 
+    # Crop at NATIVE tile resolution (256px tiles at zoom 16 are ~1:1
+    # with the card at 1200px wide) — the old upscale-then-downscale
+    # detour doubled CPU time for no sharpness gain.
     px = (xt - x0) * TILE_SIZE
     py = (yt - y0) * TILE_SIZE
-    crop_w = width * 2
-    crop_h = height * 2
-    left = max(0, min(canvas.width * 2 - crop_w, int(px * 2 - crop_w / 2)))
-    top = max(0, min(canvas.height * 2 - crop_h, int(py * 2 - crop_h / 2)))
-    card = (
-        canvas.resize((canvas.width * 2, canvas.height * 2), Image.LANCZOS)
-        .crop((left, top, left + crop_w, top + crop_h))
-        .resize((width, height), Image.LANCZOS)
-    )
+    left = max(0, min(canvas.width - width, int(px - width / 2) + offset_x))
+    top = max(0, min(canvas.height - height, int(py - height / 2) + offset_y))
+    card = canvas.crop((left, top, left + width, top + height))
+    if card.size != (width, height):
+        card = card.resize((width, height), Image.LANCZOS)
 
-    if effect == "rounded":
-        backdrop = Image.new("RGB", (width, height), (238, 242, 239))
-        inner = _rounded(card, int(48 * scale))
-        backdrop.paste(inner, (0, 0), inner)
-        card = backdrop
-    elif effect != "none":
+    if effect != "none":
         card = _apply_effect(card, effect, scale)
 
     if marker is not None:
         size = int(MARKER_SIZE_PX * scale * max(marker_scale, 0.1))
         marker_img = marker.copy()
-        marker_img.thumbnail((size, size), Image.LANCZOS)
+        # LANCZOS downscale from the high-dpi raster (fetch_marker): the
+        # vector stays sharp at any target size.
+        marker_img = marker_img.resize((size, size), Image.LANCZOS)
         card = card.convert("RGBA")
         card.alpha_composite(
             marker_img,
             (
                 int(width * MARKER_X - marker_img.width / 2),
                 int(height / 2 - marker_img.height / 2),
-            ),
-        )
-
-    if watermark is not None:
-        watermark_img = watermark.copy()
-        watermark_img.thumbnail(
-            (WATERMARK_SIZE_PX * 2, WATERMARK_SIZE_PX * 2), Image.LANCZOS
-        )
-        card = card.convert("RGBA")
-        card.alpha_composite(
-            watermark_img,
-            (
-                int(width * WATERMARK_X - watermark_img.width / 2),
-                height - watermark_img.height - WATERMARK_BOTTOM_PX,
             ),
         )
 

@@ -23,7 +23,7 @@ def offline_render(monkeypatch):
     """Fake tiles, marker and watermark (no network)."""
     from PIL import Image
 
-    calls = {"tiles": 0, "marker": 0, "watermark": 0}
+    calls = {"tiles": 0, "marker": 0}
 
     def fake_tile(zoom, x, y):
         calls["tiles"] += 1
@@ -33,13 +33,8 @@ def offline_render(monkeypatch):
         calls["marker"] += 1
         return Image.new("RGBA", (size_px, size_px), (200, 60, 60, 255))
 
-    def fake_watermark():
-        calls["watermark"] += 1
-        return Image.new("RGBA", (300, 300), (20, 60, 40, 255))
-
     monkeypatch.setattr(ogmap, "_fetch_tile", fake_tile)
     monkeypatch.setattr(ogmap, "fetch_marker", fake_marker)
-    monkeypatch.setattr(ogmap, "fetch_watermark", fake_watermark)
     return calls
 
 
@@ -92,14 +87,7 @@ class TestStaticMapEndpoint:
         assert offline_render["tiles"] > tiles_first
 
     def test_effects_and_params_validated(self, seed_data, client, offline_render):
-        for effect in (
-            "none",
-            "blur_border",
-            "spotlight",
-            "vignette",
-            "blurred_edges",
-            "rounded",
-        ):
+        for effect in ("none", "blur_border", "spotlight", "vignette", "blurred_edges"):
             response = client.get(
                 "/v1/geo/map/static",
                 {"lat": 46.5, "lon": 8.1, "effect": effect, "v": f"e-{effect}"},
@@ -162,9 +150,9 @@ class TestMetaFallbacks:
         ).first()
         assert hut is not None
         data = client.get(f"/v1/huts/{hut.slug}/meta").json()
-        assert "/v1/geo/map/static" in data["image"]
-        assert f"v={hut.modified:%Y%m%dT%H%M%S}" in data["image"]
-        assert "place_type=hut" in data["image"]
+        # imagor-wrapped: the static-map endpoint URL is the encoded source
+        assert "map%2Fstatic" in data["image"]
+        assert "wodore_watermark" in data["image"]  # logo composited by imagor
 
     def test_place_meta_no_photo_uses_static_map(
         self, seed_data, client, settings, offline_render
@@ -175,7 +163,7 @@ class TestMetaFallbacks:
         ).first()
         assert place is not None
         data = client.get(f"/v1/geo/places/{place.slug}/meta").json()
-        assert "/v1/geo/map/static" in data["image"]
+        assert "map%2Fstatic" in data["image"]
 
 
 class TestSizeParameter:
@@ -228,3 +216,44 @@ class TestSizeParameter:
             ).status_code
             == 404
         )
+
+
+class TestTileThrottling:
+    def test_429_retried_with_backoff(self, seed_data, monkeypatch):
+        """A 429 on the first attempt is retried and succeeds."""
+        import urllib.error
+
+        from PIL import Image
+
+        from server.apps.api import ogmap
+
+        calls = []
+
+        def flaky(zoom, x, y):
+            calls.append((x, y))
+            if len(calls) == 1:
+                raise urllib.error.HTTPError(
+                    "url", 429, "Too Many Requests", {"Retry-After": "0"}, None
+                )
+            return Image.new("RGB", (256, 256))
+
+        monkeypatch.setattr(ogmap, "_fetch_tile", flaky)
+        tiles = ogmap._fetch_tiles(16, [(1, 1)])
+        assert tiles[0].size == (256, 256)
+        assert len(calls) == 2  # one 429, one success
+
+    def test_parallel_fetch(self, seed_data, monkeypatch):
+        from PIL import Image
+
+        from server.apps.api import ogmap
+
+        seen = []
+
+        def recording(zoom, x, y):
+            seen.append((x, y))
+            return Image.new("RGB", (256, 256), (x % 255, y % 255, 100))
+
+        monkeypatch.setattr(ogmap, "_fetch_tile", recording)
+        tiles = ogmap._fetch_tiles(16, [(1, i) for i in range(8)])
+        assert len(tiles) == 8
+        assert len(seen) == 8

@@ -37,7 +37,7 @@ class TestPlaceMeta:
         assert place is not None
         data = client.get(f"/v1/geo/places/{place.slug}/meta").json()
         assert data["image"]
-        assert "/v1/geo/map/static" in data["image"]
+        assert "map%2Fstatic" in data["image"]  # imagor-wrapped endpoint URL
 
     def test_meta_unknown_slug_is_404(self, seed_data, client):
         assert client.get("/v1/geo/places/does-not-exist/meta").status_code == 404
@@ -79,7 +79,7 @@ class TestHutOgCardFallback:
         assert hut is not None
         data = client.get(f"/v1/huts/{hut.slug}/meta").json()
         assert data["image"]
-        assert "/v1/geo/map/static" in data["image"]
+        assert "map%2Fstatic" in data["image"]
 
 
 class TestCategoriesMarkdown:

@@ -89,6 +89,27 @@ def og_photo_url(image_url: str, focal: dict | None = None) -> str:
     )
 
 
+def og_map_card_url(map_url: str) -> str:
+    """Signed imagor URL for a static-map og card: the generic
+    static-map endpoint as source, with the Wodore watermark composited
+    left of center at the bottom (owner-approved geometry). The endpoint
+    itself stays logo-free (also used directly by the image APIs)."""
+    filters = [
+        _composite_image(
+            _frontend(OG_LOGO_URL_PATH),
+            OG_LOGO_SIZE_PX,
+            "0.18",
+            "bottom-10",
+            OG_LOGO_ALPHA,
+        )
+    ]
+    return (
+        ImagorImage(map_url)
+        .transform(size=OG_CARD_SIZE, filters=filters)
+        .get_full_url()
+    )
+
+
 def og_card_url(symbol_url: str | None = None) -> str:
     """Signed imagor URL for the branded default card, optionally with
     the entity's type symbol (SVG) composited large and centered."""

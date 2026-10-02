@@ -16,7 +16,7 @@ from ninja import Field, Schema
 from django.conf import settings
 from django.http import Http404, HttpRequest, HttpResponse
 
-from server.apps.images.og import og_photo_url
+from server.apps.images.og import og_map_card_url, og_photo_url
 
 from .api import router
 from .models import GeoPlace, GeoPlaceImageAssociation
@@ -71,7 +71,7 @@ def _place_image(place: GeoPlace, request: HttpRequest) -> str | None:
             "v": f"{place.modified:%Y%m%dT%H%M%S}",
         }
     )
-    return request.build_absolute_uri(f"/v1/geo/map/static?{query}")
+    return og_map_card_url(request.build_absolute_uri(f"/v1/geo/map/static?{query}"))
 
 
 def _place_description(place: GeoPlace) -> str:
