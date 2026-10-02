@@ -19,16 +19,14 @@ from ninja import Field, Schema
 from django.conf import settings
 from django.http import Http404, HttpRequest, HttpResponse
 
-from server.apps.images.transfomer import ImagorImage
+from server.apps.images.og import og_card_url, og_map_card_url, og_photo_url
+from server.apps.symbols.utils import resolve_symbol_urls
 from server.apps.translations import LanguageParam, activate, with_language_param
 
 from ..models import Hut, HutImageAssociation
 from ._router import router
 
 CACHE_TTL = 60 * 60
-
-# OG image variant (same preset the JSON detail endpoint calls "large").
-OG_IMAGE_SIZE = "1800x1200"
 
 # Glue words for the short meta description.
 _PLACES = {"de": "Plätze", "en": "places", "fr": "places", "it": "posti"}
@@ -63,38 +61,46 @@ class HutMetaSchema(Schema):
     modified: str | None = Field(None, description="Last modification (ISO date)")
 
 
-def _og_image(hut: Hut) -> str | None:
-    """Preview image URL: the highest-scored image, 'large' preset."""
+def _og_image(hut: Hut, request: HttpRequest) -> str:
+    """Preview image URL: the highest-scored image at the og size;
+    generated brand card (name + elevation) as fallback."""
     association = (
         HutImageAssociation.objects.filter(hut=hut)
         .select_related("image")
         .order_by("-score", "id")
         .first()
     )
-    if association is None:
-        return None
-    image = association.image
-    source = str(image.image)
-    if not source.startswith("http"):
-        source = f"{settings.MEDIA_URL}/{source}"
-    focal = (image.image_meta or {}).get("focal")
-    focal_str = (
-        f"{focal['x1']}x{focal['y1']}:{focal['x2']}x{focal['y2']}" if focal else None
-    )
-    crop_start, crop_stop = focal_str.split(":") if focal_str else (None, None)
     try:
-        return (
-            ImagorImage(source)
-            .transform(
-                size=OG_IMAGE_SIZE,
-                focal=focal_str,
-                crop_start=crop_start,
-                crop_stop=crop_stop,
-            )
-            .get_full_url()
-        )
+        if association is not None:
+            source = str(association.image.image)
+            if not source.startswith("http"):
+                source = f"{settings.MEDIA_URL}/{source}"
+            focal = (association.image.image_meta or {}).get("focal")
+            return og_photo_url(source, focal)
     except Exception:
-        return None
+        pass
+    symbol_url = None
+    if hut.hut_type_open is not None:
+        symbols = resolve_symbol_urls(hut.hut_type_open, {"request": request})
+        symbol_url = symbols.get("detailed") if symbols else None
+    if hut.location is not None:
+        # Complete static-map card (OpenTopoMap, type symbol marker,
+        # watermark) from the generic endpoint; v=<modified> busts the
+        # render/storage cache on ANY hut change, ETag-style.
+        from urllib.parse import urlencode
+
+        query = urlencode(
+            {
+                "place": hut.slug,
+                "place_type": "hut",
+                "zoom": 16,
+                "v": f"{hut.modified:%Y%m%dT%H%M%S}",
+            }
+        )
+        return og_map_card_url(
+            request.build_absolute_uri(f"/v1/geo/map/static?{query}")
+        )
+    return og_card_url(symbol_url)
 
 
 def _meta_description(hut: Hut, lang: str) -> str:
@@ -165,7 +171,7 @@ def get_hut_meta(
         raise Http404(msg)
 
     page_url = f"{settings.FRONTEND_DOMAIN.rstrip('/')}/hut/{hut.slug}"
-    image = _og_image(hut)
+    image = _og_image(hut, request)
     description = _meta_description(hut, lang)
 
     response["Cache-Control"] = f"public, max-age={CACHE_TTL}"

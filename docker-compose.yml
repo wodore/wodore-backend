@@ -29,6 +29,14 @@ services:
       - ./media:/mnt/data/source/media
       - ./media/imagor_data/storage:/mnt/data/storage
       - ./media/imagor_data/result:/mnt/data/result
+      # Fonts for the text() filter (og:image cards, server/apps/images/og.py):
+      # without a font available imagor silently draws NO text at all.
+      # The brand font (Barlow Semi Condensed SemiBold, OFL) ships in this
+      # repo; DejaVu stays as the generic fallback family.
+      # NOTE: requires imagor >= v1.9 (new text() signature with Pango
+      # font descriptions) — the tag is :latest with pull_policy always.
+      - ./docker/imagor/fonts:/usr/share/fonts/truetype/barlow:ro
+      - /usr/share/fonts/truetype/dejavu:/usr/share/fonts/truetype/dejavu:ro
     environment:
       PORT: 8079
       DEBUG: 0

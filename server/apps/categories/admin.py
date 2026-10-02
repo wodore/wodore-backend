@@ -143,6 +143,16 @@ class CategoryAdmin(ModelAdmin):
             {"fields": ("color",)},
         ),
         (
+            _("SEO"),
+            {
+                "fields": ("seo_sitemap",),
+                "description": _(
+                    "Sitemap policy for places in this category "
+                    "(tri-state: empty inherits from the parent, roots default to exclude)."
+                ),
+            },
+        ),
+        (
             _("Translations"),
             {
                 "classes": ["collapse"],

@@ -19,6 +19,12 @@ from .managers import CategoryManager
 
 @cleanup.ignore
 class Category(ComputedFieldsModel, models.Model):
+    class SeoSitemapChoices(models.TextChoices):
+        """Tri-state sitemap policy: empty (None) = inherit from parent."""
+
+        include = "include", _("include in sitemap")
+        exclude = "exclude", _("exclude from sitemap")
+
     """
     Generic hierarchical category model.
 
@@ -163,6 +169,23 @@ class Category(ComputedFieldsModel, models.Model):
         help_text=_("Whether this category is currently active"),
     )
 
+    # SEO / sitemap policy for places in this category (tri-state):
+    #   "include" / "exclude" decide for this category and (via
+    #   inheritance) its children; empty (None) inherits the parent's
+    #   value. A root category with no value defaults to exclude.
+    seo_sitemap = models.CharField(
+        max_length=8,
+        choices=SeoSitemapChoices.choices,
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name=_("SEO sitemap policy"),
+        help_text=_(
+            "Include/exclude this category's places in the sitemap; "
+            "empty inherits from the parent category (roots default to exclude)."
+        ),
+    )
+
     # Color
     color = ColorField(
         verbose_name=_("Color"),
@@ -198,6 +221,21 @@ class Category(ComputedFieldsModel, models.Model):
                 condition=~models.Q(default=models.F("id")), name="default_not_self"
             ),
         ]
+
+    def effective_seo_sitemap(self) -> str | None:
+        """Resolved tri-state policy: nearest ancestor's explicit value.
+
+        Returns ``None`` when neither this category nor any ancestor
+        sets a value — callers treat that as *exclude* (root default).
+        """
+        node: Category | None = self
+        seen: set[int] = set()
+        while node is not None and node.pk not in seen:
+            seen.add(node.pk)
+            if node.seo_sitemap:
+                return node.seo_sitemap
+            node = node.parent
+        return None
 
     def __str__(self) -> str:
         # Use identifier field (computed, no extra queries) and format it nicely
