@@ -51,7 +51,17 @@ logger = structlog.get_logger("apiversions")
 VERSION_HEADER = "Api-Version"
 VERSION_QUERY_PARAM = "api_version"
 EXCLUDED_EXACT_PATHS = frozenset({"/v1/version"})
-SCHEMA_PATHS = frozenset({"/v1/docs", "/v1/openapi.json"})
+# Docs/schema paths: validate ``api_version`` (it selects the snapshot)
+# but carry no versioning response headers (design.md D3).
+SCHEMA_PATHS = frozenset(
+    {
+        "/v1/docs",
+        "/v1/docs/redoc",
+        "/v1/docs/scalar",
+        "/v1/docs/elements",
+        "/v1/openapi.json",
+    }
+)
 
 
 def _error_response(status: int, code: str, detail: str) -> HttpResponse:

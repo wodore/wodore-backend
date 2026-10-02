@@ -149,16 +149,23 @@ class TestSchemaServing:
         assert registry.current_version() in response.content.decode()
 
     @pytest.mark.django_db
-    def test_docs_page_renders_all_template_tags_and_assets(self, seed_data, client):
+    @pytest.mark.parametrize(
+        "docs_path",
+        ["/v1/docs", "/v1/docs/redoc", "/v1/docs/scalar", "/v1/docs/elements"],
+    )
+    def test_docs_page_renders_all_template_tags_and_assets(
+        self, seed_data, client, docs_path
+    ):
         """Regression: one malformed {% static %} tag once leaked into a
         script src=, giving a blank docs page with a 404 on a literal
         '{% static ...' URL. Rendered pages must contain no template
-        syntax, and every referenced static asset must actually serve."""
+        syntax, and every referenced static asset must actually serve.
+        Covers all four documentation UIs."""
         import re
 
         from django.contrib.staticfiles import finders
 
-        response = client.get("/v1/docs")
+        response = client.get(docs_path)
         assert response.status_code == 200
         html = response.content.decode()
         assert "{%" not in html, "raw template syntax leaked into the page"
