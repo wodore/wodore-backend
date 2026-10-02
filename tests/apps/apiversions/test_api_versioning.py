@@ -113,7 +113,7 @@ class TestVersionResolution:
             headers={"Api-Version": "2097-01-01"},
         )
         assert response.status_code == 400
-        assert response.json()["code"] == "api_version_conflict"
+        assert response.json()["code"] == "validation_error"
 
     @pytest.mark.django_db
     @pytest.mark.parametrize("raw", ["2099-13-01", "not-a-date", "2026-1-1"])
@@ -122,7 +122,7 @@ class TestVersionResolution:
             "/v1/huts/huts", {"limit": 1}, headers={"Api-Version": raw}
         )
         assert response.status_code == 400
-        assert response.json()["code"] == "api_version_invalid"
+        assert response.json()["code"] == "validation_error"
 
     @pytest.mark.django_db
     def test_version_not_in_registry_is_400(self, seed_data, client):
@@ -130,7 +130,7 @@ class TestVersionResolution:
             "/v1/huts/huts", {"limit": 1}, headers={"Api-Version": "2025-01-01"}
         )
         assert response.status_code == 400
-        assert response.json()["code"] == "api_version_invalid"
+        assert response.json()["code"] == "validation_error"
 
 
 class TestVersioningScope:

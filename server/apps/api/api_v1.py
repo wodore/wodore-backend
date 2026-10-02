@@ -151,7 +151,7 @@ def versioned_openapi_json(request: HttpRequest) -> HttpResponse:
             )
             return JsonResponse(
                 {
-                    "code": ErrorCode.internal_error,
+                    "code": ErrorCode.service_unavailable,
                     "detail": "No committed OpenAPI snapshot for API "
                     f"version {version!r}.",
                 },

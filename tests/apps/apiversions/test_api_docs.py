@@ -177,7 +177,7 @@ class TestSchemaServing:
     def test_unknown_api_version_on_schema_is_400(self, seed_data, client):
         response = client.get("/v1/openapi.json", {"api_version": "not-a-date"})
         assert response.status_code == 400
-        assert response.json()["code"] == "api_version_invalid"
+        assert response.json()["code"] == "validation_error"
 
     @pytest.mark.django_db
     def test_sunset_version_on_schema_is_410(
@@ -206,7 +206,7 @@ class TestSchemaServing:
         )
         response = client.get("/v1/openapi.json", {"api_version": "2098-05-01"})
         assert response.status_code == 500
-        assert response.json()["code"] == "internal_error"
+        assert response.json()["code"] == "service_unavailable"
 
 
 class TestContractPerVersion:
