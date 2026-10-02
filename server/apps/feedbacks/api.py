@@ -64,7 +64,9 @@ class FeedbackController(ApiController):
                 f'{feedback.id}/change/">edit message</a><br/>'
                 f"<small>{feedback.created}</small></p>"
             )
-            recipient = [a[1] for a in settings.DJANGO_ADMIN_EMAILS]
+            recipient = [
+                a[1] if len(a) > 1 else a[0] for a in settings.DJANGO_ADMIN_EMAILS if a
+            ]
             msg = EmailMessage(
                 subject=subject,
                 body=text,
