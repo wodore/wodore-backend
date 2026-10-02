@@ -13,10 +13,12 @@ import hashlib
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
-from typing import Any
+from datetime import date, datetime, timezone
 
-from django.utils.http import http_date
+# Stdlib-only on purpose: CI runs the registry release-state check on a
+# bare python3 (no Django, no venv) — see .github/workflows/test.yml.
+from email.utils import formatdate as _http_date
+from typing import Any
 
 Transform = Callable[[Any], Any]
 
@@ -50,7 +52,7 @@ class EndpointDeprecation:
                 self.announced.year,
                 self.announced.month,
                 self.announced.day,
-                tzinfo=UTC,
+                tzinfo=timezone.utc,
             ).timestamp()
         )
 
@@ -137,7 +139,7 @@ def is_valid_version(version: str) -> bool:
 
 def version_status(version: str, *, today: date | None = None) -> str:
     """Lifecycle status: current | default | deprecated | sunset."""
-    today = today or datetime.now(tz=UTC).date()
+    today = today or datetime.now(tz=timezone.utc).date()
     change = get_change(version)
     if change is None:
         msg = f"Unknown API version: {version}"
@@ -201,7 +203,7 @@ def deprecation_unix(change: VersionChange) -> int | None:
             change.deprecation_date.year,
             change.deprecation_date.month,
             change.deprecation_date.day,
-            tzinfo=UTC,
+            tzinfo=timezone.utc,
         ).timestamp()
     )
 
@@ -217,14 +219,14 @@ def guard_endpoint_sunset(operation_id: str) -> None:
     dep = ENDPOINT_DEPRECATIONS.get(operation_id)
     if dep is None:
         return
-    if datetime.now(tz=UTC).date() > dep.sunset:
+    if datetime.now(tz=timezone.utc).date() > dep.sunset:
         from http import HTTPStatus
 
         from dmr import APIError
 
         sunset_ts = int(
             datetime(
-                dep.sunset.year, dep.sunset.month, dep.sunset.day, tzinfo=UTC
+                dep.sunset.year, dep.sunset.month, dep.sunset.day, tzinfo=timezone.utc
             ).timestamp()
         )
         raise APIError(
@@ -235,7 +237,7 @@ def guard_endpoint_sunset(operation_id: str) -> None:
             status_code=HTTPStatus.GONE,
             headers={
                 "Deprecation": f"@{dep.announced_unix}",
-                "Sunset": http_date(sunset_ts),
+                "Sunset": _http_date(sunset_ts, usegmt=True),
                 "Link": f'<{dep.link}>; rel="deprecation"',
             },
         )
