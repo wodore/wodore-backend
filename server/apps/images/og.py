@@ -61,6 +61,10 @@ OG_LOGO_ALPHA = 0
 OG_MAP_EFFECT = "spotlight"
 OG_MAP_MARKER_SCALE = "0.8"
 
+# Map cards render one zoom level out (15): huts sit in visible terrain
+# context instead of a rooftop close-up.
+OG_MAP_ZOOM = 15
+
 
 def _frontend(path: str) -> str:
     return f"{settings.FRONTEND_DOMAIN.rstrip('/')}/{path.lstrip('/')}"
@@ -132,14 +136,16 @@ def og_photo_url(image_url: str, focal: dict | None = None) -> str:
 def og_map_card_url(map_url: str) -> str:
     """Signed imagor URL for a static-map og card: the generic
     static-map endpoint as source, with the Wodore watermark composited
-    left of center at the bottom (owner-approved geometry). The endpoint
+    bottom-center — same geometry as the photo variant (horizontally
+    centered survives WhatsApp's tighter center crops; the old
+    left-of-center 0.18 was cut off in WhatsApp previews). The endpoint
     itself stays logo-free (also used directly by the image APIs)."""
     filters = [
         _composite_image(
             _frontend(OG_LOGO_URL_PATH),
             OG_LOGO_SIZE_PX,
-            "0.18",
-            "bottom-10",
+            OG_LOGO_POS,
+            OG_LOGO_POS_Y,
             OG_LOGO_ALPHA,
         )
     ]

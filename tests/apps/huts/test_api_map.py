@@ -153,6 +153,8 @@ class TestMetaFallbacks:
         # imagor-wrapped: the static-map endpoint URL is the encoded source
         assert "map%2Fstatic" in data["image"]
         assert "wodore_watermark" in data["image"]  # logo composited by imagor
+        # bottom-center geometry: survives WhatsApp's tighter center crops
+        assert ",center,bottom-10,0" in data["image"]
 
     def test_place_meta_no_photo_uses_static_map(
         self, seed_data, client, settings, offline_render

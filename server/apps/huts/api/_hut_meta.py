@@ -27,6 +27,7 @@ from server.apps.images.models import Image
 from server.apps.images.og import (
     OG_MAP_EFFECT,
     OG_MAP_MARKER_SCALE,
+    OG_MAP_ZOOM,
     og_card_url,
     og_map_card_url,
     og_photo_url,
@@ -177,7 +178,7 @@ def _og_image(hut: Hut, request: HttpRequest) -> str:
             {
                 "place": hut.slug,
                 "place_type": "hut",
-                "zoom": 16,
+                "zoom": OG_MAP_ZOOM,
                 "effect": OG_MAP_EFFECT,
                 "marker_scale": OG_MAP_MARKER_SCALE,
                 "v": f"{hut.modified:%Y%m%dT%H%M%S}",

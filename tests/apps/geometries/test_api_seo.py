@@ -40,6 +40,7 @@ class TestPlaceMeta:
         assert "map%2Fstatic" in data["image"]  # imagor-wrapped endpoint URL
         assert "effect%3Dspotlight" in data["image"]
         assert "marker_scale%3D0.8" in data["image"]
+        assert "zoom%3D15" in data["image"]
 
     def test_meta_unknown_slug_is_404(self, seed_data, client):
         assert client.get("/v1/geo/places/does-not-exist/meta").status_code == 404
@@ -84,6 +85,7 @@ class TestHutOgCardFallback:
         assert "map%2Fstatic" in data["image"]
         assert "effect%3Dspotlight" in data["image"]
         assert "marker_scale%3D0.8" in data["image"]
+        assert "zoom%3D15" in data["image"]
 
 
 class TestPlaceOgPinnedImage:
