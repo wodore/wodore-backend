@@ -24,7 +24,7 @@ class TestHutMeta:
         assert data["slug"] == hut.slug
         assert data["name"] == hut.name
         assert data["page_url"] == f"https://wodore.com/hut/{hut.slug}"
-        assert data["lang"] == "de"
+        assert data["lang"] == "en"  # settings.LANGUAGE_CODE
         # standard/reduced operation terminology (not open/closed season)
         assert "type_standard" in data
         assert "type_reduced" in data
@@ -58,7 +58,7 @@ class TestHutMeta:
         assert data["description"].endswith(".")
         if hut.capacity_open:
             assert str(hut.capacity_open) in data["description"]
-            assert "Plätzen" in data["description"]  # German glue, default lang
+            assert "places" in data["description"]  # English glue, default lang
         if hut.elevation:
             assert f"{int(hut.elevation)} m" in data["description"]
 
@@ -67,8 +67,8 @@ class TestHutMeta:
             is_active=True, is_public=True, capacity_open__gt=0
         ).first()
         assert hut is not None
-        de = client.get(f"/v1/huts/{hut.slug}/meta").json()["description"]
-        en = client.get(f"/v1/huts/{hut.slug}/meta", {"lang": "en"}).json()[
+        default = client.get(f"/v1/huts/{hut.slug}/meta").json()["description"]
+        de = client.get(f"/v1/huts/{hut.slug}/meta", {"lang": "de"}).json()[
             "description"
         ]
         fr = client.get(f"/v1/huts/{hut.slug}/meta", {"lang": "fr"}).json()[
@@ -77,8 +77,8 @@ class TestHutMeta:
         it = client.get(f"/v1/huts/{hut.slug}/meta", {"lang": "it"}).json()[
             "description"
         ]
+        assert "places" in default  # settings.LANGUAGE_CODE
         assert "Plätzen" in de
-        assert "places" in en
         assert "places" in fr
         assert "posti" in it
 
@@ -92,7 +92,7 @@ class TestHutMeta:
             )
             return
         data = client.get(f"/v1/huts/{hut.slug}/meta").json()
-        assert data["description"].startswith("Derzeit geschlossen.")
+        assert data["description"].startswith("Currently closed.")
 
     def test_meta_lang_param_falls_back(self, seed_data, client):
         hut = Hut.objects.filter(is_active=True, is_public=True).first()

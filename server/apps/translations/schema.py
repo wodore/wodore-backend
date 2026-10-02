@@ -20,7 +20,7 @@ class LanguageQuery(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(extra="ignore")
 
     lang: str = Field(
-        "de",
+        settings.DEFAULT_LANG,
         description=f"Select language code: {', '.join(LANGUAGE_CODES)}.",
         pattern=f"({'|'.join(LANGUAGE_CODES)})",
     )
