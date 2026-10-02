@@ -156,7 +156,7 @@ class TestSchemaServing:
         syntax, and every referenced static asset must actually serve."""
         import re
 
-        from django.contrib.staticfiles.storage import staticfiles_storage
+        from django.contrib.staticfiles import finders
 
         response = client.get("/v1/docs")
         assert response.status_code == 200
@@ -167,10 +167,11 @@ class TestSchemaServing:
         urls = re.findall(r"(?:src|href)\=\"(/static/[^\"]+)\"", html)
         assert urls, "no static assets referenced?"
         for url in urls:
-            # The file must exist for the staticfiles finders (the dev
-            # server serves exactly those).
-            name = url.split("/static/", 1)[1]
-            assert staticfiles_storage.exists(name), f"missing asset: {url}"
+            # The file must be resolvable by the staticfiles finders —
+            # exactly what the dev server serves (storage-backend
+            # independent; production uses the CDN branch anyway).
+            name = url.split("/static/", 1)[1].split("?")[0]
+            assert finders.find(name), f"missing asset: {url}"
 
     @pytest.mark.django_db
     def test_unknown_api_version_on_schema_is_400(self, seed_data, client):
