@@ -353,13 +353,11 @@ class TestAssessPlace:
 
 class TestResponsePassthrough:
     def test_thumbhashes_in_features(self, hut, monkeypatch):
-        from ninja.testing import TestClient
-
-        from server.apps.geometries.api_images import router
+        from tests.helpers import PrefixedClient as TestClient
 
         pin_place_images(hut, [_result(score=80)])
         assess_place_pins(hut)
-        client = TestClient(router)
+        client = TestClient("/v1/geo/images")
         response = client.get(f"/hut/{hut.slug}?radius=50&lang=en&limit=10")
         assert response.status_code == 200
         props = response.json()["features"][0]["properties"]

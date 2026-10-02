@@ -12,7 +12,13 @@ def index(request: HttpRequest) -> HttpResponse:
     Returns rendered default page to the user.
     Typed with the help of ``django-stubs`` project.
     """
-    return render(request, "main/index.html")
+    return render(
+        request,
+        "main/index.html",
+        # Same context pattern as robots.txt/llms.txt: the web-app link
+        # follows FRONTEND_DOMAIN instead of a hardcoded production URL.
+        {"frontend_url": settings.FRONTEND_DOMAIN.rstrip("/")},
+    )
 
 
 def robots_txt(request: HttpRequest) -> HttpResponse:

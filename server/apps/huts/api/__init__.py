@@ -1,19 +1,13 @@
-# HutType endpoints removed - now use Category API instead
-# from ._hut_type import get_hut_types
-# Import availability endpoint BEFORE _hut to ensure route order
-# (specific routes like 'availability.geojson' must come before catch-all '/{slug}')
-from server.apps.availability.api import get_hut_availability_geojson
+"""Hut API: composes all hut endpoint modules.
 
-# Import other endpoint modules
-from ._booking import get_hut_bookings
-from ._hut_meta import get_hut_meta
+Route order is load-bearing and explicit here (no import-order magic):
+the availability geojson routes, then specific hut routes, and the
+``{slug}`` catch-all LAST. The old ninja setup relied on import order
+in this ``__init__``; the list below is the same order, visible.
+"""
 
-# Import hut endpoints last (contains /{slug} catch-all) — the Markdown
-# variant MUST register BEFORE the catch-all, or '{slug}.md' URLs are
-# swallowed by /{slug}. Import order is load-bearing; keep isort out.
-# isort: off
-from ._hut_markdown import get_hut_markdown
-from ._hut import get_huts
+from server.apps.huts.api._hut import paths as hut_paths
 
-# isort: on
-from ._router import router
+__all__ = ["paths"]
+
+paths = hut_paths

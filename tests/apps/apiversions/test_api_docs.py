@@ -149,6 +149,31 @@ class TestSchemaServing:
         assert registry.current_version() in response.content.decode()
 
     @pytest.mark.django_db
+    def test_docs_page_renders_all_template_tags_and_assets(self, seed_data, client):
+        """Regression: one malformed {% static %} tag once leaked into a
+        script src=, giving a blank docs page with a 404 on a literal
+        '{% static ...' URL. Rendered pages must contain no template
+        syntax, and every referenced static asset must actually serve."""
+        import re
+
+        from django.contrib.staticfiles import finders
+
+        response = client.get("/v1/docs")
+        assert response.status_code == 200
+        html = response.content.decode()
+        assert "{%" not in html, "raw template syntax leaked into the page"
+        assert "{{" not in html, "unrendered variable leaked into the page"
+
+        urls = re.findall(r"(?:src|href)\=\"(/static/[^\"]+)\"", html)
+        assert urls, "no static assets referenced?"
+        for url in urls:
+            # The file must be resolvable by the staticfiles finders —
+            # exactly what the dev server serves (storage-backend
+            # independent; production uses the CDN branch anyway).
+            name = url.split("/static/", 1)[1].split("?")[0]
+            assert finders.find(name), f"missing asset: {url}"
+
+    @pytest.mark.django_db
     def test_unknown_api_version_on_schema_is_400(self, seed_data, client):
         response = client.get("/v1/openapi.json", {"api_version": "not-a-date"})
         assert response.status_code == 400

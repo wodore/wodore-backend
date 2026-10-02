@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from typing import Any
 
+from django.utils.http import http_date
+
 Transform = Callable[[Any], Any]
 
 # Rollout date of the versioning system itself. Every client is effectively
@@ -202,3 +204,38 @@ def deprecation_unix(change: VersionChange) -> int | None:
             tzinfo=UTC,
         ).timestamp()
     )
+
+
+def guard_endpoint_sunset(operation_id: str) -> None:
+    """Answer 410 from a handler whose endpoint sunset has passed.
+
+    Replaces the old ``wrap_api`` monkey-wrapping: handlers of endpoints
+    listed in :data:`ENDPOINT_DEPRECATIONS` call this first — explicit
+    code instead of invisible framework patching. Before the sunset date
+    this is a no-op (the middleware announces the headers).
+    """
+    dep = ENDPOINT_DEPRECATIONS.get(operation_id)
+    if dep is None:
+        return
+    if datetime.now(tz=UTC).date() > dep.sunset:
+        from http import HTTPStatus
+
+        from dmr import APIError
+
+        sunset_ts = int(
+            datetime(
+                dep.sunset.year, dep.sunset.month, dep.sunset.day, tzinfo=UTC
+            ).timestamp()
+        )
+        raise APIError(
+            {
+                "code": "endpoint_sunset",
+                "detail": dep.detail,
+            },
+            status_code=HTTPStatus.GONE,
+            headers={
+                "Deprecation": f"@{dep.announced_unix}",
+                "Sunset": http_date(sunset_ts),
+                "Link": f'<{dep.link}>; rel="deprecation"',
+            },
+        )

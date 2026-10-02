@@ -141,9 +141,7 @@ class TestMaybeEnqueue:
 
 class TestEndpointEnqueue:
     def test_stale_hut_fast_path_enqueues(self, hut, monkeypatch):
-        from ninja.testing import TestClient
-
-        from server.apps.geometries.api_images import router
+        from tests.helpers import PrefixedClient as TestClient
 
         calls = []
 
@@ -155,7 +153,7 @@ class TestEndpointEnqueue:
         hut.images_pinned_at = timezone.now() - timedelta(days=2)
         hut.save(update_fields=["images_pinned_at"])
 
-        client = TestClient(router)
+        client = TestClient("/v1/geo/images")
         response = client.get(f"/hut/{hut.slug}?radius=50&lang=en&limit=10")
         assert response.status_code == 200
         # Only the pin-refresh enqueues matter here (the visit counter may

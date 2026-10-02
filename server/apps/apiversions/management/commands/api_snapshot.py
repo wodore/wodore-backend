@@ -56,7 +56,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options) -> None:
-        from server.apps.api.api_v1 import api
+        from server.apps.api.api_v1 import get_openapi_schema
 
         version = registry.current_version()
         target_dir = options["output_dir"] or SNAPSHOT_DIR
@@ -81,7 +81,7 @@ class Command(BaseCommand):
             )
             raise CommandError(msg)
 
-        schema = api.get_openapi_schema()
+        schema = get_openapi_schema()
         schema["info"]["version"] = version
         target_dir.mkdir(parents=True, exist_ok=True)
         target.write_text(
