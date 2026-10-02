@@ -2,7 +2,7 @@
 
 import pytest
 
-from server.apps.huts.models import Hut
+from server.apps.huts.models import Hut, HutImageAssociation
 
 pytestmark = [pytest.mark.django_db]
 
@@ -24,7 +24,7 @@ class TestHutMeta:
         assert data["slug"] == hut.slug
         assert data["name"] == hut.name
         assert data["page_url"] == f"https://wodore.com/hut/{hut.slug}"
-        assert data["lang"] == "de"
+        assert data["lang"] == "en"  # settings.LANGUAGE_CODE
         # standard/reduced operation terminology (not open/closed season)
         assert "type_standard" in data
         assert "type_reduced" in data
@@ -58,7 +58,7 @@ class TestHutMeta:
         assert data["description"].endswith(".")
         if hut.capacity_open:
             assert str(hut.capacity_open) in data["description"]
-            assert "Plätzen" in data["description"]  # German glue, default lang
+            assert "places" in data["description"]  # English glue, default lang
         if hut.elevation:
             assert f"{int(hut.elevation)} m" in data["description"]
 
@@ -67,8 +67,8 @@ class TestHutMeta:
             is_active=True, is_public=True, capacity_open__gt=0
         ).first()
         assert hut is not None
-        de = client.get(f"/v1/huts/{hut.slug}/meta").json()["description"]
-        en = client.get(f"/v1/huts/{hut.slug}/meta", {"lang": "en"}).json()[
+        default = client.get(f"/v1/huts/{hut.slug}/meta").json()["description"]
+        de = client.get(f"/v1/huts/{hut.slug}/meta", {"lang": "de"}).json()[
             "description"
         ]
         fr = client.get(f"/v1/huts/{hut.slug}/meta", {"lang": "fr"}).json()[
@@ -77,8 +77,8 @@ class TestHutMeta:
         it = client.get(f"/v1/huts/{hut.slug}/meta", {"lang": "it"}).json()[
             "description"
         ]
+        assert "places" in default  # settings.LANGUAGE_CODE
         assert "Plätzen" in de
-        assert "places" in en
         assert "places" in fr
         assert "posti" in it
 
@@ -92,7 +92,7 @@ class TestHutMeta:
             )
             return
         data = client.get(f"/v1/huts/{hut.slug}/meta").json()
-        assert data["description"].startswith("Derzeit geschlossen.")
+        assert data["description"].startswith("Currently closed.")
 
     def test_meta_lang_param_falls_back(self, seed_data, client):
         hut = Hut.objects.filter(is_active=True, is_public=True).first()
@@ -110,6 +110,134 @@ class TestHutMeta:
         hut.is_public = False
         hut.save()
         assert client.get(f"/v1/huts/{hut.slug}/meta").status_code == 404
+
+
+class TestHutMetaOgImage:
+    """og:image source resolution (regression: pinned external images).
+
+    Pinned provider rows keep the file field empty and the origin URL in
+    ``source_url_raw`` — the meta endpoint used to read only the file
+    field, signing an empty path that resolved to the bare imagor media
+    alias (``.../wd``) and 500-ing in imagor on staging."""
+
+    @pytest.fixture(autouse=True)
+    def _isolated_cache(self, monkeypatch):
+        from uuid import uuid4
+
+        from django.core.cache.backends.locmem import LocMemCache
+
+        from server.apps.geometries import image_response_cache as irc
+
+        cache = LocMemCache(f"test-{uuid4().hex}", {})
+        monkeypatch.setattr(irc, "_cache", lambda: cache)
+
+    @pytest.fixture
+    def hut(self, seed_data):
+        hut = Hut.objects.filter(is_active=True, is_public=True).first()
+        assert hut is not None
+        HutImageAssociation.objects.filter(hut=hut).delete()
+        return hut
+
+    @staticmethod
+    def _pin(hut, *, source_id: str, score: int, url_large: str = ""):
+        from django.contrib.gis.geos import Point
+
+        from server.apps.geometries.pinning import pin_place_images
+        from server.apps.geometries.providers.base import ImageResult
+
+        return pin_place_images(
+            hut,
+            [
+                ImageResult(
+                    provider="wikicommons",
+                    source_id=source_id,
+                    source_url=f"https://commons.wikimedia.org/wiki/{source_id}",
+                    image_type="flat",
+                    captured_at=None,
+                    location=Point(7.5, 46.5),
+                    distance_m=42.0,
+                    license_slug="cc-by-sa-4-0",
+                    attribution="Test Author, CC BY-SA",
+                    author="Test Author",
+                    author_url=None,
+                    url_large=url_large
+                    or f"https://upload.wikimedia.org/wikipedia/commons/{source_id}.jpg",
+                    width=1920,
+                    height=1080,
+                    score=score,
+                )
+            ],
+        )
+
+    def test_pinned_external_image_serves_from_source_url_raw(self, hut, client):
+        """The og:image embeds the pinned origin URL, not the media alias."""
+        from urllib.parse import quote
+
+        url = "https://upload.wikimedia.org/wikipedia/commons/pinned_1920.jpg"
+        self._pin(hut, source_id="File:Pinned.jpg", score=32767, url_large=url)
+        data = client.get(f"/v1/huts/{hut.slug}/meta").json()
+        assert data["image"]
+        assert quote(url, safe="") in data["image"]
+        # Never the bare imagor media alias (the staging bug: '.../wd').
+        assert not data["image"].endswith("/wd")
+
+    def test_local_file_image_keeps_working(self, hut, client):
+        """Images with a local file still resolve through MEDIA_URL."""
+        from urllib.parse import quote
+
+        self._pin(hut, source_id="File:Pinned.jpg", score=32767)
+        association = (
+            HutImageAssociation.objects.filter(hut=hut).select_related("image").get()
+        )
+        image = association.image
+        image.image = "images/local.jpg"
+        image.save(update_fields=["image"])
+        data = client.get(f"/v1/huts/{hut.slug}/meta").json()
+        assert quote("images/local.jpg", safe="") in data["image"]
+
+    def test_degenerate_pinned_row_falls_back_to_map_card(self, hut, client):
+        """No file and no raw URL → static-map card, never a signed
+        empty path."""
+        self._pin(hut, source_id="File:Degenerate.jpg", score=32767)
+        association = (
+            HutImageAssociation.objects.filter(hut=hut).select_related("image").get()
+        )
+        association.image.source_url_raw = ""
+        association.image.save(update_fields=["source_url_raw"])
+        data = client.get(f"/v1/huts/{hut.slug}/meta").json()
+        assert data["image"]
+        assert "map%2Fstatic" in data["image"]
+
+    def test_hidden_top_image_is_skipped(self, hut, client):
+        """An inactive top-scored image must not become the og:image —
+        the next servable row (or the fallback) is used instead."""
+        from urllib.parse import quote
+
+        self._pin(
+            hut,
+            source_id="File:Hidden.jpg",
+            score=32767,
+            url_large="https://upload.wikimedia.org/wikipedia/commons/hidden.jpg",
+        )
+        self._pin(
+            hut,
+            source_id="File:Visible.jpg",
+            score=100,
+            url_large="https://upload.wikimedia.org/wikipedia/commons/visible.jpg",
+        )
+        top = (
+            HutImageAssociation.objects.filter(hut=hut)
+            .select_related("image")
+            .order_by("-score")
+            .first()
+        )
+        top.image.is_active = False
+        top.image.save(update_fields=["is_active"])
+        data = client.get(f"/v1/huts/{hut.slug}/meta").json()
+        assert (
+            quote("https://upload.wikimedia.org/wikipedia/commons/visible.jpg", safe="")
+            in data["image"]
+        )
 
     def test_meta_does_not_disturb_other_hut_routes(self, seed_data, client):
         """/{slug} catch-all and the .md variant keep working alongside."""

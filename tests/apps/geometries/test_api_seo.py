@@ -82,6 +82,63 @@ class TestHutOgCardFallback:
         assert "map%2Fstatic" in data["image"]
 
 
+class TestPlaceOgPinnedImage:
+    """Place og:image source resolution (same regression as huts: pinned
+    external images keep the file field empty, origin URL in
+    ``source_url_raw``)."""
+
+    @pytest.fixture(autouse=True)
+    def _isolated_cache(self, monkeypatch):
+        from uuid import uuid4
+
+        from django.core.cache.backends.locmem import LocMemCache
+
+        from server.apps.geometries import image_response_cache as irc
+
+        cache = LocMemCache(f"test-{uuid4().hex}", {})
+        monkeypatch.setattr(irc, "_cache", lambda: cache)
+
+    def test_pinned_place_image_serves_from_source_url_raw(self, seed_data, client):
+        from urllib.parse import quote
+
+        from django.contrib.gis.geos import Point
+
+        from server.apps.geometries.models import GeoPlaceImageAssociation
+        from server.apps.geometries.pinning import pin_place_images
+        from server.apps.geometries.providers.base import ImageResult
+
+        place = GeoPlace.objects.filter(is_active=True).first()
+        assert place is not None
+        GeoPlaceImageAssociation.objects.filter(geo_place=place).delete()
+        url = "https://upload.wikimedia.org/wikipedia/commons/place_1920.jpg"
+        pin_place_images(
+            place,
+            [
+                ImageResult(
+                    provider="wikicommons",
+                    source_id="File:Place.jpg",
+                    source_url="https://commons.wikimedia.org/wiki/File:Place.jpg",
+                    image_type="flat",
+                    captured_at=None,
+                    location=Point(7.5, 46.5),
+                    distance_m=42.0,
+                    license_slug="cc-by-sa-4-0",
+                    attribution="Test Author, CC BY-SA",
+                    author="Test Author",
+                    author_url=None,
+                    url_large=url,
+                    width=1920,
+                    height=1080,
+                    score=32767,
+                )
+            ],
+        )
+        data = client.get(f"/v1/geo/places/{place.slug}/meta").json()
+        assert data["image"]
+        assert quote(url, safe="") in data["image"]
+        assert not data["image"].endswith("/wd")
+
+
 class TestCategoriesMarkdown:
     def test_categories_index(self, seed_data, client):
         response = client.get("/v1/categories/index.md")
