@@ -1,0 +1,1 @@
+{"id":"b1167dd26c410ec374b01b268c3b6141.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.visits.test_models.TestFlush#test_flush_accumulates_across_flushes","name":"test_flush_accumulates_across_flushes","status":"passed","testResultsByEnv":{"default":"e2e2a37be4a8f875a3e3ba8f49687f93"}}
