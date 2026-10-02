@@ -1,4 +1,4 @@
-"""SEO/LLM surface for places: lean meta + Markdown documents.
+"""SEO/LLM surface for places: lean meta + Markdown documents (dmr).
 
 Mirrors the hut surface (``server/apps/huts/api/_hut_meta.py`` and
 ``_hut_markdown.py``) for ``GeoPlace``:
@@ -11,14 +11,17 @@ GeoPlace texts are stored per place (``main_language``), not per-active
 language like huts — the endpoints serve the stored text as-is.
 """
 
-from ninja import Field, Schema
+import pydantic
+from dmr import Path, Query, modify
+from dmr.routing import external_path, path
+from pydantic import Field
 
 from django.conf import settings
 from django.http import Http404, HttpRequest, HttpResponse
 
+from server.apps.api.controller import ApiController, cache_headers
 from server.apps.images.og import og_map_card_url, og_photo_url
 
-from .api import router
 from .models import GeoPlace, GeoPlaceImageAssociation
 
 CACHE_TTL = 60 * 60
@@ -32,7 +35,9 @@ _LANGUAGE_LABELS = {
 }
 
 
-class PlaceMetaSchema(Schema):
+class PlaceMetaSchema(pydantic.BaseModel):
+    """Minimal place metadata for edge meta-tag injection."""
+
     slug: str = Field(description="Place slug")
     name: str = Field(description="Place name")
     description: str = Field(description="Short meta description")
@@ -44,6 +49,27 @@ class PlaceMetaSchema(Schema):
     page_url: str = Field(description="Canonical frontend page URL")
     jsonld: dict | None = Field(None, description="Ready-to-inline schema.org JSON-LD")
     modified: str | None = Field(None, description="Last modification (ISO date)")
+
+
+class _PlaceSlugPath(pydantic.BaseModel):
+    """Place slug path parameter."""
+
+    slug: str = Field(description="Place slug")
+
+
+class _MetaQuery(pydantic.BaseModel):
+    """No extra query parameters (texts are stored per place)."""
+
+    model_config = pydantic.ConfigDict(extra="ignore")
+
+
+def _languages_line(slug: str) -> str:
+    """Footer links to this document in every supported language."""
+    base = f"{settings.FRONTEND_DOMAIN.rstrip('/')}/geo/places/{slug}.md"
+    links = [
+        f"[{label}]({base}?lang={code})" for code, label in _LANGUAGE_LABELS.items()
+    ]
+    return "·".join(links)
 
 
 def _place_url(place: GeoPlace) -> str:
@@ -66,7 +92,7 @@ def _place_image(place: GeoPlace, request: HttpRequest) -> str | None:
                 source = f"{settings.MEDIA_URL}/{source}"
             focal = (association.image.image_meta or {}).get("focal")
             return og_photo_url(source, focal)
-    except Exception:
+    except Exception:  # preview image is best-effort
         pass
     # Complete static-map card from the generic endpoint; v=<modified>
     # busts the render cache on ANY place change, ETag-style.
@@ -142,35 +168,42 @@ def _get_public_place(slug: str) -> GeoPlace:
     return place
 
 
-@router.get(
-    "/places/{slug}/meta", response=PlaceMetaSchema, operation_id="get_place_meta"
-)
-def get_place_meta(request: HttpRequest, response: HttpResponse, slug: str) -> dict:
-    """Minimal place metadata for HTML meta-tag injection at the edge."""
-    place = _get_public_place(slug)
-    page_url = _place_url(place)
-    image = _place_image(place, request)
-    description = _place_description(place)
+class PlaceMetaController(ApiController):
+    """Minimal place metadata for the edge."""
 
-    response["Cache-Control"] = f"public, max-age={CACHE_TTL}"
-    return {
-        "slug": place.slug,
-        "name": place.name,
-        "description": description,
-        "categories": [c.name for c in place.categories.all() if c.name],
-        "elevation": place.elevation,
-        "latitude": round(place.location.y, 6) if place.location else None,
-        "longitude": round(place.location.x, 6) if place.location else None,
-        "image": image,
-        "page_url": page_url,
-        "jsonld": _place_jsonld(place, description, page_url, image),
-        "modified": place.modified.isoformat() if place.modified else None,
-    }
+    @modify(
+        operation_id="get_place_meta",
+        headers=cache_headers(CACHE_TTL),
+    )
+    def get(
+        self,
+        parsed_path: Path[_PlaceSlugPath],
+        parsed_query: Query[_MetaQuery],
+    ) -> PlaceMetaSchema:
+        """Get place metadata.
+
+        Minimal place metadata for HTML meta-tag injection at the edge.
+        """
+        place = _get_public_place(parsed_path.slug)
+        page_url = _place_url(place)
+        image = _place_image(place, self.request)
+        description = _place_description(place)
+
+        return PlaceMetaSchema(
+            slug=place.slug,
+            name=place.name,
+            description=description,
+            categories=[c.name for c in place.categories.all() if c.name],
+            elevation=place.elevation,
+            latitude=round(place.location.y, 6) if place.location else None,
+            longitude=round(place.location.x, 6) if place.location else None,
+            image=image,
+            page_url=page_url,
+            jsonld=_place_jsonld(place, description, page_url, image),
+            modified=place.modified.isoformat() if place.modified else None,
+        )
 
 
-@router.get(
-    "/places/{slug}.md", include_in_schema=False, operation_id="get_place_markdown"
-)
 def get_place_markdown(request: HttpRequest, slug: str) -> HttpResponse:
     """A place as a self-contained Markdown document for LLM agents."""
     place = _get_public_place(slug)
@@ -207,12 +240,27 @@ Map: {page_url}
 
 {place.description or "—"}
 
-Languages: {" · ".join(f"[{label}]({settings.FRONTEND_DOMAIN.rstrip('/')}/geo/places/{place.slug}.md?lang={code})" for code, label in _LANGUAGE_LABELS.items())}
+Languages: {_languages_line(place.slug)}
 
 ---
 
 Data: [Wodore]({settings.FRONTEND_DOMAIN.rstrip("/")}) · JSON: {page_url} · Last updated: {place.modified:%Y-%m-%d}
-"""
+"""  # noqa: WPS237
     response = HttpResponse(markdown, content_type="text/markdown; charset=utf-8")
     response["Cache-Control"] = f"public, max-age={CACHE_TTL}"
     return response
+
+
+paths = [
+    path(
+        "places/<str:slug>/meta",
+        PlaceMetaController.as_view(),
+        name="get_place_meta",
+    ),
+    external_path(
+        "places/<str:slug>.md",
+        get_place_markdown,
+        openapi=None,
+        name="get_place_markdown",
+    ),
+]

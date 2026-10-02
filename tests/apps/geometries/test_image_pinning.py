@@ -1,16 +1,15 @@
 """Tests for pinning external provider results (spec: external-image-pinning).
-
 Covers the pin service (dedupe across syncs, score semantics, internal-result
 skipping, metadata merge) and the endpoint fast path / lazy write-through.
 """
 
 import pytest
-from ninja.testing import TestClient
+
+from tests.helpers import PrefixedClient as TestClient
 
 from django.contrib.gis.geos import Point
 
 from server.apps.geometries import image_response_cache as irc
-from server.apps.geometries.api_images import router
 from server.apps.geometries.pinning import pin_place_images, place_has_visible_pins
 from server.apps.geometries.providers.base import ImageResult
 from server.apps.huts.models import Hut, HutImageAssociation
@@ -143,7 +142,7 @@ class _FetchStub:
 class TestPinsEndpoint:
     @pytest.fixture
     def client(self):
-        return TestClient(router)
+        return TestClient("/v1/geo/images")
 
     @pytest.fixture
     def fetch(self, monkeypatch):
@@ -189,7 +188,6 @@ class TestPinsEndpoint:
         assert place_has_visible_pins(hut)
         hut.refresh_from_db()
         assert hut.images_pinned_at is not None
-
         second = client.get(f"/hut/{hut.slug}?radius=50&lang=en&limit=10")
         assert second.status_code == 200
         assert fetch.calls == 1  # second request served without the live path
@@ -271,7 +269,7 @@ class TestPlaceEndpointPins:
 
     @pytest.fixture
     def client(self):
-        return TestClient(router)
+        return TestClient("/v1/geo/images")
 
     @pytest.fixture
     def place(self, seed_data):
@@ -298,7 +296,6 @@ class TestPlaceEndpointPins:
         assert fetch.calls == 1
         assert place_has_visible_pins(place)
         assert Image.objects.filter(provider_synced_at__isnull=False).count() == 2
-
         second = client.get(f"/place/{place.slug}?radius=50&lang=en&limit=9")
         assert second.status_code == 200
         assert fetch.calls == 1  # pins fast path, no live pipeline

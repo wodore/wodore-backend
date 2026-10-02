@@ -33,6 +33,15 @@ if [ -n "$PORT_END" ]; then
     EXTRA_ENV+=("MARTIN_TILE_URL=${MARTIN_TILE_URL:-http://localhost:$PORT_END}")
 fi
 
+# Per-lane FRONTEND_DOMAIN (optional): infisical dev pins it to
+# localhost:9000, which this machine's other projects occupy — lanes that
+# run their own frontend dev server set the real URL in .env.local OUTSIDE
+# the workz managed block and it is re-injected here, after infisical.
+LANE_FRONTEND_DOMAIN="$(sed -n 's/^FRONTEND_DOMAIN=//p' .env.local)"
+if [ -n "$LANE_FRONTEND_DOMAIN" ]; then
+    EXTRA_ENV+=("FRONTEND_DOMAIN=$LANE_FRONTEND_DOMAIN")
+fi
+
 export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-server.settings}"
 # NOTE: no --silent on the infisical invocation — it swallows the CHILD's
 # stdout too, so interactive commands (createsuperuser) hang with invisible

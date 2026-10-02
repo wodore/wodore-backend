@@ -1,20 +1,20 @@
-"""
-API endpoints for Image aggregation.
-Separate router to allow mounting at /geo/images/
-"""
+"""Image aggregation endpoints on dmr (mounted at /geo/images/)."""
 
+import asyncio
 import logging
 
-from ninja import Query, Router
-from ninja.decorators import decorate_view
+import pydantic
+from dmr import Path, Query, modify
+from dmr.routing import path
+from pydantic import Field
 
 from django.conf import settings
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
-from django.http import HttpRequest, HttpResponse
-from django.views.decorators.cache import cache_control
+from django.http import HttpRequest
 
-from server.apps.translations import LanguageParam, activate, with_language_param
+from server.apps.api.controller import ApiController, cache_headers
+from server.apps.translations import LanguageQuery, activate
 
 from . import image_response_cache
 from .models import GeoPlace
@@ -36,7 +36,6 @@ from .schemas import (
     ImageMetadataSchema,
 )
 
-router = Router(tags=["geoimages"])
 logger = logging.getLogger(__name__)
 
 
@@ -45,221 +44,258 @@ provider_registry.register(WodoreProvider(place_type="geoplace"))
 provider_registry.register(WodoreProvider(place_type="hut"))
 provider_registry.register(WikimediaCommonsProvider())  # Replaces WikidataProvider
 provider_registry.register(RefugesInfoProvider())  # Add refuges.info provider
-# provider_registry.register(FlickrProvider())
 provider_registry.register(MapillaryProvider())
 provider_registry.register(PanoramaxProvider())
 provider_registry.register(CamptocampProvider())
 
 
-@router.get(
-    "nearby",
-    response=ImageCollectionResponse,
-    operation_id="nearby_images",
-)
-@decorate_view(cache_control(max_age=300))  # 5 minutes cache
-@with_language_param("lang")
-def nearby_images(
-    request: HttpRequest,
-    response: HttpResponse,
-    lang: LanguageParam,
-    lat: float = Query(
-        ..., description="Latitude in WGS84", ge=-90, le=90, example="46.570088"
-    ),
-    lon: float = Query(
-        ..., description="Longitude in WGS84", ge=-180, le=180, example="8.2221"
-    ),
-    radius: float = Query(
-        50.0, description="Search radius in meters", gt=0, le=10000, example="5000.0"
-    ),
-    sources: str | None = Query(
+class NearbyImagesQuery(LanguageQuery):
+    """Query parameters for the nearby-images endpoint."""
+
+    lat: float = Field(
+        description="Latitude in WGS84",
+        ge=-90,
+        le=90,
+        json_schema_extra={"example": 46.570088},
+    )
+    lon: float = Field(
+        description="Longitude in WGS84",
+        ge=-180,
+        le=180,
+        json_schema_extra={"example": 8.2221},
+    )
+    radius: float = Field(
+        50.0,
+        description="Search radius in meters",
+        gt=0,
+        le=10000,
+        json_schema_extra={"example": 5000.0},
+    )
+    sources: str | None = Field(
         None,
-        description="Comma-separated provider list (e.g., 'wodore,wikidata,flickr')",
-    ),
-    precision: str = Query(
+        description=("Comma-separated provider list (e.g., 'wodore,wikidata,flickr')"),
+    )
+    precision: str = Field(
         "precise",
         description="Coordinate precision: 'broad' (3), 'normal' (4), 'precise' (6)",
-    ),
-    limit: int = Query(
+    )
+    limit: int = Field(
         100,
         description="Maximum number of images to return",
         ge=1,
         le=500,
-    ),
-    update_cache: bool = Query(
+    )
+    update_cache: bool = Field(
         False,
-        description="Force cache refresh - bypass cache and update all cached data from providers",
-    ),
-) -> ImageCollectionResponse:
-    """
-    Get images near a location from multiple sources as a GeoJSON FeatureCollection.
-
-    Aggregates internal Wodore database images with external sources (Wikidata, Flickr, etc.).
-    Returns GeoJSON Point features with full image metadata.
-
-    Algorithm:
-    1. Find GeoPlaces within 10m of the coordinate
-    2. If found, use those places for provider queries
-    3. If not found within 10m, expand radius incrementally
-    4. Query all enabled providers in parallel
-    5. Merge and deduplicate results
-    6. Return GeoJSON FeatureCollection sorted by distance
-
-    Providers are queried with GeoPlace objects, so they can extract
-    required information (e.g., QID from osm_tags for Wikidata).
-    """
-    import asyncio
-
-    activate(lang)
-
-    # Parse sources parameter
-    sources_list = None
-    if sources:
-        sources_list = [s.strip() for s in sources.split(",")]
-
-    resp_key = image_response_cache.response_key(
-        "nearby",
-        image_response_cache.center_ident(lat, lon),
-        radius=radius,
-        sources=sources,
-        lang=lang,
-        limit=limit,
-        precision=precision,
+        description=(
+            "Force cache refresh - bypass cache and update all cached "
+            "data from providers"
+        ),
     )
-    if not update_cache:
-        cached, fresh = image_response_cache.get_response(resp_key)
-        if cached is not None and fresh:
-            return cached
 
-    # Step 1: Find GeoPlaces and Huts within 10m radius
-    query_point = Point(lon, lat, srid=4326)
 
-    logger.debug(
-        f"🔍 Searching for GeoPlaces and Huts near ({lat}, {lon}) with radius {radius}m"
+class _PlaceImagesQuery(LanguageQuery):
+    """Shared query parameters of the place/hut image endpoints."""
+
+    radius: float = Field(
+        5000.0,
+        description="Search radius in meters for external providers",
+        gt=0,
+        le=10000,
+        json_schema_extra={"example": 5000.0},
     )
-    logger.debug(f"Precision level: {precision}")
-    logger.debug(f"Requested sources: {sources_list}")
+    sources: str | None = Field(
+        None,
+        description=(
+            "Comma-separated provider list (e.g., 'wodore,wikidata,flickr'). "
+            "If provided without wodore, wodore images are not shown but "
+            "the place is still used for location."
+        ),
+    )
+    limit: int = Field(
+        100,
+        description="Maximum number of images to return",
+        ge=1,
+        le=500,
+    )
+    update_cache: bool = Field(
+        False,
+        description=(
+            "Force cache refresh - bypass cache and update all cached "
+            "data from providers"
+        ),
+    )
+    fallback: bool = Field(
+        False,
+        description=(
+            "When the entity has no images, include the generated "
+            "static-map card as a single feature (is_fallback=true)"
+        ),
+    )
 
-    # Start with 10m radius as specified
-    search_radius = 10  # meters
-    max_radius = int(radius)  # Already in meters
 
-    geoplaces = []
-    huts = []
-    current_radius = search_radius
+class PlaceSlugPath(pydantic.BaseModel):
+    """GeoPlace slug path parameter."""
 
-    while current_radius <= max_radius:
-        # Search for GeoPlaces
-        geoplaces = list(
-            GeoPlace.objects.filter(
-                is_active=True,
-                is_public=True,
-                location__distance_lte=(query_point, D(m=current_radius)),
-            )
-            .prefetch_related(
-                "source_associations__organization"  # Prefetch sources for schema conversion
-            )
-            .only("id", "slug", "name", "i18n", "location", "osm_tags")[:50]
+    place_slug: str = Field(description="GeoPlace slug")
+
+
+class HutSlugPath(pydantic.BaseModel):
+    """Hut slug path parameter."""
+
+    hut_slug: str = Field(description="Hut slug")
+
+
+class NearbyImagesController(ApiController):
+    """Images near a location from multiple sources (GeoJSON)."""
+
+    @modify(
+        operation_id="nearby_images",
+        headers=cache_headers(300),  # 5 minutes cache
+    )
+    def get(self, parsed_query: Query[NearbyImagesQuery]) -> ImageCollectionResponse:
+        """Get nearby images.
+
+        GeoJSON FeatureCollection from multiple sources. Aggregates internal Wodore database images with external sources
+        (Wikidata, Flickr, etc.). Returns GeoJSON Point features with full
+        image metadata.
+
+        Algorithm:
+        1. Find GeoPlaces within 10m of the coordinate
+        2. If found, use those places for provider queries
+        3. If not found within 10m, expand radius incrementally
+        4. Query all enabled providers in parallel
+        5. Merge and deduplicate results
+        6. Return GeoJSON FeatureCollection sorted by distance
+        """
+        query = parsed_query
+        activate(query.lang)
+
+        sources_list = None
+        if query.sources:
+            sources_list = [s.strip() for s in query.sources.split(",")]
+
+        resp_key = image_response_cache.response_key(
+            "nearby",
+            image_response_cache.center_ident(query.lat, query.lon),
+            radius=query.radius,
+            sources=query.sources,
+            lang=query.lang,
+            limit=query.limit,
+            precision=query.precision,
         )
+        if not query.update_cache:
+            cached, fresh = image_response_cache.get_response(resp_key)
+            if cached is not None and fresh:
+                return cached
 
-        # Search for Huts
-        from server.apps.huts.models import Hut
-
-        huts = list(
-            Hut.objects.filter(
-                is_active=True,
-                is_public=True,
-                location__distance_lte=(query_point, D(m=current_radius)),
-            )
-            .prefetch_related(
-                "hut_sources__organization"  # Prefetch sources for schema conversion
-            )
-            .only("id", "slug", "name", "i18n", "location")[:50]
-        )
+        # Step 1: Find GeoPlaces and Huts within 10m radius
+        query_point = Point(query.lon, query.lat, srid=4326)
 
         logger.debug(
-            f"Search radius {current_radius}m: Found {len(geoplaces)} GeoPlaces, {len(huts)} Huts"
+            f"🔍 Searching for GeoPlaces and Huts near ({query.lat}, "
+            f"{query.lon}) with radius {query.radius}m"
         )
 
-        if geoplaces or huts:
-            for place in geoplaces:
-                qid = place.osm_tags.get("wikidata") if place.osm_tags else None
-                logger.debug(f"  - GeoPlace: {place.slug} (QID: {qid})")
-            for hut in huts:
-                logger.debug(f"  - Hut: {hut.slug}")
+        search_radius = 10  # meters
+        max_radius = int(query.radius)
 
-            logger.debug(
-                f"Found {len(geoplaces)} GeoPlaces and {len(huts)} Huts within {current_radius}m"
+        geoplaces = []
+        huts = []
+        current_radius = search_radius
+
+        while current_radius <= max_radius:
+            geoplaces = list(
+                GeoPlace.objects.filter(
+                    is_active=True,
+                    is_public=True,
+                    location__distance_lte=(query_point, D(m=current_radius)),
+                )
+                .prefetch_related(
+                    "source_associations__organization"
+                )  # Prefetch sources for schema conversion
+                .only("id", "slug", "name", "i18n", "location", "osm_tags")[:50]
             )
-            break
 
-        # Double the search radius if no places found
-        current_radius *= 2
+            from server.apps.huts.models import Hut
 
-    if not geoplaces and not huts:
-        logger.warning(
-            f"No GeoPlaces or Huts found within {max_radius}m, using coordinate only"
-        )
-
-    # Combine both lists
-    all_places = list(geoplaces) + list(huts)
-
-    # Step 2: Fetch images from all providers
-    logger.debug(
-        f"📸 Fetching images from {len(provider_registry.get_all_providers())} providers..."
-    )
-
-    try:
-        # Run async function in sync context
-        results = asyncio.run(
-            fetch_images_from_providers(
-                geoplaces=all_places,  # Pass both GeoPlaces and Huts
-                lat=lat,
-                lon=lon,
-                radius=radius,
-                sources=sources_list,
-                precision=precision,
-                limit=limit,  # Pass limit to providers
-                update_cache=update_cache,  # Pass update_cache flag
+            huts = list(
+                Hut.objects.filter(
+                    is_active=True,
+                    is_public=True,
+                    location__distance_lte=(query_point, D(m=current_radius)),
+                )
+                .prefetch_related(
+                    "hut_sources__organization"
+                )  # Prefetch sources for schema conversion
+                .only("id", "slug", "name", "i18n", "location")[:50]
             )
-        )
-        logger.debug(f"Total raw results from all providers: {len(results)} images")
-    except Exception as e:
-        logger.error(f"Error fetching images from providers: {e}")
-        cached, _fresh = image_response_cache.get_response(resp_key)
-        if cached is not None:
+
+            if geoplaces or huts:
+                break
+
+            current_radius *= 2
+
+        if not geoplaces and not huts:
             logger.warning(
-                f"Stale fallback: serving cached response for nearby ({lat},{lon})"
+                f"No GeoPlaces or Huts found within {max_radius}m, "
+                "using coordinate only"
             )
-            return cached
-        results = []
 
-    # Step 3: Sort by score (primary), then by distance (secondary)
-    results.sort(key=lambda r: (-r.score, r.distance_m))
+        all_places = list(geoplaces) + list(huts)
 
-    # Step 5: Limit results
-    logger.debug(f"Limiting to {limit} results (had {len(results)})")
-    results = results[:limit]
+        logger.debug(
+            f"📸 Fetching images from "
+            f"{len(provider_registry.get_all_providers())} providers..."
+        )
 
-    # Step 6: Post-process results (generate URLs, convert to GeoJSON)
-    logger.debug(f"Post-processing {len(results)} results...")
-    features = post_process_images(results, force_provider_refresh=update_cache)
+        try:
+            results = asyncio.run(
+                fetch_images_from_providers(
+                    geoplaces=all_places,  # Pass both GeoPlaces and Huts
+                    lat=query.lat,
+                    lon=query.lon,
+                    radius=query.radius,
+                    sources=sources_list,
+                    precision=query.precision,
+                    limit=query.limit,
+                    update_cache=query.update_cache,
+                )
+            )
+        except Exception as e:  # stale-cache fallback below
+            logger.error(f"Error fetching images from providers: {e}")
+            cached, _fresh = image_response_cache.get_response(resp_key)
+            if cached is not None:
+                logger.warning(
+                    f"Stale fallback: serving cached response for nearby "
+                    f"({query.lat},{query.lon})"
+                )
+                return cached
+            results = []
 
-    # Construct metadata
-    metadata = ImageMetadataSchema(
-        total=len(features),
-        sources_queried=sources_list
-        or [p.source for p in provider_registry.get_all_providers()],
-        query_radius_m=radius,
-        center={"lat": lat, "lon": lon},
-        geoplaces_found=len(geoplaces),
-        huts_found=len(huts),
-    )
+        # Sort by score (primary), then by distance (secondary)
+        results.sort(key=lambda r: (-r.score, r.distance_m))
+        results = results[: query.limit]
 
-    response = ImageCollectionResponse(
-        type="FeatureCollection", features=features, metadata=metadata
-    )
-    image_response_cache.set_response(resp_key, response)
-    return response
+        features = post_process_images(
+            results, force_provider_refresh=query.update_cache
+        )
+
+        metadata = ImageMetadataSchema(
+            total=len(features),
+            sources_queried=sources_list
+            or [p.source for p in provider_registry.get_all_providers()],
+            query_radius_m=query.radius,
+            center={"lat": query.lat, "lon": query.lon},
+            geoplaces_found=len(geoplaces),
+            huts_found=len(huts),
+        )
+
+        response = ImageCollectionResponse(
+            type="FeatureCollection", features=features, metadata=metadata
+        )
+        image_response_cache.set_response(resp_key, response)
+        return response
 
 
 def _map_fallback_feature(
@@ -359,406 +395,339 @@ def _map_fallback_feature(
     }
 
 
-@router.get(
-    "place/{place_slug}",
-    response={200: ImageCollectionResponse},
-    operation_id="images_for_place",
-)
-@decorate_view(cache_control(max_age=300))  # 5 minutes cache
-@with_language_param("lang")
-def images_for_place(
-    request: HttpRequest,
-    response: HttpResponse,
-    lang: LanguageParam,
-    place_slug: str,
-    radius: float = Query(
-        5000.0,
-        description="Search radius in meters for external providers",
-        gt=0,
-        le=10000,
-        example="5000.0",
-    ),
-    sources: str | None = Query(
-        None,
-        description="Comma-separated provider list (e.g., 'wodore,wikidata,flickr'). If provided without wodore, wodore images are not shown but place is still used for location.",
-    ),
-    limit: int = Query(
-        100,
-        description="Maximum number of images to return",
-        ge=1,
-        le=500,
-    ),
-    update_cache: bool = Query(
-        False,
-        description="Force cache refresh - bypass cache and update all cached data from providers",
-    ),
-    fallback: bool = Query(
-        False,
-        description="When the entity has no images, include the generated static-map card as a single feature (is_fallback=true)",
-    ),
-) -> ImageCollectionResponse:
-    """
-    Get images for a specific GeoPlace from multiple sources.
+class PlaceImagesController(ApiController):
+    """Images for a specific GeoPlace from multiple sources."""
 
-    Wodore provider uses the place directly (very fast).
-    External providers use the place's coordinates with the given radius.
-
-    Returns GeoJSON Point features with full image metadata.
-    """
-    import asyncio
-
-    activate(lang)
-
-    # Parse sources parameter
-    sources_list = None
-    if sources:
-        sources_list = [s.strip() for s in sources.split(",")]
-
-    resp_key = image_response_cache.response_key(
-        "place",
-        place_slug,
-        radius=radius,
-        sources=sources,
-        lang=lang,
-        limit=limit,
-        fallback=fallback,
+    @modify(
+        operation_id="images_for_place",
+        headers=cache_headers(300),  # 5 minutes cache
     )
-    if not update_cache:
-        cached, fresh = image_response_cache.get_response(resp_key)
-        if cached is not None and fresh:
-            return cached
+    def get(
+        self,
+        parsed_path: Path[PlaceSlugPath],
+        parsed_query: Query[_PlaceImagesQuery],
+    ) -> ImageCollectionResponse:
+        """Get images for a place.
 
-    logger.debug(f"Fetching images for GeoPlace '{place_slug}'")
-    logger.debug(f"Radius: {radius}m, Sources: {sources_list}")
+        From multiple sources; Wodore provider uses the place directly (very fast). External
+        providers use the place's coordinates with the given radius.
 
-    from server.apps.geometries.models import GeoPlace
+        Returns GeoJSON Point features with full image metadata.
+        """
+        request = self.request
+        query = parsed_query
+        place_slug = parsed_path.place_slug
+        activate(query.lang)
 
-    from .pinning import pin_place_images, place_has_visible_pins
+        sources_list = None
+        if query.sources:
+            sources_list = [s.strip() for s in query.sources.split(",")]
 
-    place = GeoPlace.objects.filter(
-        slug=place_slug, is_active=True, is_public=True
-    ).first()
-
-    # Pins fast path (openspec pin-external-images): the place already has
-    # pinned/uploaded images — serve them from the DB via the internal
-    # Wodore provider only; no external provider is contacted.
-    serve_from_pins = bool(
-        place
-        and not sources_list
-        and not update_cache
-        and place_has_visible_pins(place)
-    )
-
-    if serve_from_pins and place is not None:
-        # Queued refresh (never in-request): stale pins enqueue a q2 task;
-        # this visitor gets the current pins, the next one the fresh set.
-        from .pinning import maybe_enqueue_place_refresh
-
-        maybe_enqueue_place_refresh(place)
-        try:
-            # Pure-DB fast path — same as the hut endpoint.
-            results = WodoreProvider(place_type="geoplace")._fetch_sync(
-                [], place.location.y, place.location.x, radius
-            )
-            place_info = {
-                "location": {"lat": place.location.y, "lon": place.location.x}
-            }
-            logger.debug(
-                f"Serving {len(results)} pinned/local images for place '{place_slug}'"
-            )
-        except Exception as e:
-            logger.error(f"Error fetching pinned images for place '{place_slug}': {e}")
-            cached, _fresh = image_response_cache.get_response(resp_key)
-            if cached is not None:
-                logger.warning(
-                    f"Stale fallback: serving cached response for place '{place_slug}'"
-                )
+        resp_key = image_response_cache.response_key(
+            "place",
+            place_slug,
+            radius=query.radius,
+            sources=query.sources,
+            lang=query.lang,
+            limit=query.limit,
+            fallback=query.fallback,
+        )
+        if not query.update_cache:
+            cached, fresh = image_response_cache.get_response(resp_key)
+            if cached is not None and fresh:
                 return cached
-            raise
-    else:
-        try:
-            # Fetch images and place info
-            results, place_info = asyncio.run(
-                fetch_images_for_place(
-                    place_slug=place_slug,
+
+        from .pinning import maybe_enqueue_place_refresh, place_has_visible_pins
+
+        place = GeoPlace.objects.filter(
+            slug=place_slug, is_active=True, is_public=True
+        ).first()
+
+        # Pins fast path (openspec pin-external-images): the place already
+        # has pinned/uploaded images — serve them from the DB via the
+        # internal Wodore provider only; no external provider is contacted.
+        serve_from_pins = bool(
+            place
+            and not sources_list
+            and not query.update_cache
+            and place_has_visible_pins(place)
+        )
+
+        if serve_from_pins and place is not None:
+            # Queued refresh (never in-request): stale pins enqueue a q2
+            # task; this visitor gets the current pins, the next one the
+            # fresh set.
+            maybe_enqueue_place_refresh(place)
+            try:
+                results = WodoreProvider(place_type="geoplace")._fetch_sync(
+                    [], place.location.y, place.location.x, query.radius
+                )
+                place_info = {
+                    "location": {"lat": place.location.y, "lon": place.location.x}
+                }
+            except Exception as e:
+                logger.error(
+                    f"Error fetching pinned images for place '{place_slug}': {e}"
+                )
+                cached, _fresh = image_response_cache.get_response(resp_key)
+                if cached is not None:
+                    logger.warning(
+                        f"Stale fallback: serving cached response for place "
+                        f"'{place_slug}'"
+                    )
+                    return cached
+                raise
+        else:
+            try:
+                results, place_info = asyncio.run(
+                    fetch_images_for_place(
+                        place_slug=place_slug,
+                        place_type="geoplace",
+                        radius=query.radius,
+                        sources=sources_list,
+                        limit=query.limit,
+                        update_cache=query.update_cache,
+                    )
+                )
+            except Exception as e:  # stale-cache fallback below
+                logger.error(f"Error fetching images for place '{place_slug}': {e}")
+                cached, _fresh = image_response_cache.get_response(resp_key)
+                if cached is not None:
+                    logger.warning(
+                        f"Stale fallback: serving cached response for place "
+                        f"'{place_slug}'"
+                    )
+                    return cached
+                raise
+
+            # Lazy pin-on-first-visit / forced re-pin (full default runs
+            # only).
+            if place is not None and not sources_list:
+                try:
+                    from .pinning import pin_place_images
+
+                    stats = pin_place_images(place, results)
+                    logger.info(f"Pinned images for place '{place_slug}': {stats}")
+                    # Pinning bumped the response-cache version — recompute
+                    # the key so this response is stored at the new version.
+                    resp_key = image_response_cache.response_key(
+                        "place",
+                        place_slug,
+                        radius=query.radius,
+                        sources=query.sources,
+                        lang=query.lang,
+                        limit=query.limit,
+                        fallback=query.fallback,
+                    )
+                except Exception as e:
+                    logger.error(f"Error pinning images for place '{place_slug}': {e}")
+
+        results.sort(key=lambda r: (-r.score, r.distance_m))
+        results = results[: query.limit]
+
+        features = post_process_images(
+            results, force_provider_refresh=query.update_cache
+        )
+
+        if query.fallback and not features and place is not None and place.location:
+            features = [
+                _map_fallback_feature(
+                    request,
+                    slug=place.slug,
+                    lat=place.location.y,
+                    lon=place.location.x,
+                    modified=place.modified,
                     place_type="geoplace",
-                    radius=radius,
-                    sources=sources_list,
-                    limit=limit,
-                    update_cache=update_cache,  # Pass update_cache flag
                 )
-            )
-            logger.debug(f"Total raw results from all providers: {len(results)} images")
-        except Exception as e:
-            logger.error(f"Error fetching images for place '{place_slug}': {e}")
-            cached, _fresh = image_response_cache.get_response(resp_key)
-            if cached is not None:
-                logger.warning(
-                    f"Stale fallback: serving cached response for place '{place_slug}'"
-                )
-                return cached
-            raise
+            ]
 
-        # Lazy pin-on-first-visit / forced re-pin (full default runs only).
-        if place is not None and not sources_list:
+        metadata = ImageMetadataSchema(
+            total=len(features),
+            sources_queried=sources_list
+            or [p.source for p in provider_registry.get_all_providers()],
+            query_radius_m=query.radius,
+            center={
+                "lat": place_info["location"]["lat"],
+                "lon": place_info["location"]["lon"],
+            },
+            geoplaces_found=1,
+            huts_found=0,
+        )
+
+        response = ImageCollectionResponse(
+            type="FeatureCollection", features=features, metadata=metadata
+        )
+        image_response_cache.set_response(resp_key, response)
+        return response
+
+
+class HutImagesController(ApiController):
+    """Images for a specific Hut from multiple sources."""
+
+    @modify(
+        operation_id="images_for_hut",
+        headers=cache_headers(300),  # 5 minutes cache
+    )
+    def get(
+        self,
+        parsed_path: Path[HutSlugPath],
+        parsed_query: Query[_PlaceImagesQuery],
+    ) -> ImageCollectionResponse:
+        """Get images for a hut.
+
+        From multiple sources; Wodore provider uses the hut directly (very fast). External
+        providers use the hut's coordinates with the given radius.
+
+        Returns GeoJSON Point features with full image metadata.
+        """
+        request = self.request
+        query = parsed_query
+        hut_slug = parsed_path.hut_slug
+        activate(query.lang)
+
+        sources_list = None
+        if query.sources:
+            sources_list = [s.strip() for s in query.sources.split(",")]
+
+        resp_key = image_response_cache.response_key(
+            "hut",
+            hut_slug,
+            radius=query.radius,
+            sources=query.sources,
+            lang=query.lang,
+            limit=query.limit,
+            fallback=query.fallback,
+        )
+        if not query.update_cache:
+            cached, fresh = image_response_cache.get_response(resp_key)
+            if cached is not None and fresh:
+                return cached
+
+        from server.apps.huts.models import Hut
+
+        from .pinning import place_has_visible_pins
+
+        hut = Hut.objects.filter(slug=hut_slug, is_active=True, is_public=True).first()
+
+        serve_from_pins = bool(
+            hut
+            and not sources_list
+            and not query.update_cache
+            and place_has_visible_pins(hut)
+        )
+
+        if serve_from_pins and hut is not None:
+            from .pinning import maybe_enqueue_place_refresh
+
+            maybe_enqueue_place_refresh(hut)
             try:
-                stats = pin_place_images(place, results)
-                logger.info(f"Pinned images for place '{place_slug}': {stats}")
-                # Pinning bumped the response-cache version — recompute the
-                # key so this response is stored at the new version.
-                resp_key = image_response_cache.response_key(
-                    "place",
-                    place_slug,
-                    radius=radius,
-                    sources=sources,
-                    lang=lang,
-                    limit=limit,
+                # Pure-DB fast path: the internal Wodore provider converts
+                # the hut's associations (uploads + pins) to results — no
+                # external provider, no async machinery needed.
+                results = WodoreProvider(place_type="hut")._fetch_sync(
+                    [], hut.location.y, hut.location.x, query.radius
+                )
+                place_info = {
+                    "location": {"lat": hut.location.y, "lon": hut.location.x}
+                }
+            except Exception as e:
+                logger.error(f"Error fetching pinned images for hut '{hut_slug}': {e}")
+                cached, _fresh = image_response_cache.get_response(resp_key)
+                if cached is not None:
+                    logger.warning(
+                        f"Stale fallback: serving cached response for hut '{hut_slug}'"
+                    )
+                    return cached
+                raise
+        else:
+            try:
+                results, place_info = asyncio.run(
+                    fetch_images_for_place(
+                        place_slug=hut_slug,
+                        place_type="hut",
+                        radius=query.radius,
+                        sources=sources_list,
+                        limit=query.limit,
+                        update_cache=query.update_cache,
+                    )
                 )
             except Exception as e:
-                logger.error(f"Error pinning images for place '{place_slug}': {e}")
+                logger.error(f"Error fetching images for hut '{hut_slug}': {e}")
+                cached, _fresh = image_response_cache.get_response(resp_key)
+                if cached is not None:
+                    logger.warning(
+                        f"Stale fallback: serving cached response for hut '{hut_slug}'"
+                    )
+                    return cached
+                raise
 
-    # Sort by score (primary), then by distance (secondary)
-    results.sort(key=lambda r: (-r.score, r.distance_m))
+            if hut is not None and not sources_list:
+                try:
+                    from .pinning import pin_place_images
 
-    # Limit results
-    logger.debug(f"Limiting to {limit} results (had {len(results)})")
-    results = results[:limit]
+                    stats = pin_place_images(hut, results)
+                    logger.info(f"Pinned images for hut '{hut_slug}': {stats}")
+                    resp_key = image_response_cache.response_key(
+                        "hut",
+                        hut_slug,
+                        radius=query.radius,
+                        sources=query.sources,
+                        lang=query.lang,
+                        limit=query.limit,
+                        fallback=query.fallback,
+                    )
+                except Exception as e:
+                    logger.error(f"Error pinning images for hut '{hut_slug}': {e}")
 
-    # Post-process results (generate URLs, convert to GeoJSON)
-    logger.debug(f"Post-processing {len(results)} results...")
-    features = post_process_images(results, force_provider_refresh=update_cache)
+        results.sort(key=lambda r: (-r.score, r.distance_m))
+        results = results[: query.limit]
 
-    # Construct metadata (same format as nearby_images)
-    metadata = ImageMetadataSchema(
-        total=len(features),
-        sources_queried=sources_list
-        or [p.source for p in provider_registry.get_all_providers()],
-        query_radius_m=radius,
-        center={
-            "lat": place_info["location"]["lat"],
-            "lon": place_info["location"]["lon"],
-        },
-        geoplaces_found=1,
-        huts_found=0,
-    )
-    if fallback and not features and place is not None and place.location:
-        features = [
-            _map_fallback_feature(
-                request,
-                slug=place.slug,
-                lat=place.location.y,
-                lon=place.location.x,
-                modified=place.modified,
-                place_type="geoplace",
-            )
-        ]
-        metadata.total = 1
+        features = post_process_images(
+            results, force_provider_refresh=query.update_cache
+        )
 
-    response = ImageCollectionResponse(
-        type="FeatureCollection", features=features, metadata=metadata
-    )
-    image_response_cache.set_response(resp_key, response)
-    return response
-
-
-@router.get(
-    "hut/{hut_slug}",
-    response={200: ImageCollectionResponse},
-    operation_id="images_for_hut",
-)
-@decorate_view(cache_control(max_age=300))  # 5 minutes cache
-@with_language_param("lang")
-def images_for_hut(
-    request: HttpRequest,
-    response: HttpResponse,
-    lang: LanguageParam,
-    hut_slug: str,
-    radius: float = Query(
-        5000.0,
-        description="Search radius in meters for external providers",
-        gt=0,
-        le=10000,
-        example="5000.0",
-    ),
-    sources: str | None = Query(
-        None,
-        description="Comma-separated provider list (e.g., 'wodore,wikidata,flickr'). If provided without wodore, wodore images are not shown but hut is still used for location.",
-    ),
-    limit: int = Query(
-        100,
-        description="Maximum number of images to return",
-        ge=1,
-        le=500,
-    ),
-    update_cache: bool = Query(
-        False,
-        description="Force cache refresh - bypass cache and update all cached data from providers",
-    ),
-    fallback: bool = Query(
-        False,
-        description=(
-            "When the entity has no images, include the generated static-map card "
-            "as a single feature (is_fallback=true)"
-        ),
-    ),
-) -> ImageCollectionResponse:
-    """
-    Get images for a specific Hut from multiple sources.
-
-    Wodore provider uses the hut directly (very fast).
-    External providers use the hut's coordinates with the given radius.
-
-    Returns GeoJSON Point features with full image metadata.
-    """
-    import asyncio
-
-    activate(lang)
-
-    # Parse sources parameter
-    sources_list = None
-    if sources:
-        sources_list = [s.strip() for s in sources.split(",")]
-
-    resp_key = image_response_cache.response_key(
-        "hut",
-        hut_slug,
-        radius=radius,
-        sources=sources,
-        lang=lang,
-        limit=limit,
-        fallback=fallback,
-    )
-    if not update_cache:
-        cached, fresh = image_response_cache.get_response(resp_key)
-        if cached is not None and fresh:
-            return cached
-
-    logger.debug(f"Fetching images for Hut '{hut_slug}'")
-    logger.debug(f"Radius: {radius}m, Sources: {sources_list}")
-
-    from server.apps.huts.models import Hut
-
-    from .pinning import pin_place_images, place_has_visible_pins
-
-    hut = Hut.objects.filter(slug=hut_slug, is_active=True, is_public=True).first()
-
-    # Pins fast path (openspec pin-external-images): the hut already has
-    # pinned/uploaded images — serve them from the DB via the internal
-    # Wodore provider only; no external provider is contacted.
-    serve_from_pins = bool(
-        hut and not sources_list and not update_cache and place_has_visible_pins(hut)
-    )
-
-    if serve_from_pins and hut is not None:
-        # Queued refresh (never in-request): stale pins enqueue a q2 task;
-        # this visitor gets the current pins, the next one the fresh set.
-        from .pinning import maybe_enqueue_place_refresh
-
-        maybe_enqueue_place_refresh(hut)
-        try:
-            # Pure-DB fast path: the internal Wodore provider converts the
-            # hut's associations (uploads + pins) to results — no external
-            # provider, no async machinery needed.
-            results = WodoreProvider(place_type="hut")._fetch_sync(
-                [], hut.location.y, hut.location.x, radius
-            )
-            place_info = {"location": {"lat": hut.location.y, "lon": hut.location.x}}
-            logger.debug(
-                f"Serving {len(results)} pinned/local images for hut '{hut_slug}'"
-            )
-        except Exception as e:
-            logger.error(f"Error fetching pinned images for hut '{hut_slug}': {e}")
-            cached, _fresh = image_response_cache.get_response(resp_key)
-            if cached is not None:
-                logger.warning(
-                    f"Stale fallback: serving cached response for hut '{hut_slug}'"
-                )
-                return cached
-            raise
-    else:
-        try:
-            # Fetch images and place info
-            results, place_info = asyncio.run(
-                fetch_images_for_place(
-                    place_slug=hut_slug,
+        if query.fallback and not features and hut is not None and hut.location:
+            features = [
+                _map_fallback_feature(
+                    request,
+                    slug=hut.slug,
+                    lat=hut.location.y,
+                    lon=hut.location.x,
+                    modified=hut.modified,
                     place_type="hut",
-                    radius=radius,
-                    sources=sources_list,
-                    limit=limit,
-                    update_cache=update_cache,  # Pass update_cache flag
                 )
-            )
-            logger.debug(f"Total raw results from all providers: {len(results)} images")
-        except Exception as e:
-            logger.error(f"Error fetching images for hut '{hut_slug}': {e}")
-            cached, _fresh = image_response_cache.get_response(resp_key)
-            if cached is not None:
-                logger.warning(
-                    f"Stale fallback: serving cached response for hut '{hut_slug}'"
-                )
-                return cached
-            raise
+            ]
 
-        # Lazy pin-on-first-visit / forced re-pin: persist provider results
-        # (full default runs only — explicit `sources` queries stay ephemeral).
-        if hut is not None and not sources_list:
-            try:
-                stats = pin_place_images(hut, results)
-                logger.info(f"Pinned images for hut '{hut_slug}': {stats}")
-                # Pinning bumped the response-cache version — recompute the
-                # key so this response is stored (and later read) at the
-                # new version.
-                resp_key = image_response_cache.response_key(
-                    "hut",
-                    hut_slug,
-                    radius=radius,
-                    sources=sources,
-                    lang=lang,
-                    limit=limit,
-                )
-            except Exception as e:
-                logger.error(f"Error pinning images for hut '{hut_slug}': {e}")
+        metadata = ImageMetadataSchema(
+            total=len(features),
+            sources_queried=sources_list
+            or [p.source for p in provider_registry.get_all_providers()],
+            query_radius_m=query.radius,
+            center={
+                "lat": place_info["location"]["lat"],
+                "lon": place_info["location"]["lon"],
+            },
+            geoplaces_found=0,
+            huts_found=1,
+        )
 
-    # Deduplicate results
-    # Sort by score (primary), then by distance (secondary)
-    results.sort(key=lambda r: (-r.score, r.distance_m))
+        response = ImageCollectionResponse(
+            type="FeatureCollection", features=features, metadata=metadata
+        )
+        image_response_cache.set_response(resp_key, response)
+        return response
 
-    # Limit results
-    logger.debug(f"Limiting to {limit} results (had {len(results)})")
-    results = results[:limit]
 
-    # Post-process results (generate URLs, convert to GeoJSON)
-    logger.debug(f"Post-processing {len(results)} results...")
-    features = post_process_images(results, force_provider_refresh=update_cache)
-
-    # Construct metadata (same format as nearby_images)
-    metadata = ImageMetadataSchema(
-        total=len(features),
-        sources_queried=sources_list
-        or [p.source for p in provider_registry.get_all_providers()],
-        query_radius_m=radius,
-        center={
-            "lat": place_info["location"]["lat"],
-            "lon": place_info["location"]["lon"],
-        },
-        geoplaces_found=0,
-        huts_found=1,
-    )
-    if fallback and not features and hut is not None and hut.location:
-        features = [
-            _map_fallback_feature(
-                request,
-                slug=hut.slug,
-                lat=hut.location.y,
-                lon=hut.location.x,
-                modified=hut.modified,
-                place_type="hut",
-            )
-        ]
-        metadata.total = 1
-
-    response = ImageCollectionResponse(
-        type="FeatureCollection", features=features, metadata=metadata
-    )
-    image_response_cache.set_response(resp_key, response)
-    return response
+paths = [
+    path("nearby", NearbyImagesController.as_view(), name="nearby_images"),
+    path(
+        "place/<str:place_slug>",
+        PlaceImagesController.as_view(),
+        name="images_for_place",
+    ),
+    path(
+        "hut/<str:hut_slug>",
+        HutImagesController.as_view(),
+        name="images_for_hut",
+    ),
+]

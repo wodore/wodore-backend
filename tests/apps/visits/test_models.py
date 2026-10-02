@@ -8,16 +8,15 @@ content types, operator/UA guard, enqueue-only behavior, popular_places.
 from unittest.mock import MagicMock
 
 import pytest
-from ninja.testing import TestClient
 
 from tests.apps.geometries.test_image_pinning import _result
+from tests.helpers import PrefixedClient as TestClient
 
 from django.core.cache import cache
 from django.test import RequestFactory
 from django.utils import timezone as djtz
 
 from server.apps.geometries import image_response_cache as irc
-from server.apps.geometries.api_images import router
 from server.apps.geometries.pinning import pin_place_images, popular_places
 from server.apps.visits import models as vc
 from server.apps.visits.models import (
@@ -201,7 +200,7 @@ class TestEndpointCounting:
             lambda func, *a, **kw: calls.append(func),
         )
         pin_place_images(hut, [_result(score=80)])
-        client = TestClient(router)
+        client = TestClient("/v1/geo/images")
         response = client.get(f"/hut/{hut.slug}?radius=50&lang=en&limit=10")
         assert response.status_code == 200
         assert not [c for c in calls if "visit" in str(c)]  # no visit flush

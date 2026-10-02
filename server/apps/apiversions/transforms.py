@@ -1,8 +1,14 @@
 """Transform pipeline: produce older API versions at the edge.
 
 Handlers only implement the newest version. Response downgrades run
-newest→oldest over every change newer than the requested version, keyed by
-Ninja operation id. GeoJSON helpers transform ``features[*].properties``.
+newest→oldest over every change newer than the requested version, keyed
+by operation id (== URL name of the dmr route). GeoJSON helpers
+transform ``features[*].properties``.
+
+Application point: :mod:`server.apps.apiversions.middleware` transforms
+every JSON response in place — uniformly for DTO endpoints and the
+former direct-write GeoJSON endpoints (they are ordinary JSON
+endpoints now).
 """
 
 from __future__ import annotations
@@ -39,26 +45,6 @@ def feature_properties(transform: Transform) -> Transform:
     return _properties
 
 
-def effective_operation_id(operation: Any, api: Any = None) -> str:
-    """The operation id as it appears in the OpenAPI schema.
-
-    Mirrors ninja's schema generation (``ninja/openapi/schema.py``):
-    explicit ``operation_id`` or the generated ``module_FunctionName`` id.
-    ``api`` is optional because ``operation.api`` is only populated when
-    the URLs are generated — callers that run pre-binding (``wrap_api``)
-    pass the ``NinjaAPI`` instance (or we fall back to computing the same
-    id inline).
-    """
-    if getattr(operation, "operation_id", None):
-        return operation.operation_id
-    api = api or getattr(operation, "api", None)
-    if api is not None:
-        return api.get_openapi_operation_id(operation)
-    name = operation.view_func.__name__
-    module = operation.view_func.__module__
-    return (module + "_" + name).replace(".", "_")
-
-
 def downgrade_response(requested_version: str, operation_id: str, data: Any) -> Any:
     """Apply response downgrades (newest→oldest) for one operation."""
     for change in registry.changes_after(requested_version):
@@ -75,22 +61,6 @@ def upgrade_request(requested_version: str, operation_id: str, data: Any) -> Any
         if transform is not None:
             data = transform(data)
     return data
-
-
-def apply_response_transforms(
-    request: HttpRequest, operation_id: str, data: Any
-) -> Any:
-    """Explicit transform helper for direct-write endpoints.
-
-    ``huts.geojson`` and ``availability/{date}.geojson`` serialize with
-    ``response.write(msgspec.json.encode(...))`` and bypass the Ninja
-    renderer — they call this helper on the Python dict before encoding
-    (design.md D5.3). No version pinned (or excluded operation) → no-op.
-    """
-    version = getattr(request, "api_version", None)
-    if version is None or version == registry.current_version():
-        return data
-    return downgrade_response(version, operation_id, data)
 
 
 def version_cache_key(request: HttpRequest) -> str:

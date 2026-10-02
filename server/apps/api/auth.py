@@ -25,11 +25,14 @@ from typing import Any
 
 import requests
 from authlib.jose import jwt
-from ninja.errors import HttpError
-from ninja.security import HttpBearer
+from dmr import APIError
+from dmr.endpoint import Endpoint
+from dmr.security.base import SyncAuth
+from dmr.security.http import _HttpBasicAuth  # scheme-parsing mixin
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
+from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
 
@@ -360,7 +363,67 @@ def _select_validators() -> list[BaseTokenValidator]:
     return validators
 
 
-class AuthBearer(HttpBearer):
+class BearerSyncAuth(_HttpBasicAuth, SyncAuth):
+    """``Authorization: Bearer <token>`` auth base for dmr.
+
+    dmr 0.16 ships Basic/API-key auth but no bearer variant, so this base
+    reuses the scheme-parsing mixin (``auth_scheme='Bearer'``) and adds
+    the OpenAPI ``http/bearer`` security scheme. Subclasses implement
+    :meth:`authenticate`.
+    """
+
+    def __init__(  # noqa: WPS613  # unused controller_cls is part of the mixin API
+        self,
+        *,
+        security_scheme_name: str = "bearerAuth",
+    ) -> None:
+        super().__init__(
+            security_scheme_name=security_scheme_name,
+            auth_scheme="Bearer",
+            www_authenticate=True,
+        )
+
+    @property
+    def www_authenticate_challenge(self) -> str | None:
+        """RFC 9110 challenge for 401 responses."""
+        return "Bearer"
+
+    def security_schemes(self, metadata, controller_cls):
+        from dmr.openapi.objects import SecurityScheme
+
+        return {
+            self.security_scheme_name: SecurityScheme(
+                type="http",
+                scheme="bearer",
+                description="Bearer token (Wodore/Zitadel access token)",
+            ),
+        }
+
+    def __call__(  # type: ignore[override]  # sync auth contract
+        self,
+        endpoint: "Endpoint",
+        controller,  # dmr Controller, avoided for import cycle
+    ) -> "SyncAuth | None":
+        """Extract the bearer token and delegate to ``authenticate``."""
+        header = controller.request.headers.get(self.header)
+        if not header:
+            return None
+        encoded = self._split_encoded_credentials(header)
+        if encoded is None:
+            return None
+        return self.authenticate(endpoint, controller, encoded)
+
+    def authenticate(
+        self,
+        endpoint: "Endpoint",
+        controller,
+        token: str,
+    ) -> "SyncAuth | None":
+        """Validate the token; return ``self`` on success."""
+        raise NotImplementedError
+
+
+class AuthBearer(BearerSyncAuth):
     def __init__(
         self,
         scopes: list[str] | None = None,
@@ -374,12 +437,28 @@ class AuthBearer(HttpBearer):
         self.groups = groups
         self.validators = _select_validators()
 
-    def authenticate(self, request: Any, token: str) -> dict[str, Any] | None:
+    def authenticate(
+        self,
+        endpoint: "Endpoint",
+        controller,
+        token: str,
+    ) -> "SyncAuth | None":
+        """Try every configured validator in order.
+
+        Kept compatible with the former ninja ``HttpBearer`` flow:
+        validators return the token payload on success, ``None`` on
+        failure; a fully unconfigured server answers a clean 401.
+        """
         if not self.validators:
-            raise HttpError(
-                401,
-                "Authentication is not configured on this server (OIDC is disabled).",
+            raise APIError(
+                {
+                    "code": "auth_not_configured",
+                    "detail": "Authentication is not configured on this "
+                    "server (OIDC is disabled).",
+                },
+                status_code=401,
             )
+        request: HttpRequest = controller.request
         for validator in self.validators:
             result = validator(
                 token_string=token,
@@ -389,5 +468,8 @@ class AuthBearer(HttpBearer):
                 request=request,
             )
             if result is not None:
-                return result
+                # Auth succeeded — remember the payload for the handler
+                # (ninja stored it on request.auth).
+                request.auth = result  # type: ignore[attr-defined]
+                return self
         return None

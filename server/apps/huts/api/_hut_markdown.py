@@ -6,6 +6,9 @@ ingest and cite directly (linked from ``/llms.txt``). Localized via the
 same ``lang`` parameter as the JSON API, with the same fallback behavior
 (modeltrans resolves the active language and falls back to the hut's
 main language).
+
+Plain Django view (non-JSON), wired via ``external_path`` with
+``openapi=None`` — hidden from the schema like before.
 """
 
 from __future__ import annotations
@@ -18,14 +21,9 @@ from django.conf import settings
 from django.http import Http404, HttpRequest, HttpResponse
 from django.utils.html import strip_tags
 
-from server.apps.translations import LanguageParam, activate, with_language_param
+from server.apps.translations import activate
 
 from ..models import Hut
-from ._router import router
-
-_ANCHOR_RE = re.compile(
-    r"<a\s[^>]*href=[\"']([^\"']*)[\"'][^>]*>(.*?)</a>", re.IGNORECASE | re.DOTALL
-)
 
 # Endonym labels for the language variant links in the Markdown footer.
 _LANGUAGE_LABELS = {
@@ -34,6 +32,20 @@ _LANGUAGE_LABELS = {
     "fr": "Français",
     "it": "Italiano",
 }
+
+
+def _languages_line(slug: str) -> str:
+    """Footer links to this document in every supported language."""
+    base = f"{settings.FRONTEND_DOMAIN.rstrip('/')}/hut/{quote(slug)}.md"
+    links = [
+        f"[{label}]({base}?lang={code})" for code, label in _LANGUAGE_LABELS.items()
+    ]
+    return " · ".join(links)
+
+
+_ANCHOR_RE = re.compile(
+    r'<a\s[^>]*href=["\']([^"\']*)["\'][^>]*>(.*?)</a>', re.IGNORECASE | re.DOTALL
+)
 
 # Cacheable like the JSON surface: hut data changes, but slowly.
 CACHE_TTL = 60 * 60
@@ -73,15 +85,6 @@ def _months_row(open_monthly: dict | None) -> str:
         value = (open_monthly or {}).get(f"month_{month:02d}", "unknown")
         values.append(str(value))
     return "| " + " | ".join(values) + " |"
-
-
-def _languages_line(slug: str) -> str:
-    """Footer links to this document in every supported language."""
-    base = f"{settings.FRONTEND_DOMAIN.rstrip('/')}/hut/{quote(slug)}.md"
-    links = [
-        f"[{label}]({base}?lang={code})" for code, label in _LANGUAGE_LABELS.items()
-    ]
-    return " · ".join(links)
 
 
 def _hut_markdown(request: HttpRequest, hut: Hut) -> str:
@@ -163,11 +166,11 @@ Interactive map: {app_url}
 
 {hut.description}
 {attribution_line}
+Languages: {_languages_line(hut.slug)}
+
 ## Sources
 
 {sources_block}
-
-Languages: {_languages_line(hut.slug)}
 
 ---
 
@@ -175,13 +178,7 @@ Data: [Wodore]({settings.FRONTEND_DOMAIN.rstrip("/")}) · JSON: {json_url} · La
 """
 
 
-@router.get("/{slug}.md", include_in_schema=False, operation_id="get_hut_markdown")
-@with_language_param()
-def get_hut_markdown(
-    request: HttpRequest,
-    slug: str,
-    lang: LanguageParam,
-) -> HttpResponse:
+def get_hut_markdown(request: HttpRequest, slug: str, lang: str = "de") -> HttpResponse:
     """Get a hut by its slug, rendered as Markdown for LLM agents."""
     activate(lang)
     hut = (

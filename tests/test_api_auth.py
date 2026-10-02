@@ -1,14 +1,14 @@
 """End-to-end tests for API bearer validation routing (spec: api-token-validation).
 
-Uses a test-only Ninja API with AuthBearer-protected endpoints driven by
-tokens from the built-in provider (dev password grant), covering success,
-wrong-role 401, invalid-token 401, disabled-mode 401, and validator
-routing by issuer/flags.
+Uses test-only dmr controllers with AuthBearer-protected endpoints driven
+by tokens from the built-in provider (dev password grant), covering
+success, wrong-role 401, invalid-token 401, disabled-mode 401, and
+validator routing by issuer/flags.
 """
 
 import pytest
-from ninja import NinjaAPI
-from ninja.testing import TestClient
+from dmr import modify
+from dmr.test import DMRRequestFactory
 
 from django.test import Client
 
@@ -17,30 +17,49 @@ from server.apps.api.auth import (
     BuiltInJWTValidator,
     ZitadelIntrospectTokenValidator,
 )
+from server.apps.api.controller import ApiController
 
 pytestmark = pytest.mark.django_db
 
-api = NinjaAPI(urls_namespace="test-auth-api")
+
+class PublicController(ApiController):
+    """Unauthenticated probe endpoint."""
+
+    @modify(operation_id="test_auth_public")
+    def get(self) -> dict[str, bool]:
+        """Public probe."""
+        return {"ok": True}
 
 
-@api.get("/public", auth=None)
-def public(request):
-    return {"ok": True}
+class AdminOnlyController(ApiController):
+    """Admin-role protected probe endpoint."""
+
+    @modify(
+        operation_id="test_auth_admin",
+        auth=[AuthBearer(roles=["admin"], groups=["admin"])],
+    )
+    def get(self) -> dict[str, bool]:
+        """Admin probe."""
+        return {"ok": True}
+
+
+class EditorOnlyController(ApiController):
+    """Editor-role protected probe endpoint."""
+
+    @modify(
+        operation_id="test_auth_editor",
+        auth=[AuthBearer(roles=["editor"], groups=["editor"])],
+    )
+    def get(self) -> dict[str, bool]:
+        """Editor probe."""
+        return {"ok": True}
 
 
 # NOTE: with the preserved validation semantics, a requirement of
-# ``roles=[...]`` only rejects when ``groups=[...]`` is also given and neither
-# matches (see BaseTokenValidator.validate_requirements). Endpoints below
-# therefore use the roles+groups combination, like the real (commented)
-# booking usage.
-@api.get("/admin-only", auth=AuthBearer(roles=["admin"], groups=["admin"]))
-def admin_only(request):
-    return {"ok": True}
-
-
-@api.get("/editor-only", auth=AuthBearer(roles=["editor"], groups=["editor"]))
-def editor_only(request):
-    return {"ok": True}
+# ``roles=[...]`` only rejects when ``groups=[...]`` is also given and
+# neither matches (see BaseTokenValidator.validate_requirements). The
+# controllers above therefore use the roles+groups combination, like the
+# real (commented) booking usage.
 
 
 def _password_token(username: str, password: str) -> str:
@@ -68,46 +87,63 @@ def local_users(django_db_setup, django_db_blocker):
 
 
 @pytest.fixture
-def client(local_users):
-    return TestClient(api)
+def rf(local_users):  # matches the usage below
+    return DMRRequestFactory()
+
+
+def _get(controller_cls, path, headers=None):
+    request = DMRRequestFactory().get(path, headers=headers)
+    return controller_cls.as_view()(request)
 
 
 class TestProtectedEndpoints:
-    def test_public_endpoint_needs_no_token(self, client):
-        assert client.get("/public").json() == {"ok": True}
+    def test_public_endpoint_needs_no_token(self, local_users):
+        import json as _json
 
-    def test_admin_token_passes_admin_endpoint(self, client):
+        response = _get(PublicController, "/public")
+        assert response.status_code == 200
+        assert _json.loads(response.content) == {"ok": True}
+
+    def test_admin_token_passes_admin_endpoint(self, local_users):
         token = _password_token("admin@local.test", "admin-dev")
-        response = client.get(
-            "/admin-only", headers={"Authorization": f"Bearer {token}"}
+        response = _get(
+            AdminOnlyController,
+            "/admin-only",
+            headers={"Authorization": f"Bearer {token}"},
         )
         assert response.status_code == 200
 
-    def test_editor_token_rejected_on_admin_endpoint(self, client):
+    def test_editor_token_rejected_on_admin_endpoint(self, local_users):
         token = _password_token("editor@local.test", "editor-dev")
-        response = client.get(
-            "/admin-only", headers={"Authorization": f"Bearer {token}"}
+        response = _get(
+            AdminOnlyController,
+            "/admin-only",
+            headers={"Authorization": f"Bearer {token}"},
         )
         assert response.status_code == 401
 
-    def test_editor_token_passes_editor_endpoint(self, client):
+    def test_editor_token_passes_editor_endpoint(self, local_users):
         token = _password_token("editor@local.test", "editor-dev")
-        response = client.get(
-            "/editor-only", headers={"Authorization": f"Bearer {token}"}
+        response = _get(
+            EditorOnlyController,
+            "/editor-only",
+            headers={"Authorization": f"Bearer {token}"},
         )
         assert response.status_code == 200
 
-    def test_garbage_token_rejected(self, client):
-        response = client.get(
-            "/admin-only", headers={"Authorization": "Bearer not-a-token"}
+    def test_garbage_token_rejected(self, local_users):
+        response = _get(
+            AdminOnlyController,
+            "/admin-only",
+            headers={"Authorization": "Bearer not-a-token"},
         )
         assert response.status_code == 401
 
-    def test_missing_token_rejected(self, client):
-        response = client.get("/admin-only")
+    def test_missing_token_rejected(self, local_users):
+        response = _get(AdminOnlyController, "/admin-only")
         assert response.status_code == 401
 
-    def test_wrong_issuer_jwt_rejected(self, client):
+    def test_wrong_issuer_jwt_rejected(self, local_users):
         from django.contrib.auth import get_user_model
 
         from server.apps.local_auth import tokens
@@ -116,38 +152,50 @@ class TestProtectedEndpoints:
         forged = tokens.issue_access_token(
             admin, "https://evil.example/oauth/local", "wodore-local-dev"
         )
-        response = client.get(
-            "/admin-only", headers={"Authorization": f"Bearer {forged}"}
+        response = _get(
+            AdminOnlyController,
+            "/admin-only",
+            headers={"Authorization": f"Bearer {forged}"},
         )
         assert response.status_code == 401
 
-    def test_revocation_takes_effect_immediately(self, client):
+    def test_revocation_takes_effect_immediately(self, local_users):
         from oauth2_provider.models import get_access_token_model
 
         token = _password_token("admin@local.test", "admin-dev")
         get_access_token_model().objects.filter(token=token).delete()
-        response = client.get(
-            "/admin-only", headers={"Authorization": f"Bearer {token}"}
+        response = _get(
+            AdminOnlyController,
+            "/admin-only",
+            headers={"Authorization": f"Bearer {token}"},
         )
         assert response.status_code == 401
 
 
 class TestDisabledMode:
-    def test_clean_401_when_nothing_configured(self, settings):
+    def test_clean_401_when_nothing_configured(self, local_users, settings):
         settings.OIDC_ENABLED = False
         settings.ZITADEL_RP_ENABLED = False
         settings.ZITADEL_ROLLBACK_ENABLED = False
-        disabled_api = NinjaAPI(urls_namespace="test-disabled-api")
 
-        @disabled_api.get("/x", auth=AuthBearer())
-        def x(request):
-            return {"ok": True}
+        class DisabledController(ApiController):
+            """Auth-not-configured probe."""
 
-        response = TestClient(disabled_api).get(
-            "/x", headers={"Authorization": "Bearer whatever"}
+            @modify(operation_id="test_auth_disabled", auth=[AuthBearer()])
+            def get(self) -> dict[str, bool]:
+                """Disabled probe."""
+                return {"ok": True}
+
+        response = _get(
+            DisabledController,
+            "/x",
+            headers={"Authorization": "Bearer whatever"},
         )
         assert response.status_code == 401
-        assert "not configured" in response.json()["detail"].lower()
+        import json as _json
+
+        body = _json.loads(response.content)
+        assert "not configured" in body["detail"].lower()
 
 
 class TestValidatorRouting:
