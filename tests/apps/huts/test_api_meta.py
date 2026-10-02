@@ -41,11 +41,58 @@ class TestHutMeta:
                 hut.location.y, abs=1e-5
             )
 
-    def test_meta_description_contains_name(self, seed_data, client):
+    def test_meta_title_is_name_dot_owner(self, seed_data, client):
         hut = Hut.objects.filter(is_active=True, is_public=True).first()
         assert hut is not None
         data = client.get(f"/v1/huts/{hut.slug}/meta").json()
-        assert hut.name in data["description"]
+        assert data["title"].startswith(hut.name)
+        if hut.hut_owner and hut.hut_owner.name not in hut.name:
+            assert "·" in data["title"]
+            assert hut.hut_owner.name in data["title"]
+
+    def test_meta_description_is_fact_sentences(self, seed_data, client):
+        hut = Hut.objects.filter(is_active=True, is_public=True).first()
+        assert hut is not None
+        data = client.get(f"/v1/huts/{hut.slug}/meta").json()
+        # Sentences end with a period, carry capacity/elevation when present.
+        assert data["description"].endswith(".")
+        if hut.capacity_open:
+            assert str(hut.capacity_open) in data["description"]
+            assert "Plätzen" in data["description"]  # German glue, default lang
+        if hut.elevation:
+            assert f"{int(hut.elevation)} m" in data["description"]
+
+    def test_meta_description_localized(self, seed_data, client):
+        hut = Hut.objects.filter(
+            is_active=True, is_public=True, capacity_open__gt=0
+        ).first()
+        assert hut is not None
+        de = client.get(f"/v1/huts/{hut.slug}/meta").json()["description"]
+        en = client.get(f"/v1/huts/{hut.slug}/meta", {"lang": "en"}).json()[
+            "description"
+        ]
+        fr = client.get(f"/v1/huts/{hut.slug}/meta", {"lang": "fr"}).json()[
+            "description"
+        ]
+        it = client.get(f"/v1/huts/{hut.slug}/meta", {"lang": "it"}).json()[
+            "description"
+        ]
+        assert "Plätzen" in de
+        assert "places" in en
+        assert "places" in fr
+        assert "posti" in it
+
+    def test_meta_description_closed_hut(self, seed_data, client):
+        hut = Hut.objects.filter(
+            is_active=True, is_public=True, hut_type_open__slug="closed"
+        ).first()
+        if hut is None:  # closed huts are rare in the seed — assert the guard
+            assert "closed" not in Hut.objects.values_list(
+                "hut_type_open__slug", flat=True
+            )
+            return
+        data = client.get(f"/v1/huts/{hut.slug}/meta").json()
+        assert data["description"].startswith("Derzeit geschlossen.")
 
     def test_meta_lang_param_falls_back(self, seed_data, client):
         hut = Hut.objects.filter(is_active=True, is_public=True).first()

@@ -28,14 +28,186 @@ from ._router import router
 
 CACHE_TTL = 60 * 60
 
-# Glue words for the short meta description.
-_PLACES = {"de": "Plätze", "en": "places", "fr": "places", "it": "posti"}
-_AND = {"de": "mit", "en": "with", "fr": "avec", "it": "con"}
+# Type labels by category slug, per language, sentence-initial form
+# (mid-sentence callers lowercase the first character). ``selfhut``
+# always names the word "Hütte" explicitly — unattended huts often lack
+# it in their name (Abri, Bivacco, …), all other types carry a type word
+# in the name already.
+_TYPE_LABELS: dict[str, dict[str, str]] = {
+    "hut": {
+        "de": "Hütte",
+        "en": "staffed hut",
+        "fr": "cabane gardée",
+        "it": "rifugio gestito",
+    },
+    "selfhut": {
+        "de": "Unbewachte Hütte",
+        "en": "unstaffed hut",
+        "fr": "cabane non gardée",
+        "it": "rifugio non gestito",
+    },
+    "shelter": {
+        "de": "Einfacher Unterstand",
+        "en": "simple shelter",
+        "fr": "abri sommaire",
+        "it": "ricovero semplice",
+    },
+    "bhotel": {
+        "de": "Einfaches Hotel",
+        "en": "simple hotel",
+        "fr": "hôtel simple",
+        "it": "albergo semplice",
+    },
+    "bivouac": {"de": "Biwak", "en": "bivouac", "fr": "bivouac", "it": "bivacco"},
+    "hotel": {"de": "Hotel", "en": "hotel", "fr": "hôtel", "it": "hotel"},
+    "hostel": {
+        "de": "Jugendherberge",
+        "en": "youth hostel",
+        "fr": "auberge de jeunesse",
+        "it": "ostello",
+    },
+    "alp": {"de": "Alp", "en": "alpine farm", "fr": "alpage", "it": "alpe"},
+    "camping": {
+        "de": "Campingplatz",
+        "en": "campsite",
+        "fr": "camping",
+        "it": "campeggio",
+    },
+    "resta": {
+        "de": "Restaurant",
+        "en": "restaurant",
+        "fr": "restaurant",
+        "it": "ristorante",
+    },
+}
+
+# Sentence glue per language: only facts that exist go in — capacity,
+# elevation, reduced operation, closure. Never opening times or
+# availability (not part of this endpoint's data).
+_SENTENCES = {
+    "de": {
+        "full": "{label} mit {cap} Plätzen auf {ele} m über Meer.",
+        "cap": "{label} mit {cap} Plätzen.",
+        "ele": "{label} auf {ele} m über Meer.",
+        "bare": "{label}.",
+        "reduced": "Reduzierter Betrieb als {label} mit {cap} Plätzen.",
+        "reduced_bare": "Reduzierter Betrieb als {label}.",
+        "closed": "Derzeit geschlossen.",
+        "located": "Gelegen auf {ele} m über Meer.",
+    },
+    "en": {
+        "full": "{label} with {cap} places at {ele} m above sea level.",
+        "cap": "{label} with {cap} places.",
+        "ele": "{label} at {ele} m above sea level.",
+        "bare": "{label}.",
+        "reduced": "Reduced operation as {label} with {cap} places.",
+        "reduced_bare": "Reduced operation as {label}.",
+        "closed": "Currently closed.",
+        "located": "Located at {ele} m above sea level.",
+    },
+    "fr": {
+        "full": "{label} avec {cap} places à {ele} m d'altitude.",
+        "cap": "{label} avec {cap} places.",
+        "ele": "{label} à {ele} m d'altitude.",
+        "bare": "{label}.",
+        "reduced": "En exploitation réduite, {label} avec {cap} places.",
+        "reduced_bare": "En exploitation réduite, {label}.",
+        "closed": "Actuellement fermé.",
+        "located": "Situé à {ele} m d'altitude.",
+    },
+    "it": {
+        "full": "{label} con {cap} posti a {ele} m s.l.m.",
+        "cap": "{label} con {cap} posti.",
+        "ele": "{label} a {ele} m s.l.m.",
+        "bare": "{label}.",
+        "reduced": "In esercizio ridotto, {label} con {cap} posti.",
+        "reduced_bare": "In esercizio ridotto, {label}.",
+        "closed": "Attualmente chiuso.",
+        "located": "Situato a {ele} m s.l.m.",
+    },
+}
+
+
+def _cap_first(label: str) -> str:
+    return label[0].upper() + label[1:] if label else label
+
+
+def _lower_first(label: str) -> str:
+    return label[0].lower() + label[1:] if label else label
+
+
+def _type_sentence(
+    slug: str | None, name: str | None, lang: str, cap: int | None, ele: float | None
+) -> str | None:
+    """First sentence: type + capacity + elevation, from mapped labels.
+    Returns ``None`` for closed/unknown types (handled separately)."""
+    labels = _TYPE_LABELS.get(slug or "", {}) if slug else {}
+    label = labels.get(lang) or (name if name and slug != "unknown" else None)
+    if not label:
+        return None
+    t = _SENTENCES[lang]
+    ele_i = int(ele) if ele else None
+    if cap:
+        if ele_i:
+            return t["full"].format(label=_cap_first(label), cap=cap, ele=ele_i)
+        return t["cap"].format(label=_cap_first(label), cap=cap)
+    if ele_i:
+        return t["ele"].format(label=_cap_first(label), ele=ele_i)
+    return t["bare"].format(label=_cap_first(label))
+
+
+def _meta_title(hut: Hut) -> str:
+    """ "{name} · {owner}"" — the owner (typically the SAC section) keeps
+    the title short; middle dot as separator."""
+    owner = hut.hut_owner.name if hut.hut_owner else None
+    if owner and owner not in hut.name:
+        return f"{hut.name} · {owner}"
+    return hut.name
+
+
+def _meta_description(hut: Hut, lang: str) -> str:
+    """Short, factual sentences for crawlers and link previews — built
+    only from fields that exist (type, capacities, elevation, reduced
+    operation, closure). Never invents opening times or availability."""
+    t = _SENTENCES[lang]
+    open_slug = getattr(hut.hut_type_open, "slug", None)
+    open_name = getattr(hut.hut_type_open, "name", None)
+    closed_slug = getattr(hut.hut_type_closed, "slug", None)
+    closed_name = getattr(hut.hut_type_closed, "name", None)
+    cap = hut.capacity_open or None
+    ele = float(hut.elevation) if hut.elevation else None
+
+    sentences: list[str] = []
+    if open_slug == "closed":
+        sentences.append(t["closed"])
+        if ele:
+            sentences.append(t["located"].format(ele=int(ele)))
+    else:
+        first = _type_sentence(open_slug, open_name, lang, cap, ele)
+        if first:
+            sentences.append(first)
+        elif ele:
+            sentences.append(t["located"].format(ele=int(ele)))
+        # Reduced operation (winter shelter): only when a type exists.
+        if closed_slug and closed_slug not in ("closed", "unknown"):
+            rlabels = _TYPE_LABELS.get(closed_slug, {}) if closed_slug else {}
+            rlabel = rlabels.get(lang) or (closed_name if closed_name else None)
+            if rlabel:
+                rlabel = _lower_first(rlabel)
+                cap2 = hut.capacity_closed or None
+                if cap2:
+                    sentences.append(t["reduced"].format(label=rlabel, cap=cap2))
+                else:
+                    sentences.append(t["reduced_bare"].format(label=rlabel))
+    if not sentences:
+        return hut.name
+    return " ".join(sentences)
 
 
 class HutMetaSchema(Schema):
     slug: str = Field(description="Hut slug")
     name: str = Field(description="Hut name (localized)")
+    title: str = Field(description="Meta title: name · owner")
     description: str = Field(description="Short meta description (localized)")
     lang: str = Field(description="Language the localized fields resolve to")
     type_standard: str | None = Field(
@@ -103,27 +275,6 @@ def _og_image(hut: Hut, request: HttpRequest) -> str:
     return og_card_url(symbol_url)
 
 
-def _meta_description(hut: Hut, lang: str) -> str:
-    places = _PLACES.get(lang, _PLACES["en"])
-    with_word = _AND.get(lang, _AND["en"])
-    parts = [hut.name]
-    types = " / ".join(
-        t.name for t in (hut.hut_type_open, hut.hut_type_closed) if t and t.name
-    )
-    capacity = hut.capacity_open or hut.capacity_closed
-    details = []
-    if types:
-        detail = types
-        if capacity:
-            detail += f" {with_word} {capacity} {places}"
-        details.append(detail)
-    if hut.elevation:
-        details.append(f"{int(hut.elevation)} m")
-    if hut.hut_owner and hut.hut_owner.name:
-        details.append(hut.hut_owner.name)
-    return " – ".join(parts + [" ".join(details)]) if details else parts[0]
-
-
 def _jsonld(hut: Hut, description: str, page_url: str, image: str | None) -> dict:
     data: dict = {
         "@context": "https://schema.org",
@@ -173,11 +324,13 @@ def get_hut_meta(
     page_url = f"{settings.FRONTEND_DOMAIN.rstrip('/')}/hut/{hut.slug}"
     image = _og_image(hut, request)
     description = _meta_description(hut, lang)
+    title = _meta_title(hut)
 
     response["Cache-Control"] = f"public, max-age={CACHE_TTL}"
     return {
         "slug": hut.slug,
         "name": hut.name,
+        "title": title,
         "description": description,
         "lang": lang,
         "type_standard": hut.hut_type_open.name if hut.hut_type_open else None,
