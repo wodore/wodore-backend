@@ -390,13 +390,29 @@ jobs:
       - name: Typecheck a smoke consumer
         run: |
           cat > /tmp/smoke.ts <<'TS'
-          import type { paths, components } from '/tmp/wodore_v1.d.ts';
+          import type { paths, components } from './wodore_v1.d.ts';
           type Schemas = components['schemas'];
           type Huts = paths['/v1/huts/huts']['get']['responses']['200']['content']['application/json'];
           const check: (h: Huts) => Huts = h => h;
           const schema: Schemas['HutSchemaList'] | undefined = undefined;
           console.log(check, schema);
           TS
-          npx -y typescript@5 tsc --noEmit --strict /tmp/smoke.ts \
-            --types node --moduleResolution bundler --module esnext \
-            --baseUrl / --paths '{"*":["*"]}'
+          cat > /tmp/tsconfig.smoke.json <<'JSON'
+          {
+            "compilerOptions": {
+              "strict": true,
+              "noEmit": true,
+              "skipLibCheck": true,
+              "module": "esnext",
+              "moduleResolution": "bundler",
+              "types": []
+            },
+            "files": ["smoke.ts", "wodore_v1.d.ts"]
+          }
+          JSON
+          # `npx -y typescript@5 tsc` treats the package spec as the
+          # binary name ("could not determine executable to run"); pair
+          # it with -p. tsc has no --paths CLI flag either — hence the
+          # tsconfig file (verified locally: typegen + strict typecheck
+          # against the committed snapshot pass).
+          npx -y -p typescript@5 tsc -p /tmp/tsconfig.smoke.json
