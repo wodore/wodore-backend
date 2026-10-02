@@ -86,10 +86,28 @@ def get_openapi_schema(request: HttpRequest | None = None) -> dict:
 
     ``info.version`` always reflects the *current* registry state —
     tests may register temporary versions after import time.
+
+    Operation titles use the endpoint slug: dmr derives ``summary``
+    from the handler docstring's first paragraph, which for most
+    endpoints is a full sentence — noisy as a list title in Swagger UI
+    and in generated clients. The slug (== operationId == URL name,
+    the versioning key) is the short stable name; the sentence moves
+    into ``description`` so nothing is lost.
     """
     schema = _cached_schema()
     schema.info.version = registry.current_version()
-    return schema.convert(skip_validation=True)
+    document = schema.convert(skip_validation=True)
+    for methods in document.get("paths", {}).values():
+        for operation in methods.values():
+            if not (isinstance(operation, dict) and "operationId" in operation):
+                continue
+            summary = operation.get("summary")
+            if not summary:
+                continue
+            if not operation.get("description"):
+                operation["description"] = summary
+            operation["summary"] = operation["operationId"]
+    return document
 
 
 def versioned_openapi_json(request: HttpRequest) -> HttpResponse:

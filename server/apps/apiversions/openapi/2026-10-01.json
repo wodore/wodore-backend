@@ -5421,7 +5421,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Get flat list of categories.",
+        "summary": "get_category_list_all",
         "tags": ["category"]
       },
       "summary": "Flat list of categories."
@@ -5549,7 +5549,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Get category hierarchy as a nested dictionary mapping.",
+        "summary": "get_category_map_all",
         "tags": ["category"]
       },
       "summary": "Category hierarchy as a nested dictionary mapping."
@@ -5649,7 +5649,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Redirect to the SVG icon for a category with explicit parent.",
+        "summary": "get_category_symbol_svg_with_parent",
         "tags": ["category"]
       },
       "summary": "Redirect to the SVG icon for a category with explicit parent."
@@ -5739,7 +5739,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Redirect to the SVG icon for a category.",
+        "summary": "get_category_symbol_svg",
         "tags": ["category"]
       },
       "summary": "Redirect to the SVG icon for a category."
@@ -5867,13 +5867,14 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Get category hierarchy as a tree structure.",
+        "summary": "get_category_tree",
         "tags": ["category"]
       },
       "summary": "Category hierarchy as a tree structure."
     },
     "/v1/feedback/": {
       "post": {
+        "description": "Submit feedback (stored, optionally mailed to the admins).",
         "operationId": "create_feedback",
         "parameters": [
           {
@@ -5941,7 +5942,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Submit feedback (stored, optionally mailed to the admins).",
+        "summary": "create_feedback",
         "tags": ["feedback"]
       },
       "summary": "User feedback submission."
@@ -6091,7 +6092,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Get images for a specific Hut from multiple sources.",
+        "summary": "images_for_hut",
         "tags": ["geoimages"]
       },
       "summary": "Images for a specific Hut from multiple sources."
@@ -6259,7 +6260,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Get images near a location from multiple sources as a GeoJSON FeatureCollection.",
+        "summary": "nearby_images",
         "tags": ["geoimages"]
       },
       "summary": "Images near a location from multiple sources (GeoJSON)."
@@ -6409,7 +6410,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Get images for a specific GeoPlace from multiple sources.",
+        "summary": "images_for_place",
         "tags": ["geoimages"]
       },
       "summary": "Images for a specific GeoPlace from multiple sources."
@@ -6513,13 +6514,14 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Get detailed information for an amenity place.",
+        "summary": "get_amenity",
         "tags": ["geometries"]
       },
       "summary": "Amenity place details (opening hours, websites, phones)."
     },
     "/v1/geo/places/nearby": {
       "get": {
+        "description": "Find places near coordinates within a radius, ordered by distance.",
         "operationId": "nearby_geoplaces",
         "parameters": [
           {
@@ -6718,7 +6720,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Find places near coordinates within a radius, ordered by distance.",
+        "summary": "nearby_geoplaces",
         "tags": ["geometries"]
       },
       "summary": "Places near coordinates, ordered by distance."
@@ -6771,7 +6773,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Get available overlay categories for map tile filtering.",
+        "summary": "get_overlay_categories",
         "tags": ["geometries"]
       },
       "summary": "Overlay categories for map tile filtering."
@@ -6997,13 +6999,14 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Search for geographic places using fuzzy text search.",
+        "summary": "search_geoplaces",
         "tags": ["geometries"]
       },
       "summary": "Fuzzy place search across all language fields."
     },
     "/v1/huts/availability/{date}.geojson": {
       "get": {
+        "description": "Get availability data as GeoJSON FeatureCollection for map visualization.",
         "operationId": "get_hut_availability_geojson",
         "parameters": [
           {
@@ -7152,7 +7155,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Get availability data as GeoJSON FeatureCollection for map visualization.",
+        "summary": "get_hut_availability_geojson",
         "tags": ["hut"]
       },
       "summary": "Availability as GeoJSON FeatureCollection for map visualization."
@@ -7324,7 +7327,7 @@
             "description": "Booking service unavailable. Please retry later."
           }
         },
-        "summary": "Get hut bookings (deprecated)",
+        "summary": "get_hut_bookings",
         "tags": ["hut"]
       },
       "summary": "Hut bookings as a list (deprecated)."
@@ -7493,7 +7496,7 @@
             "description": "Booking service unavailable. Please retry later."
           }
         },
-        "summary": "Get hut bookings as GeoJSON (deprecated)",
+        "summary": "get_hut_bookings_geojson",
         "tags": ["hut"]
       },
       "summary": "Hut bookings as GeoJSON (deprecated)."
@@ -7686,7 +7689,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Get a list with huts.",
+        "summary": "get_huts",
         "tags": ["hut"]
       },
       "summary": "All huts (annotated, ETag-cached)."
@@ -7945,13 +7948,14 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Get huts as GeoJSON (properties controlled by embed/include).",
+        "summary": "get_huts_geojson",
         "tags": ["hut"]
       },
       "summary": "All public huts as a GeoJSON FeatureCollection."
     },
     "/v1/huts/search": {
       "get": {
+        "description": "Search for huts using fuzzy text search across all language fields.",
         "operationId": "search_huts",
         "parameters": [
           {
@@ -8104,7 +8108,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Search for huts using fuzzy text search across all language fields.",
+        "summary": "search_huts",
         "tags": ["hut"]
       },
       "summary": "Fuzzy hut search across all language fields."
@@ -8282,7 +8286,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Get a hut by its slug.",
+        "summary": "get_hut",
         "tags": ["hut"]
       },
       "summary": "A single hut by slug (full detail, ETag-cached)."
@@ -8400,7 +8404,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Get current availability data for a specific hut.",
+        "summary": "get_hut_availability_current",
         "tags": ["hut"]
       },
       "summary": "Current availability for a hut with booking links."
@@ -8518,13 +8522,14 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Get historical availability trend data.",
+        "summary": "get_hut_availability_trend",
         "tags": ["hut"]
       },
       "summary": "Historical availability trend for a target date."
     },
     "/v1/huts/{slug}/meta": {
       "get": {
+        "description": "Minimal hut metadata for HTML meta-tag injection at the edge.",
         "operationId": "get_hut_meta",
         "parameters": [
           {
@@ -8611,7 +8616,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Minimal hut metadata for HTML meta-tag injection at the edge.",
+        "summary": "get_hut_meta",
         "tags": ["hut"]
       },
       "summary": "Minimal hut metadata for the edge."
@@ -8714,7 +8719,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Redirect to the SVG icon for a weather code from a collection.",
+        "summary": "get_weather_code_svg",
         "tags": ["meteo"]
       },
       "summary": "Redirect to the SVG icon for a weather code."
@@ -8850,13 +8855,14 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Get all weather codes as a dictionary with WMO code as key.",
+        "summary": "get_weather_codes",
         "tags": ["meteo"]
       },
       "summary": "All weather codes, keyed by WMO code."
     },
     "/v1/meteo/weather_codes/{code}": {
       "get": {
+        "description": "Get a specific weather code by WMO code.",
         "operationId": "get_weather_code",
         "parameters": [
           {
@@ -8985,13 +8991,14 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Get a specific weather code by WMO code.",
+        "summary": "get_weather_code",
         "tags": ["meteo"]
       },
       "summary": "A single weather code by WMO code."
     },
     "/v1/organizations/": {
       "get": {
+        "description": "Get a list of all organizations used for the huts.",
         "operationId": "get_organizations",
         "parameters": [
           {
@@ -9106,13 +9113,14 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Get a list of all organizations used for the huts.",
+        "summary": "get_organizations",
         "tags": ["organization"]
       },
       "summary": "Organizations used for the huts."
     },
     "/v1/organizations/{slug}": {
       "get": {
+        "description": "Get a single organization by its slug.",
         "operationId": "get_organization",
         "parameters": [
           {
@@ -9228,13 +9236,14 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Get a single organization by its slug.",
+        "summary": "get_organization",
         "tags": ["organization"]
       },
       "summary": "A single organization by slug."
     },
     "/v1/symbols/": {
       "get": {
+        "description": "Get a list of all symbols. By default only returns active symbols.",
         "operationId": "get_symbols",
         "parameters": [
           {
@@ -9343,13 +9352,14 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Get a list of all symbols. By default only returns active symbols.",
+        "summary": "get_symbols",
         "tags": ["symbols"]
       },
       "summary": "All symbols, by default only active ones."
     },
     "/v1/symbols/by-id/{id}": {
       "get": {
+        "description": "Get a single symbol by UUID.",
         "operationId": "get_symbol_by_id",
         "parameters": [
           {
@@ -9476,7 +9486,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Get a single symbol by UUID.",
+        "summary": "get_symbol_by_id",
         "tags": ["symbols"]
       },
       "summary": "A single symbol by UUID."
@@ -9631,7 +9641,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Get all style variants for a symbol by slug.",
+        "summary": "get_symbols_by_slug",
         "tags": ["symbols"]
       },
       "summary": "All style variants for a symbol slug."
@@ -9776,7 +9786,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Get a single symbol by style and slug.",
+        "summary": "get_symbol_by_style_and_slug",
         "tags": ["symbols"]
       },
       "summary": "A single symbol by style and slug."
@@ -9885,7 +9895,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Redirect to the SVG file for a symbol by style and slug.",
+        "summary": "get_symbol_svg",
         "tags": ["symbols"]
       },
       "summary": "Redirect to a symbol's SVG file by style and slug."
@@ -9926,7 +9936,7 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "Get version information.",
+        "summary": "get_version",
         "tags": ["version"]
       },
       "summary": "Build/runtime/API version information."

@@ -53,15 +53,7 @@ VERSION_QUERY_PARAM = "api_version"
 EXCLUDED_EXACT_PATHS = frozenset({"/v1/version"})
 # Docs/schema paths: validate ``api_version`` (it selects the snapshot)
 # but carry no versioning response headers (design.md D3).
-SCHEMA_PATHS = frozenset(
-    {
-        "/v1/docs",
-        "/v1/docs/redoc",
-        "/v1/docs/scalar",
-        "/v1/docs/elements",
-        "/v1/openapi.json",
-    }
-)
+SCHEMA_PATHS = frozenset({"/v1/docs", "/v1/openapi.json"})
 
 
 def _error_response(status: int, code: str, detail: str) -> HttpResponse:
