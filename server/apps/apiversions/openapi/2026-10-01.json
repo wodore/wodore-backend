@@ -1,6 +1,185 @@
 {
   "components": {
     "schemas": {
+      "AmenityDetailSchema": {
+        "description": "Schema for amenity detailed information.",
+        "properties": {
+          "extra": {
+            "additionalProperties": true,
+            "title": "Extra",
+            "type": "object"
+          },
+          "opening_hours": {
+            "additionalProperties": true,
+            "description": "Structured weekly hours per weekday + public holidays",
+            "title": "Opening Hours",
+            "type": "object"
+          },
+          "opening_months": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Monthly availability per month: {'jan': 'yes', 'feb': 'yes', ...}",
+            "title": "Opening Months",
+            "type": "object"
+          },
+          "operating_status": {
+            "title": "Operating Status",
+            "type": "string"
+          },
+          "phones": {
+            "items": {
+              "$ref": "#/components/schemas/PhoneSchema"
+            },
+            "title": "Phones",
+            "type": "array"
+          },
+          "websites": {
+            "items": {
+              "$ref": "#/components/schemas/WebsiteSchema"
+            },
+            "title": "Websites",
+            "type": "array"
+          }
+        },
+        "required": ["operating_status"],
+        "title": "AmenityDetailSchema",
+        "type": "object"
+      },
+      "AmenitySchema": {
+        "description": "Schema for amenity places with full details.",
+        "properties": {
+          "amenity_detail": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AmenityDetailSchema"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "categories": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CategoryPlaceTypeSchema"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Categories"
+          },
+          "country_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country Code"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "detail_type": {
+            "title": "Detail Type",
+            "type": "string"
+          },
+          "elevation": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elevation"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "importance": {
+            "title": "Importance",
+            "type": "integer"
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationSchema"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "review_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Review Status"
+          },
+          "sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/OrganizationSourceIdSlugSchema"
+                },
+                "type": "array"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/OrganizationSourceIdDetailSchema"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sources"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "country_code",
+          "elevation",
+          "importance",
+          "location",
+          "detail_type"
+        ],
+        "title": "AmenitySchema",
+        "type": "object"
+      },
       "AnswerEnum": {
         "description": "Anser enum.\n\n'yesish' and 'noish' means it is likely to be 'yes' or 'no'.\n'maybe' means is is either 'yes' or 'no'.",
         "enum": ["yes", "yesish", "maybe", "noish", "no", "unknown"],
@@ -65,6 +244,158 @@
         },
         "required": ["current", "default", "supported"],
         "title": "ApiVersionsBlock",
+        "type": "object"
+      },
+      "AvailabilityDaySchema": {
+        "description": "Single day's availability data for a hut.",
+        "properties": {
+          "date": {
+            "description": "Availability date",
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "free": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Number of free places (null = not published by source)",
+            "title": "Free"
+          },
+          "free_tolerance": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Plus/minus uncertainty on free places (0 = exact, null = unknown)",
+            "title": "Free Tolerance"
+          },
+          "hut_type": {
+            "default": "unknown",
+            "description": "Hut type on this date (e.g., 'hut', 'bivouac')",
+            "title": "Hut Type",
+            "type": "string"
+          },
+          "occupancy_percent": {
+            "anyOf": [
+              {
+                "maximum": 100,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Occupancy percentage (0-100), null if not computable",
+            "title": "Occupancy Percent"
+          },
+          "occupancy_status": {
+            "$ref": "#/components/schemas/OccupancyStatusEnum",
+            "description": "Occupancy status (empty, low, medium, high, full, free_unknown, unknown)"
+          },
+          "occupancy_steps": {
+            "anyOf": [
+              {
+                "maximum": 100,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Occupancy in discrete steps (0-100, increments of 10), null if not computable",
+            "title": "Occupancy Steps"
+          },
+          "reservation_status": {
+            "$ref": "#/components/schemas/ReservationStatusEnum",
+            "description": "Reservation status (unknown, possible, not_possible, not_online)"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Total number of places (null = not published by source)",
+            "title": "Total"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Either 'standard' or 'reduced' depending on which hut type applies",
+            "title": "Type"
+          },
+          "type_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Hut type color as hex code",
+            "title": "Type Color"
+          },
+          "type_identifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Hut type identifier symbol (emoji)",
+            "title": "Type Identifier"
+          },
+          "type_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Hut type slug (e.g., 'hut', 'bivouac')",
+            "title": "Type Slug"
+          }
+        },
+        "required": ["date", "reservation_status", "occupancy_status"],
+        "title": "AvailabilityDaySchema",
         "type": "object"
       },
       "AvailabilityTrendDaySchema": {
@@ -219,6 +550,349 @@
           "data"
         ],
         "title": "AvailabilityTrendSchema",
+        "type": "object"
+      },
+      "BaseModel": {
+        "properties": {},
+        "title": "BaseModel",
+        "type": "object"
+      },
+      "CategoryListItemSchema": {
+        "description": "Simple category item for list view.",
+        "properties": {
+          "children": {
+            "title": "Children",
+            "type": "boolean"
+          },
+          "color": {
+            "title": "Color",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "identifier": {
+            "title": "Identifier",
+            "type": "string"
+          },
+          "level": {
+            "title": "Level",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "order": {
+            "title": "Order",
+            "type": "integer"
+          },
+          "parent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parent"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "symbol_detailed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Symbol Detailed"
+          },
+          "symbol_mono": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Symbol Mono"
+          },
+          "symbol_simple": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Symbol Simple"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "order",
+          "level",
+          "identifier",
+          "color",
+          "children"
+        ],
+        "title": "CategoryListItemSchema",
+        "type": "object"
+      },
+      "CategoryMapSchema": {
+        "description": "Category with children for map view.",
+        "properties": {
+          "children": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CategoryMapSchema"
+            },
+            "default": {},
+            "title": "Children",
+            "type": "object"
+          },
+          "children_count": {
+            "title": "Children Count",
+            "type": "integer"
+          },
+          "color": {
+            "title": "Color",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "identifier": {
+            "title": "Identifier",
+            "type": "string"
+          },
+          "level": {
+            "title": "Level",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "order": {
+            "title": "Order",
+            "type": "integer"
+          },
+          "parent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parent"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "symbol_detailed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Symbol Detailed"
+          },
+          "symbol_mono": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Symbol Mono"
+          },
+          "symbol_simple": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Symbol Simple"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "order",
+          "level",
+          "identifier",
+          "color",
+          "children_count"
+        ],
+        "title": "CategoryMapSchema",
+        "type": "object"
+      },
+      "CategoryPlaceTypeSchema": {
+        "description": "Schema for category place type with symbols (used in GeoPlace).",
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Symbol"
+          }
+        },
+        "required": ["slug", "name"],
+        "title": "CategoryPlaceTypeSchema",
+        "type": "object"
+      },
+      "CategoryTreeSchema": {
+        "description": "Hierarchical tree representation of categories.",
+        "properties": {
+          "children": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CategoryTreeSchema"
+                },
+                "type": "array"
+              },
+              {
+                "type": "boolean"
+              }
+            ],
+            "default": false,
+            "title": "Children"
+          },
+          "color": {
+            "title": "Color",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "identifier": {
+            "title": "Identifier",
+            "type": "string"
+          },
+          "level": {
+            "title": "Level",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "order": {
+            "title": "Order",
+            "type": "integer"
+          },
+          "parent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parent"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "symbol_detailed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Symbol Detailed"
+          },
+          "symbol_mono": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Symbol Mono"
+          },
+          "symbol_simple": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Symbol Simple"
+          }
+        },
+        "required": ["slug", "name", "order", "level", "identifier", "color"],
+        "title": "CategoryTreeSchema",
         "type": "object"
       },
       "CountryTuple": {
@@ -599,6 +1273,320 @@
         "title": "ErrorDetail",
         "type": "object"
       },
+      "Feature": {
+        "description": "Feature Model",
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "maxItems": 4,
+                "minItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "maxItems": 6,
+                "minItems": 6,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bbox"
+          },
+          "geometry": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "GeometryCollection": "#/components/schemas/GeometryCollection",
+                    "LineString": "#/components/schemas/LineString",
+                    "MultiLineString": "#/components/schemas/MultiLineString",
+                    "MultiPoint": "#/components/schemas/MultiPoint",
+                    "MultiPolygon": "#/components/schemas/MultiPolygon",
+                    "Point": "#/components/schemas/Point",
+                    "Polygon": "#/components/schemas/Polygon"
+                  },
+                  "propertyName": "type"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/Point"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MultiPoint"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LineString"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MultiLineString"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Polygon"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MultiPolygon"
+                  },
+                  {
+                    "$ref": "#/components/schemas/GeometryCollection"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Geometry"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Id"
+          },
+          "properties": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "$ref": "#/components/schemas/BaseModel"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Properties"
+          },
+          "type": {
+            "const": "Feature",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": ["type", "geometry", "properties"],
+        "title": "Feature",
+        "type": "object"
+      },
+      "FeatureCollection": {
+        "description": "FeatureCollection Model",
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "maxItems": 4,
+                "minItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "maxItems": 6,
+                "minItems": 6,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bbox"
+          },
+          "features": {
+            "items": {
+              "$ref": "#/components/schemas/Feature"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "type": {
+            "const": "FeatureCollection",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": ["type", "features"],
+        "title": "FeatureCollection",
+        "type": "object"
+      },
+      "Feature_Point_HutAvailabilityPropertiesSchema_": {
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "maxItems": 4,
+                "minItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "maxItems": 6,
+                "minItems": 6,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bbox"
+          },
+          "geometry": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Id"
+          },
+          "properties": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HutAvailabilityPropertiesSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": {
+            "const": "Feature",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": ["type", "geometry", "properties"],
+        "title": "Feature[Point, HutAvailabilityPropertiesSchema]",
+        "type": "object"
+      },
       "Feature_Point_HutBookingsProps_": {
         "properties": {
           "bbox": {
@@ -836,6 +1824,571 @@
         },
         "required": ["email", "subject", "message", "get_updates"],
         "title": "FeedbackCreate",
+        "type": "object"
+      },
+      "GeoPlaceNearbySchema": {
+        "description": "Schema for nearby places with distance information.",
+        "properties": {
+          "categories": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CategoryPlaceTypeSchema"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Categories"
+          },
+          "country_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country Code"
+          },
+          "distance": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Distance"
+          },
+          "elevation": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elevation"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "importance": {
+            "title": "Importance",
+            "type": "integer"
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationSchema"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/OrganizationSourceIdSlugSchema"
+                },
+                "type": "array"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/OrganizationSourceIdDetailSchema"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sources"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "country_code",
+          "elevation",
+          "importance",
+          "location"
+        ],
+        "title": "GeoPlaceNearbySchema",
+        "type": "object"
+      },
+      "GeoPlaceSearchSchema": {
+        "description": "Schema for search results with location coordinates.",
+        "properties": {
+          "categories": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CategoryPlaceTypeSchema"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Categories"
+          },
+          "country_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country Code"
+          },
+          "elevation": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elevation"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "importance": {
+            "title": "Importance",
+            "type": "integer"
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationSchema"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Score"
+          },
+          "sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/OrganizationSourceIdSlugSchema"
+                },
+                "type": "array"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/OrganizationSourceIdDetailSchema"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sources"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "country_code",
+          "elevation",
+          "importance",
+          "location"
+        ],
+        "title": "GeoPlaceSearchSchema",
+        "type": "object"
+      },
+      "GeometryCollection": {
+        "description": "GeometryCollection Model",
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "maxItems": 4,
+                "minItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "maxItems": 6,
+                "minItems": 6,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bbox"
+          },
+          "geometries": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "GeometryCollection": "#/components/schemas/GeometryCollection",
+                  "LineString": "#/components/schemas/LineString",
+                  "MultiLineString": "#/components/schemas/MultiLineString",
+                  "MultiPoint": "#/components/schemas/MultiPoint",
+                  "MultiPolygon": "#/components/schemas/MultiPolygon",
+                  "Point": "#/components/schemas/Point",
+                  "Polygon": "#/components/schemas/Polygon"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/Point"
+                },
+                {
+                  "$ref": "#/components/schemas/MultiPoint"
+                },
+                {
+                  "$ref": "#/components/schemas/LineString"
+                },
+                {
+                  "$ref": "#/components/schemas/MultiLineString"
+                },
+                {
+                  "$ref": "#/components/schemas/Polygon"
+                },
+                {
+                  "$ref": "#/components/schemas/MultiPolygon"
+                },
+                {
+                  "$ref": "#/components/schemas/GeometryCollection"
+                }
+              ]
+            },
+            "title": "Geometries",
+            "type": "array"
+          },
+          "type": {
+            "const": "GeometryCollection",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": ["type", "geometries"],
+        "title": "GeometryCollection",
+        "type": "object"
+      },
+      "HutAvailabilityFeatureCollection": {
+        "description": "GeoJSON FeatureCollection of hut availability data.",
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "maxItems": 4,
+                "minItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "maxItems": 6,
+                "minItems": 6,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bbox"
+          },
+          "features": {
+            "items": {
+              "$ref": "#/components/schemas/Feature_Point_HutAvailabilityPropertiesSchema_"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "type": {
+            "const": "FeatureCollection",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": ["type", "features"],
+        "title": "HutAvailabilityFeatureCollection",
+        "type": "object"
+      },
+      "HutAvailabilityPropertiesSchema": {
+        "description": "Properties for a hut availability GeoJSON feature.",
+        "properties": {
+          "data": {
+            "description": "List of availability data for each day",
+            "items": {
+              "$ref": "#/components/schemas/AvailabilityDaySchema"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "days": {
+            "description": "Number of days of availability data",
+            "minimum": 1,
+            "title": "Days",
+            "type": "integer"
+          },
+          "id": {
+            "description": "Hut database ID",
+            "title": "Id",
+            "type": "integer"
+          },
+          "slug": {
+            "description": "Hut slug identifier",
+            "title": "Slug",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source organization slug (e.g., 'hrs', 'sac')",
+            "title": "Source",
+            "type": "string"
+          },
+          "source_id": {
+            "description": "External source organization's ID for this hut",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "External link to the hut page on the source website",
+            "title": "Source Link"
+          },
+          "start_date": {
+            "description": "Start date of availability period",
+            "format": "date",
+            "title": "Start Date",
+            "type": "string"
+          },
+          "type_reduced_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Hut type color as hex code in reduced state",
+            "title": "Type Reduced Color"
+          },
+          "type_reduced_identifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Hut type identifier symbol in reduced state",
+            "title": "Type Reduced Identifier"
+          },
+          "type_reduced_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Hut type display order in reduced state",
+            "title": "Type Reduced Order"
+          },
+          "type_reduced_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Hut type slug in reduced state (winter/closed)",
+            "title": "Type Reduced Slug"
+          },
+          "type_standard_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Hut type color as hex code in standard state",
+            "title": "Type Standard Color"
+          },
+          "type_standard_identifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Hut type identifier symbol in standard state",
+            "title": "Type Standard Identifier"
+          },
+          "type_standard_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Hut type display order in standard state",
+            "title": "Type Standard Order"
+          },
+          "type_standard_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Hut type slug in standard state (summer/fully open)",
+            "title": "Type Standard Slug"
+          }
+        },
+        "required": [
+          "slug",
+          "id",
+          "source_id",
+          "source",
+          "days",
+          "start_date",
+          "data"
+        ],
+        "title": "HutAvailabilityPropertiesSchema",
         "type": "object"
       },
       "HutBookingSchema": {
@@ -2754,6 +4307,87 @@
         "title": "LicenseInfoSchema",
         "type": "object"
       },
+      "LineString": {
+        "description": "LineString Model",
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "maxItems": 4,
+                "minItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "maxItems": 6,
+                "minItems": 6,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bbox"
+          },
+          "coordinates": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Position2D"
+                },
+                {
+                  "$ref": "#/components/schemas/Position3D"
+                }
+              ]
+            },
+            "minItems": 2,
+            "title": "Coordinates",
+            "type": "array"
+          },
+          "type": {
+            "const": "LineString",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": ["type", "coordinates"],
+        "title": "LineString",
+        "type": "object"
+      },
       "LocationSchema": {
         "description": "Location with longitude, latitude and optional elevation in WSG84.\n\nAttributes:\n    lon: Longitude (x).\n    lat: Latitude (y).\n    ele: Elevation in meter.",
         "properties": {
@@ -2781,6 +4415,257 @@
         "enum": ["no", "relative", "absolute"],
         "title": "MediaUrlModeEnum",
         "type": "string"
+      },
+      "MultiLineString": {
+        "description": "MultiLineString Model",
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "maxItems": 4,
+                "minItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "maxItems": 6,
+                "minItems": 6,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bbox"
+          },
+          "coordinates": {
+            "items": {
+              "items": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Position2D"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Position3D"
+                  }
+                ]
+              },
+              "minItems": 2,
+              "type": "array"
+            },
+            "title": "Coordinates",
+            "type": "array"
+          },
+          "type": {
+            "const": "MultiLineString",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": ["type", "coordinates"],
+        "title": "MultiLineString",
+        "type": "object"
+      },
+      "MultiPoint": {
+        "description": "MultiPoint Model",
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "maxItems": 4,
+                "minItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "maxItems": 6,
+                "minItems": 6,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bbox"
+          },
+          "coordinates": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Position2D"
+                },
+                {
+                  "$ref": "#/components/schemas/Position3D"
+                }
+              ]
+            },
+            "title": "Coordinates",
+            "type": "array"
+          },
+          "type": {
+            "const": "MultiPoint",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": ["type", "coordinates"],
+        "title": "MultiPoint",
+        "type": "object"
+      },
+      "MultiPolygon": {
+        "description": "MultiPolygon Model",
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "maxItems": 4,
+                "minItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "maxItems": 6,
+                "minItems": 6,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bbox"
+          },
+          "coordinates": {
+            "items": {
+              "items": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Position2D"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Position3D"
+                    }
+                  ]
+                },
+                "minItems": 4,
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "title": "Coordinates",
+            "type": "array"
+          },
+          "type": {
+            "const": "MultiPolygon",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": ["type", "coordinates"],
+        "title": "MultiPolygon",
+        "type": "object"
       },
       "OccupancyStatusEnum": {
         "description": "Enum with occupancy status.",
@@ -2963,6 +4848,89 @@
         "title": "OrganizationImageSchema",
         "type": "object"
       },
+      "OrganizationSearchSchema": {
+        "description": "Schema for organization in search results.",
+        "properties": {
+          "logo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Logo"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": ["slug"],
+        "title": "OrganizationSearchSchema",
+        "type": "object"
+      },
+      "OrganizationSourceIdDetailSchema": {
+        "description": "Schema for organization with source ID - full details version.",
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/OrganizationSearchSchema"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source Id"
+          }
+        },
+        "required": ["source"],
+        "title": "OrganizationSourceIdDetailSchema",
+        "type": "object"
+      },
+      "OrganizationSourceIdSlugSchema": {
+        "description": "Schema for organization with source ID - slug only version.",
+        "properties": {
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source Id"
+          }
+        },
+        "required": ["source"],
+        "title": "OrganizationSourceIdSlugSchema",
+        "type": "object"
+      },
       "OwnerSchema": {
         "description": "Owner reference (validated from the ORM).",
         "properties": {
@@ -2997,6 +4965,30 @@
         },
         "required": ["slug"],
         "title": "OwnerSchema",
+        "type": "object"
+      },
+      "PhoneSchema": {
+        "description": "Schema for phone number with optional label.",
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Label"
+          },
+          "number": {
+            "title": "Number",
+            "type": "string"
+          }
+        },
+        "required": ["number"],
+        "title": "PhoneSchema",
         "type": "object"
       },
       "Point": {
@@ -3074,6 +5066,90 @@
         },
         "required": ["type", "coordinates"],
         "title": "Point",
+        "type": "object"
+      },
+      "Polygon": {
+        "description": "Polygon Model",
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "maxItems": 4,
+                "minItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "maxItems": 6,
+                "minItems": 6,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bbox"
+          },
+          "coordinates": {
+            "items": {
+              "items": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Position2D"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Position3D"
+                  }
+                ]
+              },
+              "minItems": 4,
+              "type": "array"
+            },
+            "title": "Coordinates",
+            "type": "array"
+          },
+          "type": {
+            "const": "Polygon",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": ["type", "coordinates"],
+        "title": "Polygon",
         "type": "object"
       },
       "Position2D": {
@@ -3188,6 +5264,30 @@
         ],
         "title": "VersionSchema",
         "type": "object"
+      },
+      "WebsiteSchema": {
+        "description": "Schema for website with optional label.",
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Label"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": ["url"],
+        "title": "WebsiteSchema",
+        "type": "object"
       }
     }
   },
@@ -3272,8 +5372,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/CategoryListItemSchema"
                   },
                   "type": "array"
                 }
@@ -3401,8 +5500,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/CategoryMapSchema"
                   },
                   "type": "object"
                 }
@@ -3720,8 +5818,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/CategoryTreeSchema"
                   },
                   "type": "array"
                 }
@@ -4361,8 +6458,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object"
+                  "$ref": "#/components/schemas/AmenitySchema"
                 }
               }
             },
@@ -4575,8 +6671,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/GeoPlaceNearbySchema"
                   },
                   "type": "array"
                 }
@@ -4855,8 +6950,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/GeoPlaceSearchSchema"
                   },
                   "type": "array"
                 }
@@ -5003,8 +7097,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object"
+                  "$ref": "#/components/schemas/HutAvailabilityFeatureCollection"
                 }
               }
             },
@@ -5759,8 +7852,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object"
+                  "$ref": "#/components/schemas/FeatureCollection"
                 }
               }
             },

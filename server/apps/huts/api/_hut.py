@@ -16,6 +16,7 @@ from dmr import Path, Query, modify, validate
 from dmr.headers import HeaderSpec
 from dmr.metadata import ResponseSpec
 from dmr.routing import external_path, path
+from geojson_pydantic import FeatureCollection
 from pydantic import Field
 
 from django.conf import settings
@@ -34,6 +35,7 @@ from ..models import Hut
 from ..schemas import (
     HutSchemaDetails,
     HutSchemaList,
+    HutSearchResultSchema,
     ImageInfoSchema,
     LicenseInfoSchema,
 )
@@ -246,7 +248,10 @@ class HutSearchController(ApiController):
 
             results.append(result)
 
-        return results
+        return [
+            HutSearchResultSchema(**result).model_dump(exclude_unset=True)
+            for result in results
+        ]
 
 
 # ---------------------------------------------------------------------------
@@ -496,7 +501,7 @@ class HutsGeojsonController(ApiController):
 
     @validate(
         ResponseSpec(
-            dict,
+            FeatureCollection,
             status_code=HTTPStatus.OK,
             headers=_CACHE_HEADER_SPECS,
         ),

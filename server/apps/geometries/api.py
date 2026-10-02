@@ -343,7 +343,7 @@ class GeoSearchController(ApiController):
         operation_id="search_geoplaces",
         headers=cache_headers(60),
     )
-    def get(self, parsed_query: Query[GeoSearchQuery]) -> list[dict]:
+    def get(self, parsed_query: Query[GeoSearchQuery]) -> list[GeoPlaceSearchSchema]:
         """Search for geographic places using fuzzy text search.
 
         Performance optimizations:
@@ -553,7 +553,7 @@ class GeoNearbyController(ApiController):
         operation_id="nearby_geoplaces",
         headers=cache_headers(60),
     )
-    def get(self, parsed_query: Query[GeoNearbyQuery]) -> list[dict]:
+    def get(self, parsed_query: Query[GeoNearbyQuery]) -> list[GeoPlaceNearbySchema]:
         """Find places near coordinates within a radius, ordered by distance."""
         from django.conf import settings
         from django.contrib.gis.db.models.functions import Distance
@@ -635,7 +635,7 @@ class AmenityController(ApiController):
         self,
         parsed_path: Path[AmenityPath],
         parsed_query: Query[AmenityQuery],
-    ) -> dict:
+    ) -> AmenitySchema:
         """Get detailed information for an amenity place.
 
         Returns base GeoPlace fields plus amenity-specific information
@@ -755,7 +755,7 @@ class AmenityController(ApiController):
 
         _build_sources(result, place, media_url, parsed_query.include_sources)
 
-        return AmenitySchema(**result).model_dump(exclude_unset=True)
+        return AmenitySchema(**result)
 
 
 paths = [

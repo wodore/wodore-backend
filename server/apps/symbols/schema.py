@@ -34,3 +34,17 @@ class SymbolOptional(pydantic.BaseModel):
     def _svg_to_str(cls, value: object) -> str | None:
         """ImageFieldFile -> path string (former ninja ModelSchema coercion)."""
         return str(value) if value else None
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def _uuid_to_str(cls, value: object) -> str | None:
+        """UUID -> string (former ninja ModelSchema coercion)."""
+        return str(value) if value is not None else None
+
+    @field_validator("license", "source_org", mode="before")
+    @classmethod
+    def _fk_to_pk(cls, value: object) -> int | None:
+        """FK instance -> pk int (ninja mapped FK fields to their attname)."""
+        if value is None:
+            return None
+        return getattr(value, "pk", value)

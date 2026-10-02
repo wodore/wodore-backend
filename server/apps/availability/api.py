@@ -26,6 +26,7 @@ from .models import HutAvailability, HutAvailabilityHistory
 from .schemas import (
     AvailabilityTrendSchema,
     CurrentAvailabilitySchema,
+    HutAvailabilityFeatureCollection,
 )
 from .utils import parse_availability_date
 
@@ -123,7 +124,7 @@ class HutAvailabilityGeojsonController(ApiController):
         self,
         parsed_path: Path[DatePathParam],
         parsed_query: Query[AvailabilityGeoJSONQuery],
-    ) -> dict:
+    ) -> HutAvailabilityFeatureCollection:
         """Get availability data as GeoJSON FeatureCollection for map visualization."""
         activate(parsed_query.lang)
 
@@ -219,14 +220,16 @@ class HutAvailabilityGeojsonController(ApiController):
         # Generate GeoJSON using PostgreSQL (point geometries need no
         # simplification). Version downgrades are applied uniformly by
         # the API-version middleware for every JSON response.
-        return qs.aggregate(
-            GeoJSON(
-                geom_field="location",
-                fields=properties,
-                decimals=5,
-                simplify=False,
-            ),
-        )["geojson"]
+        return HutAvailabilityFeatureCollection(
+            **qs.aggregate(
+                GeoJSON(
+                    geom_field="location",
+                    fields=properties,
+                    decimals=5,
+                    simplify=False,
+                ),
+            )["geojson"]
+        )
 
 
 class HutAvailabilityCurrentController(ApiController):

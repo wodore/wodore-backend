@@ -15,6 +15,9 @@ from server.apps.translations import LanguageQuery, override
 
 from .models import Category
 from .schemas import (
+    CategoryListItemSchema,
+    CategoryMapSchema,
+    CategoryTreeSchema,
     MediaUrlModeEnum,
     SymbolVariantEnum,
 )
@@ -239,7 +242,7 @@ class CategoryTreeController(ApiController):
         self,
         parsed_path: Path[_ParentSlugPath],
         parsed_query: Query[_CategoryTreeQuery],
-    ) -> list[dict]:
+    ) -> list[CategoryTreeSchema]:
         """Get category hierarchy as a tree structure.
 
         Supports dot or slash-notation slugs with max one parent
@@ -298,7 +301,7 @@ class CategoryListController(ApiController):
         self,
         parsed_path: Path[_ParentSlugPath],
         parsed_query: Query[_CategoryQuery],
-    ) -> list[dict]:
+    ) -> list[CategoryListItemSchema]:
         """Get flat list of categories.
 
         Supports dot-notation slugs with max one parent
@@ -349,7 +352,7 @@ class CategoryMapController(ApiController):
         self,
         parsed_path: Path[_ParentSlugPath],
         parsed_query: Query[_CategoryQuery],
-    ) -> dict[str, dict]:
+    ) -> dict[str, CategoryMapSchema]:
         """Get category hierarchy as a nested dictionary mapping.
 
         Keys are category slugs, values contain category data with
