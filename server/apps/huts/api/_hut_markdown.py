@@ -18,6 +18,8 @@ from html import unescape
 from urllib.parse import quote
 
 from django.conf import settings
+from django.contrib.gis.db.models.functions import Distance
+from django.contrib.gis.measure import D
 from django.http import Http404, HttpRequest, HttpResponse
 from django.utils.html import strip_tags
 
@@ -79,12 +81,53 @@ def _fmt_coordinates(point) -> str | None:
     return f"{point.y:.6f}, {point.x:.6f}"
 
 
+_MONTH_LEGEND = (
+    "Legend: yes = open · yesish = likely open · maybe = uncertain · "
+    "no = closed · noish = likely closed · unknown = no data."
+)
+
+
 def _months_row(open_monthly: dict | None) -> str:
     values = []
     for month in range(1, 13):
         value = (open_monthly or {}).get(f"month_{month:02d}", "unknown")
         values.append(str(value))
     return "| " + " | ".join(values) + " |"
+
+
+def _reduced_months_row(open_monthly: dict | None) -> str:
+    """Months of the reduced (winter) operation, derived from the
+    standard-operation series: when the staffed operation is closed the
+    reduced service (e.g. the unstaffed winter room) is typically
+    self-accessible — per-month tracking does not exist in the data,
+    which the section explanation states explicitly."""
+    values = []
+    for month in range(1, 13):
+        value = str((open_monthly or {}).get(f"month_{month:02d}", "unknown"))
+        if value in ("no", "noish"):
+            values.append(r"yes\*")
+        elif value == "unknown":
+            values.append("unknown")
+        else:
+            values.append("-")
+    return "| " + " | ".join(values) + " |"
+
+
+def _nearby_huts(
+    hut: Hut, max_km: float = 15.0, limit: int = 5
+) -> list[tuple[Hut, float]]:
+    """Nearest other public huts within ``max_km`` (straight-line)."""
+    if hut.location is None:
+        return []
+    nearby = (
+        Hut.objects.filter(is_active=True, is_public=True)
+        .exclude(pk=hut.pk)
+        .filter(location__distance_lte=(hut.location, D(km=max_km)))
+        .annotate(distance=Distance("location", hut.location))
+        .select_related("hut_type_open")
+        .order_by("distance")[:limit]
+    )
+    return [(h, h.distance.km) for h in nearby]
 
 
 def _hut_markdown(request: HttpRequest, hut: Hut) -> str:
@@ -130,6 +173,35 @@ def _hut_markdown(request: HttpRequest, hut: Hut) -> str:
 
     open_info_url = (hut.open_monthly or {}).get("url")
     attribution = _attribution_as_markdown(hut.description_attribution)
+
+    if hut.hut_type_closed and hut.hut_type_closed.name:
+        reduced_type = hut.hut_type_closed.name
+        reduced_months_line = (
+            f"| Reduced ({reduced_type}) |{_reduced_months_row(hut.open_monthly)[1:]}"
+        )
+        derivation_note = (
+            rf"\* Reduced-operation months are derived: the {reduced_type} is "
+            "typically self-accessible when the staffed operation is closed; "
+            "the data does not track it per month — verify with the hut's "
+            "sources."
+        )
+    else:
+        reduced_months_line = ""
+        derivation_note = (
+            "No reduced operation (e.g. winter room) is recorded for this hut."
+        )
+
+    nearby = _nearby_huts(hut)
+    if nearby:
+        nearby_lines = "\n".join(
+            f"- [{n.name}]({settings.FRONTEND_DOMAIN.rstrip('/')}/hut/{n.slug}) "
+            f"— {dist:.1f} km"
+            + (f" · {n.hut_type_open.name}" if n.hut_type_open else "")
+            for n, dist in nearby
+        )
+        nearby_section = f"## Nearby huts\n\nOther public huts within 15 km (straight-line):\n\n{nearby_lines}"
+    else:
+        nearby_section = ""
     attribution_line = f"\n*Description: {attribution}*\n" if attribution else ""
 
     sources = []
@@ -156,16 +228,21 @@ Interactive map: {app_url}
 
 ## Open months
 
-| Jan | Feb | Mar | Apr | May | Jun | Jul | Aug | Sep | Oct | Nov | Dec |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-{_months_row(hut.open_monthly)}
+{_MONTH_LEGEND}
 
+| Mode | Jan | Feb | Mar | Apr | May | Jun | Jul | Aug | Sep | Oct | Nov | Dec |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Standard ({hut.hut_type_open.name if hut.hut_type_open else "unknown type"}) |{_months_row(hut.open_monthly)[1:]}
+{reduced_months_line}
+{derivation_note}
 {f"Opening information: {open_info_url}" if open_info_url else ""}
 
 ## Description
 
 {hut.description}
 {attribution_line}
+{nearby_section}
+
 Languages: {_languages_line(hut.slug)}
 
 ## Sources

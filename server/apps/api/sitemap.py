@@ -51,10 +51,50 @@ def _url(loc: str, lastmod=None) -> str:
     return f"<url><loc>{escape(loc)}</loc>{lastmod_xml}</url>"
 
 
-def _urlset(entries: list[str]) -> str:
+# Language routing derives entirely from the existing i18n config
+# (full-prefix model): EVERY language in settings.LANGUAGES gets a
+# locale-prefixed route (/en|/de|/fr|/it/...) - those prefixed URLs are
+# the indexed set, each self-canonical. The bare (unprefixed) URL is the
+# user-facing alias the SPA normalizes to (it strips the prefix
+# client-side); crawlers see it canonicalized to the default language's
+# prefixed URL. settings.DEFAULT_LANG (English) picks that default.
+DEFAULT_LANG = settings.DEFAULT_LANG
+LANG_PREFIXES = tuple(code for code, _name in settings.LANGUAGES)
+DEFAULT_URL_PREFIX = f"{DEFAULT_LANG}/"
+
+
+def _lang_alternates(bare_path: str) -> str:
+    """xhtml:link hreflang cluster for a frontend path: every language's
+    prefixed URL plus x-default pointing at the default language's
+    prefixed URL (the bare URL is a user alias, not an indexing target)."""
+    links = []
+    for lang in LANG_PREFIXES:
+        href = frontend_url(f"{lang}/{bare_path}")
+        links.append(
+            f'<xhtml:link rel="alternate" hreflang="{lang}" href="{escape(href)}"/>'
+        )
+    default_href = frontend_url(f"{DEFAULT_LANG}/{bare_path}")
+    links.append(
+        f'<xhtml:link rel="alternate" hreflang="x-default" href="{escape(default_href)}"/>'
+    )
+    return "".join(links)
+
+
+def _url_with_alternates(bare_path: str, lastmod=None) -> str:
+    """One <url> entry per path: loc is the default language's prefixed
+    URL; the cluster links every language variant."""
+    lastmod_xml = f"<lastmod>{lastmod:%Y-%m-%d}</lastmod>" if lastmod else ""
+    loc = frontend_url(f"{DEFAULT_URL_PREFIX}{bare_path}")
+    return (
+        f"<url><loc>{escape(loc)}</loc>{lastmod_xml}{_lang_alternates(bare_path)}</url>"
+    )
+
+
+def _urlset(entries: list[str], xhtml: bool = False) -> str:
+    xhtml_ns = ' xmlns:xhtml="http://www.w3.org/1999/xhtml"' if xhtml else ""
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"{xhtml_ns}>'
         f"{''.join(entries)}"
         "</urlset>"
     )
@@ -180,7 +220,8 @@ def sitemap_huts(page: int = 0) -> str | None:
         if not huts:
             return None
         return _urlset(
-            [_url(frontend_url(f"hut/{slug}"), modified) for slug, modified in huts]
+            [_url_with_alternates(f"hut/{slug}", modified) for slug, modified in huts],
+            xhtml=True,
         )
 
     return cache.get_or_set(f"sitemap:huts:{page}", build, SITEMAP_TTL)
@@ -207,12 +248,10 @@ def sitemap_places(page: int = 0) -> str | None:
         pattern = settings.PLACE_URL_PATTERN
         return _urlset(
             [
-                _url(
-                    f"{settings.FRONTEND_DOMAIN.rstrip('/')}/{pattern.format(slug=slug)}",
-                    modified,
-                )
+                _url_with_alternates(pattern.format(slug=slug), modified)
                 for slug, modified in places
-            ]
+            ],
+            xhtml=True,
         )
 
     return cache.get_or_set(f"sitemap:places:{page}", build, SITEMAP_TTL)
