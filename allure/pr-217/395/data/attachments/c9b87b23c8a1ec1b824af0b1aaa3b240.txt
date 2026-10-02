@@ -1,4 +1,0 @@
-neu3: 7/10 — Solid hut description.
-
-1 hut(s) processed, 1 assessed, 0 moved to rework
-✓ Assessing hut descriptions... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% • 0:00:00
