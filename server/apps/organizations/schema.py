@@ -1,6 +1,9 @@
+"""Pydantic API schemas for organizations (plain models, dmr-compatible)."""
+
 from typing import Any
 
-from ninja import Field, ModelSchema, Schema
+import pydantic
+from pydantic import Field, field_validator
 
 from django.conf import settings
 from django.http import HttpRequest
@@ -8,8 +11,10 @@ from django.http import HttpRequest
 from .models import Organization
 
 
-class OrganizationSearchSchema(Schema):
+class OrganizationSearchSchema(pydantic.BaseModel):
     """Schema for organization in search results."""
+
+    model_config = pydantic.ConfigDict(from_attributes=True)
 
     slug: str
     name: str | None = None
@@ -29,55 +34,52 @@ class OrganizationSearchSchema(Schema):
         return f"{media_url}{path}"
 
 
-class OrganizationSourceIdSlugSchema(Schema):
+class OrganizationSourceIdSlugSchema(pydantic.BaseModel):
     """Schema for organization with source ID - slug only version."""
 
     source: str
     source_id: str | None = None
 
 
-class OrganizationSourceIdDetailSchema(Schema):
+class OrganizationSourceIdDetailSchema(pydantic.BaseModel):
     """Schema for organization with source ID - full details version."""
 
     source: OrganizationSearchSchema
     source_id: str | None = None
 
 
-class OrganizationUpdate(ModelSchema):
+class OrganizationOptional(pydantic.BaseModel):
+    """Organization with every field optional (include/exclude base).
+
+    Validation reads the localized ``*_i18n`` attributes
+    (modeltranslation/djjmt descriptors resolve the active language);
+    serialization emits the plain field names (``name`` etc.).
+    """
+
+    model_config = pydantic.ConfigDict(from_attributes=True)
+
     slug: str | None = None
-    # name_i18n: TranslationSchema | None = Field(None, alias="name")
-    # order: int | None = None
-
-    class Meta:
-        model = Organization
-        fields = ["slug"]
-
-    #    fields = Organization.get_fields_update()
-    #    fields_optional = Organization.get_fields_update()  # .remove("name")
-
-
-class OrganizationOptional(ModelSchema):
-    # name_i18n: str | TranslationSchema | None = None
-    name: str | None = Field(..., alias="name_i18n")
-    fullname: str | None = Field(None, alias="fullname_i18n")
-    description: str | None = Field(None, alias="description_i18n")
-    attribution: str | None = Field(None, alias="attribution_i18n")
-    url: str | None = Field(None, alias="url_i18n")
-    config: dict | None = Field(None)
-    props_schema: dict | None = Field(None)
+    name: str | None = Field(None, validation_alias="name_i18n")
+    fullname: str | None = Field(None, validation_alias="fullname_i18n")
+    description: str | None = Field(None, validation_alias="description_i18n")
+    url: str | None = Field(None, validation_alias="url_i18n")
+    attribution: str | None = Field(None, validation_alias="attribution_i18n")
+    link_hut_pattern: str | None = None
+    logo: str | None = None
+    is_active: bool | None = None
+    is_public: bool | None = None
+    color_light: str | None = None
+    color_dark: str | None = None
+    config: dict | None = None
+    props_schema: dict | None = None
     order: int | None = None
 
     class Meta:
+        # Used by api.query.include_set to attach {field}_i18n companions.
         model = Organization
-        fields = Organization.get_fields_all()
-        fields_optional = (
-            f
-            for f in Organization.get_fields_all()
-            if f not in ("config", "props_schema")
-        )  # .remove("name")
 
-
-class OrganizationCreate(ModelSchema):
-    class Meta:
-        model = Organization
-        fields = Organization.get_fields_in()
+    @field_validator("logo", mode="before")
+    @classmethod
+    def _logo_to_str(cls, value: object) -> str | None:
+        """ImageFieldFile -> path string (former ninja ModelSchema coercion)."""
+        return str(value) if value else None

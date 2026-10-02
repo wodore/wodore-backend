@@ -1,39 +1,49 @@
 {% load static %}
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <link type="text/css" rel="stylesheet" href="{% static 'ninja/swagger-ui.css' %}">
-    {% include "ninja/favicons.html" %}
-    <title>{{ api.title }}</title>
-    <style>
-      .api-version-bar {
-        display: flex; gap: .5rem; align-items: center;
-        padding: .5rem 1rem; font-family: sans-serif; font-size: .85rem;
-        border-bottom: 1px solid #ddd; background: #fafafa;
-      }
-      .api-version-bar a { padding: .15rem .5rem; border-radius: 4px; text-decoration: none; }
-      .api-version-bar a.selected { background: #4990e2; color: #fff; }
-    </style>
+  <meta charset="UTF-8">
+  <title>{{ title|default:"Swagger UI" }}</title>
+  {% if swagger_cdn %}
+    <link rel="stylesheet" type="text/css" href="{{ swagger_cdn }}/swagger-ui.css" />
+  {% else %}
+    <link rel="stylesheet" type="text/css" href="{% static 'dmr/swagger/5.32.1/swagger-ui.css' %}" />
+    <link rel="stylesheet" type="text/css" href="{% static 'dmr/swagger/5.32.1/index.css' %}" />
+    <link rel="icon" type="image/png" href="{% static 'dmr/swagger/5.32.1/favicon-32x32.png' %}" sizes="32x32" />
+    <link rel="icon" type="image/png" href="{% static 'dmr/swagger/5.32.1/favicon-16x16.png' %}" sizes="16x16" />
+  {% endif %}
+  <style>
+    .api-version-bar {
+      display: flex; gap: .5rem; align-items: center;
+      padding: .5rem 1rem; font-family: sans-serif; font-size: .85rem;
+      border-bottom: 1px solid #ddd; background: #fafafa;
+    }
+    .api-version-bar a { padding: .15rem .5rem; border-radius: 4px; text-decoration: none; color: #4990e2; }
+    .api-version-bar a.selected { background: #4990e2; color: #fff; }
+  </style>
 </head>
-<body
-    data-csrf-token="{% if add_csrf %}{{ csrf_token }}{% endif %}"
-    data-api-csrf="{% if add_csrf %}true{% endif %}">
+<body>
+  <div class="api-version-bar">
+    <strong>API version:</strong>
+    {% for v in api_versions %}
+      <a href="?api_version={{ v }}" class="{% if v == selected_api_version %}selected{% endif %}">{{ v }}</a>
+    {% endfor %}
+  </div>
 
-    <div class="api-version-bar">
-      <strong>API version:</strong>
-      {% for v in api_versions %}
-        <a href="?api_version={{ v }}" class="{% if v == selected_api_version %}selected{% endif %}">{{ v }}</a>
-      {% endfor %}
-    </div>
+  <div
+    id="swagger-app"
+    data-csrf-token="{{ csrf_token }}"
+  ></div>
+  {{ schema|json_script:"swagger-schema" }}
 
-    <script type="application/json" id="swagger-settings">
-        {{ swagger_settings | safe }}
-    </script>
+  {% if swagger_cdn %}
+    <script src="{{ swagger_cdn }}/swagger-ui-bundle.js" charset="UTF-8"></script>
+    <script src="{{ swagger_cdn }}/swagger-ui-standalone-preset.js" charset="UTF-8"></script>
+  {% else %}
+    <script src="{% static 'dmr/swagger/5.32.1/swagger-ui-bundle.js' %}" charset="UTF-8"></script>
+    <script src="{% static 'dmr/swagger/5.32.1/swagger-ui-standalone-preset.js" charset="UTF-8"></script>
+  {% endif %}
 
-    <div id="swagger-ui"></div>
-
-    <script src="{% static 'ninja/swagger-ui-bundle.js' %}"></script>
-    <script src="{% static 'ninja/swagger-ui-init.js' %}"></script>
-
+  <script src="{% static 'dmr/swagger/init.js' %}"></script>
 </body>
 </html>

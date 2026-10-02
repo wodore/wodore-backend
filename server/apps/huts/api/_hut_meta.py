@@ -14,20 +14,23 @@ The ``jsonld`` block is pre-built so the edge script can inline it
 verbatim.
 """
 
-from ninja import Field, Schema
+import pydantic
+from dmr import Path, Query, modify
+from dmr.routing import path
+from pydantic import Field
 
 from django.conf import settings
-from django.http import Http404, HttpRequest, HttpResponse
+from django.http import Http404
 
+from server.apps.api.controller import ApiController, cache_headers
 from server.apps.images.transfomer import ImagorImage
-from server.apps.translations import LanguageParam, activate, with_language_param
+from server.apps.translations import LanguageQuery, activate
 
 from ..models import Hut, HutImageAssociation
-from ._router import router
 
 CACHE_TTL = 60 * 60
 
-# OG image variant (same preset the JSON detail endpoint calls "large").
+# OG image variant (same preset the JSON detail endpoint calls 'large').
 OG_IMAGE_SIZE = "1800x1200"
 
 # Glue words for the short meta description.
@@ -35,7 +38,9 @@ _PLACES = {"de": "Plätze", "en": "places", "fr": "places", "it": "posti"}
 _AND = {"de": "mit", "en": "with", "fr": "avec", "it": "con"}
 
 
-class HutMetaSchema(Schema):
+class HutMetaSchema(pydantic.BaseModel):
+    """Minimal hut metadata for edge meta-tag injection."""
+
     slug: str = Field(description="Hut slug")
     name: str = Field(description="Hut name (localized)")
     description: str = Field(description="Short meta description (localized)")
@@ -45,7 +50,7 @@ class HutMetaSchema(Schema):
     )
     type_reduced: str | None = Field(
         None,
-        description="Building/hut type during reduced operation (e.g. winter room)",
+        description=("Building/hut type during reduced operation (e.g. winter room)"),
     )
     elevation: float | None = Field(None, description="Elevation in meters")
     latitude: float | None = Field(None, description="WGS84 latitude")
@@ -61,6 +66,16 @@ class HutMetaSchema(Schema):
     page_url: str = Field(description="Canonical frontend page URL")
     jsonld: dict | None = Field(None, description="Ready-to-inline schema.org JSON-LD")
     modified: str | None = Field(None, description="Last modification (ISO date)")
+
+
+class _HutSlugPath(pydantic.BaseModel):
+    """Hut slug path parameter."""
+
+    slug: str = Field(description="Hut slug")
+
+
+class _MetaQuery(LanguageQuery):
+    """Only the shared lang parameter."""
 
 
 def _og_image(hut: Hut) -> str | None:
@@ -93,7 +108,7 @@ def _og_image(hut: Hut) -> str | None:
             )
             .get_full_url()
         )
-    except Exception:
+    except Exception:  # preview image is best-effort
         return None
 
 
@@ -145,45 +160,53 @@ def _jsonld(hut: Hut, description: str, page_url: str, image: str | None) -> dic
     return data
 
 
-@router.get("/{slug}/meta", response=HutMetaSchema, operation_id="get_hut_meta")
-@with_language_param()
-def get_hut_meta(
-    request: HttpRequest,
-    response: HttpResponse,
-    slug: str,
-    lang: LanguageParam,
-) -> dict:
-    """Minimal hut metadata for HTML meta-tag injection at the edge."""
-    activate(lang)
-    hut = (
-        Hut.objects.select_related("hut_owner", "hut_type_open", "hut_type_closed")
-        .filter(is_active=True, is_public=True, slug=slug)
-        .first()
+class HutMetaController(ApiController):
+    """Minimal hut metadata for the edge."""
+
+    @modify(
+        operation_id="get_hut_meta",
+        headers=cache_headers(CACHE_TTL),
     )
-    if hut is None:
-        msg = f"Could not find '{slug}'."
-        raise Http404(msg)
+    def get(
+        self,
+        parsed_path: Path[_HutSlugPath],
+        parsed_query: Query[_MetaQuery],
+    ) -> HutMetaSchema:
+        """Minimal hut metadata for HTML meta-tag injection at the edge."""
+        activate(parsed_query.lang)
+        hut = (
+            Hut.objects.select_related("hut_owner", "hut_type_open", "hut_type_closed")
+            .filter(is_active=True, is_public=True, slug=parsed_path.slug)
+            .first()
+        )
+        if hut is None:
+            msg = f"Could not find '{parsed_path.slug}'."
+            raise Http404(msg)
 
-    page_url = f"{settings.FRONTEND_DOMAIN.rstrip('/')}/hut/{hut.slug}"
-    image = _og_image(hut)
-    description = _meta_description(hut, lang)
+        page_url = f"{settings.FRONTEND_DOMAIN.rstrip('/')}/hut/{hut.slug}"
+        image = _og_image(hut)
+        description = _meta_description(hut, parsed_query.lang)
 
-    response["Cache-Control"] = f"public, max-age={CACHE_TTL}"
-    return {
-        "slug": hut.slug,
-        "name": hut.name,
-        "description": description,
-        "lang": lang,
-        "type_standard": hut.hut_type_open.name if hut.hut_type_open else None,
-        "type_reduced": hut.hut_type_closed.name if hut.hut_type_closed else None,
-        "elevation": float(hut.elevation) if hut.elevation else None,
-        "latitude": round(hut.location.y, 6) if hut.location else None,
-        "longitude": round(hut.location.x, 6) if hut.location else None,
-        "capacity_standard": hut.capacity_open,
-        "capacity_reduced": hut.capacity_closed,
-        "owner": hut.hut_owner.name if hut.hut_owner else None,
-        "image": image,
-        "page_url": page_url,
-        "jsonld": _jsonld(hut, description, page_url, image),
-        "modified": hut.modified.isoformat() if hut.modified else None,
-    }
+        return HutMetaSchema(
+            slug=hut.slug,
+            name=hut.name,
+            description=description,
+            lang=parsed_query.lang,
+            type_standard=hut.hut_type_open.name if hut.hut_type_open else None,
+            type_reduced=hut.hut_type_closed.name if hut.hut_type_closed else None,
+            elevation=float(hut.elevation) if hut.elevation else None,
+            latitude=round(hut.location.y, 6) if hut.location else None,
+            longitude=round(hut.location.x, 6) if hut.location else None,
+            capacity_standard=hut.capacity_open,
+            capacity_reduced=hut.capacity_closed,
+            owner=hut.hut_owner.name if hut.hut_owner else None,
+            image=image,
+            page_url=page_url,
+            jsonld=_jsonld(hut, description, page_url, image),
+            modified=hut.modified.isoformat() if hut.modified else None,
+        )
+
+
+paths = [
+    path("<str:slug>/meta", HutMetaController.as_view(), name="get_hut_meta"),
+]

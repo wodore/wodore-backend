@@ -1,51 +1,71 @@
-from ninja import Router
+"""Feedback endpoint on dmr."""
+
+import pydantic
+from dmr import Body, Query, modify
+from dmr.routing import path
+from pydantic import Field
 
 from django.conf import settings
 from django.core.mail import EmailMessage
 
-# from ninja.errors import HttpError
-from django.http import HttpRequest
-
-from server.apps.api.schemas import ResponseSchema
+from server.apps.api.controller import ApiController
 
 from .models import Feedback
-from .schemas import FeedbackCreate
-
-router = Router()
+from .schemas import FeedbackCreate, ResponseSchema
 
 
-@router.post("/", response=ResponseSchema)
-def create_feedback(
-    request: HttpRequest, payload: FeedbackCreate, send_email: bool = True
-) -> ResponseSchema:
-    if payload.urls is None:
-        payload.urls = []
-    if not payload.subject:
-        payload.subject = f"Message from {payload.email}"
-    feedback = Feedback.objects.create(**payload.model_dump())
-    if send_email:
-        email = payload.email
-        subject = f"[Feedback #{feedback.id}]: {payload.subject} ({email})"
-        no_reply = None  # email.replace("@", "AT") + "@wodore.com"
-        urls = payload.urls
-        body = payload.message.replace("\n", "<br/>")
-        text = f"<h2>{payload.subject}</h2>"
-        text += f"<p>{body}</p>"
-        if urls:
-            text += "<h4>URLs:</h4><ul>"
-            for url in urls:
-                text += f'<li><a href="{url}">{url}</a></li>'
-            text += "</ul>"
-        text += f'<p><i>from <a href="mailto:{email}">{email}</a>.</i>'
-        text += f'<hr/><p><a href="{settings.DJANGO_ADMIN_URL}/feedbacks/feedback/{feedback.id}/change/">edit message</a><br/><small>{feedback.created}</small></p>'
-        recipient = [a[1] for a in settings.DJANGO_ADMIN_EMAILS]
-        msg = EmailMessage(
-            subject=subject,
-            body=text,
-            from_email=no_reply,
-            to=recipient,
-            reply_to=[email],
-        )
-        msg.content_subtype = "html"
-        msg.send()
-    return ResponseSchema(message="Thank you for the feedback", id=feedback.id)
+class FeedbackQuery(pydantic.BaseModel):
+    send_email: bool = Field(True, description="Send notification email")
+
+
+class FeedbackController(ApiController):
+    """User feedback submission."""
+
+    @modify(operation_id="create_feedback")
+    def post(
+        self,
+        parsed_body: Body[FeedbackCreate],
+        parsed_query: Query[FeedbackQuery],
+    ) -> ResponseSchema:
+        """Submit feedback (stored, optionally mailed to the admins)."""
+        payload = parsed_body
+        if payload.urls is None:
+            payload.urls = []
+        if not payload.subject:
+            payload.subject = f"Message from {payload.email}"
+        feedback = Feedback.objects.create(**payload.model_dump())
+        if parsed_query.send_email:
+            email = payload.email
+            subject = f"[Feedback #{feedback.id}]: {payload.subject} ({email})"
+            no_reply = None
+            urls = payload.urls
+            body = payload.message.replace("\n", "<br/>")
+            text = f"<h2>{payload.subject}</h2>"
+            text += f"<p>{body}</p>"
+            if urls:
+                text += "<h4>URLs:</h4><ul>"
+                for url in urls:
+                    text += f'<li><a href="{url}">{url}</a></li>'
+                text += "</ul>"
+            text += f'<p><i>from <a href="mailto:{email}">{email}</a>.</i>'
+            text += (
+                f'<hr/><p><a href="{settings.DJANGO_ADMIN_URL}/feedbacks/feedback/'
+                f'{feedback.id}/change/">edit message</a><br/>'
+                f"<small>{feedback.created}</small></p>"
+            )
+            recipient = [a[1] for a in settings.DJANGO_ADMIN_EMAILS]
+            msg = EmailMessage(
+                subject=subject,
+                body=text,
+                from_email=no_reply,
+                to=recipient,
+                reply_to=[email],
+            )
+            msg.content_subtype = "html"
+            msg.send()
+        return ResponseSchema(message="Thank you for the feedback", id=feedback.id)
+
+
+paths = [
+    path("", FeedbackController.as_view(), name="create_feedback"),
+]

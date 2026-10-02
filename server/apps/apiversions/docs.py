@@ -1,45 +1,68 @@
 """Swagger UI with a version switcher (api-docs spec: docs version switching).
 
-Ninja's ``Swagger.render_page`` hardcodes the schema URL to the live
-``openapi.json``; this subclass points it at ``openapi.json?api_version=``
-for non-current versions and renders a small switcher bar listing all
-supported versions (ninja's Swagger template has no native ``urls``
-dropdown).
+The current version renders the live dmr schema inline; older versions
+render the committed snapshot for the pinned version (loaded from
+``openapi/<version>.json``). A small switcher bar lists all supported
+versions — dmr's Swagger template has no native version dropdown either,
+so this stays a custom template.
 """
 
 from __future__ import annotations
 
-import json
-from typing import Any
-
-from ninja.openapi.docs import Swagger, render_template
+import structlog
+from dmr.openapi.views.swagger import SwaggerView
+from dmr.settings import Settings, resolve_setting
+from typing_extensions import override
 
 from django.http import HttpRequest, HttpResponse
+from django.shortcuts import render
 
 from server.apps.apiversions import registry
+from server.apps.apiversions.management.commands.api_snapshot import load_snapshot
+
+logger = structlog.get_logger("apiversions")
 
 
-class VersionedSwagger(Swagger):
-    template = "apiversions/swagger_versioned.html"
+class VersionedSwagger(SwaggerView):
+    """Swagger UI that switches between API contract versions."""
 
-    def render_page(
-        self, request: HttpRequest, api: Any, **kwargs: Any
-    ) -> HttpResponse:
+    template_name = "apiversions/swagger_versioned.html"
+
+    @override
+    def get(self, request: HttpRequest) -> HttpResponse:
         current = registry.current_version()
         version = getattr(request, "api_version", None) or current
-        url = self.get_openapi_url(api, kwargs)
-        if version != current:
-            url = f"{url}?api_version={version}"
-        self.settings["url"] = url
 
-        from ninja.openapi.docs import _csrf_needed  # matching ninja's flow
+        if version == current:
+            schema_data = self.schema.convert(
+                skip_validation=self.skip_validation,
+            )
+        else:
+            snapshot = load_snapshot(version)
+            if snapshot is None:
+                # Serving the live schema here would silently hand an
+                # old-pinned client the NEWEST contract — fail loudly
+                # instead (CI's snapshot check should prevent this).
+                logger.error("api_snapshot_missing", version=version)
+                return HttpResponse(
+                    '{"code": "api_snapshot_missing", "detail": '
+                    f'"No committed OpenAPI snapshot for API version {version!r}."}}',
+                    content_type="application/json",
+                    status=500,
+                )
+            schema_data = snapshot
+            schema_data.setdefault("info", {})["version"] = version
 
-        context = {
-            "swagger_settings": json.dumps(self.settings, indent=1),
-            "api": api,
-            "add_csrf": _csrf_needed(api),
-            "api_versions": sorted(registry.versions(), reverse=True),
-            "current_api_version": current,
-            "selected_api_version": version,
-        }
-        return render_template(request, self.template, self.template_cdn, context)
+        cdn_config = resolve_setting(Settings.openapi_static_cdn)
+        return render(
+            request,
+            self.template_name,
+            context={
+                "title": self.schema.info.title,
+                "schema": schema_data,
+                "swagger_cdn": cdn_config.get("swagger"),
+                "api_versions": sorted(registry.versions(), reverse=True),
+                "selected_api_version": version,
+            },
+            content_type=self.content_type,
+        )

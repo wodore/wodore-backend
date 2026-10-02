@@ -116,6 +116,8 @@ DJANGO_ADMIN_URL = (
 # Application definition:
 
 INSTALLED_APPS: tuple[str, ...] = (
+    # dmr (django-modern-rest): templates/static for the OpenAPI UI views
+    "dmr",
     # my server core:
     "server.core.apps.CoreConfig",
     # my apps:
@@ -144,7 +146,6 @@ INSTALLED_APPS: tuple[str, ...] = (
     # Extension:
     "psqlextra",  # https://django-postgres-extra.readthedocs.io/
     "pgtrigger",  # https://django-pgtrigger.readthedocs.io/
-    "ninja",
     "colorfield",
     "jsoneditor",
     "modeltrans",

@@ -1,57 +1,99 @@
-from ninja import NinjaAPI
+"""/v1 API wiring on django-modern-rest (dmr).
+
+Endpoints are dmr Controllers — plain Django class-based views wired
+with ``dmr.routing.path``. Every JSON route carries ``name=<operation
+id>``; the API-versioning middleware uses the URL name as endpoint
+identity (no framework internals touched, see
+``server.apps/apiversions/middleware.py``).
+"""
+
+from functools import lru_cache
+from typing import Any
+
+from dmr.openapi import build_schema
+from dmr.openapi.config import OpenAPIConfig
+from dmr.routing import Router
+
+from django.http import HttpRequest, HttpResponse
 
 from server.apps.apiversions import registry
-from server.apps.apiversions.docs import VersionedSwagger
-from server.apps.apiversions.renderer import VersionedRenderer
 
-from .parser import MsgSpecParser
-
-# TODO: check csrf: https://django-ninja.dev/reference/csrf/
-api = NinjaAPI(
-    title="Wodore API",
-    version=registry.current_version(),  # OpenAPI info.version = API version
-    description=(
-        "Clients pin a contract version with the `Api-Version` header or the "
-        "`api_version` query parameter (e.g. `2026-10-01`); no version given "
-        "serves the latest. Deprecated versions are announced via "
-        "`Deprecation`/`Sunset` headers; see `/v1/version` for supported "
-        "versions and `/CHANGELOG_API.md` (repo) for the API changelog."
-    ),
-    docs=VersionedSwagger(),
-    renderer=VersionedRenderer(),
-    parser=MsgSpecParser(),
+API_DESCRIPTION = (
+    "Clients pin a contract version with the `Api-Version` header or the "
+    "`api_version` query parameter (e.g. `2026-10-01`); no version given "
+    "serves the latest. Deprecated versions are announced via "
+    "`Deprecation`/`Sunset` headers; see `/v1/version` for supported "
+    "versions and `/CHANGELOG_API.md` (repo) for the API changelog."
 )
 
-root_path = "server.apps"
-
-# Add routers from most specific to least specific to avoid conflicts
-api.add_router(
-    "/geo/images/", "server.apps.geometries.api_images.router", tags=["geoimages"]
-)
-api.add_router("/geo/", "server.apps.geometries.api.router", tags=["geometries"])
-api.add_router("/categories/", "server.apps.categories.api.router", tags=["category"])
-api.add_router("/huts", "server.apps.huts.api.router", tags=["hut"])
-api.add_router("/meteo/", "server.apps.meteo.api.router", tags=["meteo"])
-api.add_router(
-    "/organizations/", "server.apps.organizations.api.router", tags=["organization"]
-)
-api.add_router("/symbols/", "server.apps.symbols.api.router", tags=["symbols"])
-api.add_router("/feedback/", "server.apps.feedbacks.api.router", tags=["feedback"])
-api.add_router("/", "server.apps.utils.api.router", tags=["utils"])
-
-# Versioning wiring — must run after the last add_router (stashes
-# request.ninja_operation per operation and guards endpoint sunsets).
-from server.apps.apiversions.wrap import wrap_api
-
-wrap_api(api)
+# Import order mirrors the URL assembly below (most specific first).
+from server.apps.categories import api as categories_api
+from server.apps.feedbacks import api as feedbacks_api
+from server.apps.geometries import api as geo_api
+from server.apps.geometries import api_images as geo_images_api
+from server.apps.huts.api import paths as huts_paths
+from server.apps.meteo import api as meteo_api
+from server.apps.organizations import api as organizations_api
+from server.apps.symbols import api as symbols_api
+from server.apps.utils import api as utils_api
 
 
-def versioned_openapi_json(request):
-    """Serve the stored snapshot for `?api_version=`; live schema otherwise.
+def build_router() -> Router:
+    """Assemble the /v1 router.
 
-    Shadowing ninja's own openapi.json route from server/urls.py (exact path
-    wins over the /v1/ include) so no ninja internals are overridden.
+    Most specific prefixes first (geo/images before geo), the former
+    ninja ``add_router`` order — preserved for URL resolution parity.
     """
+    router = Router("v1/")
+    # Tags mirror the former per-router tags (OpenAPI grouping).
+    router.include(Router("geo/images/", geo_images_api.paths, tags=["geoimages"]))
+    router.include(Router("geo/", geo_api.paths, tags=["geometries"]))
+    router.include(Router("categories/", categories_api.paths, tags=["category"]))
+    router.include(Router("huts/", huts_paths, tags=["hut"]))
+    router.include(Router("meteo/", meteo_api.paths, tags=["meteo"]))
+    router.include(
+        Router("organizations/", organizations_api.paths, tags=["organization"])
+    )
+    router.include(Router("symbols/", symbols_api.paths, tags=["symbols"]))
+    router.include(Router("feedback/", feedbacks_api.paths, tags=["feedback"]))
+    # Root (version, sitemaps) last — least specific.
+    router.include(Router("", utils_api.paths, tags=["utils"]))
+    return router
+
+
+router = build_router()
+
+urlpatterns: list[Any] = [
+    # The resolver already carries the 'v1/' prefix and the namespace.
+    router.to_urlpatterns(namespace="v1"),
+]
+
+
+@lru_cache(maxsize=1)
+def _cached_schema() -> Any:
+    return build_schema(
+        build_router(),
+        config=OpenAPIConfig(
+            title="Wodore API",
+            version=registry.current_version(),  # refreshed per request below
+            description=API_DESCRIPTION,
+        ),
+    )
+
+
+def get_openapi_schema(request: HttpRequest | None = None) -> dict:
+    """The live OpenAPI document (dict form).
+
+    ``info.version`` always reflects the *current* registry state —
+    tests may register temporary versions after import time.
+    """
+    schema = _cached_schema()
+    schema.info.version = registry.current_version()
+    return schema.convert(skip_validation=True)
+
+
+def versioned_openapi_json(request: HttpRequest) -> HttpResponse:
+    """Serve the stored snapshot for ``?api_version=``; live schema otherwise."""
 
     from django.http import JsonResponse
 
@@ -80,13 +122,8 @@ def versioned_openapi_json(request):
                 status=500,
             )
         return JsonResponse(snapshot, json_dumps_params={"indent": 2}, safe=False)
-    # Live schema — enforce info.version from the registry (the NinjaAPI
-    # ``version`` attribute is frozen at import time; tests may import this
-    # module while a temporary registry entry exists).
-    from ninja.responses import NinjaJSONEncoder
-
-    schema = api.get_openapi_schema()
-    schema["info"]["version"] = registry.current_version()
     return JsonResponse(
-        schema, encoder=NinjaJSONEncoder, safe=False, json_dumps_params={"indent": 2}
+        get_openapi_schema(),
+        safe=False,
+        json_dumps_params={"indent": 2},
     )

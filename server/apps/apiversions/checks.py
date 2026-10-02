@@ -20,9 +20,9 @@ E002 = "apiversions.E002"
 
 
 def _collect_schema_operation_ids() -> set[str]:
-    from server.apps.api.api_v1 import api
+    from server.apps.api.api_v1 import get_openapi_schema
 
-    schema = api.get_openapi_schema()
+    schema = get_openapi_schema()
     ids: set[str] = set()
     for methods in schema.get("paths", {}).values():
         for operation in methods.values():

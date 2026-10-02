@@ -1,24 +1,24 @@
-from typing import Any, Literal
+"""Category endpoints on dmr (tree/list/map + symbol SVG redirects)."""
 
-from ninja import Query, Router
-from ninja.decorators import decorate_view
-from ninja.errors import HttpError
+from http import HTTPStatus
+from typing import Any
 
-from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
-from django.views.decorators.cache import cache_control
+import pydantic
+from dmr import APIError, Path, Query, RedirectTo, modify
+from dmr.routing import path
+from pydantic import Field
 
-from server.apps.translations import LanguageParam, override, with_language_param
+from django.http import HttpRequest
+
+from server.apps.api.controller import ApiController, cache_headers, raise_not_found
+from server.apps.translations import LanguageQuery, override
 
 from .models import Category
 from .schemas import (
-    CategoryListItemSchema,
-    CategoryMapSchema,
-    CategoryTreeSchema,
     MediaUrlModeEnum,
     SymbolVariantEnum,
 )
 
-router = Router()
 CACHE_MAX_AGE = 7 * 24 * 60 * 60  # 7 days in seconds
 
 
@@ -29,8 +29,6 @@ def resolve_media_url(
     if not symbol or mode == MediaUrlModeEnum.no:
         return None
 
-    # Symbol is a ForeignKey to the Symbol model
-    # Get the svg_file from the symbol
     if hasattr(symbol, "svg_file") and symbol.svg_file:
         if mode == MediaUrlModeEnum.relative:
             # Return relative path from media root
@@ -50,8 +48,8 @@ def build_category_dict(
     """Build category dict with common fields."""
     data = {
         "slug": category.slug,
-        "name": category.name_i18n,
-        "description": category.description_i18n or "",
+        "name": category.name_i18n,  # noqa: WPS308  # modeltranslation
+        "description": category.description_i18n or "",  # noqa: WPS308
         "order": category.order,
         "level": category.get_level() - base_level,  # Relative to base
         "parent": category.parent.slug if category.parent else None,
@@ -84,14 +82,12 @@ def get_descendants_tree(
     """Recursively build tree with level limit."""
     current_level = category.get_level() - base_level
 
-    # Check if we should include children
     if max_level is not None and current_level >= max_level:
         # At max level, don't include children
         result = build_category_dict(category, request, media_mode, base_level)
         result["children"] = category.has_children()
         return result
 
-    # Get children
     children_qs = category.children.all()
     if is_active:
         children_qs = children_qs.filter(is_active=True)
@@ -123,15 +119,12 @@ def get_descendants_flat(
 
     if include_self:
         data = build_category_dict(category, request, media_mode, base_level)
-        # Add children boolean
         data["children"] = category.has_children()
         result.append(data)
 
-    # Check level limit
     if max_level is not None and current_level >= max_level:
         return result
 
-    # Get children
     children_qs = category.children.all()
     if is_active:
         children_qs = children_qs.filter(is_active=True)
@@ -163,15 +156,12 @@ def get_descendants_map(
     """Recursively build map with slug keys."""
     current_level = category.get_level() - base_level
 
-    # Check if we should include children
     if max_level is not None and current_level >= max_level:
-        # At max level, don't include children
         result = build_category_dict(category, request, media_mode, base_level)
         result["children"] = {}
         result["children_count"] = 0
         return result
 
-    # Get children
     children_qs = category.children.all()
     if is_active:
         children_qs = children_qs.filter(is_active=True)
@@ -188,248 +178,259 @@ def get_descendants_map(
     return result
 
 
-@router.get(
-    "/tree/{path:parent_slug}",
-    response=list[CategoryTreeSchema],
-    exclude_unset=True,
-    operation_id="get_category_tree",
-)
-@with_language_param("lang")
-def get_category_tree(
-    request: HttpRequest,
-    lang: LanguageParam,
-    parent_slug: str | Literal["root"],
-    level: int | None = Query(
+def _resolve_parent_or_raise(parent_slug: str, is_active: bool) -> Category:
+    """Resolve a (possibly dot-notation) parent slug or raise 400/404."""
+    category, paths = Category.objects.find_by_slug(parent_slug, is_active)
+
+    if category is None:
+        if paths:
+            raise APIError(
+                {
+                    "code": "ambiguous_category",
+                    "detail": f"Slug '{parent_slug}' is not unique. "
+                    f"Use one of: {', '.join(paths)}",
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        raise_not_found(f"Category '{parent_slug}' not found")
+    return category  # type: ignore[return-value]
+
+
+class _CategoryQuery(LanguageQuery):
+    """Shared query parameters of the category endpoints."""
+
+    level: int | None = Field(
         None,
-        description="Maximum depth level relative to request slug, for the last level children are set to a boolean",
-    ),
-    is_active: bool = Query(True, description="Only include active categories"),
-    media_mode: MediaUrlModeEnum = Query(
+        description="Maximum depth level relative to request slug",
+    )
+    is_active: bool = Field(True, description="Only include active categories")
+    media_mode: MediaUrlModeEnum = Field(  # type: ignore[assignment]
         MediaUrlModeEnum.absolute,
-        description="How to return media URLs: 'no' (exclude), 'relative' (relative paths), 'absolute' (full URLs)",
-    ),
-) -> Any:
-    """
-    Get category hierarchy as a tree structure.
+        description=(
+            "How to return media URLs: 'no' (exclude), 'relative' "
+            "(relative paths), 'absolute' (full URLs)"
+        ),
+    )
 
-    Supports dot or slash-notation slugs with max one parent (e.g., `map/transport`).
-    The parent is optional but if slug is ambiguous, returns 400 error with available paths.
-    Use `root` to return all root categories.
-    Always excludes the root from results (returns children).
-    """
-    with override(lang):
-        if parent_slug != "root":
-            # Resolve slug (handles dot notation and ambiguity)
-            category, paths = Category.objects.find_by_slug(parent_slug, is_active)
 
-            if category is None:
-                if paths:
-                    # Ambiguous slug
-                    raise HttpError(
-                        400,
-                        f"Slug '{parent_slug}' is not unique. Use one of: {', '.join(paths)}",
-                    )
-                else:
-                    # Not found
-                    raise HttpError(404, f"Category '{parent_slug}' not found") or False
-            # Return only children of found category
-            children_qs = category.children.all()
-            if is_active:
-                children_qs = children_qs.filter(is_active=True)
+class _CategoryTreeQuery(_CategoryQuery):
+    """Tree endpoint: children become booleans at the last level."""
 
-            # Base level is the found category's level
-            base_level = category.get_level()
+    level: int | None = Field(
+        None,
+        description=(
+            "Maximum depth level relative to request slug, for the last "
+            "level children are set to a boolean"
+        ),
+    )
 
-            return [
-                get_descendants_tree(
-                    child, request, level, is_active, media_mode, base_level + 1
+
+class _ParentSlugPath(pydantic.BaseModel):
+    """Parent slug (path converter: dotted/slash notation or ``root``)."""
+
+    parent_slug: str = Field(description="Parent slug, dotted path or 'root'")
+
+
+class CategoryTreeController(ApiController):
+    """Category hierarchy as a tree structure."""
+
+    @modify(operation_id="get_category_tree")
+    def get(
+        self,
+        parsed_path: Path[_ParentSlugPath],
+        parsed_query: Query[_CategoryTreeQuery],
+    ) -> list[dict]:
+        """Get category hierarchy as a tree structure.
+
+        Supports dot or slash-notation slugs with max one parent
+        (e.g., `map/transport`). The parent is optional but if slug is
+        ambiguous, returns 400 error with available paths. Use `root` to
+        return all root categories. Always excludes the root from results
+        (returns children).
+        """
+        request = self.request
+        query = parsed_query
+        with override(query.lang):
+            if parsed_path.parent_slug != "root":
+                category = _resolve_parent_or_raise(
+                    parsed_path.parent_slug, query.is_active
                 )
-                for child in children_qs.order_by("order", "slug")
-            ]
-        else:
-            # No slug - return all roots
+                children_qs = category.children.all()
+                if query.is_active:
+                    children_qs = children_qs.filter(is_active=True)
+
+                base_level = category.get_level()
+
+                return [
+                    get_descendants_tree(
+                        child,
+                        request,
+                        query.level,
+                        query.is_active,
+                        query.media_mode,
+                        base_level + 1,
+                    )
+                    for child in children_qs.order_by("order", "slug")
+                ]
+
             qs = Category.objects.select_related(
                 "symbol_detailed",
                 "symbol_simple",
                 "symbol_mono",
             ).prefetch_related("children")
-            if is_active:
+            if query.is_active:
                 qs = qs.active()
 
             roots = qs.roots().order_by("order", "slug")
             return [
-                get_descendants_tree(root, request, level, is_active, media_mode, 0)
+                get_descendants_tree(
+                    root, request, query.level, query.is_active, query.media_mode, 0
+                )
                 for root in roots
             ]
 
 
-@router.get(
-    "/list/{path:parent_slug}",
-    response=list[CategoryListItemSchema],
-    exclude_unset=True,
-    operation_id="get_category_list_all",
-)
-@with_language_param("lang")
-def get_category_list(
-    request: HttpRequest,
-    lang: LanguageParam,
-    parent_slug: str | Literal["root"],
-    level: int | None = Query(
-        None, description="Maximum depth level relative to request slug"
-    ),
-    is_active: bool = Query(True, description="Only include active categories"),
-    media_mode: MediaUrlModeEnum = Query(
-        MediaUrlModeEnum.absolute,
-        description="How to return media URLs: 'no' (exclude), 'relative' (relative paths), 'absolute' (full URLs)",
-    ),
-) -> Any:
-    """
-    Get flat list of categories.
+class CategoryListController(ApiController):
+    """Flat list of categories."""
 
-    Supports dot-notation slugs with max one parent (e.g., 'accommodation.hut').
-    If slug is ambiguous, returns 400 error with available paths.
-    If slug is omitted, returns all categories.
-    Always excludes the root from results (returns children).
-    """
-    with override(lang):
-        if parent_slug != "root":
-            # Resolve slug
-            category, paths = Category.objects.find_by_slug(parent_slug, is_active)
+    @modify(operation_id="get_category_list_all")
+    def get(
+        self,
+        parsed_path: Path[_ParentSlugPath],
+        parsed_query: Query[_CategoryQuery],
+    ) -> list[dict]:
+        """Get flat list of categories.
 
-            if category is None:
-                if paths:
-                    raise HttpError(
-                        400,
-                        f"Slug '{parent_slug}' is not unique. Use one of: {', '.join(paths)}",
-                    )
-                else:
-                    raise HttpError(404, f"Category '{parent_slug}' not found")
+        Supports dot-notation slugs with max one parent
+        (e.g., 'accommodation.hut'). If slug is ambiguous, returns 400
+        error with available paths. If slug is omitted, returns all
+        categories. Always excludes the root from results (returns
+        children).
+        """
+        request = self.request
+        query = parsed_query
+        with override(query.lang):
+            if parsed_path.parent_slug != "root":
+                category = _resolve_parent_or_raise(
+                    parsed_path.parent_slug, query.is_active
+                )
+                base_level = category.get_level()
+                return get_descendants_flat(
+                    category,
+                    request,
+                    query.level,
+                    query.is_active,
+                    query.media_mode,
+                    base_level,
+                    include_self=False,
+                )
 
-            # Get flat list of descendants (exclude root)
-            base_level = category.get_level()
-            return get_descendants_flat(
-                category,
-                request,
-                level,
-                is_active,
-                media_mode,
-                base_level,
-                include_self=False,
-            )
-        else:
-            # No slug - return all categories as flat list
             qs = Category.objects.all()
-            if is_active:
+            if query.is_active:
                 qs = qs.active()
 
-            # Get all categories
             categories = qs.order_by("order", "slug")
 
             result = []
             for cat in categories:
-                if level is None or cat.get_level() <= level:
-                    data = build_category_dict(cat, request, media_mode, 0)
+                if query.level is None or cat.get_level() <= query.level:
+                    data = build_category_dict(cat, request, query.media_mode, 0)
                     data["children"] = cat.has_children()
                     result.append(data)
 
             return result
 
 
-@router.get(
-    "/map/{path:parent_slug}",
-    response=dict[str, CategoryMapSchema],
-    exclude_unset=True,
-    operation_id="get_category_map_all",
-)
-@with_language_param("lang")
-def get_category_map(
-    request: HttpRequest,
-    lang: LanguageParam,
-    parent_slug: str | Literal["root"],
-    level: int | None = Query(
-        None, description="Maximum depth level relative to request slug"
-    ),
-    is_active: bool = Query(True, description="Only include active categories"),
-    media_mode: MediaUrlModeEnum = Query(
-        MediaUrlModeEnum.absolute,
-        description="How to return media URLs: 'no' (exclude), 'relative' (relative paths), 'absolute' (full URLs)",
-    ),
-) -> Any:
-    """
-    Get category hierarchy as a nested dictionary mapping.
+class CategoryMapController(ApiController):
+    """Category hierarchy as a nested dictionary mapping."""
 
-    Keys are category slugs, values contain category data with nested 'children' dict.
+    @modify(operation_id="get_category_map_all")
+    def get(
+        self,
+        parsed_path: Path[_ParentSlugPath],
+        parsed_query: Query[_CategoryQuery],
+    ) -> dict[str, dict]:
+        """Get category hierarchy as a nested dictionary mapping.
 
-    Supports dot-notation slugs with max one parent (e.g., 'accommodation.hut').
-    If slug is ambiguous, returns 400 error with available paths.
-    If slug is omitted, returns all root categories as a map.
-    Always excludes the root from results (returns children).
-    """
-    with override(lang):
-        if parent_slug != "root":
-            # Resolve slug
-            category, paths = Category.objects.find_by_slug(parent_slug, is_active)
-
-            if category is None:
-                if paths:
-                    raise HttpError(
-                        400,
-                        f"Slug '{parent_slug}' is not unique. Use one of: {', '.join(paths)}",
-                    )
-                else:
-                    raise HttpError(404, f"Category '{parent_slug}' not found")
-
-            # Return only children as map (exclude root)
-            children_qs = category.children.all()
-            if is_active:
-                children_qs = children_qs.filter(is_active=True)
-
-            base_level = category.get_level()
-            result = {}
-            for child in children_qs.order_by("order", "slug"):
-                result[child.slug] = get_descendants_map(
-                    child, request, level, is_active, media_mode, base_level + 1
+        Keys are category slugs, values contain category data with
+        nested 'children' dict. Supports dot-notation slugs with max one
+        parent (e.g., 'accommodation.hut'). If slug is ambiguous, returns
+        400 error with available paths. Always excludes the root from
+        results (returns children).
+        """
+        request = self.request
+        query = parsed_query
+        with override(query.lang):
+            if parsed_path.parent_slug != "root":
+                category = _resolve_parent_or_raise(
+                    parsed_path.parent_slug, query.is_active
                 )
-            return result
-        else:
-            # No slug - return all roots as map
+                children_qs = category.children.all()
+                if query.is_active:
+                    children_qs = children_qs.filter(is_active=True)
+
+                base_level = category.get_level()
+                result = {}
+                for child in children_qs.order_by("order", "slug"):
+                    result[child.slug] = get_descendants_map(
+                        child,
+                        request,
+                        query.level,
+                        query.is_active,
+                        query.media_mode,
+                        base_level + 1,
+                    )
+                return result
+
             qs = Category.objects.select_related(
                 "symbol_detailed",
                 "symbol_simple",
                 "symbol_mono",
             ).prefetch_related("children")
-            if is_active:
+            if query.is_active:
                 qs = qs.active()
 
             roots = qs.roots().order_by("order", "slug")
             result = {}
             for root in roots:
                 result[root.slug] = get_descendants_map(
-                    root, request, level, is_active, media_mode, 0
+                    root, request, query.level, query.is_active, query.media_mode, 0
                 )
             return result
 
 
-def _get_category_symbol_redirect(
+class _SymbolSvgPath(pydantic.BaseModel):
+    """Path parameters for the category symbol redirect."""
+
+    variant: SymbolVariantEnum
+    slug: str
+
+
+class _SymbolSvgParentPath(_SymbolSvgPath):
+    """Variant + parent + slug (dotted category under an explicit parent)."""
+
+    parent: str
+
+
+def _category_symbol_redirect(
     variant: SymbolVariantEnum,
     slug: str,
-) -> HttpResponseRedirect:
-    """Helper function to get category symbol redirect."""
-    # Resolve slug (handles dot notation and ambiguity)
+):
+    """Resolve the symbol URL for a category or raise 400/404."""
     category, paths = Category.objects.find_by_slug(slug, is_active=True)
 
     if category is None:
         if paths:
-            # Ambiguous slug
-            raise HttpError(
-                400,
-                f"Slug '{slug}' is not unique. Use one of: {', '.join(paths)}",
+            raise APIError(
+                {
+                    "code": "ambiguous_category",
+                    "detail": f"Slug '{slug}' is not unique. "
+                    f"Use one of: {', '.join(paths)}",
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
             )
-        else:
-            # Not found
-            raise HttpError(404, f"Category '{slug}' not found")
+        raise_not_found(f"Category '{slug}' not found")
 
-    # Get the symbol based on variant
     if variant == SymbolVariantEnum.detailed:
         symbol = category.symbol_detailed
     elif variant == SymbolVariantEnum.simple:
@@ -438,55 +439,77 @@ def _get_category_symbol_redirect(
         symbol = category.symbol_mono
 
     if symbol is None:
-        raise HttpError(404, f"No {variant} symbol found for category '{slug}'")
+        raise_not_found(f"No {variant} symbol found for category {slug!r}")
 
     if not symbol.svg_file:
-        raise HttpError(404, f"SVG file not found for symbol {symbol.slug}")
+        raise_not_found(f"SVG file not found for symbol {symbol.slug}")
 
-    return HttpResponseRedirect(symbol.svg_file.url)
-
-
-@router.get(
-    "symbol/{variant}/{parent}/{slug}.svg",
-    operation_id="get_category_symbol_svg_with_parent",
-)
-@decorate_view(cache_control(max_age=CACHE_MAX_AGE))
-def get_category_symbol_svg_with_parent(
-    request: HttpRequest,
-    response: HttpResponse,
-    variant: SymbolVariantEnum,
-    parent: str,
-    slug: str,
-) -> HttpResponseRedirect:
-    """
-    Redirect to the SVG icon for a category with explicit parent.
-
-    Variant options: detailed, simple, mono
-    Example: /v1/categories/symbol/detailed/map/transport.svg
-
-    If the category doesn't have a symbol for the variant, returns 404.
-    """
-    full_slug = f"{parent}.{slug}"
-    return _get_category_symbol_redirect(variant, full_slug)
+    return symbol.svg_file.url
 
 
-@router.get(
-    "symbol/{variant}/{slug}.svg",
-    operation_id="get_category_symbol_svg",
-)
-@decorate_view(cache_control(max_age=CACHE_MAX_AGE))
-def get_category_symbol_svg(
-    request: HttpRequest,
-    response: HttpResponse,
-    variant: SymbolVariantEnum,
-    slug: str,
-) -> HttpResponseRedirect:
-    """
-    Redirect to the SVG icon for a category.
+class CategorySymbolSvgParentController(ApiController):
+    """Redirect to the SVG icon for a category with explicit parent."""
 
-    Variant options: detailed, simple, mono
-    Slug can be a simple slug (e.g., 'transport') or root category
+    @modify(
+        operation_id="get_category_symbol_svg_with_parent",
+        headers=cache_headers(CACHE_MAX_AGE),
+    )
+    def get(self, parsed_path: Path[_SymbolSvgParentPath]) -> None:
+        """Redirect to the SVG icon for a category with explicit parent.
 
-    If the category doesn't have a symbol for the variant, returns 404.
-    """
-    return _get_category_symbol_redirect(variant, slug)
+        Variant options: detailed, simple, mono
+        Example: /v1/categories/symbol/detailed/map/transport.svg
+
+        If the category doesn't have a symbol for the variant, returns 404.
+        """
+        full_slug = f"{parsed_path.parent}.{parsed_path.slug}"
+        url = _category_symbol_redirect(parsed_path.variant, full_slug)
+        raise RedirectTo(url, status_code=HTTPStatus.FOUND)
+
+
+class CategorySymbolSvgController(ApiController):
+    """Redirect to the SVG icon for a category."""
+
+    @modify(
+        operation_id="get_category_symbol_svg",
+        headers=cache_headers(CACHE_MAX_AGE),
+    )
+    def get(self, parsed_path: Path[_SymbolSvgPath]) -> None:
+        """Redirect to the SVG icon for a category.
+
+        Variant options: detailed, simple, mono
+        Slug can be a simple slug (e.g., 'transport') or root category
+
+        If the category doesn't have a symbol for the variant, returns 404.
+        """
+        url = _category_symbol_redirect(parsed_path.variant, parsed_path.slug)
+        raise RedirectTo(url, status_code=HTTPStatus.FOUND)
+
+
+paths: list[Any] = [
+    path(
+        "tree/<path:parent_slug>",
+        CategoryTreeController.as_view(),
+        name="get_category_tree",
+    ),
+    path(
+        "list/<path:parent_slug>",
+        CategoryListController.as_view(),
+        name="get_category_list_all",
+    ),
+    path(
+        "map/<path:parent_slug>",
+        CategoryMapController.as_view(),
+        name="get_category_map_all",
+    ),
+    path(
+        "symbol/<str:variant>/<str:parent>/<str:slug>.svg",
+        CategorySymbolSvgParentController.as_view(),
+        name="get_category_symbol_svg_with_parent",
+    ),
+    path(
+        "symbol/<str:variant>/<str:slug>.svg",
+        CategorySymbolSvgController.as_view(),
+        name="get_category_symbol_svg",
+    ),
+]

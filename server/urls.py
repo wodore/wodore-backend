@@ -20,7 +20,7 @@ from django.urls import include, path
 from django.views.generic import TemplateView
 
 from .apps.api import api_v1 as api_v1_module
-from .apps.api.api_v1 import api as api_v1
+from .apps.apiversions.docs import VersionedSwagger
 from .apps.local_auth import account_views
 from .apps.main import urls as django_admin_urls
 from .apps.main import views as main_views
@@ -50,12 +50,13 @@ urlpatterns = [
     # path("", include("admin_volt.urls")), # admin-volt
     path("admin/doc/", include(admindocs_urls)),
     path("admin/", admin.site.urls),
-    # Api:
+    # Api (django-modern-rest):
     # Version-addressable OpenAPI schema — exact path BEFORE the /v1/
-    # include so it shadows ninja's built-in openapi.json route (serves
-    # stored snapshots for ?api_version=, live schema otherwise).
+    # include (serves stored snapshots for ?api_version=, live schema
+    # otherwise).
     path("v1/openapi.json", api_v1_module.versioned_openapi_json),
-    path("v1/", api_v1.urls),  # type: ignore
+    path("v1/docs", VersionedSwagger.as_view(api_v1_module._cached_schema())),
+    *api_v1_module.urlpatterns,
     # Text and xml static files:
     path("robots.txt", main_views.robots_txt),
     path("llms.txt", main_views.llms_txt),

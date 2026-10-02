@@ -9,7 +9,7 @@ from ._hut import (
     ImageInfoSchema,
     LicenseInfoSchema,
 )
-from ._hut_type import HutTypeDetailSchema, HutTypeSchema
+from ._hut_type import HutTypeSchema
 
 
 # from ..ref import RefDatabase, RefCreate, HutRefLink, HutRefLinkBase

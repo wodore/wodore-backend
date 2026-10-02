@@ -1,9 +1,6 @@
 from enum import Enum
 
-from ninja import ModelSchema
 from pydantic import BaseModel
-
-from .models import WeatherCode
 
 
 class IncludeModeEnum(str, Enum):
@@ -27,24 +24,6 @@ class DayTimeEnum(str, Enum):
 
     day = "day"
     night = "night"
-
-
-class WeatherCodeSchema(ModelSchema):
-    """Schema for WeatherCode model - returns all fields."""
-
-    class Meta:
-        model = WeatherCode
-        fields = "__all__"
-        fields_optional = "__all__"
-
-
-class WeatherCodeOptional(ModelSchema):
-    """Schema for WeatherCode model with all fields optional."""
-
-    class Meta:
-        model = WeatherCode
-        fields = "__all__"
-        fields_optional = "__all__"
 
 
 class SymbolURLSchema(BaseModel):

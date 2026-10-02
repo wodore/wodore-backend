@@ -1,9 +1,24 @@
-"""API version middleware: resolution, lifecycle headers, caching hints.
+"""API version middleware: resolution, lifecycle headers, transforms.
 
-Resolution (``Api-Version`` header → ``api_version`` query → latest) and the
-``Deprecation``/``Sunset``/``Link``/``Vary`` headers live here. The
-middleware never parses response bodies; response shaping happens in the
-renderer / explicit transform helper.
+One middleware does everything the former trio
+(``ApiVersionMiddleware`` + ninja ``wrap_api`` + ``VersionedRenderer``)
+did — without touching any framework internals:
+
+* Resolution (``Api-Version`` header → ``api_version`` query → latest)
+  and the ``Deprecation``/``Sunset``/``Link``/``Vary`` headers.
+* Endpoint-identity: dmr endpoints are real Django views with URL
+  names, so ``request.resolver_match.url_name`` *is* the operation id
+  after routing — no operation wrapping needed (the old ``wrap.py``
+  monkey-patched ``operation.run`` on ninja's bound routers for this).
+* Response downgrades for pinned older versions: JSON responses are
+  transformed in place (decode → transform → encode). Direct-write
+  GeoJSON endpoints no longer need to call a transform helper — the
+  middleware covers every endpoint uniformly.
+
+Endpoint *sunset enforcement* (410 past the sunset date) moved from
+``wrap_api`` into the affected handlers via
+:func:`server.apps.apiversions.registry.guard_endpoint_sunset` — two
+bookings endpoints, explicit instead of invisible wrapping.
 
 Scope (design.md D3): everything under ``/v1/`` except:
 
@@ -22,12 +37,14 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
+import msgspec
 import structlog
 
 from django.http import HttpRequest, HttpResponse
 from django.utils.cache import patch_vary_headers
 
 from . import registry
+from .transforms import downgrade_response
 
 logger = structlog.get_logger("apiversions")
 
@@ -128,9 +145,30 @@ class ApiVersionMiddleware:
 
         response = self.get_response(request)
 
-        if path not in SCHEMA_PATHS:
-            self._add_version_headers(request, response)
+        if path in SCHEMA_PATHS:
+            return response
+
+        self._downgrade_response(request, response)
+        self._add_version_headers(request, response)
         return response
+
+    def _downgrade_response(self, request: HttpRequest, response: HttpResponse) -> None:
+        """Transform JSON bodies down to the pinned older version."""
+        version = getattr(request, "api_version", None)
+        if version is None or version == registry.current_version():
+            return
+        if response.status_code >= 400:
+            return  # error bodies keep the latest shape (unversioned)
+        content_type = response.headers.get("Content-Type", "")
+        if not content_type.startswith("application/json"):
+            return
+        match = getattr(request, "resolver_match", None)
+        op_id = getattr(match, "url_name", None) if match else None
+        if not op_id:
+            return
+        data = msgspec.json.decode(response.content)
+        data = downgrade_response(version, op_id, data)
+        response.content = msgspec.json.encode(data)
 
     def _add_version_headers(
         self, request: HttpRequest, response: HttpResponse
@@ -160,11 +198,11 @@ class ApiVersionMiddleware:
 
         # Endpoint-level deprecation (e.g. deprecated bookings endpoints),
         # only for headers not already set by the version-level block.
-        operation = getattr(request, "ninja_operation", None)
-        if operation is not None:
-            from .transforms import effective_operation_id
-
-            dep = registry.ENDPOINT_DEPRECATIONS.get(effective_operation_id(operation))
+        # Endpoint identity = URL name (dmr paths are named by operation id).
+        match = getattr(request, "resolver_match", None)
+        op_id = getattr(match, "url_name", None) if match else None
+        if op_id is not None:
+            dep = registry.ENDPOINT_DEPRECATIONS.get(op_id)
             if dep is not None and datetime.now(tz=UTC).date() <= dep.sunset:
                 response.setdefault("Deprecation", f"@{dep.announced_unix}")
                 response.setdefault(

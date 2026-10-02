@@ -1,7 +1,7 @@
-from ninja import ModelSchema
-from pydantic import BaseModel
+"""Pydantic API schemas for symbols (plain models, dmr-compatible)."""
 
-from .models import Symbol
+import pydantic
+from pydantic import BaseModel, field_validator
 
 
 class SymbolURLSchema(BaseModel):
@@ -12,26 +12,25 @@ class SymbolURLSchema(BaseModel):
     mono: str | None = None
 
 
-class SymbolSchema(ModelSchema):
-    """Schema for Symbol model - returns all fields."""
+class SymbolOptional(pydantic.BaseModel):
+    """Symbol with every field optional (include/exclude base)."""
 
-    class Meta:
-        model = Symbol
-        fields = Symbol.get_fields_all()
-        fields_optional = Symbol.get_fields_all()
+    model_config = pydantic.ConfigDict(from_attributes=True)
 
+    id: str | None = None
+    slug: str | None = None
+    style: str | None = None
+    svg_file: str | None = None
+    search_text: str | None = None
+    license: int | None = None
+    author: str | None = None
+    author_url: str | None = None
+    source_url: str | None = None
+    source_org: int | None = None
+    is_active: bool | None = None
 
-class SymbolOptional(ModelSchema):
-    """Schema for Symbol model with all fields optional."""
-
-    class Meta:
-        model = Symbol
-        fields = Symbol.get_fields_all()
-        fields_optional = Symbol.get_fields_all()
-
-
-# TODO: Add SymbolTagSchema if tags are implemented in the future
-# class SymbolTagSchema(ModelSchema):
-#     class Meta:
-#         model = SymbolTag
-#         fields = "__all__"
+    @field_validator("svg_file", mode="before")
+    @classmethod
+    def _svg_to_str(cls, value: object) -> str | None:
+        """ImageFieldFile -> path string (former ninja ModelSchema coercion)."""
+        return str(value) if value else None
