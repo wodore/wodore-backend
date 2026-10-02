@@ -1,0 +1,1 @@
+{"event": "local_auth: session ended (end_session)", "timestamp": "2026-10-02T09:21:52.497991Z", "level": "info", "logger": "server.apps.local_auth.views", "filename": "views.py", "lineno": 30, "func_name": "end_session", "module": "views"}
