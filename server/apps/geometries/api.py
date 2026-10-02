@@ -7,6 +7,8 @@ from dmr import Path, Query, modify
 from dmr.routing import path
 from pydantic import Field
 
+from django.views.decorators.cache import cache_page
+
 from server.apps.api.controller import ApiController, cache_headers, raise_not_found
 from server.apps.translations import LanguageQuery
 
@@ -758,17 +760,27 @@ class AmenityController(ApiController):
         return AmenitySchema(**result)
 
 
+# Server-side page caching parity with the former ninja decorators
+# (cache_page 300/60/60/60 + the per-endpoint Cache-Control headers).
 paths = [
     path(
         "places/overlays",
-        OverlayCategoriesController.as_view(),
+        cache_page(300)(OverlayCategoriesController.as_view()),
         name="get_overlay_categories",
     ),
-    path("places/search", GeoSearchController.as_view(), name="search_geoplaces"),
-    path("places/nearby", GeoNearbyController.as_view(), name="nearby_geoplaces"),
+    path(
+        "places/search",
+        cache_page(60)(GeoSearchController.as_view()),
+        name="search_geoplaces",
+    ),
+    path(
+        "places/nearby",
+        cache_page(60)(GeoNearbyController.as_view()),
+        name="nearby_geoplaces",
+    ),
     path(
         "places/amenity/<int:place_id>",
-        AmenityController.as_view(),
+        cache_page(60)(AmenityController.as_view()),
         name="get_amenity",
     ),
 ]
