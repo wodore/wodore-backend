@@ -34,6 +34,14 @@ def init_huts_db(
     hut_counter = 0
     fails = []
     for hut_counter, hut_src in enumerate(hut_sources, start=1):
+        if hut_src.location is None:
+            failed_huts += 1
+            click.echo(f"  Hut {hut_counter!s: <3} '{hut_src.name}'", nl=False)
+            click.secho(
+                f"  skipped (no location — review status: {hut_src.review_status})",
+                fg="yellow",
+            )
+            continue
         _name = f"  Hut {hut_counter!s: <3} '{hut_src.name}'"
         click.echo(f"{_name: <48}", nl=False)
         try:
