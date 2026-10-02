@@ -1,1 +1,0 @@
-{"id":"bc4d1516e02a6d22f69bcc14435c6eff.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.geometries.test_provider_image_sources.TestCreateImageResultSources#test_large_falls_back_to_original_without_thumbs","name":"test_large_falls_back_to_original_without_thumbs","status":"passed","testResultsByEnv":{"default":"72236352563aa32c3fd0bc154b68e8ff"}}

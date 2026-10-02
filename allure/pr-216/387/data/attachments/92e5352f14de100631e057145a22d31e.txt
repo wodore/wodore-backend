@@ -1,3 +1,0 @@
-Registry: 1 version(s)
-  2026-10-01  UNRELEASED (current)
-OK: at most one unreleased version (the current one).
