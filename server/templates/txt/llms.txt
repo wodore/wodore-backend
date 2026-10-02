@@ -1,8 +1,8 @@
 # Wodore
 
-> Wodore is the hut directory of the Swiss Alps: an interactive map with
-> opening seasons, capacities, availability and booking sources for the
-> mountain huts, bivouacs and shelters of Switzerland.
+> Wodore is the international hut directory: an interactive map with
+> opening seasons, capacities, availability and booking sources for
+> mountain huts, bivouacs and shelters.
 
 Web app: {{ frontend_url }}
 Hut pages: {{ frontend_url }}/hut/{slug}
