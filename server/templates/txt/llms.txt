@@ -26,9 +26,11 @@ Hut pages: {{ frontend_url }}/hut/{slug}
 ## Finding huts
 
 - By name (fuzzy, all languages): {{ api_base }}/v1/huts/search?q=rotond
-- By coordinates: all huts as GeoJSON points (lon/lat) —
-  {{ api_base }}/v1/huts/huts.geojson (paginate with offset and limit,
-  filter to your area client-side)
+- By map area: filter the hut/place listings to a bounding box with
+  bbox=minLon,minLat,maxLon,maxLat (WGS84) — e.g.
+  {{ api_base }}/v1/huts/huts.geojson?bbox=7.6,45.9,8.1,46.2
+  (accepted on hut search, hut list, both GeoJSON dumps and place
+  search; paginate with offset and limit)
 
 ## Live availability
 

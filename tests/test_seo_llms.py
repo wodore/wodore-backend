@@ -31,6 +31,7 @@ class TestLlmsTxt:
         # Discovery pointers: name search, coordinates, live availability.
         assert "/v1/huts/search?q=rotond" in body
         assert "/v1/huts/huts.geojson" in body
+        assert "/v1/huts/huts.geojson?bbox=7.6,45.9,8.1,46.2" in body
         assert "/v1/huts/{slug}/availability/today?days=7" in body
         assert "/v1/huts/availability/weekend.geojson" in body
 
