@@ -28,6 +28,12 @@ class TestLlmsTxt:
         assert "https://wodore.com/hut/{slug}.md" in body
         assert "https://wodore.com/sitemap.xml" in body
         assert "OpenAPI" in body
+        # Discovery pointers: name search, coordinates, live availability.
+        assert "/v1/huts/search?q=rotond" in body
+        assert "/v1/huts/huts.geojson" in body
+        assert "/v1/huts/huts.geojson?bbox=7.6,45.9,8.1,46.2" in body
+        assert "/v1/huts/{slug}/availability/today?days=7" in body
+        assert "/v1/huts/availability/weekend.geojson" in body
 
     def test_llms_txt_uses_request_host(self, client):
         response = client.get("/llms.txt")
