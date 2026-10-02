@@ -28,59 +28,6 @@ from ._router import router
 
 CACHE_TTL = 60 * 60
 
-# Type labels by category slug, per language, sentence-initial form
-# (mid-sentence callers lowercase the first character). ``selfhut``
-# always names the word "Hütte" explicitly — unattended huts often lack
-# it in their name (Abri, Bivacco, …), all other types carry a type word
-# in the name already.
-_TYPE_LABELS: dict[str, dict[str, str]] = {
-    "hut": {
-        "de": "Hütte",
-        "en": "staffed hut",
-        "fr": "cabane gardée",
-        "it": "rifugio gestito",
-    },
-    "selfhut": {
-        "de": "Unbewachte Hütte",
-        "en": "unstaffed hut",
-        "fr": "cabane non gardée",
-        "it": "rifugio non gestito",
-    },
-    "shelter": {
-        "de": "Einfacher Unterstand",
-        "en": "simple shelter",
-        "fr": "abri sommaire",
-        "it": "ricovero semplice",
-    },
-    "bhotel": {
-        "de": "Einfaches Hotel",
-        "en": "simple hotel",
-        "fr": "hôtel simple",
-        "it": "albergo semplice",
-    },
-    "bivouac": {"de": "Biwak", "en": "bivouac", "fr": "bivouac", "it": "bivacco"},
-    "hotel": {"de": "Hotel", "en": "hotel", "fr": "hôtel", "it": "hotel"},
-    "hostel": {
-        "de": "Jugendherberge",
-        "en": "youth hostel",
-        "fr": "auberge de jeunesse",
-        "it": "ostello",
-    },
-    "alp": {"de": "Alp", "en": "alpine farm", "fr": "alpage", "it": "alpe"},
-    "camping": {
-        "de": "Campingplatz",
-        "en": "campsite",
-        "fr": "camping",
-        "it": "campeggio",
-    },
-    "resta": {
-        "de": "Restaurant",
-        "en": "restaurant",
-        "fr": "restaurant",
-        "it": "ristorante",
-    },
-}
-
 # Sentence glue per language: only facts that exist go in — capacity,
 # elevation, reduced operation, closure. Never opening times or
 # availability (not part of this endpoint's data).
@@ -132,17 +79,14 @@ def _cap_first(label: str) -> str:
     return label[0].upper() + label[1:] if label else label
 
 
-def _lower_first(label: str) -> str:
-    return label[0].lower() + label[1:] if label else label
-
-
 def _type_sentence(
     slug: str | None, name: str | None, lang: str, cap: int | None, ele: float | None
 ) -> str | None:
-    """First sentence: type + capacity + elevation, from mapped labels.
+    """First sentence: type + capacity + elevation. The type word is the
+    category's ``name`` verbatim (translation-aware: whatever the active
+    language resolves to, German today) — nothing is invented here.
     Returns ``None`` for closed/unknown types (handled separately)."""
-    labels = _TYPE_LABELS.get(slug or "", {}) if slug else {}
-    label = labels.get(lang) or (name if name and slug != "unknown" else None)
+    label = name if name and slug not in ("unknown", None) else None
     if not label:
         return None
     t = _SENTENCES[lang]
@@ -188,17 +132,13 @@ def _meta_description(hut: Hut, lang: str) -> str:
             sentences.append(first)
         elif ele:
             sentences.append(t["located"].format(ele=int(ele)))
-        # Reduced operation (winter shelter): only when a type exists.
-        if closed_slug and closed_slug not in ("closed", "unknown"):
-            rlabels = _TYPE_LABELS.get(closed_slug, {}) if closed_slug else {}
-            rlabel = rlabels.get(lang) or (closed_name if closed_name else None)
-            if rlabel:
-                rlabel = _lower_first(rlabel)
-                cap2 = hut.capacity_closed or None
-                if cap2:
-                    sentences.append(t["reduced"].format(label=rlabel, cap=cap2))
-                else:
-                    sentences.append(t["reduced_bare"].format(label=rlabel))
+        # Reduced operation: the reduced-mode category name verbatim.
+        if closed_slug and closed_slug not in ("closed", "unknown") and closed_name:
+            cap2 = hut.capacity_closed or None
+            if cap2:
+                sentences.append(t["reduced"].format(label=closed_name, cap=cap2))
+            else:
+                sentences.append(t["reduced_bare"].format(label=closed_name))
     if not sentences:
         return hut.name
     return " ".join(sentences)

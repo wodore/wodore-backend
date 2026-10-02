@@ -83,12 +83,22 @@ def _place_image(place: GeoPlace, request: HttpRequest) -> str | None:
 
 
 def _place_description(place: GeoPlace) -> str:
-    parts = [place.name]
-    if place.categories.exists():
-        parts.append(", ".join(c.name for c in place.categories.all() if c.name))
-    if place.elevation:
-        parts.append(f"{place.elevation} m")
-    return " – ".join([parts[0], " ".join(parts[1:])]) if len(parts) > 1 else parts[0]
+    """Format: category name verbatim + elevation, nothing invented
+    (place texts are stored per place, no lang parameter here).
+    Falls back to a located-only sentence, then the bare name."""
+    category = next((c.name for c in place.categories.all() if c.name), None)
+    ele = int(place.elevation) if place.elevation else None
+    if category and ele:
+        return f"{_cap_first(category)} auf {ele} m über Meer."
+    if category:
+        return f"{_cap_first(category)}."
+    if ele:
+        return f"Gelegen auf {ele} m über Meer."
+    return place.name
+
+
+def _cap_first(label: str) -> str:
+    return label[0].upper() + label[1:] if label else label
 
 
 def _place_jsonld(
