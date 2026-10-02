@@ -1,1 +1,0 @@
-{"place_type": "Hut", "place": "testhuette-berner", "created": 1, "updated": 0, "skipped": 0, "new_links": 1, "event": "place_images_pinned", "timestamp": "2026-10-02T15:28:51.628833Z", "level": "info", "logger": "server.apps.geometries.pinning", "filename": "pinning.py", "lineno": 213, "func_name": "pin_place_images", "module": "pinning"}
