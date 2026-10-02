@@ -1,1 +1,0 @@
-ERROR    apiversions:api_v1.py:137 {'version': '2098-05-01', 'event': 'api_snapshot_missing', 'timestamp': '2026-10-02T14:45:34.811807Z', 'level': 'error', 'logger': 'apiversions', 'filename': 'api_v1.py', 'lineno': 137, 'func_name': 'versioned_openapi_json', 'module': 'api_v1'}
