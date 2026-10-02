@@ -2,7 +2,7 @@
 
 Renders the COMPLETE card in Pillow: map canvas, optional marker (the
 entity's type symbol raster), optional watermark, and optional visual
-effects — callers get a final 1200x630 PNG, no imagor compositing
+effects — callers get a final 1200x630 JPEG, no imagor compositing
 needed (imagor is only used to rasterize symbol SVGs at render time).
 
 Effects (``effect=`` parameter):
@@ -91,7 +91,7 @@ def fetch_watermark() -> Image.Image | None:
 
 def fetch_marker(symbol_url: str, size_px: int) -> Image.Image | None:
     """Rasterize a symbol SVG via imagor (signing handled by the transformer)."""
-    from .images.transfomer import ImagorImage
+    from server.apps.images.transfomer import ImagorImage
 
     url = ImagorImage(symbol_url).transform(size=f"{size_px}x{size_px}").get_full_url()
     return _fetch_url(url)
@@ -105,7 +105,7 @@ def _rounded(image: Image.Image, radius: int) -> Image.Image:
     return out
 
 
-def _apply_effect(card: Image.Image, effect: str) -> Image.Image:
+def _apply_effect(card: Image.Image, effect: str, scale: float = 1.0) -> Image.Image:
     if effect == "none":
         return card
     if effect == "vignette":
@@ -117,10 +117,10 @@ def _apply_effect(card: Image.Image, effect: str) -> Image.Image:
                 int(card.width * 0.85),
                 int(card.height * 0.85),
             ],
-            radius=200,
+            radius=int(200 * scale),
             fill=255,
         )
-        mask = mask.filter(ImageFilter.GaussianBlur(120))
+        mask = mask.filter(ImageFilter.GaussianBlur(int(120 * scale)))
         dark = Image.new("RGBA", card.size, (0, 0, 0, 110))
         out = card.convert("RGBA")
         out.paste(dark, (0, 0), Image.eval(mask, lambda v: 255 - v))
@@ -128,8 +128,8 @@ def _apply_effect(card: Image.Image, effect: str) -> Image.Image:
 
     # blur_border / spotlight: blurred (and optionally desaturated) copy
     # of the map fills the frame, the sharp rounded map sits on top.
-    margin = 26
-    radius = 44
+    margin = int(26 * scale)
+    radius = int(44 * scale)
     background = card.resize(
         (int(card.width * 1.15), int(card.height * 1.15)), Image.LANCZOS
     ).crop(
@@ -156,15 +156,22 @@ def render_static_map(
     lat: float,
     lon: float,
     zoom: int = CARD_ZOOM,
+    width: int = CARD_WIDTH,
+    height: int = CARD_HEIGHT,
     effect: str = "none",
     marker: Image.Image | None = None,
     marker_scale: float = 1.0,
     watermark: Image.Image | None = None,
 ) -> bytes:
-    """Render a complete og card centered exactly on (lat, lon)."""
+    """Render a complete og card of width x height, centered on (lat, lon).
+
+    Marker, watermark, effects and attribution scale with the size
+    (relative to the 1200x630 reference card).
+    """
+    scale = width / CARD_WIDTH
     xt, yt = _deg_to_tile(lat, lon, zoom)
-    nx = math.ceil((CARD_WIDTH * 1.3) / TILE_SIZE) + 1
-    ny = math.ceil((CARD_HEIGHT * 1.3) / TILE_SIZE) + 1
+    nx = math.ceil((width * 1.3) / TILE_SIZE) + 1
+    ny = math.ceil((height * 1.3) / TILE_SIZE) + 1
     x0 = math.floor(xt) - nx // 2
     y0 = math.floor(yt) - ny // 2
 
@@ -177,29 +184,31 @@ def render_static_map(
 
     px = (xt - x0) * TILE_SIZE
     py = (yt - y0) * TILE_SIZE
-    crop_w = CARD_WIDTH * 2
-    crop_h = CARD_HEIGHT * 2
+    crop_w = width * 2
+    crop_h = height * 2
     left = max(0, min(canvas.width * 2 - crop_w, int(px * 2 - crop_w / 2)))
     top = max(0, min(canvas.height * 2 - crop_h, int(py * 2 - crop_h / 2)))
     card = (
         canvas.resize((canvas.width * 2, canvas.height * 2), Image.LANCZOS)
         .crop((left, top, left + crop_w, top + crop_h))
-        .resize((CARD_WIDTH, CARD_HEIGHT), Image.LANCZOS)
+        .resize((width, height), Image.LANCZOS)
     )
 
     if effect == "rounded":
-        card = _rounded(card, 44).convert("RGB")
+        card = _rounded(card, int(44 * scale)).convert("RGB")
+    elif effect != "none":
+        card = _apply_effect(card, effect, scale)
 
     if marker is not None:
-        size = int(MARKER_SIZE_PX * max(marker_scale, 0.1))
+        size = int(MARKER_SIZE_PX * scale * max(marker_scale, 0.1))
         marker_img = marker.copy()
         marker_img.thumbnail((size, size), Image.LANCZOS)
         card = card.convert("RGBA")
         card.alpha_composite(
             marker_img,
             (
-                int(CARD_WIDTH * MARKER_X - marker_img.width / 2),
-                int(CARD_HEIGHT / 2 - marker_img.height / 2),
+                int(width * MARKER_X - marker_img.width / 2),
+                int(height / 2 - marker_img.height / 2),
             ),
         )
 
@@ -212,33 +221,36 @@ def render_static_map(
         card.alpha_composite(
             watermark_img,
             (
-                int(CARD_WIDTH * WATERMARK_X - watermark_img.width / 2),
-                CARD_HEIGHT - watermark_img.height - WATERMARK_BOTTOM_PX,
+                int(width * WATERMARK_X - watermark_img.width / 2),
+                height - watermark_img.height - WATERMARK_BOTTOM_PX,
             ),
         )
 
     card = card.convert("RGB")
     draw = ImageDraw.Draw(card, "RGBA")
+    font_size = max(12, int(18 * scale))
     try:
-        font = ImageFont.truetype(str(_FONT_PATH), 18)
+        font = ImageFont.truetype(str(_FONT_PATH), font_size)
     except OSError:
         font = ImageFont.load_default()
     bbox = draw.textbbox((0, 0), ATTRIBUTION, font=font)
     tw = bbox[2] - bbox[0]
-    pad = 6
+    pad = max(4, int(6 * scale))
     draw.rectangle(
-        [CARD_WIDTH - tw - pad * 3, CARD_HEIGHT - 26, CARD_WIDTH, CARD_HEIGHT],
+        [width - tw - pad * 3, height - int(26 * scale), width, height],
         fill=(255, 255, 255, 170),
     )
     draw.text(
-        (CARD_WIDTH - tw - pad * 2, CARD_HEIGHT - 24),
+        (width - tw - pad * 2, height - int(24 * scale)),
         ATTRIBUTION,
         font=font,
         fill=(60, 60, 60, 220),
     )
 
     buffer = io.BytesIO()
-    card.save(buffer, format="PNG", optimize=True)
+    # JPEG: flat (no transparency) photographic-like content, ~5x smaller
+    # than PNG at link-preview quality.
+    card.save(buffer, format="JPEG", quality=85, optimize=True)
     return buffer.getvalue()
 
 

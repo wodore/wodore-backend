@@ -7,6 +7,8 @@
   try geoplace, then hut) — center on the entity, and its type symbol
   becomes the marker automatically
 * ``zoom`` (default 16)
+* ``size`` (``WIDTHxHEIGHT``, default ``1200x630``, the og:image
+  standard; everything on the card scales with it)
 * ``basemap`` (``opentopomap``, the only one for now)
 * ``marker`` (``symbol`` default when a place is given, ``none``)
 * ``marker_scale`` (multiplier, default 1)
@@ -49,6 +51,7 @@ class StaticMapParams(Schema):
     place: str | None = None
     place_type: str | None = None
     zoom: int = CARD_ZOOM
+    size: str = "1200x630"
     basemap: str = "opentopomap"
     marker: str | None = None
     marker_scale: float = 1.0
@@ -118,6 +121,14 @@ def get_static_map(
         raise Http404("Unknown basemap or effect.")
     if not 5 <= params.zoom <= 17:
         raise Http404("Zoom out of range.")
+    import re
+
+    size_match = re.fullmatch(r"(\d{3,4})x(\d{3,4})", params.size)
+    if size_match is None:
+        raise Http404("Size must be WIDTHxHEIGHT (100-4000 px).")
+    width, height = (int(g) for g in size_match.groups())
+    if not (100 <= width <= 4000 and 100 <= height <= 4000):
+        raise Http404("Size out of range.")
 
     if params.place:
         lat, lon, symbol_url = _resolve_place(params.place, params.place_type, request)
@@ -133,6 +144,7 @@ def get_static_map(
             "lat": f"{lat:.6f}",
             "lon": f"{lon:.6f}",
             "zoom": params.zoom,
+            "size": f"{width}x{height}",
             "basemap": params.basemap,
             "marker": marker_mode,
             "marker_scale": f"{params.marker_scale:g}",
@@ -151,6 +163,8 @@ def get_static_map(
             lat,
             lon,
             zoom=params.zoom,
+            width=width,
+            height=height,
             effect=params.effect,
             marker=marker_img,
             marker_scale=params.marker_scale,
@@ -160,6 +174,6 @@ def get_static_map(
     with default_storage.open(name) as stored:
         data = stored.read()
 
-    response = HttpResponse(data, content_type="image/png")
+    response = HttpResponse(data, content_type="image/jpeg")
     response["Cache-Control"] = f"public, max-age={CACHE_SECONDS}"
     return response

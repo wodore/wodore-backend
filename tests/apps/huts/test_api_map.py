@@ -47,7 +47,7 @@ class TestStaticMapEndpoint:
     def test_by_lat_lon(self, seed_data, client, offline_render):
         response = client.get("/v1/geo/map/static", {"lat": 46.5555, "lon": 8.1522})
         assert response.status_code == 200
-        assert response.headers["Content-Type"] == "image/png"
+        assert response.headers["Content-Type"] == "image/jpeg"
         assert len(response.content) > 1000
 
     def test_by_place_hut(self, seed_data, client, offline_render):
@@ -59,7 +59,7 @@ class TestStaticMapEndpoint:
             "/v1/geo/map/static", {"place": hut.slug, "place_type": "hut"}
         )
         assert response.status_code == 200
-        assert response.headers["Content-Type"] == "image/png"
+        assert response.headers["Content-Type"] == "image/jpeg"
 
     def test_rendered_once_then_from_storage(self, seed_data, client, offline_render):
         hut = Hut.objects.filter(
@@ -169,3 +169,44 @@ class TestMetaFallbacks:
         assert place is not None
         data = client.get(f"/v1/geo/places/{place.slug}/meta").json()
         assert "/v1/geo/map/static" in data["image"]
+
+
+class TestSizeParameter:
+    def test_size_renders(self, seed_data, client, offline_render):
+        response = client.get(
+            "/v1/geo/map/static",
+            {"lat": 46.5, "lon": 8.1, "size": "600x315", "v": "s600"},
+        )
+        assert response.status_code == 200
+        import io
+
+        from PIL import Image
+
+        img = Image.open(io.BytesIO(response.content))
+        assert img.size == (600, 315)
+
+    def test_default_size(self, seed_data, client, offline_render):
+        response = client.get(
+            "/v1/geo/map/static", {"lat": 46.5, "lon": 8.1, "v": "s-def"}
+        )
+        assert response.status_code == 200
+        import io
+
+        from PIL import Image
+
+        img = Image.open(io.BytesIO(response.content))
+        assert img.size == (1200, 630)
+
+    def test_bad_size_404(self, seed_data, client, offline_render):
+        assert (
+            client.get(
+                "/v1/geo/map/static", {"lat": 46.5, "lon": 8.1, "size": "big"}
+            ).status_code
+            == 404
+        )
+        assert (
+            client.get(
+                "/v1/geo/map/static", {"lat": 46.5, "lon": 8.1, "size": "50x50"}
+            ).status_code
+            == 404
+        )
