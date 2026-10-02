@@ -268,3 +268,30 @@ class TestSitemapPlaces:
             slug="seo-grandchild", name="GC", parent=excluded_child
         )
         assert grandchild.effective_seo_sitemap() == Category.SeoSitemapChoices.exclude
+
+
+class TestHreflangAlternates:
+    def test_hut_urls_carry_alternates(self, seed_data, client):
+        from django.core.cache import cache
+
+        cache.delete("sitemap:huts:0")
+        response = client.get("/v1/sitemap-huts-0.xml")
+        assert response.status_code == 200
+        body = response.content.decode()
+        assert 'xmlns:xhtml="http://www.w3.org/1999/xhtml"' in body
+        assert 'hreflang="de"' in body
+        assert 'hreflang="en"' in body
+        assert 'hreflang="fr"' in body
+        assert 'hreflang="it"' in body
+        assert 'hreflang="x-default"' in body
+        hut = Hut.objects.filter(is_active=True, is_public=True).order_by("pk").first()
+        assert f"https://wodore.com/en/hut/{hut.slug}" in body
+        assert f"https://wodore.com/hut/{hut.slug}</loc>" in body  # loc stays bare (de)
+
+    def test_static_pages_no_alternates(self, seed_data, client):
+        from django.core.cache import cache
+
+        cache.delete("sitemap:static")
+        response = client.get("/v1/sitemap-static.xml")
+        assert response.status_code == 200
+        assert b"hreflang" not in response.content

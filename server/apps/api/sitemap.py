@@ -51,10 +51,41 @@ def _url(loc: str, lastmod=None) -> str:
     return f"<url><loc>{escape(loc)}</loc>{lastmod_xml}</url>"
 
 
-def _urlset(entries: list[str]) -> str:
+# Non-default language prefixes for the frontend's locale-prefixed routes
+# (German, the default, stays at the root — cartoload-style
+# prefix_default_language=False; the edge 301s /de/ to bare).
+LANG_PREFIXES = ("en", "fr", "it")
+
+
+def _lang_alternates(bare_path: str) -> str:
+    """xhtml:link hreflang cluster for a frontend path: the bare URL is
+    German and x-default, each non-default language gets its prefixed
+    URL (frontend routes /en|/fr|/it/...)."""
+    base = frontend_url(bare_path)
+    links = [f'<xhtml:link rel="alternate" hreflang="de" href="{escape(base)}"/>']
+    for lang in LANG_PREFIXES:
+        href = frontend_url(f"{lang}/{bare_path}")
+        links.append(
+            f'<xhtml:link rel="alternate" hreflang="{lang}" href="{escape(href)}"/>'
+        )
+    links.append(
+        f'<xhtml:link rel="alternate" hreflang="x-default" href="{escape(base)}"/>'
+    )
+    return "".join(links)
+
+
+def _url_with_alternates(loc: str, bare_path: str, lastmod=None) -> str:
+    lastmod_xml = f"<lastmod>{lastmod:%Y-%m-%d}</lastmod>" if lastmod else ""
+    return (
+        f"<url><loc>{escape(loc)}</loc>{lastmod_xml}{_lang_alternates(bare_path)}</url>"
+    )
+
+
+def _urlset(entries: list[str], xhtml: bool = False) -> str:
+    xhtml_ns = ' xmlns:xhtml="http://www.w3.org/1999/xhtml"' if xhtml else ""
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"{xhtml_ns}>'
         f"{''.join(entries)}"
         "</urlset>"
     )
@@ -180,7 +211,13 @@ def sitemap_huts(page: int = 0) -> str | None:
         if not huts:
             return None
         return _urlset(
-            [_url(frontend_url(f"hut/{slug}"), modified) for slug, modified in huts]
+            [
+                _url_with_alternates(
+                    frontend_url(f"hut/{slug}"), f"hut/{slug}", modified
+                )
+                for slug, modified in huts
+            ],
+            xhtml=True,
         )
 
     return cache.get_or_set(f"sitemap:huts:{page}", build, SITEMAP_TTL)
@@ -205,14 +242,17 @@ def sitemap_places(page: int = 0) -> str | None:
         if not places:
             return None
         pattern = settings.PLACE_URL_PATTERN
+        base = settings.FRONTEND_DOMAIN.rstrip("/")
         return _urlset(
             [
-                _url(
-                    f"{settings.FRONTEND_DOMAIN.rstrip('/')}/{pattern.format(slug=slug)}",
+                _url_with_alternates(
+                    f"{base}/{pattern.format(slug=slug)}",
+                    pattern.format(slug=slug),
                     modified,
                 )
                 for slug, modified in places
-            ]
+            ],
+            xhtml=True,
         )
 
     return cache.get_or_set(f"sitemap:places:{page}", build, SITEMAP_TTL)
