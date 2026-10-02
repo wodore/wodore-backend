@@ -6,7 +6,6 @@ bottom): specific routes must come before the ``{slug}`` catch-all, and
 """
 
 import datetime
-from enum import Enum
 from http import HTTPStatus
 from typing import Any
 
@@ -27,6 +26,7 @@ from django.http import Http404, HttpRequest, HttpResponse
 from django.urls import reverse_lazy
 
 from server.apps.api.controller import ApiController, cache_headers
+from server.apps.api.enums import IncludeModeEnum
 from server.apps.api.query import FieldsQuery, TristateEnum, dump_fields
 from server.apps.huts.schemas._hut import ImageMetaSchema
 from server.apps.translations import LanguageQuery, activate
@@ -47,15 +47,6 @@ from .etag_utils import (
     get_last_modified_timestamp,
 )
 from .expressions import GeoJSON
-
-
-class IncludeModeEnum(str, Enum):
-    """Include mode for search endpoint - controls level of detail."""
-
-    no = "no"
-    slug = "slug"
-    all = "all"
-
 
 # ---------------------------------------------------------------------------
 # search

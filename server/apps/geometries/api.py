@@ -1,7 +1,5 @@
 """GeoPlace search and query endpoints on dmr."""
 
-from enum import Enum
-
 import pydantic
 from dmr import Path, Query, modify
 from dmr.routing import path
@@ -10,6 +8,7 @@ from pydantic import Field
 from django.views.decorators.cache import cache_page
 
 from server.apps.api.controller import ApiController, cache_headers, raise_not_found
+from server.apps.api.enums import IncludeModeEnum
 from server.apps.translations import LanguageQuery
 
 from .models import GeoPlace
@@ -18,15 +17,6 @@ from .schemas import (
     GeoPlaceNearbySchema,
     GeoPlaceSearchSchema,
 )
-
-
-class IncludeModeEnum(str, Enum):
-    """Include mode for search endpoint - controls level of detail."""
-
-    no = "no"
-    slug = "slug"
-    all = "all"
-
 
 __all__ = ["paths", "IncludeModeEnum"]
 
