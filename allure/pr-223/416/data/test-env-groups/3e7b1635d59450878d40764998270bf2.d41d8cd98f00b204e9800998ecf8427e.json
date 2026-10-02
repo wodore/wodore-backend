@@ -1,1 +1,0 @@
-{"id":"3e7b1635d59450878d40764998270bf2.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.geometries.test_image_response_cache.TestEndpointCaching#test_invalidate_forces_recompute","name":"test_invalidate_forces_recompute","status":"passed","testResultsByEnv":{"default":"4fbe2350e2835b69d0a6a7c5f2801b85"}}
