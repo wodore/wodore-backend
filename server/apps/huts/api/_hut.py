@@ -27,7 +27,13 @@ from django.urls import reverse_lazy
 
 from server.apps.api.controller import ApiController, cache_headers
 from server.apps.api.enums import IncludeModeEnum
-from server.apps.api.query import TristateEnum, dump_sparse, sparse_fields_query
+from server.apps.api.query import (
+    BboxQuery,
+    TristateEnum,
+    bbox_polygon,
+    dump_sparse,
+    sparse_fields_query,
+)
 from server.apps.huts.schemas._hut import ImageMetaSchema
 from server.apps.translations import LanguageQuery, activate
 
@@ -62,7 +68,7 @@ class _HutSlug(pydantic.BaseModel):
     slug: str = Field(description="Hut slug")
 
 
-class HutSearchQuery(LanguageQuery):
+class HutSearchQuery(LanguageQuery, BboxQuery):
     """Query parameters for the hut search endpoint."""
 
     q: str = Field(
@@ -143,6 +149,9 @@ class HutSearchController(ApiController):
             is_active=True,
             is_public=True,
         )
+
+        if query.bbox:
+            qs = qs.filter(location__intersects=bbox_polygon(query.bbox))
 
         if query.include_hut_type != "no":
             qs = qs.select_related(
@@ -255,7 +264,7 @@ class HutSearchController(ApiController):
 # ---------------------------------------------------------------------------
 
 
-class HutListQuery(LanguageQuery):
+class HutListQuery(LanguageQuery, BboxQuery):
     """Query parameters for the hut list endpoint."""
 
     offset: int = Field(0, description="Pagination offset")
@@ -306,6 +315,7 @@ class HutsController(ApiController):
             str(query.is_public.value),
             str(query.is_active.value),
             str(query.has_availability.value),
+            str(query.bbox),
             query.lang,
         ]
         from server.apps.apiversions.transforms import version_cache_key
@@ -348,6 +358,8 @@ class HutsController(ApiController):
                 huts_db = huts_db.filter(availability_source_ref__isnull=False)
             else:
                 huts_db = huts_db.filter(availability_source_ref__isnull=True)
+        if query.bbox:
+            huts_db = huts_db.filter(location__intersects=bbox_polygon(query.bbox))
 
         media_url = request.build_absolute_uri(settings.MEDIA_URL)
         iam_media_url = "https://res.cloudinary.com/wodore/image/upload/v1/"
@@ -456,7 +468,7 @@ def get_json_obj(
     return new_vals
 
 
-class HutGeojsonQuery(LanguageQuery):
+class HutGeojsonQuery(LanguageQuery, BboxQuery):
     """Query parameters for the huts GeoJSON endpoint."""
 
     offset: int = Field(0, description="Pagination offset")
@@ -524,6 +536,7 @@ class HutsGeojsonController(ApiController):
             str(query.include_name),
             str(query.include_has_availability),
             str(query.flat),
+            str(query.bbox),
             query.lang,
             version_cache_key(request),
         ]
@@ -552,6 +565,9 @@ class HutsGeojsonController(ApiController):
             request, last_modified
         ):
             return cached_304(self, etag, last_modified, max_age=60)
+
+        if query.bbox:
+            qs = qs.filter(location__intersects=bbox_polygon(query.bbox))
 
         has_availability_annotated = False
         if (
