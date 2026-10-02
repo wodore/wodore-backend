@@ -31,35 +31,43 @@ def two_versions(monkeypatch):
 
 
 class TestRegistryCheck:
-    def test_single_unreleased_current_is_ok(self, release_state):
-        # Production state right after rollout: one version, not yet tagged.
+    """Baseline registry: 2026-10-01 + 2026-10-02 (sparse fieldsets)."""
+
+    def test_unreleased_current_with_released_old_is_ok(self, release_state):
+        # Production state: 2026-10-01 released, 2026-10-02 current,
+        # not yet tagged.
+        release_state["2026-10-01"] = True
         assert registry_check.check() == []
         assert registry_check.main() == 0
 
     def test_all_released_is_ok(self, release_state, two_versions):
         release_state["2026-10-01"] = True
+        release_state["2026-10-02"] = True
         release_state[two_versions.version] = True
         assert registry_check.check() == []
 
-    def test_unreleased_current_with_released_old_is_ok(
+    def test_unreleased_current_with_released_old_is_ok_extra(
         self, release_state, two_versions
     ):
         release_state["2026-10-01"] = True
+        release_state["2026-10-02"] = True
         assert registry_check.check() == []
 
     def test_stacked_unreleased_version_fails(
         self, release_state, two_versions, capsys
     ):
         # Old version never tagged, newer one stacked on it → violation.
+        release_state["2026-10-01"] = True
         release_state[two_versions.version] = True
         problems = registry_check.check()
         assert len(problems) == 1
-        assert "'2026-10-01'" in problems[0]
+        assert "'2026-10-02'" in problems[0]
         assert "Amend" in problems[0]
         assert registry_check.main() == 1
         stderr = capsys.readouterr().err
         assert "stacked" in stderr
 
     def test_guidance_mentions_amend_workflow(self, release_state, two_versions):
+        release_state["2026-10-01"] = True
         release_state[two_versions.version] = True
         assert "keep its version date" in registry_check.check()[0]

@@ -107,12 +107,6 @@ class GeoPlaceSearchSchema(GeoPlaceBaseSchema):
     score: float | None = None
 
 
-class GeoPlaceDetailSchema(GeoPlaceSearchSchema):
-    """Detailed schema for GeoPlace with all public fields."""
-
-    parent: GeoPlaceBaseSchema | None = None
-
-
 class GeoPlaceNearbySchema(GeoPlaceBaseSchema):
     """Schema for nearby places with distance information."""
 

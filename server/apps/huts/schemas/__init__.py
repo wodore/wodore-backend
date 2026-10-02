@@ -8,6 +8,7 @@ from ._hut import (
     HutSearchResultSchema,
     ImageInfoSchema,
     LicenseInfoSchema,
+    OrganizationBaseSchema,
 )
 from ._hut_type import HutTypeSchema
 
