@@ -345,3 +345,40 @@ jobs:
           else
             echo "Nothing to remove ($DIR absent)"
           fi
+
+  # ── API typegen gate ─────────────────────────────────────────────────
+  # The committed OpenAPI snapshot must stay consumable by the frontend
+  # toolchain: regenerate the TypeScript types with openapi-typescript
+  # (the same generator `yarn gen:api` uses) and typecheck a smoke
+  # consumer. Catches schema shapes that break the wodore_v1.d.ts build
+  # before the frontend repo notices.
+  api-types:
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - name: Check out
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Generate TypeScript types from the committed snapshot
+        run: |
+          SNAPSHOT=$(ls server/apps/apiversions/openapi/*.json | sort | tail -1)
+          npx -y openapi-typescript@7 "$SNAPSHOT" -o /tmp/wodore_v1.d.ts
+
+      - name: Typecheck a smoke consumer
+        run: |
+          cat > /tmp/smoke.ts <<'TS'
+          import type { paths, components } from '/tmp/wodore_v1.d.ts';
+          type Schemas = components['schemas'];
+          type Huts = paths['/v1/huts/huts']['get']['responses']['200']['content']['application/json'];
+          const check: (h: Huts) => Huts = h => h;
+          const schema: Schemas['HutSchemaList'] | undefined = undefined;
+          console.log(check, schema);
+          TS
+          npx -y typescript@5 tsc --noEmit --strict /tmp/smoke.ts \
+            --types node --moduleResolution bundler --module esnext \
+            --baseUrl / --paths '{"*":["*"]}'
