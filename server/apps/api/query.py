@@ -1,5 +1,6 @@
 """Query helpers for the dmr API.
 
+
 **Sparse fieldsets** (openspec ``switch-to-sparse-fieldsets``): JSON:API-style
 response narrowing via ``?fields[TYPE]=name1,name2``.
 
@@ -32,6 +33,8 @@ from pydantic import Field
 
 from django.contrib.gis.geos import Polygon
 
+from server.apps.api.error_codes import ErrorCode
+
 _M = TypeVar("_M", bound=type[pydantic.BaseModel])
 
 
@@ -52,7 +55,7 @@ def _parse(raw: str | None, available: list[str]) -> list[str]:
         )
         raise APIError(
             {
-                "code": "invalid_field_name",
+                "code": ErrorCode.validation_error,
                 "detail": f"'{', '.join(missing)}' {were} {possible}",
             },
             status_code=HTTPStatus.BAD_REQUEST,
@@ -127,7 +130,7 @@ class SparseFieldsQuery(pydantic.BaseModel):
             if legacy in data:
                 raise APIError(
                     {
-                        "code": "invalid_parameter",
+                        "code": ErrorCode.validation_error,
                         "detail": (
                             f"The '{legacy}' parameter was removed. Use "
                             "'fields[TYPE]=name1,name2' (sparse fieldsets) "
@@ -146,7 +149,7 @@ class SparseFieldsQuery(pydantic.BaseModel):
                     valid = ", ".join(sorted(cls.FIELD_TYPES))
                     raise APIError(
                         {
-                            "code": "invalid_field_type",
+                            "code": ErrorCode.validation_error,
                             "detail": (
                                 f"'{type_name}' is not a valid field type. "
                                 f"Valid types: {valid}."
@@ -255,21 +258,6 @@ def dump_sparse_list(
     return [model.model_validate(obj).model_dump(include=names) for obj in objs]
 
 
-class TristateEnum(str, Enum):
-    """Tristate enum with `true`, `false` and `unset`."""
-
-    true = "true"
-    false = "false"
-    unset = "unset"
-
-    @property
-    def bool(self) -> bool | None:
-        """Returns either `None`, `True` or `False`."""
-        if self.value == "unset":
-            return None
-        return self.value == "true"
-
-
 class BboxQuery(pydantic.BaseModel):
     """Shared ``bbox`` viewport filter for geo endpoints.
 
@@ -326,3 +314,18 @@ def bbox_polygon(raw: str | None) -> "Polygon | None":
     polygon = Polygon.from_bbox((min_lon, min_lat, max_lon, max_lat))
     polygon.srid = 4326
     return polygon
+
+
+class TristateEnum(str, Enum):
+    """Tristate enum with `true`, `false` and `unset`."""
+
+    true = "true"
+    false = "false"
+    unset = "unset"
+
+    @property
+    def bool(self) -> bool | None:
+        """Returns either `None`, `True` or `False`."""
+        if self.value == "unset":
+            return None
+        return self.value == "true"

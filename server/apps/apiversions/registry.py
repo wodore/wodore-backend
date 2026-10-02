@@ -1,5 +1,6 @@
 """API version registry: date-based contract versioning inside /v1/.
 
+
 OpenSpec change ``add-api-date-versioning``. One codebase always runs the
 newest logic; older client versions are produced by transforms at the edge
 (see :mod:`server.apps.apiversions.transforms`). This module is the single
@@ -16,6 +17,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from email.utils import formatdate
 from typing import Any
+
+from server.apps.api.error_codes import ErrorCode
 
 Transform = Callable[[Any], Any]
 
@@ -240,7 +243,7 @@ def guard_endpoint_sunset(operation_id: str) -> None:
         )
         raise APIError(
             {
-                "code": "endpoint_sunset",
+                "code": ErrorCode.gone,
                 "detail": dep.detail,
             },
             status_code=HTTPStatus.GONE,

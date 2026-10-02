@@ -13,6 +13,7 @@ from django.http import HttpRequest, HttpResponse
 from django.views.decorators.cache import cache_page
 
 from server.apps.api.controller import ApiController, cache_headers, raise_not_found
+from server.apps.api.error_codes import ErrorCode
 from server.apps.translations import LanguageQuery, override
 
 from .models import Category
@@ -189,7 +190,7 @@ def _resolve_parent_or_raise(parent_slug: str, is_active: bool) -> Category:
         if paths:
             raise APIError(
                 {
-                    "code": "ambiguous_category",
+                    "code": ErrorCode.validation_error,
                     "detail": f"Slug '{parent_slug}' is not unique. "
                     f"Use one of: {', '.join(paths)}",
                 },
@@ -426,7 +427,7 @@ def _category_symbol_redirect(
         if paths:
             raise APIError(
                 {
-                    "code": "ambiguous_category",
+                    "code": ErrorCode.validation_error,
                     "detail": f"Slug '{slug}' is not unique. "
                     f"Use one of: {', '.join(paths)}",
                 },
@@ -509,7 +510,10 @@ def get_categories_markdown(request: HttpRequest) -> HttpResponse:
 
         return HttpResponse(
             json.dumps(
-                {"code": "validation_error", "detail": f"Unknown language {lang!r}."}
+                {
+                    "code": ErrorCode.validation_error,
+                    "detail": f"Unknown language {lang!r}.",
+                }
             ),
             content_type="application/json",
             status=HTTPStatus.UNPROCESSABLE_ENTITY,
