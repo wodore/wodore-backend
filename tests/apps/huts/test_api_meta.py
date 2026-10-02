@@ -207,6 +207,10 @@ class TestHutMetaOgImage:
         data = client.get(f"/v1/huts/{hut.slug}/meta").json()
         assert data["image"]
         assert "map%2Fstatic" in data["image"]
+        # spotlight preview look, smaller marker (owner-approved)
+        assert "effect%3Dspotlight" in data["image"]
+        assert "marker_scale%3D0.8" in data["image"]
+        assert "zoom%3D15" in data["image"]
 
     def test_hidden_top_image_is_skipped(self, hut, client):
         """An inactive top-scored image must not become the og:image —
