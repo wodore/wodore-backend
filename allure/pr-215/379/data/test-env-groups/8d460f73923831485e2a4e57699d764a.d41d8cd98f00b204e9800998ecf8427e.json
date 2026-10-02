@@ -1,0 +1,1 @@
+{"id":"8d460f73923831485e2a4e57699d764a.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.test_api_auth.TestProtectedEndpoints#test_garbage_token_rejected","name":"test_garbage_token_rejected","status":"passed","testResultsByEnv":{"default":"8aed7281af00aee3500c2943959660e9"}}
