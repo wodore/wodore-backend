@@ -17,3 +17,6 @@ class ErrorCode(StrEnum):
     not_found = "not_found"
     gone = "gone"
     service_unavailable = "service_unavailable"
+
+
+# Trigger CI: bot-created PRs need a synchronize event
