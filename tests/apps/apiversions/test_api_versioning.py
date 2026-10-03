@@ -19,7 +19,7 @@ def pinned_old_version():
     versions 'old': clients pinned to them must receive downgraded shapes.
     """
     change = registry.VersionChange(
-        version="2099-01-01",
+        version="zzzz-01-01",
         description="test-only: adds 'api_old_shape' marker on downgrade",
         responses={
             "get_huts": each(lambda hut: {**hut, "api_old_shape": True}),
@@ -298,7 +298,7 @@ class TestBackwardTransforms:
             return hut
 
         change = registry.VersionChange(
-            version="2099-01-01",
+            version="zzzz-01-01",
             responses={"get_hut": downgrade_capacity},
         )
         registry.REGISTRY.append(change)
@@ -332,7 +332,7 @@ class TestBackwardTransforms:
             requests={"get_hut": lambda d: {**d, "step": d.get("step", []) + ["2098"]}},
         )
         second = registry.VersionChange(
-            version="2099-01-01",
+            version="zzzz-01-01",
             requests={"get_hut": lambda d: {**d, "step": d.get("step", []) + ["2099"]}},
         )
         registry.REGISTRY.extend([first, second])
@@ -490,7 +490,7 @@ class TestRegistryIntegrity:
         from server.apps.apiversions import checks as av_checks
 
         bogus = registry.VersionChange(
-            version="2099-01-01",
+            version="zzzz-01-01",
             responses={"no_such_operation_xyz": lambda data: data},
         )
         monkeypatch.setattr(av_checks.registry, "REGISTRY", [bogus])
