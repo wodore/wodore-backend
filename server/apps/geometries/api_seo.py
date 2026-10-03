@@ -20,17 +20,15 @@ from django.conf import settings
 from django.http import Http404, HttpRequest, HttpResponse
 
 from server.apps.api.controller import ApiController, cache_headers
-from server.apps.images.models import Image
 from server.apps.images.og import (
     OG_MAP_EFFECT,
     OG_MAP_MARKER_SCALE,
     OG_MAP_ZOOM,
     og_map_card_url,
     og_photo_url,
-    photo_source,
 )
 
-from .models import GeoPlace, GeoPlaceImageAssociation
+from .models import GeoPlace
 
 CACHE_TTL = 60 * 60
 
@@ -109,42 +107,17 @@ def _place_gallery_source(place: GeoPlace) -> str | None:
 
 
 def _place_image(place: GeoPlace, request: HttpRequest) -> str | None:
-    """Preview image URL, in frontend order: the top image of the cached
-    images-for-place aggregation the gallery renders; the
-    highest-scored *servable* pinned/uploaded image; static-map card as
-    fallback.
-
-    Same visibility filters and source resolution as the hut meta
-    endpoint (``_hut_meta._og_image``): pinned external images serve
-    from ``source_url_raw``, rows with no source are skipped instead of
-    signing an empty path."""
+    """Preview image URL: the top image of the images-for-place
+    aggregation the place page's gallery renders — everything else
+    (pinned/curated rows) is the image service's business and reaches
+    the og through its cached response. The only fallback is the
+    generated static-map card — same generation as the image service's
+    ``static_map_fallback`` feature."""
     gallery = _place_gallery_source(place)
     if gallery:
         og_url = None
         try:  # preview image is best-effort
             og_url = og_photo_url(gallery)
-        except Exception:
-            og_url = None
-        if og_url:
-            return og_url
-    associations = (
-        GeoPlaceImageAssociation.objects.filter(
-            geo_place=place,
-            image__is_active=True,
-            image__review_status=Image.ReviewStatusChoices.approved,
-        )
-        .exclude(image__license__no_publication=True)
-        .select_related("image")
-        .order_by("-score", "id")
-    )
-    for association in associations:
-        source = photo_source(association.image)
-        if source is None:
-            continue
-        focal = (association.image.image_meta or {}).get("focal")
-        og_url = None
-        try:  # preview image is best-effort
-            og_url = og_photo_url(source, focal)
         except Exception:
             og_url = None
         if og_url:

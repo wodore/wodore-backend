@@ -23,21 +23,18 @@ from django.conf import settings
 from django.http import HttpRequest
 
 from server.apps.api.controller import ApiController, cache_headers, raise_not_found
-from server.apps.images.models import Image
 from server.apps.images.og import (
     OG_MAP_EFFECT,
     OG_MAP_MARKER_SCALE,
     OG_MAP_ZOOM,
-    normalize_source,
     og_card_url,
     og_map_card_url,
     og_photo_url,
-    photo_source,
 )
 from server.apps.symbols.utils import resolve_symbol_urls
 from server.apps.translations import LanguageQuery, activate
 
-from ..models import Hut, HutImageAssociation
+from ..models import Hut
 
 CACHE_TTL = 60 * 60
 
@@ -163,52 +160,18 @@ def _og_gallery_source(hut: Hut, lang: str) -> str | None:
 
 
 def _og_image(hut: Hut, request: HttpRequest, lang: str) -> str:
-    """Preview image URL, in frontend order: the top image of the
-    images-by-hut aggregation the hut page's gallery renders; the
-    provider hero photo (hut-services ``photos`` — the detail page's
-    header image); the highest-scored *servable* curated image at the
-    og size; generated map card (name + elevation) as fallback.
-
-    The gallery source is served from the shared response cache (no
-    provider calls — see ``_og_gallery_source``); curated pins and
-    uploads cover the cold-cache case. The hero is either a
-    media-relative path or an absolute external URL —
-    ``normalize_source`` handles both.
-
-    Only publicly visible curated images count (same filters as the
-    detail endpoint): inactive, unapproved or no-publication rows are
-    skipped. Pinned external images keep their file field empty — their
-    origin URL (``source_url_raw``) is the source. Rows with no source
-    at all are skipped instead of signing an empty path (which resolves
-    to the bare imagor media alias and 500s)."""
-    for source in (_og_gallery_source(hut, lang), normalize_source(hut.photos)):
-        if not source:
-            continue
+    """Preview image URL: the top image of the images-by-hut aggregation
+    the hut page's gallery renders — everything else (pinned/curated
+    rows, the deprecated hut-services ``photos`` field) is the image
+    service's business and reaches the og through its cached response.
+    The only fallback is the generated static-map card (zoom 15,
+    spotlight effect, type-symbol marker, watermark) — same generation
+    as the image service's ``static_map_fallback`` feature."""
+    source = _og_gallery_source(hut, lang)
+    if source:
         og_url = None
         try:  # preview image is best-effort
             og_url = og_photo_url(source)
-        except Exception:
-            og_url = None
-        if og_url:
-            return og_url
-    associations = (
-        HutImageAssociation.objects.filter(
-            hut=hut,
-            image__is_active=True,
-            image__review_status=Image.ReviewStatusChoices.approved,
-        )
-        .exclude(image__license__no_publication=True)
-        .select_related("image")
-        .order_by("-score", "id")
-    )
-    for association in associations:
-        source = photo_source(association.image)
-        if source is None:
-            continue
-        focal = (association.image.image_meta or {}).get("focal")
-        og_url = None
-        try:  # preview image is best-effort
-            og_url = og_photo_url(source, focal)
         except Exception:
             og_url = None
         if og_url:

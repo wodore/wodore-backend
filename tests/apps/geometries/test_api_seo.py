@@ -104,9 +104,10 @@ class TestPlaceOgPinnedImage:
         cache = LocMemCache(f"test-{uuid4().hex}", {})
         monkeypatch.setattr(irc, "_cache", lambda: cache)
 
-    def test_pinned_place_image_serves_from_source_url_raw(self, seed_data, client):
-        from urllib.parse import quote
-
+    def test_pinned_only_images_are_not_consulted(self, seed_data, client):
+        """Pinned rows are the image service's business — the place og
+        reads only the cached gallery response, so a pins-only place
+        (no cached response) serves the static-map card."""
         from django.contrib.gis.geos import Point
 
         from server.apps.geometries.models import GeoPlaceImageAssociation
@@ -116,7 +117,6 @@ class TestPlaceOgPinnedImage:
         place = GeoPlace.objects.filter(is_active=True).first()
         assert place is not None
         GeoPlaceImageAssociation.objects.filter(geo_place=place).delete()
-        url = "https://upload.wikimedia.org/wikipedia/commons/place_1920.jpg"
         pin_place_images(
             place,
             [
@@ -132,7 +132,7 @@ class TestPlaceOgPinnedImage:
                     attribution="Test Author, CC BY-SA",
                     author="Test Author",
                     author_url=None,
-                    url_large=url,
+                    url_large="https://upload.wikimedia.org/wikipedia/commons/place_1920.jpg",
                     width=1920,
                     height=1080,
                     score=32767,
@@ -141,8 +141,7 @@ class TestPlaceOgPinnedImage:
         )
         data = client.get(f"/v1/geo/places/{place.slug}/meta").json()
         assert data["image"]
-        assert quote(url, safe="") in data["image"]
-        assert not data["image"].endswith("/wd")
+        assert "map%2Fstatic" in data["image"]
 
     def test_gallery_top_image_beats_pins(self, seed_data, client):
         """The place og:image follows the gallery first: a cached

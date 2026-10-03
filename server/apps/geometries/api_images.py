@@ -14,6 +14,7 @@ from django.contrib.gis.measure import D
 from django.http import HttpRequest
 
 from server.apps.api.controller import ApiController, cache_headers, raise_not_found
+from server.apps.images.og import OG_MAP_EFFECT, OG_MAP_MARKER_SCALE, OG_MAP_ZOOM
 from server.apps.translations import LanguageQuery, activate
 
 from . import image_response_cache
@@ -150,11 +151,13 @@ class _PlaceImagesQuery(_CachedOnlyMixin, LanguageQuery):
             "data from providers"
         ),
     )
-    fallback: bool = Field(
-        False,
+    static_map_fallback: bool = Field(
+        True,
         description=(
             "When the entity has no images, include the generated "
-            "static-map card as a single feature (is_fallback=true)"
+            "static-map card (zoom 15, spotlight effect, type-symbol "
+            "marker) as a single feature (is_fallback=true). Opt out "
+            "with false to receive a plain empty collection."
         ),
     )
 
@@ -172,16 +175,23 @@ class HutSlugPath(pydantic.BaseModel):
 
 
 def _empty_images_response(
-    *, lat: float, lon: float, radius: float, sources_list: list[str] | None
+    *,
+    lat: float,
+    lon: float,
+    radius: float,
+    sources_list: list[str] | None,
+    features: list | None = None,
 ) -> ImageCollectionResponse:
-    """Empty FeatureCollection for ``cached_only`` misses: nothing was
-    cached, so the answer is "no images" — without contacting any
-    provider."""
+    """(Near-)empty FeatureCollection for ``cached_only`` misses:
+    nothing was cached, so the answer is whatever the caller's
+    ``static_map_fallback`` adds — without contacting any provider.
+    Never written back to the cache."""
+    features = features or []
     return ImageCollectionResponse(
         type="FeatureCollection",
-        features=[],
+        features=features,
         metadata=ImageMetadataSchema(
-            total=0,
+            total=len(features),
             sources_queried=sources_list or [],
             query_radius_m=radius,
             center=ImageCenterSchema(lat=lat, lon=lon),
@@ -365,8 +375,11 @@ def _map_fallback_feature(
     modified,
     place_type: str,
 ) -> dict:
-    """Static-map fallback feature for entities without any images
-    (only included when the caller passes fallback=true)."""
+    """Static-map fallback feature for entities without any images.
+
+    Generated exactly like the og preview cards (server.apps.images.og):
+    zoom 15, spotlight effect, scaled type-symbol marker — in the
+    gallery's size variants."""
     from urllib.parse import urlencode
 
     def map_url(size: str) -> str:
@@ -375,6 +388,9 @@ def _map_fallback_feature(
                 "place": slug,
                 "place_type": place_type,
                 "size": size,
+                "zoom": OG_MAP_ZOOM,
+                "effect": OG_MAP_EFFECT,
+                "marker_scale": OG_MAP_MARKER_SCALE,
                 "v": f"{modified:%Y%m%dT%H%M%S}",
             }
         )
@@ -488,7 +504,7 @@ class PlaceImagesController(ApiController):
             sources=query.sources,
             lang=query.lang,
             limit=query.limit,
-            fallback=query.fallback,
+            fallback=query.static_map_fallback,
         )
         cached = None
         if not query.update_cache:
@@ -497,8 +513,8 @@ class PlaceImagesController(ApiController):
                 return cached
         if query.cached_only:
             # Fast call: the cached response if any (stale included), else
-            # an empty collection — providers are never contacted and
-            # nothing is written back.
+            # an empty collection with at most the static-map fallback —
+            # providers are never contacted and nothing is written back.
             if cached is not None:
                 return cached
             place = GeoPlace.objects.filter(
@@ -506,11 +522,25 @@ class PlaceImagesController(ApiController):
             ).first()
             if place is None:
                 raise_not_found(f"GeoPlace '{place_slug}' not found")
+            location = place.location
+            features = []
+            if query.static_map_fallback and location is not None:
+                features = [
+                    _map_fallback_feature(
+                        request,
+                        slug=place.slug,
+                        lat=location.y,
+                        lon=location.x,
+                        modified=place.modified,
+                        place_type="geoplace",
+                    )
+                ]
             return _empty_images_response(
-                lat=place.location.y,
-                lon=place.location.x,
+                lat=location.y if location is not None else 0.0,
+                lon=location.x if location is not None else 0.0,
                 radius=query.radius,
                 sources_list=sources_list,
+                features=features,
             )
 
         from .pinning import maybe_enqueue_place_refresh, place_has_visible_pins
@@ -593,7 +623,7 @@ class PlaceImagesController(ApiController):
                         sources=query.sources,
                         lang=query.lang,
                         limit=query.limit,
-                        fallback=query.fallback,
+                        fallback=query.static_map_fallback,
                     )
                 except Exception as e:
                     logger.error(f"Error pinning images for place '{place_slug}': {e}")
@@ -605,7 +635,12 @@ class PlaceImagesController(ApiController):
             results, force_provider_refresh=query.update_cache
         )
 
-        if query.fallback and not features and place is not None and place.location:
+        if (
+            query.static_map_fallback
+            and not features
+            and place is not None
+            and place.location
+        ):
             features = [
                 _map_fallback_feature(
                     request,
@@ -672,7 +707,7 @@ class HutImagesController(ApiController):
             sources=query.sources,
             lang=query.lang,
             limit=query.limit,
-            fallback=query.fallback,
+            fallback=query.static_map_fallback,
         )
         cached = None
         if not query.update_cache:
@@ -683,8 +718,8 @@ class HutImagesController(ApiController):
 
         if query.cached_only:
             # Fast call: the cached response if any (stale included), else
-            # an empty collection — providers are never contacted and
-            # nothing is written back.
+            # an empty collection with at most the static-map fallback —
+            # providers are never contacted and nothing is written back.
             if cached is not None:
                 return cached
             hut = Hut.objects.filter(
@@ -692,11 +727,25 @@ class HutImagesController(ApiController):
             ).first()
             if hut is None:
                 raise_not_found(f"Hut '{hut_slug}' not found")
+            location = hut.location
+            features = []
+            if query.static_map_fallback and location is not None:
+                features = [
+                    _map_fallback_feature(
+                        request,
+                        slug=hut.slug,
+                        lat=location.y,
+                        lon=location.x,
+                        modified=hut.modified,
+                        place_type="hut",
+                    )
+                ]
             return _empty_images_response(
-                lat=hut.location.y,
-                lon=hut.location.x,
+                lat=location.y if location is not None else 0.0,
+                lon=location.x if location is not None else 0.0,
                 radius=query.radius,
                 sources_list=sources_list,
+                features=features,
             )
 
         from .pinning import place_has_visible_pins
@@ -768,7 +817,7 @@ class HutImagesController(ApiController):
                         sources=query.sources,
                         lang=query.lang,
                         limit=query.limit,
-                        fallback=query.fallback,
+                        fallback=query.static_map_fallback,
                     )
                 except Exception as e:
                     logger.error(f"Error pinning images for hut '{hut_slug}': {e}")
@@ -780,7 +829,12 @@ class HutImagesController(ApiController):
             results, force_provider_refresh=query.update_cache
         )
 
-        if query.fallback and not features and hut is not None and hut.location:
+        if (
+            query.static_map_fallback
+            and not features
+            and hut is not None
+            and hut.location
+        ):
             features = [
                 _map_fallback_feature(
                     request,
@@ -813,10 +867,11 @@ class HutImagesController(ApiController):
 
 
 #: The hut/place page gallery's request shape (frontend ``useHutImages``/
-#: ``useMediaImages``: radius 50 m, 20 images, all sources, no map
-#: fallback). The og:image lookups must read exactly the cache entries
-#: these parameters produce — the same images the pages render.
-GALLERY_QUERY_SHAPE = {"radius": 50.0, "sources": None, "limit": 20, "fallback": False}
+#: ``useMediaImages``: radius 50 m, 20 images, all sources) plus the
+#: endpoints' default static-map fallback. The og:image lookups must
+#: read exactly the cache entries these parameters produce — the same
+#: images the pages render (fallback features are skipped there).
+GALLERY_QUERY_SHAPE = {"radius": 50.0, "sources": None, "limit": 20, "fallback": True}
 
 
 def cached_hut_images(hut_slug: str, *, lang: str) -> ImageCollectionResponse | None:

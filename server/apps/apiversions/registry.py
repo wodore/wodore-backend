@@ -110,6 +110,30 @@ UNRELEASED = "unreleased"
 # chronological for readability. Add a new VersionChange ONLY for breaking
 # changes (see README "Introducing a breaking change"). Use UNRELEASED as
 # the version string; the date is assigned at release time.
+
+
+def _strip_static_map_fallback(data: Any) -> Any:
+    """Downgrade for the image endpoints: drop the generated static-map
+    fallback feature (``properties.is_fallback``) so clients pinned to
+    the previous version keep receiving photo-only responses.
+    ``metadata.total`` is corrected when it still matches the old list
+    length (defensive against sparse/aliased payloads)."""
+
+    if isinstance(data, dict) and isinstance(data.get("features"), list):
+        before = len(data["features"])
+        data["features"] = [
+            feature
+            for feature in data["features"]
+            if not (
+                isinstance(feature, dict)
+                and (feature.get("properties") or {}).get("is_fallback")
+            )
+        ]
+        metadata = data.get("metadata")
+        if isinstance(metadata, dict) and metadata.get("total") == before:
+            metadata["total"] = len(data["features"])
+    return data
+
 REGISTRY: list[VersionChange] = [
     VersionChange(
         version=INITIAL_VERSION,
@@ -135,8 +159,22 @@ REGISTRY: list[VersionChange] = [
             "endpoints (search_huts, search/nearby_geoplaces, get_amenity, "
             "get_weather_codes/get_weather_code). Shape change: slug "
             "shorthand lists become objects (sources=[{slug: sac}] not "
-            "[sac]). include_X senders get 400."
+            "[sac]). include_X senders get 400. Also rename the image "
+            "endpoints' fallback parameter to static_map_fallback and "
+            "default it to true: /v1/geo/images/hut/{slug} and "
+            "/v1/geo/images/place/{slug} include the generated static-map "
+            "card (zoom 15, spotlight effect, type-symbol marker) as an "
+            "is_fallback feature whenever the entity has no images — "
+            "including cached_only fast calls. The old default (photo-only, "
+            "opt-in fallback) is restored for pinned clients by stripping "
+            "fallback features; clients that opted in via fallback=true "
+            "should switch to static_map_fallback=true. nearby keeps no "
+            "fallback (no entity to center)."
         ),
+        responses={
+            "images_for_hut": _strip_static_map_fallback,
+            "images_for_place": _strip_static_map_fallback,
+        },
     ),
 ]
 
