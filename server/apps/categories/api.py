@@ -14,7 +14,7 @@ from django.views.decorators.cache import cache_page
 
 from server.apps.api.controller import ApiController, cache_headers, raise_not_found
 from server.apps.api.error_codes import ErrorCode
-from server.apps.translations import LanguageQuery, override
+from server.apps.translations import LanguageQuery, activate, override
 
 from .models import Category
 from .schemas import (
@@ -518,8 +518,8 @@ def get_categories_markdown(request: HttpRequest) -> HttpResponse:
             content_type="application/json",
             status=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
-    with override(lang):
-        return _categories_markdown(request)
+    activate(lang)
+    return _categories_markdown(request)
 
 
 def _categories_markdown(request: HttpRequest) -> HttpResponse:
