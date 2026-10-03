@@ -195,12 +195,7 @@ def release(
         warning("Did not update to new version tag.")
 
 
-@task(
-    help={
-        "tag": "Create and push the api/<version> tag (default: yes)",
-        "changelog": "Regenerate CHANGELOG_API.md with git-cliff (default: yes)",
-    }
-)
+@task
 def api_freeze(c: Ctx):
     """Assign the real date to the 'unreleased' API version.
 
@@ -244,6 +239,12 @@ def api_freeze(c: Ctx):
     info(f"Snapshot: server/apps/apiversions/openapi/{real_date}.json")
 
 
+@task(
+    help={
+        "tag": "Create and push the api/<version> tag (default: yes)",
+        "changelog": "Regenerate CHANGELOG_API.md with git-cliff (default: yes)",
+    }
+)
 def api_release(c: Ctx, tag: bool = True, changelog: bool = True):
     """Release artifacts for the current API contract version.
 
