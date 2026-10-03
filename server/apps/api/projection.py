@@ -105,3 +105,4 @@ def field_selected(parsed: SparseFieldsQuery, top_type: str, field_name: str) ->
 
 # CI trigger
 # CI trigger
+# Retry CI
