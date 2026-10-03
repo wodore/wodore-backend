@@ -110,7 +110,7 @@ def _place_image(place: GeoPlace, request: HttpRequest) -> str | None:
             continue
         og_url = None
         try:  # preview image is best-effort
-            og_url = og_photo_url(raw)
+            og_url = og_photo_url(raw, request=request)
         except Exception:
             og_url = None
         if og_url:

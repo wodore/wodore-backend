@@ -357,3 +357,55 @@ class TestBakedWatermark:
         fake.write_bytes(b"version-b")
         key_b = ogmap.static_map_cache_key({"v": "x"})
         assert key_a != key_b, "replacing the asset must re-render cached cards"
+
+
+class TestLogoAssetEndpoint:
+    """The watermark is served statically by the backend itself
+    (/assets/logo/wodore_watermark.png) — the og/imagor pipeline no
+    longer references the frontend-hosted copy."""
+
+    def test_logo_is_served(self, client):
+        response = client.get("/assets/logo/wodore_watermark.png")
+        assert response.status_code == 200
+        assert response.headers["Content-Type"] == "image/png"
+        assert "max-age" in response.headers["Cache-Control"]
+        assert response.getvalue()[:8] == b"\x89PNG\r\n\x1a\n"
+
+    def test_unknown_asset_is_404(self, client):
+        assert client.get("/assets/logo/other.png").status_code == 404
+        assert client.get("/assets/logo/..%2Fsettings.py").status_code == 404
+
+    def test_photo_og_url_uses_backend_logo(self, seed_data, client, monkeypatch):
+        """og photo URLs embed the backend-served watermark (with the
+        ?v= digest for imagor cache busting), not the frontend URL."""
+        from urllib.parse import quote
+        from uuid import uuid4
+
+        from tests.apps.huts.test_api_meta import TestHutMetaOgSources
+
+        from django.core.cache.backends.locmem import LocMemCache
+
+        from server.apps.geometries import image_response_cache as irc
+
+        cache = LocMemCache(f"test-{uuid4().hex}", {})
+        monkeypatch.setattr(irc, "_cache", lambda: cache)
+
+        hut = Hut.objects.filter(is_active=True, is_public=True).first()
+        assert hut is not None
+        from server.apps.huts.models import HutImageAssociation
+
+        HutImageAssociation.objects.filter(hut=hut).delete()
+        TestHutMetaOgSources._warm_gallery_cache(
+            hut,
+            TestHutMetaOgSources._gallery_response(
+                hut, "https://media.camptocamp.org/c2corg-active/logo_check.jpg"
+            ),
+        )
+        meta = client.get(f"/v1/huts/{hut.slug}/meta")
+        assert meta.status_code == 200
+        image = meta.json()["image"]
+        assert (
+            quote("static/logo/wodore_watermark.png", safe="") not in image
+        )  # not the frontend-style path
+        assert quote("/assets/logo/wodore_watermark.png?v=", safe="") in image
+        assert "wodore.com/meta/" not in image

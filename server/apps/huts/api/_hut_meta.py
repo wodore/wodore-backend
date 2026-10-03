@@ -157,7 +157,7 @@ def _og_image(hut: Hut, request: HttpRequest, lang: str) -> str:
             continue
         og_url = None
         try:  # preview image is best-effort
-            og_url = og_photo_url(raw)
+            og_url = og_photo_url(raw, request=request)
         except Exception:
             og_url = None
         if og_url:
