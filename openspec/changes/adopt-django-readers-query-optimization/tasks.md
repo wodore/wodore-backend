@@ -31,3 +31,4 @@
 - [ ] 5.1 Delete annotation/prefetch code paths superseded by derived specs (verify no remaining references)
 - [ ] 5.2 Remove hand-maintained `field_selected()` gates that the spec subset now covers (keep the helper where it guards non-query behavior)
 - [ ] 5.3 Update `_work/` session document with benchmark numbers and final endpoint disposition table
+# trigger
