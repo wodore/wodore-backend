@@ -100,9 +100,16 @@ class VersionChange:
     sunset_date: date | None = None
 
 
+# The placeholder for the next unreleased version. Replaced with the
+# actual release date by "inv release" (api-freeze step). Sorting:
+# "unreleased" > any date string, so versions()[-1] always returns it
+# as current while it exists.
+UNRELEASED = "unreleased"
+
 # The registry. Order is not significant (versions are sorted), but keep it
 # chronological for readability. Add a new VersionChange ONLY for breaking
-# changes (see README "Introducing a breaking change").
+# changes (see README "Introducing a breaking change"). Use UNRELEASED as
+# the version string; the date is assigned at release time.
 REGISTRY: list[VersionChange] = [
     VersionChange(
         version=INITIAL_VERSION,
@@ -118,6 +125,17 @@ REGISTRY: list[VersionChange] = [
             "The 2026-10-01 snapshot still documents them as historical "
             "record; pinned clients of that version are unaffected until "
             "it sunsets."
+        ),
+    ),
+    VersionChange(
+        version=UNRELEASED,
+        description=(
+            "Harmonize response narrowing: replace include_X=no|slug|all "
+            "with JSON:API sparse fieldsets (fields[TYPE]) on all search "
+            "endpoints (search_huts, search/nearby_geoplaces, get_amenity, "
+            "get_weather_codes/get_weather_code). Shape change: slug "
+            "shorthand lists become objects (sources=[{slug: sac}] not "
+            "[sac]). include_X senders get 400."
         ),
     ),
 ]
