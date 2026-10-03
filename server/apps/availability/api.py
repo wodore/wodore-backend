@@ -20,6 +20,7 @@ from django.db.models import Case, F, Max, Q, Value, When
 from django.db.models.functions import Coalesce, JSONObject
 
 from server.apps.api.controller import ApiController, cache_headers, raise_not_found
+from server.apps.api.query import BboxQuery, bbox_polygon
 from server.apps.translations import LanguageQuery, activate
 
 from .models import HutAvailability, HutAvailabilityHistory
@@ -48,7 +49,7 @@ class DatePathParamTrend(pydantic.BaseModel):
     date: str = Field(description=_DATE_HELP)
 
 
-class AvailabilityGeoJSONQuery(LanguageQuery):
+class AvailabilityGeoJSONQuery(LanguageQuery, BboxQuery):
     """Query parameters for GeoJSON availability endpoint."""
 
     slugs: str | None = Field(
@@ -142,6 +143,9 @@ class HutAvailabilityGeojsonController(ApiController):
         if parsed_query.slugs:
             hut_slugs_list = [s.strip().lower() for s in parsed_query.slugs.split(",")]
             qs = qs.filter(hut__slug__in=hut_slugs_list)
+
+        if parsed_query.bbox:
+            qs = qs.filter(hut__location__intersects=bbox_polygon(parsed_query.bbox))
 
         qs = qs.values("hut_id").annotate(
             slug=Max(F("hut__slug")),

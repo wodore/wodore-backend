@@ -1,5 +1,6 @@
 """Base controller for all Wodore JSON API endpoints.
 
+
 Establishes the project-wide error contract on dmr:
 
     {"code": "<machine readable>", "detail": "<human readable>"}
@@ -22,6 +23,8 @@ from dmr.serializer import BaseSerializer
 from typing_extensions import TypedDict, override
 
 from django.http import Http404, HttpResponse
+
+from server.apps.api.error_codes import ErrorCode
 
 from .serializer import WodoreSerializer
 
@@ -55,11 +58,11 @@ class ApiController(Controller[WodoreSerializer]):
         ``detail`` so clients can show something useful.
         """
         if isinstance(error, str):
-            return {"code": "error", "detail": error}
+            return {"code": ErrorCode.validation_error, "detail": error}
         default = format_error(error, loc=loc, error_type=error_type)
         messages = "; ".join(detail["msg"] for detail in default["detail"])
         return {
-            "code": "validation_error",
+            "code": ErrorCode.validation_error,
             "detail": messages or str(error),
         }
 
@@ -73,7 +76,7 @@ class ApiController(Controller[WodoreSerializer]):
         """Map framework-agnostic exceptions to the Wodore error body."""
         if isinstance(exc, Http404):
             return self.to_error(
-                {"code": "not_found", "detail": str(exc) or "Not found."},
+                {"code": ErrorCode.not_found, "detail": str(exc) or "Not found."},
                 status_code=HTTPStatus.NOT_FOUND,
             )
         # APIError (raised by handlers/auth) already carries its payload
@@ -84,7 +87,7 @@ class ApiController(Controller[WodoreSerializer]):
 def raise_not_found(detail: str) -> None:
     """Raise the standard 404 APIError from any handler."""
     raise APIError(
-        {"code": "not_found", "detail": detail},
+        {"code": ErrorCode.not_found, "detail": detail},
         status_code=HTTPStatus.NOT_FOUND,
     )
 
