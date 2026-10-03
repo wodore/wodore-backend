@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12, <4.0"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -3417,6 +3417,23 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/c8/5b/181e2e3becb7672b502f0ed7f16ed7352aca7c109cfb94cf3878a9186db9/psycopg-3.3.3-py3-none-any.whl", hash = "sha256:f96525a72bcfade6584ab17e89de415ff360748c766f0106959144dcbb38c698", size = 212768, upload-time = "2026-02-18T16:46:27.365Z" },
 ]
 
+[package.optional-dependencies]
+pool = [
+    { name = "psycopg-pool" },
+]
+
+[[package]]
+name = "psycopg-pool"
+version = "3.3.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/74/5e/c0664b968b102ff68b811d999c728546c48d5c1eec03e3bbaf88c0cb4472/psycopg_pool-3.3.3.tar.gz", hash = "sha256:df87b5d9d0ad7db37f6cdad4fa8ce113d250f5997f6db38e9a99192fb67f9e1d", size = 32006, upload-time = "2026-09-22T15:53:24.947Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5d/b4/452c6607a0f479465cd8a9b0d9956919fcb150050c1f83f9f11e6b8ee8dc/psycopg_pool-3.3.3-py3-none-any.whl", hash = "sha256:9b9cd6a4fcec47a410f7e82d408540e7f77b478509e91b44c1a5457a13e5ff37", size = 40304, upload-time = "2026-09-22T15:53:23.712Z" },
+]
+
 [[package]]
 name = "psycopg2-binary"
 version = "2.9.11"
@@ -4816,6 +4833,19 @@ wheels = [
 ]
 
 [[package]]
+name = "uvicorn"
+version = "0.54.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "h11" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/da/34/30e9280707135d2cfc589dfff3cb796bd07a3aeb1a3e415ba09dd89d7bb4/uvicorn-0.54.0.tar.gz", hash = "sha256:a2e33cbfaa0306f8e6b0c13e0cb89d7d7a2da3e62b90c66e18c33d9807b28620", size = 112283, upload-time = "2026-09-25T06:52:37.601Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/38/0c/b54a4fdd7f90a3af8b02ebc9ce6712c2c208b7926a2f7bad95c33ebbe943/uvicorn-0.54.0-py3-none-any.whl", hash = "sha256:505bdb0f318731d45f1f712071fc781a8981f6847a31c902c9f5e652d4f67faf", size = 87427, upload-time = "2026-09-25T06:52:35.829Z" },
+]
+
+[[package]]
 name = "virtualenv"
 version = "21.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -4974,7 +5004,7 @@ dependencies = [
     { name = "osmium" },
     { name = "overpass" },
     { name = "pillow" },
-    { name = "psycopg" },
+    { name = "psycopg", extra = ["pool"] },
     { name = "psycopg2-binary" },
     { name = "python-benedict" },
     { name = "python-decouple" },
@@ -4984,6 +5014,7 @@ dependencies = [
     { name = "svgutils" },
     { name = "tzdata" },
     { name = "unidecode" },
+    { name = "uvicorn" },
     { name = "whitenoise", extra = ["brotli"] },
     { name = "xmltodict" },
 ]
@@ -5108,7 +5139,7 @@ requires-dist = [
     { name = "osmium", specifier = ">=3.7.0" },
     { name = "overpass", specifier = ">=0.7.2" },
     { name = "pillow", specifier = "==11.*" },
-    { name = "psycopg", specifier = "==3.*" },
+    { name = "psycopg", extras = ["pool"], specifier = "==3.*" },
     { name = "psycopg2-binary", specifier = "==2.*" },
     { name = "python-benedict", specifier = "==0.35.*" },
     { name = "python-decouple", specifier = "==3.*" },
@@ -5118,6 +5149,7 @@ requires-dist = [
     { name = "svgutils", specifier = ">=0.3.4" },
     { name = "tzdata", specifier = ">=2025.3" },
     { name = "unidecode", specifier = "==1.*" },
+    { name = "uvicorn", specifier = ">=0.54.0" },
     { name = "whitenoise", extras = ["brotli"], specifier = "==6.*" },
     { name = "xmltodict", specifier = ">=0.13.0,<0.14.0" },
 ]

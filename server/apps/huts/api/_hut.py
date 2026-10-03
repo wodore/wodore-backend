@@ -10,6 +10,7 @@ from http import HTTPStatus
 from typing import Any
 
 import pydantic
+from asgiref.sync import sync_to_async
 from benedict import benedict
 from dmr import Path, Query, modify, validate
 from dmr.headers import HeaderSpec
@@ -292,8 +293,21 @@ class HutsController(ApiController):
         operation_id="get_huts",
         exclude_validate_responses={HTTPStatus.NOT_MODIFIED},
     )
-    def get(self, parsed_query: Query[HutListQuery]) -> HttpResponse:
+    async def get(self, parsed_query: Query[HutListQuery]) -> HttpResponse:
         """List huts."""
+        # Async wrapper (sync-core pattern, openspec: async-api-staging):
+        # the whole handler - ORM, ETag, serialization - runs unchanged in
+        # a bridged worker thread, so nothing blocking ever touches the
+        # event loop. Default thread_sensitive=True keeps Django's
+        # thread-affinity contract (request_finished -> close_old_connections
+        # runs on the same logical thread); PoC measurement showed no
+        # wall-time difference under load either way - the ~1s/request is
+        # CPU-bound ETag aggregation serialized by the GIL, not executor
+        # scheduling. Sync tests/commands call _get_core directly.
+        return await sync_to_async(self._get_core)(parsed_query)
+
+    def _get_core(self, parsed_query: Query[HutListQuery]) -> HttpResponse:
+        """Sync core of the hut list endpoint (unchanged WSGI-era logic)."""
         request = self.request
         query = parsed_query
         activate(query.lang)
