@@ -27,7 +27,13 @@ from django.urls import reverse_lazy
 
 from server.apps.api.controller import ApiController, cache_headers
 from server.apps.api.projection import field_selected, project_fields
-from server.apps.api.query import TristateEnum, dump_sparse, sparse_fields_query
+from server.apps.api.query import (
+    BboxQuery,
+    TristateEnum,
+    bbox_polygon,
+    dump_sparse,
+    sparse_fields_query,
+)
 from server.apps.huts.schemas._hut import ImageMetaSchema
 from server.apps.translations import LanguageQuery, activate
 
@@ -70,7 +76,7 @@ HutSearchFields = sparse_fields_query(
 )
 
 
-class HutSearchQuery(LanguageQuery, HutSearchFields):
+class HutSearchQuery(LanguageQuery, HutSearchFields, BboxQuery):
     """Query parameters for the hut search endpoint."""
 
     q: str = Field(
@@ -133,8 +139,10 @@ class HutSearchController(ApiController):
             is_public=True,
         )
 
+        if query.bbox:
+            qs = qs.filter(location__intersects=bbox_polygon(query.bbox))
+
         # Skip the DB cost when the field isn't in the selection
-        # (the old include_X=no optimization, driven by fields[huts]).
         wants_hut_type = field_selected(query, "huts", "hut_type")
         wants_sources = field_selected(query, "huts", "sources")
         if wants_hut_type:
@@ -238,7 +246,7 @@ class HutSearchController(ApiController):
 # ---------------------------------------------------------------------------
 
 
-class HutListQuery(LanguageQuery):
+class HutListQuery(LanguageQuery, BboxQuery):
     """Query parameters for the hut list endpoint."""
 
     offset: int = Field(0, description="Pagination offset")
@@ -319,6 +327,9 @@ class HutsController(ApiController):
             request, last_modified
         ):
             return cached_304(self, etag, last_modified, max_age=60)
+
+        if query.bbox:
+            huts_db = huts_db.filter(location__intersects=bbox_polygon(query.bbox))
 
         if query.is_modified != TristateEnum.unset:
             huts_db = huts_db.filter(is_modified=query.is_modified.bool)
@@ -439,7 +450,7 @@ def get_json_obj(
     return new_vals
 
 
-class HutGeojsonQuery(LanguageQuery):
+class HutGeojsonQuery(LanguageQuery, BboxQuery):
     """Query parameters for the huts GeoJSON endpoint."""
 
     offset: int = Field(0, description="Pagination offset")
@@ -507,6 +518,7 @@ class HutsGeojsonController(ApiController):
             str(query.include_name),
             str(query.include_has_availability),
             str(query.flat),
+            str(query.bbox or ""),
             query.lang,
             version_cache_key(request),
         ]
@@ -535,6 +547,9 @@ class HutsGeojsonController(ApiController):
             request, last_modified
         ):
             return cached_304(self, etag, last_modified, max_age=60)
+
+        if query.bbox:
+            qs = qs.filter(location__intersects=bbox_polygon(query.bbox))
 
         has_availability_annotated = False
         if (

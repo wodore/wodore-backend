@@ -101,3 +101,6 @@ def field_selected(parsed: SparseFieldsQuery, top_type: str, field_name: str) ->
     if top_spec is None or top_spec == "__all__":
         return True
     return field_name in {n.strip() for n in top_spec.split(",") if n.strip()}
+
+
+# CI trigger
