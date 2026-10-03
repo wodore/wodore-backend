@@ -8,7 +8,6 @@ from pydantic import Field
 from django.views.decorators.cache import cache_page
 
 from server.apps.api.controller import ApiController, cache_headers, raise_not_found
-from server.apps.api.enums import IncludeModeEnum
 from server.apps.api.projection import field_selected, project_fields
 from server.apps.api.query import BboxQuery, bbox_polygon, sparse_fields_query
 from server.apps.geometries.presenters import (
@@ -30,7 +29,7 @@ from .schemas import (
     GeoPlaceSearchSchema,
 )
 
-__all__ = ["paths", "IncludeModeEnum"]
+__all__ = ["paths"]
 
 
 GeoPlaceFields = sparse_fields_query(
@@ -268,7 +267,7 @@ class GeoSearchController(ApiController):
         if wants_categories:
             queryset = prefetch_categories(queryset)
         if wants_sources:
-            queryset = annotate_sources(queryset, IncludeModeEnum.all)
+            queryset = annotate_sources(queryset)
 
         # Fuzzy search using trigram similarity
         requested_language = query.lang
@@ -392,7 +391,7 @@ class GeoSearchController(ApiController):
             if wants_categories:
                 result["categories"] = build_categories_data(place, request) or []
             if wants_sources:
-                build_sources(result, place, media_url, IncludeModeEnum.all)
+                build_sources(result, place, media_url)
             results.append(result)
 
         return results
@@ -442,7 +441,7 @@ class GeoNearbyController(ApiController):
         if wants_categories:
             queryset = prefetch_categories(queryset)
         if wants_sources:
-            queryset = annotate_sources(queryset, IncludeModeEnum.all)
+            queryset = annotate_sources(queryset)
 
         queryset = queryset.annotate(distance=Distance("location", point)).order_by(
             "distance"
@@ -462,7 +461,7 @@ class GeoNearbyController(ApiController):
             result["distance"] = round(distance_m, 2) if distance_m else None
 
             result["categories"] = build_categories_data(place, request) or []
-            build_sources(result, place, media_url, IncludeModeEnum.all)
+            build_sources(result, place, media_url)
             results.append(
                 project_fields(
                     result,
@@ -604,7 +603,7 @@ class AmenityController(ApiController):
                 "extra": place.amenity_detail.extra or {},
             }
 
-        build_sources(result, place, media_url, IncludeModeEnum.all)
+        build_sources(result, place, media_url)
 
         return AmenitySchema(**result)
 
