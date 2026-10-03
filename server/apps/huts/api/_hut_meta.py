@@ -28,6 +28,7 @@ from server.apps.images.og import (
     OG_MAP_EFFECT,
     OG_MAP_MARKER_SCALE,
     OG_MAP_ZOOM,
+    normalize_source,
     og_card_url,
     og_map_card_url,
     og_photo_url,
@@ -133,8 +134,15 @@ class _MetaQuery(LanguageQuery):
 
 
 def _og_image(hut: Hut, request: HttpRequest) -> str:
-    """Preview image URL: the highest-scored *servable* image at the og
-    size; generated brand card (name + elevation) as fallback.
+    """Preview image URL: the provider hero photo when set — the same
+    photo the detail endpoint prepends to the gallery and uses as the
+    avatar, so the preview matches the page; else the highest-scored
+    *servable* image at the og size; generated map card (name +
+    elevation) as fallback.
+
+    The hero is the hut-services ``photos`` field (e.g. the SAC photo):
+    either a media-relative path or an absolute external URL —
+    ``normalize_source`` handles both.
 
     Only publicly visible images count (same filters as the detail
     endpoint): inactive, unapproved or no-publication rows are skipped.
@@ -142,6 +150,15 @@ def _og_image(hut: Hut, request: HttpRequest) -> str:
     URL (``source_url_raw``) is the source. Rows with no source at all
     are skipped instead of signing an empty path (which resolves to the
     bare imagor media alias and 500s)."""
+    hero = normalize_source(hut.photos)
+    if hero:
+        hero_url = None
+        try:  # preview image is best-effort
+            hero_url = og_photo_url(hero)
+        except Exception:
+            hero_url = None
+        if hero_url:
+            return hero_url
     associations = (
         HutImageAssociation.objects.filter(
             hut=hut,
