@@ -1,1 +1,0 @@
-{"id":"57555d625ef9e8dfb6190ffb45ab5634.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.feedbacks.test_api.TestFeedbackThrottling#test_sixth_request_within_a_minute_is_throttled","name":"test_sixth_request_within_a_minute_is_throttled","status":"passed","testResultsByEnv":{"default":"3531e871375576e7335176a67923fd6d"}}
