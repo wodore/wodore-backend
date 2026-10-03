@@ -13,7 +13,7 @@ from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
 from django.http import HttpRequest
 
-from server.apps.api.controller import ApiController, cache_headers
+from server.apps.api.controller import ApiController, cache_headers, raise_not_found
 from server.apps.translations import LanguageQuery, activate
 
 from . import image_response_cache
@@ -32,6 +32,7 @@ from .providers import (
 )
 from .schemas import (
     DEFAULT_THUMBHASHES,
+    ImageCenterSchema,
     ImageCollectionResponse,
     ImageMetadataSchema,
 )
@@ -49,7 +50,31 @@ provider_registry.register(PanoramaxProvider())
 provider_registry.register(CamptocampProvider())
 
 
-class NearbyImagesQuery(LanguageQuery):
+class _CachedOnlyMixin(pydantic.BaseModel):
+    """Shared ``cached_only`` parameter of the image endpoints.
+
+    Fast call for in-process and preview callers (e.g. the hut meta
+    og:image): serve whatever the response cache holds — fresh or stale
+    — and never contact providers. The empty-collection miss keeps the
+    contract simple; nothing is written back to the cache."""
+
+    cached_only: bool = Field(
+        False,
+        description=(
+            "Fast call: serve only a cached response (fresh or stale), "
+            "never query providers — an empty collection when nothing "
+            "is cached. Mutually exclusive with update_cache."
+        ),
+    )
+
+    @pydantic.model_validator(mode="after")
+    def _cached_only_excludes_update_cache(self):
+        if self.cached_only and getattr(self, "update_cache", False):
+            raise ValueError("cached_only and update_cache are mutually exclusive")
+        return self
+
+
+class NearbyImagesQuery(_CachedOnlyMixin, LanguageQuery):
     """Query parameters for the nearby-images endpoint."""
 
     lat: float = Field(
@@ -94,7 +119,7 @@ class NearbyImagesQuery(LanguageQuery):
     )
 
 
-class _PlaceImagesQuery(LanguageQuery):
+class _PlaceImagesQuery(_CachedOnlyMixin, LanguageQuery):
     """Shared query parameters of the place/hut image endpoints."""
 
     radius: float = Field(
@@ -146,6 +171,26 @@ class HutSlugPath(pydantic.BaseModel):
     hut_slug: str = Field(description="Hut slug")
 
 
+def _empty_images_response(
+    *, lat: float, lon: float, radius: float, sources_list: list[str] | None
+) -> ImageCollectionResponse:
+    """Empty FeatureCollection for ``cached_only`` misses: nothing was
+    cached, so the answer is "no images" — without contacting any
+    provider."""
+    return ImageCollectionResponse(
+        type="FeatureCollection",
+        features=[],
+        metadata=ImageMetadataSchema(
+            total=0,
+            sources_queried=sources_list or [],
+            query_radius_m=radius,
+            center=ImageCenterSchema(lat=lat, lon=lon),
+            geoplaces_found=0,
+            huts_found=0,
+        ),
+    )
+
+
 class NearbyImagesController(ApiController):
     """Images near a location from multiple sources (GeoJSON)."""
 
@@ -184,10 +229,23 @@ class NearbyImagesController(ApiController):
             limit=query.limit,
             precision=query.precision,
         )
+        cached = None
         if not query.update_cache:
             cached, fresh = image_response_cache.get_response(resp_key)
             if cached is not None and fresh:
                 return cached
+        if query.cached_only:
+            # Fast call: the cached response if any (stale included), else
+            # an empty collection — providers are never contacted and
+            # nothing is written back.
+            if cached is not None:
+                return cached
+            return _empty_images_response(
+                lat=query.lat,
+                lon=query.lon,
+                radius=query.radius,
+                sources_list=sources_list,
+            )
 
         # Step 1: Find GeoPlaces and Huts within 10m radius
         query_point = Point(query.lon, query.lat, srid=4326)
@@ -432,10 +490,28 @@ class PlaceImagesController(ApiController):
             limit=query.limit,
             fallback=query.fallback,
         )
+        cached = None
         if not query.update_cache:
             cached, fresh = image_response_cache.get_response(resp_key)
             if cached is not None and fresh:
                 return cached
+        if query.cached_only:
+            # Fast call: the cached response if any (stale included), else
+            # an empty collection — providers are never contacted and
+            # nothing is written back.
+            if cached is not None:
+                return cached
+            place = GeoPlace.objects.filter(
+                slug=place_slug, is_active=True, is_public=True
+            ).first()
+            if place is None:
+                raise_not_found(f"GeoPlace '{place_slug}' not found")
+            return _empty_images_response(
+                lat=place.location.y,
+                lon=place.location.x,
+                radius=query.radius,
+                sources_list=sources_list,
+            )
 
         from .pinning import maybe_enqueue_place_refresh, place_has_visible_pins
 
@@ -598,12 +674,30 @@ class HutImagesController(ApiController):
             limit=query.limit,
             fallback=query.fallback,
         )
+        cached = None
         if not query.update_cache:
             cached, fresh = image_response_cache.get_response(resp_key)
             if cached is not None and fresh:
                 return cached
-
         from server.apps.huts.models import Hut
+
+        if query.cached_only:
+            # Fast call: the cached response if any (stale included), else
+            # an empty collection — providers are never contacted and
+            # nothing is written back.
+            if cached is not None:
+                return cached
+            hut = Hut.objects.filter(
+                slug=hut_slug, is_active=True, is_public=True
+            ).first()
+            if hut is None:
+                raise_not_found(f"Hut '{hut_slug}' not found")
+            return _empty_images_response(
+                lat=hut.location.y,
+                lon=hut.location.x,
+                radius=query.radius,
+                sources_list=sources_list,
+            )
 
         from .pinning import place_has_visible_pins
 
@@ -716,6 +810,40 @@ class HutImagesController(ApiController):
         )
         image_response_cache.set_response(resp_key, response)
         return response
+
+
+#: The hut/place page gallery's request shape (frontend ``useHutImages``/
+#: ``useMediaImages``: radius 50 m, 20 images, all sources, no map
+#: fallback). The og:image lookups must read exactly the cache entries
+#: these parameters produce — the same images the pages render.
+GALLERY_QUERY_SHAPE = {"radius": 50.0, "sources": None, "limit": 20, "fallback": False}
+
+
+def cached_hut_images(hut_slug: str, *, lang: str) -> ImageCollectionResponse | None:
+    """Cache-only answer of the images-by-hut endpoint for in-process
+    callers (the hut meta endpoint's og:image).
+
+    Returns exactly the response cached for the gallery's request shape
+    — fresh or stale — or ``None`` when nothing is cached. Equivalent to
+    ``GET /v1/geo/images/hut/{slug}?cached_only=true``: providers are
+    never contacted, nothing is pinned or written back."""
+    key = image_response_cache.response_key(
+        "hut", hut_slug, lang=lang, **GALLERY_QUERY_SHAPE
+    )
+    cached, _fresh = image_response_cache.get_response(key)
+    return cached
+
+
+def cached_place_images(
+    place_slug: str, *, lang: str
+) -> ImageCollectionResponse | None:
+    """Cache-only answer of the images-for-place endpoint for the place
+    SEO surface's og:image — see :func:`cached_hut_images`."""
+    key = image_response_cache.response_key(
+        "place", place_slug, lang=lang, **GALLERY_QUERY_SHAPE
+    )
+    cached, _fresh = image_response_cache.get_response(key)
+    return cached
 
 
 paths = [

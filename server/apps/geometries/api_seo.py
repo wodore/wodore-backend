@@ -85,14 +85,48 @@ def _place_url(place: GeoPlace) -> str:
     return f"{settings.FRONTEND_DOMAIN.rstrip('/')}/{pattern.format(slug=place.slug)}"
 
 
+def _place_gallery_source(place: GeoPlace) -> str | None:
+    """Top photo of the same images-for-place response the place page's
+    gallery renders (``/v1/geo/images/place/{slug}`` — external
+    providers, score-ordered), served through the images API's
+    cache-only read path (``cached_place_images`` — the
+    ``cached_only=true`` fast call, no provider queries). Imagery is
+    language-independent and the place meta endpoint has no lang
+    parameter — any cached language's entry counts."""
+    from .api_images import cached_place_images
+
+    for candidate_lang in ("en", "de", "fr", "it"):
+        cached = cached_place_images(place.slug, lang=candidate_lang)
+        if cached is None or not cached.features:
+            continue
+        top = cached.features[0].properties
+        if top is None or top.is_fallback:
+            return None  # no properties or generated map fallback, not a photo
+        if not top.urls.original.raw:
+            continue
+        return top.urls.original.raw
+    return None
+
+
 def _place_image(place: GeoPlace, request: HttpRequest) -> str | None:
-    """Highest-scored *servable* image as og:image; static-map card as
+    """Preview image URL, in frontend order: the top image of the cached
+    images-for-place aggregation the gallery renders; the
+    highest-scored *servable* pinned/uploaded image; static-map card as
     fallback.
 
     Same visibility filters and source resolution as the hut meta
     endpoint (``_hut_meta._og_image``): pinned external images serve
     from ``source_url_raw``, rows with no source are skipped instead of
     signing an empty path."""
+    gallery = _place_gallery_source(place)
+    if gallery:
+        og_url = None
+        try:  # preview image is best-effort
+            og_url = og_photo_url(gallery)
+        except Exception:
+            og_url = None
+        if og_url:
+            return og_url
     associations = (
         GeoPlaceImageAssociation.objects.filter(
             geo_place=place,

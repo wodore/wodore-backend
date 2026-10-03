@@ -91,6 +91,20 @@ def _composite_image(source_url: str, size_px: int, x: str, y: str, alpha: int) 
     return f"image(/unsafe/{size_px}x{size_px}/{quote(source_url, safe='')},{x},{y},{alpha})"
 
 
+def normalize_source(source: str) -> str | None:
+    """Servable URL for a raw source string: media-relative paths get
+    the media prefix, absolute URLs pass through.
+
+    Returns ``None`` when the string is empty — an empty source would
+    sign the bare imagor media alias (e.g. ``.../wd``) and 500 in
+    imagor, so callers must skip to the next candidate or fall back."""
+    if not source:
+        return None
+    if not source.startswith("http"):
+        source = f"{settings.MEDIA_URL.rstrip('/')}/{source.lstrip('/')}"
+    return source
+
+
 def photo_source(image: Image) -> str | None:
     """Servable source URL for an :class:`Image` row: the local file when
     set, else the pinned external raw URL (pinned provider rows keep the
@@ -102,11 +116,7 @@ def photo_source(image: Image) -> str | None:
     source = str(image.image) if image.image else ""
     if not source:
         source = image.source_url_raw or ""
-    if not source:
-        return None
-    if not source.startswith("http"):
-        source = f"{settings.MEDIA_URL.rstrip('/')}/{source}"
-    return source
+    return normalize_source(source)
 
 
 def og_photo_url(image_url: str, focal: dict | None = None) -> str:
