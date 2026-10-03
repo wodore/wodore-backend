@@ -23,6 +23,7 @@ from server.apps.categories.models import Category
 from server.apps.translations import LanguageQuery
 
 from .models import WeatherCode, WeatherCodeSymbol, WeatherCodeSymbolCollection
+from .response import WeatherCodeValue
 from .schemas import DayTimeEnum
 
 DEFAULT_COLLECTION = "weather-icons-outlined-mono"
@@ -266,7 +267,9 @@ class WeatherCodesController(ApiController):
         operation_id="get_weather_codes",
         headers=cache_headers(CACHE_MAX_AGE),
     )
-    def get(self, parsed_query: Query[WeatherCodesQuery]) -> dict[int, dict]:
+    def get(
+        self, parsed_query: Query[WeatherCodesQuery]
+    ) -> dict[int, WeatherCodeValue]:
         """List weather codes.
 
         Dict keyed by WMO code, with symbols from the specified collection.
