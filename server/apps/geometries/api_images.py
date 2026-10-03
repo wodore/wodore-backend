@@ -513,34 +513,21 @@ class PlaceImagesController(ApiController):
                 return cached
         if query.cached_only:
             # Fast call: the cached response if any (stale included), else
-            # an empty collection with at most the static-map fallback —
+            # the empty collection with at most the static-map fallback —
             # providers are never contacted and nothing is written back.
-            if cached is not None:
-                return cached
             place = GeoPlace.objects.filter(
                 slug=place_slug, is_active=True, is_public=True
             ).first()
             if place is None:
                 raise_not_found(f"GeoPlace '{place_slug}' not found")
-            location = place.location
-            features = []
-            if query.static_map_fallback and location is not None:
-                features = [
-                    _map_fallback_feature(
-                        request,
-                        slug=place.slug,
-                        lat=location.y,
-                        lon=location.x,
-                        modified=place.modified,
-                        place_type="geoplace",
-                    )
-                ]
-            return _empty_images_response(
-                lat=location.y if location is not None else 0.0,
-                lon=location.x if location is not None else 0.0,
+            return cached_only_response(
+                cached=cached,
+                entity=place,
+                request=request,
+                place_type="geoplace",
                 radius=query.radius,
                 sources_list=sources_list,
-                features=features,
+                static_map_fallback=query.static_map_fallback,
             )
 
         from .pinning import maybe_enqueue_place_refresh, place_has_visible_pins
@@ -718,34 +705,21 @@ class HutImagesController(ApiController):
 
         if query.cached_only:
             # Fast call: the cached response if any (stale included), else
-            # an empty collection with at most the static-map fallback —
+            # the empty collection with at most the static-map fallback —
             # providers are never contacted and nothing is written back.
-            if cached is not None:
-                return cached
             hut = Hut.objects.filter(
                 slug=hut_slug, is_active=True, is_public=True
             ).first()
             if hut is None:
                 raise_not_found(f"Hut '{hut_slug}' not found")
-            location = hut.location
-            features = []
-            if query.static_map_fallback and location is not None:
-                features = [
-                    _map_fallback_feature(
-                        request,
-                        slug=hut.slug,
-                        lat=location.y,
-                        lon=location.x,
-                        modified=hut.modified,
-                        place_type="hut",
-                    )
-                ]
-            return _empty_images_response(
-                lat=location.y if location is not None else 0.0,
-                lon=location.x if location is not None else 0.0,
+            return cached_only_response(
+                cached=cached,
+                entity=hut,
+                request=request,
+                place_type="hut",
                 radius=query.radius,
                 sources_list=sources_list,
-                features=features,
+                static_map_fallback=query.static_map_fallback,
             )
 
         from .pinning import place_has_visible_pins
@@ -872,6 +846,101 @@ class HutImagesController(ApiController):
 #: read exactly the cache entries these parameters produce — the same
 #: images the pages render (fallback features are skipped there).
 GALLERY_QUERY_SHAPE = {"radius": 50.0, "sources": None, "limit": 20, "fallback": True}
+
+
+def cached_only_response(
+    *,
+    cached: ImageCollectionResponse | None,
+    entity,
+    request: HttpRequest,
+    place_type: str,
+    radius: float,
+    sources_list: list[str] | None,
+    static_map_fallback: bool,
+) -> ImageCollectionResponse:
+    """The ``cached_only=true`` answer for one entity (Hut or
+    GeoPlace): the cached response if any (stale included), else the
+    empty collection with at most the static-map fallback feature.
+
+    Providers are never contacted and nothing is written back. Shared
+    by the controllers' cached_only branches and the in-process og
+    helpers (``hut_gallery_response``/``place_gallery_response``).
+    ``entity`` is duck-typed: slug, location, modified."""
+    if cached is not None:
+        return cached
+    location = entity.location
+    features = []
+    if static_map_fallback and location is not None:
+        features = [
+            _map_fallback_feature(
+                request,
+                slug=entity.slug,
+                lat=location.y,
+                lon=location.x,
+                modified=entity.modified,
+                place_type=place_type,
+            )
+        ]
+    return _empty_images_response(
+        lat=location.y if location is not None else 0.0,
+        lon=location.x if location is not None else 0.0,
+        radius=radius,
+        sources_list=sources_list,
+        features=features,
+    )
+
+
+def hut_gallery_response(
+    hut, request: HttpRequest, *, lang: str | None
+) -> ImageCollectionResponse:
+    """The image service's answer for the hut page's gallery, default
+    parameters, for in-process callers (the hut meta og:image).
+
+    Identical to ``GET /v1/geo/images/hut/{slug}?cached_only=true``:
+    the cached gallery response if any (stale included; imagery is
+    language-independent — the requested language's entry first, then
+    any other), else the static-map fallback feature."""
+    cached = None
+    for candidate_lang in dict.fromkeys((lang, "en", "de", "fr", "it")):
+        if candidate_lang is None:
+            continue
+        entry = cached_hut_images(hut.slug, lang=candidate_lang)
+        if entry is not None and entry.features:
+            cached = entry
+            break
+    return cached_only_response(
+        cached=cached,
+        entity=hut,
+        request=request,
+        place_type="hut",
+        radius=GALLERY_QUERY_SHAPE["radius"],
+        sources_list=None,
+        static_map_fallback=GALLERY_QUERY_SHAPE["fallback"],
+    )
+
+
+def place_gallery_response(
+    place, request: HttpRequest, *, lang: str | None = None
+) -> ImageCollectionResponse:
+    """The image service's answer for the place page's gallery (the
+    place SEO surface's og:image) — see :func:`hut_gallery_response`.
+    The place meta endpoint has no lang parameter, so any cached
+    language's entry counts."""
+    cached = None
+    for candidate_lang in ("en", "de", "fr", "it"):
+        entry = cached_place_images(place.slug, lang=candidate_lang)
+        if entry is not None and entry.features:
+            cached = entry
+            break
+    return cached_only_response(
+        cached=cached,
+        entity=place,
+        request=request,
+        place_type="geoplace",
+        radius=GALLERY_QUERY_SHAPE["radius"],
+        sources_list=None,
+        static_map_fallback=GALLERY_QUERY_SHAPE["fallback"],
+    )
 
 
 def cached_hut_images(hut_slug: str, *, lang: str) -> ImageCollectionResponse | None:

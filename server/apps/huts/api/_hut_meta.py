@@ -23,14 +23,7 @@ from django.conf import settings
 from django.http import HttpRequest
 
 from server.apps.api.controller import ApiController, cache_headers, raise_not_found
-from server.apps.images.og import (
-    OG_MAP_EFFECT,
-    OG_MAP_MARKER_SCALE,
-    OG_MAP_ZOOM,
-    og_card_url,
-    og_map_card_url,
-    og_photo_url,
-)
+from server.apps.images.og import og_card_url, og_photo_url
 from server.apps.symbols.utils import resolve_symbol_urls
 from server.apps.translations import LanguageQuery, activate
 
@@ -130,48 +123,41 @@ class _MetaQuery(LanguageQuery):
     """Only the shared lang parameter."""
 
 
-def _og_gallery_source(hut: Hut, lang: str) -> str | None:
-    """Top photo of the same images-by-hut response the frontend gallery
-    renders (``/v1/geo/images/hut/{slug}``: external providers such as
-    camptocamp or wikicommons, score-ordered — the images the hut page
-    shows).
-
-    Served through the images API's cache-only read path
-    (``cached_hut_images`` — the ``cached_only=true`` fast call, no
-    provider queries) so the meta endpoint stays a fast single-row
-    query. Entries may be stale, which is fine for a preview image; a
-    cold cache (nobody has opened the hut page yet) returns ``None``
-    and the caller falls through to the next candidate. Imagery is
-    language-independent — the requested language's entry first, then
-    any other."""
-    from server.apps.geometries.api_images import cached_hut_images
-
-    for candidate_lang in dict.fromkeys((lang, "en", "de", "fr", "it")):
-        cached = cached_hut_images(hut.slug, lang=candidate_lang)
-        if cached is None or not cached.features:
-            continue
-        top = cached.features[0].properties
-        if top is None or top.is_fallback:
-            return None  # no properties or generated map fallback, not a photo
-        if not top.urls.original.raw:
-            continue
-        return top.urls.original.raw
-    return None
-
-
 def _og_image(hut: Hut, request: HttpRequest, lang: str) -> str:
-    """Preview image URL: the top image of the images-by-hut aggregation
-    the hut page's gallery renders — everything else (pinned/curated
-    rows, the deprecated hut-services ``photos`` field) is the image
-    service's business and reaches the og through its cached response.
-    The only fallback is the generated static-map card (zoom 15,
-    spotlight effect, type-symbol marker, watermark) — same generation
-    as the image service's ``static_map_fallback`` feature."""
-    source = _og_gallery_source(hut, lang)
-    if source:
+    """Preview image URL straight from the image service's gallery
+    response (``hut_gallery_response`` — the ``cached_only=true`` fast
+    call, default parameters):
+
+    * a photo feature → imagor og size with the Wodore logo composited
+      at the bottom, a bit left of center;
+    * the service's static-map fallback feature (``is_fallback``) → its
+      card URL as-is (already og-sized: zoom 15, spotlight effect,
+      type-symbol marker, watermark baked into the render).
+
+    Everything else (pinned/curated rows, the deprecated hut-services
+    ``photos`` field) is the image service's business. The branded card
+    remains only for the degenerate no-location case."""
+    from server.apps.geometries.api_images import hut_gallery_response
+
+    response = hut_gallery_response(hut, request, lang=lang)
+    for feature in response.features:
+        props = feature.properties
+        if props is None:
+            continue
+        if props.is_fallback:
+            landscape = props.urls.landscape
+            url = (landscape.md if landscape is not None else None) or (
+                props.urls.original.raw or None
+            )
+            if url:
+                return url
+            continue
+        raw = props.urls.original.raw
+        if not raw:
+            continue
         og_url = None
         try:  # preview image is best-effort
-            og_url = og_photo_url(source)
+            og_url = og_photo_url(raw)
         except Exception:
             og_url = None
         if og_url:
@@ -180,25 +166,6 @@ def _og_image(hut: Hut, request: HttpRequest, lang: str) -> str:
     if hut.hut_type_open is not None:
         symbols = resolve_symbol_urls(hut.hut_type_open, {"request": request})
         symbol_url = symbols.get("detailed") if symbols else None
-    if hut.location is not None:
-        # Complete static-map card (OpenTopoMap, type symbol marker,
-        # watermark) from the generic endpoint; v=<modified> busts the
-        # render/storage cache on ANY hut change, ETag-style.
-        from urllib.parse import urlencode
-
-        query = urlencode(
-            {
-                "place": hut.slug,
-                "place_type": "hut",
-                "zoom": OG_MAP_ZOOM,
-                "effect": OG_MAP_EFFECT,
-                "marker_scale": OG_MAP_MARKER_SCALE,
-                "v": f"{hut.modified:%Y%m%dT%H%M%S}",
-            }
-        )
-        return og_map_card_url(
-            request.build_absolute_uri(f"/v1/geo/map/static?{query}")
-        )
     return og_card_url(symbol_url)
 
 

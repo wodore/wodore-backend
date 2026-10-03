@@ -29,18 +29,30 @@ class TestPlaceMeta:
         assert data["jsonld"]["@type"] == "Place"
         assert data["jsonld"]["name"] == place.name
 
+    @pytest.fixture(autouse=True)
+    def _isolated_cache(self, monkeypatch):
+        from uuid import uuid4
+
+        from django.core.cache.backends.locmem import LocMemCache
+
+        from server.apps.geometries import image_response_cache as irc
+
+        cache = LocMemCache(f"test-{uuid4().hex}", {})
+        monkeypatch.setattr(irc, "_cache", lambda: cache)
+
     def test_meta_always_has_image(self, seed_data, client):
-        """No photo -> static-map card from the generic endpoint."""
+        """No photo -> the image service's static-map fallback feature
+        (direct card URL, og dimensions, spotlight, marker)."""
         place = GeoPlace.objects.filter(
             is_active=True, is_public=True, name__gt=""
         ).first()
         assert place is not None
         data = client.get(f"/v1/geo/places/{place.slug}/meta").json()
         assert data["image"]
-        assert "map%2Fstatic" in data["image"]  # imagor-wrapped endpoint URL
-        assert "effect%3Dspotlight" in data["image"]
-        assert "marker_scale%3D0.8" in data["image"]
-        assert "zoom%3D15" in data["image"]
+        assert "/v1/geo/map/static" in data["image"]
+        assert "effect=spotlight" in data["image"]
+        assert "marker_scale=0.8" in data["image"]
+        assert "zoom=15" in data["image"]
 
     def test_meta_unknown_slug_is_404(self, seed_data, client):
         assert client.get("/v1/geo/places/does-not-exist/meta").status_code == 404
@@ -73,8 +85,21 @@ class TestPlaceMarkdown:
 
 
 class TestHutOgCardFallback:
+    @pytest.fixture(autouse=True)
+    def _isolated_cache(self, monkeypatch):
+        from uuid import uuid4
+
+        from django.core.cache.backends.locmem import LocMemCache
+
+        from server.apps.geometries import image_response_cache as irc
+
+        cache = LocMemCache(f"test-{uuid4().hex}", {})
+        monkeypatch.setattr(irc, "_cache", lambda: cache)
+
     def test_hut_meta_image_falls_back_to_static_map(self, seed_data, client):
-        """Huts without a photo get the static map card (map.png)."""
+        """Huts without a photo get the image service's static-map
+        fallback feature — its card URL is the og:image, as-is (direct
+        URL, og dimensions, spotlight, marker)."""
         from server.apps.huts.models import Hut, HutImageAssociation
 
         HutImageAssociation.objects.all().delete()
@@ -82,10 +107,11 @@ class TestHutOgCardFallback:
         assert hut is not None
         data = client.get(f"/v1/huts/{hut.slug}/meta").json()
         assert data["image"]
-        assert "map%2Fstatic" in data["image"]
-        assert "effect%3Dspotlight" in data["image"]
-        assert "marker_scale%3D0.8" in data["image"]
-        assert "zoom%3D15" in data["image"]
+        assert "/v1/geo/map/static" in data["image"]
+        assert "effect=spotlight" in data["image"]
+        assert "marker_scale=0.8" in data["image"]
+        assert "zoom=15" in data["image"]
+        assert "size=1200x630" in data["image"]
 
 
 class TestPlaceOgPinnedImage:
@@ -141,7 +167,8 @@ class TestPlaceOgPinnedImage:
         )
         data = client.get(f"/v1/geo/places/{place.slug}/meta").json()
         assert data["image"]
-        assert "map%2Fstatic" in data["image"]
+        assert "/v1/geo/map/static" in data["image"]
+        assert "effect=spotlight" in data["image"]
 
     def test_gallery_top_image_beats_pins(self, seed_data, client):
         """The place og:image follows the gallery first: a cached

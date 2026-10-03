@@ -205,7 +205,10 @@ class TestHutMetaOgSources:
             quote("media.camptocamp.org/c2corg-active/1204579707.jpg", safe="")
             in data["image"]
         )
-        assert "map%2Fstatic" not in data["image"]
+        assert "/v1/geo/map/static" not in data["image"]
+        # Wodore logo watermark: bottom, a bit left of center (0.33,
+        # same position as the static-map cards).
+        assert ",0.33,bottom-10,0)" in data["image"]
 
     def test_gallery_cached_in_other_language_is_used(self, hut, client):
         """The gallery is language-independent imagery — a response cached
@@ -235,20 +238,23 @@ class TestHutMetaOgSources:
         assert quote("media.camptocamp.org/top.jpg", safe="") in data["image"]
         assert "sac-cas.ch" not in data["image"]
 
-    def test_cold_gallery_cache_is_map_card(self, hut, client):
+    def test_cold_gallery_cache_uses_service_fallback(self, hut, client):
         """No cached gallery response (nobody opened the page yet) → the
-        static-map card, never the deprecated photos field."""
+        image service's static-map fallback feature — never the
+        deprecated photos field."""
         hut.photos = "https://static.suissealpine.sac-cas.ch/hero.jpg"
         hut.save(update_fields=["photos"])
         data = client.get(f"/v1/huts/{hut.slug}/meta").json()
         assert data["image"]
-        assert "map%2Fstatic" in data["image"]
+        assert "/v1/geo/map/static" in data["image"]
+        assert "effect=spotlight" in data["image"]
+        assert "size=1200x630" in data["image"]
         assert "sac-cas.ch" not in data["image"]
 
-    def test_fallback_only_cache_is_map_card(self, hut, client):
+    def test_fallback_feature_is_og_image(self, hut, client):
         """A cached response whose only feature is the service's
-        static-map fallback (is_fallback=true) serves the og's own map
-        card, never the fallback feature's URL."""
+        static-map fallback (is_fallback=true) serves that feature's
+        card URL as-is — the og never generates map cards itself."""
         from server.apps.geometries.api_images import _map_fallback_feature
 
         class _Req:
@@ -284,7 +290,8 @@ class TestHutMetaOgSources:
             ),
         )
         data = client.get(f"/v1/huts/{hut.slug}/meta").json()
-        assert "map%2Fstatic" in data["image"]
+        assert data["image"].startswith("https://wodore.com/v1/geo/map/static")
+        assert "effect=spotlight" in data["image"]
 
     def test_meta_does_not_disturb_other_hut_routes(self, seed_data, client):
         """/{slug} catch-all and the .md variant keep working alongside."""
