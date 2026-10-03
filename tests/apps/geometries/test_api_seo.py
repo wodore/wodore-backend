@@ -144,6 +144,92 @@ class TestPlaceOgPinnedImage:
         assert quote(url, safe="") in data["image"]
         assert not data["image"].endswith("/wd")
 
+    def test_gallery_top_image_beats_pins(self, seed_data, client):
+        """The place og:image follows the gallery first: a cached
+        images-for-place response wins over pinned rows (the same order
+        as the hut meta endpoint)."""
+        from urllib.parse import quote
+
+        from django.contrib.gis.geos import Point
+
+        from server.apps.geometries.models import GeoPlaceImageAssociation
+        from server.apps.geometries.pinning import pin_place_images
+        from server.apps.geometries.providers import post_process_images
+        from server.apps.geometries.providers.base import ImageResult
+        from server.apps.geometries.schemas import (
+            ImageCollectionResponse,
+            ImageMetadataSchema,
+        )
+
+        place = GeoPlace.objects.filter(is_active=True).first()
+        assert place is not None
+        GeoPlaceImageAssociation.objects.filter(geo_place=place).delete()
+        pin_place_images(
+            place,
+            [
+                ImageResult(
+                    provider="wikicommons",
+                    source_id="File:Pinned.jpg",
+                    source_url="https://commons.wikimedia.org/wiki/File:Pinned.jpg",
+                    image_type="flat",
+                    captured_at=None,
+                    location=Point(7.5, 46.5),
+                    distance_m=0.0,
+                    license_slug="cc-by-sa-4-0",
+                    attribution="Pinned Author, CC BY-SA",
+                    author="Pinned Author",
+                    author_url=None,
+                    url_large="https://upload.wikimedia.org/wikipedia/commons/pinned.jpg",
+                    width=1920,
+                    height=1080,
+                    score=32767,
+                )
+            ],
+        )
+        # Warm the gallery cache exactly like the endpoint would (post-
+        # processed camptocmp result under the gallery request shape).
+        result = ImageResult(
+            provider="camptocamp",
+            source_id="c2c_place",
+            source_url="https://www.camptocamp.org/images/1",
+            image_type="flat",
+            captured_at=None,
+            location=Point(7.5, 46.5),
+            distance_m=4.0,
+            license_slug="cc-by-sa-3-0",
+            attribution="Gallery Author, CC BY-SA",
+            author="Gallery Author",
+            author_url=None,
+            url_large="https://media.camptocamp.org/c2corg-active/place_top.jpg",
+            width=1920,
+            height=1080,
+            score=60,
+        )
+        from server.apps.geometries import image_response_cache as irc
+        from server.apps.geometries.api_images import GALLERY_QUERY_SHAPE
+
+        irc.set_response(
+            irc.response_key("place", place.slug, lang="fr", **GALLERY_QUERY_SHAPE),
+            ImageCollectionResponse(
+                type="FeatureCollection",
+                features=post_process_images([result]),
+                metadata=ImageMetadataSchema(
+                    total=1,
+                    sources_queried=["camptocamp"],
+                    query_radius_m=50,
+                    center={"lat": 46.5, "lon": 7.5},
+                    geoplaces_found=1,
+                    huts_found=0,
+                ),
+            ),
+        )
+        data = client.get(f"/v1/geo/places/{place.slug}/meta").json()
+        assert (
+            quote("media.camptocamp.org/c2corg-active/place_top.jpg", safe="")
+            in (data["image"])
+        )
+        assert "pinned.jpg" not in data["image"]
+
 
 class TestCategoriesMarkdown:
     def test_categories_index_lists_sitemap_categories_with_counts(

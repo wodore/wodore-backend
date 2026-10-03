@@ -139,26 +139,18 @@ def _og_gallery_source(hut: Hut, lang: str) -> str | None:
     camptocamp or wikicommons, score-ordered — the images the hut page
     shows).
 
-    Read from the endpoint's shared response cache so the meta endpoint
-    stays a fast single-row query — no provider calls, ever. Entries may
-    be stale, which is fine for a preview image; a cold cache (nobody
-    has opened the hut page yet) returns ``None`` and the caller falls
-    through to the next candidate. The key mirrors the gallery request
-    exactly (``useHutImages`` in the frontend: radius 50, limit 20, no
-    sources filter), trying the requested language first."""
-    from server.apps.geometries import image_response_cache as irc
+    Served through the images API's cache-only read path
+    (``cached_hut_images`` — the ``cached_only=true`` fast call, no
+    provider queries) so the meta endpoint stays a fast single-row
+    query. Entries may be stale, which is fine for a preview image; a
+    cold cache (nobody has opened the hut page yet) returns ``None``
+    and the caller falls through to the next candidate. Imagery is
+    language-independent — the requested language's entry first, then
+    any other."""
+    from server.apps.geometries.api_images import cached_hut_images
 
     for candidate_lang in dict.fromkeys((lang, "en", "de", "fr", "it")):
-        key = irc.response_key(
-            "hut",
-            hut.slug,
-            radius=50.0,
-            sources=None,
-            lang=candidate_lang,
-            limit=20,
-            fallback=False,
-        )
-        cached, _fresh = irc.get_response(key)
+        cached = cached_hut_images(hut.slug, lang=candidate_lang)
         if cached is None or not cached.features:
             continue
         top = cached.features[0].properties
@@ -167,6 +159,7 @@ def _og_gallery_source(hut: Hut, lang: str) -> str | None:
         if not top.urls.original.raw:
             continue
         return top.urls.original.raw
+    return None
 
 
 def _og_image(hut: Hut, request: HttpRequest, lang: str) -> str:
