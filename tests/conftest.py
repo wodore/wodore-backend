@@ -1,13 +1,19 @@
+"""Shared test configuration.
+
+``DJANGO_ENV`` is pinned in two places: ``server/settings/__init__.py``
+guards the pytest case directly (pytest-django builds settings before any
+conftest code runs), and the module-level ``setdefault`` below covers
+non-standard settings modules that might not go through that guard.
+"""
+
 import hashlib
 import os
+
+os.environ.setdefault("DJANGO_ENV", "test")
 
 import pytest
 
 from server.apps.huts.models import Hut
-
-
-def pytest_configure(config):
-    os.environ.setdefault("DJANGO_ENV", "test")
 
 
 def _reset_pk_sequences() -> None:
