@@ -36,6 +36,26 @@ Options considered:
 - **Relation detection heuristics** (which nested model is a relation) could mis-derive. Mitigation: explicit per-endpoint overrides (`spec_overrides=`) before any magic; heuristics only where unambiguous (`model._meta` field-name match).
 - **Readers-generated queries may lose to `JSONBAgg` on wide list endpoints** (single query vs select+prefetch). Mitigation: benchmark gate below; hot endpoints keep annotations.
 
+#### Mixing readers and hand-coded paths (verified against django-readers docs)
+
+Specs are pure functions (`process(spec) → (prepare, project)`) with no global state, no `INSTALLED_APPS` registration, no settings — adoption is per-endpoint and JSONBAgg/ readers paths never share a queryset. Three concrete failure modes to guard, each pinned by the query-count tests:
+
+1. **prepare/project split**: calling `project()` on a queryset that skipped `prepare()` → deferred-field access triggers silent per-instance queries (N+1) or `AttributeError` on a missing `to_attr`. The derivation always returns the pair together.
+2. **`only()` vs shared code**: model methods, `__str__`, or signal handlers touching fields outside the spec cause per-instance deferred loads. Readers has explicit cookbook patterns for properties/methods requiring loaded fields — use them; the query-count tests catch violations.
+3. **Annotation name collisions**: an annotated attribute (`.sources`) and a spec relationship with the same name on one queryset collide. Computed fields become reader pairs (annotation inside `prepare`), so both names never coexist on one path; shared annotating manager methods stay out of readers endpoints.
+
+#### Ecosystem check (no pydantic wrapper exists)
+
+- **django-mantle**: attrs + cattrs — no pydantic support.
+- **`django_readers.rest_framework`**: derives DRF serializers *from* specs (opposite direction) for OpenAPI introspection; targets DRF, not dmr/pydantic.
+- **django-modern-schemas** (dmr-docs companion): generates pydantic models *from* Django models — solves the schema side, not query optimization; our schemas already exist hand-authored.
+
+The pydantic→spec derivation is therefore ours to own (~100 lines). The inverse direction (spec→pydantic, à la the DRF module) was considered and rejected: specs are pure query shape and cannot carry OpenAPI metadata (descriptions, examples, aliases) that our hand-authored schemas must keep.
+
+#### Reversibility
+
+The layer is one isolated module plus per-endpoint call sites — no migrations, no settings, no shared state. Reader pairs are plain `(prepare, project)` functions whose bodies come straight from the current annotations. Dropping = revert endpoints, delete the module, remove the dependency; query-count tests document correct counts for both implementations, making the revert verifiable. Partial adoption (hot endpoints keeping `JSONBAgg` indefinitely) is a supported stable end-state, not a failure.
+
 ## Surprising Details
 
 - The `@spec`/`@overrides` escape hatches map exactly onto our existing computed annotations (`annotate_hut_sources()`, `annotate_hut_images()`) — they become reusable reader pairs with the same bodies, so the hand-tuned logic isn't discarded, it's re-expressed.
