@@ -1199,6 +1199,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/7d/fe/ca8acf0ec02d26736500ce0e8b4979b0bb169340a23d34420b06ae5df982/django-querycount-0.8.3.tar.gz", hash = "sha256:0782484e8a1bd29498fa0195a67106e47cdcc98fafe80cebb1991964077cb694", size = 6739, upload-time = "2023-01-05T22:01:20.252Z" }
 
 [[package]]
+name = "django-readers"
+version = "2.5.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d6/6d/b89717c06b3bc3b9ae157ae24a8b936b85960f6c60b8752f6ad9fc8aaad8/django_readers-2.5.1.tar.gz", hash = "sha256:b00529c73842b4af69d3e44f6c362dc4ce8122cbda9b85034216a1236c26a56a", size = 12584, upload-time = "2025-11-03T13:18:41.479Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6e/4c/e701f6ab32a2efbb6e09fdf095394640fc59b7fda58d37d329c18034cc49/django_readers-2.5.1-py3-none-any.whl", hash = "sha256:af0d043403458cf66c0313f9b594b24e87a8781057510de1c95f54b1051268d9", size = 13434, upload-time = "2025-11-03T12:32:27.886Z" },
+]
+
+[[package]]
 name = "django-split-settings"
 version = "1.3.2"
 source = { registry = "https://pypi.org/simple" }
@@ -5044,6 +5056,7 @@ dependencies = [
     { name = "django-pgtrigger" },
     { name = "django-postgres-extra" },
     { name = "django-q2" },
+    { name = "django-readers" },
     { name = "django-split-settings" },
     { name = "django-storages", extra = ["s3"] },
     { name = "django-unfold" },
@@ -5177,6 +5190,7 @@ requires-dist = [
     { name = "django-pgtrigger", specifier = ">=4.17.0" },
     { name = "django-postgres-extra", git = "https://github.com/armonge/django-postgres-extra.git?branch=feat%2Fdjango-6" },
     { name = "django-q2", specifier = ">=1.11.0" },
+    { name = "django-readers", specifier = ">=2.5.1" },
     { name = "django-split-settings", specifier = "==1.*" },
     { name = "django-storages", extras = ["s3"], specifier = ">=1.14.6" },
     { name = "django-unfold", specifier = "==0.87.*" },
