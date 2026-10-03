@@ -14,6 +14,7 @@ one predictable format, documented in the OpenAPI schema via dmr's
 ``error_model`` mechanism.
 """
 
+import typing
 from http import HTTPStatus
 
 from dmr import APIError, Controller, NewHeader
@@ -84,7 +85,7 @@ class ApiController(Controller[WodoreSerializer]):
         raise exc from None
 
 
-def raise_not_found(detail: str) -> None:
+def raise_not_found(detail: str) -> typing.NoReturn:
     """Raise the standard 404 APIError from any handler."""
     raise APIError(
         {"code": ErrorCode.not_found, "detail": detail},

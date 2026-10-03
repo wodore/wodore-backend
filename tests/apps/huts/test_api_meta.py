@@ -136,6 +136,11 @@ class TestHutMetaOgImage:
         hut = Hut.objects.filter(is_active=True, is_public=True).first()
         assert hut is not None
         HutImageAssociation.objects.filter(hut=hut).delete()
+        # The provider hero (hut.photos) wins over everything — clear it
+        # so the curated-image/fallback tests below stay meaningful.
+        if hut.photos:
+            hut.photos = ""
+            hut.save(update_fields=["photos"])
         return hut
 
     @staticmethod
@@ -250,3 +255,199 @@ class TestHutMetaOgImage:
         assert client.get(f"/v1/huts/{hut.slug}").status_code == 200
         assert client.get(f"/v1/huts/{hut.slug}.md").status_code == 200
         assert client.get(f"/v1/huts/{hut.slug}/meta").status_code == 200
+
+
+class TestHutMetaOgSources:
+    """og:image source resolution against the frontend's image choices.
+
+    Provider hero (hut-services ``photos``) and the images-by-hut
+    gallery: huts whose only photos come from external providers used
+    to fall through to the static-map card even though the hut page
+    shows them (gallery via ``/v1/geo/images/hut/{slug}``, header via
+    ``photos``) — the preview must match the page."""
+
+    @pytest.fixture(autouse=True)
+    def _isolated_cache(self, monkeypatch):
+        from uuid import uuid4
+
+        from django.core.cache.backends.locmem import LocMemCache
+
+        from server.apps.geometries import image_response_cache as irc
+
+        cache = LocMemCache(f"test-{uuid4().hex}", {})
+        monkeypatch.setattr(irc, "_cache", lambda: cache)
+
+    @pytest.fixture
+    def hut(self, seed_data):
+        hut = Hut.objects.filter(is_active=True, is_public=True).first()
+        assert hut is not None
+        HutImageAssociation.objects.filter(hut=hut).delete()
+        hut.photos = ""
+        hut.save(update_fields=["photos"])
+        return hut
+
+    def test_provider_hero_external_url_is_og_image(self, hut, client):
+        """An external provider photo (e.g. SAC) becomes the og:image."""
+        from urllib.parse import quote
+
+        hut.photos = "https://static.suissealpine.sac-cas.ch/sewen.jpg"
+        hut.save(update_fields=["photos"])
+        data = client.get(f"/v1/huts/{hut.slug}/meta").json()
+        assert data["image"]
+        assert (
+            quote("static.suissealpine.sac-cas.ch/sewen.jpg", safe="") in data["image"]
+        )
+        # Photo variant, not a map/brand card.
+        assert "map%2Fstatic" not in data["image"]
+        assert "meta.jpg" not in data["image"]
+
+    def test_provider_hero_media_path_gets_media_prefix(self, hut, client):
+        """A media-relative hero path resolves through MEDIA_URL."""
+        from urllib.parse import quote
+
+        hut.photos = "hut_photos/hero.jpg"
+        hut.save(update_fields=["photos"])
+        data = client.get(f"/v1/huts/{hut.slug}/meta").json()
+        assert quote("hut_photos/hero.jpg", safe="") in data["image"]
+
+    def test_provider_hero_wins_over_curated_images(self, hut, client):
+        """The hero matches the page (avatar/gallery lead) even when
+        curated, approved images exist."""
+        from urllib.parse import quote
+
+        TestHutMetaOgImage._pin(
+            hut,
+            source_id="File:Curated.jpg",
+            score=32767,
+            url_large="https://upload.wikimedia.org/wikipedia/commons/curated.jpg",
+        )
+        hut.photos = "https://static.suissealpine.sac-cas.ch/hero.jpg"
+        hut.save(update_fields=["photos"])
+        data = client.get(f"/v1/huts/{hut.slug}/meta").json()
+        assert (
+            quote("static.suissealpine.sac-cas.ch/hero.jpg", safe="") in data["image"]
+        )
+        assert "curated.jpg" not in data["image"]
+
+    def test_no_hero_no_images_is_map_card(self, hut, client):
+        """Without hero and curated images the map card stays."""
+        data = client.get(f"/v1/huts/{hut.slug}/meta").json()
+        assert data["image"]
+        assert "map%2Fstatic" in data["image"]
+
+    @staticmethod
+    def _gallery_response(hut, top_raw: str):
+        """ImageCollectionResponse built exactly like the endpoint: a
+        camptocamp ImageResult through post_process_images."""
+        from django.contrib.gis.geos import Point
+
+        from server.apps.geometries.providers import post_process_images
+        from server.apps.geometries.providers.base import ImageResult
+        from server.apps.geometries.schemas import (
+            ImageCollectionResponse,
+            ImageMetadataSchema,
+        )
+
+        result = ImageResult(
+            provider="camptocamp",
+            source_id="c2c_120457",
+            source_url="https://www.camptocamp.org/images/120457",
+            image_type="flat",
+            captured_at=None,
+            location=Point(8.521, 46.7466),
+            distance_m=4.0,
+            license_slug="cc-by-sa-3-0",
+            attribution="Test Author, CC BY-SA",
+            author="Test Author",
+            author_url=None,
+            url_large=top_raw,
+            width=1920,
+            height=1080,
+            score=60,
+        )
+        features = post_process_images([result])
+        return ImageCollectionResponse(
+            type="FeatureCollection",
+            features=features,
+            metadata=ImageMetadataSchema(
+                total=len(features),
+                sources_queried=["camptocamp"],
+                query_radius_m=50,
+                center={"lat": 46.7466, "lon": 8.521},
+                geoplaces_found=0,
+                huts_found=1,
+            ),
+        )
+
+    @staticmethod
+    def _warm_gallery_cache(hut, response, *, lang="en") -> None:
+        from server.apps.geometries import image_response_cache as irc
+
+        irc.set_response(
+            irc.response_key(
+                "hut",
+                hut.slug,
+                radius=50.0,
+                sources=None,
+                lang=lang,
+                limit=20,
+                fallback=False,
+            ),
+            response,
+        )
+
+    def test_gallery_top_image_is_og_image(self, hut, client):
+        """The og:image is the top image of the cached images-by-hut
+        response — the same photo the frontend gallery shows first."""
+        from urllib.parse import quote
+
+        self._warm_gallery_cache(
+            hut,
+            self._gallery_response(
+                hut, "https://media.camptocamp.org/c2corg-active/1204579707.jpg"
+            ),
+        )
+        data = client.get(f"/v1/huts/{hut.slug}/meta").json()
+        assert (
+            quote("media.camptocamp.org/c2corg-active/1204579707.jpg", safe="")
+            in data["image"]
+        )
+        assert "map%2Fstatic" not in data["image"]
+
+    def test_gallery_beats_provider_hero(self, hut, client):
+        """The gallery (the page's image strip) wins over the photos hero."""
+        from urllib.parse import quote
+
+        hut.photos = "https://static.suissealpine.sac-cas.ch/hero.jpg"
+        hut.save(update_fields=["photos"])
+        self._warm_gallery_cache(
+            hut, self._gallery_response(hut, "https://media.camptocamp.org/top.jpg")
+        )
+        data = client.get(f"/v1/huts/{hut.slug}/meta").json()
+        assert quote("media.camptocamp.org/top.jpg", safe="") in data["image"]
+        assert "sac-cas.ch" not in data["image"]
+
+    def test_gallery_cached_in_other_language_is_used(self, hut, client):
+        """The gallery is language-independent imagery — a response cached
+        under any UI language serves the og lookup."""
+        from urllib.parse import quote
+
+        self._warm_gallery_cache(
+            hut,
+            self._gallery_response(hut, "https://media.camptocamp.org/anylang.jpg"),
+            lang="fr",
+        )
+        data = client.get(f"/v1/huts/{hut.slug}/meta", {"lang": "de"}).json()
+        assert quote("media.camptocamp.org/anylang.jpg", safe="") in data["image"]
+
+    def test_cold_gallery_cache_falls_to_hero(self, hut, client):
+        """No cached gallery response (nobody opened the page yet) → the
+        hero/curated fallbacks apply unchanged."""
+        from urllib.parse import quote
+
+        hut.photos = "https://static.suissealpine.sac-cas.ch/hero.jpg"
+        hut.save(update_fields=["photos"])
+        data = client.get(f"/v1/huts/{hut.slug}/meta").json()
+        assert (
+            quote("static.suissealpine.sac-cas.ch/hero.jpg", safe="") in data["image"]
+        )
