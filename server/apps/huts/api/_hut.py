@@ -26,7 +26,7 @@ from django.http import Http404, HttpRequest, HttpResponse
 from django.urls import reverse_lazy
 
 from server.apps.api.controller import ApiController, cache_headers
-from server.apps.api.projection import project_fields
+from server.apps.api.projection import field_selected, project_fields
 from server.apps.api.query import TristateEnum, dump_sparse, sparse_fields_query
 from server.apps.huts.schemas._hut import ImageMetaSchema
 from server.apps.translations import LanguageQuery, activate
@@ -133,30 +133,36 @@ class HutSearchController(ApiController):
             is_public=True,
         )
 
-        # Always fetch the full shape — narrowing happens at projection
-        qs = qs.select_related(
-            "hut_type_open",
-            "hut_type_closed",
-            "hut_type_open__symbol_detailed",
-            "hut_type_open__symbol_simple",
-            "hut_type_open__symbol_mono",
-            "hut_type_closed__symbol_detailed",
-            "hut_type_closed__symbol_simple",
-            "hut_type_closed__symbol_mono",
-        ).annotate(
-            sources_data=JSONBAgg(
-                JSONObject(
-                    slug="org_set__slug",
-                    name="org_set__name_i18n",
-                    fullname="org_set__fullname_i18n",
-                    link="orgs_source__link",
-                    logo="org_set__logo",
-                    public="org_set__is_public",
-                    source_id="orgs_source__source_id",
+        # Skip the DB cost when the field isn't in the selection
+        # (the old include_X=no optimization, driven by fields[huts]).
+        wants_hut_type = field_selected(query, "huts", "hut_type")
+        wants_sources = field_selected(query, "huts", "sources")
+        if wants_hut_type:
+            qs = qs.select_related(
+                "hut_type_open",
+                "hut_type_closed",
+                "hut_type_open__symbol_detailed",
+                "hut_type_open__symbol_simple",
+                "hut_type_open__symbol_mono",
+                "hut_type_closed__symbol_detailed",
+                "hut_type_closed__symbol_simple",
+                "hut_type_closed__symbol_mono",
+            )
+        if wants_sources:
+            qs = qs.annotate(
+                sources_data=JSONBAgg(
+                    JSONObject(
+                        slug="org_set__slug",
+                        name="org_set__name_i18n",
+                        fullname="org_set__fullname_i18n",
+                        link="orgs_source__link",
+                        logo="org_set__logo",
+                        public="org_set__is_public",
+                        source_id="orgs_source__source_id",
+                    ),
+                    distinct=True,
                 ),
-                distinct=True,
-            ),
-        )
+            )
 
         if query.limit is not None:
             qs = qs[query.offset : query.offset + query.limit]
@@ -177,7 +183,9 @@ class HutSearchController(ApiController):
                 "location": hut.location,
                 "elevation": hut.elevation,
                 "score": hut.combined_score,
-                "hut_type": {
+            }
+            if wants_hut_type:
+                result["hut_type"] = {
                     "open": {
                         "slug": hut.hut_type_open.slug,
                         "name": hut.hut_type_open.name_i18n,  # noqa: WPS308
@@ -194,8 +202,9 @@ class HutSearchController(ApiController):
                     }
                     if hut.hut_type_closed
                     else None,
-                },
-                "sources": [
+                }
+            if wants_sources:
+                result["sources"] = [
                     {
                         **src,
                         "logo": f"{media_url}{src['logo']}"
@@ -204,8 +213,7 @@ class HutSearchController(ApiController):
                     }
                     for src in (hut.sources_data or [])
                     if src.get("slug") is not None
-                ],
-            }
+                ]
             if hut.photos:
                 result["avatar"] = f"{media_url}{hut.photos}"
             else:

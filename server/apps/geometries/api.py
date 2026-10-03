@@ -9,7 +9,7 @@ from django.views.decorators.cache import cache_page
 
 from server.apps.api.controller import ApiController, cache_headers, raise_not_found
 from server.apps.api.enums import IncludeModeEnum
-from server.apps.api.projection import project_fields
+from server.apps.api.projection import field_selected, project_fields
 from server.apps.api.query import sparse_fields_query
 from server.apps.geometries.presenters import (
     annotate_sources,
@@ -258,9 +258,13 @@ class GeoSearchController(ApiController):
 
         queryset = apply_type_filters(queryset, query.types, query.categories)
 
-        # Always fetch the full shape — narrowing happens at projection
-        queryset = prefetch_categories(queryset)
-        queryset = annotate_sources(queryset, IncludeModeEnum.all)
+        # Skip the DB cost when the field isn't in the selection
+        wants_categories = field_selected(query, "places", "categories")
+        wants_sources = field_selected(query, "places", "sources")
+        if wants_categories:
+            queryset = prefetch_categories(queryset)
+        if wants_sources:
+            queryset = annotate_sources(queryset, IncludeModeEnum.all)
 
         # Fuzzy search using trigram similarity
         requested_language = query.lang
@@ -381,8 +385,10 @@ class GeoSearchController(ApiController):
             result = base_result(place, media_url)
             result["score"] = place.rank_score
 
-            result["categories"] = build_categories_data(place, request) or []
-            build_sources(result, place, media_url, IncludeModeEnum.all)
+            if wants_categories:
+                result["categories"] = build_categories_data(place, request) or []
+            if wants_sources:
+                build_sources(result, place, media_url, IncludeModeEnum.all)
             results.append(result)
 
         return results
@@ -426,9 +432,13 @@ class GeoNearbyController(ApiController):
 
         queryset = apply_type_filters(queryset, query.types, query.categories)
 
-        # Always fetch the full shape — narrowing happens at projection
-        queryset = prefetch_categories(queryset)
-        queryset = annotate_sources(queryset, IncludeModeEnum.all)
+        # Skip the DB cost when the field isn't in the selection
+        wants_categories = field_selected(query, "places", "categories")
+        wants_sources = field_selected(query, "places", "sources")
+        if wants_categories:
+            queryset = prefetch_categories(queryset)
+        if wants_sources:
+            queryset = annotate_sources(queryset, IncludeModeEnum.all)
 
         queryset = queryset.annotate(distance=Distance("location", point)).order_by(
             "distance"
