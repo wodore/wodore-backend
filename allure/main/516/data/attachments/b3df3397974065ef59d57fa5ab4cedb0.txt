@@ -1,0 +1,1 @@
+{"place_type": "hut", "place": "testhuette-berner", "age_h": 25.0, "event": "place_refresh_enqueued", "timestamp": "2026-10-03T20:09:13.474397Z", "level": "info", "logger": "server.apps.geometries.pinning", "filename": "pinning.py", "lineno": 369, "func_name": "maybe_enqueue_place_refresh", "module": "pinning"}
