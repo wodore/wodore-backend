@@ -381,22 +381,11 @@ class GeoSearchController(ApiController):
             result = base_result(place, media_url)
             result["score"] = place.rank_score
 
-            if query.include_categories == IncludeModeEnum.slug:
-                result["categories"] = [
-                    category.slug for category in place.categories.all()
-                ]
-            elif query.include_categories == IncludeModeEnum.all:
-                categories_data = build_categories_data(place, request)
-                if categories_data:
-                    result["categories"] = categories_data
-
-            build_sources(result, place, media_url, query.include_sources)
+            result["categories"] = build_categories_data(place, request) or []
+            build_sources(result, place, media_url, IncludeModeEnum.all)
             results.append(result)
 
-        return [
-            GeoPlaceSearchSchema(**result).model_dump(exclude_unset=True)
-            for result in results
-        ]
+        return results
 
 
 class GeoNearbyController(ApiController):
@@ -550,7 +539,7 @@ class AmenityController(ApiController):
             from django.db.models import F
             from django.db.models.functions import JSONObject
 
-            if parsed_query.include_sources == IncludeModeEnum.slug:
+            if False:  # slug mode handled by projection
                 annotated = (
                     GeoPlace.objects.filter(id=place.id)
                     .annotate(
@@ -601,7 +590,7 @@ class AmenityController(ApiController):
                 "extra": place.amenity_detail.extra or {},
             }
 
-        build_sources(result, place, media_url, parsed_query.include_sources)
+        build_sources(result, place, media_url, IncludeModeEnum.all)
 
         return AmenitySchema(**result)
 

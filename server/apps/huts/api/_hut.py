@@ -211,9 +211,11 @@ class HutSearchController(ApiController):
             else:
                 result["avatar"] = None
 
+            # Schema validation converts ORM objects (GEOS Point) to JSON types
+            safe = HutSearchResultSchema(**result).model_dump(exclude_unset=True)
             results.append(
                 project_fields(
-                    result,
+                    safe,
                     query,
                     "huts",
                     {"hut_types": "hut_type", "sources": "sources"},
