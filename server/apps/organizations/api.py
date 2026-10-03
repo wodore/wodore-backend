@@ -7,7 +7,7 @@ from pydantic import Field
 
 from server.apps.api.controller import ApiController, raise_not_found
 from server.apps.api.query import dump_sparse, dump_sparse_list, sparse_fields_query
-from server.apps.translations import override
+from server.apps.translations import activate
 from server.apps.translations.schema import LanguageQuery
 
 from .models import Organization
@@ -44,14 +44,14 @@ class OrganizationsController(ApiController):
         orgs = Organization.objects.all().filter(is_active=True)
         if isinstance(parsed_query.is_public, bool):
             orgs = orgs.filter(is_public=parsed_query.is_public)
-        with override(parsed_query.lang):
-            return dump_sparse_list(
-                OrganizationOptional,
-                list(orgs),
-                parsed_query,
-                "organizations",
-                default_include=["slug", "url", "logo", "name", "fullname"],
-            )
+        activate(parsed_query.lang)
+        return dump_sparse_list(
+            OrganizationOptional,
+            list(orgs),
+            parsed_query,
+            "organizations",
+            default_include=["slug", "url", "logo", "name", "fullname"],
+        )
 
 
 class OrganizationDetailController(ApiController):
@@ -67,14 +67,14 @@ class OrganizationDetailController(ApiController):
         org = Organization.objects.filter(slug=parsed_path.slug, is_active=True).first()
         if org is None:
             raise_not_found(f"Organization {parsed_path.slug!r} not found.")
-        with override(parsed_query.lang):
-            return dump_sparse(
-                OrganizationOptional,
-                org,
-                parsed_query,
-                "organizations",
-                default_include="__all__",
-            )
+        activate(parsed_query.lang)
+        return dump_sparse(
+            OrganizationOptional,
+            org,
+            parsed_query,
+            "organizations",
+            default_include="__all__",
+        )
 
 
 paths = [
