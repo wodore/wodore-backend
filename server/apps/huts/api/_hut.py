@@ -26,7 +26,7 @@ from django.http import Http404, HttpRequest, HttpResponse
 from django.urls import reverse_lazy
 
 from server.apps.api.controller import ApiController, cache_headers
-from server.apps.api.enums import IncludeModeEnum
+from server.apps.api.projection import field_selected, project_fields
 from server.apps.api.query import (
     BboxQuery,
     TristateEnum,
@@ -42,6 +42,7 @@ from ..schemas import (
     HutSchemaDetails,
     HutSchemaList,
     HutSearchResultSchema,
+    HutTypeSchema,
     ImageInfoSchema,
     LicenseInfoSchema,
     OrganizationBaseSchema,
@@ -68,7 +69,14 @@ class _HutSlug(pydantic.BaseModel):
     slug: str = Field(description="Hut slug")
 
 
-class HutSearchQuery(LanguageQuery, BboxQuery):
+HutSearchFields = sparse_fields_query(
+    huts=HutSearchResultSchema,
+    hut_types=HutTypeSchema,
+    sources=OrganizationBaseSchema,
+)
+
+
+class HutSearchQuery(LanguageQuery, HutSearchFields, BboxQuery):
     """Query parameters for the hut search endpoint."""
 
     q: str = Field(
@@ -84,25 +92,6 @@ class HutSearchQuery(LanguageQuery, BboxQuery):
             "results but with lower relevance. Recommended: 0.1 for fuzzy "
             "matching, 0.3 for stricter matching."
         ),
-    )
-    include_hut_type: IncludeModeEnum = Field(  # type: ignore[assignment]
-        IncludeModeEnum.no,
-        description=(
-            "Include hut type information: 'no' excludes field, 'slug' "
-            "returns type slugs only, all returns full type details "
-            "with icons"
-        ),
-    )
-    include_sources: IncludeModeEnum = Field(  # type: ignore[assignment]
-        IncludeModeEnum.no,
-        description=(
-            "Include data sources: 'no' excludes field, 'slug' returns "
-            "source slugs only, all returns full source details with logos"
-        ),
-    )
-    include_avatar: bool = Field(
-        True,
-        description="Include avatar/primary photo URL in results",
     )
 
 
@@ -153,7 +142,10 @@ class HutSearchController(ApiController):
         if query.bbox:
             qs = qs.filter(location__intersects=bbox_polygon(query.bbox))
 
-        if query.include_hut_type != "no":
+        # Skip the DB cost when the field isn't in the selection
+        wants_hut_type = field_selected(query, "huts", "hut_type")
+        wants_sources = field_selected(query, "huts", "sources")
+        if wants_hut_type:
             qs = qs.select_related(
                 "hut_type_open",
                 "hut_type_closed",
@@ -164,12 +156,7 @@ class HutSearchController(ApiController):
                 "hut_type_closed__symbol_simple",
                 "hut_type_closed__symbol_mono",
             )
-
-        if query.include_sources == "slug":
-            qs = qs.annotate(
-                organization_slugs=JSONBAgg(F("org_set__slug"), distinct=True)
-            )
-        elif query.include_sources == "all":
+        if wants_sources:
             qs = qs.annotate(
                 sources_data=JSONBAgg(
                     JSONObject(
@@ -182,7 +169,7 @@ class HutSearchController(ApiController):
                         source_id="orgs_source__source_id",
                     ),
                     distinct=True,
-                )
+                ),
             )
 
         if query.limit is not None:
@@ -205,13 +192,7 @@ class HutSearchController(ApiController):
                 "elevation": hut.elevation,
                 "score": hut.combined_score,
             }
-
-            if query.include_hut_type == "slug":
-                result["hut_type"] = {
-                    "open": hut.hut_type_open.slug if hut.hut_type_open else None,
-                    "closed": hut.hut_type_closed.slug if hut.hut_type_closed else None,
-                }
-            elif query.include_hut_type == "all":
+            if wants_hut_type:
                 result["hut_type"] = {
                     "open": {
                         "slug": hut.hut_type_open.slug,
@@ -230,33 +211,34 @@ class HutSearchController(ApiController):
                     if hut.hut_type_closed
                     else None,
                 }
-
-            if query.include_sources == "slug":
-                org_slugs = [
-                    slug for slug in (hut.organization_slugs or []) if slug is not None
+            if wants_sources:
+                result["sources"] = [
+                    {
+                        **src,
+                        "logo": f"{media_url}{src['logo']}"
+                        if src.get("logo")
+                        else None,
+                    }
+                    for src in (hut.sources_data or [])
+                    if src.get("slug") is not None
                 ]
-                result["sources"] = org_slugs
-            elif query.include_sources == "all":
-                sources = []
-                for src in hut.sources_data or []:
-                    if src.get("slug") is not None:
-                        if src.get("logo"):
-                            src["logo"] = f"{media_url}{src['logo']}"
-                        sources.append(src)
-                result["sources"] = sources
+            if hut.photos:
+                result["avatar"] = f"{media_url}{hut.photos}"
+            else:
+                result["avatar"] = None
 
-            if query.include_avatar:
-                if hut.photos:
-                    result["avatar"] = f"{media_url}{hut.photos}"
-                else:
-                    result["avatar"] = None
+            # Schema validation converts ORM objects (GEOS Point) to JSON types
+            safe = HutSearchResultSchema(**result).model_dump(exclude_unset=True)
+            results.append(
+                project_fields(
+                    safe,
+                    query,
+                    "huts",
+                    {"hut_types": "hut_type", "sources": "sources"},
+                )
+            )
 
-            results.append(result)
-
-        return [
-            HutSearchResultSchema(**result).model_dump(exclude_unset=True)
-            for result in results
-        ]
+        return results
 
 
 # ---------------------------------------------------------------------------
@@ -315,7 +297,6 @@ class HutsController(ApiController):
             str(query.is_public.value),
             str(query.is_active.value),
             str(query.has_availability.value),
-            str(query.bbox),
             query.lang,
         ]
         from server.apps.apiversions.transforms import version_cache_key
@@ -347,6 +328,9 @@ class HutsController(ApiController):
         ):
             return cached_304(self, etag, last_modified, max_age=60)
 
+        if query.bbox:
+            huts_db = huts_db.filter(location__intersects=bbox_polygon(query.bbox))
+
         if query.is_modified != TristateEnum.unset:
             huts_db = huts_db.filter(is_modified=query.is_modified.bool)
         if query.is_active != TristateEnum.unset:
@@ -358,8 +342,6 @@ class HutsController(ApiController):
                 huts_db = huts_db.filter(availability_source_ref__isnull=False)
             else:
                 huts_db = huts_db.filter(availability_source_ref__isnull=True)
-        if query.bbox:
-            huts_db = huts_db.filter(location__intersects=bbox_polygon(query.bbox))
 
         media_url = request.build_absolute_uri(settings.MEDIA_URL)
         iam_media_url = "https://res.cloudinary.com/wodore/image/upload/v1/"
@@ -536,7 +518,7 @@ class HutsGeojsonController(ApiController):
             str(query.include_name),
             str(query.include_has_availability),
             str(query.flat),
-            str(query.bbox),
+            str(query.bbox or ""),
             query.lang,
             version_cache_key(request),
         ]
