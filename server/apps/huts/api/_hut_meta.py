@@ -162,13 +162,11 @@ def _og_gallery_source(hut: Hut, lang: str) -> str | None:
         if cached is None or not cached.features:
             continue
         top = cached.features[0].properties
-        if getattr(top, "is_fallback", False):
-            return None  # generated map fallback, not a photo
-        try:
-            return top.urls.original.raw or None
-        except AttributeError:
-            return None
-    return None
+        if top is None or top.is_fallback:
+            return None  # no properties or generated map fallback, not a photo
+        if not top.urls.original.raw:
+            continue
+        return top.urls.original.raw
 
 
 def _og_image(hut: Hut, request: HttpRequest, lang: str) -> str:
