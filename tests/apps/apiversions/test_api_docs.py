@@ -21,7 +21,7 @@ from server.apps.apiversions.transforms import each
 @pytest.fixture
 def newer_version():
     change = registry.VersionChange(
-        version="2099-01-01",
+        version="zzzz-01-01",
         description="test-only newer version",
         responses={"get_huts": each(lambda hut: {**hut, "api_old_shape": True})},
     )
@@ -85,7 +85,7 @@ class TestSnapshots:
         from django.core.management.base import CommandError
 
         change = registry.VersionChange(
-            version="2098-06-01", description="no snapshot for this one"
+            version="zzzz-06-01", description="no snapshot for this one"
         )
         monkeypatch.setattr(
             "server.apps.apiversions.registry.REGISTRY",
@@ -106,7 +106,7 @@ class TestSnapshots:
             is_released,
         )
 
-        assert not is_released("2099-01-01")  # no such tag in this repo
+        assert not is_released("zzzz-01-01")  # no such tag in this repo
 
         monkeypatch.setattr(
             "server.apps.apiversions.management.commands.api_snapshot.is_released",
@@ -177,7 +177,7 @@ class TestSchemaServing:
     def test_unknown_api_version_on_schema_is_400(self, seed_data, client):
         response = client.get("/v1/openapi.json", {"api_version": "not-a-date"})
         assert response.status_code == 400
-        assert response.json()["code"] == "api_version_invalid"
+        assert response.json()["code"] == "validation_error"
 
     @pytest.mark.django_db
     def test_sunset_version_on_schema_is_410(
@@ -199,14 +199,14 @@ class TestSchemaServing:
         orphan = registry.VersionChange(
             version="2098-05-01", description="no snapshot for this one"
         )
-        newest = registry.VersionChange(version="2099-01-01")
+        newest = registry.VersionChange(version="zzzz-01-01")
         monkeypatch.setattr(
             "server.apps.apiversions.registry.REGISTRY",
             registry.REGISTRY + [orphan, newest],
         )
         response = client.get("/v1/openapi.json", {"api_version": "2098-05-01"})
         assert response.status_code == 500
-        assert response.json()["code"] == "api_snapshot_missing"
+        assert response.json()["code"] == "service_unavailable"
 
 
 class TestContractPerVersion:

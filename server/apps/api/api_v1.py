@@ -16,6 +16,7 @@ from dmr.routing import Router
 
 from django.http import HttpRequest, HttpResponse
 
+from server.apps.api.error_codes import ErrorCode
 from server.apps.apiversions import registry
 
 API_DESCRIPTION = (
@@ -150,7 +151,7 @@ def versioned_openapi_json(request: HttpRequest) -> HttpResponse:
             )
             return JsonResponse(
                 {
-                    "code": "api_snapshot_missing",
+                    "code": ErrorCode.service_unavailable,
                     "detail": "No committed OpenAPI snapshot for API "
                     f"version {version!r}.",
                 },

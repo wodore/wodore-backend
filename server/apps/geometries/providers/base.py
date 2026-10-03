@@ -1,4 +1,5 @@
 """
+
 Base classes and utilities for image providers.
 """
 
@@ -13,6 +14,8 @@ from asgiref.sync import sync_to_async
 
 from django.contrib.gis.geos import Point
 from django.core.cache import cache
+
+from server.apps.api.error_codes import ErrorCode
 
 from .schemas import GeoPlaceSchema
 
@@ -921,7 +924,7 @@ async def fetch_images_for_place(
             if place is None:
                 raise APIError(
                     {
-                        "code": "not_found",
+                        "code": ErrorCode.not_found,
                         "detail": f"GeoPlace '{place_slug}' not found",
                     },
                     status_code=HTTPStatus.NOT_FOUND,
@@ -952,7 +955,10 @@ async def fetch_images_for_place(
 
             if place is None:
                 raise APIError(
-                    {"code": "not_found", "detail": f"Hut '{place_slug}' not found"},
+                    {
+                        "code": ErrorCode.not_found,
+                        "detail": f"Hut '{place_slug}' not found",
+                    },
                     status_code=HTTPStatus.NOT_FOUND,
                 )
 

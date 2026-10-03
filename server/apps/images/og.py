@@ -2,12 +2,16 @@
 
 Two variants:
 
-* ``og_photo_url`` — a real photo, resized to the 'large' preset
-  (1800x1200, focal-aware) exactly like the JSON detail endpoint, with
-  the Wodore logo (SVG, original colors) composited bottom-left.
+* ``og_photo_url`` — a real photo at the og:image size (1200x630,
+  focal-aware) with the Wodore logo composited at the bottom, a bit
+  left of center.
 * ``og_card_url`` — the branded default card for entities without a
   usable photo: the brand map image (1200x630) with the entity's type
   symbol (SVG pictogram) composited large and centered.
+
+Static-map og cards are NOT generated here — the image service's
+``static_map_fallback`` feature (``/v1/geo/map/static``, og dimensions,
+watermark baked into the render) is the og fallback.
 
 SVG compositing notes, verified live against imagor v1.9.6:
 
@@ -45,11 +49,12 @@ OG_CARD_SIZE = "1200x630"
 # Logo watermark on photos: the official watermark PNG in the frontend's
 # public/meta/ (next to meta.jpg), served from wodore.com/meta/.
 OG_LOGO_URL_PATH = "meta/wodore_watermark.png"
-# Watermark geometry (owner-approved): 270px raster, horizontally
-# centered, 10px from the bottom (survives 1:1 center crops), fully
+# Watermark geometry (owner-approved): 270px raster, a bit LEFT of
+# center (0.33 of the free space — same position as the static-map
+# cards), 10px from the bottom (survives 1:1 center crops), fully
 # opaque.
 OG_LOGO_SIZE_PX = 270
-OG_LOGO_POS = "center"
+OG_LOGO_POS = "0.33"
 OG_LOGO_POS_Y = "bottom-10"
 OG_LOGO_ALPHA = 0
 
@@ -64,12 +69,6 @@ OG_MAP_MARKER_SCALE = "0.8"
 # Map cards render one zoom level out (15): huts sit in visible terrain
 # context instead of a rooftop close-up.
 OG_MAP_ZOOM = 15
-
-# Watermark x on map cards: left of center (owner preference), far
-# enough right to survive WhatsApp's 1:1 center crop — 0.33 of the free
-# space puts a 270px logo at ~26–48% of card width (crop zone starts
-# at ~24%). The photo variant stays dead-center (OG_LOGO_POS).
-OG_MAP_LOGO_POS = "0.33"
 
 
 def _frontend(path: str) -> str:
@@ -91,6 +90,20 @@ def _composite_image(source_url: str, size_px: int, x: str, y: str, alpha: int) 
     return f"image(/unsafe/{size_px}x{size_px}/{quote(source_url, safe='')},{x},{y},{alpha})"
 
 
+def normalize_source(source: str) -> str | None:
+    """Servable URL for a raw source string: media-relative paths get
+    the media prefix, absolute URLs pass through.
+
+    Returns ``None`` when the string is empty — an empty source would
+    sign the bare imagor media alias (e.g. ``.../wd``) and 500 in
+    imagor, so callers must skip to the next candidate or fall back."""
+    if not source:
+        return None
+    if not source.startswith("http"):
+        source = f"{settings.MEDIA_URL.rstrip('/')}/{source.lstrip('/')}"
+    return source
+
+
 def photo_source(image: Image) -> str | None:
     """Servable source URL for an :class:`Image` row: the local file when
     set, else the pinned external raw URL (pinned provider rows keep the
@@ -102,16 +115,13 @@ def photo_source(image: Image) -> str | None:
     source = str(image.image) if image.image else ""
     if not source:
         source = image.source_url_raw or ""
-    if not source:
-        return None
-    if not source.startswith("http"):
-        source = f"{settings.MEDIA_URL.rstrip('/')}/{source}"
-    return source
+    return normalize_source(source)
 
 
 def og_photo_url(image_url: str, focal: dict | None = None) -> str:
     """Signed imagor URL for a photo at the og:image size, with the
-    Wodore logo composited bottom-left."""
+    Wodore logo composited at the bottom, a bit left of center (same
+    position as the static-map cards)."""
     focal_str = None
     crop_start = crop_stop = None
     if focal:
@@ -135,28 +145,6 @@ def og_photo_url(image_url: str, focal: dict | None = None) -> str:
             crop_stop=crop_stop,
             filters=filters,
         )
-        .get_full_url()
-    )
-
-
-def og_map_card_url(map_url: str) -> str:
-    """Signed imagor URL for a static-map og card: the generic
-    static-map endpoint as source, with the Wodore watermark composited
-    at the bottom, left of center (OG_MAP_LOGO_POS — the old 0.18 was
-    cut off in WhatsApp's tighter center crops). The endpoint itself
-    stays logo-free (also used directly by the image APIs)."""
-    filters = [
-        _composite_image(
-            _frontend(OG_LOGO_URL_PATH),
-            OG_LOGO_SIZE_PX,
-            OG_MAP_LOGO_POS,
-            OG_LOGO_POS_Y,
-            OG_LOGO_ALPHA,
-        )
-    ]
-    return (
-        ImagorImage(map_url)
-        .transform(size=OG_CARD_SIZE, filters=filters)
         .get_full_url()
     )
 

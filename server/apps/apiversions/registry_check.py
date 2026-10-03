@@ -40,6 +40,15 @@ def check() -> list[str]:
     problems: list[str] = []
     versions = registry.versions()
     for version in versions[:-1]:  # everything except the current one
+        if version == registry.UNRELEASED:
+            # "unreleased" must never survive a release — if it's no
+            # longer current, the freeze step was skipped.
+            problems.append(
+                "API version 'unreleased' is no longer current: a newer "
+                "version was stacked on it. Run 'inv api-freeze' to "
+                "assign a real date before adding the next version."
+            )
+            continue
         if not is_released(version):
             problems.append(
                 f"API version {version!r} is no longer current but was "

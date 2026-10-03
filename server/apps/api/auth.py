@@ -1,5 +1,6 @@
 """Bearer token authentication for the Django Ninja API (spec: api-token-validation).
 
+
 Validators share the scope/role/group matching logic from
 ``BaseTokenValidator``:
 
@@ -33,6 +34,8 @@ from dmr.security.http import _HttpBasicAuth  # scheme-parsing mixin
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
+
+from server.apps.api.error_codes import ErrorCode
 
 logger = logging.getLogger(__name__)
 
@@ -126,23 +129,32 @@ class BaseTokenValidator:
         now = floor(time.time())
         if not token:
             raise ValidatorError(
-                {"code": "invalid_token_revoked", "description": "Token was revoked."},
+                {
+                    "code": ErrorCode.not_authenticated,
+                    "description": "Token was revoked.",
+                },
                 401,
             )
         if not token.get("active"):
             raise ValidatorError(
-                {"code": "invalid_token_inactive", "description": "Token is inactive."},
+                {
+                    "code": ErrorCode.not_authenticated,
+                    "description": "Token is inactive.",
+                },
                 401,
             )
         if token["exp"] < now:
             raise ValidatorError(
-                {"code": "invalid_token_expired", "description": "Token has expired."},
+                {
+                    "code": ErrorCode.not_authenticated,
+                    "description": "Token has expired.",
+                },
                 401,
             )
         if not self.match_token_scopes(token, scopes):
             raise ValidatorError(
                 {
-                    "code": "insufficient_scope",
+                    "code": ErrorCode.insufficient_permission,
                     "description": f"Token has insufficient scope. Scopes required: {scopes}",
                 },
                 401,
@@ -152,7 +164,7 @@ class BaseTokenValidator:
         ):
             raise ValidatorError(
                 {
-                    "code": "insufficient_permission",
+                    "code": ErrorCode.insufficient_permission,
                     "description": f"Token has insufficient permission. Roles required: {roles} or group required: {groups}",
                 },
                 401,
@@ -452,7 +464,7 @@ class AuthBearer(BearerSyncAuth):
         if not self.validators:
             raise APIError(
                 {
-                    "code": "auth_not_configured",
+                    "code": ErrorCode.not_authenticated,
                     "detail": "Authentication is not configured on this "
                     "server (OIDC is disabled).",
                 },

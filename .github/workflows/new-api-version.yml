@@ -35,6 +35,15 @@ jobs:
           echo "Current API version: $VERSION"
           echo "version=$VERSION" >> $GITHUB_ENV
 
+      - name: Guard never tag unreleased
+        if: env.version == 'unreleased'
+        run: |
+          echo "::error::Cannot tag 'unreleased' as an API version."
+          echo "Run 'inv api-freeze' (or 'inv release') to assign the real"
+          echo "date before deploying. The freeze step replaces 'unreleased'"
+          echo "with the actual release date in registry.py."
+          exit 1
+
       - name: Check snapshot is committed
         run: |
           SNAPSHOT="server/apps/apiversions/openapi/${{ env.version }}.json"

@@ -8,11 +8,13 @@ from dmr import APIError, Path, Query, RedirectTo, modify
 from dmr.routing import external_path, path
 from pydantic import Field
 
+from django.db.models import Count, Q
 from django.http import HttpRequest, HttpResponse
 from django.views.decorators.cache import cache_page
 
 from server.apps.api.controller import ApiController, cache_headers, raise_not_found
-from server.apps.translations import LanguageQuery, override
+from server.apps.api.error_codes import ErrorCode
+from server.apps.translations import LanguageQuery, activate, override
 
 from .models import Category
 from .schemas import (
@@ -188,7 +190,7 @@ def _resolve_parent_or_raise(parent_slug: str, is_active: bool) -> Category:
         if paths:
             raise APIError(
                 {
-                    "code": "ambiguous_category",
+                    "code": ErrorCode.validation_error,
                     "detail": f"Slug '{parent_slug}' is not unique. "
                     f"Use one of: {', '.join(paths)}",
                 },
@@ -425,7 +427,7 @@ def _category_symbol_redirect(
         if paths:
             raise APIError(
                 {
-                    "code": "ambiguous_category",
+                    "code": ErrorCode.validation_error,
                     "detail": f"Slug '{slug}' is not unique. "
                     f"Use one of: {', '.join(paths)}",
                 },
@@ -489,12 +491,12 @@ class CategorySymbolSvgController(ApiController):
 
 
 def get_categories_markdown(request: HttpRequest) -> HttpResponse:
-    """The category tree as a compact Markdown index for LLM agents.
+    """The place categories as a compact Markdown index for LLM agents.
 
-    Categories are the entry vocabulary of the map (hut types, amenities,
-    overlays ...): agents use this to translate user terms ("bivouac",
-    "winter room") into API slugs before searching. Localized via the
-    same lang parameter as the JSON API (category names are modeltrans).
+    Only categories whose effective ``seo_sitemap`` policy is "include"
+    are listed — the vocabulary of place pages agents can browse — each
+    with the number of public places in it. Localized via the same lang
+    parameter as the JSON API (category names are modeltrans).
     """
     from http import HTTPStatus
 
@@ -508,34 +510,62 @@ def get_categories_markdown(request: HttpRequest) -> HttpResponse:
 
         return HttpResponse(
             json.dumps(
-                {"code": "validation_error", "detail": f"Unknown language {lang!r}."}
+                {
+                    "code": ErrorCode.validation_error,
+                    "detail": f"Unknown language {lang!r}.",
+                }
             ),
             content_type="application/json",
             status=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
-    with override(lang):
-        return _categories_markdown(request)
+    activate(lang)
+    return _categories_markdown(request)
 
 
 def _categories_markdown(request: HttpRequest) -> HttpResponse:
-    """Markdown index; localized names via the active language."""
+    """Markdown index; localized names via the active language.
+
+    Lists only categories with an effective ``seo_sitemap`` policy of
+    "include" (tri-state inheritance, roots default to exclude) — the
+    same rule the place sitemap applies — each with the number of public
+    places in the category.
+    """
     lines = [
-        "# Wodore categories",
+        "# Wodore place categories",
         "",
         (
-            "Hierarchy by indentation; the slug is what the API expects"
-            " (e.g. `/v1/huts/huts?search=` or category filters)."
+            "Categories with place pages (sitemap-included); the slug is"
+            " what the place search expects"
+            " (e.g. `/v1/geo/places/search?types={slug}`). Each entry"
+            " counts the public places in the category."
         ),
         "",
     ]
+    include = Category.SeoSitemapChoices.include
     categories = (
         Category.objects.filter(is_active=True)
         .select_related("parent")
+        .annotate(
+            place_count=Count(
+                "geo_places",
+                filter=Q(
+                    geo_places__is_active=True,
+                    geo_places__is_public=True,
+                ),
+                distinct=True,
+            ),
+        )
         .order_by("parent__slug", "order", "slug")
     )
     for category in categories:
+        if category.effective_seo_sitemap() != include:
+            continue
         indent = "  " if category.parent_id else ""
-        lines.append(f"- {indent}{category.name} `{category.slug}`")
+        plural = "" if category.place_count == 1 else "s"
+        lines.append(
+            f"- {indent}{category.name} `{category.slug}`"
+            f" ({category.place_count} place{plural})"
+        )
     lines += [
         "",
         "---",

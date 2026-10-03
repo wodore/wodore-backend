@@ -10,7 +10,7 @@ from pydantic import Field
 
 from server.apps.api.controller import ApiController, raise_not_found
 from server.apps.api.query import dump_sparse, dump_sparse_list, sparse_fields_query
-from server.apps.translations import override
+from server.apps.translations import activate
 from server.apps.translations.schema import LanguageQuery
 
 from .models import Symbol
@@ -67,14 +67,14 @@ class SymbolsController(ApiController):
         By default only returns active symbols."""
         symbols = Symbol.objects.filter(is_active=parsed_query.is_active)
         symbols = symbols.select_related("license", "source_org", "uploaded_by_user")
-        with override(parsed_query.lang):
-            return dump_sparse_list(
-                SymbolOptional,
-                list(symbols),
-                parsed_query,
-                "symbols",
-                default_include=["slug", "style", "svg_file", "is_active"],
-            )
+        activate(parsed_query.lang)
+        return dump_sparse_list(
+            SymbolOptional,
+            list(symbols),
+            parsed_query,
+            "symbols",
+            default_include=["slug", "style", "svg_file", "is_active"],
+        )
 
 
 class SymbolByIdController(ApiController):
@@ -92,14 +92,14 @@ class SymbolByIdController(ApiController):
         ).first()
         if symbol is None:
             raise_not_found("Symbol not found.")
-        with override(parsed_query.lang):
-            return dump_sparse(
-                SymbolOptional,
-                symbol,
-                parsed_query,
-                "symbols",
-                default_include="__all__",
-            )
+        activate(parsed_query.lang)
+        return dump_sparse(
+            SymbolOptional,
+            symbol,
+            parsed_query,
+            "symbols",
+            default_include="__all__",
+        )
 
 
 class SymbolsBySlugController(ApiController):
@@ -121,14 +121,14 @@ class SymbolsBySlugController(ApiController):
         if parsed_query.style:
             symbols = symbols.filter(style=parsed_query.style)
         symbols = symbols.select_related("license", "source_org", "uploaded_by_user")
-        with override(parsed_query.lang):
-            return dump_sparse_list(
-                SymbolOptional,
-                list(symbols),
-                parsed_query,
-                "symbols",
-                default_include=["slug", "style", "svg_file", "is_active"],
-            )
+        activate(parsed_query.lang)
+        return dump_sparse_list(
+            SymbolOptional,
+            list(symbols),
+            parsed_query,
+            "symbols",
+            default_include=["slug", "style", "svg_file", "is_active"],
+        )
 
 
 _REDIRECT_SPEC = ResponseSpec(
@@ -198,14 +198,14 @@ class SymbolByStyleController(ApiController):
         ).first()
         if symbol is None:
             raise_not_found("Symbol not found.")
-        with override(parsed_query.lang):
-            return dump_sparse(
-                SymbolOptional,
-                symbol,
-                parsed_query,
-                "symbols",
-                default_include="__all__",
-            )
+        activate(parsed_query.lang)
+        return dump_sparse(
+            SymbolOptional,
+            symbol,
+            parsed_query,
+            "symbols",
+            default_include="__all__",
+        )
 
 
 paths = [

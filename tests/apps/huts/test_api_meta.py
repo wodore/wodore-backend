@@ -2,7 +2,7 @@
 
 import pytest
 
-from server.apps.huts.models import Hut, HutImageAssociation
+from server.apps.huts.models import Hut
 
 pytestmark = [pytest.mark.django_db]
 
@@ -112,13 +112,11 @@ class TestHutMeta:
         assert client.get(f"/v1/huts/{hut.slug}/meta").status_code == 404
 
 
-class TestHutMetaOgImage:
-    """og:image source resolution (regression: pinned external images).
-
-    Pinned provider rows keep the file field empty and the origin URL in
-    ``source_url_raw`` — the meta endpoint used to read only the file
-    field, signing an empty path that resolved to the bare imagor media
-    alias (``.../wd``) and 500-ing in imagor on staging."""
+class TestHutMetaOgSources:
+    """og:image resolution: the top image of the images-by-hut response
+    the frontend gallery renders — everything else (curated rows, the
+    deprecated hut-services ``photos`` field) is the image service's
+    business. The only fallback is the static-map card."""
 
     @pytest.fixture(autouse=True)
     def _isolated_cache(self, monkeypatch):
@@ -135,113 +133,165 @@ class TestHutMetaOgImage:
     def hut(self, seed_data):
         hut = Hut.objects.filter(is_active=True, is_public=True).first()
         assert hut is not None
-        HutImageAssociation.objects.filter(hut=hut).delete()
         return hut
 
     @staticmethod
-    def _pin(hut, *, source_id: str, score: int, url_large: str = ""):
+    def _gallery_response(hut, top_raw: str):
+        """ImageCollectionResponse built exactly like the endpoint: a
+        camptocamp ImageResult through post_process_images."""
         from django.contrib.gis.geos import Point
 
-        from server.apps.geometries.pinning import pin_place_images
+        from server.apps.geometries.providers import post_process_images
         from server.apps.geometries.providers.base import ImageResult
-
-        return pin_place_images(
-            hut,
-            [
-                ImageResult(
-                    provider="wikicommons",
-                    source_id=source_id,
-                    source_url=f"https://commons.wikimedia.org/wiki/{source_id}",
-                    image_type="flat",
-                    captured_at=None,
-                    location=Point(7.5, 46.5),
-                    distance_m=42.0,
-                    license_slug="cc-by-sa-4-0",
-                    attribution="Test Author, CC BY-SA",
-                    author="Test Author",
-                    author_url=None,
-                    url_large=url_large
-                    or f"https://upload.wikimedia.org/wikipedia/commons/{source_id}.jpg",
-                    width=1920,
-                    height=1080,
-                    score=score,
-                )
-            ],
+        from server.apps.geometries.schemas import (
+            ImageCollectionResponse,
+            ImageMetadataSchema,
         )
 
-    def test_pinned_external_image_serves_from_source_url_raw(self, hut, client):
-        """The og:image embeds the pinned origin URL, not the media alias."""
+        result = ImageResult(
+            provider="camptocamp",
+            source_id="c2c_120457",
+            source_url="https://www.camptocamp.org/images/120457",
+            image_type="flat",
+            captured_at=None,
+            location=Point(8.521, 46.7466),
+            distance_m=4.0,
+            license_slug="cc-by-sa-3-0",
+            attribution="Test Author, CC BY-SA",
+            author="Test Author",
+            author_url=None,
+            url_large=top_raw,
+            width=1920,
+            height=1080,
+            score=60,
+        )
+        features = post_process_images([result])
+        return ImageCollectionResponse(
+            type="FeatureCollection",
+            features=features,
+            metadata=ImageMetadataSchema(
+                total=len(features),
+                sources_queried=["camptocamp"],
+                query_radius_m=50,
+                center={"lat": 46.7466, "lon": 8.521},
+                geoplaces_found=0,
+                huts_found=1,
+            ),
+        )
+
+    @staticmethod
+    def _warm_gallery_cache(hut, response, *, lang="en") -> None:
+        from server.apps.geometries import image_response_cache as irc
+        from server.apps.geometries.api_images import GALLERY_QUERY_SHAPE
+
+        irc.set_response(
+            irc.response_key("hut", hut.slug, lang=lang, **GALLERY_QUERY_SHAPE),
+            response,
+        )
+
+    def test_gallery_top_image_is_og_image(self, hut, client):
+        """The og:image is the top image of the cached images-by-hut
+        response — the same photo the frontend gallery shows first."""
         from urllib.parse import quote
 
-        url = "https://upload.wikimedia.org/wikipedia/commons/pinned_1920.jpg"
-        self._pin(hut, source_id="File:Pinned.jpg", score=32767, url_large=url)
-        data = client.get(f"/v1/huts/{hut.slug}/meta").json()
-        assert data["image"]
-        assert quote(url, safe="") in data["image"]
-        # Never the bare imagor media alias (the staging bug: '.../wd').
-        assert not data["image"].endswith("/wd")
-
-    def test_local_file_image_keeps_working(self, hut, client):
-        """Images with a local file still resolve through MEDIA_URL."""
-        from urllib.parse import quote
-
-        self._pin(hut, source_id="File:Pinned.jpg", score=32767)
-        association = (
-            HutImageAssociation.objects.filter(hut=hut).select_related("image").get()
-        )
-        image = association.image
-        image.image = "images/local.jpg"
-        image.save(update_fields=["image"])
-        data = client.get(f"/v1/huts/{hut.slug}/meta").json()
-        assert quote("images/local.jpg", safe="") in data["image"]
-
-    def test_degenerate_pinned_row_falls_back_to_map_card(self, hut, client):
-        """No file and no raw URL → static-map card, never a signed
-        empty path."""
-        self._pin(hut, source_id="File:Degenerate.jpg", score=32767)
-        association = (
-            HutImageAssociation.objects.filter(hut=hut).select_related("image").get()
-        )
-        association.image.source_url_raw = ""
-        association.image.save(update_fields=["source_url_raw"])
-        data = client.get(f"/v1/huts/{hut.slug}/meta").json()
-        assert data["image"]
-        assert "map%2Fstatic" in data["image"]
-        # spotlight preview look, smaller marker (owner-approved)
-        assert "effect%3Dspotlight" in data["image"]
-        assert "marker_scale%3D0.8" in data["image"]
-        assert "zoom%3D15" in data["image"]
-
-    def test_hidden_top_image_is_skipped(self, hut, client):
-        """An inactive top-scored image must not become the og:image —
-        the next servable row (or the fallback) is used instead."""
-        from urllib.parse import quote
-
-        self._pin(
+        self._warm_gallery_cache(
             hut,
-            source_id="File:Hidden.jpg",
-            score=32767,
-            url_large="https://upload.wikimedia.org/wikipedia/commons/hidden.jpg",
+            self._gallery_response(
+                hut, "https://media.camptocamp.org/c2corg-active/1204579707.jpg"
+            ),
         )
-        self._pin(
-            hut,
-            source_id="File:Visible.jpg",
-            score=100,
-            url_large="https://upload.wikimedia.org/wikipedia/commons/visible.jpg",
-        )
-        top = (
-            HutImageAssociation.objects.filter(hut=hut)
-            .select_related("image")
-            .order_by("-score")
-            .first()
-        )
-        top.image.is_active = False
-        top.image.save(update_fields=["is_active"])
         data = client.get(f"/v1/huts/{hut.slug}/meta").json()
         assert (
-            quote("https://upload.wikimedia.org/wikipedia/commons/visible.jpg", safe="")
+            quote("media.camptocamp.org/c2corg-active/1204579707.jpg", safe="")
             in data["image"]
         )
+        assert "/v1/geo/map/static" not in data["image"]
+        # Wodore logo watermark: bottom, a bit left of center (0.33,
+        # same position as the static-map cards).
+        assert ",0.33,bottom-10,0)" in data["image"]
+
+    def test_gallery_cached_in_other_language_is_used(self, hut, client):
+        """The gallery is language-independent imagery — a response cached
+        under any UI language serves the og lookup."""
+        from urllib.parse import quote
+
+        self._warm_gallery_cache(
+            hut,
+            self._gallery_response(hut, "https://media.camptocamp.org/anylang.jpg"),
+            lang="fr",
+        )
+        data = client.get(f"/v1/huts/{hut.slug}/meta", {"lang": "de"}).json()
+        assert quote("media.camptocamp.org/anylang.jpg", safe="") in data["image"]
+
+    def test_deprecated_photos_field_is_ignored(self, hut, client):
+        """hut.services `photos` is deprecated — it never becomes the
+        og:image, warm gallery or not."""
+        from urllib.parse import quote
+
+        hut.photos = "https://static.suissealpine.sac-cas.ch/hero.jpg"
+        hut.save(update_fields=["photos"])
+        # Warm gallery wins even with the hero set …
+        self._warm_gallery_cache(
+            hut, self._gallery_response(hut, "https://media.camptocamp.org/top.jpg")
+        )
+        data = client.get(f"/v1/huts/{hut.slug}/meta").json()
+        assert quote("media.camptocamp.org/top.jpg", safe="") in data["image"]
+        assert "sac-cas.ch" not in data["image"]
+
+    def test_cold_gallery_cache_uses_service_fallback(self, hut, client):
+        """No cached gallery response (nobody opened the page yet) → the
+        image service's static-map fallback feature — never the
+        deprecated photos field."""
+        hut.photos = "https://static.suissealpine.sac-cas.ch/hero.jpg"
+        hut.save(update_fields=["photos"])
+        data = client.get(f"/v1/huts/{hut.slug}/meta").json()
+        assert data["image"]
+        assert "/v1/geo/map/static" in data["image"]
+        assert "effect=spotlight" in data["image"]
+        assert "size=1200x630" in data["image"]
+        assert "sac-cas.ch" not in data["image"]
+
+    def test_fallback_feature_is_og_image(self, hut, client):
+        """A cached response whose only feature is the service's
+        static-map fallback (is_fallback=true) serves that feature's
+        card URL as-is — the og never generates map cards itself."""
+        from server.apps.geometries.api_images import _map_fallback_feature
+
+        class _Req:
+            def build_absolute_uri(self, uri: str) -> str:
+                return f"https://wodore.com{uri}"
+
+        feature = _map_fallback_feature(
+            _Req(),
+            slug=hut.slug,
+            lat=46.5,
+            lon=7.5,
+            modified=hut.modified,
+            place_type="hut",
+        )
+        from server.apps.geometries.schemas import (
+            ImageCollectionResponse,
+            ImageMetadataSchema,
+        )
+
+        self._warm_gallery_cache(
+            hut,
+            ImageCollectionResponse(
+                type="FeatureCollection",
+                features=[feature],
+                metadata=ImageMetadataSchema(
+                    total=1,
+                    sources_queried=["wodore"],
+                    query_radius_m=50,
+                    center={"lat": 46.5, "lon": 7.5},
+                    geoplaces_found=0,
+                    huts_found=1,
+                ),
+            ),
+        )
+        data = client.get(f"/v1/huts/{hut.slug}/meta").json()
+        assert data["image"].startswith("https://wodore.com/v1/geo/map/static")
+        assert "effect=spotlight" in data["image"]
 
     def test_meta_does_not_disturb_other_hut_routes(self, seed_data, client):
         """/{slug} catch-all and the .md variant keep working alongside."""

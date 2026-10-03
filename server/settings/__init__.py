@@ -9,6 +9,7 @@ To change settings file:
 `DJANGO_ENV=production python manage.py runserver`
 """
 
+import sys
 from os import environ
 
 try:
@@ -23,7 +24,18 @@ except ModuleNotFoundError:
 from split_settings.tools import include, optional
 
 # Managing environment via `DJANGO_ENV` variable:
-environ.setdefault("DJANGO_ENV", "development")
+#
+# Under pytest, default to "test": pytest-django builds Django settings
+# during plugin init (before any conftest code runs), so a conftest-level
+# pin is too late. Without this guard, a local `pytest` invocation with
+# DJANGO_ENV unset loads the development environment and its
+# debug-toolbar middleware into test responses (toolbar rendering then
+# fails reversing djdt:* URLs, which only exist when DEBUG=True).
+# An explicit DJANGO_ENV always wins (CI sets it in the workflow env).
+if "pytest" in sys.modules:
+    environ.setdefault("DJANGO_ENV", "test")
+else:
+    environ.setdefault("DJANGO_ENV", "development")
 _ENV = environ["DJANGO_ENV"]
 
 _base_settings = (

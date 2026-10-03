@@ -135,14 +135,22 @@ class TestStaticMapEndpoint:
 
 
 class TestMetaFallbacks:
+    @pytest.fixture(autouse=True)
+    def _isolated_cache(self, monkeypatch):
+        from uuid import uuid4
+
+        from django.core.cache.backends.locmem import LocMemCache
+
+        from server.apps.geometries import image_response_cache as irc
+
+        cache = LocMemCache(f"test-{uuid4().hex}", {})
+        monkeypatch.setattr(irc, "_cache", lambda: cache)
+
     def test_hut_meta_no_photo_uses_static_map(
         self, seed_data, client, settings, offline_render
     ):
-        from django.core.cache import cache
-
         from server.apps.huts.models import HutImageAssociation
 
-        cache.clear()
         settings.FRONTEND_DOMAIN = "https://wodore.com"
         HutImageAssociation.objects.all().delete()
         hut = Hut.objects.filter(
@@ -150,11 +158,14 @@ class TestMetaFallbacks:
         ).first()
         assert hut is not None
         data = client.get(f"/v1/huts/{hut.slug}/meta").json()
-        # imagor-wrapped: the static-map endpoint URL is the encoded source
-        assert "map%2Fstatic" in data["image"]
-        assert "wodore_watermark" in data["image"]  # logo composited by imagor
-        # left-of-center watermark, clear of WhatsApp's center crop
-        assert ",0.33,bottom-10,0" in data["image"]
+        # The image service's static-map fallback feature, as-is: a
+        # direct endpoint URL (no imagor wrapping — the render bakes the
+        # watermark), og dimensions, spotlight, marker.
+        assert "/v1/geo/map/static" in data["image"]
+        assert "size=1200x630" in data["image"]
+        assert "effect=spotlight" in data["image"]
+        assert "marker_scale=0.8" in data["image"]
+        assert "zoom=15" in data["image"]
 
     def test_place_meta_no_photo_uses_static_map(
         self, seed_data, client, settings, offline_render
@@ -165,7 +176,8 @@ class TestMetaFallbacks:
         ).first()
         assert place is not None
         data = client.get(f"/v1/geo/places/{place.slug}/meta").json()
-        assert "map%2Fstatic" in data["image"]
+        assert "/v1/geo/map/static" in data["image"]
+        assert "effect=spotlight" in data["image"]
 
 
 class TestSizeParameter:
@@ -288,7 +300,7 @@ class TestCategoriesIndexLang:
         default = client.get("/v1/categories/index.md")
         assert default.status_code == 200
         body = default.content.decode()
-        assert body.startswith("# Wodore categories")
+        assert body.startswith("# Wodore place categories")
         # the param is accepted (validated against the language choices)
         english = client.get("/v1/categories/index.md", {"lang": "en"})
         assert english.status_code == 200
