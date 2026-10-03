@@ -15,6 +15,10 @@ taxonomy, and no third-party dependency in the picker.
   ref: metadata + one SVG per style (Color, Flat, High Contrast), stored
   as static assets; slugs equal the upstream names (which mirror Unicode
   CLDR short names).
+- Import **Noto Emoji** (Google, Apache-2.0) as the secondary set — the
+  color variant, same Unicode slugs — imported by the same command so the
+  picker can offer both families (frontend already offers Fluent Flat +
+  Noto via Iconify at runtime; this moves both in-house).
 - Import **localized keywords** per icon (de/en/fr/it) from CLDR-derived
   data (emojibase-data, MIT) so search works in every UI language without
   client-side fetches.
@@ -30,7 +34,8 @@ taxonomy, and no third-party dependency in the picker.
 ### New Capabilities
 
 - `emoji-icon-library`: registry + import of the Fluent Emoji set (three
-  styles) with localized keywords, categories, and a searchable read API.
+  styles) and the Noto Emoji color set, with localized keywords,
+  categories, and a searchable read API.
 
 ### Modified Capabilities
 
@@ -39,7 +44,7 @@ taxonomy, and no third-party dependency in the picker.
 ## Impact
 
 - **New models**: `EmojiIcon` (slug, unicode hexcode, CLDR group/subgroup,
-  curated flag, upstream ref), `EmojiIconKeyword` (icon, locale, keyword),
+  curated flag, upstream ref, `family` field: fluent | noto), `EmojiIconKeyword` (icon, locale, keyword),
   per-style asset paths (static files, no media uploads)
 - **Import**: management command `import_fluent_emoji --ref <pin>`; pulls
   the upstream repo archive + emojibase keyword JSON; idempotent re-run;

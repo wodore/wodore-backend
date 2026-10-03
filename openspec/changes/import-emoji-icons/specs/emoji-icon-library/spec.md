@@ -1,8 +1,9 @@
 ## ADDED Requirements
 
-### Requirement: Fluent Emoji import at a pinned ref
+### Requirement: Fluent Emoji + Noto import at pinned refs
 The system SHALL provide a management command that imports the complete
-`microsoft/fluentui-emoji` set from a pinned upstream ref, storing for
+`microsoft/fluentui-emoji` set (primary) and the Noto Emoji color set
+(secondary family, Apache-2.0) from pinned upstream refs, storing for
 every icon its slug (upstream name), unicode hexcode (variation selectors
 stripped), CLDR group and subgroup, and one SVG asset per style (Color,
 Flat, High Contrast). Re-running the command at the same or a newer ref
@@ -10,9 +11,10 @@ SHALL be idempotent and SHALL record the imported upstream ref.
 
 #### Scenario: Full import
 
-- WHEN an operator runs `import_fluent_emoji --ref <pin>`
-- THEN every upstream icon exists exactly once with slug, hexcode, group,
-  subgroup, and three style asset paths
+- WHEN an operator runs `import_fluent_emoji --ref <pin> [--noto-ref <pin>]`
+- THEN every upstream icon exists exactly once per family with slug,
+  hexcode, group, subgroup, and its style asset paths (fluent: three
+  styles; noto: color)
 - AND the upstream ref and license (MIT) are recorded
 
 #### Scenario: Idempotent re-run
@@ -39,7 +41,7 @@ form retained for display.
 
 ### Requirement: Searchable icons endpoint
 The system SHALL expose `GET /v1/icons` with `search`, `lang`, `style`,
-`category`, `curated`, `limit`, and `offset` parameters. Search SHALL
+`category`, `family`, `curated`, `limit`, and `offset` parameters. Search SHALL
 match localized keywords and slug with prefix ranking above substring
 ranking, SHALL apply typo tolerance (edit distance ≤ 2) for terms of at
 least 4 characters when no exact matches exist, and SHALL return each

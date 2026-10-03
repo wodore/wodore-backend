@@ -29,6 +29,15 @@ though they map to the planned detailed/reduced/mono visual modes.
 keeps `unicode` (hexcode, without FE0F variation selectors) as the join
 key for keyword data. Re-imports are idempotent; upstream ref recorded.
 
+### D1b: Secondary family — Noto Emoji (color), same import pattern
+
+`googlefonts/noto-emoji` (Apache-2.0) at a pinned ref, color SVGs only,
+joined on the same hexcode → slug space. Icons carry a `family` field
+(fluent | noto); slugs collide BY DESIGN (both mirror Unicode names) —
+`(family, slug)` is the unique key, and search results may return the
+same glyph in both families. Per-style assets apply to fluent; noto
+imports its single color style as `svg_color` (flat/high-contrast empty).
+
 ### D2: Keywords from emojibase-data (CLDR), not hand-written
 
 `emojibase-data/<locale>/data.json` (MIT) provides labels + tags in our

@@ -1,7 +1,7 @@
 ## 1. Registry + import (PR A)
 
 - [ ] 1.1 `EmojiIcon` model (slug unique, hexcode + index, group, subgroup, curated bool, svg_color/svg_flat/svg_high_contrast paths, upstream_ref, sort_key) + `EmojiIconKeyword` (icon FK, locale, keyword, keyword_folded; unique (icon, locale, keyword_folded), index (locale, keyword_folded)) + migrations
-- [ ] 1.2 `import_fluent_emoji --ref <pin> [--locales de,en,fr,it]` — download pinned archive, write style SVGs to static storage, import metadata; idempotent upserts; record ref/license
+- [ ] 1.2 `import_fluent_emoji --ref <pin> [--noto-ref <pin>] [--locales de,en,fr,it]` — download pinned archives, write style SVGs (fluent: 3 styles; noto: color) to static storage, import metadata with `family` (fluent | noto); idempotent upserts; record refs/licenses
 - [ ] 1.3 Keyword import from emojibase-data (pinned version): hexcode join, folded + original keyword, per-locale labels; unmatched-slugs report
 - [ ] 1.4 `curated` shortlist management (data migration with the ~18 activity slugs; admin toggle)
 - [ ] 1.5 Tests: idempotent re-run, keyword folding (accents/case), hexcode join coverage report, asset integrity (3 styles per icon)
