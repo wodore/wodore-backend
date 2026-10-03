@@ -20,9 +20,9 @@ from dmr.routing import path
 from pydantic import Field
 
 from django.conf import settings
-from django.http import Http404, HttpRequest
+from django.http import HttpRequest
 
-from server.apps.api.controller import ApiController, cache_headers
+from server.apps.api.controller import ApiController, cache_headers, raise_not_found
 from server.apps.images.models import Image
 from server.apps.images.og import (
     OG_MAP_EFFECT,
@@ -355,7 +355,7 @@ class HutMetaController(ApiController):
         )
         if hut is None:
             msg = f"Could not find '{parsed_path.slug}'."
-            raise Http404(msg)
+            raise_not_found(msg)
 
         page_url = f"{settings.FRONTEND_DOMAIN.rstrip('/')}/hut/{hut.slug}"
         image = _og_image(hut, request, parsed_query.lang)

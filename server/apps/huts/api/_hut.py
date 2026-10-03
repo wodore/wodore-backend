@@ -22,10 +22,10 @@ from django.conf import settings
 from django.contrib.postgres.aggregates import JSONBAgg
 from django.db.models import Case, F, Value, When
 from django.db.models.functions import Coalesce, Concat, JSONObject
-from django.http import Http404, HttpRequest, HttpResponse
+from django.http import HttpRequest, HttpResponse
 from django.urls import reverse_lazy
 
-from server.apps.api.controller import ApiController, cache_headers
+from server.apps.api.controller import ApiController, cache_headers, raise_not_found
 from server.apps.api.projection import field_selected, project_fields
 from server.apps.api.query import (
     BboxQuery,
@@ -839,7 +839,7 @@ class HutDetailController(ApiController):
         hut_db = qs.first()
         if hut_db is None:
             msg = f"Could not find '{slug}'."
-            raise Http404(msg)
+            raise_not_found(msg)
         if len(hut_db.sources) and hut_db.sources[0]["slug"] is None:
             hut_db.sources = []
         else:
