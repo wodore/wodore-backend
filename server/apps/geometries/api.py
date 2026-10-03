@@ -9,6 +9,8 @@ from django.views.decorators.cache import cache_page
 
 from server.apps.api.controller import ApiController, cache_headers, raise_not_found
 from server.apps.api.enums import IncludeModeEnum
+from server.apps.api.projection import project_fields
+from server.apps.api.query import sparse_fields_query
 from server.apps.geometries.presenters import (
     annotate_sources,
     apply_type_filters,
@@ -17,6 +19,8 @@ from server.apps.geometries.presenters import (
     build_sources,
     prefetch_categories,
 )
+from server.apps.geometries.schemas import CategoryPlaceTypeSchema as CategorySchema
+from server.apps.organizations.schema import OrganizationSourceIdSlugSchema
 from server.apps.translations import LanguageQuery
 
 from .models import GeoPlace
@@ -29,7 +33,14 @@ from .schemas import (
 __all__ = ["paths", "IncludeModeEnum"]
 
 
-class _GeoSearchQuery(LanguageQuery):
+GeoPlaceFields = sparse_fields_query(
+    places=GeoPlaceSearchSchema,
+    categories=CategorySchema,
+    sources=OrganizationSourceIdSlugSchema,
+)
+
+
+class _GeoSearchQuery(LanguageQuery, GeoPlaceFields):
     """Query parameters shared by search and nearby."""
 
     types: list[str] | None = Field(
@@ -42,22 +53,6 @@ class _GeoSearchQuery(LanguageQuery):
     categories: list[str] | None = Field(
         None,
         description=("Filter by parent category slugs (e.g., 'terrain', 'transport')"),
-    )
-    include_categories: IncludeModeEnum = Field(  # type: ignore[assignment]
-        IncludeModeEnum.all,
-        description=(
-            "Include categories information: 'no' excludes field, 'slug' "
-            "returns category slugs only, 'all' returns full category "
-            "details with name and description"
-        ),
-    )
-    include_sources: IncludeModeEnum = Field(  # type: ignore[assignment]
-        IncludeModeEnum.no,
-        description=(
-            "Include data sources: 'no' excludes field, 'slug' returns "
-            "source slugs only, all returns full source details with "
-            "name and logo"
-        ),
     )
 
 
@@ -116,17 +111,8 @@ class GeoNearbyQuery(_GeoSearchQuery):
     min_importance: int = Field(0, description="Minimum importance score (0-100)")
 
 
-class AmenityQuery(LanguageQuery):
+class AmenityQuery(LanguageQuery, GeoPlaceFields):
     """Query parameters for the amenity detail endpoint."""
-
-    include_sources: IncludeModeEnum = Field(  # type: ignore[assignment]
-        IncludeModeEnum.no,
-        description=(
-            "Include data sources: 'no' excludes field, 'slug' returns "
-            "source slugs only, all returns full source details with "
-            "name and logo"
-        ),
-    )
 
 
 class AmenityPath(pydantic.BaseModel):
@@ -272,10 +258,9 @@ class GeoSearchController(ApiController):
 
         queryset = apply_type_filters(queryset, query.types, query.categories)
 
-        if query.include_categories != IncludeModeEnum.no:
-            queryset = prefetch_categories(queryset)
-
-        queryset = annotate_sources(queryset, query.include_sources)
+        # Always fetch the full shape — narrowing happens at projection
+        queryset = prefetch_categories(queryset)
+        queryset = annotate_sources(queryset, IncludeModeEnum.all)
 
         # Fuzzy search using trigram similarity
         requested_language = query.lang
@@ -452,10 +437,9 @@ class GeoNearbyController(ApiController):
 
         queryset = apply_type_filters(queryset, query.types, query.categories)
 
-        if query.include_categories != IncludeModeEnum.no:
-            queryset = prefetch_categories(queryset)
-
-        queryset = annotate_sources(queryset, query.include_sources)
+        # Always fetch the full shape — narrowing happens at projection
+        queryset = prefetch_categories(queryset)
+        queryset = annotate_sources(queryset, IncludeModeEnum.all)
 
         queryset = queryset.annotate(distance=Distance("location", point)).order_by(
             "distance"
@@ -474,22 +458,18 @@ class GeoNearbyController(ApiController):
             result = base_result(place, media_url)
             result["distance"] = round(distance_m, 2) if distance_m else None
 
-            if query.include_categories == IncludeModeEnum.slug:
-                result["categories"] = [
-                    category.slug for category in place.categories.all()
-                ]
-            elif query.include_categories == IncludeModeEnum.all:
-                categories_data = build_categories_data(place, request)
-                if categories_data:
-                    result["categories"] = categories_data
+            result["categories"] = build_categories_data(place, request) or []
+            build_sources(result, place, media_url, IncludeModeEnum.all)
+            results.append(
+                project_fields(
+                    result,
+                    query,
+                    "places",
+                    {"categories": "categories", "sources": "sources"},
+                )
+            )
 
-            build_sources(result, place, media_url, query.include_sources)
-            results.append(result)
-
-        return [
-            GeoPlaceNearbySchema(**result).model_dump(exclude_unset=True)
-            for result in results
-        ]
+        return results
 
 
 class AmenityController(ApiController):
@@ -565,7 +545,7 @@ class AmenityController(ApiController):
 
         # Add source data (annotations must run on a queryset; the old
         # code annotated the instance which crashed for include_sources).
-        if parsed_query.include_sources != IncludeModeEnum.no:
+        if True:  # Always fetch — narrowing happens at projection
             from django.contrib.postgres.aggregates import JSONBAgg
             from django.db.models import F
             from django.db.models.functions import JSONObject

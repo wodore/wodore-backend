@@ -26,7 +26,7 @@ from django.http import Http404, HttpRequest, HttpResponse
 from django.urls import reverse_lazy
 
 from server.apps.api.controller import ApiController, cache_headers
-from server.apps.api.enums import IncludeModeEnum
+from server.apps.api.projection import project_fields
 from server.apps.api.query import TristateEnum, dump_sparse, sparse_fields_query
 from server.apps.huts.schemas._hut import ImageMetaSchema
 from server.apps.translations import LanguageQuery, activate
@@ -36,6 +36,7 @@ from ..schemas import (
     HutSchemaDetails,
     HutSchemaList,
     HutSearchResultSchema,
+    HutTypeSchema,
     ImageInfoSchema,
     LicenseInfoSchema,
     OrganizationBaseSchema,
@@ -62,7 +63,14 @@ class _HutSlug(pydantic.BaseModel):
     slug: str = Field(description="Hut slug")
 
 
-class HutSearchQuery(LanguageQuery):
+HutSearchFields = sparse_fields_query(
+    huts=HutSearchResultSchema,
+    hut_types=HutTypeSchema,
+    sources=OrganizationBaseSchema,
+)
+
+
+class HutSearchQuery(LanguageQuery, HutSearchFields):
     """Query parameters for the hut search endpoint."""
 
     q: str = Field(
@@ -78,25 +86,6 @@ class HutSearchQuery(LanguageQuery):
             "results but with lower relevance. Recommended: 0.1 for fuzzy "
             "matching, 0.3 for stricter matching."
         ),
-    )
-    include_hut_type: IncludeModeEnum = Field(  # type: ignore[assignment]
-        IncludeModeEnum.no,
-        description=(
-            "Include hut type information: 'no' excludes field, 'slug' "
-            "returns type slugs only, all returns full type details "
-            "with icons"
-        ),
-    )
-    include_sources: IncludeModeEnum = Field(  # type: ignore[assignment]
-        IncludeModeEnum.no,
-        description=(
-            "Include data sources: 'no' excludes field, 'slug' returns "
-            "source slugs only, all returns full source details with logos"
-        ),
-    )
-    include_avatar: bool = Field(
-        True,
-        description="Include avatar/primary photo URL in results",
     )
 
 
@@ -144,37 +133,30 @@ class HutSearchController(ApiController):
             is_public=True,
         )
 
-        if query.include_hut_type != "no":
-            qs = qs.select_related(
-                "hut_type_open",
-                "hut_type_closed",
-                "hut_type_open__symbol_detailed",
-                "hut_type_open__symbol_simple",
-                "hut_type_open__symbol_mono",
-                "hut_type_closed__symbol_detailed",
-                "hut_type_closed__symbol_simple",
-                "hut_type_closed__symbol_mono",
-            )
-
-        if query.include_sources == "slug":
-            qs = qs.annotate(
-                organization_slugs=JSONBAgg(F("org_set__slug"), distinct=True)
-            )
-        elif query.include_sources == "all":
-            qs = qs.annotate(
-                sources_data=JSONBAgg(
-                    JSONObject(
-                        slug="org_set__slug",
-                        name="org_set__name_i18n",
-                        fullname="org_set__fullname_i18n",
-                        link="orgs_source__link",
-                        logo="org_set__logo",
-                        public="org_set__is_public",
-                        source_id="orgs_source__source_id",
-                    ),
-                    distinct=True,
-                )
-            )
+        # Always fetch the full shape — narrowing happens at projection
+        qs = qs.select_related(
+            "hut_type_open",
+            "hut_type_closed",
+            "hut_type_open__symbol_detailed",
+            "hut_type_open__symbol_simple",
+            "hut_type_open__symbol_mono",
+            "hut_type_closed__symbol_detailed",
+            "hut_type_closed__symbol_simple",
+            "hut_type_closed__symbol_mono",
+        ).annotate(
+            sources_data=JSONBAgg(
+                JSONObject(
+                    slug="org_set__slug",
+                    name="org_set__name_i18n",
+                    fullname="org_set__fullname_i18n",
+                    link="orgs_source__link",
+                    logo="org_set__logo",
+                    public="org_set__is_public",
+                    source_id="orgs_source__source_id",
+                ),
+                distinct=True,
+            ),
+        )
 
         if query.limit is not None:
             qs = qs[query.offset : query.offset + query.limit]
@@ -195,15 +177,7 @@ class HutSearchController(ApiController):
                 "location": hut.location,
                 "elevation": hut.elevation,
                 "score": hut.combined_score,
-            }
-
-            if query.include_hut_type == "slug":
-                result["hut_type"] = {
-                    "open": hut.hut_type_open.slug if hut.hut_type_open else None,
-                    "closed": hut.hut_type_closed.slug if hut.hut_type_closed else None,
-                }
-            elif query.include_hut_type == "all":
-                result["hut_type"] = {
+                "hut_type": {
                     "open": {
                         "slug": hut.hut_type_open.slug,
                         "name": hut.hut_type_open.name_i18n,  # noqa: WPS308
@@ -220,34 +194,33 @@ class HutSearchController(ApiController):
                     }
                     if hut.hut_type_closed
                     else None,
-                }
+                },
+                "sources": [
+                    {
+                        **src,
+                        "logo": f"{media_url}{src['logo']}"
+                        if src.get("logo")
+                        else None,
+                    }
+                    for src in (hut.sources_data or [])
+                    if src.get("slug") is not None
+                ],
+            }
+            if hut.photos:
+                result["avatar"] = f"{media_url}{hut.photos}"
+            else:
+                result["avatar"] = None
 
-            if query.include_sources == "slug":
-                org_slugs = [
-                    slug for slug in (hut.organization_slugs or []) if slug is not None
-                ]
-                result["sources"] = org_slugs
-            elif query.include_sources == "all":
-                sources = []
-                for src in hut.sources_data or []:
-                    if src.get("slug") is not None:
-                        if src.get("logo"):
-                            src["logo"] = f"{media_url}{src['logo']}"
-                        sources.append(src)
-                result["sources"] = sources
+            results.append(
+                project_fields(
+                    result,
+                    query,
+                    "huts",
+                    {"hut_types": "hut_type", "sources": "sources"},
+                )
+            )
 
-            if query.include_avatar:
-                if hut.photos:
-                    result["avatar"] = f"{media_url}{hut.photos}"
-                else:
-                    result["avatar"] = None
-
-            results.append(result)
-
-        return [
-            HutSearchResultSchema(**result).model_dump(exclude_unset=True)
-            for result in results
-        ]
+        return results
 
 
 # ---------------------------------------------------------------------------

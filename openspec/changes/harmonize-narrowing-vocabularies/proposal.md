@@ -19,3 +19,11 @@ harmonizing on the JSON:API convention removes a parallel concept.
 
 ### Modified Capabilities
 - `sparse-fieldsets`: extended to cover the former include_X endpoints
+
+## Shape change: slug lists become objects
+
+`include_X=slug` returned flat strings (`"sources": ["sac", "hrs"]`).
+`fields[sources]=slug` returns objects (`"sources": [{"slug": "sac"}]`).
+The shape is now consistent regardless of field count — always an
+object, never a surprise type change. Frontend impact: `s.slug` instead
+of the string directly. Rides the version bump at no extra cost.
