@@ -548,7 +548,7 @@ class TestRegistryIntegrity:
 
 @pytest.mark.django_db
 class TestStaticMapFallbackVersioning:
-    """2026-10-03: static_map_fallback defaults to true on the image
+    """Unreleased version: static_map_fallback defaults to true on the image
     endpoints; clients pinned to 2026-10-02 keep photo-only responses
     (the downgrade strips is_fallback features)."""
 
@@ -586,7 +586,7 @@ class TestStaticMapFallbackVersioning:
     def test_current_version_includes_fallback(self, hut_slug, client):
         response = client.get(f"/v1/geo/images/hut/{hut_slug}", {"sources": "wodore"})
         assert response.status_code == 200
-        assert response["Api-Version"] == "2026-10-03"
+        assert response["Api-Version"] == "unreleased"
         features = response.json()["features"]
         assert [f["properties"]["is_fallback"] for f in features] == [True]
 

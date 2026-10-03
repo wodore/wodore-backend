@@ -134,6 +134,7 @@ def _strip_static_map_fallback(data: Any) -> Any:
             metadata["total"] = len(data["features"])
     return data
 
+
 REGISTRY: list[VersionChange] = [
     VersionChange(
         version=INITIAL_VERSION,

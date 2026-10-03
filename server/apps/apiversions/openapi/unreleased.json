@@ -895,6 +895,116 @@
         "title": "CategoryTreeSchema",
         "type": "object"
       },
+      "CategoryValue": {
+        "description": "The weather-code category.",
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "parent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parent"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Slug"
+          },
+          "symbol_detailed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Symbol Detailed"
+          },
+          "symbol_mono": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Symbol Mono"
+          },
+          "symbol_simple": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Symbol Simple"
+          }
+        },
+        "title": "CategoryValue",
+        "type": "object"
+      },
+      "CollectionValue": {
+        "description": "The symbol collection a weather code belongs to.",
+        "properties": {
+          "organization": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Organization"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Slug"
+          }
+        },
+        "title": "CollectionValue",
+        "type": "object"
+      },
       "CountryTuple": {
         "maxItems": 2,
         "minItems": 2,
@@ -5335,6 +5445,37 @@
         "title": "ResponseSchema",
         "type": "object"
       },
+      "SymbolValue": {
+        "description": "One symbol variant (day or night).",
+        "properties": {
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Slug"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          }
+        },
+        "title": "SymbolValue",
+        "type": "object"
+      },
       "SymbolVariantEnum": {
         "description": "Symbol variant types for categories.",
         "enum": ["detailed", "simple", "mono"],
@@ -5390,6 +5531,91 @@
           "api"
         ],
         "title": "VersionSchema",
+        "type": "object"
+      },
+      "WeatherCodeValue": {
+        "additionalProperties": true,
+        "description": "One weather-code entry (the value in the WMO-keyed dict).",
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CategoryValue"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "code": {
+            "title": "Code",
+            "type": "integer"
+          },
+          "collection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CollectionValue"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "description_day": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description Day"
+          },
+          "description_night": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description Night"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "symbol_day": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SymbolValue"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "symbol_night": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SymbolValue"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": ["code", "slug"],
+        "title": "WeatherCodeValue",
         "type": "object"
       },
       "WebsiteSchema": {
@@ -6143,6 +6369,17 @@
             }
           },
           {
+            "description": "Fast call: serve only a cached response (fresh or stale), never query providers \u2014 an empty collection when nothing is cached. Mutually exclusive with update_cache.",
+            "in": "query",
+            "name": "cached_only",
+            "schema": {
+              "default": false,
+              "description": "Fast call: serve only a cached response (fresh or stale), never query providers \u2014 an empty collection when nothing is cached. Mutually exclusive with update_cache.",
+              "title": "Cached Only",
+              "type": "boolean"
+            }
+          },
+          {
             "description": "Search radius in meters for external providers",
             "in": "query",
             "name": "radius",
@@ -6199,13 +6436,13 @@
             }
           },
           {
-            "description": "When the entity has no images, include the generated static-map card as a single feature (is_fallback=true)",
+            "description": "When the entity has no images, include the generated static-map card (zoom 15, spotlight effect, type-symbol marker) as a single feature (is_fallback=true). Opt out with false to receive a plain empty collection.",
             "in": "query",
-            "name": "fallback",
+            "name": "static_map_fallback",
             "schema": {
-              "default": false,
-              "description": "When the entity has no images, include the generated static-map card as a single feature (is_fallback=true)",
-              "title": "Fallback",
+              "default": true,
+              "description": "When the entity has no images, include the generated static-map card (zoom 15, spotlight effect, type-symbol marker) as a single feature (is_fallback=true). Opt out with false to receive a plain empty collection.",
+              "title": "Static Map Fallback",
               "type": "boolean"
             }
           }
@@ -6290,6 +6527,17 @@
               "pattern": "(de|en|fr|it)",
               "title": "Lang",
               "type": "string"
+            }
+          },
+          {
+            "description": "Fast call: serve only a cached response (fresh or stale), never query providers \u2014 an empty collection when nothing is cached. Mutually exclusive with update_cache.",
+            "in": "query",
+            "name": "cached_only",
+            "schema": {
+              "default": false,
+              "description": "Fast call: serve only a cached response (fresh or stale), never query providers \u2014 an empty collection when nothing is cached. Mutually exclusive with update_cache.",
+              "title": "Cached Only",
+              "type": "boolean"
             }
           },
           {
@@ -6472,6 +6720,17 @@
             }
           },
           {
+            "description": "Fast call: serve only a cached response (fresh or stale), never query providers \u2014 an empty collection when nothing is cached. Mutually exclusive with update_cache.",
+            "in": "query",
+            "name": "cached_only",
+            "schema": {
+              "default": false,
+              "description": "Fast call: serve only a cached response (fresh or stale), never query providers \u2014 an empty collection when nothing is cached. Mutually exclusive with update_cache.",
+              "title": "Cached Only",
+              "type": "boolean"
+            }
+          },
+          {
             "description": "Search radius in meters for external providers",
             "in": "query",
             "name": "radius",
@@ -6528,13 +6787,13 @@
             }
           },
           {
-            "description": "When the entity has no images, include the generated static-map card as a single feature (is_fallback=true)",
+            "description": "When the entity has no images, include the generated static-map card (zoom 15, spotlight effect, type-symbol marker) as a single feature (is_fallback=true). Opt out with false to receive a plain empty collection.",
             "in": "query",
-            "name": "fallback",
+            "name": "static_map_fallback",
             "schema": {
-              "default": false,
-              "description": "When the entity has no images, include the generated static-map card as a single feature (is_fallback=true)",
-              "title": "Fallback",
+              "default": true,
+              "description": "When the entity has no images, include the generated static-map card (zoom 15, spotlight effect, type-symbol marker) as a single feature (is_fallback=true). Opt out with false to receive a plain empty collection.",
+              "title": "Static Map Fallback",
               "type": "boolean"
             }
           }
@@ -9162,8 +9421,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/WeatherCodeValue"
                   },
                   "type": "object"
                 }
