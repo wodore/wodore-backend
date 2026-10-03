@@ -52,6 +52,47 @@ EFFECTS = ("none", "blur_border", "spotlight", "vignette", "blurred_edges")
 MARKER_SIZE_PX = 170
 MARKER_X = 0.60
 
+# Watermark geometry (owner-approved, same as the og photo composite):
+# 270px raster at the 1200x630 reference card, horizontally at 33% of
+# the free space (a bit left of center — clear of WhatsApp's 1:1
+# center crop), 10px from the bottom, opaque.
+_LOGO_PATH = Path(__file__).resolve().parent / "assets" / "wodore_watermark.png"
+LOGO_SIZE_PX = 270
+LOGO_X_RATIO = 0.33
+LOGO_BOTTOM_PX = 10
+
+_logo_image: Image.Image | None = None
+_logo_lock = threading.Lock()
+
+
+def _watermark(scale: float) -> Image.Image | None:
+    """The logo raster scaled for a card at ``scale`` (reference = 1.0).
+
+    ``None`` when the asset is unreadable — rendering continues
+    without the watermark instead of failing the whole card.
+    """
+    global _logo_image
+    if _logo_image is None:
+        with _logo_lock:
+            if _logo_image is None:
+                try:
+                    _logo_image = Image.open(_LOGO_PATH).convert("RGBA")
+                except OSError:
+                    return None
+    size = max(1, int(LOGO_SIZE_PX * scale))
+    return _logo_image.resize((size, size), Image.LANCZOS)
+
+
+def _logo_version() -> str:
+    """Short content digest of the watermark asset — part of the render
+    cache key so replacing the file re-renders every card.
+    """
+    try:
+        return hashlib.sha1(_LOGO_PATH.read_bytes()).hexdigest()[:8]
+    except OSError:
+        return "nologo"
+
+
 _FONT_PATH = (
     Path(settings.BASE_DIR) / "docker/imagor/fonts/BarlowSemiCondensed-SemiBold.ttf"
 )
@@ -251,9 +292,9 @@ def render_static_map(
 ) -> bytes:
     """Render a complete og card of width x height, centered on (lat, lon).
 
-    Marker, effects and attribution scale with the size (relative to
-    the 1200x630 reference card). The Wodore logo is NOT baked in —
-    og consumers composite it via imagor.
+    Marker, effects, watermark and attribution scale with the size
+    (relative to the 1200x630 reference card). The Wodore logo is baked
+    in from the backend-bundled asset (``assets/wodore_watermark.png``).
     """
     scale = width / CARD_WIDTH
     xt, yt = _deg_to_tile(lat, lon, zoom)
@@ -302,6 +343,18 @@ def render_static_map(
             ),
         )
 
+    logo = _watermark(scale)
+    if logo is not None:
+        free_x = max(1, width - logo.width)
+        card = card.convert("RGBA")
+        card.alpha_composite(
+            logo,
+            (
+                int(free_x * LOGO_X_RATIO),
+                height - logo.height - max(1, int(LOGO_BOTTOM_PX * scale)),
+            ),
+        )
+
     card = card.convert("RGB")
     if attribution:
         draw = ImageDraw.Draw(card, "RGBA")
@@ -332,9 +385,14 @@ def render_static_map(
 
 
 def static_map_cache_key(params: dict) -> str:
-    """Stable storage key for a parameter set (any change re-renders)."""
+    """Stable storage key for a parameter set (any change re-renders).
+
+    The watermark asset's content digest is folded in: replacing the
+    logo re-renders every card even with identical request parameters.
+    """
     canonical = "&".join(
         f"{k}={params[k]}" for k in sorted(params) if params[k] is not None
     )
+    canonical += f"&logo={_logo_version()}"
     digest = hashlib.sha1(canonical.encode()).hexdigest()[:20]
     return f"ogmaps/static-{digest}.png"
