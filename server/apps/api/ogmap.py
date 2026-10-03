@@ -253,7 +253,8 @@ def render_static_map(
 
     Marker, effects and attribution scale with the size (relative to
     the 1200x630 reference card). The Wodore logo is NOT baked in —
-    og consumers composite it via imagor.
+    og consumers composite it via imagor (from the backend-served
+    asset) on top of this output.
     """
     scale = width / CARD_WIDTH
     xt, yt = _deg_to_tile(lat, lon, zoom)

@@ -21,6 +21,7 @@ from django.urls import include, path
 from django.views.generic import TemplateView
 
 from .apps.api import api_v1 as api_v1_module
+from .apps.api import assets_view
 from .apps.api.serializer import WodoreSerializer
 from .apps.apiversions.docs import VersionedSwagger
 from .apps.local_auth import account_views
@@ -67,6 +68,14 @@ urlpatterns = [
     # Text and xml static files:
     path("robots.txt", main_views.robots_txt),
     path("llms.txt", main_views.llms_txt),
+    # Backend-served brand assets (og/imagor pipeline references —
+    # e.g. the watermark composited onto og photos). No frontend
+    # dependency: the files are bundled in server/apps/api/assets/.
+    path(
+        "assets/logo/<str:name>",
+        assets_view.serve_logo,
+        name="logo-asset",
+    ),
     path(
         "humans.txt",
         TemplateView.as_view(
