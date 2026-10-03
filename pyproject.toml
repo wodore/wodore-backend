@@ -68,6 +68,7 @@ dependencies = [
   "argon2-cffi>=25.1.0",
   "fido2>=2.2.1",
   "django-modern-rest[msgspec,openapi,pydantic]>=0.16.0,<0.17",
+  "django-readers>=2.5.1",
 ]
 
 

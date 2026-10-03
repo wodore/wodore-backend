@@ -2,9 +2,16 @@
 
 ## 1. Derivation layer
 
-- [ ] 1.1 Add `django-readers` dependency (version pin in `pyproject.toml`, `uv sync --extra private`)
-- [ ] 1.2 Implement `spec_from_schema(schema, fields=None, overrides=None)` in `server/apps/api/readers.py`: plain fields → field entries; nested models with matching relations → relationship entries; sparse `fields[TYPE]` selection → spec subset; `overrides` → verbatim reader pairs
-- [ ] 1.3 Unit tests: derived specs for representative schemas (flat, FK-nested, reverse-FK-nested, sparse-subset, override) asserting spec shape and processed queryset SQL column/relation set
+- [x] 1.1 Add `django-readers` dependency (version pin in `pyproject.toml`, `uv sync --extra private`)
+- [x] 1.2 Implement `spec_from_schema(schema, fields=None, overrides=None)` in `server/apps/api/readers.py`: plain fields → field entries; nested models with matching relations → relationship entries; sparse `fields[TYPE]` selection → spec subset; `overrides` → verbatim reader pairs
+- [x] 1.3 Unit tests: derived specs for representative schemas (flat, FK-nested, reverse-FK-nested, sparse-subset, override) asserting spec shape and processed queryset SQL column/relation set
+
+Findings baked into the implementation (both anticipated by the design's "`only()` vs shared code" trap):
+
+- **modeltrans trap 1**: `only('relation_name')` implies `select_related` traversal; the multilingual queryset then defers sibling translated fields (e.g. `Category.symbol_detailed`) and Django rejects "cannot be both deferred and traversed". Forward to-one relations therefore emit a custom prefetch pair that includes only the `<name>_id` column instead.
+- **modeltrans trap 2**: any `only()` without `i18n` defers the TranslationField, breaking translated attribute reads — `_include_i18n()` keeps it in every derived spec for models that carry it.
+- **manager defaults**: `Category._default_manager` pre-applies `select_related('parent', 'symbol_*')`; derived child querysets clear it (`select_related(None)`), since it collides with child field limiting.
+- Forward-FK prefetch on an all-NULL column skips the child query entirely (Django behaviour) — nullable FKs cost nothing extra.
 
 ## 2. Pilot: hut detail
 
