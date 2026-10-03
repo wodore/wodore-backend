@@ -544,3 +544,75 @@ class TestRegistryIntegrity:
         for name in av_checks.HIDDEN_URL_NAMES:
             assert name in url_names, f"{name} is not a route (remove it?)"
             assert name not in schema_ids, f"{name} IS documented (remove from hidden)"
+
+
+@pytest.mark.django_db
+class TestStaticMapFallbackVersioning:
+    """Unreleased version: static_map_fallback defaults to true on the image
+    endpoints; clients pinned to 2026-10-02 keep photo-only responses
+    (the downgrade strips is_fallback features)."""
+
+    @pytest.fixture(autouse=True)
+    def _isolated_cache(self, monkeypatch):
+        from uuid import uuid4
+
+        from django.core.cache.backends.locmem import LocMemCache
+
+        from server.apps.geometries import image_response_cache as irc
+
+        cache = LocMemCache(f"test-{uuid4().hex}", {})
+        monkeypatch.setattr(irc, "_cache", lambda: cache)
+
+    @pytest.fixture(autouse=True)
+    def _no_images(self, db):
+        from server.apps.geometries.models import GeoPlaceImageAssociation
+        from server.apps.huts.models import HutImageAssociation
+
+        HutImageAssociation.objects.all().delete()
+        GeoPlaceImageAssociation.objects.all().delete()
+
+    @pytest.fixture
+    def hut_slug(self, seed_data):
+        from server.apps.huts.models import Hut
+
+        slug = (
+            Hut.objects.filter(is_active=True, is_public=True)
+            .values_list("slug", flat=True)
+            .first()
+        )
+        assert slug, "seed data provides no public hut"
+        return slug
+
+    def test_current_version_includes_fallback(self, hut_slug, client):
+        response = client.get(f"/v1/geo/images/hut/{hut_slug}", {"sources": "wodore"})
+        assert response.status_code == 200
+        assert response["Api-Version"] == "unreleased"
+        features = response.json()["features"]
+        assert [f["properties"]["is_fallback"] for f in features] == [True]
+
+    def test_pinned_previous_version_strips_fallback(self, hut_slug, client):
+        response = client.get(
+            f"/v1/geo/images/hut/{hut_slug}",
+            {"sources": "wodore"},
+            headers={"Api-Version": "2026-10-02"},
+        )
+        assert response.status_code == 200
+        assert response["Api-Version"] == "2026-10-02"
+        body = response.json()
+        assert body["features"] == []
+        assert body["metadata"]["total"] == 0
+
+    def test_pinned_previous_version_strips_fallback_place(self, seed_data, client):
+        from server.apps.geometries.models import GeoPlace
+
+        place = GeoPlace.objects.filter(is_active=True, is_public=True).first()
+        assert place is not None
+        response = client.get(
+            f"/v1/geo/images/place/{place.slug}",
+            {"sources": "wodore"},
+            headers={"Api-Version": "2026-10-02"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["features"] == []
+        assert body["metadata"]["total"] == 0

@@ -255,29 +255,48 @@ class TestCachedOnly:
         assert fast.json() == warm.json()
         assert fetch.calls == 1  # only the warm-up call
 
-    def test_cold_cache_returns_empty_without_providers(self, client, hut_slug, fetch):
+    def test_cold_cache_returns_fallback_without_providers(
+        self, client, hut_slug, fetch
+    ):
         fetch.exc = RuntimeError("provider down")
         response = client.get(
             f"/hut/{hut_slug}?radius=50&lang=en&limit=20&cached_only=true"
         )
         assert response.status_code == 200
         body = response.json()
+        # static_map_fallback defaults to true — the map card feature is
+        # generated, no provider was contacted.
+        assert len(body["features"]) == 1
+        assert body["features"][0]["properties"]["is_fallback"] is True
+        assert body["metadata"]["total"] == 1
+        assert fetch.calls == 0
+
+    def test_cold_cache_opt_out_is_empty(self, client, hut_slug, fetch):
+        fetch.exc = RuntimeError("provider down")
+        response = client.get(
+            f"/hut/{hut_slug}?radius=50&lang=en&limit=20"
+            "&cached_only=true&static_map_fallback=false"
+        )
+        assert response.status_code == 200
+        body = response.json()
         assert body["features"] == []
         assert body["metadata"]["total"] == 0
-        assert fetch.calls == 0  # never contacted a provider
+        assert fetch.calls == 0
 
     def test_cold_cache_does_not_shadow_future_responses(self, client, hut_slug, fetch):
         client.get(f"/hut/{hut_slug}?radius=50&lang=en&limit=20&cached_only=true")
         client.get(f"/hut/{hut_slug}?radius=50&lang=en&limit=20")
         assert fetch.calls == 1  # the empty fast call was not cached
 
-    def test_place_cold_cache_returns_empty(self, client, place_slug, fetch):
+    def test_place_cold_cache_returns_fallback(self, client, place_slug, fetch):
         fetch.exc = RuntimeError("provider down")
         response = client.get(
             f"/place/{place_slug}?radius=50&lang=en&limit=20&cached_only=true"
         )
         assert response.status_code == 200
-        assert response.json()["features"] == []
+        features = response.json()["features"]
+        assert len(features) == 1
+        assert features[0]["properties"]["is_fallback"] is True
         assert fetch.calls == 0
 
     def test_place_unknown_slug_is_404(self, client, fetch):
@@ -338,7 +357,10 @@ class TestCachedOnly:
         client.get(f"/hut/{hut_slug}?radius=50&lang=de&limit=20")  # gallery shape
         cached = cached_hut_images(hut_slug, lang="de")
         assert cached is not None
-        assert cached.metadata.total == 0  # stub fetched no features
+        # The stub returned no features — the default static_map fallback
+        # is the single cached feature, and the og lookup skips it.
+        assert len(cached.features) == 1
+        assert cached.features[0].properties.is_fallback is True
 
     def test_cached_place_images_helper_cold_is_none(self, place_slug):
         from server.apps.geometries.api_images import cached_place_images
