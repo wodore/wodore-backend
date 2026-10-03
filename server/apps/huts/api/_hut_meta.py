@@ -133,32 +133,73 @@ class _MetaQuery(LanguageQuery):
     """Only the shared lang parameter."""
 
 
-def _og_image(hut: Hut, request: HttpRequest) -> str:
-    """Preview image URL: the provider hero photo when set — the same
-    photo the detail endpoint prepends to the gallery and uses as the
-    avatar, so the preview matches the page; else the highest-scored
-    *servable* image at the og size; generated map card (name +
-    elevation) as fallback.
+def _og_gallery_source(hut: Hut, lang: str) -> str | None:
+    """Top photo of the same images-by-hut response the frontend gallery
+    renders (``/v1/geo/images/hut/{slug}``: external providers such as
+    camptocamp or wikicommons, score-ordered — the images the hut page
+    shows).
 
-    The hero is the hut-services ``photos`` field (e.g. the SAC photo):
-    either a media-relative path or an absolute external URL —
+    Read from the endpoint's shared response cache so the meta endpoint
+    stays a fast single-row query — no provider calls, ever. Entries may
+    be stale, which is fine for a preview image; a cold cache (nobody
+    has opened the hut page yet) returns ``None`` and the caller falls
+    through to the next candidate. The key mirrors the gallery request
+    exactly (``useHutImages`` in the frontend: radius 50, limit 20, no
+    sources filter), trying the requested language first."""
+    from server.apps.geometries import image_response_cache as irc
+
+    for candidate_lang in dict.fromkeys((lang, "en", "de", "fr", "it")):
+        key = irc.response_key(
+            "hut",
+            hut.slug,
+            radius=50.0,
+            sources=None,
+            lang=candidate_lang,
+            limit=20,
+            fallback=False,
+        )
+        cached, _fresh = irc.get_response(key)
+        if cached is None or not cached.features:
+            continue
+        top = cached.features[0].properties
+        if getattr(top, "is_fallback", False):
+            return None  # generated map fallback, not a photo
+        try:
+            return top.urls.original.raw or None
+        except AttributeError:
+            return None
+    return None
+
+
+def _og_image(hut: Hut, request: HttpRequest, lang: str) -> str:
+    """Preview image URL, in frontend order: the top image of the
+    images-by-hut aggregation the hut page's gallery renders; the
+    provider hero photo (hut-services ``photos`` — the detail page's
+    header image); the highest-scored *servable* curated image at the
+    og size; generated map card (name + elevation) as fallback.
+
+    The gallery source is served from the shared response cache (no
+    provider calls — see ``_og_gallery_source``); curated pins and
+    uploads cover the cold-cache case. The hero is either a
+    media-relative path or an absolute external URL —
     ``normalize_source`` handles both.
 
-    Only publicly visible images count (same filters as the detail
-    endpoint): inactive, unapproved or no-publication rows are skipped.
-    Pinned external images keep their file field empty — their origin
-    URL (``source_url_raw``) is the source. Rows with no source at all
-    are skipped instead of signing an empty path (which resolves to the
-    bare imagor media alias and 500s)."""
-    hero = normalize_source(hut.photos)
-    if hero:
-        hero_url = None
+    Only publicly visible curated images count (same filters as the
+    detail endpoint): inactive, unapproved or no-publication rows are
+    skipped. Pinned external images keep their file field empty — their
+    origin URL (``source_url_raw``) is the source. Rows with no source
+    at all are skipped instead of signing an empty path (which resolves
+    to the bare imagor media alias and 500s)."""
+    for source in (_og_gallery_source(hut, lang), normalize_source(hut.photos)):
+        if not source:
+            continue
+        og_url = None
         try:  # preview image is best-effort
-            hero_url = og_photo_url(hero)
+            og_url = og_photo_url(source)
         except Exception:
-            hero_url = None
-        if hero_url:
-            return hero_url
+            og_url = None
+        if og_url:
+            return og_url
     associations = (
         HutImageAssociation.objects.filter(
             hut=hut,
@@ -326,7 +367,7 @@ class HutMetaController(ApiController):
             raise Http404(msg)
 
         page_url = f"{settings.FRONTEND_DOMAIN.rstrip('/')}/hut/{hut.slug}"
-        image = _og_image(hut, request)
+        image = _og_image(hut, request, parsed_query.lang)
         description = _meta_description(hut, parsed_query.lang)
         title = _meta_title(hut)
 
