@@ -158,14 +158,14 @@ class TestMetaFallbacks:
         ).first()
         assert hut is not None
         data = client.get(f"/v1/huts/{hut.slug}/meta").json()
-        # The image service's static-map fallback feature, as-is: a
-        # direct endpoint URL (no imagor wrapping — the render bakes the
-        # watermark), og dimensions, spotlight, marker.
-        assert "/v1/geo/map/static" in data["image"]
-        assert "size=1200x630" in data["image"]
-        assert "effect=spotlight" in data["image"]
-        assert "marker_scale=0.8" in data["image"]
-        assert "zoom=15" in data["image"]
+        # The image service's static-map fallback feature, wrapped in
+        # imagor like every og image (backend-served watermark
+        # composited; the map URL is the encoded source).
+        assert "map%2Fstatic" in data["image"]
+        assert "size%3D1200x630" in data["image"]
+        assert "effect%3Dspotlight" in data["image"]
+        assert "marker_scale%3D0.8" in data["image"]
+        assert "zoom%3D15" in data["image"]
 
     def test_place_meta_no_photo_uses_static_map(
         self, seed_data, client, settings, offline_render
@@ -176,8 +176,8 @@ class TestMetaFallbacks:
         ).first()
         assert place is not None
         data = client.get(f"/v1/geo/places/{place.slug}/meta").json()
-        assert "/v1/geo/map/static" in data["image"]
-        assert "effect=spotlight" in data["image"]
+        assert "map%2Fstatic" in data["image"]
+        assert "effect%3Dspotlight" in data["image"]
 
 
 class TestSizeParameter:
@@ -306,57 +306,6 @@ class TestCategoriesIndexLang:
         assert english.status_code == 200
         bad = client.get("/v1/categories/index.md", {"lang": "xx"})
         assert bad.status_code == 422
-
-
-class TestBakedWatermark:
-    """The Wodore watermark is baked into every card from the
-    backend-bundled asset (no frontend dependency)."""
-
-    def test_render_includes_the_logo(self, offline_render):
-        import io
-
-        from PIL import Image, ImageChops
-
-        params = dict(lat=46.5, lon=8.0, zoom=15, effect="spotlight")
-        with_logo = Image.open(io.BytesIO(ogmap.render_static_map(**params)))
-        real = ogmap._watermark
-        ogmap._watermark = lambda scale: None
-        try:
-            without = Image.open(io.BytesIO(ogmap.render_static_map(**params)))
-        finally:
-            ogmap._watermark = real
-        diff = ImageChops.difference(with_logo.convert("RGB"), without.convert("RGB"))
-        bbox = diff.getbbox()
-        assert bbox is not None, "expected the watermark to change the card"
-        # Owner-approved geometry: 270px at the 1200x630 reference, 33% of
-        # the free width, 10px from the bottom. The PNG carries transparent
-        # padding, so the visible edge sits slightly right of the anchor.
-        left, top, right, bottom = bbox
-        assert 300 <= left <= 345  # anchor at 0.33 * (1200 - 270) = 307
-        assert 340 <= top <= 365  # anchor at 630 - 270 - 10 = 350
-        assert right <= 590
-        assert bottom <= 630
-
-    def test_missing_asset_renders_without_logo(
-        self, offline_render, monkeypatch, tmp_path
-    ):
-        import io
-
-        from PIL import Image
-
-        monkeypatch.setattr(ogmap, "_LOGO_PATH", tmp_path / "missing.png")
-        monkeypatch.setattr(ogmap, "_logo_image", None)
-        data = ogmap.render_static_map(46.5, lon=8.0, zoom=15)
-        assert Image.open(io.BytesIO(data)).size == (1200, 630)
-
-    def test_cache_key_busts_on_logo_change(self, monkeypatch, tmp_path):
-        fake = tmp_path / "logo.png"
-        fake.write_bytes(b"version-a")
-        monkeypatch.setattr(ogmap, "_LOGO_PATH", fake)
-        key_a = ogmap.static_map_cache_key({"v": "x"})
-        fake.write_bytes(b"version-b")
-        key_b = ogmap.static_map_cache_key({"v": "x"})
-        assert key_a != key_b, "replacing the asset must re-render cached cards"
 
 
 class TestLogoAssetEndpoint:
