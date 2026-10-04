@@ -246,15 +246,18 @@ class TestHutMetaOgSources:
         hut.save(update_fields=["photos"])
         data = client.get(f"/v1/huts/{hut.slug}/meta").json()
         assert data["image"]
-        assert "/v1/geo/map/static" in data["image"]
-        assert "effect=spotlight" in data["image"]
-        assert "size=1200x630" in data["image"]
+        # imagor-composed map card: the map URL is the encoded source
+        assert "map%2Fstatic" in data["image"]
+        assert "effect%3Dspotlight" in data["image"]
+        assert "marker_scale%3D0.56" in data["image"]
         assert "sac-cas.ch" not in data["image"]
 
-    def test_fallback_feature_is_og_image(self, hut, client):
+    def test_fallback_feature_is_imagor_composed(self, hut, client):
         """A cached response whose only feature is the service's
-        static-map fallback (is_fallback=true) serves that feature's
-        card URL as-is — the og never generates map cards itself."""
+        static-map fallback (is_fallback=true) goes through imagor
+        (watermark composited, backend-served logo) — never raw."""
+        from urllib.parse import quote
+
         from server.apps.geometries.api_images import _map_fallback_feature
 
         class _Req:
@@ -290,8 +293,10 @@ class TestHutMetaOgSources:
             ),
         )
         data = client.get(f"/v1/huts/{hut.slug}/meta").json()
-        assert data["image"].startswith("https://wodore.com/v1/geo/map/static")
-        assert "effect=spotlight" in data["image"]
+        # ... wrapped in imagor like every og image, never served raw
+        assert not data["image"].startswith("https://wodore.com/v1/geo/map/static")
+        assert quote("/v1/geo/map/static", safe="") in data["image"]
+        assert "effect%3Dspotlight" in data["image"]
 
     def test_meta_does_not_disturb_other_hut_routes(self, seed_data, client):
         """/{slug} catch-all and the .md variant keep working alongside."""

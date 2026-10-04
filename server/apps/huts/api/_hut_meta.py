@@ -23,7 +23,7 @@ from django.conf import settings
 from django.http import HttpRequest
 
 from server.apps.api.controller import ApiController, cache_headers, raise_not_found
-from server.apps.images.og import og_card_url, og_photo_url
+from server.apps.images.og import og_card_url, og_map_card_url, og_photo_url
 from server.apps.symbols.utils import resolve_symbol_urls
 from server.apps.translations import LanguageQuery, activate
 
@@ -145,19 +145,28 @@ def _og_image(hut: Hut, request: HttpRequest, lang: str) -> str:
         if props is None:
             continue
         if props.is_fallback:
+            # The service's static-map card (og dimensions, spotlight,
+            # marker) goes through imagor like every og image, with the
+            # backend-served watermark composited.
             landscape = props.urls.landscape
             url = (landscape.md if landscape is not None else None) or (
                 props.urls.original.raw or None
             )
             if url:
-                return url
+                og_url = None
+                try:  # preview image is best-effort
+                    og_url = og_map_card_url(url, request=request)
+                except Exception:
+                    og_url = None
+                if og_url:
+                    return og_url
             continue
         raw = props.urls.original.raw
         if not raw:
             continue
         og_url = None
         try:  # preview image is best-effort
-            og_url = og_photo_url(raw)
+            og_url = og_photo_url(raw, request=request)
         except Exception:
             og_url = None
         if og_url:
