@@ -206,9 +206,9 @@ class TestHutMetaOgSources:
             in data["image"]
         )
         assert "/v1/geo/map/static" not in data["image"]
-        # Wodore logo watermark: bottom, a bit left of center (0.33,
-        # same position as the static-map cards).
-        assert ",0.33,bottom-10,0)" in data["image"]
+        # Wodore logo watermark: bottom, left of center (0.42 of the
+        # free space), 220px raster.
+        assert ",0.42,bottom-10,0)" in data["image"]
 
     def test_gallery_cached_in_other_language_is_used(self, hut, client):
         """The gallery is language-independent imagery — a response cached
