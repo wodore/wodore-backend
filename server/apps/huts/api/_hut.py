@@ -42,6 +42,8 @@ from ..schemas import (
     OrganizationBaseSchema,
 )
 from .etag_utils import (
+    agenerate_etag,
+    aget_last_modified_http_date,
     cached_200,
     cached_304,
     check_etag_match,
@@ -295,18 +297,166 @@ class HutsController(ApiController):
     )
     async def get(self, parsed_query: Query[HutListQuery]) -> HttpResponse:
         """List huts."""
-        # Async wrapper (sync-core pattern, openspec: async-api-staging):
-        # the whole handler - ORM, ETag, serialization - runs unchanged in
-        # a bridged worker thread, so nothing blocking ever touches the
-        # event loop. Default thread_sensitive=True keeps Django's
-        # thread-affinity contract (request_finished -> close_old_connections
-        # runs on the same logical thread); PoC measurement showed no
-        # wall-time difference under load either way - the ~1s/request is
-        # CPU-bound ETag aggregation serialized by the GIL, not executor
-        # scheduling. Sync tests/commands call _get_core directly.
-        return await sync_to_async(self._get_core)(parsed_query)
+        # Native-async variant (async PoC, openspec: async-api-staging):
+        # ETag aggregates via aaggregate, list rows via async for. The ORM
+        # still bridges each query into a worker thread internally - this is
+        # query-granularity yielding on the event loop, not driver-level
+        # async I/O. _get_core (sync, unchanged) is kept below for A/B
+        # measurement. Caveat: activate() is thread-local on the loop
+        # thread - under interleaving, another request's activate() could
+        # flip the language between our awaits (hut list translations are
+        # DB columns, so low risk here - but this is why the sync-core
+        # pattern stays the recommended default).
+        request = self.request
+        query = parsed_query
+        activate(query.lang)
+        huts_db = Hut.objects.select_related("hut_owner").all()
 
-    def _get_core(self, parsed_query: Query[HutListQuery]) -> HttpResponse:
+        additional_keys = [
+            str(query.offset),
+            str(query.limit),
+            str(query.is_modified.value),
+            str(query.is_public.value),
+            str(query.is_active.value),
+            str(query.has_availability.value),
+            query.lang,
+        ]
+        from server.apps.apiversions.transforms import version_cache_key
+
+        additional_keys.append(version_cache_key(request))
+
+        etag = await agenerate_etag(
+            include_huts=True,
+            include_categories=True,  # hut types/availability statuses are embedded
+            include_organizations=True,  # sources are always included
+            include_owners=True,  # owner is always included
+            include_images=True,  # images are always included
+            include_availability=False,  # availability_source_ref is part of Hut
+            hut_queryset=huts_db,
+            additional_keys=additional_keys,
+        )
+
+        last_modified = await aget_last_modified_http_date(
+            include_huts=True,
+            include_organizations=True,
+            include_owners=True,
+            include_images=True,
+            include_availability=False,
+            hut_queryset=huts_db,
+        )
+
+        if check_etag_match(request, etag) and not check_if_modified_since(
+            request, last_modified
+        ):
+            return cached_304(self, etag, last_modified, max_age=60)
+
+        if query.is_modified != TristateEnum.unset:
+            huts_db = huts_db.filter(is_modified=query.is_modified.bool)
+        if query.is_active != TristateEnum.unset:
+            huts_db = huts_db.filter(is_active=query.is_active.bool)
+        if query.is_public != TristateEnum.unset:
+            huts_db = huts_db.filter(is_public=query.is_public.bool)
+        if query.has_availability != TristateEnum.unset:
+            if query.has_availability.bool:
+                huts_db = huts_db.filter(availability_source_ref__isnull=False)
+            else:
+                huts_db = huts_db.filter(availability_source_ref__isnull=True)
+
+        media_url = request.build_absolute_uri(settings.MEDIA_URL)
+        iam_media_url = "https://res.cloudinary.com/wodore/image/upload/v1/"
+        huts_db = huts_db.select_related(
+            "hut_type_open", "hut_type_closed", "hut_owner", "availability_source_ref"
+        ).annotate(
+            has_availability=Case(
+                When(availability_source_ref__isnull=False, then=Value(True)),
+                default=Value(False),
+            ),
+            availability_source_ref__slug=F("availability_source_ref__slug"),
+            sources=JSONBAgg(
+                JSONObject(
+                    logo=Concat(Value(media_url), F("org_set__logo")),
+                    fullname="org_set__fullname_i18n",
+                    slug="org_set__slug",
+                    name="org_set__name_i18n",
+                    link="orgs_source__link",
+                    source_id="orgs_source__source_id",
+                    public="org_set__is_public",
+                ),
+                distinct=True,
+            ),
+            images=JSONBAgg(
+                JSONObject(
+                    image="image_set__image",
+                    image_url=Concat(Value(iam_media_url), F("image_set__image")),
+                    image_meta=JSONObject(
+                        crop="image_set__image_meta__crop",
+                        focal="image_set__image_meta__focal",
+                        width="image_set__image_meta__width",
+                        height="image_set__image_meta__height",
+                    ),
+                    caption="image_set__caption_i18n",
+                    license=JSONObject(
+                        slug="image_set__license__slug",
+                        name="image_set__license__name_i18n",
+                        fullname="image_set__license__fullname_i18n",
+                        description="image_set__license__description_i18n",
+                        url="image_set__license__url_i18n",
+                    ),
+                    author="image_set__author",
+                    author_url="image_set__author_url",
+                    source_url="image_set__source_url",
+                    organization=JSONObject(
+                        logo=Concat(Value(media_url), F("image_set__source_org__logo")),
+                        fullname="image_set__source_org__fullname_i18n",
+                        slug="image_set__source_org__slug",
+                        name="image_set__source_org__name_i18n",
+                        url="image_set__source_org__url",
+                    ),
+                    attribution=Value(""),
+                ),
+                ordering=(
+                    F("image_set__details__score").desc(nulls_last=True),
+                    "image_set__details__id",
+                ),
+            ),
+            translations=JSONObject(
+                description=JSONObject(
+                    de="description_de",
+                    en="description_en",
+                    fr="description_fr",
+                    it="description_it",
+                ),
+                name=JSONObject(
+                    de="name_de",
+                    en="name_en",
+                    fr="name_fr",
+                    it="name_it",
+                ),
+            ),
+        )
+
+        hut_rows = [hut async for hut in huts_db]
+        for hut_db in hut_rows:
+            if len(hut_db.sources) and hut_db.sources[0]["slug"] is None:
+                hut_db.sources = []
+            if len(hut_db.images) and hut_db.images[0]["image"] is None:
+                hut_db.images = []
+        if query.limit is not None:
+            hut_rows = hut_rows[query.offset : query.offset + query.limit]
+
+        # model_validate lazily loads relations the queryset did not
+        # select_related (symbol_detailed et al. - N+1: 10 reads, 8 duplicates
+        # per response). On the event loop Django's async-unsafe guard raises
+        # SynchronousOnlyOperation on those implicit queries - native async
+        # forces you to either eliminate the N+1 (add them to select_related)
+        # or bridge the validation step, as here (PoC finding).
+        validated = await sync_to_async(
+            lambda: [
+                HutSchemaList.model_validate(hut, context={"request": request})
+                for hut in hut_rows
+            ]
+        )()
+        return cached_200(self, validated, etag, last_modified, max_age=60)
         """Sync core of the hut list endpoint (unchanged WSGI-era logic)."""
         request = self.request
         query = parsed_query

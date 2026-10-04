@@ -164,6 +164,14 @@ def check_etag_match(request: HttpRequest, etag: str) -> bool:
     """
     Check if the request's If-None-Match header matches the generated ETag.
 
+    NOTE (async PoC, openspec: async-api-staging): async twins of the
+    DB-touching helpers above live at the bottom of this module
+    (``aget_last_modified_timestamp`` / ``agenerate_etag`` / ...). They
+    execute the identical queries through the ORM's async interface
+    (``aaggregate`` / ``async for``), which bridges each query into a
+    worker thread - Django's ORM has no driver-level async, so these are
+    query-granularity bridges, not true async socket I/O.
+
     Args:
         request: The HTTP request
         etag: The generated ETag
@@ -280,3 +288,129 @@ def cached_200(controller, data, etag: str, last_modified: str, *, max_age: int)
             "Cache-Control": f"public, max-age={max_age}",
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Async twins (async PoC, openspec: async-api-staging)
+#
+# Same queries as their sync counterparts above, driven through the ORM's
+# async interface (aaggregate / async for). Note: Django's ORM bridges every
+# query into a worker thread internally - these give query-granularity
+# yielding on the event loop, not driver-level async I/O.
+# ---------------------------------------------------------------------------
+
+
+async def aget_categories_content_hash(
+    parent_slugs: tuple[str, ...] = ("accommodation", "availability"),
+) -> str:
+    """Async twin of get_categories_content_hash."""
+    digest = hashlib.md5()
+    rows = (
+        Category.objects.filter(parent__slug__in=parent_slugs)
+        .values_list("id", "name", "i18n")
+        .order_by("id")
+    )
+    async for row_id, name, i18n in rows:
+        digest.update(
+            f"{row_id}:{name}:{json.dumps(i18n, sort_keys=True, default=str)};".encode()
+        )
+    return digest.hexdigest()
+
+
+async def aget_last_modified_timestamp(
+    *,
+    include_huts: bool = True,
+    include_organizations: bool = False,
+    include_owners: bool = False,
+    include_images: bool = False,
+    include_availability: bool = False,
+    hut_queryset: QuerySet[Hut] | None = None,
+) -> float:
+    """Async twin of get_last_modified_timestamp."""
+    timestamps: list[Any] = []
+
+    if include_huts:
+        qs = hut_queryset if hut_queryset is not None else Hut.objects.all()
+        hut_modified = (await qs.aaggregate(Max("modified")))["modified__max"]
+        if hut_modified:
+            timestamps.append(hut_modified.timestamp())
+    if include_organizations:
+        org_modified = (await Organization.objects.aaggregate(Max("modified")))[
+            "modified__max"
+        ]
+        if org_modified:
+            timestamps.append(org_modified.timestamp())
+    if include_owners:
+        owner_modified = (await Owner.objects.aaggregate(Max("modified")))[
+            "modified__max"
+        ]
+        if owner_modified:
+            timestamps.append(owner_modified.timestamp())
+    if include_images:
+        image_modified = (await Image.objects.aaggregate(Max("modified")))[
+            "modified__max"
+        ]
+        if image_modified:
+            timestamps.append(image_modified.timestamp())
+    if include_availability:
+        avail_modified = (await AvailabilityStatus.objects.aaggregate(Max("modified")))[
+            "modified__max"
+        ]
+        if avail_modified:
+            timestamps.append(avail_modified.timestamp())
+
+    return max(timestamps) if timestamps else 0.0
+
+
+async def agenerate_etag(
+    *,
+    include_huts: bool = True,
+    include_organizations: bool = False,
+    include_owners: bool = False,
+    include_images: bool = False,
+    include_availability: bool = False,
+    include_categories: bool = False,
+    hut_queryset: QuerySet[Hut] | None = None,
+    additional_keys: list[str] | None = None,
+) -> str:
+    """Async twin of generate_etag (identical hash inputs)."""
+    timestamp = await aget_last_modified_timestamp(
+        include_huts=include_huts,
+        include_organizations=include_organizations,
+        include_owners=include_owners,
+        include_images=include_images,
+        include_availability=include_availability,
+        hut_queryset=hut_queryset,
+    )
+
+    hash_parts = [str(timestamp), settings.GIT_HASH]
+
+    if include_categories:
+        hash_parts.append(f"categories:{await aget_categories_content_hash()}")
+
+    if additional_keys:
+        hash_parts.extend(additional_keys)
+
+    hash_input = "-".join(hash_parts)
+    return f'"{hashlib.md5(hash_input.encode()).hexdigest()}"'
+
+
+async def aget_last_modified_http_date(
+    *,
+    include_huts: bool = True,
+    include_organizations: bool = False,
+    include_owners: bool = False,
+    include_images: bool = False,
+    include_availability: bool = False,
+    hut_queryset: QuerySet[Hut] | None = None,
+) -> str:
+    """Async twin of get_last_modified_http_date."""
+    timestamp = await aget_last_modified_timestamp(
+        include_huts=include_huts,
+        include_organizations=include_organizations,
+        include_owners=include_owners,
+        include_images=include_images,
+        include_availability=include_availability,
+        hut_queryset=hut_queryset,
+    )
+    return http_date(timestamp)
