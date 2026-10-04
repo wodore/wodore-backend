@@ -400,8 +400,72 @@ def _map_fallback_feature(
         )
         return request.build_absolute_uri(f"/v1/geo/map/static?{query}")
 
-    landscape_sm, landscape_md = map_url("600x315"), map_url("1200x630")
-    square_sm = map_url("600x600")
+    # Same variant pipeline as the provider photos: one map render per
+    # aspect group as the source, then signed imagor downscale variants
+    # (xs–xl, quality 85) with the identical size presets — the
+    # gallery treats the fallback exactly like any other image and
+    # imagor caches/transforms it like one.
+    from server.apps.geometries.providers.base import (
+        _calculate_constrained_size,
+    )
+    from server.apps.images.transfomer import ImagorImage
+
+    quality = 85
+    aspect_sources = {
+        # aspect group: (source render size, variant presets)
+        "square": (
+            (1000, 1000),
+            {
+                "xs": (200, 200),
+                "sm": (400, 400),
+                "md": (1200, 1200),
+                "lg": (2000, 2000),
+                "xl": (4000, 4000),
+            },
+        ),
+        "landscape": (
+            (1200, 630),
+            {
+                "xs": (200, 133),
+                "sm": (400, 267),
+                "md": (1200, 800),
+                "lg": (2000, 1333),
+                "xl": (4000, 2666),
+            },
+        ),
+        "portrait": (
+            (1000, 1500),
+            {
+                "xs": (133, 200),
+                "sm": (267, 400),
+                "md": (900, 1350),
+                "lg": (1500, 2250),
+                "xl": (3000, 4500),
+            },
+        ),
+    }
+    urls: dict = {}
+    sizes: dict = {"raw": {"width": 1200, "height": 630}}
+    for group, ((sw, sh), presets) in aspect_sources.items():
+        source = ImagorImage(map_url(f"{sw}x{sh}"))
+        variants = {}
+        for key, (tw, th) in presets.items():
+            cw, ch = _calculate_constrained_size(tw, th, sw, sh)
+            variants[key] = source.transform(
+                size=f"{cw}x{ch}", quality=quality
+            ).get_full_url()
+            if group == "landscape":
+                # The feature's own orientation is landscape — report
+                # its constrained dims (mirrors _build_sizes).
+                sizes[key] = {"width": cw, "height": ch}
+        urls[group] = variants
+    landscape_raw = map_url("1200x630")
+    urls["original"] = {
+        # raw stays the direct endpoint URL: the og compose wraps it in
+        # imagor itself (og_map_card_url).
+        "raw": landscape_raw,
+        "proxy": ImagorImage(landscape_raw).transform().get_full_url(),
+    }
     attribution_short = (
         "© OpenTopoMap (CC-BY-SA) · © SRTM · © OpenStreetMap contributors"
     )
@@ -436,34 +500,8 @@ def _map_fallback_feature(
                 "url": "https://creativecommons.org/licenses/by-sa/4.0/",
                 "icon": None,
             },
-            "urls": {
-                "original": {"raw": landscape_md, "proxy": landscape_md},
-                "square": {
-                    "xs": square_sm,
-                    "sm": square_sm,
-                    "md": square_sm,
-                    "lg": square_sm,
-                    "xl": square_sm,
-                },
-                "landscape": {
-                    "xs": landscape_sm,
-                    "sm": landscape_sm,
-                    "md": landscape_md,
-                    "lg": landscape_md,
-                    "xl": landscape_md,
-                },
-                "portrait": {
-                    "xs": landscape_sm,
-                    "sm": landscape_sm,
-                    "md": landscape_md,
-                    "lg": landscape_md,
-                    "xl": landscape_md,
-                },
-            },
-            "sizes": {
-                "sm": {"width": 600, "height": 315},
-                "md": {"width": 1200, "height": 630},
-            },
+            "urls": urls,
+            "sizes": sizes,
             "is_portrait": False,
             "place": None,
             "score": 0,
