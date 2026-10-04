@@ -90,10 +90,23 @@ def _unwrap_model(annotation: Any) -> type[BaseModel] | None:
 
 
 def _candidate_names(name: str, info: FieldInfo) -> list[str]:
-    """Python name first, then wire aliases (they may differ)."""
+    """Python name first, then wire aliases (they may differ).
+
+    ``AliasChoices`` (one field accepting several wire names, e.g.
+    ``owner`` / ``hut_owner``) is unpacked — model-attr aliases are how
+    the hut wire schemas map onto ORM field names.
+    """
     names = [name]
+    aliases: list[str] = []
     for alias in (info.alias, info.validation_alias):
-        if isinstance(alias, str) and alias != name and alias not in names:
+        if isinstance(alias, str):
+            aliases.append(alias)
+        else:
+            choices = getattr(alias, "choices", None)
+            if choices:
+                aliases.extend(c for c in choices if isinstance(c, str))
+    for alias in aliases:
+        if alias != name and alias not in names:
             names.append(alias)
     return names
 
