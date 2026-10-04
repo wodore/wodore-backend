@@ -14,6 +14,7 @@ from django.contrib.gis.measure import D
 from django.http import HttpRequest
 
 from server.apps.api.controller import ApiController, cache_headers, raise_not_found
+from server.apps.api.ogmap import RENDER_VERSION
 from server.apps.images.og import OG_MAP_EFFECT, OG_MAP_MARKER_SCALE, OG_MAP_ZOOM
 from server.apps.translations import LanguageQuery, activate
 
@@ -391,7 +392,10 @@ def _map_fallback_feature(
                 "zoom": OG_MAP_ZOOM,
                 "effect": OG_MAP_EFFECT,
                 "marker_scale": OG_MAP_MARKER_SCALE,
-                "v": f"{modified:%Y%m%dT%H%M%S}",
+                # v busts BOTH caches: the raw render storage and the
+                # imagor composites built on this URL (renderer changes
+                # propagate via RENDER_VERSION).
+                "v": f"{modified:%Y%m%dT%H%M%S}r{RENDER_VERSION}",
             }
         )
         return request.build_absolute_uri(f"/v1/geo/map/static?{query}")

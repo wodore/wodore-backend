@@ -358,3 +358,58 @@ class TestLogoAssetEndpoint:
         )  # not the frontend-style path
         assert quote("/assets/logo/wodore_watermark.png?v=", safe="") in image
         assert "wodore.com/meta/" not in image
+
+
+class TestSpotlightFalloff:
+    """The spotlight effect is a smooth falloff — no inset, no frame:
+    sharp colored center, darker desaturated (and gently blurred)
+    outside. Regression for the rounded-inset 'border' look."""
+
+    def _card(self, effect, offline_render):
+        import io
+
+        from PIL import Image
+
+        return Image.open(
+            io.BytesIO(ogmap.render_static_map(46.5, 8.0, zoom=15, effect=effect))
+        ).convert("RGB")
+
+    def test_outside_is_desaturated_center_keeps_color(self, offline_render):
+        # Colored fake tiles: the ONLY saturation change comes from the
+        # effect, not from map content.
+        card = self._card("spotlight", offline_render)
+
+        # Center keeps saturation (colored map); corners are grayscale-ish.
+        def saturation(px):
+            h, s, v = __import__("colorsys").rgb_to_hsv(*[c / 255 for c in px])
+            return s
+
+        center = saturation(card.getpixel((600, 315)))
+        corner = saturation(card.getpixel((30, 30)))
+        assert center > corner + 0.1, (center, corner)
+
+    def test_no_hard_border_edge(self, offline_render):
+        """Sample a horizontal strip: saturation must fall off gradually
+        — no single step where saturation collapses (the old rounded
+        inset produced a hard edge)."""
+        import colorsys
+        import itertools
+
+        card = self._card("spotlight", offline_render)
+
+        def sat(x):
+            r, g, b = card.getpixel((x, 315))
+            return colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)[1]
+
+        sats = [sat(x) for x in range(0, 1200, 24)]
+        steps = [abs(a - b) for a, b in itertools.pairwise(sats)]
+        assert max(steps) < 0.12, f"hard edge detected: max step {max(steps):.3f}"
+
+    def test_render_version_busts_cache_key(self):
+        key_a = ogmap.static_map_cache_key({"v": "x"})
+        ogmap.RENDER_VERSION = ogmap.RENDER_VERSION + 1
+        try:
+            key_b = ogmap.static_map_cache_key({"v": "x"})
+        finally:
+            ogmap.RENDER_VERSION = ogmap.RENDER_VERSION - 1
+        assert key_a != key_b

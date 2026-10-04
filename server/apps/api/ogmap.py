@@ -10,8 +10,9 @@ Effects (``effect=`` parameter):
 * ``none`` — plain map
 * ``blur_border`` — rounded, sharp map inset over a blurred, slightly
   darkened copy of itself filling the frame (the "modern preview" look)
-* ``spotlight`` — same layout, but the border copy is desaturated
-  (color stays only inside)
+* ``spotlight`` — smooth falloff, no inset: the sharp, colorful center
+  fades into a darker, desaturated, gently blurred outside (color
+  stays only under the spotlight)
 * ``vignette`` — radial darkening towards the edges
 * ``blurred_edges`` — vignette-style falloff with BLUR instead of
   darkness: sharp inside, increasingly blurred towards the edges
@@ -47,6 +48,13 @@ CARD_HEIGHT = 630
 CARD_ASPECT = CARD_WIDTH / CARD_HEIGHT
 CARD_ZOOM = 16
 EFFECTS = ("none", "blur_border", "spotlight", "vignette", "blurred_edges")
+
+#: Bump when the rendering itself changes (effects, marker/watermark
+#: geometry, output encoding). Folded into the render cache key and —
+#: via the fallback feature URLs — into the ``v=`` busting parameter, so
+#: a renderer change re-renders every card AND regenerates the imagor
+#: composites built on top of them.
+RENDER_VERSION = 2
 
 # Marker geometry (owner-approved): symbol right of center.
 MARKER_SIZE_PX = 170
@@ -210,8 +218,31 @@ def _apply_effect(card: Image.Image, effect: str, scale: float = 1.0) -> Image.I
         card.paste(blurred, (0, 0), Image.eval(mask, lambda v: 255 - v))
         return card
 
-    # blur_border / spotlight: blurred (and optionally desaturated) copy
-    # of the map fills the frame, the sharp rounded map sits on top.
+    if effect == "spotlight":
+        # Smooth falloff — no inset, no frame: the sharp, colorful
+        # center fades into a darker, desaturated, gently blurred
+        # outside (color stays only under the spotlight).
+        outside = card.convert("L").convert("RGB")
+        outside = outside.filter(ImageFilter.GaussianBlur(int(6 * scale)))
+        outside = Image.eval(outside, lambda v: int(v * 0.75))
+        mask = Image.new("L", card.size, 0)
+        ImageDraw.Draw(mask).rounded_rectangle(
+            [
+                int(card.width * 0.18),
+                int(card.height * 0.18),
+                int(card.width * 0.82),
+                int(card.height * 0.82),
+            ],
+            radius=int(260 * scale),
+            fill=255,
+        )
+        mask = mask.filter(ImageFilter.GaussianBlur(int(130 * scale)))
+        out = card.convert("RGB").copy()
+        out.paste(outside, (0, 0), Image.eval(mask, lambda v: 255 - v))
+        return out
+
+    # blur_border: blurred copy of the map fills the frame, the sharp
+    # rounded map sits on top.
     margin = int(26 * scale)
     radius = int(44 * scale)
     background = card.resize(
@@ -224,8 +255,6 @@ def _apply_effect(card: Image.Image, effect: str, scale: float = 1.0) -> Image.I
             int(card.height * 0.075) + card.height,
         )
     )
-    if effect == "spotlight":
-        background = background.convert("L").convert("RGB")
     background = background.filter(ImageFilter.GaussianBlur(14))
     background = Image.eval(background, lambda v: int(v * 0.8))
 
@@ -333,9 +362,15 @@ def render_static_map(
 
 
 def static_map_cache_key(params: dict) -> str:
-    """Stable storage key for a parameter set (any change re-renders)."""
+    """Stable storage key for a parameter set (any change re-renders).
+
+    The renderer version is folded in: a rendering change (effect,
+    geometry) re-renders every card even with identical request
+    parameters.
+    """
     canonical = "&".join(
         f"{k}={params[k]}" for k in sorted(params) if params[k] is not None
     )
+    canonical += f"&rv={RENDER_VERSION}"
     digest = hashlib.sha1(canonical.encode()).hexdigest()[:20]
     return f"ogmaps/static-{digest}.png"
