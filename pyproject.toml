@@ -20,7 +20,7 @@ dependencies = [
   "python-decouple==3.*",      # https://pypi.org/project/python-decouple/
   "structlog==25.*",           # https://pypi.org/project/structlog/
   "django-colorfield==0.14.*", # https://pypi.org/project/django-colorfield/
-  "pillow==11.*",              # https://pypi.org/project/Pillow/
+  "pillow==12.*",              # https://pypi.org/project/Pillow/
   "django-model-utils==5.*",   # https://pypi.org/project/django-model-utils/
   "django-jsoneditor==0.2.*",  # https://pypi.org/project/django-jsoneditor/
   "django-modeltrans==0.9.*",  # https://pypi.org/project/django-modeltrans/
@@ -68,6 +68,7 @@ dependencies = [
   "argon2-cffi>=25.1.0",
   "fido2>=2.2.1",
   "django-modern-rest[msgspec,openapi,pydantic]>=0.16.0,<0.17",
+  "django-readers>=2.5.1",
 ]
 
 
@@ -90,7 +91,6 @@ dev = [
   "django-extra-checks==0.*",      # https://pypi.org/project/django-extra-checks/
   "django-stubs-ext==5.*",         # https://pypi.org/project/django-stubs-ext/
   "django-stubs==5.*",             # https://pypi.org/project/django-stubs/
-  "nplusone==1.*",                 # https://pypi.org/project/nplusone/
   "wemake-python-styleguide==1.*", # https://pypi.org/project/wemake-python-styleguide/
   "flake8-pytest-style==2.*",      # https://pypi.org/project/flake8-pytest-style/
   "flake8-django==1.*",            # https://pypi.org/project/flake8-django/
