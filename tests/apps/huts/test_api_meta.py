@@ -249,7 +249,7 @@ class TestHutMetaOgSources:
         # imagor-composed map card: the map URL is the encoded source
         assert "map%2Fstatic" in data["image"]
         assert "effect%3Dspotlight" in data["image"]
-        assert "marker_scale%3D0.8" in data["image"]
+        assert "marker_scale%3D0.65" in data["image"]
         assert "sac-cas.ch" not in data["image"]
 
     def test_fallback_feature_is_imagor_composed(self, hut, client):

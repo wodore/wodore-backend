@@ -63,12 +63,13 @@ OG_LOGO_POS_Y = "bottom-10"
 OG_LOGO_ALPHA = 0
 
 # Static-map og cards (hut/place meta fallbacks): render with the
-# spotlight effect (desaturated blurred map behind the sharp rounded
-# inset) and the type-symbol marker at 0.8x — owner-approved preview
-# look. Both are plain query params on /v1/geo/map/static and part of
-# its render cache key, so existing cards re-render on URL change.
+# spotlight effect (smooth falloff: sharp colored center, darker
+# desaturated outside) and the type-symbol marker at 0.65x —
+# owner-approved preview look. Both are plain query params on
+# /v1/geo/map/static and part of its render cache key, so existing
+# cards re-render on URL change.
 OG_MAP_EFFECT = "spotlight"
-OG_MAP_MARKER_SCALE = "0.8"
+OG_MAP_MARKER_SCALE = "0.65"
 
 # Map cards render one zoom level out (15): huts sit in visible terrain
 # context instead of a rooftop close-up.

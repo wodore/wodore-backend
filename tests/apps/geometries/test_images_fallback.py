@@ -38,7 +38,7 @@ class TestImageFallback:
         assert props["urls"]["landscape"]["md"].startswith("http")
         # og-style generation: spotlight effect, marker scale, zoom 15
         assert "effect=spotlight" in props["urls"]["landscape"]["md"]
-        assert "marker_scale=0.8" in props["urls"]["landscape"]["md"]
+        assert "marker_scale=0.65" in props["urls"]["landscape"]["md"]
         assert "zoom=15" in props["urls"]["landscape"]["md"]
 
     def test_hut_without_images_opt_out(self, seed_data, client):

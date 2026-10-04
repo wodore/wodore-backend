@@ -51,7 +51,7 @@ class TestPlaceMeta:
         assert data["image"]
         assert "map%2Fstatic" in data["image"]
         assert "effect%3Dspotlight" in data["image"]
-        assert "marker_scale%3D0.8" in data["image"]
+        assert "marker_scale%3D0.65" in data["image"]
         assert "zoom%3D15" in data["image"]
 
     def test_meta_unknown_slug_is_404(self, seed_data, client):
@@ -109,7 +109,7 @@ class TestHutOgCardFallback:
         assert data["image"]
         assert "map%2Fstatic" in data["image"]
         assert "effect%3Dspotlight" in data["image"]
-        assert "marker_scale%3D0.8" in data["image"]
+        assert "marker_scale%3D0.65" in data["image"]
         assert "zoom%3D15" in data["image"]
         assert "size%3D1200x630" in data["image"]
 
