@@ -164,7 +164,7 @@ class TestMetaFallbacks:
         assert "map%2Fstatic" in data["image"]
         assert "size%3D1200x630" in data["image"]
         assert "effect%3Dspotlight" in data["image"]
-        assert "marker_scale%3D0.5" in data["image"]
+        assert "marker_scale%3D0.56" in data["image"]
         assert "zoom%3D15" in data["image"]
 
     def test_place_meta_no_photo_uses_static_map(

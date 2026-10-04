@@ -54,7 +54,7 @@ EFFECTS = ("none", "blur_border", "spotlight", "vignette", "blurred_edges")
 #: via the fallback feature URLs — into the ``v=`` busting parameter, so
 #: a renderer change re-renders every card AND regenerates the imagor
 #: composites built on top of them.
-RENDER_VERSION = 5
+RENDER_VERSION = 6
 
 # Marker geometry (owner-approved): symbol right of center.
 MARKER_SIZE_PX = 170

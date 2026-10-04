@@ -69,7 +69,7 @@ OG_LOGO_ALPHA = 0
 # /v1/geo/map/static and part of its render cache key, so existing
 # cards re-render on URL change.
 OG_MAP_EFFECT = "spotlight"
-OG_MAP_MARKER_SCALE = "0.5"
+OG_MAP_MARKER_SCALE = "0.56"
 
 # Map cards render one zoom level out (15): huts sit in visible terrain
 # context instead of a rooftop close-up.
