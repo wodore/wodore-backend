@@ -1,0 +1,1 @@
+{"id":"ba55d60e0d1727fc69dc44f3fde8429a.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.geometries.test_image_response_cache.TestCachedOnly#test_cold_cache_returns_fallback_without_providers","name":"test_cold_cache_returns_fallback_without_providers","status":"passed","testResultsByEnv":{"default":"f42eb2284dfb2f8b55c26211d74f0696"}}
