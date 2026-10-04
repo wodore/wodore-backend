@@ -47,6 +47,7 @@ from ..schemas import (
     LicenseInfoSchema,
     OrganizationBaseSchema,
 )
+from ._hut_spec import prepare_hut_detail
 from .annotations import annotate_hut_images, annotate_hut_sources
 from .etag_utils import (
     cached_200,
@@ -709,31 +710,7 @@ class HutDetailController(ApiController):
             return cached_304(self, etag, last_modified, max_age=60)
 
         media_abs_url = request.build_absolute_uri(settings.MEDIA_URL)
-        qs = qs.select_related(
-            "hut_type_open", "hut_type_closed", "hut_owner", "availability_source_ref"
-        ).annotate(
-            has_availability=Case(
-                When(availability_source_ref__isnull=False, then=Value(True)),
-                default=Value(False),
-            ),
-            availability_source_ref__slug=F("availability_source_ref__slug"),
-            sources=annotate_hut_sources(media_url=media_abs_url, detail=True),
-            images=annotate_hut_images(detail=True),
-            translations=JSONObject(
-                description=JSONObject(
-                    de="description_de",
-                    en="description_en",
-                    fr="description_fr",
-                    it="description_it",
-                ),
-                name=JSONObject(
-                    de="name_de",
-                    en="name_en",
-                    fr="name_fr",
-                    it="name_it",
-                ),
-            ),
-        )
+        qs = prepare_hut_detail(qs, media_url=media_abs_url)
         hut_db = qs.first()
         if hut_db is None:
             msg = f"Could not find '{slug}'."

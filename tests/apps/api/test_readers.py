@@ -1,7 +1,7 @@
 """Unit tests for pydantic→spec derivation (OpenSpec phase 1.3)."""
 
 import pytest
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 from django.contrib.gis.geos import Point
 from django.db import connection
@@ -99,6 +99,23 @@ class TestSpecShape:
 
         spec = spec_from_schema(Hut, Aliased, fields={"slug", "is_active"})
         assert spec == ["slug", "active", "i18n"]
+
+    def test_alias_choices_are_unpacked(self):
+        """Hut wire schemas map schema names onto model attrs via
+        AliasChoices (owner -> hut_owner); the derivation resolves them."""
+
+        class OwnerRef(BaseModel):
+            slug: str
+
+        class WithOwner(BaseModel):
+            slug: str
+            owner: OwnerRef | None = Field(
+                default=None, validation_alias=AliasChoices("hut_owner", "owner")
+            )
+
+        spec = spec_from_schema(Hut, WithOwner)
+        assert spec[0] == "slug"
+        assert "hut_owner" in spec[1]
 
     def test_override_used_verbatim(self):
         def prepare(qs):
