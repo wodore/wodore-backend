@@ -21,10 +21,12 @@ Findings baked into the implementation (both anticipated by the design's "`only(
 
 ## 3. Roll out cold endpoints
 
-- [ ] 3.1 Categories endpoints
-- [ ] 3.2 Organizations/symbols detail paths
-- [ ] 3.3 Availability endpoints
-- [ ] 3.4 Query-count tests for each converted endpoint (same pattern as 2.2)
+- [x] 3.1 Categories endpoints — in-memory tree assembly: cold build went from ~9000 queries (per-node children/symbol/parent lazy loads, hidden only by the page cache) to ONE query (symbols + parent joined, children grouped in memory); cold + warm query pins added
+- [x] 3.2 Organizations/symbols detail paths — symbols: relation loading now schema-derived (relations_only + select_related_for; the dead uploaded_by_user join is gone; 1-query pin). Organizations: nothing to derive — the wire schema exposes no relations (already 1 query), documented
+- [ ] 3.3 Availability endpoints — follow-up: the two select_related sites follow the now-mechanical symbols pattern; needs its wire-schema analysis first
+- [x] 3.4 Query-count tests for each converted endpoint (tests/apps/api/test_cold_query_pins.py: symbols cold pin, categories cold pins + warm-hit-must-be-free)
+
+Phase 3 findings baked into readers.py: ``relations_only`` mode (derive the relation set only — no ``only()`` field limiting, since dump_sparse/from_attributes validates the full schema off the instance and deferred columns lazy-load per row) with ``select_related_for`` join opt-in; scalar-typed relation fields (``license: int``) still load under from_attributes and are now derived as loads, not rejected.
 
 ## 4. Benchmark gate: hot paths
 
