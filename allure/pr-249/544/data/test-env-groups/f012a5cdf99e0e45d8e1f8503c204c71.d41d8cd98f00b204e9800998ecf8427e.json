@@ -1,1 +1,0 @@
-{"id":"f012a5cdf99e0e45d8e1f8503c204c71.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.api.test_query_bbox.TestPlacesSearchBbox#test_nearby_keeps_center_radius_semantics","name":"test_nearby_keeps_center_radius_semantics","status":"passed","testResultsByEnv":{"default":"403adb452a28a9e6ddc7645566eecb96"}}
