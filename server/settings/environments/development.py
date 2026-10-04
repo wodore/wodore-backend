@@ -4,7 +4,6 @@ This file contains all the settings that defines the development server.
 SECURITY WARNING: don't run with debug turned on in production!
 """
 
-import logging
 import re
 import socket
 import subprocess
@@ -108,7 +107,6 @@ if WITH_DEV:
     INSTALLED_APPS += (
         # Better debug:
         "debug_toolbar",
-        "nplusone.ext.django",
         # Linting migrations:
         "django_migration_linter",
         # django-test-migrations:
@@ -161,22 +159,6 @@ DEBUG_TOOLBAR_CONFIG = {
 CONTENT_SECURITY_POLICY["DIRECTIVES"]["script-src"] += ("ajax.googleapis.com",)
 CONTENT_SECURITY_POLICY["DIRECTIVES"]["connect-src"] += ("'self'",)
 CONTENT_SECURITY_POLICY["DIRECTIVES"]["img-src"] += ("http:",)
-
-
-# nplusone
-# https://github.com/jmcarp/nplusone
-
-# Should be the first in line:
-if WITH_DEV:
-    MIDDLEWARE = ("nplusone.ext.django.NPlusOneMiddleware", *MIDDLEWARE)
-
-# Logging N+1 requests:
-# NPLUSONE_RAISE = True  # comment out if you want to allow N+1 requests
-NPLUSONE_LOGGER = logging.getLogger("django")
-NPLUSONE_LOG_LEVEL = logging.WARNING
-NPLUSONE_WHITELIST = [
-    {"model": "admin.*"},
-]
 
 
 # django-test-migrations
