@@ -10,8 +10,9 @@ Effects (``effect=`` parameter):
 * ``none`` — plain map
 * ``blur_border`` — rounded, sharp map inset over a blurred, slightly
   darkened copy of itself filling the frame (the "modern preview" look)
-* ``spotlight`` — same layout, but the border copy is desaturated
-  (color stays only inside)
+* ``spotlight`` — smooth falloff, no inset: the sharp, colorful center
+  fades into a darker, desaturated, gently blurred outside (color
+  stays only under the spotlight)
 * ``vignette`` — radial darkening towards the edges
 * ``blurred_edges`` — vignette-style falloff with BLUR instead of
   darkness: sharp inside, increasingly blurred towards the edges
@@ -30,7 +31,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.request import Request, urlopen
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
 if TYPE_CHECKING:
     import requests
@@ -47,6 +48,13 @@ CARD_HEIGHT = 630
 CARD_ASPECT = CARD_WIDTH / CARD_HEIGHT
 CARD_ZOOM = 16
 EFFECTS = ("none", "blur_border", "spotlight", "vignette", "blurred_edges")
+
+#: Bump when the rendering itself changes (effects, marker/watermark
+#: geometry, output encoding). Folded into the render cache key and —
+#: via the fallback feature URLs — into the ``v=`` busting parameter, so
+#: a renderer change re-renders every card AND regenerates the imagor
+#: composites built on top of them.
+RENDER_VERSION = 6
 
 # Marker geometry (owner-approved): symbol right of center.
 MARKER_SIZE_PX = 170
@@ -210,8 +218,39 @@ def _apply_effect(card: Image.Image, effect: str, scale: float = 1.0) -> Image.I
         card.paste(blurred, (0, 0), Image.eval(mask, lambda v: 255 - v))
         return card
 
-    # blur_border / spotlight: blurred (and optionally desaturated) copy
-    # of the map fills the frame, the sharp rounded map sits on top.
+    if effect == "spotlight":
+        # Smooth falloff — no inset, no frame: a warm, sharp, slightly
+        # saturated island under a cold spotlight. The outside is
+        # bokeh-blurred, tinted toward moonlight blue and dimmed to 0.5
+        # — the temperature contrast (warm center / cold surround)
+        # reads as depth without any frame edge.
+        outside = card.convert("L")
+        outside = outside.filter(ImageFilter.GaussianBlur(int(12 * scale)))
+        outside = ImageOps.colorize(outside, black=(18, 26, 40), white=(198, 208, 224))
+        outside = Image.eval(outside, lambda v: int(v * 0.5))
+        mask = Image.new("L", card.size, 0)
+        ImageDraw.Draw(mask).rounded_rectangle(
+            [
+                int(card.width * 0.18),
+                int(card.height * 0.18),
+                int(card.width * 0.82),
+                int(card.height * 0.82),
+            ],
+            radius=int(260 * scale),
+            fill=255,
+        )
+        mask = mask.filter(ImageFilter.GaussianBlur(int(130 * scale)))
+        # Warm island: stronger saturation boost plus a slight
+        # brightness lift, so the center really pops against the cold
+        # moonlight surround (owner review: "increase the warm natural
+        # center").
+        out = ImageEnhance.Color(card.convert("RGB")).enhance(1.15)
+        out = ImageEnhance.Brightness(out).enhance(1.03)
+        out.paste(outside, (0, 0), Image.eval(mask, lambda v: 255 - v))
+        return out
+
+    # blur_border: blurred copy of the map fills the frame, the sharp
+    # rounded map sits on top.
     margin = int(26 * scale)
     radius = int(44 * scale)
     background = card.resize(
@@ -224,8 +263,6 @@ def _apply_effect(card: Image.Image, effect: str, scale: float = 1.0) -> Image.I
             int(card.height * 0.075) + card.height,
         )
     )
-    if effect == "spotlight":
-        background = background.convert("L").convert("RGB")
     background = background.filter(ImageFilter.GaussianBlur(14))
     background = Image.eval(background, lambda v: int(v * 0.8))
 
@@ -253,13 +290,19 @@ def render_static_map(
 
     Marker, effects and attribution scale with the size (relative to
     the 1200x630 reference card). The Wodore logo is NOT baked in —
-    og consumers composite it via imagor.
+    og consumers composite it via imagor (from the backend-served
+    asset) on top of this output.
     """
     scale = width / CARD_WIDTH
     xt, yt = _deg_to_tile(lat, lon, zoom)
     # EXACT tile range covering the crop window — no centering slack
     # (the grid formula fetched ~35 tiles; ~15-20 are actually needed).
-    abs_left = xt * TILE_SIZE - width / 2 + offset_x
+    # The marker sits right of center (MARKER_X) — shift the map view
+    # with it so the symbol lands ON the entity's true position, not
+    # beside it (owner review: the 0.5→0.6 offset was hut-photo framing,
+    # for the symbol the map must move along).
+    marker_shift = int(width * (MARKER_X - 0.5)) if marker is not None else 0
+    abs_left = xt * TILE_SIZE - width / 2 + offset_x - marker_shift
     abs_top = yt * TILE_SIZE - height / 2 + offset_y
     x0 = math.floor(abs_left / TILE_SIZE)
     x1 = math.floor((abs_left + width) / TILE_SIZE)
@@ -332,9 +375,15 @@ def render_static_map(
 
 
 def static_map_cache_key(params: dict) -> str:
-    """Stable storage key for a parameter set (any change re-renders)."""
+    """Stable storage key for a parameter set (any change re-renders).
+
+    The renderer version is folded in: a rendering change (effect,
+    geometry) re-renders every card even with identical request
+    parameters.
+    """
     canonical = "&".join(
         f"{k}={params[k]}" for k in sorted(params) if params[k] is not None
     )
+    canonical += f"&rv={RENDER_VERSION}"
     digest = hashlib.sha1(canonical.encode()).hexdigest()[:20]
     return f"ogmaps/static-{digest}.png"
