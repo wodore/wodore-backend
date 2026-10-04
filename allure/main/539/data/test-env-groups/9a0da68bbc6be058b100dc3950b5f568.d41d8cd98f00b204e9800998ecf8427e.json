@@ -1,0 +1,1 @@
+{"id":"9a0da68bbc6be058b100dc3950b5f568.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.geometries.test_image_response_cache.TestCachedOnly#test_cold_cache_does_not_shadow_future_responses","name":"test_cold_cache_does_not_shadow_future_responses","status":"passed","testResultsByEnv":{"default":"22bcae9cf63ac989689be20b8722838d"}}
