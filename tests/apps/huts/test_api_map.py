@@ -33,8 +33,20 @@ def offline_render(monkeypatch):
         calls["marker"] += 1
         return Image.new("RGBA", (size_px, size_px), (200, 60, 60, 255))
 
+    async def fake_tile_retry_async(client, semaphore, zoom, x, y):
+        calls["tiles"] += 1
+        return Image.new("RGB", (ogmap.TILE_SIZE, ogmap.TILE_SIZE), (90, 120, 150))
+
+    async def fake_marker_async(client, symbol_url, size_px):
+        calls["marker"] += 1
+        return Image.new("RGBA", (size_px, size_px), (200, 60, 60, 255))
+
     monkeypatch.setattr(ogmap, "_fetch_tile", fake_tile)
     monkeypatch.setattr(ogmap, "fetch_marker", fake_marker)
+    # Async render path (the endpoint is async now): patch its fetchers too,
+    # so tests never touch the network.
+    monkeypatch.setattr(ogmap, "_fetch_tile_retry_async", fake_tile_retry_async)
+    monkeypatch.setattr(ogmap, "fetch_marker_async", fake_marker_async)
     return calls
 
 
@@ -221,6 +233,7 @@ class TestSizeParameter:
 class TestTileThrottling:
     def test_429_retried_with_backoff(self, seed_data, monkeypatch):
         """A 429 on the first attempt is retried and succeeds."""
+        import email.message
         import urllib.error
 
         from PIL import Image
@@ -232,8 +245,10 @@ class TestTileThrottling:
         def flaky(zoom, x, y):
             calls.append((x, y))
             if len(calls) == 1:
+                headers = email.message.Message()
+                headers["Retry-After"] = "0"
                 raise urllib.error.HTTPError(
-                    "url", 429, "Too Many Requests", {"Retry-After": "0"}, None
+                    "url", 429, "Too Many Requests", headers, None
                 )
             return Image.new("RGB", (256, 256))
 

@@ -22,14 +22,16 @@ the bottom-right corner of every card.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import io
 import math
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.request import Request, urlopen
 
+import httpx
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 if TYPE_CHECKING:
@@ -255,10 +257,25 @@ def render_static_map(
     the 1200x630 reference card). The Wodore logo is NOT baked in —
     og consumers composite it via imagor.
     """
-    scale = width / CARD_WIDTH
+    plan = _plan_tiles(lat, lon, zoom, width, height, offset_x, offset_y)
+    tiles = _fetch_tiles(zoom, plan["coords"])
+    return _composite_card(
+        tiles, plan, marker, width, height, effect, marker_scale, attribution
+    )
+
+
+def _plan_tiles(
+    lat: float,
+    lon: float,
+    zoom: int,
+    width: int,
+    height: int,
+    offset_x: int,
+    offset_y: int,
+) -> dict:
+    """EXACT tile range covering the crop window — no centering slack
+    (the grid formula fetched ~35 tiles; ~15-20 are actually needed)."""
     xt, yt = _deg_to_tile(lat, lon, zoom)
-    # EXACT tile range covering the crop window — no centering slack
-    # (the grid formula fetched ~35 tiles; ~15-20 are actually needed).
     abs_left = xt * TILE_SIZE - width / 2 + offset_x
     abs_top = yt * TILE_SIZE - height / 2 + offset_y
     x0 = math.floor(abs_left / TILE_SIZE)
@@ -266,9 +283,25 @@ def render_static_map(
     y0 = math.floor(abs_top / TILE_SIZE)
     y1 = math.floor((abs_top + height) / TILE_SIZE)
     nx, ny = x1 - x0 + 1, y1 - y0 + 1
-
     coords = [(x0 + dx, y0 + dy) for dx in range(nx) for dy in range(ny)]
-    tiles = _fetch_tiles(zoom, coords)
+    left = int(round(abs_left)) - x0 * TILE_SIZE
+    top = int(round(abs_top)) - y0 * TILE_SIZE
+    return {"coords": coords, "nx": nx, "ny": ny, "left": left, "top": top}
+
+
+def _composite_card(
+    tiles: list[Image.Image],
+    plan: dict,
+    marker: Image.Image | None,
+    width: int,
+    height: int,
+    effect: str,
+    marker_scale: float,
+    attribution: bool,
+) -> bytes:
+    """Pure-CPU composite: canvas, crop, effects, marker, attribution, JPEG."""
+    scale = width / CARD_WIDTH
+    nx, ny = plan["nx"], plan["ny"]
     canvas = Image.new("RGB", (nx * TILE_SIZE, ny * TILE_SIZE))
     for (dx, dy), tile in zip(
         ((dx, dy) for dx in range(nx) for dy in range(ny)), tiles
@@ -278,8 +311,7 @@ def render_static_map(
     # Crop at NATIVE tile resolution (256px tiles at zoom 16 are ~1:1
     # with the card at 1200px wide) — the old upscale-then-downscale
     # detour doubled CPU time for no sharpness gain.
-    left = int(round(abs_left)) - x0 * TILE_SIZE
-    top = int(round(abs_top)) - y0 * TILE_SIZE
+    left, top = plan["left"], plan["top"]
     card = canvas.crop((left, top, left + width, top + height))
     if card.size != (width, height):
         card = card.resize((width, height), Image.LANCZOS)
@@ -338,3 +370,114 @@ def static_map_cache_key(params: dict) -> str:
     )
     digest = hashlib.sha1(canonical.encode()).hexdigest()[:20]
     return f"ogmaps/static-{digest}.png"
+
+
+# ---------------------------------------------------------------------------
+# Async render path (async PoC, openspec: async-api-staging)
+#
+# The endpoint's I/O (N tiles + the marker raster) overlaps in ONE
+# httpx.AsyncClient via asyncio.gather - the marker no longer serializes
+# behind the tiles. TILE_WORKERS still bounds concurrent tile fetches
+# (asyncio.Semaphore), so OpenTopoMap sees the same politeness as with
+# the thread pool. The PIL composite is CPU work and runs in a bridged
+# thread (sync_to_async) so the event loop keeps serving other requests.
+# The sync path above (ThreadPool + requests.Session) stays for sync
+# callers and tests.
+# ---------------------------------------------------------------------------
+
+
+async def _fetch_tile_async(
+    client: httpx.AsyncClient, zoom: int, x: int, y: int
+) -> Image.Image:
+    response = await client.get(OTM_TILE_URL.format(z=zoom, x=x, y=y))
+    response.raise_for_status()
+    return Image.open(io.BytesIO(response.content)).convert("RGB")
+
+
+async def _fetch_tile_retry_async(
+    client: httpx.AsyncClient,
+    semaphore: asyncio.Semaphore,
+    zoom: int,
+    x: int,
+    y: int,
+) -> Image.Image:
+    """One tile with 429 backoff (async twin of _fetch_tile_retry)."""
+    for attempt in range(TILE_ATTEMPTS):
+        try:
+            async with semaphore:
+                return await _fetch_tile_async(client, zoom, x, y)
+        except httpx.HTTPStatusError as error:
+            if error.response.status_code == 429 and attempt < TILE_ATTEMPTS - 1:
+                wait = error.response.headers.get("Retry-After")
+                await asyncio.sleep(float(wait) if wait else 0.5 * (2**attempt))
+                continue
+            raise
+    raise RuntimeError("unreachable")  # pragma: no cover
+
+
+async def fetch_marker_async(
+    client: httpx.AsyncClient, symbol_url: str, size_px: int
+) -> Image.Image | None:
+    """Async twin of fetch_marker (imagor rasterization of the symbol)."""
+    from server.apps.images.transfomer import ImagorImage
+
+    url = (
+        ImagorImage(symbol_url)
+        .transform(
+            size=f"{size_px * 2}x{size_px * 2}",
+            fit=True,
+            filters=["dpi(1440)", "format(png)"],
+        )
+        .get_full_url()
+    )
+    try:
+        response = await client.get(url)
+        response.raise_for_status()
+        return Image.open(io.BytesIO(response.content)).convert("RGBA")
+    except Exception:
+        return None
+
+
+async def render_static_map_async(
+    lat: float,
+    lon: float,
+    zoom: int = CARD_ZOOM,
+    width: int = CARD_WIDTH,
+    height: int = CARD_HEIGHT,
+    effect: str = "none",
+    marker_url: str | None = None,
+    marker_size_px: int = 512,
+    marker_scale: float = 1.0,
+    attribution: bool = True,
+    offset_x: int = 0,
+    offset_y: int = 0,
+) -> bytes:
+    """Async render: tiles + marker overlap, composite in a bridged thread."""
+    from asgiref.sync import sync_to_async
+
+    plan = _plan_tiles(lat, lon, zoom, width, height, offset_x, offset_y)
+    semaphore = asyncio.Semaphore(TILE_WORKERS)
+    async with httpx.AsyncClient(
+        timeout=10.0,
+        headers={"User-Agent": USER_AGENT},
+        follow_redirects=True,
+    ) as client:
+        tasks: list[Any] = [
+            _fetch_tile_retry_async(client, semaphore, zoom, x, y)
+            for (x, y) in plan["coords"]
+        ]
+        marker_image: Image.Image | None = None
+        if marker_url:
+            marker_image = await fetch_marker_async(client, marker_url, marker_size_px)
+        tiles = list(await asyncio.gather(*tasks))
+
+    return await sync_to_async(_composite_card)(
+        tiles,
+        plan,
+        marker_image,
+        width,
+        height,
+        effect,
+        marker_scale,
+        attribution,
+    )
