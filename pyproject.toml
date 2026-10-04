@@ -20,7 +20,7 @@ dependencies = [
   "python-decouple==3.*",      # https://pypi.org/project/python-decouple/
   "structlog==25.*",           # https://pypi.org/project/structlog/
   "django-colorfield==0.14.*", # https://pypi.org/project/django-colorfield/
-  "pillow==11.*",              # https://pypi.org/project/Pillow/
+  "pillow==12.*",              # https://pypi.org/project/Pillow/
   "django-model-utils==5.*",   # https://pypi.org/project/django-model-utils/
   "django-jsoneditor==0.2.*",  # https://pypi.org/project/django-jsoneditor/
   "django-modeltrans==0.9.*",  # https://pypi.org/project/django-modeltrans/
