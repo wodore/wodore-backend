@@ -54,7 +54,7 @@ EFFECTS = ("none", "blur_border", "spotlight", "vignette", "blurred_edges")
 #: via the fallback feature URLs — into the ``v=`` busting parameter, so
 #: a renderer change re-renders every card AND regenerates the imagor
 #: composites built on top of them.
-RENDER_VERSION = 4
+RENDER_VERSION = 5
 
 # Marker geometry (owner-approved): symbol right of center.
 MARKER_SIZE_PX = 170
@@ -240,9 +240,12 @@ def _apply_effect(card: Image.Image, effect: str, scale: float = 1.0) -> Image.I
             fill=255,
         )
         mask = mask.filter(ImageFilter.GaussianBlur(int(130 * scale)))
-        # Gentle saturation boost on the original so the island pops
-        # against the cool surround.
-        out = ImageEnhance.Color(card.convert("RGB")).enhance(1.08)
+        # Warm island: stronger saturation boost plus a slight
+        # brightness lift, so the center really pops against the cold
+        # moonlight surround (owner review: "increase the warm natural
+        # center").
+        out = ImageEnhance.Color(card.convert("RGB")).enhance(1.15)
+        out = ImageEnhance.Brightness(out).enhance(1.03)
         out.paste(outside, (0, 0), Image.eval(mask, lambda v: 255 - v))
         return out
 
