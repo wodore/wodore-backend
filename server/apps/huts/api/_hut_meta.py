@@ -20,20 +20,14 @@ from dmr.routing import path
 from pydantic import Field
 
 from django.conf import settings
-from django.http import Http404, HttpRequest
+from django.http import HttpRequest
 
-from server.apps.api.controller import ApiController, cache_headers
-from server.apps.images.models import Image
-from server.apps.images.og import (
-    og_card_url,
-    og_map_card_url,
-    og_photo_url,
-    photo_source,
-)
+from server.apps.api.controller import ApiController, cache_headers, raise_not_found
+from server.apps.images.og import og_card_url, og_map_card_url, og_photo_url
 from server.apps.symbols.utils import resolve_symbol_urls
 from server.apps.translations import LanguageQuery, activate
 
-from ..models import Hut, HutImageAssociation
+from ..models import Hut
 
 CACHE_TTL = 60 * 60
 
@@ -129,34 +123,50 @@ class _MetaQuery(LanguageQuery):
     """Only the shared lang parameter."""
 
 
-def _og_image(hut: Hut, request: HttpRequest) -> str:
-    """Preview image URL: the highest-scored *servable* image at the og
-    size; generated brand card (name + elevation) as fallback.
+def _og_image(hut: Hut, request: HttpRequest, lang: str) -> str:
+    """Preview image URL straight from the image service's gallery
+    response (``hut_gallery_response`` — the ``cached_only=true`` fast
+    call, default parameters):
 
-    Only publicly visible images count (same filters as the detail
-    endpoint): inactive, unapproved or no-publication rows are skipped.
-    Pinned external images keep their file field empty — their origin
-    URL (``source_url_raw``) is the source. Rows with no source at all
-    are skipped instead of signing an empty path (which resolves to the
-    bare imagor media alias and 500s)."""
-    associations = (
-        HutImageAssociation.objects.filter(
-            hut=hut,
-            image__is_active=True,
-            image__review_status=Image.ReviewStatusChoices.approved,
-        )
-        .exclude(image__license__no_publication=True)
-        .select_related("image")
-        .order_by("-score", "id")
-    )
-    for association in associations:
-        source = photo_source(association.image)
-        if source is None:
+    * a photo feature → imagor og size with the Wodore logo composited
+      at the bottom, a bit left of center;
+    * the service's static-map fallback feature (``is_fallback``) → its
+      card URL as-is (already og-sized: zoom 15, spotlight effect,
+      type-symbol marker, watermark baked into the render).
+
+    Everything else (pinned/curated rows, the deprecated hut-services
+    ``photos`` field) is the image service's business. The branded card
+    remains only for the degenerate no-location case."""
+    from server.apps.geometries.api_images import hut_gallery_response
+
+    response = hut_gallery_response(hut, request, lang=lang)
+    for feature in response.features:
+        props = feature.properties
+        if props is None:
             continue
-        focal = (association.image.image_meta or {}).get("focal")
+        if props.is_fallback:
+            # The service's static-map card (og dimensions, spotlight,
+            # marker) goes through imagor like every og image, with the
+            # backend-served watermark composited.
+            landscape = props.urls.landscape
+            url = (landscape.md if landscape is not None else None) or (
+                props.urls.original.raw or None
+            )
+            if url:
+                og_url = None
+                try:  # preview image is best-effort
+                    og_url = og_map_card_url(url, request=request)
+                except Exception:
+                    og_url = None
+                if og_url:
+                    return og_url
+            continue
+        raw = props.urls.original.raw
+        if not raw:
+            continue
         og_url = None
         try:  # preview image is best-effort
-            og_url = og_photo_url(source, focal)
+            og_url = og_photo_url(raw, request=request)
         except Exception:
             og_url = None
         if og_url:
@@ -165,23 +175,6 @@ def _og_image(hut: Hut, request: HttpRequest) -> str:
     if hut.hut_type_open is not None:
         symbols = resolve_symbol_urls(hut.hut_type_open, {"request": request})
         symbol_url = symbols.get("detailed") if symbols else None
-    if hut.location is not None:
-        # Complete static-map card (OpenTopoMap, type symbol marker,
-        # watermark) from the generic endpoint; v=<modified> busts the
-        # render/storage cache on ANY hut change, ETag-style.
-        from urllib.parse import urlencode
-
-        query = urlencode(
-            {
-                "place": hut.slug,
-                "place_type": "hut",
-                "zoom": 16,
-                "v": f"{hut.modified:%Y%m%dT%H%M%S}",
-            }
-        )
-        return og_map_card_url(
-            request.build_absolute_uri(f"/v1/geo/map/static?{query}")
-        )
     return og_card_url(symbol_url)
 
 
@@ -301,10 +294,10 @@ class HutMetaController(ApiController):
         )
         if hut is None:
             msg = f"Could not find '{parsed_path.slug}'."
-            raise Http404(msg)
+            raise_not_found(msg)
 
         page_url = f"{settings.FRONTEND_DOMAIN.rstrip('/')}/hut/{hut.slug}"
-        image = _og_image(hut, request)
+        image = _og_image(hut, request, parsed_query.lang)
         description = _meta_description(hut, parsed_query.lang)
         title = _meta_title(hut)
 

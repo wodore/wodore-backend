@@ -107,6 +107,15 @@ FRONTEND_DOMAIN = (
     else "http://localhost:9000"
 )
 
+# This backend's own public base URL — used to build absolute asset
+# URLs when no request is in scope (the og helpers fall back to it;
+# with a request they use build_absolute_uri instead).
+BACKEND_DOMAIN = (
+    config("BACKEND_DOMAIN")
+    if config("BACKEND_DOMAIN", None)
+    else "http://localhost:8000"
+)
+
 DJANGO_ADMIN_URL = (
     config("DJANGO_ADMIN_URL")
     if config("DJANGO_ADMIN_URL", None)

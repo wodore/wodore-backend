@@ -82,7 +82,7 @@ def resolve_version(
             None,
             _error_response(
                 400,
-                "api_version_conflict",
+                "validation_error",
                 f"'{VERSION_HEADER}' header ({header!r}) and "
                 f"'{VERSION_QUERY_PARAM}' query parameter ({query!r}) differ.",
             ),
@@ -100,7 +100,7 @@ def resolve_version(
             None,
             _error_response(
                 400,
-                "api_version_invalid",
+                "validation_error",
                 f"Unknown API version {version!r}. Supported: {supported}.",
             ),
         )

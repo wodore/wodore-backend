@@ -344,8 +344,8 @@ class Hut(TimeStampedModel):
         return self.name_i18n
 
     @classmethod
-    def from_db(cls, db, field_names, values):
-        instance = super().from_db(db, field_names, values)
+    def from_db(cls, db, field_names, values, fetch_mode=None):
+        instance = super().from_db(db, field_names, values, fetch_mode=fetch_mode)
 
         # save original values, when model is loaded from database,
         # in a separate attribute on the model

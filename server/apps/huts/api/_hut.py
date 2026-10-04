@@ -21,13 +21,19 @@ from pydantic import Field
 from django.conf import settings
 from django.contrib.postgres.aggregates import JSONBAgg
 from django.db.models import Case, F, Value, When
-from django.db.models.functions import Coalesce, Concat, JSONObject
-from django.http import Http404, HttpRequest, HttpResponse
+from django.db.models.functions import JSONObject
+from django.http import HttpRequest, HttpResponse
 from django.urls import reverse_lazy
 
-from server.apps.api.controller import ApiController, cache_headers
-from server.apps.api.enums import IncludeModeEnum
-from server.apps.api.query import TristateEnum, dump_sparse, sparse_fields_query
+from server.apps.api.controller import ApiController, cache_headers, raise_not_found
+from server.apps.api.projection import field_selected, project_fields
+from server.apps.api.query import (
+    BboxQuery,
+    TristateEnum,
+    bbox_polygon,
+    dump_sparse,
+    sparse_fields_query,
+)
 from server.apps.huts.schemas._hut import ImageMetaSchema
 from server.apps.translations import LanguageQuery, activate
 
@@ -36,10 +42,13 @@ from ..schemas import (
     HutSchemaDetails,
     HutSchemaList,
     HutSearchResultSchema,
+    HutTypeSchema,
     ImageInfoSchema,
     LicenseInfoSchema,
     OrganizationBaseSchema,
 )
+from ._hut_spec import prepare_hut_detail
+from .annotations import annotate_hut_images, annotate_hut_sources
 from .etag_utils import (
     cached_200,
     cached_304,
@@ -62,7 +71,14 @@ class _HutSlug(pydantic.BaseModel):
     slug: str = Field(description="Hut slug")
 
 
-class HutSearchQuery(LanguageQuery):
+HutSearchFields = sparse_fields_query(
+    huts=HutSearchResultSchema,
+    hut_types=HutTypeSchema,
+    sources=OrganizationBaseSchema,
+)
+
+
+class HutSearchQuery(LanguageQuery, HutSearchFields, BboxQuery):
     """Query parameters for the hut search endpoint."""
 
     q: str = Field(
@@ -78,25 +94,6 @@ class HutSearchQuery(LanguageQuery):
             "results but with lower relevance. Recommended: 0.1 for fuzzy "
             "matching, 0.3 for stricter matching."
         ),
-    )
-    include_hut_type: IncludeModeEnum = Field(  # type: ignore[assignment]
-        IncludeModeEnum.no,
-        description=(
-            "Include hut type information: 'no' excludes field, 'slug' "
-            "returns type slugs only, all returns full type details "
-            "with icons"
-        ),
-    )
-    include_sources: IncludeModeEnum = Field(  # type: ignore[assignment]
-        IncludeModeEnum.no,
-        description=(
-            "Include data sources: 'no' excludes field, 'slug' returns "
-            "source slugs only, all returns full source details with logos"
-        ),
-    )
-    include_avatar: bool = Field(
-        True,
-        description="Include avatar/primary photo URL in results",
     )
 
 
@@ -144,7 +141,13 @@ class HutSearchController(ApiController):
             is_public=True,
         )
 
-        if query.include_hut_type != "no":
+        if query.bbox:
+            qs = qs.filter(location__intersects=bbox_polygon(query.bbox))
+
+        # Skip the DB cost when the field isn't in the selection
+        wants_hut_type = field_selected(query, "huts", "hut_type")
+        wants_sources = field_selected(query, "huts", "sources")
+        if wants_hut_type:
             qs = qs.select_related(
                 "hut_type_open",
                 "hut_type_closed",
@@ -155,12 +158,7 @@ class HutSearchController(ApiController):
                 "hut_type_closed__symbol_simple",
                 "hut_type_closed__symbol_mono",
             )
-
-        if query.include_sources == "slug":
-            qs = qs.annotate(
-                organization_slugs=JSONBAgg(F("org_set__slug"), distinct=True)
-            )
-        elif query.include_sources == "all":
+        if wants_sources:
             qs = qs.annotate(
                 sources_data=JSONBAgg(
                     JSONObject(
@@ -173,7 +171,7 @@ class HutSearchController(ApiController):
                         source_id="orgs_source__source_id",
                     ),
                     distinct=True,
-                )
+                ),
             )
 
         if query.limit is not None:
@@ -196,13 +194,7 @@ class HutSearchController(ApiController):
                 "elevation": hut.elevation,
                 "score": hut.combined_score,
             }
-
-            if query.include_hut_type == "slug":
-                result["hut_type"] = {
-                    "open": hut.hut_type_open.slug if hut.hut_type_open else None,
-                    "closed": hut.hut_type_closed.slug if hut.hut_type_closed else None,
-                }
-            elif query.include_hut_type == "all":
+            if wants_hut_type:
                 result["hut_type"] = {
                     "open": {
                         "slug": hut.hut_type_open.slug,
@@ -221,33 +213,34 @@ class HutSearchController(ApiController):
                     if hut.hut_type_closed
                     else None,
                 }
-
-            if query.include_sources == "slug":
-                org_slugs = [
-                    slug for slug in (hut.organization_slugs or []) if slug is not None
+            if wants_sources:
+                result["sources"] = [
+                    {
+                        **src,
+                        "logo": f"{media_url}{src['logo']}"
+                        if src.get("logo")
+                        else None,
+                    }
+                    for src in (hut.sources_data or [])
+                    if src.get("slug") is not None
                 ]
-                result["sources"] = org_slugs
-            elif query.include_sources == "all":
-                sources = []
-                for src in hut.sources_data or []:
-                    if src.get("slug") is not None:
-                        if src.get("logo"):
-                            src["logo"] = f"{media_url}{src['logo']}"
-                        sources.append(src)
-                result["sources"] = sources
+            if hut.photos:
+                result["avatar"] = f"{media_url}{hut.photos}"
+            else:
+                result["avatar"] = None
 
-            if query.include_avatar:
-                if hut.photos:
-                    result["avatar"] = f"{media_url}{hut.photos}"
-                else:
-                    result["avatar"] = None
+            # Schema validation converts ORM objects (GEOS Point) to JSON types
+            safe = HutSearchResultSchema(**result).model_dump(exclude_unset=True)
+            results.append(
+                project_fields(
+                    safe,
+                    query,
+                    "huts",
+                    {"hut_types": "hut_type", "sources": "sources"},
+                )
+            )
 
-            results.append(result)
-
-        return [
-            HutSearchResultSchema(**result).model_dump(exclude_unset=True)
-            for result in results
-        ]
+        return results
 
 
 # ---------------------------------------------------------------------------
@@ -255,7 +248,7 @@ class HutSearchController(ApiController):
 # ---------------------------------------------------------------------------
 
 
-class HutListQuery(LanguageQuery):
+class HutListQuery(LanguageQuery, BboxQuery):
     """Query parameters for the hut list endpoint."""
 
     offset: int = Field(0, description="Pagination offset")
@@ -337,6 +330,9 @@ class HutsController(ApiController):
         ):
             return cached_304(self, etag, last_modified, max_age=60)
 
+        if query.bbox:
+            huts_db = huts_db.filter(location__intersects=bbox_polygon(query.bbox))
+
         if query.is_modified != TristateEnum.unset:
             huts_db = huts_db.filter(is_modified=query.is_modified.bool)
         if query.is_active != TristateEnum.unset:
@@ -359,53 +355,8 @@ class HutsController(ApiController):
                 default=Value(False),
             ),
             availability_source_ref__slug=F("availability_source_ref__slug"),
-            sources=JSONBAgg(
-                JSONObject(
-                    logo=Concat(Value(media_url), F("org_set__logo")),
-                    fullname="org_set__fullname_i18n",
-                    slug="org_set__slug",
-                    name="org_set__name_i18n",
-                    link="orgs_source__link",
-                    source_id="orgs_source__source_id",
-                    public="org_set__is_public",
-                ),
-                distinct=True,
-            ),
-            images=JSONBAgg(
-                JSONObject(
-                    image="image_set__image",
-                    image_url=Concat(Value(iam_media_url), F("image_set__image")),
-                    image_meta=JSONObject(
-                        crop="image_set__image_meta__crop",
-                        focal="image_set__image_meta__focal",
-                        width="image_set__image_meta__width",
-                        height="image_set__image_meta__height",
-                    ),
-                    caption="image_set__caption_i18n",
-                    license=JSONObject(
-                        slug="image_set__license__slug",
-                        name="image_set__license__name_i18n",
-                        fullname="image_set__license__fullname_i18n",
-                        description="image_set__license__description_i18n",
-                        url="image_set__license__url_i18n",
-                    ),
-                    author="image_set__author",
-                    author_url="image_set__author_url",
-                    source_url="image_set__source_url",
-                    organization=JSONObject(
-                        logo=Concat(Value(media_url), F("image_set__source_org__logo")),
-                        fullname="image_set__source_org__fullname_i18n",
-                        slug="image_set__source_org__slug",
-                        name="image_set__source_org__name_i18n",
-                        url="image_set__source_org__url",
-                    ),
-                    attribution=Value(""),
-                ),
-                ordering=(
-                    F("image_set__details__score").desc(nulls_last=True),
-                    "image_set__details__id",
-                ),
-            ),
+            sources=annotate_hut_sources(media_url=media_url),
+            images=annotate_hut_images(media_url=iam_media_url),
             translations=JSONObject(
                 description=JSONObject(
                     de="description_de",
@@ -456,7 +407,7 @@ def get_json_obj(
     return new_vals
 
 
-class HutGeojsonQuery(LanguageQuery):
+class HutGeojsonQuery(LanguageQuery, BboxQuery):
     """Query parameters for the huts GeoJSON endpoint."""
 
     offset: int = Field(0, description="Pagination offset")
@@ -524,6 +475,7 @@ class HutsGeojsonController(ApiController):
             str(query.include_name),
             str(query.include_has_availability),
             str(query.flat),
+            str(query.bbox or ""),
             query.lang,
             version_cache_key(request),
         ]
@@ -552,6 +504,9 @@ class HutsGeojsonController(ApiController):
             request, last_modified
         ):
             return cached_304(self, etag, last_modified, max_age=60)
+
+        if query.bbox:
+            qs = qs.filter(location__intersects=bbox_polygon(query.bbox))
 
         has_availability_annotated = False
         if (
@@ -755,93 +710,11 @@ class HutDetailController(ApiController):
             return cached_304(self, etag, last_modified, max_age=60)
 
         media_abs_url = request.build_absolute_uri(settings.MEDIA_URL)
-        qs = qs.select_related(
-            "hut_type_open", "hut_type_closed", "hut_owner", "availability_source_ref"
-        ).annotate(
-            has_availability=Case(
-                When(availability_source_ref__isnull=False, then=Value(True)),
-                default=Value(False),
-            ),
-            availability_source_ref__slug=F("availability_source_ref__slug"),
-            sources=JSONBAgg(
-                JSONObject(
-                    logo=Concat(Value(media_abs_url), F("org_set__logo")),
-                    fullname="org_set__fullname_i18n",
-                    slug="org_set__slug",
-                    name="org_set__name_i18n",
-                    link="orgs_source__link",
-                    source_id="orgs_source__source_id",
-                    public="org_set__is_public",
-                    active="org_set__is_active",
-                    order="org_set__order",
-                ),
-                distinct=True,
-            ),
-            images=JSONBAgg(
-                JSONObject(
-                    image="image_set__image",
-                    image_meta=JSONObject(
-                        crop="image_set__image_meta__crop",
-                        focal="image_set__image_meta__focal",
-                        width="image_set__image_meta__width",
-                        height="image_set__image_meta__height",
-                    ),
-                    review_status="image_set__review_status",
-                    caption="image_set__caption_i18n",
-                    license=JSONObject(
-                        slug="image_set__license__slug",
-                        is_active="image_set__license__is_active",
-                        name=Coalesce(
-                            "image_set__license__name_i18n",
-                            "image_set__license__slug",
-                        ),
-                        fullname=Coalesce(
-                            "image_set__license__fullname_i18n",
-                            "image_set__license__name_i18n",
-                            "image_set__license__slug",
-                        ),
-                        description="image_set__license__description_i18n",
-                        url="image_set__license__url_i18n",
-                        no_publication="image_set__license__no_publication",
-                    ),
-                    author="image_set__author",
-                    author_url="image_set__author_url",
-                    source_url="image_set__source_url",
-                    organization=JSONObject(
-                        logo=Concat(
-                            Value(media_abs_url), F("image_set__source_org__logo")
-                        ),
-                        fullname="image_set__source_org__fullname_i18n",
-                        slug="image_set__source_org__slug",
-                        name="image_set__source_org__name_i18n",
-                        url="image_set__source_org__url",
-                    ),
-                    attribution=Value(""),
-                ),
-                ordering=(
-                    F("image_set__details__score").desc(nulls_last=True),
-                    "image_set__details__id",
-                ),
-            ),
-            translations=JSONObject(
-                description=JSONObject(
-                    de="description_de",
-                    en="description_en",
-                    fr="description_fr",
-                    it="description_it",
-                ),
-                name=JSONObject(
-                    de="name_de",
-                    en="name_en",
-                    fr="name_fr",
-                    it="name_it",
-                ),
-            ),
-        )
+        qs = prepare_hut_detail(qs, media_url=media_abs_url)
         hut_db = qs.first()
         if hut_db is None:
             msg = f"Could not find '{slug}'."
-            raise Http404(msg)
+            raise_not_found(msg)
         if len(hut_db.sources) and hut_db.sources[0]["slug"] is None:
             hut_db.sources = []
         else:

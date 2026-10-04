@@ -2,12 +2,16 @@
 
 Two variants:
 
-* ``og_photo_url`` — a real photo, resized to the 'large' preset
-  (1800x1200, focal-aware) exactly like the JSON detail endpoint, with
-  the Wodore logo (SVG, original colors) composited bottom-left.
+* ``og_photo_url`` — a real photo at the og:image size (1200x630,
+  focal-aware) with the Wodore logo composited at the bottom, a bit
+  left of center.
 * ``og_card_url`` — the branded default card for entities without a
   usable photo: the brand map image (1200x630) with the entity's type
   symbol (SVG pictogram) composited large and centered.
+
+Static-map og cards are NOT generated here — the image service's
+``static_map_fallback`` feature (``/v1/geo/map/static``, og dimensions,
+watermark baked into the render) is the og fallback.
 
 SVG compositing notes, verified live against imagor v1.9.6:
 
@@ -28,6 +32,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.conf import settings
+from django.http import HttpRequest
 
 from .transfomer import ImagorImage
 
@@ -42,16 +47,33 @@ OG_PHOTO_SIZE = "1200x630"
 # Generated card — the same og:image aspect ratio.
 OG_CARD_SIZE = "1200x630"
 
-# Logo watermark on photos: the official watermark PNG in the frontend's
-# public/meta/ (next to meta.jpg), served from wodore.com/meta/.
-OG_LOGO_URL_PATH = "meta/wodore_watermark.png"
-# Watermark geometry (owner-approved): 270px raster, horizontally
-# centered, 10px from the bottom (survives 1:1 center crops), fully
+# Logo watermark on photos: served by the backend itself
+# (/assets/logo/wodore_watermark.png — the bundled copy in
+# server/apps/api/assets/, no frontend dependency), with the asset's
+# content digest as ?v= so imagor results and CDN entries bust when
+# the logo is replaced.
+LOGO_ASSET_NAME = "wodore_watermark.png"
+# Watermark geometry (owner-approved): 270px raster, a bit LEFT of
+# center (0.33 of the free space — same position as the static-map
+# cards), 10px from the bottom (survives 1:1 center crops), fully
 # opaque.
 OG_LOGO_SIZE_PX = 270
-OG_LOGO_POS = "center"
+OG_LOGO_POS = "0.33"
 OG_LOGO_POS_Y = "bottom-10"
 OG_LOGO_ALPHA = 0
+
+# Static-map og cards (hut/place meta fallbacks): render with the
+# spotlight effect (warm sharp island under a cold, bokeh-blurred
+# moonlight surround) and the type-symbol marker at 0.5x —
+# owner-approved preview look. Both are plain query params on
+# /v1/geo/map/static and part of its render cache key, so existing
+# cards re-render on URL change.
+OG_MAP_EFFECT = "spotlight"
+OG_MAP_MARKER_SCALE = "0.56"
+
+# Map cards render one zoom level out (15): huts sit in visible terrain
+# context instead of a rooftop close-up.
+OG_MAP_ZOOM = 15
 
 
 def _frontend(path: str) -> str:
@@ -73,6 +95,20 @@ def _composite_image(source_url: str, size_px: int, x: str, y: str, alpha: int) 
     return f"image(/unsafe/{size_px}x{size_px}/{quote(source_url, safe='')},{x},{y},{alpha})"
 
 
+def normalize_source(source: str) -> str | None:
+    """Servable URL for a raw source string: media-relative paths get
+    the media prefix, absolute URLs pass through.
+
+    Returns ``None`` when the string is empty — an empty source would
+    sign the bare imagor media alias (e.g. ``.../wd``) and 500 in
+    imagor, so callers must skip to the next candidate or fall back."""
+    if not source:
+        return None
+    if not source.startswith("http"):
+        source = f"{settings.MEDIA_URL.rstrip('/')}/{source.lstrip('/')}"
+    return source
+
+
 def photo_source(image: Image) -> str | None:
     """Servable source URL for an :class:`Image` row: the local file when
     set, else the pinned external raw URL (pinned provider rows keep the
@@ -84,16 +120,37 @@ def photo_source(image: Image) -> str | None:
     source = str(image.image) if image.image else ""
     if not source:
         source = image.source_url_raw or ""
-    if not source:
-        return None
-    if not source.startswith("http"):
-        source = f"{settings.MEDIA_URL.rstrip('/')}/{source}"
-    return source
+    return normalize_source(source)
 
 
-def og_photo_url(image_url: str, focal: dict | None = None) -> str:
+def watermark_url(request: HttpRequest | None = None) -> str:
+    """Absolute URL of the backend-served watermark asset, with the
+    asset's content digest as ``?v=`` (imagor result-cache busting).
+
+    Built from the request when one is in scope (correct host behind
+    any proxy), else from ``BACKEND_DOMAIN``."""
+    from django.urls import reverse
+
+    from server.apps.api.assets_view import logo_version
+
+    path = reverse("logo-asset", args=[LOGO_ASSET_NAME])
+    if request is not None:
+        base = request.build_absolute_uri(path)
+    else:
+        base = f"{settings.BACKEND_DOMAIN.rstrip('/')}{path}"
+    return f"{base}?v={logo_version()}"
+
+
+def og_photo_url(
+    image_url: str,
+    focal: dict | None = None,
+    *,
+    request: HttpRequest | None = None,
+) -> str:
     """Signed imagor URL for a photo at the og:image size, with the
-    Wodore logo composited bottom-left."""
+    Wodore logo (backend-served, ``?v=``-busted) composited at the
+    bottom, a bit left of center (same position as the static-map
+    cards)."""
     focal_str = None
     crop_start = crop_stop = None
     if focal:
@@ -101,7 +158,7 @@ def og_photo_url(image_url: str, focal: dict | None = None) -> str:
         crop_start, crop_stop = focal_str.split(":")
     filters = [
         _composite_image(
-            _frontend(OG_LOGO_URL_PATH),
+            watermark_url(request),
             OG_LOGO_SIZE_PX,
             OG_LOGO_POS,
             OG_LOGO_POS_Y,
@@ -121,17 +178,17 @@ def og_photo_url(image_url: str, focal: dict | None = None) -> str:
     )
 
 
-def og_map_card_url(map_url: str) -> str:
-    """Signed imagor URL for a static-map og card: the generic
-    static-map endpoint as source, with the Wodore watermark composited
-    left of center at the bottom (owner-approved geometry). The endpoint
-    itself stays logo-free (also used directly by the image APIs)."""
+def og_map_card_url(map_url: str, *, request: HttpRequest | None = None) -> str:
+    """Signed imagor URL for a static-map og card: the map endpoint's
+    card (spotlight, marker, og dimensions — rendered by the backend)
+    as the source, with the backend-served Wodore watermark
+    (``?v=``-busted) composited at the bottom, a bit left of center."""
     filters = [
         _composite_image(
-            _frontend(OG_LOGO_URL_PATH),
+            watermark_url(request),
             OG_LOGO_SIZE_PX,
-            "0.18",
-            "bottom-10",
+            OG_LOGO_POS,
+            OG_LOGO_POS_Y,
             OG_LOGO_ALPHA,
         )
     ]

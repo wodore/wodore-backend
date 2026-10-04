@@ -159,6 +159,15 @@ def release(
         )
         c.run(f"bump2version --allow-dirty --new-version {new_version} patch")
 
+        # Freeze the API version (unreleased -> real date) BEFORE the
+        # api_release step regenerates CHANGELOG_API.md and the CI
+        # tags api/<version> — the tag must never be 'unreleased'.
+        try:
+            api_freeze(c)
+        except Exception as exc:
+            error(f"API freeze step failed: {exc!r}")
+            raise
+
         # CI (.github/workflows/new-api-version.yml) cuts the api/<version>
         # tag when the docker build that ships it succeeds — every API
         # release is an app release, but not vice versa. This local step
@@ -184,6 +193,50 @@ def release(
             c.run(f"git push origin '{new_tag}'")
     else:
         warning("Did not update to new version tag.")
+
+
+@task
+def api_freeze(c: Ctx):
+    """Assign the real date to the 'unreleased' API version.
+
+    Called by 'inv release' — replaces 'unreleased' with today's date
+    in registry.py, renames the snapshot file, and regenerates it.
+    No-op if the current version is already a date (not 'unreleased').
+    """
+    from datetime import UTC, datetime
+
+    from server.apps.apiversions.registry import UNRELEASED, current_version
+
+    version = current_version()
+    if version != UNRELEASED:
+        info(f"API version already frozen: {version}")
+        return
+
+    real_date = datetime.now(tz=UTC).date().isoformat()
+    header(f"Freezing API version: {UNRELEASED!r} -> {real_date!r}")
+
+    # 1. Rename in registry.py
+    registry_path = Path("server/apps/apiversions/registry.py")
+    src = registry_path.read_text()
+    src = src.replace(f'version="{UNRELEASED}"', f'version="{real_date}"')
+    src = src.replace(f"version={UNRELEASED}", f'version="{real_date}"')
+    registry_path.write_text(src)
+
+    # 2. Rename the snapshot file
+    old_snapshot = Path(f"server/apps/apiversions/openapi/{UNRELEASED}.json")
+    new_snapshot = Path(f"server/apps/apiversions/openapi/{real_date}.json")
+    if old_snapshot.exists():
+        old_snapshot.rename(new_snapshot)
+
+    # 3. Regenerate the snapshot against the frozen version
+    c.run(
+        "infisical run --env=dev --path /backend --log-level warn -- "
+        "app api_snapshot --force",
+        hide=True,
+    )
+
+    success(f"API version frozen: {UNRELEASED!r} -> {real_date!r}")
+    info(f"Snapshot: server/apps/apiversions/openapi/{real_date}.json")
 
 
 @task(

@@ -8,11 +8,13 @@ from dmr import APIError, Path, Query, RedirectTo, modify
 from dmr.routing import external_path, path
 from pydantic import Field
 
+from django.db.models import Count, Q
 from django.http import HttpRequest, HttpResponse
 from django.views.decorators.cache import cache_page
 
 from server.apps.api.controller import ApiController, cache_headers, raise_not_found
-from server.apps.translations import LanguageQuery, override
+from server.apps.api.error_codes import ErrorCode
+from server.apps.translations import LanguageQuery, activate, override
 
 from .models import Category
 from .schemas import (
@@ -75,12 +77,35 @@ def build_category_dict(
     return data
 
 
-def _ordered_children(category: Category, is_active: bool):
-    """Active-filtered, order-stable children queryset (shared by tree/flat/map)."""
-    children_qs = category.children.all()
+def _load_category_tree(is_active: bool):
+    """Load the whole (active) category tree in ONE query.
+
+    Replaces the per-node ``category.children`` traversal that made the
+    cold tree build cost ~9000 queries (hidden only by the page cache):
+    everything — symbols, parent — is joined here, and children are
+    grouped in memory. ``is_active`` prunes inactive subtrees wholesale,
+    matching the former per-level filtering.
+    """
+    qs = Category.objects.select_related(
+        "parent",
+        "symbol_detailed",
+        "symbol_simple",
+        "symbol_mono",
+    )
     if is_active:
-        children_qs = children_qs.filter(is_active=True)
-    return children_qs.order_by("order", "slug")
+        qs = qs.active()
+
+    nodes = list(qs)
+    children: dict[int | None, list[Category]] = {}
+    for node in nodes:
+        children.setdefault(node.parent_id, []).append(node)
+    for kids in children.values():
+        kids.sort(key=lambda c: (c.order, c.slug))
+    return nodes, children
+
+
+def _has_children(children_map, category: Category) -> bool:
+    return bool(children_map.get(category.id))
 
 
 def get_descendants_tree(
@@ -90,23 +115,28 @@ def get_descendants_tree(
     is_active: bool,
     media_mode: MediaUrlModeEnum,
     base_level: int,
+    children_map: dict,
 ) -> dict:
-    """Recursively build tree with level limit."""
+    """Recursively build tree with level limit (in-memory traversal)."""
     current_level = category.get_level() - base_level
 
     if max_level is not None and current_level >= max_level:
         # At max level, don't include children
         result = build_category_dict(category, request, media_mode, base_level)
-        result["children"] = category.has_children()
+        result["children"] = _has_children(children_map, category)
         return result
-
-    children_qs = _ordered_children(category, is_active)
 
     tree_children = [
         get_descendants_tree(
-            child, request, max_level, is_active, media_mode, base_level
+            child,
+            request,
+            max_level,
+            is_active,
+            media_mode,
+            base_level,
+            children_map,
         )
-        for child in children_qs.order_by("order", "slug")
+        for child in children_map.get(category.id, [])
     ]
 
     result = build_category_dict(category, request, media_mode, base_level)
@@ -121,21 +151,22 @@ def get_descendants_flat(
     is_active: bool,
     media_mode: MediaUrlModeEnum,
     base_level: int,
+    children_map: dict,
     include_self: bool = False,
 ) -> list[dict]:
-    """Get flat list of descendants."""
+    """Get flat list of descendants (in-memory traversal)."""
     result = []
     current_level = category.get_level() - base_level
 
     if include_self:
         data = build_category_dict(category, request, media_mode, base_level)
-        data["children"] = category.has_children()
+        data["children"] = _has_children(children_map, category)
         result.append(data)
 
     if max_level is not None and current_level >= max_level:
         return result
 
-    for child in _ordered_children(category, is_active):
+    for child in children_map.get(category.id, []):
         result.extend(
             get_descendants_flat(
                 child,
@@ -144,6 +175,7 @@ def get_descendants_flat(
                 is_active,
                 media_mode,
                 base_level,
+                children_map,
                 include_self=True,
             )
         )
@@ -158,8 +190,9 @@ def get_descendants_map(
     is_active: bool,
     media_mode: MediaUrlModeEnum,
     base_level: int,
+    tree_children: dict,
 ) -> dict:
-    """Recursively build map with slug keys."""
+    """Recursively build map with slug keys (in-memory traversal)."""
     current_level = category.get_level() - base_level
 
     if max_level is not None and current_level >= max_level:
@@ -169,9 +202,9 @@ def get_descendants_map(
         return result
 
     children_map = {}
-    for child in _ordered_children(category, is_active):
+    for child in tree_children.get(category.id, []):
         children_map[child.slug] = get_descendants_map(
-            child, request, max_level, is_active, media_mode, base_level
+            child, request, max_level, is_active, media_mode, base_level, tree_children
         )
 
     result = build_category_dict(category, request, media_mode, base_level)
@@ -188,7 +221,7 @@ def _resolve_parent_or_raise(parent_slug: str, is_active: bool) -> Category:
         if paths:
             raise APIError(
                 {
-                    "code": "ambiguous_category",
+                    "code": ErrorCode.validation_error,
                     "detail": f"Slug '{parent_slug}' is not unique. "
                     f"Use one of: {', '.join(paths)}",
                 },
@@ -253,14 +286,11 @@ class CategoryTreeController(ApiController):
         request = self.request
         query = parsed_query
         with override(query.lang):
+            nodes, children_map = _load_category_tree(query.is_active)
             if parsed_path.parent_slug != "root":
                 category = _resolve_parent_or_raise(
                     parsed_path.parent_slug, query.is_active
                 )
-                children_qs = category.children.all()
-                if query.is_active:
-                    children_qs = children_qs.filter(is_active=True)
-
                 base_level = category.get_level()
 
                 return [
@@ -271,22 +301,21 @@ class CategoryTreeController(ApiController):
                         query.is_active,
                         query.media_mode,
                         base_level + 1,
+                        children_map,
                     )
-                    for child in children_qs.order_by("order", "slug")
+                    for child in children_map.get(category.id, [])
                 ]
 
-            qs = Category.objects.select_related(
-                "symbol_detailed",
-                "symbol_simple",
-                "symbol_mono",
-            ).prefetch_related("children")
-            if query.is_active:
-                qs = qs.active()
-
-            roots = qs.roots().order_by("order", "slug")
+            roots = [node for node in nodes if node.parent_id is None]
             return [
                 get_descendants_tree(
-                    root, request, query.level, query.is_active, query.media_mode, 0
+                    root,
+                    request,
+                    query.level,
+                    query.is_active,
+                    query.media_mode,
+                    0,
+                    children_map,
                 )
                 for root in roots
             ]
@@ -312,6 +341,7 @@ class CategoryListController(ApiController):
         request = self.request
         query = parsed_query
         with override(query.lang):
+            nodes, children_map = _load_category_tree(query.is_active)
             if parsed_path.parent_slug != "root":
                 category = _resolve_parent_or_raise(
                     parsed_path.parent_slug, query.is_active
@@ -324,20 +354,15 @@ class CategoryListController(ApiController):
                     query.is_active,
                     query.media_mode,
                     base_level,
+                    children_map,
                     include_self=False,
                 )
 
-            qs = Category.objects.all()
-            if query.is_active:
-                qs = qs.active()
-
-            categories = qs.order_by("order", "slug")
-
             result = []
-            for cat in categories:
+            for cat in sorted(nodes, key=lambda c: (c.order, c.slug)):
                 if query.level is None or cat.get_level() <= query.level:
                     data = build_category_dict(cat, request, query.media_mode, 0)
-                    data["children"] = cat.has_children()
+                    data["children"] = _has_children(children_map, cat)
                     result.append(data)
 
             return result
@@ -363,17 +388,14 @@ class CategoryMapController(ApiController):
         request = self.request
         query = parsed_query
         with override(query.lang):
+            nodes, children_map = _load_category_tree(query.is_active)
             if parsed_path.parent_slug != "root":
                 category = _resolve_parent_or_raise(
                     parsed_path.parent_slug, query.is_active
                 )
-                children_qs = category.children.all()
-                if query.is_active:
-                    children_qs = children_qs.filter(is_active=True)
-
                 base_level = category.get_level()
                 result = {}
-                for child in children_qs.order_by("order", "slug"):
+                for child in children_map.get(category.id, []):
                     result[child.slug] = get_descendants_map(
                         child,
                         request,
@@ -381,22 +403,21 @@ class CategoryMapController(ApiController):
                         query.is_active,
                         query.media_mode,
                         base_level + 1,
+                        children_map,
                     )
                 return result
 
-            qs = Category.objects.select_related(
-                "symbol_detailed",
-                "symbol_simple",
-                "symbol_mono",
-            ).prefetch_related("children")
-            if query.is_active:
-                qs = qs.active()
-
-            roots = qs.roots().order_by("order", "slug")
+            roots = [node for node in nodes if node.parent_id is None]
             result = {}
             for root in roots:
                 result[root.slug] = get_descendants_map(
-                    root, request, query.level, query.is_active, query.media_mode, 0
+                    root,
+                    request,
+                    query.level,
+                    query.is_active,
+                    query.media_mode,
+                    0,
+                    children_map,
                 )
             return result
 
@@ -425,7 +446,7 @@ def _category_symbol_redirect(
         if paths:
             raise APIError(
                 {
-                    "code": "ambiguous_category",
+                    "code": ErrorCode.validation_error,
                     "detail": f"Slug '{slug}' is not unique. "
                     f"Use one of: {', '.join(paths)}",
                 },
@@ -489,12 +510,12 @@ class CategorySymbolSvgController(ApiController):
 
 
 def get_categories_markdown(request: HttpRequest) -> HttpResponse:
-    """The category tree as a compact Markdown index for LLM agents.
+    """The place categories as a compact Markdown index for LLM agents.
 
-    Categories are the entry vocabulary of the map (hut types, amenities,
-    overlays ...): agents use this to translate user terms ("bivouac",
-    "winter room") into API slugs before searching. Localized via the
-    same lang parameter as the JSON API (category names are modeltrans).
+    Only categories whose effective ``seo_sitemap`` policy is "include"
+    are listed — the vocabulary of place pages agents can browse — each
+    with the number of public places in it. Localized via the same lang
+    parameter as the JSON API (category names are modeltrans).
     """
     from http import HTTPStatus
 
@@ -508,34 +529,62 @@ def get_categories_markdown(request: HttpRequest) -> HttpResponse:
 
         return HttpResponse(
             json.dumps(
-                {"code": "validation_error", "detail": f"Unknown language {lang!r}."}
+                {
+                    "code": ErrorCode.validation_error,
+                    "detail": f"Unknown language {lang!r}.",
+                }
             ),
             content_type="application/json",
             status=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
-    with override(lang):
-        return _categories_markdown(request)
+    activate(lang)
+    return _categories_markdown(request)
 
 
 def _categories_markdown(request: HttpRequest) -> HttpResponse:
-    """Markdown index; localized names via the active language."""
+    """Markdown index; localized names via the active language.
+
+    Lists only categories with an effective ``seo_sitemap`` policy of
+    "include" (tri-state inheritance, roots default to exclude) — the
+    same rule the place sitemap applies — each with the number of public
+    places in the category.
+    """
     lines = [
-        "# Wodore categories",
+        "# Wodore place categories",
         "",
         (
-            "Hierarchy by indentation; the slug is what the API expects"
-            " (e.g. `/v1/huts/huts?search=` or category filters)."
+            "Categories with place pages (sitemap-included); the slug is"
+            " what the place search expects"
+            " (e.g. `/v1/geo/places/search?types={slug}`). Each entry"
+            " counts the public places in the category."
         ),
         "",
     ]
+    include = Category.SeoSitemapChoices.include
     categories = (
         Category.objects.filter(is_active=True)
         .select_related("parent")
+        .annotate(
+            place_count=Count(
+                "geo_places",
+                filter=Q(
+                    geo_places__is_active=True,
+                    geo_places__is_public=True,
+                ),
+                distinct=True,
+            ),
+        )
         .order_by("parent__slug", "order", "slug")
     )
     for category in categories:
+        if category.effective_seo_sitemap() != include:
+            continue
         indent = "  " if category.parent_id else ""
-        lines.append(f"- {indent}{category.name} `{category.slug}`")
+        plural = "" if category.place_count == 1 else "s"
+        lines.append(
+            f"- {indent}{category.name} `{category.slug}`"
+            f" ({category.place_count} place{plural})"
+        )
     lines += [
         "",
         "---",

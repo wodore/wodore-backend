@@ -1,5 +1,6 @@
 """API version registry: date-based contract versioning inside /v1/.
 
+
 OpenSpec change ``add-api-date-versioning``. One codebase always runs the
 newest logic; older client versions are produced by transforms at the edge
 (see :mod:`server.apps.apiversions.transforms`). This module is the single
@@ -16,6 +17,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from email.utils import formatdate
 from typing import Any
+
+from server.apps.api.error_codes import ErrorCode
 
 Transform = Callable[[Any], Any]
 
@@ -97,9 +100,41 @@ class VersionChange:
     sunset_date: date | None = None
 
 
+# The placeholder for the next unreleased version. Replaced with the
+# actual release date by "inv release" (api-freeze step). Sorting:
+# "unreleased" > any date string, so versions()[-1] always returns it
+# as current while it exists.
+UNRELEASED = "unreleased"
+
 # The registry. Order is not significant (versions are sorted), but keep it
 # chronological for readability. Add a new VersionChange ONLY for breaking
-# changes (see README "Introducing a breaking change").
+# changes (see README "Introducing a breaking change"). Use UNRELEASED as
+# the version string; the date is assigned at release time.
+
+
+def _strip_static_map_fallback(data: Any) -> Any:
+    """Downgrade for the image endpoints: drop the generated static-map
+    fallback feature (``properties.is_fallback``) so clients pinned to
+    the previous version keep receiving photo-only responses.
+    ``metadata.total`` is corrected when it still matches the old list
+    length (defensive against sparse/aliased payloads)."""
+
+    if isinstance(data, dict) and isinstance(data.get("features"), list):
+        before = len(data["features"])
+        data["features"] = [
+            feature
+            for feature in data["features"]
+            if not (
+                isinstance(feature, dict)
+                and (feature.get("properties") or {}).get("is_fallback")
+            )
+        ]
+        metadata = data.get("metadata")
+        if isinstance(metadata, dict) and metadata.get("total") == before:
+            metadata["total"] = len(data["features"])
+    return data
+
+
 REGISTRY: list[VersionChange] = [
     VersionChange(
         version=INITIAL_VERSION,
@@ -116,6 +151,31 @@ REGISTRY: list[VersionChange] = [
             "record; pinned clients of that version are unaffected until "
             "it sunsets."
         ),
+    ),
+    VersionChange(
+        version=UNRELEASED,
+        description=(
+            "Harmonize response narrowing: replace include_X=no|slug|all "
+            "with JSON:API sparse fieldsets (fields[TYPE]) on all search "
+            "endpoints (search_huts, search/nearby_geoplaces, get_amenity, "
+            "get_weather_codes/get_weather_code). Shape change: slug "
+            "shorthand lists become objects (sources=[{slug: sac}] not "
+            "[sac]). include_X senders get 400. Also rename the image "
+            "endpoints' fallback parameter to static_map_fallback and "
+            "default it to true: /v1/geo/images/hut/{slug} and "
+            "/v1/geo/images/place/{slug} include the generated static-map "
+            "card (zoom 15, spotlight effect, type-symbol marker) as an "
+            "is_fallback feature whenever the entity has no images — "
+            "including cached_only fast calls. The old default (photo-only, "
+            "opt-in fallback) is restored for pinned clients by stripping "
+            "fallback features; clients that opted in via fallback=true "
+            "should switch to static_map_fallback=true. nearby keeps no "
+            "fallback (no entity to center)."
+        ),
+        responses={
+            "images_for_hut": _strip_static_map_fallback,
+            "images_for_place": _strip_static_map_fallback,
+        },
     ),
 ]
 
@@ -240,7 +300,7 @@ def guard_endpoint_sunset(operation_id: str) -> None:
         )
         raise APIError(
             {
-                "code": "endpoint_sunset",
+                "code": ErrorCode.gone,
                 "detail": dep.detail,
             },
             status_code=HTTPStatus.GONE,

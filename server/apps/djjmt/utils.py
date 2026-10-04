@@ -39,8 +39,8 @@ def with_language_param(
                 f"Function paramter '{_param}: LanguageParam' is missing! "
             )
             lang = kwargs.get(_param)
-            with override(lang):
-                return func(request, *args, **kwargs)
+            activate(lang)
+            return func(request, *args, **kwargs)
 
         return wrapper
 

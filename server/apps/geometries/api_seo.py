@@ -20,10 +20,9 @@ from django.conf import settings
 from django.http import Http404, HttpRequest, HttpResponse
 
 from server.apps.api.controller import ApiController, cache_headers
-from server.apps.images.models import Image
-from server.apps.images.og import og_map_card_url, og_photo_url, photo_source
+from server.apps.images.og import og_map_card_url, og_photo_url
 
-from .models import GeoPlace, GeoPlaceImageAssociation
+from .models import GeoPlace
 
 CACHE_TTL = 60 * 60
 
@@ -79,47 +78,53 @@ def _place_url(place: GeoPlace) -> str:
 
 
 def _place_image(place: GeoPlace, request: HttpRequest) -> str | None:
-    """Highest-scored *servable* image as og:image; static-map card as
-    fallback.
+    """Preview image URL straight from the image service's gallery
+    response (``place_gallery_response`` — the ``cached_only=true``
+    fast call, default parameters):
 
-    Same visibility filters and source resolution as the hut meta
-    endpoint (``_hut_meta._og_image``): pinned external images serve
-    from ``source_url_raw``, rows with no source are skipped instead of
-    signing an empty path."""
-    associations = (
-        GeoPlaceImageAssociation.objects.filter(
-            geo_place=place,
-            image__is_active=True,
-            image__review_status=Image.ReviewStatusChoices.approved,
-        )
-        .exclude(image__license__no_publication=True)
-        .select_related("image")
-        .order_by("-score", "id")
-    )
-    for association in associations:
-        source = photo_source(association.image)
-        if source is None:
+    * a photo feature → imagor og size with the Wodore logo composited
+      at the bottom, a bit left of center;
+    * the service's static-map fallback feature (``is_fallback``) → its
+      card URL as-is (already og-sized: zoom 15, spotlight effect,
+      marker, watermark baked into the render).
+
+    Everything else (pinned/curated rows) is the image service's
+    business. Degenerate places without a location have no image."""
+    from .api_images import place_gallery_response
+
+    response = place_gallery_response(place, request)
+    for feature in response.features:
+        props = feature.properties
+        if props is None:
             continue
-        focal = (association.image.image_meta or {}).get("focal")
+        if props.is_fallback:
+            # The service's static-map card (og dimensions, spotlight,
+            # marker) goes through imagor like every og image, with the
+            # backend-served watermark composited.
+            landscape = props.urls.landscape
+            url = (landscape.md if landscape is not None else None) or (
+                props.urls.original.raw or None
+            )
+            if url:
+                og_url = None
+                try:  # preview image is best-effort
+                    og_url = og_map_card_url(url, request=request)
+                except Exception:
+                    og_url = None
+                if og_url:
+                    return og_url
+            continue
+        raw = props.urls.original.raw
+        if not raw:
+            continue
         og_url = None
         try:  # preview image is best-effort
-            og_url = og_photo_url(source, focal)
+            og_url = og_photo_url(raw, request=request)
         except Exception:
             og_url = None
         if og_url:
             return og_url
-    # Complete static-map card from the generic endpoint; v=<modified>
-    # busts the render cache on ANY place change, ETag-style.
-    from urllib.parse import urlencode
-
-    query = urlencode(
-        {
-            "place": place.slug,
-            "zoom": 16,
-            "v": f"{place.modified:%Y%m%dT%H%M%S}",
-        }
-    )
-    return og_map_card_url(request.build_absolute_uri(f"/v1/geo/map/static?{query}"))
+    return None
 
 
 def _place_description(place: GeoPlace) -> str:

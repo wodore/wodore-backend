@@ -1,5 +1,6 @@
 """Query helpers for the dmr API.
 
+
 **Sparse fieldsets** (openspec ``switch-to-sparse-fieldsets``): JSON:API-style
 response narrowing via ``?fields[TYPE]=name1,name2``.
 
@@ -30,6 +31,10 @@ import pydantic
 from dmr import APIError
 from pydantic import Field
 
+from django.contrib.gis.geos import Polygon
+
+from server.apps.api.error_codes import ErrorCode
+
 _M = TypeVar("_M", bound=type[pydantic.BaseModel])
 
 
@@ -50,7 +55,7 @@ def _parse(raw: str | None, available: list[str]) -> list[str]:
         )
         raise APIError(
             {
-                "code": "invalid_field_name",
+                "code": ErrorCode.validation_error,
                 "detail": f"'{', '.join(missing)}' {were} {possible}",
             },
             status_code=HTTPStatus.BAD_REQUEST,
@@ -125,7 +130,7 @@ class SparseFieldsQuery(pydantic.BaseModel):
             if legacy in data:
                 raise APIError(
                     {
-                        "code": "invalid_parameter",
+                        "code": ErrorCode.validation_error,
                         "detail": (
                             f"The '{legacy}' parameter was removed. Use "
                             "'fields[TYPE]=name1,name2' (sparse fieldsets) "
@@ -144,7 +149,7 @@ class SparseFieldsQuery(pydantic.BaseModel):
                     valid = ", ".join(sorted(cls.FIELD_TYPES))
                     raise APIError(
                         {
-                            "code": "invalid_field_type",
+                            "code": ErrorCode.validation_error,
                             "detail": (
                                 f"'{type_name}' is not a valid field type. "
                                 f"Valid types: {valid}."
@@ -251,6 +256,64 @@ def dump_sparse_list(
     """``dump_sparse`` for a list of objects."""
     names = sparse_include(parsed, top_type, default_include)
     return [model.model_validate(obj).model_dump(include=names) for obj in objs]
+
+
+class BboxQuery(pydantic.BaseModel):
+    """Shared ``bbox`` viewport filter for geo endpoints.
+
+    Restricts results to features whose location intersects the box.
+    Center/radius queries keep the dedicated ``nearby`` endpoints (they
+    additionally return distance ordering) — one spatial filter
+    vocabulary per endpoint family.
+    """
+
+    model_config = pydantic.ConfigDict(extra="ignore")
+
+    bbox: str | None = Field(
+        None,
+        title="Bounding Box",
+        description=(
+            "Filter to features intersecting the box, formatted as "
+            "minLon,minLat,maxLon,maxLat (WGS84 decimal degrees)."
+        ),
+        json_schema_extra={"example": "7.6,45.9,8.1,46.2"},
+    )
+
+    @pydantic.field_validator("bbox")
+    @classmethod
+    def _validate_bbox(cls, value: str | None) -> str | None:
+        """Four comma-separated numbers, ordered, in WGS84 range."""
+        if value is None or not value.strip():
+            return None
+        detail = (
+            "'bbox' must be minLon,minLat,maxLon,maxLat with "
+            "-180 <= minLon < maxLon <= 180 and "
+            "-90 <= minLat < maxLat <= 90."
+        )
+        parts = [part.strip() for part in value.split(",")]
+        if len(parts) != 4:
+            raise ValueError(detail)
+        try:
+            min_lon, min_lat, max_lon, max_lat = (float(p) for p in parts)
+        except ValueError as exc:
+            raise ValueError(detail) from exc
+        if not (-180 <= min_lon < max_lon <= 180 and -90 <= min_lat < max_lat <= 90):
+            raise ValueError(detail)
+        return value
+
+
+def bbox_polygon(raw: str | None) -> "Polygon | None":
+    """Convert a validated ``bbox`` query value to a WGS84 polygon.
+
+    ``None`` when the parameter is unset — callers keep their
+    unfiltered path without a branch in the queryset.
+    """
+    if not raw:
+        return None
+    min_lon, min_lat, max_lon, max_lat = (float(p) for p in raw.split(","))
+    polygon = Polygon.from_bbox((min_lon, min_lat, max_lon, max_lat))
+    polygon.srid = 4326
+    return polygon
 
 
 class TristateEnum(str, Enum):
