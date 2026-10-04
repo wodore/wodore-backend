@@ -1,0 +1,1 @@
+{"id":"c58f990fa4323552e46f55b8e3e85c22.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.api.test_readers.TestProcessedQueryset#test_sparse_selection_issues_fewer_queries","name":"test_sparse_selection_issues_fewer_queries","status":"passed","testResultsByEnv":{"default":"77feae721cf5795f85c94d5635e8bb61"}}
