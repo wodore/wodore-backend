@@ -105,3 +105,6 @@ def prepare_hut_detail(queryset: QuerySet, *, media_url: str) -> QuerySet:
 
     queryset = join_prepare(queryset)
     return aggregates_prepare(queryset)
+
+
+# trigger
