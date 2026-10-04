@@ -1,0 +1,1 @@
+{"id":"e5634bbdc3806e3ff095823b23fe320a.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.test_api_auth.TestProtectedEndpoints#test_admin_token_passes_admin_endpoint","name":"test_admin_token_passes_admin_endpoint","status":"passed","testResultsByEnv":{"default":"a43db0f0e0219816a17cc86340e6f8c7"}}
