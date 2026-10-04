@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.request import Request, urlopen
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
 if TYPE_CHECKING:
     import requests
@@ -54,7 +54,7 @@ EFFECTS = ("none", "blur_border", "spotlight", "vignette", "blurred_edges")
 #: via the fallback feature URLs — into the ``v=`` busting parameter, so
 #: a renderer change re-renders every card AND regenerates the imagor
 #: composites built on top of them.
-RENDER_VERSION = 3
+RENDER_VERSION = 4
 
 # Marker geometry (owner-approved): symbol right of center.
 MARKER_SIZE_PX = 170
@@ -219,12 +219,15 @@ def _apply_effect(card: Image.Image, effect: str, scale: float = 1.0) -> Image.I
         return card
 
     if effect == "spotlight":
-        # Smooth falloff — no inset, no frame: the sharp, colorful
-        # center fades into a darker, desaturated, gently blurred
-        # outside (color stays only under the spotlight).
-        outside = card.convert("L").convert("RGB")
-        outside = outside.filter(ImageFilter.GaussianBlur(int(6 * scale)))
-        outside = Image.eval(outside, lambda v: int(v * 0.6))
+        # Smooth falloff — no inset, no frame: a warm, sharp, slightly
+        # saturated island under a cold spotlight. The outside is
+        # bokeh-blurred, tinted toward moonlight blue and dimmed to 0.5
+        # — the temperature contrast (warm center / cold surround)
+        # reads as depth without any frame edge.
+        outside = card.convert("L")
+        outside = outside.filter(ImageFilter.GaussianBlur(int(12 * scale)))
+        outside = ImageOps.colorize(outside, black=(18, 26, 40), white=(198, 208, 224))
+        outside = Image.eval(outside, lambda v: int(v * 0.5))
         mask = Image.new("L", card.size, 0)
         ImageDraw.Draw(mask).rounded_rectangle(
             [
@@ -237,7 +240,9 @@ def _apply_effect(card: Image.Image, effect: str, scale: float = 1.0) -> Image.I
             fill=255,
         )
         mask = mask.filter(ImageFilter.GaussianBlur(int(130 * scale)))
-        out = card.convert("RGB").copy()
+        # Gentle saturation boost on the original so the island pops
+        # against the cool surround.
+        out = ImageEnhance.Color(card.convert("RGB")).enhance(1.08)
         out.paste(outside, (0, 0), Image.eval(mask, lambda v: 255 - v))
         return out
 
