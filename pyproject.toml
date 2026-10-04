@@ -43,7 +43,7 @@ dependencies = [
   "easydict==1.*",                         # https://pypi.org/project/easydict/
   "xmltodict>=0.13.0,<0.14.0",             # https://pypi.org/project/xmltodict/
   "dickens==2.*",                          # https://pypi.org/project/dickens/
-  "psycopg==3.*",                          # https://pypi.org/project/psycopg/
+  "psycopg[pool]==3.*",                          # https://pypi.org/project/psycopg/
   "mozilla-django-oidc==5.*",              # https://pypi.org/project/mozilla-django-oidc/
   "authlib==1.*",                          # https://pypi.org/project/authlib/
   "load-dotenv==0.1.*",                    # https://pypi.org/project/load-dotenv/
@@ -69,6 +69,7 @@ dependencies = [
   "fido2>=2.2.1",
   "django-modern-rest[msgspec,openapi,pydantic]>=0.16.0,<0.17",
   "django-readers>=2.5.1",
+  "uvicorn>=0.54.0",
 ]
 
 
@@ -273,6 +274,11 @@ unfixable = [
   "T20",  # Removes print statements
   "F841", # Removes unused variables
 ]
+
+# Event-loop safety: blocking calls (sync sleep/HTTP) inside async functions
+# are the async failure mode (one call stalls every concurrent request in
+# the process) - lint them at CI time (openspec: async-api-staging).
+extend-select = ["ASYNC"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]

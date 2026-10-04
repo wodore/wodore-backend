@@ -1,8 +1,9 @@
 # Gunicorn configuration file
-# https://docs.gunicorn.org/en/stable/configure.html#configuration-file
-# https://docs.gunicorn.org/en/stable/settings.html
+# https://gunicorn.org/en/stable/configure.html#configuration-file
+# https://gunicorn.org/en/stable/settings.html
 
 import multiprocessing
+import os
 
 bind = "0.0.0.0:8000"
 # Concerning `workers` setting see:
@@ -15,3 +16,28 @@ max_requests_jitter = 400
 log_file = "-"
 chdir = "/code"
 worker_tmp_dir = "/dev/shm"
+
+# Async-ready runtime switch (openspec: async-api-staging).
+#
+# Default (unset/0): sync WSGI workers on server.wsgi — exactly the
+# previous behavior. ASGI_ENABLED=1: uvicorn workers on server.asgi —
+# one event loop per worker; async views get real cross-request
+# concurrency, sync views run auto-adapted in bridged threads.
+#
+# For ASGI also set POSTGRES_POOL=1 (psycopg3 pool instead of
+# CONN_MAX_AGE, see settings/components/common.py) and prefer fewer,
+# fatter workers (e.g. GUNICORN_WORKERS=3) with a per-worker pool cap
+# (POSTGRES_POOL_SIZE, default 10) — pool size x workers is the DB
+# connection budget.
+#
+# Measured guidance (openspec PoC, lane): ASGI x3 workers = ~3.5x
+# sustained throughput of sync WSGI x3 on geo endpoints and survives
+# slow clients and long requests (sync workers are killed by
+# --timeout on both).
+ASGI_ENABLED = os.environ.get("ASGI_ENABLED", "").lower() in {"1", "true", "yes"}
+
+if ASGI_ENABLED:
+    worker_class = "uvicorn.workers.UvicornWorker"
+    wsgi_app = "server.asgi:application"
+else:
+    wsgi_app = "server.wsgi:application"

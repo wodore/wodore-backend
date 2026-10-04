@@ -272,6 +272,29 @@ DATABASES = {
     },
 }
 
+# Async-mode database pooling (PoC, env-gated; openspec: async-api-staging).
+#
+# Django's guidance for ASGI: disable per-connection persistence
+# (CONN_MAX_AGE) and use the backend's connection pool instead, sized to
+# the target in-flight query concurrency (each bridged request worker
+# thread checks a connection out of the pool). Requires psycopg[pool].
+if config("POSTGRES_POOL", cast=bool, default=False):
+    DATABASES["default"].update(
+        {
+            "CONN_MAX_AGE": 0,
+            "OPTIONS": {
+                **DATABASES["default"]["OPTIONS"],
+                # psycopg_pool ConnectionPool kwargs (Django passes this
+                # dict as **pool_options; "pool": True would use defaults,
+                # which start at min_size=4).
+                "pool": {
+                    "min_size": 2,
+                    "max_size": config("POSTGRES_POOL_SIZE", cast=int, default=10),
+                },
+            },
+        }
+    )
+
 # Configure django-postgres-extra to wrap PostGIS backend
 POSTGRES_EXTRA_DB_BACKEND_BASE = "django.contrib.gis.db.backends.postgis"
 
