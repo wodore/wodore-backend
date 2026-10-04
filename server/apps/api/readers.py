@@ -120,12 +120,45 @@ def _find_field(model: type[Model], names: list[str]) -> Field | None:
     return None
 
 
+def _prefetch_pair(name: str):
+    """Prefetch one relation, full child load (no field limiting).
+
+    Used by ``relations_only`` derivations for scalar-typed relations
+    whose instances pydantic still reads (FK ids trigger lazy loads
+    under ``from_attributes``). ``prefetch_related`` accumulates, so one
+    pair per relation composes safely.
+    """
+
+    def prepare(queryset):
+        return queryset.prefetch_related(name)
+
+    return prepare, None
+
+
+def _join_pair(relations: list[str]):
+    """Join all given to-one relations in the main query.
+
+    Used by ``relations_only`` derivations: without field limiting on the
+    parent, bare ``select_related`` names are safe (no deferred-and-
+    traversed conflicts) and to-one joins beat prefetches. A single pair
+    bundles all relations because chained ``select_related`` calls
+    replace each other.
+    """
+
+    def prepare(queryset):
+        return queryset.select_related(*relations)
+
+    return prepare, None
+
+
 def spec_from_schema(
     model: type[Model],
     schema: type[BaseModel],
     *,
     fields: Collection[str] | None = None,
     overrides: Mapping[str, Pair] | None = None,
+    relations_only: bool = False,
+    select_related_for: Collection[str] | None = None,
 ) -> Spec:
     """Derive a django-readers spec from a pydantic response schema.
 
@@ -140,11 +173,32 @@ def spec_from_schema(
 
     ``fields`` restricts the spec to the given names (python name or wire
     alias); ``overrides`` maps field names to reader pairs used verbatim.
+
+    ``relations_only`` derives ONLY relation entries - plain fields stay
+    unlisted, so no ``only()`` field-limiting is applied. Use this when
+    the serializer validates the full wire schema off the instance
+    (``dump_sparse``/``from_attributes``): deferred columns there mean
+    per-instance lazy loads, so the query must load everything anyway -
+    deriving the relations (the ``select_related``/``prefetch`` set) is
+    the whole win.
+
+    ``select_related_for`` names schema fields whose to-one relations
+    should JOIN in the main query instead of prefetching. Only valid
+    with ``relations_only`` - under ``only()`` a bare relation name
+    trips Django's deferred-and-traversed guard.
     Raises ``ValueError`` listing fields that cannot be derived.
     """
     overrides = overrides or {}
+    select_related_for = set(select_related_for or ())
+    if select_related_for and not relations_only:
+        msg = (
+            "select_related_for requires relations_only=True "
+            "(bare relation names are unsafe under only())"
+        )
+        raise ValueError(msg)
     spec: Spec = []
     problems: list[str] = []
+    joins: list[str] = []
 
     for name, info in schema.model_fields.items():
         wire = str(info.validation_alias or info.alias or name)
@@ -160,14 +214,27 @@ def spec_from_schema(
 
         if nested is None:
             if model_field is None:
-                problems.append(f"{name} (no model field)")
+                if not relations_only:
+                    problems.append(f"{name} (no model field)")
             elif model_field.is_relation:
                 # Relation exposed as a scalar (usually an id): the plain
                 # field entry would project the related instance instead.
-                problems.append(
-                    f"{name} (relation needs a nested schema or an override)"
-                )
-            else:
+                if relations_only:
+                    # from_attributes still READS the FK instance (even
+                    # for int-typed fields) - the relation must be loaded.
+                    if (model_field.many_to_one or model_field.one_to_one) and (
+                        name in select_related_for or wire in select_related_for
+                    ):
+                        joins.append(model_field.name)
+                    else:
+                        spec.append(
+                            {model_field.name: _prefetch_pair(model_field.name)}
+                        )
+                elif not relations_only:
+                    problems.append(
+                        f"{name} (relation needs a nested schema or an override)"
+                    )
+            elif not relations_only:
                 spec.append(name)
             continue
 
@@ -175,6 +242,12 @@ def spec_from_schema(
             problems.append(f"{name} (no model field)")
         elif model_field.is_relation:
             if model_field.many_to_one or model_field.one_to_one:
+                if relations_only and (
+                    name in select_related_for or wire in select_related_for
+                ):
+                    # Join in the main query (no field limiting -> safe).
+                    joins.append(model_field.name)
+                    continue
                 # Forward to-one: custom prefetch pair (modeltrans-safe,
                 # see _to_one_pair).
                 spec.append(
@@ -194,7 +267,7 @@ def spec_from_schema(
                         )
                     }
                 )
-        else:
+        elif not relations_only:
             # Plain field typed as a nested schema (JSON passthrough).
             spec.append(name)
 
@@ -204,7 +277,10 @@ def spec_from_schema(
             f"cannot derive spec for {schema.__name__} against {model.__name__}: "
             f"{msg}; supply reader pairs via overrides="
         )
-    _include_i18n(model, schema, spec)
+    if joins:
+        spec.append(_join_pair(joins))
+    if not relations_only:
+        _include_i18n(model, schema, spec)
     return spec
 
 
