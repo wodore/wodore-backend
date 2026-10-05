@@ -1,0 +1,1 @@
+{"id":"c3d17b1bf571247b8244b968a34c5011.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.geometries.test_image_pinning.TestUrlSanitization#test_strips_utm_params_keeps_real_ones","name":"test_strips_utm_params_keeps_real_ones","status":"passed","testResultsByEnv":{"default":"edb35f5d591a0d6412f03b329936a459"}}
