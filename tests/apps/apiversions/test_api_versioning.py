@@ -245,6 +245,57 @@ class TestBackwardTransforms:
         assert all("api_old_shape" not in hut for hut in fresh.json())
 
     @pytest.mark.django_db
+    def test_response_downgrade_keeps_content_length_truthful(
+        self, seed_data, client, pinned_old_version
+    ):
+        """2026-10-05 staging wedge: CommonMiddleware (inner) stamps
+        Content-Length on the full body; the outer version downgrade then
+        re-encodes the body to a different length. uvicorn rejects any
+        body/header mismatch ("Response content shorter/longer than
+        Content-Length"), which truncated responses mid-send and leaked
+        the request's DB pool connection (Django skips response cleanup
+        when send() raises). The downgrade must keep the header equal to
+        the final body length — pinned and unpinned alike.
+        """
+        old = max(v for v in registry.versions() if v != pinned_old_version.version)
+        response = client.get(
+            "/v1/huts/huts", {"limit": 2}, headers={"Api-Version": old}
+        )
+        assert response.status_code == 200
+        assert response.has_header("Content-Length")
+        assert int(response["Content-Length"]) == len(response.content)
+        assert all(hut["api_old_shape"] is True for hut in response.json())
+
+        fresh = client.get("/v1/huts/huts", {"limit": 2})
+        assert fresh.status_code == 200
+        assert int(fresh["Content-Length"]) == len(fresh.content)
+
+    @pytest.mark.django_db
+    def test_response_downgrade_skips_bodyless_responses(
+        self, seed_data, client, pinned_old_version
+    ):
+        """ETag revalidations (304) have a JSON Content-Type but an empty
+        body — the downgrade must not try to decode (or rewrite) them."""
+        old = max(v for v in registry.versions() if v != pinned_old_version.version)
+        headers = {"Api-Version": old}
+        first = client.get("/v1/huts/huts", {"limit": 2}, headers=headers)
+        assert first.status_code == 200
+        etag = first.headers.get("ETag")
+        assert etag, "hut list is ETag-cached; first response carries an ETag"
+
+        revalidation = client.get(
+            "/v1/huts/huts",
+            {"limit": 2},
+            headers={
+                **headers,
+                "If-None-Match": etag,
+                # The endpoint's ETag dance requires both revalidators.
+                "If-Modified-Since": first.headers["Last-Modified"],
+            },
+        )
+        assert revalidation.status_code == 304
+
+    @pytest.mark.django_db
     def test_response_downgrade_direct_write_geojson(
         self, seed_data, client, pinned_old_version
     ):

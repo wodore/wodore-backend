@@ -295,6 +295,16 @@ if config("POSTGRES_POOL", cast=bool, default=False):
         }
     )
 
+# Wall-clock bound for one geo-image provider fan-out (gather + dedupe),
+# including when it runs through the asgiref bridge from the sync
+# controllers (``run_async``): while bridged, the request's worker thread
+# holds a psycopg-pool connection, so slow providers must not be able to
+# park it indefinitely (pool starvation, 2026-10-05 staging wedge). On
+# timeout the endpoints serve the stale cached response instead.
+GEO_IMAGE_FETCH_TIMEOUT_SECONDS = config(
+    "GEO_IMAGE_FETCH_TIMEOUT_SECONDS", cast=int, default=45
+)
+
 # Configure django-postgres-extra to wrap PostGIS backend
 POSTGRES_EXTRA_DB_BACKEND_BASE = "django.contrib.gis.db.backends.postgis"
 

@@ -12,6 +12,7 @@ from typing import Any, Literal
 import structlog
 from asgiref.sync import async_to_sync, sync_to_async
 
+from django.conf import settings
 from django.contrib.gis.geos import Point
 from django.core.cache import cache
 
@@ -1484,33 +1485,51 @@ async def fetch_images_from_providers(
         )
         for provider in providers
     ]
-    results_lists = await asyncio.gather(*tasks, return_exceptions=True)
+    # Run all providers in parallel, bounded by one wall-clock budget for
+    # the whole fan-out (gather + dedupe). While this coroutine is driven
+    # through the asgiref bridge from the sync controllers (``run_async``),
+    # the calling worker thread holds a psycopg-pool connection — without
+    # a bound, slow providers (30s httpx timeouts each) could park it for
+    # minutes and starve the pool (2026-10-05 staging wedge). On timeout
+    # the controllers' stale-cache fallback takes over.
+    fetch_timeout = getattr(settings, "GEO_IMAGE_FETCH_TIMEOUT_SECONDS", 45)
 
-    # Flatten results and handle exceptions
-    all_results = []
-    for i, result_list in enumerate(results_lists):
-        provider = providers[i]
-        if isinstance(result_list, BaseException):
-            logger.error(
-                "Provider fetch failed",
-                provider=provider.source,
-                error=str(result_list),
-            )
-            continue
-        if result_list:
-            all_results.extend(result_list)
-            logger.debug(
-                "Provider returned images",
-                provider=provider.source,
-                count=len(result_list),
-            )
+    async def _fan_out() -> list[ImageResult]:
+        results_lists = await asyncio.gather(*tasks, return_exceptions=True)
 
-    logger.debug("Total images fetched", total_count=len(all_results))
+        # Flatten results and handle exceptions
+        all_results = []
+        for i, result_list in enumerate(results_lists):
+            provider = providers[i]
+            if isinstance(result_list, BaseException):
+                logger.error(
+                    "Provider fetch failed",
+                    provider=provider.source,
+                    error=str(result_list),
+                )
+                continue
+            if result_list:
+                all_results.extend(result_list)
+                logger.debug(
+                    "Provider returned images",
+                    provider=provider.source,
+                    count=len(result_list),
+                )
 
-    # Deduplicate and fetch missing dimensions
-    all_results = await deduplicate_images(all_results)
+        logger.debug("Total images fetched", total_count=len(all_results))
 
-    return all_results
+        # Deduplicate and fetch missing dimensions
+        return await deduplicate_images(all_results)
+
+    try:
+        return await asyncio.wait_for(_fan_out(), timeout=fetch_timeout)
+    except TimeoutError:
+        logger.error(
+            "Geo image provider fan-out timed out",
+            timeout_s=fetch_timeout,
+            provider_count=len(providers),
+        )
+        raise
 
 
 async def deduplicate_images(results: list[ImageResult]) -> list[ImageResult]:
