@@ -1,0 +1,1 @@
+{"place_type": "GeoPlace", "place": "tespeadam-0u2i0", "created": 1, "updated": 0, "skipped": 0, "new_links": 1, "event": "place_images_pinned", "timestamp": "2026-10-05T15:49:03.373857Z", "level": "info", "logger": "server.apps.geometries.pinning", "filename": "pinning.py", "lineno": 213, "func_name": "pin_place_images", "module": "pinning"}
