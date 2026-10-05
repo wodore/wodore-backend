@@ -30,14 +30,14 @@ Phase 3 findings baked into readers.py: ``relations_only`` mode (derive the rela
 
 ## 4. Benchmark gate: hot paths
 
-- [ ] 4.1 Benchmark harness as a management command (`app benchmark_readers`) comparing hand-tuned vs readers-generated for `search_huts`, `huts.geojson`, geo search/nearby (warm cache, N=50, p50/p95 output)
-- [ ] 4.2 Run harness on a lane DB with the `wodore_template` data snapshot; record results in `_work/`
-- [ ] 4.3 Per endpoint: convert if p50 within ±5% and p95 not worse; otherwise keep annotations and document the decision at the query site
-- [ ] 4.4 If converted: query-count tests as in 2.2
+- [x] 4.1 Benchmark harness as a management command (`app benchmark_readers`) comparing hand-tuned vs readers-generated for `search_huts`, `huts.geojson`, geo search/nearby (warm cache, N=50, p50/p95 output) — `server/apps/api/management/commands/benchmark_readers.py`; shared projection loops, interleaved paired measurement (shared dev postgres), query counts via debug-cursor pass
+- [x] 4.2 Run harness on a lane DB with the `wodore_template` data snapshot; record results in `_work/` — `_work/261005_readers_benchmark.md`
+- [x] 4.3 Per endpoint: convert if p50 within ±5% and p95 not worse; otherwise keep annotations and document the decision at the query site — **all four KEEP** (see `_work/261005_readers_benchmark.md`): search_huts parity-noise on identical SQL + override-only conversion; huts.geojson is one SQL aggregate (no readers candidate); geoplaces parity at best, override-only (request-context symbol resolution outside the wire schema). Decisions documented at each query site
+- [x] 4.4 If converted: query-count tests as in 2.2 — n/a: no hot endpoint converted; converted endpoints (hut detail, categories, symbols, availability) are already pinned
 
 ## 5. Cleanup
 
-- [ ] 5.1 Delete annotation/prefetch code paths superseded by derived specs (verify no remaining references)
-- [ ] 5.2 Remove hand-maintained `field_selected()` gates that the spec subset now covers (keep the helper where it guards non-query behavior)
-- [ ] 5.3 Update `_work/` session document with benchmark numbers and final endpoint disposition table
+- [x] 5.1 Delete annotation/prefetch code paths superseded by derived specs (verify no remaining references) — verified: `annotate_hut_sources`/`annotate_hut_images` remain live (reader-pair bodies in `_hut_spec.py` + the KEPT hand-tuned hut list endpoint); nothing superseded to delete
+- [x] 5.2 Remove hand-maintained `field_selected()` gates that the spec subset now covers (keep the helper where it guards non-query behavior) — verified: all remaining gates (search_huts, geoplaces, meteo) guard KEPT hand-tuned endpoints' conditional DB work; no spec subset covers them
+- [x] 5.3 Update `_work/` session document with benchmark numbers and final endpoint disposition table — `_work/261005_readers_benchmark.md`
 # trigger
