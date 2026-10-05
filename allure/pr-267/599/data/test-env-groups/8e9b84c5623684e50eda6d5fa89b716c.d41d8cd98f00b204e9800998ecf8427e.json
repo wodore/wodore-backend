@@ -1,1 +1,1 @@
-{"id":"8e9b84c5623684e50eda6d5fa89b716c.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.huts.test_api.TestHutsApi#test_huts_list","name":"test_huts_list","status":"passed","testResultsByEnv":{"default":"7533409e3d1e350df169dd8910b8d1e8"}}
+{"id":"8e9b84c5623684e50eda6d5fa89b716c.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.huts.test_api.TestHutsApi#test_huts_list","name":"test_huts_list","status":"passed","testResultsByEnv":{"default":"7c0ea2dcc2e68b27a97a4d3337db1e49"}}

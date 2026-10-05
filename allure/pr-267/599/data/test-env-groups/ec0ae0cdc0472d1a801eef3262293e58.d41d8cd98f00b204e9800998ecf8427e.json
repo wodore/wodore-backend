@@ -1,1 +1,1 @@
-{"id":"ec0ae0cdc0472d1a801eef3262293e58.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.huts.test_api_map.TestStaticMapEndpoint#test_missing_coords_404","name":"test_missing_coords_404","status":"passed","testResultsByEnv":{"default":"53f3632aaf7011ccaee1259fe4657777"}}
+{"id":"ec0ae0cdc0472d1a801eef3262293e58.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.huts.test_api_map.TestStaticMapEndpoint#test_missing_coords_404","name":"test_missing_coords_404","status":"passed","testResultsByEnv":{"default":"9ce4113e5ae3fa9deb394d74882e4665"}}

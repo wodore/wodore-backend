@@ -1,1 +1,1 @@
-{"id":"1866d43aa9f6fe27db73f115489651cc.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.api.test_cold_query_pins.TestAvailabilityQueryCount#test_geojson_pinned","name":"test_geojson_pinned","status":"passed","testResultsByEnv":{"default":"bc1d7b4ec12cef687610010dc287d72c"}}
+{"id":"1866d43aa9f6fe27db73f115489651cc.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.api.test_cold_query_pins.TestAvailabilityQueryCount#test_geojson_pinned","name":"test_geojson_pinned","status":"passed","testResultsByEnv":{"default":"be457d892e82b0f3e20668f00ed97e64"}}
