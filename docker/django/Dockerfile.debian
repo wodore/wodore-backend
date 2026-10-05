@@ -169,6 +169,11 @@ COPY --from=builder-base "/usr/local/bin/tini" "/usr/local/bin/tini"
 
 # This is a special case. We need to run this script as an entry point:
 COPY ./docker/django/entrypoint.sh /docker-entrypoint.sh
+# Server start chain (#263): start.sh is exec'd by the default CMD (and
+# by k8s args); gunicorn_config.py is imported as
+# python:docker.django.gunicorn_config (implicit namespace package).
+COPY --chown=web:web ./docker/django/start.sh /code/docker/django/start.sh
+COPY --chown=web:web ./docker/django/gunicorn_config.py /code/docker/django/gunicorn_config.py
 
 # Setting up proper permissions:
 RUN chmod +x '/docker-entrypoint.sh' \
