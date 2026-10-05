@@ -1,1 +1,0 @@
-{"id":"e507c78d18d7cdb95f9a9143baeb2254.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.test_local_auth.TestUserinfo#test_rejects_garbage_token","name":"test_rejects_garbage_token","status":"passed","testResultsByEnv":{"default":"a1875df19d41c79f75f38ec8fe49ce41"}}
