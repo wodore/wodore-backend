@@ -802,14 +802,14 @@ argon2 = [
 
 [[package]]
 name = "django-admin-runner"
-version = "0.2.0"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "django" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c5/25/e580f0d86bc8dca26f76de1086a60fa37fc485b99d40b3fdee64e9376e5c/django_admin_runner-0.2.0.tar.gz", hash = "sha256:3dc541dd3b35f7484348e550a0b41035bab65b121cc3f92bd5837b0cc73dc95d", size = 251859, upload-time = "2026-09-20T20:36:37.955Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/45/c0/25acc2dc863394a7a5fefbd3378a37b6f824153aebfddda9eb7c3527c670/django_admin_runner-0.3.0.tar.gz", hash = "sha256:fa413e6a3d8e3dc40f11e588be7ed76bedc7df5f90c34075aecaade656e02b90", size = 252993, upload-time = "2026-10-05T21:31:15.047Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4f/0a/18ee41822cb171a69ca68c7aafa175acb77309ea1a99ab737769a51d0f96/django_admin_runner-0.2.0-py3-none-any.whl", hash = "sha256:a201ef80c1867356a0ef37cafe0b6bd740d59a169c7779c00e01590c39ebb38e", size = 282112, upload-time = "2026-09-20T20:36:36.441Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/5e/9f546e213528b5ccf6551510ba930315e51af831323ec941174602e8a9ff/django_admin_runner-0.3.0-py3-none-any.whl", hash = "sha256:f55f272070148b8b8448a614b8a7bcca4c41bb03b28f630fa79e2f7a2bcb0d6e", size = 284379, upload-time = "2026-10-05T21:31:13.569Z" },
 ]
 
 [package.optional-dependencies]
