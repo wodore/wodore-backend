@@ -11,6 +11,7 @@ import pytest
 
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
+from django.urls import reverse
 from django.utils import timezone as djtz
 
 from server.apps.visits.models import ObjectVisitDay, visit_window_annotation
@@ -91,11 +92,10 @@ class TestWindowAnnotation:
 
 
 class TestChangelistSorting:
-    """Sorting is asserted through Django's ChangeList (the same machinery
-    behind ?o=), not the rendered response: unfold 0.87's changelist
-    template tag predates Django 6.1's InclusionAdminNode signature, so
-    rendering any unfold changelist fails in this environment (pre-existing,
-    unrelated to these columns)."""
+    """Sorting is asserted through Django's ChangeList (the machinery
+    behind ?o=), independent of template rendering. Changelist rendering
+    itself was broken under unfold 0.87 (pre-#269); it is smoke-tested
+    separately in TestChangelistRendering below."""
 
     def _sorted_pks(self, admin_cls, model, column, user, descending=True):
         from django.contrib import admin as django_admin
@@ -152,3 +152,36 @@ class TestChangelistSorting:
         for admin_cls in (HutsAdmin, GeoPlaceAdmin):
             for column in ("visits_30d", "visits_365d"):
                 assert getattr(admin_cls, column).admin_order_field == column
+
+
+class TestChangelistRendering:
+    """Render smoke tests — possible since the unfold 0.108 upgrade (#269);
+    under unfold 0.87 every changelist render raised TypeError."""
+
+    @pytest.mark.parametrize(
+        ("url_name", "admin_cls", "model"),
+        [
+            ("admin:huts_hut_changelist", "HutsAdmin", "Hut"),
+            (
+                "admin:geometries_geoplace_changelist",
+                "GeoPlaceAdmin",
+                "GeoPlace",
+            ),
+        ],
+    )
+    def test_changelist_renders_with_visit_columns(
+        self, client, superuser, seed_data, url_name, admin_cls, model
+    ):
+        if url_name.startswith("admin:huts"):
+            from server.apps.huts import admin as admin_mod
+        else:
+            from server.apps.geometries import admin as admin_mod
+
+        list_display = getattr(admin_mod, admin_cls).list_display
+        client.force_login(superuser)
+        response = client.get(reverse(url_name))
+        assert response.status_code == 200
+        content = response.content.decode()
+        for column in ("visits_30d", "visits_365d"):
+            index = list(list_display).index(column) + 1
+            assert f"o={index}" in content  # sortable header link present
