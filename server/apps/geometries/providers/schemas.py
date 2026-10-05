@@ -179,16 +179,19 @@ def geoplace_to_schema(geoplace: Any) -> GeoPlaceSchema:
             )
             sources.append(source)
 
-    # Extract OSM data from osm_tags if available
-    if geoplace.osm_tags:
+    # Extract OSM data from osm_tags if available. getattr: a Hut (no
+    # osm_tags attribute) passed here by mistake must degrade gracefully
+    # instead of raising AttributeError and killing the whole fetch.
+    osm_tags = getattr(geoplace, "osm_tags", None)
+    if osm_tags:
         # Check if there's an OSM organization source
         has_osm_org = any(s.slug in ["osm", "openstreetmap"] for s in sources)
-        if not has_osm_org and geoplace.osm_tags:
+        if not has_osm_org:
             # Add OSM tags as a source
             osm_source = Source(
                 slug="osm",
-                source_id=geoplace.osm_tags.get("id"),
-                source_data={"tags": geoplace.osm_tags},
+                source_id=osm_tags.get("id"),
+                source_data={"tags": osm_tags},
                 priority=20,
             )
             sources.append(osm_source)
