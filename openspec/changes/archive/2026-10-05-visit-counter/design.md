@@ -31,6 +31,12 @@ place_type enum.
 
 ### D1 — Count in the images endpoints, place-first, not middleware
 
+> **Shipped differently (#205):** counting hooks into the **detail
+> endpoints** (`GET /v1/huts/{slug}` and the amenity place detail), not
+> the images endpoints. The detail fetch is the actual page-view signal,
+> and keeping the images endpoints uncounted preserves their response
+> cacheability (tests lock this in). The `update_cache`/UA guard stayed.
+
 The images endpoints are the canonical "someone looked at this place"
 signals — every place/hut page fetches them. Counting there (not in global
 middleware) keeps the surface explicit, skips admin/map-tile/autocomplete
@@ -74,6 +80,11 @@ the project's TimeStampedModel — `created`/`modified` reflect first/last
 flush of a day's row, useful for debugging, not analytics.
 
 ### D4 — Admin + sweep consumption
+
+> **Shipped (admin columns):** instead of a single `visits_7d` column,
+> the admins show sortable `visits_30d` + `visits_365d` (maintainer
+> decision) via `visit_window_annotation()` subquery annotations. The
+> `--popular-first` sweep flag is proposed follow-up work (see tasks.md).
 
 - Hut/GeoPlace admin: `visits_7d` sortable column (sum of last 7 days,
   subquery annotation)
