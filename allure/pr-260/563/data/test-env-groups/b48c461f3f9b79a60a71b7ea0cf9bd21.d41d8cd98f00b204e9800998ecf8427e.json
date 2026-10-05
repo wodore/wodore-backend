@@ -1,0 +1,1 @@
+{"id":"b48c461f3f9b79a60a71b7ea0cf9bd21.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.test_local_auth.TestLoginRedirects#test_admin_login_bridge_rejects_open_redirects","name":"test_admin_login_bridge_rejects_open_redirects","status":"passed","testResultsByEnv":{"default":"1ba0e69fd65b04dc3c822b2e8d9a644f"}}
