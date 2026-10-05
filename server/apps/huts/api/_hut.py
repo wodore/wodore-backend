@@ -145,6 +145,14 @@ class HutSearchController(ApiController):
             qs = qs.filter(location__intersects=bbox_polygon(query.bbox))
 
         # Skip the DB cost when the field isn't in the selection
+        # Readers disposition (OpenSpec §4.3, benchmarked N=50 via
+        # scripts/benchmark/readers_hot_paths.py): the readers variant
+        # measures at parity (p50 −9%…−0% across runs, noise on identical
+        # SQL) — but the conversion is override-only (the wire schema
+        # cannot drive hut_type/sources; the projection is a manual
+        # loop), so it would swap eight explicit lines for equivalent
+        # indirection. Hand-tuned on purpose; rerun the benchmark script
+        # before revisiting.
         wants_hut_type = field_selected(query, "huts", "hut_type")
         wants_sources = field_selected(query, "huts", "sources")
         if wants_hut_type:
@@ -578,6 +586,11 @@ class HutsGeojsonController(ApiController):
 
         if select_related_fields:
             qs = qs.select_related(*select_related_fields)
+        # Readers disposition (OpenSpec §4.3): the whole FeatureCollection
+        # is assembled in PostgreSQL (GeoJSON expression over
+        # JSONObject/JSONBAgg) — a readers variant would load every hut
+        # into Python. KEEP per scripts/benchmark/readers_hot_paths.py
+        # (SQL aggregate; 1 query).
         if query.embed_all or query.embed_capacity:
             annot = get_json_obj(
                 flat=query.flat,

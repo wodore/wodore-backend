@@ -71,5 +71,5 @@ The layer is one isolated module plus per-endpoint call sites — no migrations,
 
 ## Open Questions
 
-- Benchmark harness placement: standalone management command (`app benchmark_readers`) vs pytest-benchmark in CI vs a manual script under `scripts/`. Leaning management command — reproducible against any lane DB, CI-optional.
+- Benchmark harness placement: standalone management command (`app benchmark_readers`) vs pytest-benchmark in CI vs a manual script under `scripts/`. Leaning management command — reproducible against any lane DB, CI-optional. **Resolved 2026-10-05:** `scripts/benchmark/readers_hot_paths.py` (the repo's `scripts/` convention for custom benchmark tooling; same lane-DB reproducibility, CI-optional).
 - Whether the derivation layer should live in `server/apps/api/` (shared infra) or per-app — leaning shared, mirroring `projection.py`/`query.py`.
