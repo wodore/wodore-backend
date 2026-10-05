@@ -1,1 +1,0 @@
-{"id":"acedbed9718f0d85a7f336bd0f9fa5e5.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.geometries.test_provider_image_sources.TestCreateImageResultSources#test_bucket_passes_missing_raster_falls_back_to_original","name":"test_bucket_passes_missing_raster_falls_back_to_original","status":"passed","testResultsByEnv":{"default":"441f7af88357d5081f9b7c6c605e429d"}}
