@@ -1,0 +1,5 @@
+hut 'huette': translated en: name, fr: name, it: name (saved)
+hut 'huette1': translated en: name, fr: name, it: name (saved)
+
+2 instance(s) processed, 6 field(s) translated
+✓ Translating missing fields... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% • 0:00:00
