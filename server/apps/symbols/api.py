@@ -3,6 +3,7 @@
 from http import HTTPStatus
 
 import pydantic
+from django_readers import specs
 from dmr import Path, Query, RedirectTo, ResponseSpec, modify
 from dmr.headers import HeaderSpec
 from dmr.routing import path
@@ -10,6 +11,7 @@ from pydantic import Field
 
 from server.apps.api.controller import ApiController, raise_not_found
 from server.apps.api.query import dump_sparse, dump_sparse_list, sparse_fields_query
+from server.apps.api.readers import spec_from_schema
 from server.apps.translations import activate
 from server.apps.translations.schema import LanguageQuery
 
@@ -17,6 +19,29 @@ from .models import Symbol
 from .schema import SymbolOptional
 
 SymbolFields = sparse_fields_query(symbols=SymbolOptional)
+
+
+_SYMBOL_SPEC = spec_from_schema(
+    Symbol,
+    SymbolOptional,
+    relations_only=True,
+    select_related_for={"license", "source_org"},
+)
+_SYMBOL_PREPARE, _ = specs.process(_SYMBOL_SPEC)
+
+
+def _prepared_symbols(base_qs):
+    """Base queryset with schema-derived relation loading.
+
+    relations_only: the serializer validates the full wire schema off
+    the instance, so the query loads everything; the derived part is the
+    relation set. license/source_org are scalar-typed on the wire but
+    from_attributes still reads the FK instances - select_related_for
+    joins them (one query). uploaded_by_user is not on the wire schema
+    at all: its former join was dead weight and is gone.
+    """
+    return _SYMBOL_PREPARE(base_qs)
+
 
 CACHE_MAX_AGE = 7 * 24 * 60 * 60  # 7 days in seconds
 
@@ -65,8 +90,9 @@ class SymbolsController(ApiController):
         """List symbols.
 
         By default only returns active symbols."""
-        symbols = Symbol.objects.filter(is_active=parsed_query.is_active)
-        symbols = symbols.select_related("license", "source_org", "uploaded_by_user")
+        symbols = _prepared_symbols(
+            Symbol.objects.filter(is_active=parsed_query.is_active)
+        )
         activate(parsed_query.lang)
         return dump_sparse_list(
             SymbolOptional,
@@ -87,8 +113,8 @@ class SymbolByIdController(ApiController):
         parsed_query: Query[SymbolQuery],
     ) -> dict:
         """Get a single symbol by UUID."""
-        symbol = Symbol.objects.filter(
-            id=parsed_path.id, is_active=parsed_query.is_active
+        symbol = _prepared_symbols(
+            Symbol.objects.filter(id=parsed_path.id, is_active=parsed_query.is_active)
         ).first()
         if symbol is None:
             raise_not_found("Symbol not found.")
@@ -120,7 +146,7 @@ class SymbolsBySlugController(ApiController):
         )
         if parsed_query.style:
             symbols = symbols.filter(style=parsed_query.style)
-        symbols = symbols.select_related("license", "source_org", "uploaded_by_user")
+        symbols = _prepared_symbols(symbols)
         activate(parsed_query.lang)
         return dump_sparse_list(
             SymbolOptional,

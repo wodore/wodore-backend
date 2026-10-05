@@ -30,6 +30,7 @@ Hidden from the OpenAPI schema (binary response).
 import math
 import re
 
+from asgiref.sync import sync_to_async
 from dmr.routing import external_path
 
 from django.core.files.base import ContentFile
@@ -39,8 +40,7 @@ from django.http import Http404, HttpRequest, HttpResponse
 from server.apps.api.ogmap import (
     CARD_ZOOM,
     EFFECTS,
-    fetch_marker,
-    render_static_map,
+    render_static_map_async,
     static_map_cache_key,
 )
 from server.apps.huts.models import Hut
@@ -105,6 +105,12 @@ def _resolve_place(
     raise Http404(msg)
 
 
+def _read_stored(name: str) -> bytes:
+    """Read a rendered card from storage (sync; bridged by the view)."""
+    with default_storage.open(name) as stored:
+        return stored.read()
+
+
 def _get_float(request: HttpRequest, name: str) -> float | None:
     raw = request.GET.get(name)
     if raw is None:
@@ -115,8 +121,15 @@ def _get_float(request: HttpRequest, name: str) -> float | None:
     return value
 
 
-def get_static_map(request: HttpRequest) -> HttpResponse:
-    """Complete static-map og card (map + marker + watermark + effect)."""
+async def get_static_map(request: HttpRequest) -> HttpResponse:
+    """Complete static-map og card (map + marker + watermark + effect).
+
+    Async (async PoC, openspec: async-api-staging): tiles + marker
+    fetch concurrently over one AsyncClient, the PIL composite runs in
+    a bridged thread, and the DB lookup (place resolution) and storage
+    I/O (local FS here, S3 in production) are bridged so nothing
+    blocking touches the event loop.
+    """
     basemap = request.GET.get("basemap", "opentopomap")
     effect = request.GET.get("effect", "none")
     if basemap not in BASEMAPS or effect not in EFFECTS:
@@ -142,7 +155,7 @@ def get_static_map(request: HttpRequest) -> HttpResponse:
     lat = _get_float(request, "lat")
     lon = _get_float(request, "lon")
     if place_slug:
-        lat, lon, symbol_url = _resolve_place(
+        lat, lon, symbol_url = await sync_to_async(_resolve_place)(
             place_slug, request.GET.get("place_type"), request
         )
     elif lat is not None and lon is not None:
@@ -180,28 +193,23 @@ def get_static_map(request: HttpRequest) -> HttpResponse:
             "symbol": symbol_url,
         }
     )
-    if not default_storage.exists(name):
-        marker_img = (
-            fetch_marker(symbol_url, 512)
-            if marker_mode == "symbol" and symbol_url
-            else None
-        )
-        data = render_static_map(
+    if not await sync_to_async(default_storage.exists)(name):
+        marker_url = symbol_url if marker_mode == "symbol" and symbol_url else None
+        data = await render_static_map_async(
             lat,
             lon,
             zoom=zoom,
             width=width,
             height=height,
             effect=effect,
-            marker=marker_img,
+            marker_url=marker_url,
             marker_scale=marker_scale,
             attribution=attribution,
             offset_x=offset_x,
             offset_y=offset_y,
         )
-        default_storage.save(name, ContentFile(data))
-    with default_storage.open(name) as stored:
-        data = stored.read()
+        await sync_to_async(default_storage.save)(name, ContentFile(data))
+    data = await sync_to_async(_read_stored)(name)
 
     response = HttpResponse(data, content_type="image/jpeg")
     response["Cache-Control"] = f"public, max-age={CACHE_SECONDS}"

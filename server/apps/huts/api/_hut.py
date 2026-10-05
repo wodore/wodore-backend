@@ -47,6 +47,7 @@ from ..schemas import (
     LicenseInfoSchema,
     OrganizationBaseSchema,
 )
+from ._hut_spec import prepare_hut_detail
 from .annotations import annotate_hut_images, annotate_hut_sources
 from .etag_utils import (
     cached_200,
@@ -144,6 +145,14 @@ class HutSearchController(ApiController):
             qs = qs.filter(location__intersects=bbox_polygon(query.bbox))
 
         # Skip the DB cost when the field isn't in the selection
+        # Readers disposition (OpenSpec §4.3, benchmarked N=50 via
+        # scripts/benchmark/readers_hot_paths.py): the readers variant
+        # measures at parity (p50 −9%…−0% across runs, noise on identical
+        # SQL) — but the conversion is override-only (the wire schema
+        # cannot drive hut_type/sources; the projection is a manual
+        # loop), so it would swap eight explicit lines for equivalent
+        # indirection. Hand-tuned on purpose; rerun the benchmark script
+        # before revisiting.
         wants_hut_type = field_selected(query, "huts", "hut_type")
         wants_sources = field_selected(query, "huts", "sources")
         if wants_hut_type:
@@ -577,6 +586,11 @@ class HutsGeojsonController(ApiController):
 
         if select_related_fields:
             qs = qs.select_related(*select_related_fields)
+        # Readers disposition (OpenSpec §4.3): the whole FeatureCollection
+        # is assembled in PostgreSQL (GeoJSON expression over
+        # JSONObject/JSONBAgg) — a readers variant would load every hut
+        # into Python. KEEP per scripts/benchmark/readers_hot_paths.py
+        # (SQL aggregate; 1 query).
         if query.embed_all or query.embed_capacity:
             annot = get_json_obj(
                 flat=query.flat,
@@ -709,31 +723,7 @@ class HutDetailController(ApiController):
             return cached_304(self, etag, last_modified, max_age=60)
 
         media_abs_url = request.build_absolute_uri(settings.MEDIA_URL)
-        qs = qs.select_related(
-            "hut_type_open", "hut_type_closed", "hut_owner", "availability_source_ref"
-        ).annotate(
-            has_availability=Case(
-                When(availability_source_ref__isnull=False, then=Value(True)),
-                default=Value(False),
-            ),
-            availability_source_ref__slug=F("availability_source_ref__slug"),
-            sources=annotate_hut_sources(media_url=media_abs_url, detail=True),
-            images=annotate_hut_images(detail=True),
-            translations=JSONObject(
-                description=JSONObject(
-                    de="description_de",
-                    en="description_en",
-                    fr="description_fr",
-                    it="description_it",
-                ),
-                name=JSONObject(
-                    de="name_de",
-                    en="name_en",
-                    fr="name_fr",
-                    it="name_it",
-                ),
-            ),
-        )
+        qs = prepare_hut_detail(qs, media_url=media_abs_url)
         hut_db = qs.first()
         if hut_db is None:
             msg = f"Could not find '{slug}'."

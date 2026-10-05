@@ -127,6 +127,13 @@ class HutAvailabilityGeojsonController(ApiController):
         parsed_query: Query[AvailabilityGeoJSONQuery],
     ) -> HutAvailabilityFeatureCollection:
         """Get availability as GeoJSON for map visualization."""
+        # Wire-schema disposition (OpenSpec adopt-django-readers 3.3): the
+        # entire response is assembled in SQL (``values()`` + ``JSONBAgg``
+        # + PostgreSQL-native GeoJSON) — no ORM instance is ever
+        # serialized, so there is nothing for ``spec_from_schema`` to
+        # derive. ``select_related`` here only pre-creates the joins the
+        # aggregate's ``F()`` refs reuse; removing it would risk changing
+        # join types for zero queries saved. Hand-tuned on purpose.
         activate(parsed_query.lang)
 
         start_datetime = parse_availability_date(parsed_path.date)
@@ -255,12 +262,28 @@ class HutAvailabilityCurrentController(ApiController):
         slug = parsed_path.slug
         activate(parsed_query.lang)
 
+        from server.apps.huts.api._hut_spec import select_related_pair
         from server.apps.huts.models import Hut
 
         date_raw = parsed_path.date
 
+        # Wire-schema disposition (OpenSpec adopt-django-readers 3.3):
+        # ``CurrentAvailabilitySchema`` is a composite (Hut + availability
+        # rows + association link) serialized by explicit attribute
+        # access, not ``from_attributes`` off one model — a ``relations_only``
+        # derivation has nothing to anchor on (the ``type_standard_*`` /
+        # ``type_reduced_*`` wire fields carry no model-attr aliases).
+        # The query defect derivation WOULD have caught: the response
+        # reads ``hut.hut_type_open.*`` / ``hut.hut_type_closed.*`` while
+        # the fetch joined neither — two hidden lazy loads per request
+        # whenever the FKs are set. Both joins now ride along in the main
+        # query via the shared reader pair (same joins as the hut
+        # detail); pinned by TestAvailabilityQueryCount.
+        hut_prepare, _ = select_related_pair("hut_type_open", "hut_type_closed")
         try:
-            hut = Hut.objects.get(slug=slug, is_active=True, is_public=True)
+            hut = hut_prepare(Hut.objects.all()).get(
+                slug=slug, is_active=True, is_public=True
+            )
         except Hut.DoesNotExist:
             raise_not_found(f"Hut with slug '{slug}' not found")
 
@@ -369,6 +392,12 @@ class HutAvailabilityTrendController(ApiController):
         """Get historical availability trend data.
 
         Shows how availability changed over time for a specific date.
+
+        Wire-schema disposition (OpenSpec adopt-django-readers 3.3):
+        already minimal — the hut fetch reads only ``slug``/``id`` (no
+        FK access, nothing to join) and the single history query joins
+        ``hut_type`` for the row loop. Two queries total, pinned by
+        TestAvailabilityQueryCount.
         """
         slug = parsed_path.slug
         activate(parsed_query.lang)

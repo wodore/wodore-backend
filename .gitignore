@@ -200,3 +200,6 @@ cython_debug/
 
 # Local working notes (AGENTS.md § Documentation) — never commit
 /_work/
+
+# Agent/worktree lanes (pi, Paseo, workz)
+.worktrees/

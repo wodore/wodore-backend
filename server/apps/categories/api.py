@@ -77,12 +77,35 @@ def build_category_dict(
     return data
 
 
-def _ordered_children(category: Category, is_active: bool):
-    """Active-filtered, order-stable children queryset (shared by tree/flat/map)."""
-    children_qs = category.children.all()
+def _load_category_tree(is_active: bool):
+    """Load the whole (active) category tree in ONE query.
+
+    Replaces the per-node ``category.children`` traversal that made the
+    cold tree build cost ~9000 queries (hidden only by the page cache):
+    everything — symbols, parent — is joined here, and children are
+    grouped in memory. ``is_active`` prunes inactive subtrees wholesale,
+    matching the former per-level filtering.
+    """
+    qs = Category.objects.select_related(
+        "parent",
+        "symbol_detailed",
+        "symbol_simple",
+        "symbol_mono",
+    )
     if is_active:
-        children_qs = children_qs.filter(is_active=True)
-    return children_qs.order_by("order", "slug")
+        qs = qs.active()
+
+    nodes = list(qs)
+    children: dict[int | None, list[Category]] = {}
+    for node in nodes:
+        children.setdefault(node.parent_id, []).append(node)
+    for kids in children.values():
+        kids.sort(key=lambda c: (c.order, c.slug))
+    return nodes, children
+
+
+def _has_children(children_map, category: Category) -> bool:
+    return bool(children_map.get(category.id))
 
 
 def get_descendants_tree(
@@ -92,23 +115,28 @@ def get_descendants_tree(
     is_active: bool,
     media_mode: MediaUrlModeEnum,
     base_level: int,
+    children_map: dict,
 ) -> dict:
-    """Recursively build tree with level limit."""
+    """Recursively build tree with level limit (in-memory traversal)."""
     current_level = category.get_level() - base_level
 
     if max_level is not None and current_level >= max_level:
         # At max level, don't include children
         result = build_category_dict(category, request, media_mode, base_level)
-        result["children"] = category.has_children()
+        result["children"] = _has_children(children_map, category)
         return result
-
-    children_qs = _ordered_children(category, is_active)
 
     tree_children = [
         get_descendants_tree(
-            child, request, max_level, is_active, media_mode, base_level
+            child,
+            request,
+            max_level,
+            is_active,
+            media_mode,
+            base_level,
+            children_map,
         )
-        for child in children_qs.order_by("order", "slug")
+        for child in children_map.get(category.id, [])
     ]
 
     result = build_category_dict(category, request, media_mode, base_level)
@@ -123,21 +151,22 @@ def get_descendants_flat(
     is_active: bool,
     media_mode: MediaUrlModeEnum,
     base_level: int,
+    children_map: dict,
     include_self: bool = False,
 ) -> list[dict]:
-    """Get flat list of descendants."""
+    """Get flat list of descendants (in-memory traversal)."""
     result = []
     current_level = category.get_level() - base_level
 
     if include_self:
         data = build_category_dict(category, request, media_mode, base_level)
-        data["children"] = category.has_children()
+        data["children"] = _has_children(children_map, category)
         result.append(data)
 
     if max_level is not None and current_level >= max_level:
         return result
 
-    for child in _ordered_children(category, is_active):
+    for child in children_map.get(category.id, []):
         result.extend(
             get_descendants_flat(
                 child,
@@ -146,6 +175,7 @@ def get_descendants_flat(
                 is_active,
                 media_mode,
                 base_level,
+                children_map,
                 include_self=True,
             )
         )
@@ -160,8 +190,9 @@ def get_descendants_map(
     is_active: bool,
     media_mode: MediaUrlModeEnum,
     base_level: int,
+    tree_children: dict,
 ) -> dict:
-    """Recursively build map with slug keys."""
+    """Recursively build map with slug keys (in-memory traversal)."""
     current_level = category.get_level() - base_level
 
     if max_level is not None and current_level >= max_level:
@@ -171,9 +202,9 @@ def get_descendants_map(
         return result
 
     children_map = {}
-    for child in _ordered_children(category, is_active):
+    for child in tree_children.get(category.id, []):
         children_map[child.slug] = get_descendants_map(
-            child, request, max_level, is_active, media_mode, base_level
+            child, request, max_level, is_active, media_mode, base_level, tree_children
         )
 
     result = build_category_dict(category, request, media_mode, base_level)
@@ -255,14 +286,11 @@ class CategoryTreeController(ApiController):
         request = self.request
         query = parsed_query
         with override(query.lang):
+            nodes, children_map = _load_category_tree(query.is_active)
             if parsed_path.parent_slug != "root":
                 category = _resolve_parent_or_raise(
                     parsed_path.parent_slug, query.is_active
                 )
-                children_qs = category.children.all()
-                if query.is_active:
-                    children_qs = children_qs.filter(is_active=True)
-
                 base_level = category.get_level()
 
                 return [
@@ -273,22 +301,21 @@ class CategoryTreeController(ApiController):
                         query.is_active,
                         query.media_mode,
                         base_level + 1,
+                        children_map,
                     )
-                    for child in children_qs.order_by("order", "slug")
+                    for child in children_map.get(category.id, [])
                 ]
 
-            qs = Category.objects.select_related(
-                "symbol_detailed",
-                "symbol_simple",
-                "symbol_mono",
-            ).prefetch_related("children")
-            if query.is_active:
-                qs = qs.active()
-
-            roots = qs.roots().order_by("order", "slug")
+            roots = [node for node in nodes if node.parent_id is None]
             return [
                 get_descendants_tree(
-                    root, request, query.level, query.is_active, query.media_mode, 0
+                    root,
+                    request,
+                    query.level,
+                    query.is_active,
+                    query.media_mode,
+                    0,
+                    children_map,
                 )
                 for root in roots
             ]
@@ -314,6 +341,7 @@ class CategoryListController(ApiController):
         request = self.request
         query = parsed_query
         with override(query.lang):
+            nodes, children_map = _load_category_tree(query.is_active)
             if parsed_path.parent_slug != "root":
                 category = _resolve_parent_or_raise(
                     parsed_path.parent_slug, query.is_active
@@ -326,20 +354,15 @@ class CategoryListController(ApiController):
                     query.is_active,
                     query.media_mode,
                     base_level,
+                    children_map,
                     include_self=False,
                 )
 
-            qs = Category.objects.all()
-            if query.is_active:
-                qs = qs.active()
-
-            categories = qs.order_by("order", "slug")
-
             result = []
-            for cat in categories:
+            for cat in sorted(nodes, key=lambda c: (c.order, c.slug)):
                 if query.level is None or cat.get_level() <= query.level:
                     data = build_category_dict(cat, request, query.media_mode, 0)
-                    data["children"] = cat.has_children()
+                    data["children"] = _has_children(children_map, cat)
                     result.append(data)
 
             return result
@@ -365,17 +388,14 @@ class CategoryMapController(ApiController):
         request = self.request
         query = parsed_query
         with override(query.lang):
+            nodes, children_map = _load_category_tree(query.is_active)
             if parsed_path.parent_slug != "root":
                 category = _resolve_parent_or_raise(
                     parsed_path.parent_slug, query.is_active
                 )
-                children_qs = category.children.all()
-                if query.is_active:
-                    children_qs = children_qs.filter(is_active=True)
-
                 base_level = category.get_level()
                 result = {}
-                for child in children_qs.order_by("order", "slug"):
+                for child in children_map.get(category.id, []):
                     result[child.slug] = get_descendants_map(
                         child,
                         request,
@@ -383,22 +403,21 @@ class CategoryMapController(ApiController):
                         query.is_active,
                         query.media_mode,
                         base_level + 1,
+                        children_map,
                     )
                 return result
 
-            qs = Category.objects.select_related(
-                "symbol_detailed",
-                "symbol_simple",
-                "symbol_mono",
-            ).prefetch_related("children")
-            if query.is_active:
-                qs = qs.active()
-
-            roots = qs.roots().order_by("order", "slug")
+            roots = [node for node in nodes if node.parent_id is None]
             result = {}
             for root in roots:
                 result[root.slug] = get_descendants_map(
-                    root, request, query.level, query.is_active, query.media_mode, 0
+                    root,
+                    request,
+                    query.level,
+                    query.is_active,
+                    query.media_mode,
+                    0,
+                    children_map,
                 )
             return result
 
