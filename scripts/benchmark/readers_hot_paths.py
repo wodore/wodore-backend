@@ -15,8 +15,8 @@ not worse — otherwise keep the hand-tuned annotations and document the
 decision at the query site.
 
 Usage (lane DB with template data):
-    scripts/lane-run.sh .venv/bin/python manage.py benchmark_readers
-    scripts/lane-run.sh .venv/bin/python manage.py benchmark_readers --runs 50 --q alp
+    scripts/lane-run.sh .venv/bin/python scripts/benchmark/readers_hot_paths.py
+    scripts/lane-run.sh .venv/bin/python scripts/benchmark/readers_hot_paths.py --runs 50 --q alp
 
 Query-construction code is copied verbatim from the controllers
 (referenced inline). It will drift; the harness is a measuring tool —
@@ -25,15 +25,23 @@ rerun against the commit under decision and record output in ``_work/``.
 
 from __future__ import annotations
 
+import argparse
+import os
 import statistics
 import time
 from collections.abc import Callable
 from typing import Any
 
+os.environ.setdefault("DJANGO_ENV", "test")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "server.settings")
+
+import django
+
+django.setup()
+
 from django_readers import specs as readers_specs
 
 from django.contrib.postgres.aggregates import JSONBAgg
-from django.core.management.base import BaseCommand
 from django.db import connection
 from django.db.models import Case, F, Value, When
 from django.db.models.functions import JSONObject
@@ -651,193 +659,191 @@ def _bench_pair(hand: Callable[[], Any], readers: Callable[[], Any], runs: int) 
     }
 
 
-class Command(BaseCommand):
-    help = "Benchmark hand-tuned vs readers-generated hot paths (OpenSpec §4)."
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Benchmark hand-tuned vs readers-generated hot paths (OpenSpec §4)."
+    )
+    parser.add_argument("--runs", type=int, default=50)
+    parser.add_argument(
+        "--q",
+        type=str,
+        default="",
+        help="Search term; defaults to a probe of the first hut name.",
+    )
+    options = vars(parser.parse_args())
+    from server.apps.geometries.api import GeoNearbyQuery, GeoSearchQuery
+    from server.apps.geometries.models import GeoPlace
+    from server.apps.huts.api._hut import HutSearchQuery
 
-    def add_arguments(self, parser):
-        parser.add_argument("--runs", type=int, default=50)
-        parser.add_argument(
-            "--q",
-            type=str,
-            default="",
-            help="Search term; defaults to a probe of the first hut name.",
-        )
+    runs = options["runs"]
+    probe = options["q"] or _probe_term()
+    activate("de")
+    # The 15s default guard trips on the trigram/window searches when
+    # the shared dev postgres is busy; a bench session may use a
+    # bigger budget (connection-scoped, dies with the process).
+    with connection.cursor() as cursor:
+        cursor.execute("SET statement_timeout = '60s'")
+    request = RequestFactory(SERVER_NAME="localhost").get("/benchmark")
+    media_url = request.build_absolute_uri("/media/")
 
-    def handle(self, *args, **options):
-        from server.apps.geometries.api import GeoNearbyQuery, GeoSearchQuery
-        from server.apps.geometries.models import GeoPlace
-        from server.apps.huts.api._hut import HutSearchQuery
+    hut_query = HutSearchQuery(q=probe)
+    place_query = GeoSearchQuery(q=probe)
+    nearby_query = GeoNearbyQuery(lat=46.0342, lon=7.6488)
 
-        runs = options["runs"]
-        probe = options["q"] or self._probe_term()
-        activate("de")
-        # The 15s default guard trips on the trigram/window searches when
-        # the shared dev postgres is busy; a bench session may use a
-        # bigger budget (connection-scoped, dies with the process).
-        with connection.cursor() as cursor:
-            cursor.execute("SET statement_timeout = '60s'")
-        request = RequestFactory(SERVER_NAME="localhost").get("/benchmark")
-        media_url = request.build_absolute_uri("/media/")
+    # search_huts: hand vs readers prepare, shared projection.
+    hut_readers_prepare, _ = readers_specs.process(_hut_search_readers_spec())
 
-        hut_query = HutSearchQuery(q=probe)
-        place_query = GeoSearchQuery(q=probe)
-        nearby_query = GeoNearbyQuery(lat=46.0342, lon=7.6488)
+    def hut_hand():
+        qs = _hut_search_hand_prepare(hut_query)(_hut_search_base_queryset(hut_query))
+        return _project_hut_search(qs, hut_query, media_url, request)
 
-        # search_huts: hand vs readers prepare, shared projection.
-        hut_readers_prepare, _ = readers_specs.process(_hut_search_readers_spec())
+    def hut_readers():
+        qs = hut_readers_prepare(_hut_search_base_queryset(hut_query))
+        return _project_hut_search(qs, hut_query, media_url, request)
 
-        def hut_hand():
-            qs = _hut_search_hand_prepare(hut_query)(
-                _hut_search_base_queryset(hut_query)
-            )
-            return _project_hut_search(qs, hut_query, media_url, request)
+    # huts.geojson: hand only (SQL aggregate — readers is the decision).
+    from server.apps.huts.models import Hut
 
-        def hut_readers():
-            qs = hut_readers_prepare(_hut_search_base_queryset(hut_query))
-            return _project_hut_search(qs, hut_query, media_url, request)
-
-        # huts.geojson: hand only (SQL aggregate — readers is the decision).
-        from server.apps.huts.models import Hut
-
-        def geojson_hand():
-            qs = _huts_geojson_prepare(media_url)(
-                Hut.objects.filter(is_active=True, is_public=True)
-            )
-            return _project_huts_geojson(qs)
-
-        # geo search / nearby: hand vs readers prepare, shared projection.
-        # Controller order: the prepare slots in BEFORE the fuzzy
-        # annotations (base filters -> prefetch/annotate -> fuzzy).
-        place_hand = _geoplace_hand_prepare()
-        place_readers, _ = readers_specs.process(_geoplace_readers_spec(nearby=False))
-        nearby_readers, _ = readers_specs.process(_geoplace_readers_spec(nearby=True))
-
-        def place_hand_fn():
-            qs = _geoplace_fuzzy(
-                place_hand(_geoplace_search_base(place_query)), place_query
-            )
-            return _project_geoplaces(qs, media_url, request)
-
-        def place_readers_fn():
-            qs = _geoplace_fuzzy(
-                place_readers(_geoplace_search_base(place_query)), place_query
-            )
-            return _project_geoplaces(qs, media_url, request)
-
-        # nearby: distance filter + annotation per the nearby controller.
-        def _nearby_base():
-            from django.contrib.gis.geos import Point
-            from django.contrib.gis.measure import D
-
-            point = Point(nearby_query.lon, nearby_query.lat, srid=4326)
-            return (
-                point,
-                GeoPlace.objects.filter(
-                    is_active=True,
-                    is_public=True,
-                    location__distance_lte=(point, D(m=nearby_query.radius)),
-                ).only(
-                    "id",
-                    "name",
-                    "i18n",
-                    "location",
-                    "elevation",
-                    "importance",
-                    "country_code",
-                ),
-            )
-
-        def nearby_hand_fn():
-            from django.contrib.gis.db.models.functions import Distance
-
-            point, queryset = _nearby_base()
-            qs = place_hand(queryset)
-            qs = qs.annotate(distance=Distance("location", point)).order_by("distance")
-            qs = qs[nearby_query.offset : nearby_query.offset + nearby_query.limit]
-            return _project_geoplaces(qs, media_url, request, nearby=True)
-
-        def nearby_readers_fn():
-            from django.contrib.gis.db.models.functions import Distance
-
-            point, queryset = _nearby_base()
-            qs = nearby_readers(queryset)
-            qs = qs.annotate(distance=Distance("location", point)).order_by("distance")
-            qs = qs[nearby_query.offset : nearby_query.offset + nearby_query.limit]
-            return _project_geoplaces(qs, media_url, request, nearby=True)
-
-        cases = [
-            ("search_huts", hut_hand, hut_readers),
-            ("huts.geojson", geojson_hand, None),
-            ("search_geoplaces", place_hand_fn, place_readers_fn),
-            ("nearby_geoplaces", nearby_hand_fn, nearby_readers_fn),
-        ]
-
-        self.stdout.write(
-            f"benchmark_readers: N={runs} warmup={WARMUP} q={probe!r} "
-            f"lang=de (times in ms, queries per call)"
-        )
-        header = f"{'case':<20} {'variant':<10} {'p50':>8} {'p95':>8} {'mean':>8} {'queries':>8}"
-        self.stdout.write(header)
-        self.stdout.write("-" * len(header))
-        results = {}
-        for name, hand, readers in cases:
-            if readers is None:
-                results[name] = {"hand": _bench(hand, runs)}
-            else:
-                results[name] = _bench_pair(hand, readers, runs)
-            self.stdout.write(
-                f"{name:<20} {'hand':<10} "
-                f"{results[name]['hand']['p50']:>8.2f} "
-                f"{results[name]['hand']['p95']:>8.2f} "
-                f"{results[name]['hand']['mean']:>8.2f} "
-                f"{results[name]['hand']['queries']:>8.1f}"
-            )
-            if readers is not None:
-                self.stdout.write(
-                    f"{'':<20} {'readers':<10} "
-                    f"{results[name]['readers']['p50']:>8.2f} "
-                    f"{results[name]['readers']['p95']:>8.2f} "
-                    f"{results[name]['readers']['mean']:>8.2f} "
-                    f"{results[name]['readers']['queries']:>8.1f}"
-                )
-
-        self.stdout.write("")
-        self.stdout.write(
-            "§4.3 decision rule: convert if p50 within ±5% and p95 not worse"
-        )
-        for name, data in results.items():
-            if "readers" not in data:
-                self.stdout.write(
-                    f"  {name:<20} KEEP (SQL aggregate; no readers candidate exists)"
-                )
-                continue
-            hand, rd = data["hand"], data["readers"]
-            p50_delta = (rd["p50"] - hand["p50"]) / hand["p50"] * 100
-            p95_ok = rd["p95"] <= hand["p95"]
-            # Literal §4.3 rule: convert at parity (p50 within the ±5%
-            # band) with p95 not worse. Deltas beyond the band are noise
-            # on identical SQL — reported, not treated as a conversion
-            # argument.
-            within = abs(p50_delta) <= 5 and p95_ok
-            direction = "faster" if p50_delta < 0 else "slower"
-            verdict = "CONVERT eligible" if within else "KEEP"
-            self.stdout.write(
-                f"  {name:<20} {verdict} "
-                f"(p50 {p50_delta:+.1f}% {direction}, p95 {'ok' if p95_ok else 'worse'})"
-            )
-
-    def _probe_term(self) -> str:
-        from server.apps.huts.models import Hut
-
-        hut = (
+    def geojson_hand():
+        qs = _huts_geojson_prepare(media_url)(
             Hut.objects.filter(is_active=True, is_public=True)
-            .only("name")
-            .order_by("pk")
-            .first()
         )
-        if hut is None:
-            self.stdout.write(
-                self.style.WARNING("no huts in database — run on a seeded lane DB")
+        return _project_huts_geojson(qs)
+
+    # geo search / nearby: hand vs readers prepare, shared projection.
+    # Controller order: the prepare slots in BEFORE the fuzzy
+    # annotations (base filters -> prefetch/annotate -> fuzzy).
+    place_hand = _geoplace_hand_prepare()
+    place_readers, _ = readers_specs.process(_geoplace_readers_spec(nearby=False))
+    nearby_readers, _ = readers_specs.process(_geoplace_readers_spec(nearby=True))
+
+    def place_hand_fn():
+        qs = _geoplace_fuzzy(
+            place_hand(_geoplace_search_base(place_query)), place_query
+        )
+        return _project_geoplaces(qs, media_url, request)
+
+    def place_readers_fn():
+        qs = _geoplace_fuzzy(
+            place_readers(_geoplace_search_base(place_query)), place_query
+        )
+        return _project_geoplaces(qs, media_url, request)
+
+    # nearby: distance filter + annotation per the nearby controller.
+    def _nearby_base():
+        from django.contrib.gis.geos import Point
+        from django.contrib.gis.measure import D
+
+        point = Point(nearby_query.lon, nearby_query.lat, srid=4326)
+        return (
+            point,
+            GeoPlace.objects.filter(
+                is_active=True,
+                is_public=True,
+                location__distance_lte=(point, D(m=nearby_query.radius)),
+            ).only(
+                "id",
+                "name",
+                "i18n",
+                "location",
+                "elevation",
+                "importance",
+                "country_code",
+            ),
+        )
+
+    def nearby_hand_fn():
+        from django.contrib.gis.db.models.functions import Distance
+
+        point, queryset = _nearby_base()
+        qs = place_hand(queryset)
+        qs = qs.annotate(distance=Distance("location", point)).order_by("distance")
+        qs = qs[nearby_query.offset : nearby_query.offset + nearby_query.limit]
+        return _project_geoplaces(qs, media_url, request, nearby=True)
+
+    def nearby_readers_fn():
+        from django.contrib.gis.db.models.functions import Distance
+
+        point, queryset = _nearby_base()
+        qs = nearby_readers(queryset)
+        qs = qs.annotate(distance=Distance("location", point)).order_by("distance")
+        qs = qs[nearby_query.offset : nearby_query.offset + nearby_query.limit]
+        return _project_geoplaces(qs, media_url, request, nearby=True)
+
+    cases = [
+        ("search_huts", hut_hand, hut_readers),
+        ("huts.geojson", geojson_hand, None),
+        ("search_geoplaces", place_hand_fn, place_readers_fn),
+        ("nearby_geoplaces", nearby_hand_fn, nearby_readers_fn),
+    ]
+
+    print(
+        f"benchmark_readers: N={runs} warmup={WARMUP} q={probe!r} "
+        f"lang=de (times in ms, queries per call)"
+    )
+    header = (
+        f"{'case':<20} {'variant':<10} {'p50':>8} {'p95':>8} {'mean':>8} {'queries':>8}"
+    )
+    print(header)
+    print("-" * len(header))
+    results = {}
+    for name, hand, readers in cases:
+        if readers is None:
+            results[name] = {"hand": _bench(hand, runs)}
+        else:
+            results[name] = _bench_pair(hand, readers, runs)
+        print(
+            f"{name:<20} {'hand':<10} "
+            f"{results[name]['hand']['p50']:>8.2f} "
+            f"{results[name]['hand']['p95']:>8.2f} "
+            f"{results[name]['hand']['mean']:>8.2f} "
+            f"{results[name]['hand']['queries']:>8.1f}"
+        )
+        if readers is not None:
+            print(
+                f"{'':<20} {'readers':<10} "
+                f"{results[name]['readers']['p50']:>8.2f} "
+                f"{results[name]['readers']['p95']:>8.2f} "
+                f"{results[name]['readers']['mean']:>8.2f} "
+                f"{results[name]['readers']['queries']:>8.1f}"
             )
-            raise SystemExit(2)
-        return hut.name.split()[0] if hut.name else "hut"
+
+    print()
+    print("§4.3 decision rule: convert if p50 within ±5% and p95 not worse")
+    for name, data in results.items():
+        if "readers" not in data:
+            print(f"  {name:<20} KEEP (SQL aggregate; no readers candidate exists)")
+            continue
+        hand, rd = data["hand"], data["readers"]
+        p50_delta = (rd["p50"] - hand["p50"]) / hand["p50"] * 100
+        p95_ok = rd["p95"] <= hand["p95"]
+        # Literal §4.3 rule: convert at parity (p50 within the ±5%
+        # band) with p95 not worse. Deltas beyond the band are noise
+        # on identical SQL — reported, not treated as a conversion
+        # argument.
+        within = abs(p50_delta) <= 5 and p95_ok
+        direction = "faster" if p50_delta < 0 else "slower"
+        verdict = "CONVERT eligible" if within else "KEEP"
+        print(
+            f"  {name:<20} {verdict} "
+            f"(p50 {p50_delta:+.1f}% {direction}, p95 {'ok' if p95_ok else 'worse'})"
+        )
+
+
+def _probe_term() -> str:
+    from server.apps.huts.models import Hut
+
+    hut = (
+        Hut.objects.filter(is_active=True, is_public=True)
+        .only("name")
+        .order_by("pk")
+        .first()
+    )
+    if hut is None:
+        print("WARNING: no huts in database — run on a seeded lane DB")
+        raise SystemExit(2)
+    return hut.name.split()[0] if hut.name else "hut"
+
+
+if __name__ == "__main__":
+    main()

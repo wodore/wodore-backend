@@ -1,6 +1,6 @@
 """Benchmark get_hut: wall time + SQL cost, warm cache.
 
-Usage (lane): ./scripts/lane-run.sh .venv/bin/python scripts/bench_get_hut.py
+Usage (lane): ./scripts/lane-run.sh .venv/bin/python scripts/benchmark/get_hut.py
 Writes a compact table to stdout; run on main for the baseline, on the
 branch for the comparison.
 """

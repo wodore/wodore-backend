@@ -262,11 +262,11 @@ class GeoSearchController(ApiController):
 
         # Skip the DB cost when the field isn't in the selection
         # (the old include_X=no optimization, driven by fields[places]).
-        # Readers disposition (OpenSpec §4.3, benchmark_readers N=50):
-        # parity at best (p50 +1.3%, p95 worse) and the conversion is
-        # override-only — the projection resolves symbol URLs with the
-        # request context, fields the wire schema does not declare.
-        # Hand-tuned on purpose.
+        # Readers disposition (OpenSpec §4.3, benchmarked N=50 via
+        # scripts/benchmark/readers_hot_paths.py): parity at best
+        # (p50 +1.3%, p95 worse) and the conversion is override-only —
+        # the projection resolves symbol URLs with the request context,
+        # fields the wire schema does not declare. Hand-tuned on purpose.
         wants_categories = field_selected(query, "places", "categories")
         wants_sources = field_selected(query, "places", "sources")
         if wants_categories:
@@ -441,9 +441,10 @@ class GeoNearbyController(ApiController):
         queryset = apply_type_filters(queryset, query.types, query.categories)
 
         # Skip the DB cost when the field isn't in the selection
-        # Readers disposition (OpenSpec §4.3, benchmark_readers N=50):
-        # parity (p50 ±0%, p95 worse) with an override-only conversion —
-        # hand-tuned on purpose, same reasoning as search_geoplaces.
+        # Readers disposition (OpenSpec §4.3, benchmarked N=50 via
+        # scripts/benchmark/readers_hot_paths.py): parity (p50 ±0%,
+        # p95 worse) with an override-only conversion — hand-tuned on
+        # purpose, same reasoning as search_geoplaces.
         wants_categories = field_selected(query, "places", "categories")
         wants_sources = field_selected(query, "places", "sources")
         if wants_categories:
