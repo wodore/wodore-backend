@@ -1,0 +1,1 @@
+{"id":"a84575a498cde2f5e4dc318a2ab3407e.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.geometries.test_place_image_sync.TestMaybeEnqueue#test_stale_pins_enqueue_once_then_debounce","name":"test_stale_pins_enqueue_once_then_debounce","status":"passed","testResultsByEnv":{"default":"7be10bb4b74fa6a9fb40ee0c73f112ef"}}
