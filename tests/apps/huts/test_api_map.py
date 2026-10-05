@@ -21,9 +21,16 @@ def _tmp_media(settings, tmp_path):
 @pytest.fixture
 def offline_render(monkeypatch):
     """Fake tiles, marker and watermark (no network)."""
+    import io
+
     from PIL import Image
 
     calls = {"tiles": 0, "marker": 0}
+
+    def _png_bytes(mode, size, color):
+        buf = io.BytesIO()
+        Image.new(mode, size, color).save(buf, format="PNG")
+        return buf.getvalue()
 
     def fake_tile(zoom, x, y):
         calls["tiles"] += 1
@@ -35,11 +42,11 @@ def offline_render(monkeypatch):
 
     async def fake_tile_retry_async(client, semaphore, zoom, x, y):
         calls["tiles"] += 1
-        return Image.new("RGB", (ogmap.TILE_SIZE, ogmap.TILE_SIZE), (90, 120, 150))
+        return _png_bytes("RGB", (ogmap.TILE_SIZE, ogmap.TILE_SIZE), (90, 120, 150))
 
     async def fake_marker_async(client, symbol_url, size_px):
         calls["marker"] += 1
-        return Image.new("RGBA", (size_px, size_px), (200, 60, 60, 255))
+        return _png_bytes("RGBA", (size_px, size_px), (200, 60, 60, 255))
 
     monkeypatch.setattr(ogmap, "_fetch_tile", fake_tile)
     monkeypatch.setattr(ogmap, "fetch_marker", fake_marker)

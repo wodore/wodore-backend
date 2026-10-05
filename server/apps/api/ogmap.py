@@ -256,7 +256,7 @@ def _apply_effect(card: Image.Image, effect: str, scale: float = 1.0) -> Image.I
     margin = int(26 * scale)
     radius = int(44 * scale)
     background = card.resize(
-        (int(card.width * 1.15), int(card.height * 1.15)), Image.LANCZOS
+        (int(card.width * 1.15), int(card.height * 1.15)), Image.Resampling.LANCZOS
     ).crop(
         (
             int(card.width * 0.075),
@@ -270,7 +270,9 @@ def _apply_effect(card: Image.Image, effect: str, scale: float = 1.0) -> Image.I
 
     inner_w = card.width - margin * 2
     inner_h = card.height - margin * 2
-    foreground = _rounded(card.resize((inner_w, inner_h), Image.LANCZOS), radius)
+    foreground = _rounded(
+        card.resize((inner_w, inner_h), Image.Resampling.LANCZOS), radius
+    )
     background.paste(foreground, (margin, margin), foreground)
     return background
 
@@ -369,7 +371,7 @@ def _composite_card(
     left, top = plan["left"], plan["top"]
     card = canvas.crop((left, top, left + width, top + height))
     if card.size != (width, height):
-        card = card.resize((width, height), Image.LANCZOS)
+        card = card.resize((width, height), Image.Resampling.LANCZOS)
 
     if effect != "none":
         card = _apply_effect(card, effect, scale)
@@ -379,7 +381,7 @@ def _composite_card(
         marker_img = marker.copy()
         # LANCZOS downscale from the high-dpi raster (fetch_marker): the
         # vector stays sharp at any target size.
-        marker_img = marker_img.resize((size, size), Image.LANCZOS)
+        marker_img = marker_img.resize((size, size), Image.Resampling.LANCZOS)
         card = card.convert("RGBA")
         card.alpha_composite(
             marker_img,

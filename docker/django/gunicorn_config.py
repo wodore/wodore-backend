@@ -9,6 +9,12 @@ bind = "0.0.0.0:8000"
 # Concerning `workers` setting see:
 # https://github.com/wemake-services/wemake-django-template/issues/1022
 workers = multiprocessing.cpu_count() * 2 + 1
+# Override via env (parity with the k8s deployment, which passes
+# GUNICORN_WORKERS explicitly): applies to both runtimes; for ASGI
+# prefer fewer, fatter workers (see the switch notes below).
+_workers_env = os.environ.get("GUNICORN_WORKERS", "").strip()
+if _workers_env:
+    workers = int(_workers_env)
 
 max_requests = 2000
 max_requests_jitter = 400
@@ -37,7 +43,7 @@ worker_tmp_dir = "/dev/shm"
 ASGI_ENABLED = os.environ.get("ASGI_ENABLED", "").lower() in {"1", "true", "yes"}
 
 if ASGI_ENABLED:
-    worker_class = "uvicorn.workers.UvicornWorker"
+    worker_class = "uvicorn_worker.UvicornWorker"
     wsgi_app = "server.asgi:application"
 else:
     wsgi_app = "server.wsgi:application"
