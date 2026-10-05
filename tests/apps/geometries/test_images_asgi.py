@@ -16,11 +16,14 @@ actually return features.
 """
 
 import asyncio
+import threading
+import time
 
 import httpx
 import pytest
 
 from django.core.asgi import get_asgi_application
+from django.test import override_settings
 
 from server.apps.geometries import (
     api_images,  # noqa: F401 -- imports register the providers
@@ -198,3 +201,163 @@ class TestImagesEndpointsUnderASGI:
         features = response.json()["features"]
         assert len(features) > 0
         assert not features[0]["properties"].get("is_fallback")
+
+
+class TestFanoutBudget:
+    """P0 2026-10-05: one straggling provider must not hold the request.
+
+    The overall fan-out budget cancels providers still running at the
+    deadline and serves the fast providers' partial results (which the
+    response-cache path then caches as usual) — bounded latency instead
+    of a 30-60s request that upstream clients abort mid-flight.
+    """
+
+    def test_slow_provider_serves_partial_results_within_budget(
+        self, asgi_app, hut, monkeypatch
+    ):
+        from structlog.testing import capture_logs
+
+        slow = provider_registry.get_provider("wikicommons")
+
+        async def _slow_fetch(
+            self, places, lat, lon, radius, limit=100, update_cache=False
+        ):
+            await asyncio.sleep(30.0)  # far beyond the 0.3s budget
+            return [_stub_result(self.source, 99)]
+
+        monkeypatch.setattr(slow, "fetch", _slow_fetch.__get__(slow))
+
+        url = f"/v1/geo/images/nearby?lat={hut.location.y}&lon={hut.location.x}&radius=50&lang=en&limit=20"
+        with (
+            override_settings(IMAGES_FANOUT_BUDGET_SECONDS=0.3),
+            capture_logs() as logs,
+        ):
+            started = time.monotonic()
+            response = _asgi_get(asgi_app, url)
+            elapsed = time.monotonic() - started
+
+        assert response.status_code == 200
+        features = response.json()["features"]
+        assert features, "fast providers' partial results must be served"
+        assert all(
+            "wikicommons" not in f["properties"]["source_id"] for f in features
+        ), "straggler's results must not appear"
+        assert elapsed < 5.0, f"request must respect the budget (took {elapsed:.1f}s)"
+        stragglers = [
+            e
+            for e in logs
+            if "budget" in e.get("event", "") and e.get("provider") == "wikicommons"
+        ]
+        assert stragglers, "timed-out provider must be logged, not raised"
+
+
+class TestCancelledRequestConnectionHygiene:
+    """P0 2026-10-05: a cancelled request must not strand a pool checkout.
+
+    Reproduces the abort path from the incident: the request is driven
+    through the real ASGI app (full middleware chain) with one provider
+    sleeping far beyond a short deadline, then the request task itself is
+    cancelled — as when Traefik or the client gives up. The CancelledError
+    travels the same asgiref bridge as on staging.
+
+    Observability is the hard part of integration-level cancellation: the
+    leaked connection lives in the detached sync view thread's
+    asgiref-local ``ConnectionHandler``, which the test thread cannot
+    enumerate. So the test spies on ``connections.all(initialized_only=...)``
+    — what ``run_async``'s cleanup enumerates — and forces each connection's
+    ``close_at`` to 0, simulating the staging pool setup (``CONN_MAX_AGE=0``
+    makes every connection immediately obsolete, so the cleanup must close
+    it — with the psycopg pool that means checking it back in). It then
+    asserts the cleanup ran on the view thread, saw the request's open
+    connection, and actually closed it.
+    """
+
+    def test_cancelled_request_releases_view_thread_connections(
+        self, asgi_app, hut, monkeypatch
+    ):
+        import django.db
+
+        slow = provider_registry.get_provider("wikicommons")
+        fetch_started = threading.Event()
+
+        async def _slow_fetch(
+            self, places, lat, lon, radius, limit=100, update_cache=False
+        ):
+            fetch_started.set()
+            await asyncio.sleep(30.0)
+            return []
+
+        monkeypatch.setattr(slow, "fetch", _slow_fetch.__get__(slow))
+
+        cleanup_calls: list[dict] = []
+        cleanup_started = threading.Event()
+        connections = django.db.connections
+        real_all = connections.all
+
+        def _spied_all(initialized_only=False):
+            conns = real_all(initialized_only=initialized_only)
+            if initialized_only and conns:
+                cleanup_calls.append(
+                    {
+                        "thread": threading.current_thread().name,
+                        "conns": list(conns),
+                        "open_before": [c.connection is not None for c in conns],
+                    }
+                )
+                for conn in conns:
+                    # Staging semantics: CONN_MAX_AGE=0 → always obsolete.
+                    conn.close_at = 0.0
+                cleanup_started.set()
+            return conns
+
+        monkeypatch.setattr(connections, "all", _spied_all)
+
+        async def _aborted_get() -> None:
+            transport = httpx.ASGITransport(app=asgi_app)
+            async with httpx.AsyncClient(
+                transport=transport, base_url="http://testserver"
+            ) as client:
+                url = f"/v1/geo/images/nearby?lat={hut.location.y}&lon={hut.location.x}&radius=50&lang=en&limit=20"
+                request_task = asyncio.create_task(client.get(url))
+                # Wait until the fan-out is actually inside the slow
+                # provider, then abort the request task — a deterministic
+                # mid-flight cancellation, like an upstream proxy abort.
+                for _ in range(500):
+                    if fetch_started.is_set():
+                        break
+                    await asyncio.sleep(0.02)
+                assert fetch_started.is_set(), "provider fetch never started"
+                request_task.cancel()
+                # The abort unwinds through the asgiref bridge; whatever
+                # escapes the cancelled request itself is not what this
+                # test asserts about.
+                await asyncio.gather(request_task, return_exceptions=True)
+
+        asyncio.run(_aborted_get())
+
+        assert cleanup_started.wait(timeout=10.0), (
+            "run_async connection cleanup never ran after request cancellation"
+        )
+        view_thread_calls = [
+            c for c in cleanup_calls if c["thread"] != threading.main_thread().name
+        ]
+        assert view_thread_calls, "cleanup must run on the sync view thread"
+        released = [
+            conn
+            for call in view_thread_calls
+            for conn, was_open in zip(call["conns"], call["open_before"])
+            if was_open and not conn.in_atomic_block
+        ]
+        assert released, (
+            "the aborted request held an open DB connection at cleanup time"
+        )
+        # The cleanup must actually close them (staging: check back into
+        # the psycopg pool instead of leaking the checkout).
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline:
+            if all(conn.connection is None for conn in released):
+                break
+            time.sleep(0.05)
+        assert all(conn.connection is None for conn in released), (
+            "cancelled request's DB connections were not closed"
+        )
