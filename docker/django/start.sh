@@ -85,5 +85,7 @@ fi
 # ASGI_ENABLED=1 — the app module and worker class live in the config):
 # Docs: https://gunicorn.org/en/stable/settings.html
 # Make sure it is in sync with `docker/django/ci.sh` check.
-exec /usr/local/bin/gunicorn \
+# PATH lookup (not the template's /usr/local/bin absolute): the uv venv
+# installs gunicorn into /code/.venv/bin, which is on PATH via ENV.
+exec gunicorn \
   --config python:docker.django.gunicorn_config
