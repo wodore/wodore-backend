@@ -1,1 +1,1 @@
-{"id":"84214f8a67a20b91ed7cd8e2ea717c88.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.translations.test_llm#test_translate_raises_on_invalid_json","name":"test_translate_raises_on_invalid_json","status":"passed","testResultsByEnv":{"default":"0a90f24f914508a428d0f1bbab603c36"}}
+{"id":"84214f8a67a20b91ed7cd8e2ea717c88.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.translations.test_llm#test_translate_raises_on_invalid_json","name":"test_translate_raises_on_invalid_json","status":"passed","testResultsByEnv":{"default":"e3ba0353710cb46b90510fe297bd98f2"}}
