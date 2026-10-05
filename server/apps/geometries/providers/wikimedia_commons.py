@@ -87,6 +87,23 @@ def _select_large_source(
     return original_url or thumb_url_large or thumb_url or thumb_url
 
 
+def _raise_on_mediawiki_error(data: dict, context: str) -> None:
+    """Raise when a MediaWiki API response carries an ``error`` document.
+
+    The MediaWiki Action API reports bad parameters (e.g. non-integer
+    values for integer params like ``ggsradius``) as HTTP 200 with
+    ``{"error": {"code": "badinteger"}}`` — raise_for_status does not
+    catch that, and the strategy would silently contribute zero results.
+    Raising here lets the per-strategy handlers in :meth:`fetch` log it.
+    """
+    error = data.get("error")
+    if error:
+        raise RuntimeError(
+            f"MediaWiki API error in {context}: {error.get('code')}: "
+            f"{error.get('info', '')}".strip()
+        )
+
+
 class WikimediaCommonsProvider(ImageProvider):
     """
     Provider for Wikimedia Commons images.
@@ -533,8 +550,11 @@ class WikimediaCommonsProvider(ImageProvider):
         # MediaWiki GeoData expects ggsradius in METERS, bounded 10–10000;
         # the endpoint's radius is meters — clamp to the API bounds instead
         # of converting (the old km value was out of range for every query,
-        # so geosearch silently returned nothing).
-        ggsradius_m = min(max(radius, 10), 10_000)
+        # so geosearch silently returned nothing). Cast to int: the endpoint
+        # radius is a pydantic float (``300.0``) and MediaWiki integer
+        # params answer HTTP 200 with ``{"error": {"code": "badinteger"}}``
+        # and zero results — silently cached as an empty provider run.
+        ggsradius_m = int(min(max(radius, 10), 10_000))
 
         params = {
             "action": "query",
@@ -560,6 +580,7 @@ class WikimediaCommonsProvider(ImageProvider):
             response.raise_for_status()
 
             data = response.json()
+            _raise_on_mediawiki_error(data, "geosearch")
             pages = data.get("query", {}).get("pages", {}).values()
 
             # Extra passes at the large thumb steps (servable sources —
@@ -624,6 +645,7 @@ class WikimediaCommonsProvider(ImageProvider):
             response = await client.get(self.commons_api, params=bucket_params)
             response.raise_for_status()
             data = response.json()
+            _raise_on_mediawiki_error(data, "thumb bucket")
         except Exception as e:
             logger.warning(
                 "commons_thumb_bucket_fetch_failed", width=width, error=str(e)
@@ -666,6 +688,7 @@ class WikimediaCommonsProvider(ImageProvider):
             response.raise_for_status()
 
             data = response.json()
+            _raise_on_mediawiki_error(data, "imageinfo")
             pages = data.get("query", {}).get("pages", {})
 
             for page_id, page_data in pages.items():
@@ -739,6 +762,7 @@ class WikimediaCommonsProvider(ImageProvider):
             response.raise_for_status()
 
             data = response.json()
+            _raise_on_mediawiki_error(data, "categorymembers")
             members = data.get("query", {}).get("categorymembers", [])
 
             logger.debug(

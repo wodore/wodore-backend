@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 import structlog
-from asgiref.sync import sync_to_async
+from asgiref.sync import async_to_sync, sync_to_async
 
 from django.contrib.gis.geos import Point
 from django.core.cache import cache
@@ -32,6 +32,23 @@ CACHE_VERY_SHORT = 3600  # 1 hours
 
 # Cache key prefix for all geoimages caching
 CACHE_KEY_PREFIX = "geoimages"
+
+
+def run_async(async_fn, /, *args, **kwargs):
+    """Run an async callable (e.g. ``fetch_images_from_providers``) from
+    sync code under any server topology.
+
+    ``asyncio.run`` is wrong once requests are served over ASGI: the sync
+    controllers then execute inside asgiref's sync/async bridging
+    machinery, and any nested ``sync_to_async`` in the awaited stack (place
+    schema conversion, cache backends) fails with asgiref's
+    ``CurrentThreadExecutor`` self-submit guard (or deadlocks its executor)
+    — the provider fetch dies before any external call and the endpoint
+    answers an empty collection. ``async_to_sync`` bridges both worlds:
+    correct under ASGI, and under WSGI it degrades to the previously
+    working nested-event-loop path.
+    """
+    return async_to_sync(async_fn)(*args, **kwargs)
 
 
 def get_persistent_cache():
@@ -221,7 +238,17 @@ class ImageProvider(ABC):
             lat_rounded = lat
             lon_rounded = lon
 
-        return f"{CACHE_KEY_PREFIX}:{self.source}:images:{lat_rounded}:{lon_rounded}:{radius}:{precision}"
+        # Radius normalized to int: the endpoints take a pydantic float
+        # (``300.0``), and float keys fork the cache from the int keys other
+        # callers produce — historically the float half even got poisoned
+        # with empty "badinteger" responses (ggsradius=300.0). Int keys
+        # fork away from old poisoned entries; they simply expire by TTL.
+        radius_int = int(radius)
+
+        return (
+            f"{CACHE_KEY_PREFIX}:{self.source}:images:"
+            f"{lat_rounded}:{lon_rounded}:{radius_int}:{precision}"
+        )
 
     def _get_metadata_cache_key(self, identifier: str) -> str:
         """

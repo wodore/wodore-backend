@@ -1,6 +1,5 @@
 """Image aggregation endpoints on dmr (mounted at /geo/images/)."""
 
-import asyncio
 import logging
 
 import pydantic
@@ -31,6 +30,7 @@ from .providers import (
     fetch_images_from_providers,
     post_process_images,
     provider_registry,
+    run_async,
 )
 from .schemas import (
     DEFAULT_THUMBHASHES,
@@ -311,25 +311,24 @@ class NearbyImagesController(ApiController):
                 "using coordinate only"
             )
 
-        all_places = list(geoplaces) + list(huts)
-
         logger.debug(
             f"📸 Fetching images from "
             f"{len(provider_registry.get_all_providers())} providers..."
         )
 
+        fetch_failed = False
         try:
-            results = asyncio.run(
-                fetch_images_from_providers(
-                    geoplaces=all_places,  # Pass both GeoPlaces and Huts
-                    lat=query.lat,
-                    lon=query.lon,
-                    radius=query.radius,
-                    sources=sources_list,
-                    precision=query.precision,
-                    limit=query.limit,
-                    update_cache=query.update_cache,
-                )
+            results = run_async(
+                fetch_images_from_providers,
+                geoplaces=geoplaces,  # GeoPlaces and Huts dispatched by type
+                huts=huts,  # (hut_to_schema, no osm_tags attribute)
+                lat=query.lat,
+                lon=query.lon,
+                radius=query.radius,
+                sources=sources_list,
+                precision=query.precision,
+                limit=query.limit,
+                update_cache=query.update_cache,
             )
         except Exception as e:  # stale-cache fallback below
             logger.error(f"Error fetching images from providers: {e}")
@@ -341,6 +340,7 @@ class NearbyImagesController(ApiController):
                 )
                 return cached
             results = []
+            fetch_failed = True
 
         # Sort by score (primary), then by distance (secondary)
         results.sort(key=lambda r: (-r.score, r.distance_m))
@@ -363,7 +363,11 @@ class NearbyImagesController(ApiController):
         response = ImageCollectionResponse(
             type="FeatureCollection", features=features, metadata=metadata
         )
-        image_response_cache.set_response(resp_key, response)
+        if not fetch_failed:
+            # Cache successful aggregations only — an exception fallback
+            # (stale miss, empty features) must not poison the response
+            # cache for the next visitor.
+            image_response_cache.set_response(resp_key, response)
         return response
 
 
@@ -633,15 +637,14 @@ class PlaceImagesController(ApiController):
                 raise
         else:
             try:
-                results, place_info = asyncio.run(
-                    fetch_images_for_place(
-                        place_slug=place_slug,
-                        place_type="geoplace",
-                        radius=query.radius,
-                        sources=sources_list,
-                        limit=query.limit,
-                        update_cache=query.update_cache,
-                    )
+                results, place_info = run_async(
+                    fetch_images_for_place,
+                    place_slug=place_slug,
+                    place_type="geoplace",
+                    radius=query.radius,
+                    sources=sources_list,
+                    limit=query.limit,
+                    update_cache=query.update_cache,
                 )
             except Exception as e:  # stale-cache fallback below
                 logger.error(f"Error fetching images for place '{place_slug}': {e}")
@@ -819,15 +822,14 @@ class HutImagesController(ApiController):
                 raise
         else:
             try:
-                results, place_info = asyncio.run(
-                    fetch_images_for_place(
-                        place_slug=hut_slug,
-                        place_type="hut",
-                        radius=query.radius,
-                        sources=sources_list,
-                        limit=query.limit,
-                        update_cache=query.update_cache,
-                    )
+                results, place_info = run_async(
+                    fetch_images_for_place,
+                    place_slug=hut_slug,
+                    place_type="hut",
+                    radius=query.radius,
+                    sources=sources_list,
+                    limit=query.limit,
+                    update_cache=query.update_cache,
                 )
             except Exception as e:
                 logger.error(f"Error fetching images for hut '{hut_slug}': {e}")
