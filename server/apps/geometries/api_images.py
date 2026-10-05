@@ -392,6 +392,11 @@ def _map_fallback_feature(
                 "zoom": OG_MAP_ZOOM,
                 "effect": OG_MAP_EFFECT,
                 "marker_scale": OG_MAP_MARKER_SCALE,
+                # No baked attribution strip: the OpenTopoMap/OSM credits
+                # travel in the feature's license/author/attribution
+                # metadata instead (the gallery renders them like for
+                # provider photos).
+                "attribution": "false",
                 # v busts BOTH caches: the raw render storage and the
                 # imagor composites built on this URL (renderer changes
                 # propagate via RENDER_VERSION).
@@ -466,8 +471,19 @@ def _map_fallback_feature(
         "raw": landscape_raw,
         "proxy": ImagorImage(landscape_raw).transform().get_full_url(),
     }
-    attribution_short = (
+    # License/attribution metadata mirrors the provider photos (same
+    # shape, HTML links) — the gallery renders it exactly like any
+    # other image's credits. Map data: OpenTopoMap tiles are CC-BY-SA
+    # derivatives of OpenStreetMap data (with SRTM elevation).
+    license_url = "https://creativecommons.org/licenses/by-sa/4.0/"
+    attribution_full = (
         "© OpenTopoMap (CC-BY-SA) · © SRTM · © OpenStreetMap contributors"
+    )
+    license_short = f'<a href="{license_url}" target="_blank">CC-BY-SA-4.0</a>'
+    attribution_author = (
+        "© OpenTopoMap / "
+        '<a href="https://www.openstreetmap.org/copyright" '
+        'target="_blank" rel="nofollow">OpenStreetMap contributors</a>'
     )
     return {
         "type": "Feature",
@@ -486,18 +502,21 @@ def _map_fallback_feature(
             "captured_at": None,
             "distance_m": 0.0,
             "attribution": {
-                "short": attribution_short,
-                "full": attribution_short,
+                "short": f"{license_short} · {attribution_author}",
+                "full": attribution_full,
                 "license_icon": None,
-                "license_short": "CC-BY-SA",
+                "license_short": license_short,
                 "license_full": "CC BY-SA 4.0",
-                "author": "OpenTopoMap / OpenStreetMap contributors",
+                "author": attribution_author,
             },
-            "author": None,
+            "author": {
+                "name": "OpenTopoMap / OpenStreetMap contributors",
+                "url": None,
+            },
             "license": {
                 "slug": "cc-by-sa-4-0",
                 "name": "CC BY-SA 4.0 (map data)",
-                "url": "https://creativecommons.org/licenses/by-sa/4.0/",
+                "url": license_url,
                 "icon": None,
             },
             "urls": urls,

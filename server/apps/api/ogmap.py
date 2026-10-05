@@ -54,11 +54,12 @@ EFFECTS = ("none", "blur_border", "spotlight", "vignette", "blurred_edges")
 #: via the fallback feature URLs — into the ``v=`` busting parameter, so
 #: a renderer change re-renders every card AND regenerates the imagor
 #: composites built on top of them.
-RENDER_VERSION = 6
+RENDER_VERSION = 7
 
-# Marker geometry (owner-approved): symbol right of center.
+# Marker geometry (owner-approved): symbol centered on the entity —
+# the map view centers with it (no offset).
 MARKER_SIZE_PX = 170
-MARKER_X = 0.60
+MARKER_X = 0.5
 
 _FONT_PATH = (
     Path(settings.BASE_DIR) / "docker/imagor/fonts/BarlowSemiCondensed-SemiBold.ttf"
@@ -297,12 +298,9 @@ def render_static_map(
     xt, yt = _deg_to_tile(lat, lon, zoom)
     # EXACT tile range covering the crop window — no centering slack
     # (the grid formula fetched ~35 tiles; ~15-20 are actually needed).
-    # The marker sits right of center (MARKER_X) — shift the map view
-    # with it so the symbol lands ON the entity's true position, not
-    # beside it (owner review: the 0.5→0.6 offset was hut-photo framing,
-    # for the symbol the map must move along).
-    marker_shift = int(width * (MARKER_X - 0.5)) if marker is not None else 0
-    abs_left = xt * TILE_SIZE - width / 2 + offset_x - marker_shift
+    # The marker is centered (MARKER_X = 0.5): the view centers on the
+    # entity and the symbol sits exactly on it — no offset compensation.
+    abs_left = xt * TILE_SIZE - width / 2 + offset_x
     abs_top = yt * TILE_SIZE - height / 2 + offset_y
     x0 = math.floor(abs_left / TILE_SIZE)
     x1 = math.floor((abs_left + width) / TILE_SIZE)

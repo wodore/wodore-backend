@@ -47,6 +47,18 @@ class TestImageFallback:
         assert "size%3D1000x1000" in props["urls"]["square"]["md"]
         # original.raw stays the direct endpoint URL (og composes it)
         assert "/v1/geo/map/static" in props["urls"]["original"]["raw"]
+        # no baked attribution strip: the credits travel in metadata
+        assert "attribution=false" in props["urls"]["original"]["raw"]
+        assert "attribution%3Dfalse" in md
+        # license/author/attribution mirror the provider photos' shape
+        assert props["license"]["slug"] == "cc-by-sa-4-0"
+        assert props["license"]["url"] == (
+            "https://creativecommons.org/licenses/by-sa/4.0/"
+        )
+        assert props["author"]["name"] == ("OpenTopoMap / OpenStreetMap contributors")
+        assert 'target="_blank"' in props["attribution"]["short"]
+        assert "OpenTopoMap" in props["attribution"]["full"]
+        assert "openstreetmap.org/copyright" in props["attribution"]["author"]
 
     def test_hut_without_images_opt_out(self, seed_data, client):
         hut = Hut.objects.filter(
