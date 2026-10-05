@@ -211,4 +211,6 @@ AXES_ENABLED = False
 # Zitadel RP mode only (AUTH_PROVIDER=zitadel): refresh OIDC sessions.
 
 if ZITADEL_RP_ENABLED:
-    MIDDLEWARE += ("mozilla_django_oidc.middleware.SessionRefresh",)  # pyright: ignore[reportUndefinedVariable]
+    MIDDLEWARE += (
+        "server.middleware.oidc.AsyncSafeSessionRefresh",  # pyright: ignore[reportUndefinedVariable]
+    )
