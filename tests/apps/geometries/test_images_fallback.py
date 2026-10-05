@@ -34,12 +34,31 @@ class TestImageFallback:
         assert fallback_features, "expected the static-map fallback feature"
         props = fallback_features[0]["properties"]
         assert props["provider"]["slug"] == "wodore-map"
-        assert "/v1/geo/map/static" in props["urls"]["landscape"]["md"]
-        assert props["urls"]["landscape"]["md"].startswith("http")
-        # og-style generation: spotlight effect, marker scale, zoom 15
-        assert "effect=spotlight" in props["urls"]["landscape"]["md"]
-        assert "marker_scale=0.56" in props["urls"]["landscape"]["md"]
-        assert "zoom=15" in props["urls"]["landscape"]["md"]
+        md = props["urls"]["landscape"]["md"]
+        # Same pipeline as provider photos: signed imagor variants with
+        # the identical size presets, the map render as encoded source.
+        assert "v1%2Fgeo%2Fmap%2Fstatic" in md
+        assert "/945x630/" in md  # landscape md preset, constrained to source
+        assert "quality(85)" in md
+        assert "effect%3Dspotlight" in md
+        assert "marker_scale%3D0.56" in md
+        assert "zoom%3D15" in md
+        # square variants come from the square map render
+        assert "size%3D1000x1000" in props["urls"]["square"]["md"]
+        # original.raw stays the direct endpoint URL (og composes it)
+        assert "/v1/geo/map/static" in props["urls"]["original"]["raw"]
+        # no baked attribution strip: the credits travel in metadata
+        assert "attribution=false" in props["urls"]["original"]["raw"]
+        assert "attribution%3Dfalse" in md
+        # license/author/attribution mirror the provider photos' shape
+        assert props["license"]["slug"] == "cc-by-sa-4-0"
+        assert props["license"]["url"] == (
+            "https://creativecommons.org/licenses/by-sa/4.0/"
+        )
+        assert props["author"]["name"] == ("OpenTopoMap / OpenStreetMap contributors")
+        assert 'target="_blank"' in props["attribution"]["short"]
+        assert "OpenTopoMap" in props["attribution"]["full"]
+        assert "openstreetmap.org/copyright" in props["attribution"]["author"]
 
     def test_hut_without_images_opt_out(self, seed_data, client):
         hut = Hut.objects.filter(

@@ -53,12 +53,11 @@ OG_CARD_SIZE = "1200x630"
 # content digest as ?v= so imagor results and CDN entries bust when
 # the logo is replaced.
 LOGO_ASSET_NAME = "wodore_watermark.png"
-# Watermark geometry (owner-approved): 270px raster, a bit LEFT of
-# center (0.33 of the free space — same position as the static-map
-# cards), 10px from the bottom (survives 1:1 center crops), fully
-# opaque.
-OG_LOGO_SIZE_PX = 270
-OG_LOGO_POS = "0.33"
+# Watermark geometry (owner-approved): 220px raster, left-of-center
+# (0.42 of the free space), 10px from the bottom (survives 1:1 center
+# crops), fully opaque.
+OG_LOGO_SIZE_PX = 220
+OG_LOGO_POS = "0.42"
 OG_LOGO_POS_Y = "bottom-10"
 OG_LOGO_ALPHA = 0
 
