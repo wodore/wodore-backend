@@ -36,6 +36,7 @@ python /code/manage.py migrate --noinput
 # Start gunicorn:
 # Docs: http://docs.gunicorn.org/en/stable/settings.html
 # Make sure it is in sync with `django/ci.sh` check:
+# The application module lives in gunicorn_config.py (`wsgi_app`) so the
+# runtime is switchable via ASGI_ENABLED (WSGI default / uvicorn ASGI).
 /usr/local/bin/gunicorn \
-  --config python:docker.django.gunicorn_config \
-  server.wsgi
+  --config python:docker.django.gunicorn_config
