@@ -75,6 +75,7 @@ class TestGeosearchRadiusUnit:
         # rejects as out of range (10–10000), silently emptying geosearch.
         values = _ggsradius_values(5000)
         assert set(values) == {5000}
+
         assert len(values) == 3  # metadata pass + two thumb-bucket passes
 
     def test_clamped_to_api_maximum(self):
@@ -86,6 +87,113 @@ class TestGeosearchRadiusUnit:
     def test_all_passes_share_the_radius(self):
         values = _ggsradius_values(3000)
         assert len(set(values)) == 1
+
+
+class TestGeosearchRadiusIntTyping:
+    """The image endpoints take a pydantic ``float`` radius; MediaWiki
+    integer params must receive ints. ``ggsradius=300.0`` answers HTTP
+    200 with ``{"error": {"code": "badinteger"}}`` and zero results —
+    observed live against commons.wikimedia.org — and was silently
+    cached as an empty provider run for the 7-day TTL."""
+
+    def test_float_endpoint_radius_sent_as_int(self):
+        values = _ggsradius_values(300.0)
+        assert set(values) == {300}
+        assert all(isinstance(v, int) for v in values)
+
+    def test_float_radius_clamps_to_int_bounds(self):
+        assert set(_ggsradius_values(15000.0)) == {10000}
+        assert set(_ggsradius_values(5.5)) == {10}
+
+
+class TestProviderCacheKeyRadius:
+    """Float radii forked the provider cache into int-key and float-key
+    spaces (endpoint path poisoned the float half with empty entries).
+    The cache key normalizes to int so both callers share one space."""
+
+    def test_float_and_int_radius_share_key(self):
+        provider = WikimediaCommonsProvider()
+        key_float = provider._get_cache_key(46.0, 7.75, 300.0)
+        key_int = provider._get_cache_key(46.0, 7.75, 300)
+        assert key_float == key_int
+        assert "300.0" not in key_float
+        assert ":300:" in key_float
+
+
+class _ErrorAsyncClient:
+    """Answers every request with a MediaWiki error document and HTTP 200."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        pass
+
+    async def get(self, url: str, params: dict[str, Any]) -> _Response:
+        return _Response({"error": {"code": "badinteger", "info": "not an integer"}})
+
+
+class _ErrorHttpx:
+    AsyncClient = _ErrorAsyncClient
+
+
+class TestMediaWikiErrorSurfaces:
+    """MediaWiki reports bad parameters as HTTP 200 + ``{"error": ...}``;
+    ``raise_for_status`` does not catch that. The fetchers must raise so
+    the per-strategy handlers log the failure instead of silently
+    contributing zero results."""
+
+    def test_geosearch_error_raises(self):
+        provider = WikimediaCommonsProvider()
+        with pytest.raises(RuntimeError, match="badinteger"):
+            asyncio.run(
+                provider._fetch_commons_geosearch(
+                    lat=46.0,
+                    lon=7.75,
+                    radius=300.0,
+                    limit=10,
+                    place_qids=set(),
+                    httpx=_ErrorHttpx,
+                )
+            )
+
+    def test_categorymembers_error_raises(self):
+        provider = WikimediaCommonsProvider()
+        with pytest.raises(RuntimeError, match="badinteger"):
+            asyncio.run(
+                provider._fetch_commons_category_images(
+                    category_name="Testhütte",
+                    lat=46.0,
+                    lon=7.75,
+                    limit=10,
+                    httpx=_ErrorHttpx,
+                )
+            )
+
+    def test_metadata_error_is_skipped(self):
+        # The per-image metadata fetch is best-effort: an error answer is
+        # logged and the image skipped (None), never a hard failure.
+        provider = WikimediaCommonsProvider()
+        result = asyncio.run(
+            provider._fetch_commons_metadata("File:Test.jpg", _ErrorAsyncClient())
+        )
+        assert result is None
+
+    def test_thumb_bucket_error_is_skipped(self):
+        # Thumb-bucket passes are an enhancement; on error the caller
+        # falls back to the smaller buckets (empty map).
+        provider = WikimediaCommonsProvider()
+        result = asyncio.run(
+            provider._fetch_thumb_bucket(
+                _ErrorAsyncClient(),
+                {"action": "query", "iiurlwidth": 500},
+                1920,
+            )
+        )
+        assert result == {}
 
 
 class TestWikidataSpatialRadius:
