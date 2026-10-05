@@ -27,14 +27,20 @@ set -o pipefail
 # Note: `compilemessages` is NOT run (neither here nor in the image build):
 # locale/ is currently empty, there is nothing to compile.
 
-# Check that $DJANGO_ENV is set to "production",
-# fail otherwise, since it may break things:
+# Check that $DJANGO_ENV is a serve-safe environment. Wodore serves from
+# two: "production" and "staging" (server/settings/environments/); the
+# wemake-template default of rejecting anything but "production" would
+# crash-loop the k8s staging namespace, which sets DJANGO_ENV=staging.
 echo "DJANGO_ENV is ${DJANGO_ENV:-<unset>}"
-if [ "${DJANGO_ENV:-}" != 'production' ]; then
-  echo 'Error: DJANGO_ENV is not set to "production".'
-  echo 'Application will not start.'
-  exit 1
-fi
+case "${DJANGO_ENV:-}" in
+  production | staging)
+    ;;
+  *)
+    echo 'Error: DJANGO_ENV is not set to "production" or "staging".'
+    echo 'Application will not start.'
+    exit 1
+    ;;
+esac
 
 export DJANGO_ENV
 
