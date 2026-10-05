@@ -215,3 +215,8 @@ USER web
 
 # We customize how our app is loaded with the custom entrypoint:
 ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
+
+# Default command: the generic server start script. Overriders append
+# flags (k8s passes args only: ["bash", "./docker/django/start.sh",
+# "--no-migrate", "--port", "8008"], keeping the entrypoint chain intact).
+CMD ["bash", "./docker/django/start.sh"]
