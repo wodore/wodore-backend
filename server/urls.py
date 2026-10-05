@@ -41,6 +41,8 @@ urlpatterns = [
     # Apps:
     path("main/", include(django_admin_urls, namespace="main")),
     # Health checks:
+    # /health/ is the DEEP check (database + cache + storage) - use it for
+    # readiness probes: "can this pod serve traffic right now?".
     path(
         "health/",
         HealthCheckView.as_view(
@@ -51,6 +53,12 @@ urlpatterns = [
             ],
         ),
     ),
+    # /health/live/ is the SHALLOW check - no dependencies at all. Use it
+    # for k8s liveness probes: "is the process (and, under ASGI, the event
+    # loop) alive?". A dependency check there would restart perfectly
+    # healthy pods during a database hiccup (restart storm against an
+    # already-struggling dependency).
+    path("health/live/", HealthCheckView.as_view(checks=[])),
     # Locale:
     path("i18n/", include("django.conf.urls.i18n")),
     # django-admin:

@@ -69,7 +69,7 @@ dependencies = [
   "fido2>=2.2.1",
   "django-modern-rest[msgspec,openapi,pydantic]>=0.16.0,<0.17",
   "django-readers>=2.5.1",
-  "uvicorn>=0.54.0",
+  "uvicorn[standard]>=0.54.0",  # uvloop + httptools for the ASGI runtime (ASGI_ENABLED=1)
   "uvicorn-worker>=0.4.0",
 ]
 
