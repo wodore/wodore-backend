@@ -76,6 +76,8 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         "is_modified",
         "is_active",
         "review_tag",
+        "visits_30d",
+        "visits_365d",
         "description_quality_display",
         "view_link",
     )
@@ -153,6 +155,8 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         return super().formfield_for_dbfield(db_field, request, **kwargs)
 
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
+        from server.apps.visits.models import visit_window_annotation
+
         qs = super().get_queryset(request).prefetch_related("image_set")
         # prefetch_related("orgs_source", "orgs_source__organization").
         return qs.select_related(
@@ -165,7 +169,19 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
                     link_i18n="orgs_source__link",
                 )
             ),
+            visits_30d=visit_window_annotation(Hut, days=30),
+            visits_365d=visit_window_annotation(Hut, days=365),
         )
+
+    @display(description=_("Visits 30d"), ordering="visits_30d")  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+    def visits_30d(self, obj):
+        """Visit sum over the last 30 days (openspec: place-visit-counter)."""
+        return obj.visits_30d
+
+    @display(description=_("Visits 1y"), ordering="visits_365d")  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+    def visits_365d(self, obj):
+        """Visit sum over the last year (openspec: place-visit-counter)."""
+        return obj.visits_365d
 
     @display(
         description=_("Status"),  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)

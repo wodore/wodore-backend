@@ -1,27 +1,30 @@
 ## ADDED Requirements
 
 ### Requirement: Best-effort visit counting with visitor dedup
-The system SHALL count visits per object per day, incremented when an
-images endpoint serves a place or hut page request, at most once per
-visitor per object within a short dedup window (opaque visitor key derived
-from request properties, kept only in the cache). Counting SHALL NOT add
-a database write to the request path; increments are buffered in the cache
-and flushed asynchronously. Requests with `update_cache=true` SHALL NOT be
-counted. Counting failures SHALL NOT affect the observed response.
+The system SHALL count visits per object per day, incremented when a hut
+or place detail endpoint serves a page request, at most once per visitor
+per object within a short dedup window (opaque visitor key derived from
+request properties, kept only in the cache). Counting SHALL NOT add a
+database write to the request path; increments are buffered in the cache
+and flushed asynchronously. Requests with `update_cache=true` SHALL NOT
+be counted, nor requests from a short static prefetch/crawler
+user-agent list. Counting failures SHALL NOT affect the observed
+response. The images endpoints SHALL NOT be counted (they stay
+response-cacheable; the detail fetch is the page-view signal).
 
 #### Scenario: Hut page visit is counted
 
-- **WHEN** a visitor loads a hut page (images endpoint hit for an existing hut)
+- **WHEN** a visitor loads a hut page (hut detail endpoint hit for an existing hut)
 - **THEN** the hut's daily counter is incremented via the async buffer and the response is served normally
 
 #### Scenario: Repeat fetches within the window count once
 
-- **WHEN** the same visitor hits the images endpoint for the same place several times within the dedup window
+- **WHEN** the same visitor hits the detail endpoint for the same place several times within the dedup window
 - **THEN** the place's counter is incremented exactly once for that window
 
 #### Scenario: Operator refresh is not counted
 
-- **WHEN** the images endpoint is called with `update_cache=true`
+- **WHEN** counting observes a request with `update_cache=true` or a prefetch user agent
 - **THEN** no visit is counted
 
 ### Requirement: Generic daily counter storage
@@ -51,18 +54,12 @@ restarts MAY lose buffered counts (best-effort, documented).
 
 ### Requirement: Popularity consumption
 The system SHALL expose visit aggregates internally: a `popular_places`
-helper (top places by visit sum over a configurable window) and a sortable
-recent-visits column in the Hut and GeoPlace admins. The image sync
-command's `--all` sweep SHALL support `--popular-first` ordering by recent
-visit sums. Counts SHALL NOT be exposed through public API endpoints in
-this change.
-
-#### Scenario: Sweep orders by popularity
-
-- **WHEN** `geoimages_pin --all --popular-first` runs
-- **THEN** sweep targets are ordered by descending visit sum over the recent window, places without counters sorted last
+helper (top places by visit sum over a configurable window) and sortable
+visit columns in the Hut and GeoPlace admins (30-day and one-year
+windows, SQL-side subquery annotations). Counts SHALL NOT be exposed
+through public API endpoints in this change.
 
 #### Scenario: Admin sorts by visits
 
-- **WHEN** an admin sorts the Hut changelist by the visits column
-- **THEN** huts are ordered by their recent visit aggregate
+- **WHEN** an admin sorts the Hut changelist by a visits column
+- **THEN** huts are ordered by their visit aggregate for that column's window
