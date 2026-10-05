@@ -2,16 +2,16 @@
 
 ## ADDED Requirements
 
-### Requirement: ASGI serving with sync-core controllers
-The API SHALL be served over ASGI (uvicorn worker via gunicorn, `server.asgi`), with every dmr controller endpoint implemented as a thin async wrapper whose handler logic executes inside a single `sync_to_async` bridged sync core. Handler cores SHALL remain callable from synchronous contexts (tests, management commands) unchanged.
+### Requirement: ASGI serving with sync-first endpoints
+The API SHALL be served over ASGI (uvicorn worker via gunicorn, `server.asgi`, switchable via `ASGI_ENABLED`). Endpoint handlers SHALL stay synchronous by default (Django auto-adapts sync views into bridged threads); explicit sync-core wrappers (one `sync_to_async` bridge per request) SHALL be used only where dmr auth hooks or explicit control require async. Endpoints with genuinely independent external I/O MAY be native async (template: the og static map, #259); blanket native conversion is rejected (PoC: native burst8 13.0s vs sync-core 9.2–9.9s).
 
-#### Scenario: Request served through async wrapper
+#### Scenario: Sync view served under ASGI
 - **WHEN** a client requests any `/v1/` endpoint under ASGI
-- **THEN** the endpoint's async wrapper delegates to its sync core via one `sync_to_async` bridge and returns the same response body, headers (including `Api-Version` and ETag semantics), and status code as the previous WSGI deployment
+- **THEN** the sync handler runs in a bridged thread and returns the same response body, headers (including `Api-Version` and ETag semantics), and status code as under WSGI
 
-#### Scenario: Sync core reused outside the request path
-- **WHEN** a management command or unit test invokes a controller's sync core directly
-- **THEN** the core executes without any async context or bridge
+#### Scenario: Handler cores stay sync-callable
+- **WHEN** a management command or unit test invokes a controller handler directly
+- **THEN** it executes without any async context or bridge
 
 ### Requirement: No blocking calls on the event loop
 Application code executing on the event loop SHALL NOT perform blocking operations. All ORM access, network calls (including OIDC token introspection), and filesystem operations SHALL run inside `sync_to_async` bridges or async clients. CI SHALL enforce ruff `ASYNC` lint rules on all async functions.
@@ -32,15 +32,19 @@ The application SHALL run a heartbeat task during the ASGI lifespan that measure
 - **THEN** a structured warning event with the measured lag is logged
 
 ### Requirement: Database connection pooling for async mode
-The database configuration SHALL use the psycopg3 connection pool (`"pool": True` in `OPTIONS`) with `CONN_MAX_AGE` set to 0 and connection health checks enabled. The pool size SHALL be configurable via environment and default to 10 per pod.
+When ASGI mode is enabled (`POSTGRES_POOL=1`), the database configuration SHALL use the psycopg3 connection pool (env-gated, shipped in #259) with `CONN_MAX_AGE` set to 0. The pool SHALL configure a checkout (`getconn`) timeout of ~2 seconds and a per-worker `max_size` cap such that workers × max_size stays within the pod's DB connection budget (guidance: 3 × 4–5).
 
 #### Scenario: Pool replaces persistent connections
 - **WHEN** the app runs in ASGI mode and serves concurrent requests
 - **THEN** database connections are checked out from the psycopg pool and no per-request persistent connections are kept via `CONN_MAX_AGE`
 
-#### Scenario: Pool size tuned via environment
-- **WHEN** the operator sets the pool-size environment variable
-- **THEN** the psycopg pool is created with that size without code changes
+#### Scenario: Pool exhaustion fails fast instead of wedging
+- **WHEN** concurrent demand exceeds the pool budget under a burst
+- **THEN** checkouts fail within the short timeout (fast 5xx) instead of queuing 30s, and the process recovers without a restart (PoC counter-example: 40× burst wedged until restart with the default timeout)
+
+#### Scenario: Pool tuned via environment
+- **WHEN** the operator sets the pool environment variables
+- **THEN** the psycopg pool picks up size and timeout without code changes
 
 ### Requirement: Async-capable custom middleware
 The custom middlewares (`EnvironmentHeadersMiddleware`, `LoggingContextVarsMiddleware`, `ApiVersionMiddleware`) SHALL be async-capable so that no per-request thread adaptation is inserted for them on the ASGI stack. Request-context (contextvar) propagation SHALL survive the async/thread bridge without duplication or loss.
@@ -60,9 +64,9 @@ Switching the runtime to ASGI SHALL NOT change any observable API behavior: Open
 - **WHEN** the full contract test suite and schemathesis runs execute against the ASGI application
 - **THEN** all assertions that passed against the WSGI application pass unchanged
 
-### Requirement: Django 6.1 baseline for async features
-The application SHALL run on Django 6.1.x before ASGI rollout, making the async cache framework, async sessions, and dual-mode bundled middleware available.
+### Requirement: App-level request timeout under ASGI
+Because uvicorn workers heartbeat continuously (gunicorn `--timeout` is inert under ASGI), the application SHALL enforce its own request-level timeout with the standard error contract, so runaway handlers cannot hold connections indefinitely (PoC: 2.85 MB list request ran 52s with no kill).
 
-#### Scenario: Bundled middleware runs dual-mode
-- **WHEN** the ASGI stack processes a request through Django's bundled middleware (e.g. sessions, common)
-- **THEN** the middleware executes natively without thread adaptation
+#### Scenario: Runaway request is cut off
+- **WHEN** a request exceeds the configured app-level timeout under ASGI
+- **THEN** it is cancelled and answered with the standard error contract response instead of running unbounded

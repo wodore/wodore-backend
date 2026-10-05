@@ -1,94 +1,102 @@
 # Design: Staged async API migration
 
+> **Amended 2026-10-05.** D7 (Django 6.1) is delivered (#254); D1/D2/D3/D6
+> are partially delivered or measured — see each decision's status line.
+> Measurements referenced below were taken in the PoC lane
+> ([#252](https://github.com/wodore/wodore-backend/pull/252)) on the same
+> data as production-shape WSGI.
+
 ## Context
 
-Production runs `wd-backend` as **1 replica / 1 pod** with `gunicorn -w 3 --timeout 30 --preload server.wsgi` (port 8008). The k8s command bypasses the repo's `docker/django/gunicorn_config.py` entirely — two diverged sources of truth. Observed load: ~3m CPU, 412Mi (limits 2Gi), ~600 log lines/24h dominated by scanner noise, zero `WORKER TIMEOUT` events, zero open app DB connections at rest (`CONN_MAX_AGE=60`). Successful 200 responses are not logged at all.
+Production runs `wd-backend` as **1 replica / 1 pod** with an inline k8s
+gunicorn command (`-w 3 --timeout 30 --preload`, WSGI, port 8008) that
+bypasses the repo config. Observed (2026-10-05): ~idle traffic, no access
+logging for 2xx, zero worker timeouts, `wd-martin` CrashLoopBackOff since
+235 days, `psycopg2-binary` still pinned.
 
-Stack facts established by research (see `_work` doc / session findings):
-- dmr supports async endpoints natively (`endpoint.py` `is_async`) and ships `SyncAuth` / `AsyncAuth` / `SyncOrAsyncAuth` bases.
-- Django 6.0.3 installed. Django 6.1 (Aug 2026) ships the async cache framework, async sessions, and dual-mode bundled middleware.
-- The ORM never executes queries on the event loop: every `a*()` method is `sync_to_async(sync)()`. Django 6.1 guidance: async mode ⇒ `CONN_MAX_AGE` off, psycopg3 pool on, pool sized to target in-flight query concurrency.
-- Transactions and the admin (Unfold) are sync-only, permanently.
-- DB backend is `psqlextra.backend` (fork `armonge/django-postgres-extra@feat/django-6`), which wraps Django's psycopg3 backend.
-- Background work (availability cronjobs, hut-services imports, admin) is and stays sync in separate processes.
+Landed on main since the original proposal: **Django 6.1** (#254 — async
+cache framework, async sessions, dual-mode bundled middleware), **#259**
+(`ASGI_ENABLED` runtime switch via `gunicorn_config.py` (`wsgi_app`,
+`uvicorn_worker.UvicornWorker`), env-gated psycopg3 pool
+(`POSTGRES_POOL`/`POSTGRES_POOL_SIZE`, `CONN_MAX_AGE=0` while enabled),
+ruff `ASYNC` rules, and the og static-map endpoint as a native-async
+showcase: tiles+marker overlap in a TaskGroup, decode/composite bridged).
+
+PoC facts that shaped the amendments below (see #252 for details):
+- ORM async is thread-bridging per query (`aget = await
+  sync_to_async(get)()`); native conversion measured **worse** under load
+  (hut list burst8: 13.0s native vs 9.2–9.9s sync-core at ×1 worker);
+  serializer lazy N+1 loads crash on the loop (`SynchronousOnlyOperation`)
+- **ASGI ×3 workers beats every other config measured**: sustained 16
+  clients 17.9 req/s vs 5.1 (prod WSGI ×3) and 6.4 (ASGI ×1); burst8 hut
+  list 4.8s vs 12–27s (WSGI); survives slow readers and the 2.85 MB full
+  list (WSGI: worker killed at `--timeout 30` → hard 500)
+- Pool exhaustion wedge: 40× burst → 30s `getconn` timeouts → 500s; one
+  run never recovered (idle-in-PG conns, pool exhausted, restart needed);
+  steady-state returns work fine
+- GIL: CPU-heavy endpoints scale linearly per process regardless of
+  runtime — process count is the CPU parallelism dial
 
 ## Goals / Non-Goals
 
 **Goals:**
 - Remove the 3-concurrent-request ceiling and the single-replica availability risk
-- Make all API traffic observable (status + duration per request) before changing the runtime model
-- Adopt ASGI with a **sync-core controller pattern**: async controller wrappers, unchanged sync handler cores — minimal bimodal surface, transactions intact
-- Guard the event loop: structural (sync-core), lint (ruff `ASYNC`), runtime (loop-lag watchdog), topology (2 replicas + tight liveness probe)
-- Keep the API contract byte-identical: `Api-Version`, ETags, error contract, OpenAPI schema unchanged
+- Make all API traffic observable (status + duration per request) before flipping runtimes
+- Flip production to ASGI (measured best config) behind stage gates
+- Guard the event loop: auth off the loop, async-capable middleware, app-level request timeout, pool policy, watchdog
 
 **Non-Goals:**
-- Rewriting query code to `aget()`/`async for` (stage 3, optional, per-endpoint, profile-gated)
+- Converting endpoint handlers to native async (rejected by measurement; og map (#259) stays the exception that proves the rule — independent I/O)
 - Async background jobs, hut-services, or admin
-- Websockets/SSE endpoints (this migration *enables* them; building them is future work)
-- Redis cache / cross-process cache replacement (locmem deduplicates naturally with fewer processes; revisit only if cache hit rates matter later)
+- Websockets/SSE endpoints (enabled by the runtime, not built here)
+- Redis/shared cache (locmem deduplicates once process count drops; revisit if hit rates matter)
 
 ## Decisions
 
-### D1: Sync-core controller pattern instead of full async conversion
-Every dmr controller keeps its current handler logic as a private sync method; the endpoint becomes a thin `async def` that delegates via one `sync_to_async` bridge:
+### D1: Sync-core pattern as the default — **validated by PoC**
+Thin `async def` controller delegating via one `sync_to_async` bridge to an unchanged sync core; transactions keep working; cores stay callable from sync contexts. PoC: contract byte-identical, no `aget()` needed, bursts better than native-async. Most endpoints need **no change at all** (Django auto-adapts sync views under ASGI — measured on geojson/list endpoints in #259). Status: pattern documented; endpoint conversion only where dmr auth hooks or explicit control demand it.
 
-```python
-async def get(self, parsed_path: Path[HutPath], parsed_query: Query[HutsQuery]):
-    return await sync_to_async(self._get_core)(parsed_path, parsed_query)
-```
+### D2: Deployment = ASGI ×3 uvicorn workers per pod, 2 replicas — **amended by measurement**
+Original: 1 worker/pod × 2 replicas. Measured: 3 event loops dominate (17.9 vs 6.4 req/s sustained; GIL-parallel CPU across processes; loop-wedge blast radius ⅓ per pod). Config is on main (#259: `ASGI_ENABLED=1`, `GUNICORN_WORKERS=3`); production flip is a k8s env/command change gated on stage-2 tasks. Alternative rejected: ASGI ×1 (slower, single loop wedge = whole pod).
 
-Why: Django's documented recommendation ("restructure so the loop runs inside one `sync_to_async` crossing"); no `aget()` rewrite; `atomic()` keeps working inside cores; cores stay callable from sync tests/commands; concurrency ceiling equals pool size (identical to full conversion for sequential-query endpoints). Blocking calls are structurally confined to the bridged core. Alternative rejected: converting cores to a-variants now — large diff, breaks transactions, no measurable benefit at current traffic.
+### D3: Pool with short timeout and per-worker cap — **amended by PoC finding**
+`OPTIONS["pool"] = {"min_size": 2, "max_size": N}` (env-tunable since #259) + `CONN_MAX_AGE=0`. Amendments: set a **~2s getconn timeout** (default 30s produced wedged 500s under burst) and cap per-worker `max_size` at 4–5 (≤15 conns/pod; measured 3 pools × 10 = 20 conns under load). Root-cause the leaked-checkout wedge (one PoC run never recovered) before the prod flip. Format note: pool options must be a dict — flat keys leak into connect kwargs (`invalid connection option`).
 
-### D2: Deployment = gunicorn UvicornWorker × 1 worker per pod, 2 replicas
-- `server.wsgi` → `server.asgi`; worker class `uvicorn.workers.UvicornWorker`, 1 worker process per pod (the event loop is the concurrency mechanism); replicas 1 → 2 with PDB `minAvailable: 1`.
-- Consolidate config: one gunicorn config consumed by both docker-compose and k8s (k8s stops carrying its own inline command; `GUNICORN_WORKERS=1`, `WSGI_APPLICATION`/`ASGI_APPLICATION` env). Port stays 8008.
-- `migrate` moves out of `docker/django/gunicorn.sh` into a k8s pre-deploy Job (helm/gitops change in the infra repo; this repo ships the compose/pre-sync equivalent + docs).
+### D4: Auth — async twin, never introspect on the loop — **open (stage 2)**
+`AuthBearer` async counterpart via dmr `SyncOrAsyncAuth`; JWT verification is local CPU; the legacy Zitadel introspection validator must bridge or use `httpx.AsyncClient` + a short-TTL cache. A sync network call during auth blocks the loop for every concurrent request.
 
-Why not more workers per pod: memory cost with no benefit (pool caps DB concurrency anyway); 2 pods bound the blast radius of a wedged loop.
+### D5: Middleware — custom three `async_capable` — **open (stage 2), cheaper since Django 6.1**
+`EnvironmentHeadersMiddleware`, `LoggingContextVarsMiddleware`, `ApiVersionMiddleware` get `async_capable = True` (`markcoroutinefunction`). Django 6.1's bundled middleware (sessions, cache) is dual-mode natively. Third-party audit (`corsheaders`, `csp`, `permissions-policy`, `whitenoise`); adapted ones are acceptable (thread hop per request).
 
-### D3: Database = psycopg3 pool, `CONN_MAX_AGE=0`
-`OPTIONS: {"pool": True, "pool_size": 10}` (psycopg_pool, ships via `psycopg[pool]`), `CONN_MAX_AGE=0` + `CONN_HEALTH_CHECKS=True`. Pool size 10 ⇒ up to 10 concurrent in-flight queries per pod ≈ 3× today's ceiling at half the pods' worker processes. Drop `psycopg2-binary` from pyproject (vestigial; nothing imports it; Django 6 removed psycopg2 support).
+### D6: Event-loop safety net — **lint delivered (#259); watchdog + timeout open**
+Delivered: ruff `ASYNC` rules in CI. Open: loop-lag watchdog (lifespan heartbeat, warn >250ms), liveness probe with `timeoutSeconds: 2` (a wedged loop cannot answer → kubelet restarts; the second replica serves), **app-level request timeout** (gunicorn `--timeout` is inert under uvicorn workers — measured 52s request with no kill), and `PYTHONASYNCIODEBUG=1` staging soak.
 
-### D4: Auth — async twin, never introspect on the loop
-`AuthBearer` gains an async counterpart using dmr's `SyncOrAsyncAuth` pattern. JWT validation is local CPU crypto and runs async; the legacy Zitadel introspection validator (network call) must run inside the bridge (`sync_to_async`) or use `httpx.AsyncClient` — a sync network call during auth would block the loop for every concurrent request. Add a cache (locmem, short TTL) for introspection results while touching it.
+### D7: Django 6.1 first — **delivered by #254**
 
-### D5: Middleware — custom three become `async_capable`; rest audited
-`EnvironmentHeadersMiddleware`, `LoggingContextVarsMiddleware`, `ApiVersionMiddleware` get `async_capable = True` implementations (`markcoroutinefunction`). Bundled Django middleware is dual-mode on 6.1. Third-party (`corsheaders`, `csp`, `permissions-policy`, `whitenoise`) audited for `async_capable`; any sync one stays auto-adapted (thread hop per request, acceptable — verified counts logged via `django.request` "adapted" debug log at rollout).
-
-`ApiVersionMiddleware` response transforms are pure response-processing and convert mechanically; its ETag-keying (version + registry hash) is unaffected.
-
-### D6: Event-loop safety net
-- ruff: enable `ASYNC` rules (blocking sleep/HTTP in async functions) in `[tool.ruff.lint]`.
-- Loop-lag watchdog: ASGI-lifespan-started heartbeat task measuring `loop.time()` drift; warning log + metric-able event beyond 250ms.
-- Liveness probe: HTTP probe against a loop-served endpoint (e.g. health endpoint), `timeoutSeconds: 2`, `failureThreshold: 2` — a wedged loop cannot answer, kubelet restarts the pod, second replica serves.
-- Staging runs with `PYTHONASYNCIODEBUG=1` during rollout to surface slow callbacks.
-
-### D7: Django 6.1 first
-Stage 2 begins with the 6.0.3 → 6.1.x bump (async cache/sessions/middleware needed for D5; standard release-process PR, not mixed into the ASGI PR). Verify psqlextra fork on 6.1 (fork branch is already `feat/django-6`; pin moves may be needed).
-
-### D8: Request/duration access logging (stage 1, independent of async)
-Middleware emits one structlog event per completed response: method, path, status, duration, cache-hit/ETag outcome where cheap. `django.server` 200s stop being invisible. This is the measuring stick that gates stage 3 and validates stage 2 (before/after latency comparison).
+### D8: Request/duration access logging — **open (stage 1, unchanged)**
+One structlog event per completed response (method, path, status, duration; no tokens/bodies), deployed under WSGI to build a ≥1-week baseline before the ASGI flip. This is also the measuring stick for stage-3 gating.
 
 ## Risks / Trade-offs
 
-- [Blocking call freezes a pod's loop] → structural (D1: blocking work lives inside bridges), lint (D6), watchdog + 2 replicas + aggressive liveness probe (D2/D6). Residual risk accepted: worst case = one pod restarts, not an outage.
-- [psqlextra fork incompatible with 6.1] → verify before stage 2 starts; fallback: upstream pin or backend swap (only `PostgresViewModel` is used — cheap to vendor if the fork stalls).
-- [dmr async path bugs] → sync-core keeps dmr surface minimal (endpoint dispatch only); full contract suite + schemathesis runs against ASGI in CI before rollout; staging soak with `PYTHONASYNCIODEBUG`.
-- [Contextvar/log-context duplication across the bridge] → `LoggingContextVarsMiddleware` converted in D5 and covered by explicit tests asserting request-id continuity through an async controller.
-- [Pool exhaustion latency cliffs] → pool 10/pod with health checks; request-duration logging (D8) makes queueing visible; pool size is a one-line env-backed tune.
-- [Rolling update stalls with 2 replicas if migrate stays in-entrypoint] → D2 migrate Job; verified by rehearsing the rollout in staging.
-- [GIL contention with many active threads] → pool caps threads per pod at ~10; far below contention territory.
-- [`wd-martin` fix out of repo scope] → tracked as stage-1 item in the infra repo; not a blocker for stages 2/3 of this change.
+- [Blocking call freezes a loop] → lint (shipped), watchdog + probe + 2 replicas (stage 1/2), blast radius ⅓ per pod at ×3 workers
+- [Pool exhaustion wedge under burst] → short pool timeout + cap (D3) + root-cause ticket **blocks the prod flip**
+- [No request timeout under ASGI] → app-level timeout task **blocks the prod flip** (52s measured worst case)
+- [psqlextra fork on 6.1] → resolved: fork runs on Django 6.1 in production since #254
+- [dmr async path bugs] → sync-core keeps dmr surface minimal; og map (#259) exercises the async dispatch in prod traffic already
+- [Contextvar/log-context across the bridge] → `LoggingContextVarsMiddleware` conversion + continuity tests (stage 2)
+- [`wd-martin` fix out of repo scope] → infra-repo item; not a blocker for stage 2
+- [CPU-bound endpoints stay GIL-linear] → accepted; process count (×3 workers ×2 replicas) is the CPU dial; ETag/category work already landed (#257) to cut per-request CPU
 
 ## Migration Plan
 
-1. **Stage 1** (ship independently, sync runtime unchanged): D8 logging; k8s replicas+PDB+probe; migrate Job; martin fix; psycopg2-binary cleanup; gunicorn config consolidation (still WSGI). Deploy, observe real traffic baseline for ≥1 week.
-2. **Stage 2a**: Django 6.1 bump PR (release process, its own changelog entry).
-3. **Stage 2b**: ASGI PR — D1–D6. Roll out staging → production canary (1 pod) → both pods. Rollback = revert deployment to previous image (WSGI config still present in repo history); no data/schema changes involved.
-4. **Stage 3** (optional, only if profiling shows need): per-endpoint native conversion, decided endpoint-by-endpoint with duration data from D8.
+1. **Stage 1** (WSGI unchanged): D8 logging; k8s replicas+PDB+probe; migrate Job; martin fix; psycopg2-binary cleanup; drop inline k8s gunicorn command (config is single source since #259). Baseline ≥1 week.
+2. **Stage 2a — done** (#254).
+3. **Stage 2b — flip prep** (repo): auth twin (D4), middleware (D5), watchdog + app timeout (D6), pool timeout/cap (D3), wedge root-cause ticket. Staging soak with `PYTHONASYNCIODEBUG=1`; load test incl. slow-client and burst scenarios.
+4. **Flip**: `ASGI_ENABLED=1`, `POSTGRES_POOL=1` (timeout 2s, `max_size` 4–5), `GUNICORN_WORKERS=3`, 2 replicas. Canary 1 pod → both. Rollback = previous image/env (WSGI path still shipped and tested).
+5. **Stage 3** (optional): per-endpoint native conversion only with duration-data justification.
 
 ## Open Questions
 
-- Kubernetes manifests live outside this repo (flux/gitops in the infra project) — confirm where the `wd-backend` deployment + migrate Job changes land and who applies them.
-- Should the health/liveness endpoint be a new lightweight `/healthz` on the API (currently no such route serves the loop directly)?
-- Pool size 10 vs larger — decided by stage-1 baseline data (current traffic suggests 10 is generous).
+- k8s manifests live in the infra (flux/gitops) repo — confirm owner for the deployment changes + migrate Job.
+- Health/liveness endpoint: add `/healthz` (loop-served) or reuse an existing route?
+- Pool wedge root cause: upstream (Django 6.1 / psycopg_pool) vs our combination — needs a minimal reproducer.
