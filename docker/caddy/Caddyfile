@@ -23,7 +23,7 @@ www.{$DOMAIN_NAME} {
 		root * /var/www/django/static
 
 		file_server {
-			# Staticfiles are pre-compressed in `gunicorn.sh`
+			# Staticfiles are pre-compressed in `start.sh`
 			precompressed br gzip
 		}
 	}

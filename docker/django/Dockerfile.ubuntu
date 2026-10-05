@@ -205,3 +205,6 @@ USER web
 
 # We customize how our app is loaded with the custom entrypoint:
 ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
+
+# Default command: the generic server start script (see Dockerfile.alpine).
+CMD ["bash", "./docker/django/start.sh"]
