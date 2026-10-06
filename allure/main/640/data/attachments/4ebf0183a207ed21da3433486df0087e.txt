@@ -1,0 +1,1 @@
+{"error": "", "provider": "panoramax", "event": "Provider error", "timestamp": "2026-10-06T23:10:10.195338Z", "level": "error", "logger": "server.apps.geometries.providers.panoramax", "filename": "panoramax.py", "lineno": 145, "func_name": "fetch", "module": "panoramax"}
