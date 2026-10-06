@@ -1,1 +1,0 @@
-{"provider": "camptocamp", "error": "", "event": "Provider error", "timestamp": "2026-10-06T23:02:13.326861Z", "level": "error", "logger": "server.apps.geometries.providers.camptocamp", "filename": "camptocamp.py", "lineno": 168, "func_name": "fetch", "module": "camptocamp"}
