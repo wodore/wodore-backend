@@ -1,13 +1,7 @@
 {
   "worktree": {
-    "setup": [
-      "workz sync --isolated --quiet \"$PASEO_WORKTREE_PATH\"",
-      "scripts/lane-venv.sh",
-      "scripts/lane-db.sh create",
-      "scripts/sync-martin.sh"
-    ],
-    "teardown": ["scripts/lane-martin.sh stop", "scripts/lane-db.sh drop"],
-    "servicePorts": { "range": "3450-3499" }
+    "setup": ["workz sync --isolated --quiet .", "scripts/lane-setup.sh"],
+    "teardown": ["scripts/lane-teardown.sh"]
   },
   "scripts": {
     "test": { "command": "scripts/lane-run.sh .venv/bin/pytest" },
@@ -16,9 +10,6 @@
     },
     "martin:start": { "command": "scripts/lane-martin.sh start" },
     "martin:stop": { "command": "scripts/lane-martin.sh stop" },
-    "api": {
-      "type": "service",
-      "command": "scripts/lane-run.sh .venv/bin/python manage.py runserver $PASEO_PORT"
-    }
+    "runserver": { "type": "service", "command": "scripts/lane-dev.sh fg" }
   }
 }
