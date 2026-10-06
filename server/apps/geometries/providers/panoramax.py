@@ -8,7 +8,7 @@ from typing import Any
 
 import structlog
 
-from .base import ImageProvider, ImageResult
+from .base import ImageProvider, ImageResult, provider_http_timeout
 from .schemas import GeoPlaceSchema
 from .scoring import (
     calculate_age_penalty,
@@ -91,7 +91,9 @@ class PanoramaxProvider(ImageProvider):
                 )
             }
 
-            async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+            async with httpx.AsyncClient(
+                timeout=provider_http_timeout(), headers=headers
+            ) as client:
                 # Single search request to /api/search
                 url = f"{self.api_base}/api/search"
                 params = {

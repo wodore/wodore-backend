@@ -14,7 +14,7 @@ import structlog
 
 from django.contrib.gis.geos import Point
 
-from .base import ImageProvider, ImageResult
+from .base import ImageProvider, ImageResult, provider_http_timeout
 from .schemas import GeoPlaceSchema
 from .scoring import (
     calculate_age_penalty,
@@ -121,7 +121,9 @@ class RefugesInfoProvider(ImageProvider):
                     settings, "BOT_AGENT", "WodoreBackend/1.0 (+https://wodore.ch)"
                 )
             }
-            async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+            async with httpx.AsyncClient(
+                timeout=provider_http_timeout(), headers=headers
+            ) as client:
                 for source_id, place in place_map.items():
                     try:
                         logger.debug(

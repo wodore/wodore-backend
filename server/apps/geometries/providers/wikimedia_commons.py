@@ -19,7 +19,7 @@ import structlog
 from django.conf import settings
 from django.contrib.gis.geos import Point
 
-from .base import ImageProvider, ImageResult
+from .base import ImageProvider, ImageResult, provider_http_timeout
 from .schemas import GeoPlaceSchema
 from .scoring import (
     calculate_age_penalty,
@@ -329,7 +329,9 @@ class WikimediaCommonsProvider(ImageProvider):
             "Accept": "application/json",
         }
 
-        async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+        async with httpx.AsyncClient(
+            timeout=provider_http_timeout(), headers=headers
+        ) as client:
             response = await client.get(
                 self.wikidata_endpoint, params={"query": sparql, "format": "json"}
             )
@@ -433,7 +435,9 @@ class WikimediaCommonsProvider(ImageProvider):
         results = []
         categories_to_fetch = set()  # Track categories we need to fetch
 
-        async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+        async with httpx.AsyncClient(
+            timeout=provider_http_timeout(), headers=headers
+        ) as client:
             response = await client.get(
                 self.wikidata_endpoint, params={"query": sparql, "format": "json"}
             )
@@ -575,7 +579,9 @@ class WikimediaCommonsProvider(ImageProvider):
             "User-Agent": getattr(settings, "BOT_AGENT", "WodoreBackend/1.0"),
         }
 
-        async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+        async with httpx.AsyncClient(
+            timeout=provider_http_timeout(), headers=headers
+        ) as client:
             response = await client.get(self.commons_api, params=params)
             response.raise_for_status()
 
@@ -757,7 +763,9 @@ class WikimediaCommonsProvider(ImageProvider):
 
         results = []
 
-        async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+        async with httpx.AsyncClient(
+            timeout=provider_http_timeout(), headers=headers
+        ) as client:
             response = await client.get(self.commons_api, params=params)
             response.raise_for_status()
 
