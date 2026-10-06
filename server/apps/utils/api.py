@@ -66,6 +66,24 @@ PACKAGE_VERSION = _get_package_version()
 DJANGO_ENV = environ.get("DJANGO_ENV", "development")
 
 
+def _build_timestamp() -> datetime.datetime:
+    """Parse BUILD_TIMESTAMP into a datetime, tolerating garbage.
+
+    The alpine production image (the CI default distro) baked an
+    unparseable BusyBox date(1) artifact into BUILD_TIMESTAMP (its
+    date does not support ``%N``; the Dockerfiles used
+    ``date +%6NZ``), and ``fromisoformat`` raised ValueError —
+    turning ``GET /v1/version`` into a 500 on staging. Build
+    metadata is best-effort: the version discovery endpoint must
+    stay reachable, so an invalid value falls back to import time
+    (same semantics as an unset BUILD_TIMESTAMP in dev).
+    """
+    try:
+        return datetime.datetime.fromisoformat(BUILD_TIMESTAMP)
+    except ValueError:
+        return datetime.datetime.now()
+
+
 class ApiVersionEntry(pydantic.BaseModel):
     """One registered API version with lifecycle status."""
 
@@ -140,7 +158,7 @@ class VersionController(ApiController):
             hash=get_git_short_hash(),
             hash_long=get_git_long_hash(),
             version=PACKAGE_VERSION,
-            timestamp=datetime.datetime.fromisoformat(BUILD_TIMESTAMP),
+            timestamp=_build_timestamp(),
             environment=DJANGO_ENV,
             api={
                 "current": registry.current_version(),
