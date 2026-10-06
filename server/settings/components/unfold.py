@@ -83,15 +83,9 @@ UNFOLD = {
             "900": "#133426",
         },
     },
-    "EXTENSIONS": {
-        "modeltranslation": {
-            "flags": {
-                "en": "🇬🇧",
-                "fr": "🇫🇷",
-                "nl": "🇧🇪",
-            },
-        },
-    },
+    # NOTE: EXTENSIONS (modeltranslation flags) was removed in django-unfold
+    # 0.102 (PR #2181): the setting is silently ignored since then and
+    # translated field labels render their default "[en]"-style suffixes.
     "SIDEBAR": {
         "show_search": False,  # Search in applications and models names
         "show_all_applications": True,  # Dropdown with all applications and models

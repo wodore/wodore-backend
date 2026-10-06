@@ -1,6 +1,5 @@
 """Image aggregation endpoints on dmr (mounted at /geo/images/)."""
 
-import asyncio
 import logging
 
 import pydantic
@@ -31,6 +30,7 @@ from .providers import (
     fetch_images_from_providers,
     post_process_images,
     provider_registry,
+    run_async,
 )
 from .schemas import (
     DEFAULT_THUMBHASHES,
@@ -311,25 +311,24 @@ class NearbyImagesController(ApiController):
                 "using coordinate only"
             )
 
-        all_places = list(geoplaces) + list(huts)
-
         logger.debug(
             f"📸 Fetching images from "
             f"{len(provider_registry.get_all_providers())} providers..."
         )
 
+        fetch_failed = False
         try:
-            results = asyncio.run(
-                fetch_images_from_providers(
-                    geoplaces=all_places,  # Pass both GeoPlaces and Huts
-                    lat=query.lat,
-                    lon=query.lon,
-                    radius=query.radius,
-                    sources=sources_list,
-                    precision=query.precision,
-                    limit=query.limit,
-                    update_cache=query.update_cache,
-                )
+            results = run_async(
+                fetch_images_from_providers,
+                geoplaces=geoplaces,  # GeoPlaces and Huts dispatched by type
+                huts=huts,  # (hut_to_schema, no osm_tags attribute)
+                lat=query.lat,
+                lon=query.lon,
+                radius=query.radius,
+                sources=sources_list,
+                precision=query.precision,
+                limit=query.limit,
+                update_cache=query.update_cache,
             )
         except Exception as e:  # stale-cache fallback below
             logger.error(f"Error fetching images from providers: {e}")
@@ -341,6 +340,7 @@ class NearbyImagesController(ApiController):
                 )
                 return cached
             results = []
+            fetch_failed = True
 
         # Sort by score (primary), then by distance (secondary)
         results.sort(key=lambda r: (-r.score, r.distance_m))
@@ -363,7 +363,11 @@ class NearbyImagesController(ApiController):
         response = ImageCollectionResponse(
             type="FeatureCollection", features=features, metadata=metadata
         )
-        image_response_cache.set_response(resp_key, response)
+        if not fetch_failed:
+            # Cache successful aggregations only — an exception fallback
+            # (stale miss, empty features) must not poison the response
+            # cache for the next visitor.
+            image_response_cache.set_response(resp_key, response)
         return response
 
 
@@ -392,6 +396,11 @@ def _map_fallback_feature(
                 "zoom": OG_MAP_ZOOM,
                 "effect": OG_MAP_EFFECT,
                 "marker_scale": OG_MAP_MARKER_SCALE,
+                # No baked attribution strip: the OpenTopoMap/OSM credits
+                # travel in the feature's license/author/attribution
+                # metadata instead (the gallery renders them like for
+                # provider photos).
+                "attribution": "false",
                 # v busts BOTH caches: the raw render storage and the
                 # imagor composites built on this URL (renderer changes
                 # propagate via RENDER_VERSION).
@@ -400,10 +409,85 @@ def _map_fallback_feature(
         )
         return request.build_absolute_uri(f"/v1/geo/map/static?{query}")
 
-    landscape_sm, landscape_md = map_url("600x315"), map_url("1200x630")
-    square_sm = map_url("600x600")
-    attribution_short = (
+    # Same variant pipeline as the provider photos: one map render per
+    # aspect group as the source, then signed imagor downscale variants
+    # (xs–xl, quality 85) with the identical size presets — the
+    # gallery treats the fallback exactly like any other image and
+    # imagor caches/transforms it like one.
+    from server.apps.geometries.providers.base import (
+        _calculate_constrained_size,
+    )
+    from server.apps.images.transfomer import ImagorImage
+
+    quality = 85
+    aspect_sources = {
+        # aspect group: (source render size, variant presets)
+        "square": (
+            (1000, 1000),
+            {
+                "xs": (200, 200),
+                "sm": (400, 400),
+                "md": (1200, 1200),
+                "lg": (2000, 2000),
+                "xl": (4000, 4000),
+            },
+        ),
+        "landscape": (
+            (1200, 630),
+            {
+                "xs": (200, 133),
+                "sm": (400, 267),
+                "md": (1200, 800),
+                "lg": (2000, 1333),
+                "xl": (4000, 2666),
+            },
+        ),
+        "portrait": (
+            (1000, 1500),
+            {
+                "xs": (133, 200),
+                "sm": (267, 400),
+                "md": (900, 1350),
+                "lg": (1500, 2250),
+                "xl": (3000, 4500),
+            },
+        ),
+    }
+    urls: dict = {}
+    sizes: dict = {"raw": {"width": 1200, "height": 630}}
+    for group, ((sw, sh), presets) in aspect_sources.items():
+        source = ImagorImage(map_url(f"{sw}x{sh}"))
+        variants = {}
+        for key, (tw, th) in presets.items():
+            cw, ch = _calculate_constrained_size(tw, th, sw, sh)
+            variants[key] = source.transform(
+                size=f"{cw}x{ch}", quality=quality
+            ).get_full_url()
+            if group == "landscape":
+                # The feature's own orientation is landscape — report
+                # its constrained dims (mirrors _build_sizes).
+                sizes[key] = {"width": cw, "height": ch}
+        urls[group] = variants
+    landscape_raw = map_url("1200x630")
+    urls["original"] = {
+        # raw stays the direct endpoint URL: the og compose wraps it in
+        # imagor itself (og_map_card_url).
+        "raw": landscape_raw,
+        "proxy": ImagorImage(landscape_raw).transform().get_full_url(),
+    }
+    # License/attribution metadata mirrors the provider photos (same
+    # shape, HTML links) — the gallery renders it exactly like any
+    # other image's credits. Map data: OpenTopoMap tiles are CC-BY-SA
+    # derivatives of OpenStreetMap data (with SRTM elevation).
+    license_url = "https://creativecommons.org/licenses/by-sa/4.0/"
+    attribution_full = (
         "© OpenTopoMap (CC-BY-SA) · © SRTM · © OpenStreetMap contributors"
+    )
+    license_short = f'<a href="{license_url}" target="_blank">CC-BY-SA-4.0</a>'
+    attribution_author = (
+        "© OpenTopoMap / "
+        '<a href="https://www.openstreetmap.org/copyright" '
+        'target="_blank" rel="nofollow">OpenStreetMap contributors</a>'
     )
     return {
         "type": "Feature",
@@ -422,48 +506,25 @@ def _map_fallback_feature(
             "captured_at": None,
             "distance_m": 0.0,
             "attribution": {
-                "short": attribution_short,
-                "full": attribution_short,
+                "short": f"{license_short} · {attribution_author}",
+                "full": attribution_full,
                 "license_icon": None,
-                "license_short": "CC-BY-SA",
+                "license_short": license_short,
                 "license_full": "CC BY-SA 4.0",
-                "author": "OpenTopoMap / OpenStreetMap contributors",
+                "author": attribution_author,
             },
-            "author": None,
+            "author": {
+                "name": "OpenTopoMap / OpenStreetMap contributors",
+                "url": None,
+            },
             "license": {
                 "slug": "cc-by-sa-4-0",
                 "name": "CC BY-SA 4.0 (map data)",
-                "url": "https://creativecommons.org/licenses/by-sa/4.0/",
+                "url": license_url,
                 "icon": None,
             },
-            "urls": {
-                "original": {"raw": landscape_md, "proxy": landscape_md},
-                "square": {
-                    "xs": square_sm,
-                    "sm": square_sm,
-                    "md": square_sm,
-                    "lg": square_sm,
-                    "xl": square_sm,
-                },
-                "landscape": {
-                    "xs": landscape_sm,
-                    "sm": landscape_sm,
-                    "md": landscape_md,
-                    "lg": landscape_md,
-                    "xl": landscape_md,
-                },
-                "portrait": {
-                    "xs": landscape_sm,
-                    "sm": landscape_sm,
-                    "md": landscape_md,
-                    "lg": landscape_md,
-                    "xl": landscape_md,
-                },
-            },
-            "sizes": {
-                "sm": {"width": 600, "height": 315},
-                "md": {"width": 1200, "height": 630},
-            },
+            "urls": urls,
+            "sizes": sizes,
             "is_portrait": False,
             "place": None,
             "score": 0,
@@ -576,15 +637,14 @@ class PlaceImagesController(ApiController):
                 raise
         else:
             try:
-                results, place_info = asyncio.run(
-                    fetch_images_for_place(
-                        place_slug=place_slug,
-                        place_type="geoplace",
-                        radius=query.radius,
-                        sources=sources_list,
-                        limit=query.limit,
-                        update_cache=query.update_cache,
-                    )
+                results, place_info = run_async(
+                    fetch_images_for_place,
+                    place_slug=place_slug,
+                    place_type="geoplace",
+                    radius=query.radius,
+                    sources=sources_list,
+                    limit=query.limit,
+                    update_cache=query.update_cache,
                 )
             except Exception as e:  # stale-cache fallback below
                 logger.error(f"Error fetching images for place '{place_slug}': {e}")
@@ -762,15 +822,14 @@ class HutImagesController(ApiController):
                 raise
         else:
             try:
-                results, place_info = asyncio.run(
-                    fetch_images_for_place(
-                        place_slug=hut_slug,
-                        place_type="hut",
-                        radius=query.radius,
-                        sources=sources_list,
-                        limit=query.limit,
-                        update_cache=query.update_cache,
-                    )
+                results, place_info = run_async(
+                    fetch_images_for_place,
+                    place_slug=hut_slug,
+                    place_type="hut",
+                    radius=query.radius,
+                    sources=sources_list,
+                    limit=query.limit,
+                    update_cache=query.update_cache,
                 )
             except Exception as e:
                 logger.error(f"Error fetching images for hut '{hut_slug}': {e}")

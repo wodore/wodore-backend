@@ -5,7 +5,9 @@
 import multiprocessing
 import os
 
-bind = "0.0.0.0:8000"
+# Full bind override ("HOST:PORT") — set by start.sh's --port flag or directly
+# for k8s, which serves the backend on 8008.
+bind = os.environ.get("GUNICORN_BIND", "0.0.0.0:8000")
 # Concerning `workers` setting see:
 # https://github.com/wemake-services/wemake-django-template/issues/1022
 workers = multiprocessing.cpu_count() * 2 + 1

@@ -46,7 +46,7 @@ class ObjectVisitDay(TimeStampedModel):
     day = models.DateField(db_index=True)
     count = models.PositiveIntegerField(default=0)
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = "Object Visit Day"
         verbose_name_plural = "Object Visit Days"
         unique_together = (("content_type", "object_id", "day"),)
@@ -159,6 +159,37 @@ def _persist(buffer_key: str, hits: int):
         )
 
 
+def visit_window_annotation(model_or_ct, *, days: int = 30):
+    """Subquery annotation: per-object visit sum over the last ``days`` days.
+
+    For use in admin ``get_queryset().annotate(visits_Nd=...)`` so
+    changelist sorting stays SQL-side (one query, no N+1). Objects with
+    no counters annotate as 0 instead of NULL.
+    """
+    from datetime import timedelta
+
+    from django.db.models import OuterRef, Subquery, Sum
+    from django.db.models.functions import Coalesce
+
+    ct = (
+        model_or_ct
+        if isinstance(model_or_ct, ContentType)
+        else ContentType.objects.get_for_model(model_or_ct)
+    )
+    since = datetime.now(tz=timezone.utc).date() - timedelta(days=days)
+    totals = (
+        ObjectVisitDay.objects.filter(
+            content_type=ct,
+            object_id=OuterRef("pk"),
+            day__gte=since,
+        )
+        .values("object_id")
+        .annotate(total=Sum("count"))
+        .values("total")[:1]
+    )
+    return Coalesce(Subquery(totals), 0)
+
+
 def visit_totals(model_or_ct, *, days: int = 30):
     """Visit sums per object_id for a given model (or ContentType),
     ordered by descending total over the window. Generic — knows
@@ -180,6 +211,3 @@ def visit_totals(model_or_ct, *, days: int = 30):
         .annotate(total=Coalesce(Sum("count"), 0))
         .order_by("-total")
     )
-
-
-# Re-export for callers that imported from the old location.

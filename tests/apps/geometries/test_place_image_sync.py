@@ -90,7 +90,9 @@ class TestSyncPlaceImages:
         )
         stats = sync_place_images(place)
         assert stats.created == 1
-        assert place.image_associations.count() == 1
+        from server.apps.geometries.models import GeoPlaceImageAssociation
+
+        assert GeoPlaceImageAssociation.objects.filter(geo_place=place).count() == 1
 
     def test_task_unknown_slug_is_logged_not_raised(self):
         sync_place_images_task("hut", "does-not-exist")  # must not raise
@@ -247,6 +249,7 @@ class TestGeoimagesPinCommand:
         from server.apps.geometries.models import GeoPlace
 
         place = GeoPlace.objects.filter(is_active=True, is_public=True).first()
+        assert place is not None
         pin_place_images(place, [_result(score=10)])  # geoplace now has pins
 
         seen = []
@@ -261,6 +264,24 @@ class TestGeoimagesPinCommand:
         )
         call_command("geoimages_pin", all=True)
         assert hut.slug in seen and place.slug in seen
+
+    def test_budget_flag_threads_to_fanout(self, hut, monkeypatch):
+        """--budget (seconds) reaches the fan-out; default defers to the
+        IMAGES_FANOUT_BUDGET_SECONDS setting (budget=None)."""
+        seen = []
+
+        class _BudgetRecorder(_FetchStub):
+            async def __call__(self, **kwargs):
+                seen.append(kwargs.get("budget"))
+                return await super().__call__(**kwargs)
+
+        monkeypatch.setattr(
+            "server.apps.geometries.providers.fetch_images_for_place",
+            _BudgetRecorder([]),
+        )
+        call_command("geoimages_pin", place=hut.slug)
+        call_command("geoimages_pin", place=hut.slug, budget=25)
+        assert seen == [None, 25]
 
 
 class TestImagorWarmup:

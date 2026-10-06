@@ -39,7 +39,7 @@ services:
         - django-media:/var/www/django/media # since in dev it is app's folder
         - django-locale:/code/locale # since in dev it is app's folder
 
-    command: bash ./docker/django/gunicorn.sh
+    command: bash ./docker/django/start.sh
     networks:
       - proxynet
     expose:

@@ -17,7 +17,11 @@ from server.apps.geometries.image_response_cache import (
     response_key,
     set_response,
 )
-from server.apps.geometries.schemas import ImageCollectionResponse, ImageMetadataSchema
+from server.apps.geometries.schemas import (
+    ImageCenterSchema,
+    ImageCollectionResponse,
+    ImageMetadataSchema,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -45,7 +49,7 @@ def _sample_response(total: int = 0) -> ImageCollectionResponse:
             total=total,
             sources_queried=["wodore"],
             query_radius_m=50.0,
-            center={"lat": 46.5, "lon": 7.5},
+            center=ImageCenterSchema(lat=46.5, lon=7.5),
             geoplaces_found=0,
             huts_found=1,
         ),
@@ -360,9 +364,60 @@ class TestCachedOnly:
         # The stub returned no features — the default static_map fallback
         # is the single cached feature, and the og lookup skips it.
         assert len(cached.features) == 1
-        assert cached.features[0].properties.is_fallback is True
+        props = cached.features[0].properties
+        assert props is not None
+        assert props.is_fallback is True
 
     def test_cached_place_images_helper_cold_is_none(self, place_slug):
         from server.apps.geometries.api_images import cached_place_images
 
         assert cached_place_images(place_slug, lang="en") is None
+
+
+@pytest.mark.django_db
+class TestFailureIsNotCached:
+    """The nearby endpoint's exception fallback (stale miss → empty
+    collection) must not be written to the response cache: caching it
+    poisoned the entry and every later request served the empty
+    collection until the freshness window expired."""
+
+    class _FetchStub:
+        """Async stand-in for fetch_images_from_providers (nearby shape)."""
+
+        def __init__(self):
+            self.calls = 0
+            self.exc: Exception | None = None
+
+        async def __call__(self, **kwargs):
+            self.calls += 1
+            if self.exc is not None:
+                raise self.exc
+            from tests.apps.geometries.test_image_pinning import _result
+
+            return [_result(provider="wikicommons", source_id="File:CacheGuard.jpg")]
+
+    def test_nearby_exception_response_not_cached(self, seed_data, monkeypatch):
+        from server.apps.geometries import api_images
+
+        stub = self._FetchStub()
+        stub.exc = RuntimeError("provider down")
+        monkeypatch.setattr(api_images, "fetch_images_from_providers", stub)
+        client = TestClient("/v1/geo/images")
+        url = "/nearby?lat=46.5&lon=7.5&radius=100&lang=en&limit=10"
+
+        first = client.get(url)  # fetch fails, nothing cached to fall back on
+        assert first.status_code == 200
+        assert first.json()["features"] == []
+
+        stub.exc = None  # providers healthy again
+        second = client.get(url)  # must recompute, not serve the poisoned entry
+        assert second.status_code == 200
+        features = second.json()["features"]
+        assert len(features) == 1
+        assert features[0]["properties"]["source_id"] == "File:CacheGuard.jpg"
+        assert stub.calls == 2
+
+        third = client.get(url)  # the successful aggregation IS cached
+        assert third.status_code == 200
+        assert third.json() == second.json()
+        assert stub.calls == 2

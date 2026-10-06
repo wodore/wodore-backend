@@ -28,7 +28,7 @@ dependencies = [
   "django-cors-headers==4.*",  # https://pypi.org/project/django-cors-headers/
   "django-extensions==4.*",    # https://pypi.org/project/django-extensions/
   #"django-unfold==0.43.*",            # https://pypi.org/project/django-unfold/
-  "django-unfold==0.87.*",                 # https://pypi.org/project/django-unfold/
+  "django-unfold==0.108.*",                # https://pypi.org/project/django-unfold/
   "django-q2>=1.11.0",                     # https://pypi.org/project/django-q2/
   "django-admin-runner[django-q2,unfold]", # https://github.com/burgdev/django-admin-runner
   "msgspec==0.22.*",                       # https://pypi.org/project/msgspec/
@@ -69,7 +69,7 @@ dependencies = [
   "fido2>=2.2.1",
   "django-modern-rest[msgspec,openapi,pydantic]>=0.16.0,<0.17",
   "django-readers>=2.5.1",
-  "uvicorn>=0.54.0",
+  "uvicorn[standard]>=0.54.0",  # uvloop + httptools for the ASGI runtime (ASGI_ENABLED=1)
   "uvicorn-worker>=0.4.0",
 ]
 

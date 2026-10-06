@@ -56,6 +56,13 @@ ZITADEL_RP_ENABLED = AUTH_PROVIDER == "zitadel"  # Zitadel RP surface
 ZITADEL_ROLLBACK_ENABLED = config(
     "ZITADEL_ROLLBACK_ENABLED", cast=bool, default=not _IS_DEV_OR_TEST
 )
+
+# NOTE: the async-safe SessionRefresh replacement lives in
+# server/middleware/oidc.py (AsyncSafeSessionRefresh). It cannot be
+# defined here: importing mozilla_django_oidc.middleware from a settings
+# component triggers AppRegistryNotReady (models are imported); MIDDLEWARE
+# entries are string paths resolved lazily at handler init, after apps
+# are ready.
 if AUTH_PROVIDER == "none":
     ZITADEL_ROLLBACK_ENABLED = False
 

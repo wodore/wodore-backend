@@ -148,10 +148,10 @@ def _og_image(hut: Hut, request: HttpRequest, lang: str) -> str:
             # The service's static-map card (og dimensions, spotlight,
             # marker) goes through imagor like every og image, with the
             # backend-served watermark composited.
-            landscape = props.urls.landscape
-            url = (landscape.md if landscape is not None else None) or (
-                props.urls.original.raw or None
-            )
+            # original.raw is the direct map endpoint URL — the og
+            # compose wraps it in imagor itself (the variant URLs are
+            # already imagor transforms; do not double-wrap).
+            url = props.urls.original.raw or None
             if url:
                 og_url = None
                 try:  # preview image is best-effort
