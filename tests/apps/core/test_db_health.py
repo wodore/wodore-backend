@@ -12,12 +12,20 @@ from server.core.db_health import FastDatabaseReadinessCheck
 class _FakePool:
     """Minimal psycopg_pool stand-in for the readiness check."""
 
-    def __init__(self, *, checkout_delay: float = 0.0, row=(1,)):
+    def __init__(self, *, checkout_delay: float = 0.0, row=(1,), opened=True):
         self.checkout_delay = checkout_delay
         self.row = row
         self.putconn_calls = 0
+        self.open_calls = 0
+        self._opened = opened
+
+    def open(self):
+        self.open_calls += 1
+        self._opened = True
 
     def getconn(self, timeout=None):
+        if not self._opened:
+            raise RuntimeError("the pool 'pool-1' is not open yet")
         if timeout is not None and self.checkout_delay > timeout:
             # Emulate psycopg_pool: wait out the budget, then raise.
             time.sleep(timeout)
@@ -37,6 +45,21 @@ class _FakePool:
 
 
 class TestFastDatabaseReadinessCheck:
+    def test_pool_path_opens_a_lazy_pool_before_checking_out(self):
+        # Freshly booted worker: Django creates the pool with open=False;
+        # the check must open it (like Django does) instead of failing with
+        # "the pool ... is not open yet" (seen on staging 2026-10-06).
+        pool = _FakePool(opened=False)
+        check = FastDatabaseReadinessCheck(budget_seconds=2.0)
+
+        def _pool():
+            return pool
+
+        check._pool_or_none = _pool
+        check.check_status()
+        assert pool.open_calls == 1
+        assert pool.putconn_calls == 1
+
     def test_pool_path_succeeds_and_returns_connection(self):
         pool = _FakePool()
         check = FastDatabaseReadinessCheck(budget_seconds=2.0)
