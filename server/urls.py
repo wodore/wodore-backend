@@ -10,7 +10,7 @@ files serving technique in development.
 """
 
 from dmr.routing import build_404_handler, build_500_handler
-from health_check import Cache, Database, Storage
+from health_check import Cache, Storage
 from health_check.views import HealthCheckView
 
 from django.conf import settings
@@ -28,6 +28,7 @@ from .apps.local_auth import account_views
 from .apps.main import urls as django_admin_urls
 from .apps.main import views as main_views
 from .apps.main.views import index
+from .core.db_health import PoolStatsDatabaseCheck
 
 admin.autodiscover()
 
@@ -47,7 +48,7 @@ urlpatterns = [
         "health/",
         HealthCheckView.as_view(
             checks=[
-                (Database, {}),
+                (PoolStatsDatabaseCheck, {}),
                 (Cache, {"cache_key": None}),
                 (Storage, {}),
             ],
