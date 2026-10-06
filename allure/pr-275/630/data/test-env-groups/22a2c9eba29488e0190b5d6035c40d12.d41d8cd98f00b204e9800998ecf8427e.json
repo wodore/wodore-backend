@@ -1,0 +1,1 @@
+{"id":"22a2c9eba29488e0190b5d6035c40d12.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.test_api_auth.TestProtectedEndpoints#test_public_endpoint_needs_no_token","name":"test_public_endpoint_needs_no_token","status":"passed","testResultsByEnv":{"default":"5d604b20861dc3609e851d6b7d3192d4"}}
