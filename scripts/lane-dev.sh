@@ -8,7 +8,8 @@
 #
 # The port comes from the workz-managed block in .env.local — workz is the
 # ONLY port allocator for lanes. A paseo-allocated $PASEO_PORT would be
-# invisible to workz run/reap/preview/done, so paseo.json's `api` service
+# invisible to workz run/reap/preview/done, so paseo.json's `runserver`
+# service
 # wraps `fg` instead of using its own port.
 #
 # `fg` guards double starts: a listener already on the port that belongs to

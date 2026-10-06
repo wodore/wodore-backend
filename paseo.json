@@ -10,6 +10,6 @@
     },
     "martin:start": { "command": "scripts/lane-martin.sh start" },
     "martin:stop": { "command": "scripts/lane-martin.sh stop" },
-    "api": { "type": "service", "command": "scripts/lane-dev.sh fg" }
+    "runserver": { "type": "service", "command": "scripts/lane-dev.sh fg" }
   }
 }
