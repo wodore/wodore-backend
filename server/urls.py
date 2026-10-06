@@ -10,7 +10,7 @@ files serving technique in development.
 """
 
 from dmr.routing import build_404_handler, build_500_handler
-from health_check import Cache, Database, Storage
+from health_check import Cache, Storage
 from health_check.views import HealthCheckView
 
 from django.conf import settings
@@ -28,6 +28,7 @@ from .apps.local_auth import account_views
 from .apps.main import urls as django_admin_urls
 from .apps.main import views as main_views
 from .apps.main.views import index
+from .core.db_health import FastDatabaseReadinessCheck, PoolStatsDatabaseCheck
 
 admin.autodiscover()
 
@@ -47,7 +48,7 @@ urlpatterns = [
         "health/",
         HealthCheckView.as_view(
             checks=[
-                (Database, {}),
+                (PoolStatsDatabaseCheck, {}),
                 (Cache, {"cache_key": None}),
                 (Storage, {}),
             ],
@@ -59,6 +60,19 @@ urlpatterns = [
     # healthy pods during a database hiccup (restart storm against an
     # already-struggling dependency).
     path("health/live/", HealthCheckView.as_view(checks=[])),
+    # /health/ready/ is the FAST readiness check: the DB touch carries a
+    # hard per-check budget (default 2s), so an exhausted pool answers a
+    # clean 503 quickly instead of hanging until the kubelet probe times
+    # out (2026-10-05 staging wedge: 15s probe < 30s pool wait meant only
+    # "context deadline exceeded", plus one zombie health check per
+    # probe). Probe with a timeout of ~3x the budget. The deep /health/
+    # above stays for humans and debugging.
+    path(
+        "health/ready/",
+        HealthCheckView.as_view(
+            checks=[(FastDatabaseReadinessCheck, {"budget_seconds": 2.0})]
+        ),
+    ),
     # Locale:
     path("i18n/", include("django.conf.urls.i18n")),
     # django-admin:

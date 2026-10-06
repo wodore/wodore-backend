@@ -290,6 +290,13 @@ if config("POSTGRES_POOL", cast=bool, default=False):
                 "pool": {
                     "min_size": 2,
                     "max_size": config("POSTGRES_POOL_SIZE", cast=int, default=10),
+                    # Wall-clock budget for one pool checkout. Keep it below
+                    # the k8s readiness deadline so an exhausted pool yields
+                    # a fast, loggable failure instead of psycopg-pool's
+                    # default 30s hang (2026-10-05 staging wedge).
+                    "timeout": config(
+                        "POSTGRES_POOL_TIMEOUT", cast=float, default=30.0
+                    ),
                 },
             },
         }

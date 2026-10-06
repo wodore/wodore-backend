@@ -161,6 +161,8 @@ class ApiVersionMiddleware:
             return
         if response.status_code >= 400:
             return  # error bodies keep the latest shape (unversioned)
+        if response.status_code in (204, 304) or not response.content:
+            return  # bodyless responses carry nothing to transform
         content_type = response.headers.get("Content-Type", "")
         if not content_type.startswith("application/json"):
             return
@@ -171,6 +173,14 @@ class ApiVersionMiddleware:
         data = msgspec.json.decode(response.content)
         data = downgrade_response(version, op_id, data)
         response.content = msgspec.json.encode(data)
+        # The re-encoded body has a new length. Any Content-Length stamped
+        # earlier is now wrong: CommonMiddleware (inner) sets it on the
+        # pre-downgrade body for non-streaming responses, and uvicorn
+        # hard-fails a response whose body doesn't match the header
+        # ("Response content shorter than Content-Length") — the error
+        # that truncated responses and leaked DB pool connections in the
+        # 2026-10-05 staging wedge. Keep the header, but make it truthful.
+        response.headers["Content-Length"] = str(len(response.content))
 
     def _add_version_headers(
         self, request: HttpRequest, response: HttpResponse

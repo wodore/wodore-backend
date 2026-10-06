@@ -203,6 +203,44 @@ class TestImagesEndpointsUnderASGI:
         assert not features[0]["properties"].get("is_fallback")
 
 
+class TestConcurrentBridgeRequests:
+    """The 2026-10-05 staging wedge (pool exhaustion → readiness 503) started
+    with concurrent geo requests crossing the asgiref sync/async bridge.
+
+    Requests are driven through the real ASGI stack concurrently; the
+    providers are stubbed (fast), so this is a routing/deadlock canary for
+    the bridge machinery (``run_async`` → ``async_to_sync`` onto the main
+    loop → nested thread-sensitive ``sync_to_async``), not a load test.
+    A hard hang here is exactly the incident's wedge shape.
+    """
+
+    @staticmethod
+    def _concurrent_get(app, urls: list[str]) -> list[httpx.Response]:
+        async def _do() -> list[httpx.Response]:
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport, base_url="http://testserver", timeout=30
+            ) as client:
+                gathered = await asyncio.wait_for(
+                    asyncio.gather(*[client.get(url) for url in urls]), timeout=60
+                )
+                return list(gathered)
+
+        return asyncio.run(_do())
+
+    def test_concurrent_mixed_requests_complete(self, asgi_app, hut, place):
+        """8 concurrent requests across all three endpoints must all answer."""
+        urls = [
+            f"/v1/geo/images/nearby?lat={hut.location.y}&lon={hut.location.x}&radius=50&lang=en&limit=20",
+            f"/v1/geo/images/place/{place.slug}?radius=50&sources=wikicommons&lang=en&limit=20",
+            f"/v1/geo/images/hut/{hut.slug}?radius=50&sources=wikicommons&lang=en&limit=20",
+        ] * 3  # 9 requests, mixed endpoints, overlapping bridges
+        responses = self._concurrent_get(asgi_app, urls)
+        assert len(responses) == len(urls)
+        for response in responses:
+            assert response.status_code == 200
+
+
 class TestFanoutBudget:
     """P0 2026-10-05: one straggling provider must not hold the request.
 
