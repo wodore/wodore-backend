@@ -1,0 +1,1 @@
+{"id":"8a8d0b6a59cb7cb4d5a8f88cef8fa1dd.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.geometries.test_geosearch_radius.TestGeosearchRadiusIntTyping#test_float_radius_clamps_to_int_bounds","name":"test_float_radius_clamps_to_int_bounds","status":"passed","testResultsByEnv":{"default":"cb91b1b86dc33b4296c9e8b35c39ff0f"}}
