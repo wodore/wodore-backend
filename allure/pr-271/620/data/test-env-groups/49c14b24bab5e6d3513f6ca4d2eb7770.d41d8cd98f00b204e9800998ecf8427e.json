@@ -1,0 +1,1 @@
+{"id":"49c14b24bab5e6d3513f6ca4d2eb7770.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.geometries.test_geosearch_radius.TestGeosearchRadiusIntTyping#test_float_endpoint_radius_sent_as_int","name":"test_float_endpoint_radius_sent_as_int","status":"passed","testResultsByEnv":{"default":"316bd0ad5adf5a5b1cd11a73daa174a0"}}
