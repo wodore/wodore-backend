@@ -15,7 +15,7 @@ from datetime import datetime
 
 import structlog
 
-from .base import ImageProvider, ImageResult
+from .base import ImageProvider, ImageResult, provider_http_timeout
 from .schemas import GeoPlaceSchema
 from .scoring import (
     calculate_age_penalty,
@@ -101,7 +101,9 @@ class CamptocampProvider(ImageProvider):
                     settings, "BOT_AGENT", "WodoreBackend/1.0 (+https://wodore.ch)"
                 )
             }
-            async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+            async with httpx.AsyncClient(
+                timeout=provider_http_timeout(), headers=headers
+            ) as client:
                 # Step 1: Get all waypoints in bbox
                 waypoints = await self._fetch_waypoints(client, bbox)
 

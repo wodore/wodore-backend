@@ -273,13 +273,18 @@ def place_type_of(place) -> str:
     raise TypeError(f"Unsupported place type for pinning: {type(place)!r}")
 
 
-def sync_place_images(place, *, radius: float = PIN_SYNC_RADIUS_M, check_origins=False):
+def sync_place_images(
+    place, *, radius: float = PIN_SYNC_RADIUS_M, check_origins=False, budget=None
+):
     """Run the live provider pipeline for a place and pin the results.
 
     Background counterpart of the endpoints' lazy write-through: same
     provider call, same dedupe/score semantics. Provider-layer caches are
     respected (``update_cache=False``) — the TTL layering keeps upstream
     requests bounded (24 h pins ≤ 7 d wikimedia ≤ 30 d camp2camp).
+    ``budget`` (seconds) overrides the fan-out budget for this sync — the
+    request-path default trades completeness for latency, background
+    sweeps may want to wait longer (``<= 0`` disables the budget).
     """
     from .providers import fetch_images_for_place, run_async
 
@@ -292,6 +297,7 @@ def sync_place_images(place, *, radius: float = PIN_SYNC_RADIUS_M, check_origins
         sources=None,
         limit=100,
         update_cache=False,
+        budget=budget,
     )
     stats = pin_place_images(place, results)
     if check_origins:

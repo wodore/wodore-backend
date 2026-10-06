@@ -47,8 +47,75 @@ def run_async(async_fn, /, *args, **kwargs):
     answers an empty collection. ``async_to_sync`` bridges both worlds:
     correct under ASGI, and under WSGI it degrades to the previously
     working nested-event-loop path.
+
+    Connection hygiene: every exit from the bridge — success, provider
+    error, or ``asyncio.CancelledError`` from an upstream client abort —
+    closes this thread's DB connections. Under ASGI a cancelled request
+    never reaches Django's request-finished cleanup for the detached sync
+    view thread; without this, each abort stranded a checked-out psycopg
+    pool connection until the pool starved (P0 2026-10-05).
     """
-    return async_to_sync(async_fn)(*args, **kwargs)
+    try:
+        return async_to_sync(async_fn)(*args, **kwargs)
+    finally:
+        _release_thread_db_connections()
+
+
+def _release_thread_db_connections() -> None:
+    """Deterministically release this thread's DB connections.
+
+    Runs on the sync side of the bridge, i.e. on the view thread that
+    checked the connections out (thread-sensitive ``sync_to_async`` funnels
+    the provider stack's DB access onto that same thread). With the native
+    psycopg pool and ``CONN_MAX_AGE=0`` (the ASGI staging setup), closing
+    here checks the connection back into the pool on every exit path —
+    including the cancellation path that used to leak it.
+
+    Connections inside an open transaction are left alone: they belong to
+    an outer ``atomic`` block whose owner still expects to commit (a
+    mid-transaction close would abort it — and breaks transactional test
+    wrappers), and their release follows the normal transaction lifecycle.
+    The provider phase itself runs in autocommit, so the incident's leak
+    path is fully covered.
+    """
+    from django.db import connections
+
+    try:
+        for conn in connections.all(initialized_only=True):
+            if conn.in_atomic_block:
+                continue
+            conn.close_if_unusable_or_obsolete()
+    except Exception:
+        logger.warning(
+            "Failed to close DB connections after provider bridge",
+            exc_info=True,
+        )
+
+
+def provider_http_timeout() -> float:
+    """Outbound HTTP timeout (seconds) for image provider API calls.
+
+    ``IMAGES_PROVIDER_HTTP_TIMEOUT_SECONDS`` setting, default 10s — a cold
+    fan-out queries several external providers and Wikimedia runs multiple
+    sequential strategies, so each single HTTP call must fit comfortably
+    inside the overall fan-out budget.
+    """
+    from django.conf import settings
+
+    return float(getattr(settings, "IMAGES_PROVIDER_HTTP_TIMEOUT_SECONDS", 10.0))
+
+
+def fanout_budget_seconds() -> float:
+    """Overall wall-clock budget (seconds) for one provider fan-out.
+
+    ``IMAGES_FANOUT_BUDGET_SECONDS`` setting; values <= 0 disable the
+    budget. Providers still running at the deadline are cancelled and
+    their results skipped — partial results serve the request instead of
+    a 30s+ straggler holding it (and its pooled DB connections) open.
+    """
+    from django.conf import settings
+
+    return float(getattr(settings, "IMAGES_FANOUT_BUDGET_SECONDS", 10.0))
 
 
 def get_persistent_cache():
@@ -836,9 +903,11 @@ def _build_attribution(
         "license_icons": license_icons,
         "license_short": license_short_html,
         "license_full": license_full_html,
-        "author": f"{author_html} on {provider_html}"
-        if author_html and provider_html
-        else (author_html or provider_html or "Unknown"),
+        "author": (
+            f"{author_html} on {provider_html}"
+            if author_html and provider_html
+            else (author_html or provider_html or "Unknown")
+        ),
     }
 
 
@@ -905,6 +974,7 @@ async def fetch_images_for_place(
     sources: list[str] | None,
     limit: int,
     update_cache: bool = False,
+    budget: float | None = None,
 ) -> tuple[list[ImageResult], dict[str, Any]]:
     """
     Fetch images for a specific place (GeoPlace or Hut).
@@ -919,6 +989,8 @@ async def fetch_images_for_place(
         sources: Optional list of providers to query
         limit: Max number of images to return
         update_cache: If True, bypass cache and refresh cached data
+        budget: Optional fan-out budget override (seconds) passed through
+            to ``fetch_images_from_providers``
 
     Returns:
         Tuple of (list of ImageResult objects, place info dict)
@@ -1014,6 +1086,7 @@ async def fetch_images_for_place(
         precision="precise",  # Always use high precision
         limit=limit,
         update_cache=update_cache,
+        budget=budget,
     )
 
     return results, place_info
@@ -1433,6 +1506,7 @@ async def fetch_images_from_providers(
     limit: int = 100,
     huts: list[Any] | None = None,
     update_cache: bool = False,
+    budget: float | None = None,
 ) -> list[ImageResult]:
     """
     Fetch images from all enabled providers in parallel.
@@ -1447,6 +1521,12 @@ async def fetch_images_from_providers(
         limit: Maximum number of results to fetch per provider
         huts: Optional list of Hut objects (if querying for huts)
         update_cache: If True, bypass cache and refresh cached data
+        budget: Overall wall-clock budget (seconds) for the provider
+            fan-out. ``None`` (default) uses the
+            ``IMAGES_FANOUT_BUDGET_SECONDS`` setting; an explicit value
+            (including <= 0, which disables the budget) wins — background
+            callers like the geoimages_pin command use this to run longer
+            than the latency-driven request default.
 
     Returns:
         List of ImageResult objects from all providers
@@ -1477,26 +1557,53 @@ async def fetch_images_from_providers(
     if update_cache:
         logger.debug("Cache update mode enabled", action="bypassing_cache")
 
-    # Run all providers in parallel
+    # Run all providers in parallel under an overall wall-clock budget:
+    # stragglers are cancelled at the deadline and their results skipped,
+    # so one slow upstream cannot hold the request (and its pooled DB
+    # connections) open until upstream clients cancel it. Partial results
+    # still flow through dedupe/scoring and are cached by the response
+    # cache — completeness is traded for bounded latency.
+    budget = fanout_budget_seconds() if budget is None else budget
     tasks = [
-        provider.fetch(
-            place_schemas, lat, lon, radius, limit, update_cache=update_cache
+        asyncio.ensure_future(
+            provider.fetch(
+                place_schemas, lat, lon, radius, limit, update_cache=update_cache
+            )
         )
         for provider in providers
     ]
-    results_lists = await asyncio.gather(*tasks, return_exceptions=True)
+    try:
+        await asyncio.wait(tasks, timeout=budget or None)
+    finally:
+        # Also when this coroutine itself is cancelled (client abort):
+        # never leave provider tasks running detached.
+        for task in tasks:
+            if not task.done():
+                task.cancel()
 
-    # Flatten results and handle exceptions
+    # Let cancelled stragglers unwind; their CancelledErrors are expected
+    # and must not escape the fan-out.
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Flatten results, handle per-provider exceptions and budget stragglers
     all_results = []
-    for i, result_list in enumerate(results_lists):
-        provider = providers[i]
-        if isinstance(result_list, BaseException):
+    for task, provider in zip(tasks, providers):
+        if task.cancelled():
+            logger.warning(
+                "Provider exceeded fan-out budget, results skipped",
+                provider=provider.source,
+                budget_s=budget,
+            )
+            continue
+        exc = task.exception()
+        if exc is not None:
             logger.error(
                 "Provider fetch failed",
                 provider=provider.source,
-                error=str(result_list),
+                error=str(exc),
             )
             continue
+        result_list = task.result()
         if result_list:
             all_results.extend(result_list)
             logger.debug(
@@ -1852,7 +1959,7 @@ async def _get_image_dimensions_from_headers(url: str) -> tuple[int, int] | None
             )
         }
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=provider_http_timeout()) as client:
             # Use streaming to handle large EXIF headers
             async with client.stream("GET", url, headers=headers) as response:
                 if response.status_code not in [200, 206]:

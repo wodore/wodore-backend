@@ -11,6 +11,7 @@ Examples:
     manage.py geoimages_pin --all                          # sweep
     manage.py geoimages_pin --all --dry-run
     manage.py geoimages_pin --place=laemmeren --check-origins
+    manage.py geoimages_pin --all --budget=60              # wait longer per place
 """
 
 from django_admin_runner import register_command
@@ -45,7 +46,7 @@ def _sweep_targets():
 
 @register_command(group="Geometries")
 class Command(BaseCommand):
-    help = __doc__
+    help = __doc__ or ""
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -87,6 +88,19 @@ class Command(BaseCommand):
                 "thumbhash, duplicate detection) on the place's pins."
             ),
         )
+        parser.add_argument(
+            "--budget",
+            type=float,
+            default=None,
+            metavar="SECONDS",
+            help=(
+                "Overall wall-clock budget per place's provider fan-out, in "
+                "seconds; 0 or negative disables it (wait for all providers). "
+                "Default: the IMAGES_FANOUT_BUDGET_SECONDS setting (10s), "
+                "which trades completeness for latency on the request path — "
+                "background sweeps can afford to wait longer."
+            ),
+        )
 
     def handle(self, *args, **options):
         if not options["place"] and not options["all"]:
@@ -95,6 +109,7 @@ class Command(BaseCommand):
         warmup = bool(options["warmup_image_cache"])
         assess = bool(options["assess"])
         dry_run = bool(options["dry_run"])
+        budget = options["budget"]
 
         if options["place"]:
             targets = self._single_place(options["place"], options["type"])
@@ -105,14 +120,18 @@ class Command(BaseCommand):
         for place_type, place in targets:
             pins = getattr(place, "image_associations", None)
             pin_count = (
-                pins.count() if place_type == "geoplace" else place.image_set.count()
+                pins.count()
+                if place_type == "geoplace" and pins is not None
+                else place.image_set.count()
             )
             label = f"{place_type}:{place.slug} (pins: {pin_count})"
             if dry_run:
                 self.stdout.write(f"[dry-run] would sync {label}")
                 continue
             try:
-                stats = sync_place_images(place, check_origins=check_origins)
+                stats = sync_place_images(
+                    place, check_origins=check_origins, budget=budget
+                )
             except Exception as e:
                 failed += 1
                 self.stdout.write(self.style.ERROR(f"sync failed {label}: {e}"))

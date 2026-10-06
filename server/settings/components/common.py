@@ -412,6 +412,18 @@ IMAGOR_KEY = config("IMAGOR_KEY", None)
 
 # Martin vector tile server
 MARTIN_TILE_URL = config("MARTIN_TILE_URL", "http://localhost:8075")
+
+# Geo image providers: overall wall-clock budget for one provider
+# fan-out and per-provider outbound HTTP timeout (seconds). P0 2026-10-05:
+# 30s provider timeouts and no overall budget let one cold fan-out hold
+# requests (and their pooled DB connections) for 30-60s+, until upstream
+# cancellation leaked psycopg pool checkouts and killed pod readiness.
+# Stragglers are cancelled at the budget deadline; partial results serve
+# the request. Set IMAGES_FANOUT_BUDGET_SECONDS <= 0 to disable the budget.
+IMAGES_FANOUT_BUDGET_SECONDS = config("IMAGES_FANOUT_BUDGET_SECONDS", 10.0, cast=float)
+IMAGES_PROVIDER_HTTP_TIMEOUT_SECONDS = config(
+    "IMAGES_PROVIDER_HTTP_TIMEOUT_SECONDS", 10.0, cast=float
+)
 # Templates
 # https://docs.djangoproject.com/en/4.2/ref/templates/api
 
