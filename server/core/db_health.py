@@ -90,6 +90,16 @@ class FastDatabaseReadinessCheck(DatabaseHeartBeatCheck):
             return None
 
     def _check_via_pool(self, pool) -> None:
+        # Django creates the pool with open=False and opens it lazily before
+        # its first getconn (backends/postgresql: "If nothing else has opened
+        # the pool, open it now"). A freshly booted worker whose first
+        # traffic is a readiness probe would otherwise fail with "the pool
+        # ... is not open yet" — so open it exactly like Django does (the
+        # call is idempotent for an already-open pool).
+        try:
+            pool.open()
+        except Exception as exc:
+            raise ServiceUnavailable(f"database pool failed to open: {exc}")
         try:
             conn = pool.getconn(timeout=self.budget_seconds)
         except Exception as exc:
