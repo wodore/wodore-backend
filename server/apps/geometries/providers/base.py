@@ -974,6 +974,7 @@ async def fetch_images_for_place(
     sources: list[str] | None,
     limit: int,
     update_cache: bool = False,
+    budget: float | None = None,
 ) -> tuple[list[ImageResult], dict[str, Any]]:
     """
     Fetch images for a specific place (GeoPlace or Hut).
@@ -988,6 +989,8 @@ async def fetch_images_for_place(
         sources: Optional list of providers to query
         limit: Max number of images to return
         update_cache: If True, bypass cache and refresh cached data
+        budget: Optional fan-out budget override (seconds) passed through
+            to ``fetch_images_from_providers``
 
     Returns:
         Tuple of (list of ImageResult objects, place info dict)
@@ -1083,6 +1086,7 @@ async def fetch_images_for_place(
         precision="precise",  # Always use high precision
         limit=limit,
         update_cache=update_cache,
+        budget=budget,
     )
 
     return results, place_info
@@ -1502,6 +1506,7 @@ async def fetch_images_from_providers(
     limit: int = 100,
     huts: list[Any] | None = None,
     update_cache: bool = False,
+    budget: float | None = None,
 ) -> list[ImageResult]:
     """
     Fetch images from all enabled providers in parallel.
@@ -1516,6 +1521,12 @@ async def fetch_images_from_providers(
         limit: Maximum number of results to fetch per provider
         huts: Optional list of Hut objects (if querying for huts)
         update_cache: If True, bypass cache and refresh cached data
+        budget: Overall wall-clock budget (seconds) for the provider
+            fan-out. ``None`` (default) uses the
+            ``IMAGES_FANOUT_BUDGET_SECONDS`` setting; an explicit value
+            (including <= 0, which disables the budget) wins — background
+            callers like the geoimages_pin command use this to run longer
+            than the latency-driven request default.
 
     Returns:
         List of ImageResult objects from all providers
@@ -1552,7 +1563,7 @@ async def fetch_images_from_providers(
     # connections) open until upstream clients cancel it. Partial results
     # still flow through dedupe/scoring and are cached by the response
     # cache — completeness is traded for bounded latency.
-    budget = fanout_budget_seconds()
+    budget = fanout_budget_seconds() if budget is None else budget
     tasks = [
         asyncio.ensure_future(
             provider.fetch(

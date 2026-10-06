@@ -250,6 +250,52 @@ class TestFanoutBudget:
         ]
         assert stragglers, "timed-out provider must be logged, not raised"
 
+    def test_explicit_budget_overrides_setting(self, monkeypatch):
+        """The budget parameter wins over the setting (pin-command path).
+
+        The setting stays at its 10s default here; only the explicit 0.3s
+        budget can explain finishing fast with the other providers'
+        partial results — geoimages_pin passes this parameter through
+        ``sync_place_images`` so background sweeps can wait longer.
+        """
+        from structlog.testing import capture_logs
+
+        from server.apps.geometries.providers import (
+            fetch_images_from_providers,
+            run_async,
+        )
+
+        slow = provider_registry.get_provider("wikicommons")
+
+        async def _slow_fetch(
+            self, places, lat, lon, radius, limit=100, update_cache=False
+        ):
+            await asyncio.sleep(30.0)  # far beyond the 0.3s explicit budget
+            return [_stub_result(self.source, 99)]
+
+        monkeypatch.setattr(slow, "fetch", _slow_fetch.__get__(slow))
+
+        with capture_logs() as logs:
+            started = time.monotonic()
+            results = run_async(
+                fetch_images_from_providers,
+                geoplaces=[],
+                huts=[],
+                lat=46.5,
+                lon=7.5,
+                radius=50.0,
+                budget=0.3,
+            )
+            elapsed = time.monotonic() - started
+
+        assert results, "fast providers' partial results must be returned"
+        assert all(r.provider != "wikicommons" for r in results)
+        assert elapsed < 5.0, f"explicit budget must bind (took {elapsed:.1f}s)"
+        assert any(
+            "budget" in e.get("event", "") and e.get("provider") == "wikicommons"
+            for e in logs
+        )
+
 
 class TestCancelledRequestConnectionHygiene:
     """P0 2026-10-05: a cancelled request must not strand a pool checkout.
