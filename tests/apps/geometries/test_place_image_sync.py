@@ -146,6 +146,21 @@ class TestRunAsyncReleaseDb:
         image = Image.objects.get(source_ident="wikicommons:File:Test.jpg")
         assert len(image.author) == 255
 
+    def test_source_url_over_old_column_length_pins(self, hut):
+        """URLs longer than the old varchar(500) must not abort the run.
+
+        Trimming would break the URL, so the columns were widened to 1000
+        (staging: 'value too long for type character varying(500)' on a
+        geoplace pin run)."""
+        long_url = (
+            "https://upload.wikimedia.org/wikipedia/commons/" + "a" * 540 + ".jpg"
+        )
+        result = _result(score=50, url=long_url)
+        pin_place_images(hut, [result])
+        image = Image.objects.get(source_ident="wikicommons:File:Test.jpg")
+        assert image.source_url_raw.startswith("https://upload.wikimedia.org/")
+        assert len(image.source_url_raw) > 500
+
     def test_sync_pins_geoplace(self, seed_data, monkeypatch):
         from server.apps.geometries.models import GeoPlace
 
@@ -393,6 +408,28 @@ class TestGeoimagesPinCommand:
         assert "bbox-widget" in html
         assert 'name="bbox"' in html and 'value="7.5,46.0,8.5,46.8"' in html
         assert "bbox_widget.js" in html
+
+    def test_assess_skipped_when_place_has_no_pins(self, hut, monkeypatch, capsys):
+        """--assess (and warmup) are pointless for places without pins."""
+        assessed = []
+        monkeypatch.setattr(
+            "server.apps.images.assessment.assess_place_pins",
+            lambda place, force=False: assessed.append(place.slug) or {"assessed": 0},
+        )
+        stub = _FetchStub([])  # no provider results → no pins
+        monkeypatch.setattr(
+            "server.apps.geometries.providers.fetch_images_for_place", stub
+        )
+
+        call_command("geoimages_pin", place=hut.slug, assess=True)
+        out = capsys.readouterr().out
+        assert "assessed pins" not in out and assessed == []
+
+        # Pins exist → assess runs.
+        pin_place_images(hut, [_result(score=50)])
+        call_command("geoimages_pin", place=hut.slug, assess=True)
+        out = capsys.readouterr().out
+        assert "assessed pins" in out and hut.slug in assessed
 
     def test_all_sweep_covers_huts_and_pinned_geoplaces(
         self, hut, seed_data, monkeypatch

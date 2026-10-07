@@ -240,12 +240,19 @@ class Command(BaseCommand):
                 report(f"sync failed {label}: {e}", False)
                 return False
             report(f"synced {label}: {stats}", True)
-            if assess:
+
+            def has_pins() -> bool:
+                # Re-checked after the sync: the place may have gained pins.
+                if place_type == "geoplace" and pins is not None:
+                    return pins.exists()
+                return place.image_set.exists()
+
+            if assess and has_pins():
                 from server.apps.images.assessment import assess_place_pins
 
                 assess_stats = assess_place_pins(place)
                 report(f"  assessed pins for {label}: {assess_stats}", True)
-            if warmup:
+            if warmup and has_pins():
                 warmed = warmup_place_image_cache(place)
                 report(f"  warmed {warmed} imagor variants for {label}", True)
             return True

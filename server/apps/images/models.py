@@ -104,7 +104,7 @@ class Image(TimeStampedModel):
         max_length=255, default="", blank=True, null=True, verbose_name=_("Author")
     )
     author_url = models.URLField(
-        blank=True, max_length=500, null=True, default="", verbose_name=_("Author URL")
+        blank=True, max_length=1000, null=True, default="", verbose_name=_("Author URL")
     )
     caption = models.TextField(
         max_length=400,
@@ -163,11 +163,11 @@ class Image(TimeStampedModel):
         related_name="image_uploaded_set",
     )
     source_url = models.URLField(
-        blank=True, max_length=500, null=True, default="", verbose_name=_("Source URL")
+        blank=True, max_length=1000, null=True, default="", verbose_name=_("Source URL")
     )
     source_url_raw = models.URLField(
         blank=True,
-        max_length=500,
+        max_length=1000,
         null=True,
         default="",
         verbose_name=_("Source URL to raw image"),
