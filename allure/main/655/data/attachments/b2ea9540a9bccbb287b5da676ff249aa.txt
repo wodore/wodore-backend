@@ -1,0 +1,1 @@
+{"version": "2098-05-01", "event": "api_snapshot_missing", "timestamp": "2026-10-07T11:30:32.599086Z", "level": "error", "logger": "apiversions", "filename": "api_v1.py", "lineno": 149, "func_name": "versioned_openapi_json", "module": "api_v1"}
