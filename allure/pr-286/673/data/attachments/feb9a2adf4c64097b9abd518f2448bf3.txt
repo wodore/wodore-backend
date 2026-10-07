@@ -1,3 +1,0 @@
-assessed hut:testhuette-berner: {'assessed': 1, 'duplicates': 0, 'pins': 1}
-Assessing pinned images (place 'testhuette-berner').… 10… • hut:testhuette-bern…
-Done: 1 places, 0 failed (place 'testhuette-berner').
