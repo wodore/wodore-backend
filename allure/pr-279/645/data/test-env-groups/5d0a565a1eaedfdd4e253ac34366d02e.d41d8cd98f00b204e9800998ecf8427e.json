@@ -1,0 +1,1 @@
+{"id":"5d0a565a1eaedfdd4e253ac34366d02e.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.availability.test_services.TestProcessHutsBatch#test_large_batch_spans_bulk_write_chunks","name":"test_large_batch_spans_bulk_write_chunks","status":"passed","testResultsByEnv":{"default":"a3bb94c4d17d91cda9d1a4da42f040bb"}}
