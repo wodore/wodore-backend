@@ -37,6 +37,16 @@ CACHES = {
             "MAX_ENTRIES": 1000,
         },
     },
+    # Throttle counters (openspec: api-throttling). LocMem default is
+    # correct for dev/test (single process); production.py overrides to
+    # DatabaseCache — rate limits must hold across workers.
+    "throttling": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "TIMEOUT": 3600,
+        "OPTIONS": {
+            "MAX_ENTRIES": 10000,
+        },
+    },
 }
 
 
