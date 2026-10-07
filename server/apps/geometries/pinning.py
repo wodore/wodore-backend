@@ -185,7 +185,7 @@ def pin_place_images(place, results: list[ImageResult]) -> PinStats:
             defaults={
                 "source_org": org,
                 "license": license_obj,
-                "author": result.author or "",
+                "author": (result.author or "")[:255],
                 "author_url": result.author_url or "",
                 "source_url": _sanitize_url(result.source_url),
                 "source_url_raw": _sanitize_url(result.url_large),

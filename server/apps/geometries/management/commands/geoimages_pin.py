@@ -18,14 +18,6 @@ Examples:
 
 from django_admin_runner import register_command
 from django_admin_runner.forms import _hidden_aware_argparse
-from rich.progress import (
-    BarColumn,
-    Progress,
-    SpinnerColumn,
-    TaskProgressColumn,
-    TextColumn,
-    TimeElapsedColumn,
-)
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Q
@@ -36,6 +28,7 @@ from server.apps.geometries.pinning import (
     sync_place_images,
     warmup_place_image_cache,
 )
+from server.apps.geometries.sweep import run_sweep
 from server.apps.geometries.widgets import BBoxWidget
 
 HELP_TYPE = "Which place type to sync: hut, geoplace or all (default)."
@@ -207,7 +200,7 @@ class Command(BaseCommand):
             return
 
         if dry_run:
-            for place_type, place in targets:
+            for place_type, place in targets[:10]:
                 pins = getattr(place, "image_associations", None)
                 pin_count = (
                     pins.count()
@@ -217,65 +210,48 @@ class Command(BaseCommand):
                 self.stdout.write(
                     f"[dry-run] would sync {place_type}:{place.slug} (pins: {pin_count})"
                 )
+            if len(targets) > 10:
+                self.stdout.write(f"[dry-run] … and {len(targets) - 10} more.")
             self.stdout.write(
                 self.style.SUCCESS(f"Dry run: {len(targets)} place(s) ({mode}).")
             )
             return
 
-        synced = failed = 0
-
-        def report(message: str, progress: Progress) -> None:
-            # Bare print()s land inside the live area; progress.console.print
-            # renders them above the bar instead (and prints plainly when the
-            # progress display is disabled).
-            progress.console.print(message)
-
-        progress = Progress(
-            SpinnerColumn(finished_text="✓"),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            TextColumn("•"),
-            TimeElapsedColumn(),
-            TextColumn("{task.fields[status]}"),
-            disable=no_progress,
-        )
-        with progress:
-            task = progress.add_task(
-                f"[cyan]Pinning images ({mode})...",
-                total=len(targets),
-                status="[dim]starting...",
+        def work(place_type, place, report) -> bool:
+            pins = getattr(place, "image_associations", None)
+            pin_count = (
+                pins.count()
+                if place_type == "geoplace" and pins is not None
+                else place.image_set.count()
             )
-            for place_type, place in targets:
-                progress.update(task, status=f"[cyan]{place_type}:{place.slug}")
-                pins = getattr(place, "image_associations", None)
-                pin_count = (
-                    pins.count()
-                    if place_type == "geoplace" and pins is not None
-                    else place.image_set.count()
+            label = f"{place_type}:{place.slug} (pins: {pin_count})"
+            try:
+                stats = sync_place_images(
+                    place, check_origins=check_origins, budget=budget
                 )
-                label = f"{place_type}:{place.slug} (pins: {pin_count})"
-                try:
-                    stats = sync_place_images(
-                        place, check_origins=check_origins, budget=budget
-                    )
-                except Exception as e:
-                    failed += 1
-                    report(self.style.ERROR(f"sync failed {label}: {e}"), progress)
-                else:
-                    synced += 1
-                    report(f"synced {label}: {stats}", progress)
-                    if assess:
-                        from server.apps.images.assessment import assess_place_pins
+            except Exception as e:
+                report(f"sync failed {label}: {e}", False)
+                return False
+            report(f"synced {label}: {stats}", True)
+            if assess:
+                from server.apps.images.assessment import assess_place_pins
 
-                        assess_stats = assess_place_pins(place)
-                        report(f"  assessed pins for {label}: {assess_stats}", progress)
-                    if warmup:
-                        warmed = warmup_place_image_cache(place)
-                        report(
-                            f"  warmed {warmed} imagor variants for {label}", progress
-                        )
-                progress.advance(task)
+                assess_stats = assess_place_pins(place)
+                report(f"  assessed pins for {label}: {assess_stats}", True)
+            if warmup:
+                warmed = warmup_place_image_cache(place)
+                report(f"  warmed {warmed} imagor variants for {label}", True)
+            return True
+
+        synced, failed = run_sweep(
+            targets,
+            mode=mode,
+            verb="Pinning images",
+            no_progress=no_progress,
+            stdout=self.stdout,
+            stderr=self.stderr,
+            work=work,
+        )
         self.stdout.write(
             self.style.SUCCESS(f"Done: {synced} synced, {failed} failed ({mode}).")
         )

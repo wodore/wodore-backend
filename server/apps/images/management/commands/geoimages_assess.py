@@ -22,19 +22,12 @@ Examples:
 
 from django_admin_runner import register_command
 from django_admin_runner.forms import _hidden_aware_argparse
-from rich.progress import (
-    BarColumn,
-    Progress,
-    SpinnerColumn,
-    TaskProgressColumn,
-    TextColumn,
-    TimeElapsedColumn,
-)
 
 from django.core.management.base import BaseCommand, CommandError
 
 from server.apps.geometries.bbox import parse_bbox
 from server.apps.geometries.pinning import GeoPlaceImageAssociation
+from server.apps.geometries.sweep import run_sweep
 from server.apps.geometries.widgets import BBoxWidget
 from server.apps.images.assessment import assess_place_pins
 
@@ -143,49 +136,34 @@ class Command(BaseCommand):
             return
 
         if dry_run:
-            for place_type, place in targets:
+            for place_type, place in targets[:10]:
                 self.stdout.write(f"[dry-run] would assess {place_type}:{place.slug}")
+            if len(targets) > 10:
+                self.stdout.write(f"[dry-run] … and {len(targets) - 10} more.")
             self.stdout.write(
                 self.style.SUCCESS(f"Dry run: {len(targets)} place(s) ({mode}).")
             )
             return
 
-        assessed_places = failed = 0
+        def work(place_type, place, report) -> bool:
+            label = f"{place_type}:{place.slug}"
+            try:
+                stats = assess_place_pins(place, force=force)
+            except Exception as e:
+                report(f"assess failed {label}: {e}", False)
+                return False
+            report(f"assessed {label}: {stats}", True)
+            return True
 
-        def report(message: str, progress: Progress) -> None:
-            # Bare print()s land inside the live area; progress.console.print
-            # renders them above the bar instead (and prints plainly when the
-            # progress display is disabled).
-            progress.console.print(message)
-
-        progress = Progress(
-            SpinnerColumn(finished_text="✓"),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            TextColumn("•"),
-            TimeElapsedColumn(),
-            TextColumn("{task.fields[status]}"),
-            disable=no_progress,
+        assessed_places, failed = run_sweep(
+            targets,
+            mode=mode,
+            verb="Assessing pinned images",
+            no_progress=no_progress,
+            stdout=self.stdout,
+            stderr=self.stderr,
+            work=work,
         )
-        with progress:
-            task = progress.add_task(
-                f"[cyan]Assessing pinned images ({mode})...",
-                total=len(targets),
-                status="[dim]starting...",
-            )
-            for place_type, place in targets:
-                progress.update(task, status=f"[cyan]{place_type}:{place.slug}")
-                label = f"{place_type}:{place.slug}"
-                try:
-                    stats = assess_place_pins(place, force=force)
-                except Exception as e:
-                    failed += 1
-                    report(self.style.ERROR(f"assess failed {label}: {e}"), progress)
-                else:
-                    assessed_places += 1
-                    report(f"assessed {label}: {stats}", progress)
-                progress.advance(task)
         self.stdout.write(
             self.style.SUCCESS(
                 f"Done: {assessed_places} places, {failed} failed ({mode})."

@@ -134,6 +134,17 @@ class TestRunAsyncReleaseDb:
         assert providers_base.run_async(self._work, release_db=False) == "ok"
         assert calls == []
 
+    def test_author_over_column_length_is_trimmed(self, hut):
+        """Provider author strings longer than varchar(255) get trimmed.
+
+        Untrimmed they aborted the whole place's pin run with
+        'value too long for type character varying(255)'."""
+        result = _result(score=50)
+        result.author = "x" * 300
+        pin_place_images(hut, [result])
+        image = Image.objects.get(source_ident="wikicommons:File:Test.jpg")
+        assert len(image.author) == 255
+
     def test_sync_pins_geoplace(self, seed_data, monkeypatch):
         from server.apps.geometries.models import GeoPlace
 
