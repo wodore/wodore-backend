@@ -5,11 +5,15 @@ from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 
 # from django.contrib import admin
 # from django.contrib.auth.models import Permission, User
-from django.contrib.auth.models import Group, User
+from django.contrib.auth.models import Group
+
+from server.apps.accounts.models import User
 
 
 class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimported]
-    def _prepare_request_with_custom_host(self, url: str, request_kwargs: dict = None):
+    def _prepare_request_with_custom_host(
+        self, url: str, request_kwargs: dict | None = None
+    ):
         """
         Modify URL and headers if OIDC_ISSUER_INTERNAL_URL is configured.
         This allows using an internal service URL while preserving the public hostname in the Host header.
@@ -40,7 +44,7 @@ class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimp
 
         return url, request_kwargs
 
-    def retrieve_matching_jwk(self, token):
+    def retrieve_matching_jwk(self, token):  # type: ignore[override]
         """Override to add Host header support for JWKS endpoint
 
         Returns a PEM-formatted key string (not a JWK dict) for PyJWT compatibility.
@@ -156,11 +160,17 @@ class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimp
                 user.groups.remove(ugroup)
         return user
 
-    def create_user(self, claims: dict) -> User:
-        username = self.get_username(claims)
-        user = self.UserModel.objects.create_user(username)  # , email=email)
+    def create_user(self, claims: dict) -> User | None:
+        # accounts.User has no username; mozilla-django-oidc 5.x matches
+        # users by the email claim (iexact), so seed the identity with the
+        # email directly. The Zitadel sub was a username-era placeholder
+        # (transiently stored in the unique email column until update_user
+        # corrected it).
+        email = claims.get("email")
+        if not email:
+            return None
+        user = self.UserModel.objects.create_user(email)  # type: ignore[union-attr]
         return self.update_user(user, claims)
-        # return self.UserModel.objects.none()
 
     def update_user(self, user: User, claims: dict) -> User:
         user.email = claims.get("email")

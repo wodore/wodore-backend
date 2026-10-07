@@ -1,0 +1,168 @@
+name: Allure Report (manual)
+
+# Optional, on-demand Allure report from a Tests run's uploaded results.
+# Regular CI runs no longer touch gh-pages (concurrent publishers used to
+# race and fail the whole tests job) — dispatch this instead:
+#
+#   gh workflow run allure-report.yml -f run_id=<Tests run id>
+#
+# run_id empty → the latest completed Tests run on main.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Tests run id to report on (empty = latest on main)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write # publishing to gh-pages
+
+# gh-pages is shared with the Tests workflow's closed-PR cleanup —
+# serialize every push to it or the two race and one loses
+# ('failed to push some refs').
+concurrency:
+  group: gh-pages-push
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Resolve source run
+        id: src
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let runId = '${{ inputs.run_id }}';
+            if (!runId) {
+              const runs = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'test.yml',
+                branch: 'main',
+                status: 'completed',
+                per_page: 1,
+              });
+              if (!runs.data.workflow_runs.length) {
+                core.setFailed('No completed Tests run on main found');
+                return;
+              }
+              runId = String(runs.data.workflow_runs[0].id);
+            }
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: Number(runId),
+            });
+            if (run.status !== 'completed') {
+              core.setFailed(`Run ${runId} is not completed (${run.status})`);
+              return;
+            }
+            const pr = run.pull_requests?.[0]?.number;
+            core.setOutput('run_id', runId);
+            core.setOutput('run_number', String(run.run_number));
+            // PR runs report under allure/pr-N, everything else under allure/main
+            core.setOutput('ctx', pr ? `allure/pr-${pr}` : 'allure/main');
+            core.setOutput('url', run.html_url);
+
+      - name: Download Allure results artifact
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ steps.src.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          name: allure-results
+          path: allure-results
+
+      # SINGLE gh-pages checkout (depth 1): history restore, report
+      # publish, pruning and history update all reuse it.
+      - name: Check out gh-pages
+        uses: actions/checkout@v6
+        with:
+          ref: gh-pages
+          path: gh-pages
+          fetch-depth: 1
+
+      - name: Restore Allure history
+        run: |
+          CTX="${{ steps.src.outputs.ctx }}"
+          mkdir -p allure-results/history
+          if [ -f "gh-pages/${CTX}/history/history.json" ]; then
+            cp "gh-pages/${CTX}/history/history.json" allure-results/history/
+          fi
+
+      # allure@3, like the legacy in-CI pipeline: the existing gh-pages
+      # history files were built in the v3 summary format, and allure@3 is
+      # what reads them. (Backend reports carry no screenshots, so the
+      # v3 SPA's GitHub-Pages attachment quirk is moot here.)
+      - name: Generate Allure report
+        run: npx -y allure@3 generate allure-results
+
+      # allure@3 does NOT write history back into the report; rebuild the
+      # next run's history.json from this report's per-test data. Capped
+      # at 2000 entries to bound the gh-pages file size.
+      - name: Build next-run history
+        run: |
+          cat > /tmp/build-history.js <<'EOF'
+          const fs = require('fs');
+          const h = {};
+          const d = 'allure-report/data/test-results';
+          for (const f of fs.readdirSync(d)) {
+            const j = JSON.parse(fs.readFileSync(d + '/' + f));
+            h[j.historyId] = {
+              status: j.status,
+              statusDetails: j.statusDetails || {},
+              trace: '',
+              stop: j.stop,
+            };
+          }
+          const capped = {};
+          for (const k of Object.keys(h).slice(0, 2000)) capped[k] = h[k];
+          fs.mkdirSync('allure-results/history', { recursive: true });
+          fs.writeFileSync(
+            'allure-results/history/history.json',
+            JSON.stringify(capped),
+          );
+          EOF
+          node /tmp/build-history.js
+
+      - name: Publish report + history + prune (single commit)
+        run: |
+          CTX="${{ steps.src.outputs.ctx }}"
+          RUN="${{ steps.src.outputs.run_number }}"
+          # publish the run's report
+          rm -rf "gh-pages/${CTX}/${RUN}"
+          cp -R allure-report "gh-pages/${CTX}/${RUN}"
+          # prune: keep the latest 30 runs per context
+          if [ -d "gh-pages/${CTX}" ]; then
+            OLD=$(ls -1 "gh-pages/${CTX}" | grep -E '^[0-9]+$' | sort -n | head -n -30 || true)
+            if [ -n "$OLD" ]; then
+              echo "Pruning: $OLD"
+              echo "$OLD" | xargs -I{} rm -rf "gh-pages/${CTX}/{}"
+            fi
+          fi
+          # next-run history
+          if [ -f allure-results/history/history.json ]; then
+            mkdir -p "gh-pages/${CTX}/history"
+            cp allure-results/history/history.json "gh-pages/${CTX}/history/"
+          fi
+          cd gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nothing to publish"
+          else
+            git commit -m "Allure report ${CTX}/${RUN} (run ${{ steps.src.outputs.run_id }})"
+            git push origin HEAD:gh-pages
+          fi
+          echo "REPORT_URL=https://wodore.github.io/wodore-backend/${CTX}/${RUN}/" >> "$GITHUB_ENV"
+
+      - name: Summary
+        run: |
+          echo "## Allure report" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Report:** $REPORT_URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Source run:** ${{ steps.src.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"

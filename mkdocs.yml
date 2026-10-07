@@ -9,6 +9,7 @@ nav:
   - "Links": infos.md
   - "API": api.md
   - "API Versioning": api-versioning.md
+  - "Backups & Staging Data": backups.md
   - Packages: packages.md
   #- API Reference:
   #    - server: reference/
@@ -121,7 +122,7 @@ plugins:
   - open-in-new-tab:
       add_icon: false
   - search:
-      separator: '[\s\u200b\-_,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
+      separator: '[\s\u200b_,:!=\[\]()"`/-]+|\.(?!\d)|&[lg]t;|\B(?=[A-Z][a-z])'
   #- gen-files:
   #    scripts:
   #      - tasks/gen_ref_pages.py
