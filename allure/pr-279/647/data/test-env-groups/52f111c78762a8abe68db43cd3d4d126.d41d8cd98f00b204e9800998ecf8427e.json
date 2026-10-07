@@ -1,1 +1,0 @@
-{"id":"52f111c78762a8abe68db43cd3d4d126.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.geometries.test_images_asgi.TestCancelledRequestConnectionHygiene#test_cancelled_request_releases_view_thread_connections","name":"test_cancelled_request_releases_view_thread_connections","status":"passed","testResultsByEnv":{"default":"5db70bb59b740472fab21e13ae542ca6"}}

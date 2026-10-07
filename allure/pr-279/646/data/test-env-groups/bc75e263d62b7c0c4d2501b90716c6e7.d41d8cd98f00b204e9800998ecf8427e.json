@@ -1,1 +1,0 @@
-{"id":"bc75e263d62b7c0c4d2501b90716c6e7.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.availability.test_services.TestProcessHutsBatch#test_duplicate_hut_date_in_payload_last_wins","name":"test_duplicate_hut_date_in_payload_last_wins","status":"passed","testResultsByEnv":{"default":"68bfb1955739840e46d2525770a48cfa"}}
