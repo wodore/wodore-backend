@@ -1022,6 +1022,12 @@ class WikimediaCommonsProvider(ImageProvider):
                 # Try ISO 8601 format first
                 try:
                     captured_at = datetime.fromisoformat(date_taken_str)
+                    if captured_at.tzinfo is None:
+                        # EXIF times carry no zone — assume UTC (same as the
+                        # dateparser fallback below), else the aware-now
+                        # subtraction would raise and silently drop the
+                        # age penalty.
+                        captured_at = captured_at.replace(tzinfo=timezone.utc)
                 except ValueError:
                     # Try other common formats
                     import dateparser
@@ -1111,6 +1117,11 @@ class WikimediaCommonsProvider(ImageProvider):
                     # Try ISO 8601 format first
                     try:
                         captured_at = datetime.fromisoformat(date_str)
+                        if captured_at.tzinfo is None:
+                            # EXIF times carry no zone — assume UTC (same
+                            # as the dateparser fallback below) so pins get
+                            # aware capture dates.
+                            captured_at = captured_at.replace(tzinfo=timezone.utc)
                     except ValueError:
                         # Try other common formats
                         import dateparser
