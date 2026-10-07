@@ -1,0 +1,1 @@
+{"id":"c30bd078b836e01764ce36913c3448d8.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.api.test_query_bbox.TestPlacesSearchBbox#test_bbox_excluding_place_empties_results","name":"test_bbox_excluding_place_empties_results","status":"passed","testResultsByEnv":{"default":"281e0d645119ca9c2c244680ec9d6bf2"}}
