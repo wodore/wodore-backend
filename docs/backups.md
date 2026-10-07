@@ -18,7 +18,10 @@ pg_dump ... \
   --exclude-table-data='oauth2_provider_accesstoken' \
   --exclude-table-data='oauth2_provider_refreshtoken' \
   --exclude-table-data='oauth2_provider_idtoken' \
-  --exclude-table-data='axes_attempts'   # login-throttle state (IPs, usernames)
+  --exclude-table-data='axes_accessattempt'        # login-throttle state (IPs, usernames)
+  --exclude-table-data='axes_accesslog'           # login history
+  --exclude-table-data='axes_accessfailurelog'    # failed-login log
+  --exclude-table-data='axes_accessattemptexpiration'  # attempt expiry bookkeeping
 ```
 
 Keep everything else, notably:

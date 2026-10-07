@@ -29,6 +29,7 @@
 - [ ] 3.1 Monitor until token metrics show zero Zitadel usage, then remove the introspection validator and the Zitadel RP surface: `mozilla_django_oidc`, `SessionRefresh`, `/oidc/` routes, `ZITADEL_*` settings (incl. private-key loading and `oidc_permission.py` remnants)
 - [ ] 3.2 Decommission the Zitadel instance and remove its Infisical secrets; document rollback (re-provision Zitadel, bootstrap accounts) in ops notes
 - [ ] 3.3 Update `AGENTS.md` auth-mode section and `_work` notes; archive the change via openspec when verified
+- [ ] 3.4 Add a regression test for `PermissionBackend.create_user` (Zitadel rollback path: seeds the email identity, handles a missing email claim) before deleting the RP surface
 
 ## 4. Verification gates (run throughout)
 

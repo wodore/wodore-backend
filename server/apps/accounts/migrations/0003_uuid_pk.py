@@ -38,6 +38,7 @@ state and pg_catalog introspection only and are composed with
 ``psycopg.sql.Identifier`` (identifiers cannot be bound as parameters).
 """
 
+import os
 import uuid
 
 from psycopg import sql
@@ -86,6 +87,21 @@ def to_uuid_pk(apps, schema_editor):
     if schema_editor.connection.vendor != "postgresql":
         return  # dev/test lanes and production are postgres; nothing else
 
+    # Safety net: this migration wipes every user row (by design - spec D7
+    # says production has no user base yet, and deploys run migrations
+    # automatically). If an account somehow exists on a production
+    # database (bootstrap before first deploy, delayed rollout), refuse
+    # loudly instead of silently locking everyone out.
+    if os.environ.get("DJANGO_ENV") == "production":
+        with schema_editor.connection.cursor() as cursor:
+            cursor.execute("SELECT 1 FROM accounts_user LIMIT 1")
+            if cursor.fetchone():
+                raise RuntimeError(
+                    "uuid_pk: production database already has users - refusing "
+                    "to wipe them (spec D7 assumes none). Delete them "
+                    "deliberately or bootstrap after this migration."
+                )
+
     with schema_editor.connection.cursor() as cursor:
         cursor.execute(
             """
@@ -110,7 +126,14 @@ def to_uuid_pk(apps, schema_editor):
         deferrable_flags: dict[tuple[str, str], bool] = {}
         for table, column, name, deferrable in cursor.fetchall():
             constraint_names.setdefault((table, column), []).append(name)
-            deferrable_flags[(table, column)] = deferrable
+            # pg_catalog row order is unspecified; tie the deferrable flag
+            # to the same constraint pick_name prefers (the post-switch
+            # fk_accounts_user_id one) so name and flag always describe
+            # the same constraint on re-add.
+            if name.endswith("fk_accounts_user_id") or (
+                (table, column) not in deferrable_flags
+            ):
+                deferrable_flags[(table, column)] = deferrable
 
         def pick_name(key: tuple[str, str]) -> str:
             names = sorted(
