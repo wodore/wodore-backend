@@ -17,6 +17,7 @@ Examples:
 """
 
 from django_admin_runner import register_command
+from django_admin_runner.forms import _hidden_aware_argparse
 from rich.progress import (
     BarColumn,
     Progress,
@@ -29,16 +30,18 @@ from rich.progress import (
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Q
 
+from server.apps.geometries.bbox import parse_bbox
 from server.apps.geometries.pinning import (
     GeoPlaceImageAssociation,
     sync_place_images,
     warmup_place_image_cache,
 )
+from server.apps.geometries.widgets import BBoxWidget
 
 HELP_TYPE = "Which place type to sync: hut, geoplace or all (default)."
 
 
-def _sweep_targets(all_places: bool, place_type: str):
+def _sweep_targets(all_places: bool, place_type: str, bbox=None):
     """Materialized sweep targets.
 
     Default (``all_places=False``): only places never synced from
@@ -66,8 +69,12 @@ def _sweep_targets(all_places: bool, place_type: str):
 
     targets: list[tuple[str, Hut | GeoPlace]] = []
     if place_type in ("hut", "all"):
+        if bbox is not None:
+            huts = huts.filter(location__intersects=bbox)
         targets += [("hut", hut) for hut in huts]
     if place_type in ("geoplace", "all"):
+        if bbox is not None:
+            geoplaces = geoplaces.filter(location__intersects=bbox)
         targets += [("geoplace", place) for place in geoplaces]
     return targets
 
@@ -92,6 +99,16 @@ class Command(BaseCommand):
                 "(images_pinned_at is null)."
             ),
         )
+        with _hidden_aware_argparse():
+            parser.add_argument(
+                "--bbox",
+                metavar="LON_MIN,LAT_MIN,LON_MAX,LAT_MAX",
+                widget=BBoxWidget(),
+                help=(
+                    "Restrict the sweep to this bounding box (WGS84 degrees). "
+                    "In the admin form, draw the rectangle on the map."
+                ),
+            )
         parser.add_argument(
             "--no-progress",
             action="store_true",
@@ -147,13 +164,21 @@ class Command(BaseCommand):
         dry_run = bool(options["dry_run"])
         budget = options["budget"]
         no_progress = bool(options["no_progress"])
+        bbox_polygon = None
+        if options["bbox"]:
+            try:
+                bbox_polygon = parse_bbox(options["bbox"])
+            except ValueError as e:
+                raise CommandError(f"--bbox: {e}") from e
 
         if options["place"]:
             targets = self._single_place(options["place"], options["type"])
             mode = f"place {options['place']!r}"
         else:
-            targets = _sweep_targets(options["all"], options["type"])
+            targets = _sweep_targets(options["all"], options["type"], bbox=bbox_polygon)
             mode = "full sweep" if options["all"] else "unpinned only"
+            if bbox_polygon is not None:
+                mode += " + bbox"
         if not targets:
             self.stdout.write(f"Nothing to do ({mode}): no matching places.")
             return

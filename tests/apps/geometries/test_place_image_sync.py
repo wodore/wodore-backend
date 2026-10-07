@@ -345,6 +345,43 @@ class TestGeoimagesPinCommand:
         assert hut.slug in seen and place.slug not in seen
         assert "(full sweep)" in out
 
+    def test_bbox_filters_sweep(self, hut, monkeypatch, capsys):
+        """--bbox restricts the sweep to places inside the envelope."""
+        seen = []
+
+        class _SweepStub(_FetchStub):
+            async def __call__(self, **kwargs):
+                seen.append(kwargs.get("place_slug"))
+                return [], {"location": {"lat": 1.0, "lon": 1.0}}
+
+        monkeypatch.setattr(
+            "server.apps.geometries.providers.fetch_images_for_place", _SweepStub([])
+        )
+
+        # A bbox in the Pacific excludes the Alpine seed hut.
+        call_command("geoimages_pin", bbox="-179.0,-50.0,-178.0,-49.0")
+        out = capsys.readouterr().out
+        assert "Nothing to do" in out and "+ bbox" in out and hut.slug not in seen
+
+        # A worldwide bbox includes it.
+        seen.clear()
+        call_command("geoimages_pin", bbox="-180.0,-90.0,180.0,90.0")
+        out = capsys.readouterr().out
+        assert hut.slug in seen
+
+    def test_invalid_bbox_raises(self):
+        with pytest.raises(CommandError):
+            call_command("geoimages_pin", bbox="not,a,bbox")
+
+    def test_bbox_widget_renders(self):
+        """Smoke test: the widget renders the map container and the input."""
+        from server.apps.geometries.widgets import BBoxWidget
+
+        html = BBoxWidget().render("bbox", "7.5,46.0,8.5,46.8")
+        assert "bbox-widget" in html
+        assert 'name="bbox"' in html and 'value="7.5,46.0,8.5,46.8"' in html
+        assert "bbox_widget.js" in html
+
     def test_all_sweep_covers_huts_and_pinned_geoplaces(
         self, hut, seed_data, monkeypatch
     ):

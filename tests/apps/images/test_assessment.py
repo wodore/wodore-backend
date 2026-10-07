@@ -176,9 +176,35 @@ class TestAssessImage:
 
 
 class TestCommand:
-    def test_requires_scope(self):
+    def test_default_assesses_pinned_places(self, hut, capsys):
+        """Default (no args) sweeps every place that has pins."""
+        pin_place_images(hut, [_result(score=80)])
+        call_command("geoimages_assess", no_progress=True)
+        out = capsys.readouterr().out
+        assert f"assessed hut:{hut.slug}" in out
+        assert "(all pinned places)" in out
+
+    def test_no_pins_reports_nothing_to_do(self, hut, capsys):
+        call_command("geoimages_assess")
+        out = capsys.readouterr().out
+        assert "Nothing to do" in out
+
+    def test_bbox_filters_targets(self, hut, monkeypatch, capsys):
+        """A tiny bbox elsewhere on the globe excludes the pinned place."""
+        pin_place_images(hut, [_result(score=80)])
+        # hut is in the Alps; a bbox in the Pacific matches nothing.
+        call_command("geoimages_assess", bbox="-179.0,-50.0,-178.0,-49.0", dry_run=True)
+        out = capsys.readouterr().out
+        assert "Nothing to do" in out and hut.slug not in out
+
+        # A huge bbox includes it.
+        call_command("geoimages_assess", bbox="-180.0,-90.0,180.0,90.0", dry_run=True)
+        out = capsys.readouterr().out
+        assert f"would assess hut:{hut.slug}" in out
+
+    def test_invalid_bbox_raises(self):
         with pytest.raises(CommandError):
-            call_command("geoimages_assess")
+            call_command("geoimages_assess", bbox="not,a,bbox")
 
     def test_dry_run(self, hut, capsys):
         call_command("geoimages_assess", place=hut.slug, dry_run=True)
@@ -264,7 +290,7 @@ class TestAdminSaveHook:
                 f"/admin/images/image/{image.id}/change/",
                 {
                     "source_url": "https://example.org/hut",
-                    "license": str(license_obj.id),
+                    "license": str(license_obj.id),  # pyright: ignore[reportAttributeAccessIssue]
                     "caption_en": "x",
                     "review_status": "approved",
                     "_continue": "1",
