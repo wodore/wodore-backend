@@ -152,6 +152,9 @@ dev = [
 [tool.uv.sources]
 django-postgres-extra = { git = "https://github.com/armonge/django-postgres-extra.git", branch = "feat/django-6" }
 hut-services-private = { git = "ssh://git@github.com/wodore/hut-services-private", branch = "main" }
+# django-admin-runner: pinned to the unreleased heartbeat-liveness commit —
+# switch back to PyPI at the next official release (>= 0.4.0).
+django-admin-runner = { git = "https://github.com/burgdev/django-admin-runner", rev = "9efeb32279c9f315bab3b1e92f5a3acf57b9598e" }
 # hut-services-private = { path = "/home/tobias/git/wodore/hut-services-private", editable = true }
 # hut-services = { git = "ssh://git@github.com/wodore/hut-services", branch = "main" }
 # hut-services = { path = "/home/tobias/git/wodore/hut-services", editable = true } # local DEV

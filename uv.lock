@@ -803,13 +803,9 @@ argon2 = [
 [[package]]
 name = "django-admin-runner"
 version = "0.3.0"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/burgdev/django-admin-runner?rev=9efeb32279c9f315bab3b1e92f5a3acf57b9598e#9efeb32279c9f315bab3b1e92f5a3acf57b9598e" }
 dependencies = [
     { name = "django" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/45/c0/25acc2dc863394a7a5fefbd3378a37b6f824153aebfddda9eb7c3527c670/django_admin_runner-0.3.0.tar.gz", hash = "sha256:fa413e6a3d8e3dc40f11e588be7ed76bedc7df5f90c34075aecaade656e02b90", size = 252993, upload-time = "2026-10-05T21:31:15.047Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/4e/5e/9f546e213528b5ccf6551510ba930315e51af831323ec941174602e8a9ff/django_admin_runner-0.3.0-py3-none-any.whl", hash = "sha256:f55f272070148b8b8448a614b8a7bcca4c41bb03b28f630fa79e2f7a2bcb0d6e", size = 284379, upload-time = "2026-10-05T21:31:13.569Z" },
 ]
 
 [package.optional-dependencies]
@@ -5461,7 +5457,7 @@ requires-dist = [
     { name = "deepdiff", specifier = "==8.*" },
     { name = "dickens", specifier = "==2.*" },
     { name = "django", extras = ["argon2"], specifier = "==6.*" },
-    { name = "django-admin-runner", extras = ["django-q2", "unfold"] },
+    { name = "django-admin-runner", extras = ["django-q2", "unfold"], git = "https://github.com/burgdev/django-admin-runner?rev=9efeb32279c9f315bab3b1e92f5a3acf57b9598e" },
     { name = "django-allauth", specifier = ">=65.19.4" },
     { name = "django-axes", specifier = "==8.*" },
     { name = "django-cleanup", specifier = "==9.*" },
