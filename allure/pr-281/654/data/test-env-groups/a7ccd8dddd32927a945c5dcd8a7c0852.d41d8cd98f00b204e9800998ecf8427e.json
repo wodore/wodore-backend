@@ -1,0 +1,1 @@
+{"id":"a7ccd8dddd32927a945c5dcd8a7c0852.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.test_oidc_settings.TestFailFast#test_rollback_without_zitadel_key_aborts","name":"test_rollback_without_zitadel_key_aborts","status":"passed","testResultsByEnv":{"default":"ad01b79c256020e6677ebc4739e6e6b6"}}
