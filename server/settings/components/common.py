@@ -484,6 +484,9 @@ AUTHENTICATION_BACKENDS = (
 )
 
 PASSWORD_HASHERS = [
+    # Argon2id with OWASP-grade cost (Django's default memory_cost is 512 KiB
+    # - far below the ~19 MiB floor); see server/apps/accounts/password_hashers.py
+    "server.apps.accounts.password_hashers.TunedArgon2PasswordHasher",
     "django.contrib.auth.hashers.Argon2PasswordHasher",
     "django.contrib.auth.hashers.PBKDF2PasswordHasher",
     "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",

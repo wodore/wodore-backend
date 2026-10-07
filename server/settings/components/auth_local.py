@@ -50,9 +50,11 @@ ACCOUNT_RATE_LIMITS = {
     "reset_password": "5/5m, 20/1h",
 }
 
-# Argon2 first; falls back to the other hashers for existing passwords.
-# (Overridden to MD5 in the test environment.)
+# Argon2 first (tuned: 64 MiB / t=3 / p=4 — Django's stock defaults are
+# below the OWASP floor); falls back to the other hashers for existing
+# passwords. (Overridden to MD5 in the test environment.)
 PASSWORD_HASHERS = [
+    "server.apps.accounts.password_hashers.TunedArgon2PasswordHasher",
     "django.contrib.auth.hashers.Argon2PasswordHasher",
     "django.contrib.auth.hashers.PBKDF2PasswordHasher",
     "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
