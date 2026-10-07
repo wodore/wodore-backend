@@ -1,0 +1,1 @@
+{"id":"22ecae9285580b1ecc19c902b9354054.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.api.test_readers.TestProcessedQueryset#test_nullable_fk_does_not_n_plus_one","name":"test_nullable_fk_does_not_n_plus_one","status":"passed","testResultsByEnv":{"default":"d6171ada4d661e3edb308276bc492728"}}
