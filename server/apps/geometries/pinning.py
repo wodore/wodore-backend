@@ -12,6 +12,7 @@ See openspec change ``pin-external-images``.
 """
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 import structlog
 
@@ -52,6 +53,20 @@ class PinStats:
 def _source_ident(result: ImageResult) -> str:
     """Stable dedupe key for a provider result."""
     return f"{result.provider}:{result.source_id}"[:512]
+
+
+def _aware(dt: datetime | None) -> datetime | None:
+    """Make a provider capture time timezone-aware (naive → UTC).
+
+    EXIF/capture times carry no zone info and providers may hand them
+    through unparsed (Wikimedia ``date_taken``, stale cached results).
+    Assigning a naive datetime to ``Image.capture_date`` trips Django's
+    USE_TZ RuntimeWarning, so guard the model boundary here — matching the
+    providers' own naive-means-UTC convention (``normalize_datetime``).
+    """
+    if dt is None or dt.tzinfo is not None:
+        return dt
+    return dt.replace(tzinfo=UTC)
 
 
 def _sanitize_url(url: str | None) -> str:
@@ -175,7 +190,7 @@ def pin_place_images(place, results: list[ImageResult]) -> PinStats:
                 "source_url": _sanitize_url(result.source_url),
                 "source_url_raw": _sanitize_url(result.url_large),
                 "caption_en": _default_caption(result.source_id or ""),
-                "capture_date": result.captured_at,
+                "capture_date": _aware(result.captured_at),
                 "provider_synced_at": now,
                 "image_meta": _merge_image_meta_from_result(result),
             },
@@ -191,7 +206,7 @@ def pin_place_images(place, results: list[ImageResult]) -> PinStats:
                 image.source_url = sanitized_source
             image.source_org = org
             image.license = license_obj
-            image.capture_date = result.captured_at
+            image.capture_date = _aware(result.captured_at)
             image.provider_synced_at = now
             image.image_meta = _merge_image_meta(image, result)
             image.save()
