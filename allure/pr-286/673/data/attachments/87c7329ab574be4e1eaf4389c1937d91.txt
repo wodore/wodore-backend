@@ -1,0 +1,4 @@
+synced hut:testhuette-berner (pins: 0): created=1 updated=0 skipped=0 
+new_links=1
+✓ Pinning images (place 'testhuette-berner')... ━ 100% • … hut:testhuette-berner
+Done: 1 synced, 0 failed (place 'testhuette-berner').
