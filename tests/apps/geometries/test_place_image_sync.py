@@ -79,6 +79,61 @@ class TestSyncPlaceImages:
         hut.refresh_from_db()
         assert hut.images_pinned_at is not None
 
+    def test_sync_bridge_keeps_db_connection(self, hut, monkeypatch):
+        """The command pipeline must not release the thread's DB connection.
+
+        ``sync_place_images`` runs while the caller (``geoimages_pin --all``)
+        iterates a server-side cursor; the bridge's exit-path cleanup would
+        close that connection mid-cursor (staging 2026-10-07)."""
+        import server.apps.geometries.providers as providers_mod
+        from server.apps.geometries.providers import base as providers_base
+
+        seen = {}
+        real_run_async = providers_base.run_async
+
+        def spy_run_async(fn, *args, **kwargs):
+            seen["release_db"] = kwargs.get("release_db", True)
+            kwargs["release_db"] = False
+            return real_run_async(fn, *args, **kwargs)
+
+        monkeypatch.setattr(providers_mod, "run_async", spy_run_async)
+        stub = _FetchStub([_result(score=70)])
+        monkeypatch.setattr(
+            "server.apps.geometries.providers.fetch_images_for_place", stub
+        )
+
+        sync_place_images(hut)
+
+        assert stub.calls == 1  # sanity: the pipeline still ran
+        assert seen["release_db"] is False
+
+
+class TestRunAsyncReleaseDb:
+    """The bridge's exit-path connection cleanup honours ``release_db``."""
+
+    async def _work(self):
+        return "ok"
+
+    def test_default_releases_connections(self, monkeypatch):
+        from server.apps.geometries.providers import base as providers_base
+
+        calls = []
+        monkeypatch.setattr(
+            providers_base, "_release_thread_db_connections", lambda: calls.append(1)
+        )
+        assert providers_base.run_async(self._work) == "ok"
+        assert calls == [1]
+
+    def test_release_db_false_skips_cleanup(self, monkeypatch):
+        from server.apps.geometries.providers import base as providers_base
+
+        calls = []
+        monkeypatch.setattr(
+            providers_base, "_release_thread_db_connections", lambda: calls.append(1)
+        )
+        assert providers_base.run_async(self._work, release_db=False) == "ok"
+        assert calls == []
+
     def test_sync_pins_geoplace(self, seed_data, monkeypatch):
         from server.apps.geometries.models import GeoPlace
 
@@ -239,9 +294,56 @@ class TestGeoimagesPinCommand:
         with pytest.raises(CommandError):
             call_command("geoimages_pin", place="nope")
 
-    def test_requires_scope(self):
-        with pytest.raises(CommandError):
-            call_command("geoimages_pin")
+    def test_default_targets_unpinned_only(self, hut, monkeypatch, capsys):
+        """Default (no args) pins only places never synced from providers."""
+        seen = []
+
+        class _SweepStub(_FetchStub):
+            async def __call__(self, **kwargs):
+                seen.append(kwargs.get("place_slug"))
+                return [], {"location": {"lat": 1.0, "lon": 1.0}}
+
+        monkeypatch.setattr(
+            "server.apps.geometries.providers.fetch_images_for_place", _SweepStub([])
+        )
+
+        # Unpinned hut → default mode sweeps it.
+        call_command("geoimages_pin")
+        out = capsys.readouterr().out
+        assert "unpinned only" in out and hut.slug in seen
+
+        # Pinned hut → default mode skips it; --all still sweeps it.
+        hut.images_pinned_at = timezone.now()
+        hut.save(update_fields=["images_pinned_at"])
+        seen.clear()
+        call_command("geoimages_pin")
+        out = capsys.readouterr().out
+        assert "Nothing to do" in out and hut.slug not in seen
+
+        seen.clear()
+        call_command("geoimages_pin", all=True)
+        assert hut.slug in seen
+
+    def test_type_filter_applies_to_sweep(self, hut, seed_data, monkeypatch, capsys):
+        from server.apps.geometries.models import GeoPlace
+
+        place = GeoPlace.objects.filter(is_active=True, is_public=True).first()
+        assert place is not None
+        pin_place_images(place, [_result(score=10)])  # geoplace now has pins
+        seen = []
+
+        class _SweepStub(_FetchStub):
+            async def __call__(self, **kwargs):
+                seen.append(kwargs.get("place_slug"))
+                return [], {"location": {"lat": 1.0, "lon": 1.0}}
+
+        monkeypatch.setattr(
+            "server.apps.geometries.providers.fetch_images_for_place", _SweepStub([])
+        )
+        call_command("geoimages_pin", all=True, type="hut")
+        out = capsys.readouterr().out
+        assert hut.slug in seen and place.slug not in seen
+        assert "(full sweep)" in out
 
     def test_all_sweep_covers_huts_and_pinned_geoplaces(
         self, hut, seed_data, monkeypatch
