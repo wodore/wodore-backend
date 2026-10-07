@@ -162,9 +162,9 @@ class Command(BaseCommand):
             help=(
                 "Overall wall-clock budget per place's provider fan-out, in "
                 "seconds; 0 or negative disables it (wait for all providers). "
-                "Default: the IMAGES_FANOUT_BUDGET_SECONDS setting (10s), "
-                "which trades completeness for latency on the request path — "
-                "background sweeps can afford to wait longer."
+                "Default: 3× the IMAGES_FANOUT_BUDGET_SECONDS setting (30s "
+                "at the 10s request-path default) — background sweeps can "
+                "afford to wait longer for completeness."
             ),
         )
 
@@ -174,6 +174,13 @@ class Command(BaseCommand):
         assess = bool(options["assess"])
         dry_run = bool(options["dry_run"])
         budget = options["budget"]
+        if budget is None:
+            # Background sweeps can afford to wait longer than the request
+            # path: triple the env-backed fan-out budget unless --budget is
+            # passed explicitly (0/negative still disables the budget).
+            from server.apps.geometries.providers.base import fanout_budget_seconds
+
+            budget = fanout_budget_seconds() * 3
         no_progress = bool(options["no_progress"])
         bbox_polygon = None
         if options["bbox"]:

@@ -11,6 +11,7 @@ import pytest
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.test import override_settings
 from django.utils import timezone
 
 from server.apps.geometries import image_response_cache as irc
@@ -416,8 +417,8 @@ class TestGeoimagesPinCommand:
         assert hut.slug in seen and place.slug in seen
 
     def test_budget_flag_threads_to_fanout(self, hut, monkeypatch):
-        """--budget (seconds) reaches the fan-out; default defers to the
-        IMAGES_FANOUT_BUDGET_SECONDS setting (budget=None)."""
+        """--budget (seconds) reaches the fan-out; the command default is
+        3× the request-path budget (background sweeps wait longer)."""
         seen = []
 
         class _BudgetRecorder(_FetchStub):
@@ -431,7 +432,9 @@ class TestGeoimagesPinCommand:
         )
         call_command("geoimages_pin", place=hut.slug)
         call_command("geoimages_pin", place=hut.slug, budget=25)
-        assert seen == [None, 25]
+        with override_settings(IMAGES_FANOUT_BUDGET_SECONDS=5):
+            call_command("geoimages_pin", place=hut.slug)
+        assert seen == [30.0, 25, 15.0]
 
 
 class TestImagorWarmup:
