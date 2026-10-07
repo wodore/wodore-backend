@@ -1,1 +1,0 @@
-{"id":"6e1b9806bab3a1e8682c6a3bb4ca9a18.64f434ce97fea8da553ca328def052ee","fullName":"tests.apps.api.test_cold_query_pins.TestCategoriesQueryCount#test_cold_build_single_query","name":"test_cold_build_single_query[/v1/categories/map/root]","status":"passed","testResultsByEnv":{"default":"4b662178bcee3f108253cfab4a90b2c6"}}

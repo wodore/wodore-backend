@@ -1,1 +1,0 @@
-{"id":"403c534729526a3be9a91cfdd0f8b178.26af1a513055cc3bcce7c64368704067","fullName":"tests.apps.geometries.test_provider_http_timeouts.TestWikimediaStrategyClients#test_strategy_client_uses_configured_timeout","name":"test_strategy_client_uses_configured_timeout[_fetch_wikidata_by_qids]","status":"passed","testResultsByEnv":{"default":"ed85526ec68b6b00c9c147cb88ab31ef"}}

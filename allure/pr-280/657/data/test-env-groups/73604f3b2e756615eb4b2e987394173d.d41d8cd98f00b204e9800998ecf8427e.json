@@ -1,1 +1,0 @@
-{"id":"73604f3b2e756615eb4b2e987394173d.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.test_api_auth.TestProtectedEndpoints#test_editor_token_rejected_on_admin_endpoint","name":"test_editor_token_rejected_on_admin_endpoint","status":"passed","testResultsByEnv":{"default":"9a427d1520f73ce7200d13d1cb07736e"}}

@@ -1,1 +1,0 @@
-{"id":"2b1f8a5eae65dad30c0b82b589141d86.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.geometries.test_place_schema_conversion.TestMixedPlaceDispatch#test_hut_mistyped_as_geoplace_degrades_gracefully","name":"test_hut_mistyped_as_geoplace_degrades_gracefully","status":"passed","testResultsByEnv":{"default":"b6fd50f2f6164c42450a167e89ca7c4f"}}
