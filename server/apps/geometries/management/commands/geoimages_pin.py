@@ -41,7 +41,9 @@ from server.apps.geometries.widgets import BBoxWidget
 HELP_TYPE = "Which place type to sync: hut, geoplace or all (default)."
 
 
-def _sweep_targets(all_places: bool, place_type: str, bbox=None):
+def _sweep_targets(
+    all_places: bool, place_type: str, bbox=None, limit: int | None = None
+):
     """Materialized sweep targets.
 
     Default (``all_places=False``): only places never synced from
@@ -51,13 +53,16 @@ def _sweep_targets(all_places: bool, place_type: str, bbox=None):
     so a full sweep re-sweeps only known ones).
 
     Targets are materialized into a list: no server-side cursor spans the
-    (hours-long) per-place loop.
+    (hours-long) per-place loop. Unpinned geoplaces number in the hundreds
+    of thousands, so they are capped by *limit* (huts first, geoplaces
+    fill the remaining budget) — pass ``--type=geoplace`` to fill the
+    whole budget with geoplaces instead.
     """
     from server.apps.geometries.models import GeoPlace
     from server.apps.huts.models import Hut
 
     huts = Hut.objects.filter(is_active=True, is_public=True)
-    geoplaces = GeoPlace.objects.filter(is_active=True, is_public=True)
+    geoplaces = GeoPlace.objects.filter(is_active=True, is_public=True).defer("shape")
     if all_places:
         pinned_geoplace_ids = GeoPlaceImageAssociation.objects.values_list(
             "geo_place_id", flat=True
@@ -65,7 +70,7 @@ def _sweep_targets(all_places: bool, place_type: str, bbox=None):
         geoplaces = geoplaces.filter(Q(id__in=pinned_geoplace_ids))
     else:
         huts = huts.filter(images_pinned_at__isnull=True)
-        geoplaces = geoplaces.filter(images_pinned_at__isnull=True)
+        geoplaces = geoplaces.filter(images_pinned_at__isnull=True).order_by("id")
 
     targets: list[tuple[str, Hut | GeoPlace]] = []
     if place_type in ("hut", "all"):
@@ -75,6 +80,8 @@ def _sweep_targets(all_places: bool, place_type: str, bbox=None):
     if place_type in ("geoplace", "all"):
         if bbox is not None:
             geoplaces = geoplaces.filter(location__intersects=bbox)
+        if not all_places and limit is not None:
+            geoplaces = geoplaces[: max(0, limit - len(targets))]
         targets += [("geoplace", place) for place in geoplaces]
     return targets
 
@@ -109,6 +116,17 @@ class Command(BaseCommand):
                     "In the admin form, draw the rectangle on the map."
                 ),
             )
+        parser.add_argument(
+            "--limit",
+            type=int,
+            default=200,
+            metavar="N",
+            help=(
+                "Cap on places per run in the default (unpinned) mode — huts "
+                "first, geoplaces fill the remaining budget (default 200; the "
+                "unpinned geoplace table is huge). --all ignores it."
+            ),
+        )
         parser.add_argument(
             "--no-progress",
             action="store_true",
@@ -175,7 +193,12 @@ class Command(BaseCommand):
             targets = self._single_place(options["place"], options["type"])
             mode = f"place {options['place']!r}"
         else:
-            targets = _sweep_targets(options["all"], options["type"], bbox=bbox_polygon)
+            targets = _sweep_targets(
+                options["all"],
+                options["type"],
+                bbox=bbox_polygon,
+                limit=options["limit"],
+            )
             mode = "full sweep" if options["all"] else "unpinned only"
             if bbox_polygon is not None:
                 mode += " + bbox"
