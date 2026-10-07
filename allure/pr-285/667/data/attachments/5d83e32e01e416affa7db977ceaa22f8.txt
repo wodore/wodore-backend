@@ -1,1 +1,0 @@
-{"event": "Error fetching images for hut 'testhuette-berner': provider down", "timestamp": "2026-10-07T18:43:13.513893Z", "level": "error", "logger": "server.apps.geometries.api_images", "filename": "api_images.py", "lineno": 835, "func_name": "get", "module": "api_images"}

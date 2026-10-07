@@ -1,1 +1,0 @@
-{"id":"31fa11fe461a81ebbc249bd5c795dbd9.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.geometries.test_place_image_sync.TestSyncPlaceImages#test_sync_bridge_keeps_db_connection","name":"test_sync_bridge_keeps_db_connection","status":"passed","testResultsByEnv":{"default":"c5a05d079ad61683b02d1f35047a9396"}}
