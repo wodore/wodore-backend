@@ -18,4 +18,4 @@
 ## 4. Contract & docs
 
 - [x] 4.1 API snapshot regenerated (3 × documented 429 on the availability endpoints; prettier-normalized at commit); `python3 -m server.apps.apiversions.registry_check` passes with no new version — additive change per design D5
-- [ ] 4.2 Ops note in the PR body: `app createcachetable` deploy step; nginx `proxy_set_header X-Forwarded-For $remote_addr` (overwrite, not append)
+- [x] 4.2 Ops note in the PR body: `app createcachetable` deploy step; nginx `proxy_set_header X-Forwarded-For $remote_addr` (overwrite, not append)
