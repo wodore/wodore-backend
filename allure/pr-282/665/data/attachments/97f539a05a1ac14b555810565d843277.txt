@@ -1,1 +1,0 @@
-{"error": "", "event": "RefugesInfoProvider error", "timestamp": "2026-10-07T18:30:00.923206Z", "level": "error", "logger": "server.apps.geometries.providers.refugesinfo", "filename": "refugesinfo.py", "lineno": 156, "func_name": "fetch", "module": "refugesinfo"}
