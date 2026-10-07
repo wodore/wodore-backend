@@ -258,11 +258,28 @@ scripts/lane-setup.sh
 # Shared verbatim by workz start (post_start) and paseo.json setup.
 ```
 
-**Dev server:** `scripts/lane-dev.sh fg|start|stop|status` — `fg` runs a
-guarded foreground runserver on the workz port (`PORT` in the `.env.local`
-managed block) through `lane-run.sh`; a second start on a live lane port is
-a no-op, a foreign listener is refused. `start`/`stop` wrap detached
-`workz run`/`workz run --stop`.
+**Dev server:** `scripts/lane-dev.sh
+fg|start|stop|status|attach|kill` — `fg` runs a guarded foreground
+supervisor on the workz port (`PORT` in the `.env.local` managed block)
+through `lane-run.sh`: runserver plus a django-q2 **qcluster**; when
+runserver stops, the wrapper's traps tear the qcluster down too — across
+paseo `script stop`, `workz run --stop`, Ctrl-C and crashes. A second start
+on a live lane port is a no-op, a foreign listener is refused; orphans from
+a SIGKILLed run are retired on the next `fg`/`kill`. Process management is
+cwd-scoped discovery (`pgrep -f '.?venv/bin/python3? manage.py
+(qcluster|runserver)'` + `/proc/<pid>/cwd` == worktree) — no pidfiles.
+django-q2 hangs on SIGTERM in this stack, so every stop is TERM → ~5 s →
+SIGKILL. Make qcluster optional with `QCLUSTER=0` in `.env.local` (outside
+the workz managed block, like `FRONTEND_DOMAIN`) or one-off
+`QCLUSTER=0 scripts/lane-dev.sh fg`. `start`/`stop` wrap detached
+`workz run`/`workz run --stop` (workz-provisioned lanes only — `workz run`
+cannot resolve paseo-created worktrees); `attach` prints recent runserver
+output (the paseo service terminal via `paseo terminal capture`, else the
+last detached workz run log — live view: open the terminal in the Paseo
+app); `kill` hard-stops runserver + qcluster (note: paseo's lifecycle badge
+may keep saying "running" until it reaps the pane — use `paseo script stop`
+when the supervisor is healthy). paseo.json exposes all of this as
+`runserver` (service), `runserver:attach` and `runserver:kill`.
 
 **Teardown:** `scripts/lane-teardown.sh` — dev server stop → workz reap →
 martin stop → lane DB drop, idempotent. `workz done <branch> --cleanup-db`
