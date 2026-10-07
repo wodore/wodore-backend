@@ -125,9 +125,7 @@ def to_uuid_pk(apps, schema_editor):
         targets = list(
             {(t, c): (t, c, od, nl) for t, c, od, nl in _user_fk_fields(apps)}.values()
         )
-        missing = [
-            (t, c) for t, c, _, _ in targets if (t, c) not in constraint_names
-        ]
+        missing = [(t, c) for t, c, _, _ in targets if (t, c) not in constraint_names]
         if missing:
             raise RuntimeError(
                 f"uuid_pk: no FK constraint found for {missing} - "
@@ -136,9 +134,9 @@ def to_uuid_pk(apps, schema_editor):
         # Pre-switch auth_user through tables retargeted by 0002: no state
         # model, dead data - wipe them so the parent delete passes.
         shadows = [
-            (t, c) for t, c in constraint_names if (t, c) not in {
-                (t, c) for t, c, _, _ in targets
-            }
+            (t, c)
+            for t, c in constraint_names
+            if (t, c) not in {(t, c) for t, c, _, _ in targets}
         ]
 
         # Detach: wipe dependent rows (fixture auth data), keep nullable
@@ -160,9 +158,7 @@ def to_uuid_pk(apps, schema_editor):
                     sql.SQL("""DELETE FROM {0}""").format(sql.Identifier(table))
                 )
         for table, column in shadows:
-            cursor.execute(
-                sql.SQL("""DELETE FROM {0}""").format(sql.Identifier(table))
-            )
+            cursor.execute(sql.SQL("""DELETE FROM {0}""").format(sql.Identifier(table)))
         cursor.execute("DELETE FROM accounts_user")
 
         # 0002 left the retargeted FKs DEFERRABLE INITIALLY DEFERRED; the
@@ -265,7 +261,6 @@ def from_uuid_pk(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("accounts", "0002_retarget_user_fks"),
     ]
