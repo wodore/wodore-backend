@@ -313,6 +313,10 @@ def sync_place_images(
         limit=100,
         update_cache=False,
         budget=budget,
+        # Command/background path: the calling thread may hold the sweep's
+        # server-side cursor (``queryset.iterator()``) across this call —
+        # the bridge's exit-path connection cleanup would close it.
+        release_db=False,
     )
     stats = pin_place_images(place, results)
     if check_origins:
