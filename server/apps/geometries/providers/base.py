@@ -34,7 +34,7 @@ CACHE_VERY_SHORT = 3600  # 1 hours
 CACHE_KEY_PREFIX = "geoimages"
 
 
-def run_async(async_fn, /, *args, **kwargs):
+def run_async(async_fn, /, *args, release_db: bool = True, **kwargs):
     """Run an async callable (e.g. ``fetch_images_from_providers``) from
     sync code under any server topology.
 
@@ -54,11 +54,21 @@ def run_async(async_fn, /, *args, **kwargs):
     never reaches Django's request-finished cleanup for the detached sync
     view thread; without this, each abort stranded a checked-out psycopg
     pool connection until the pool starved (P0 2026-10-05).
+
+    Pass ``release_db=False`` when the calling thread holds a long-lived
+    server-side cursor (``queryset.iterator()``) across the bridge: the
+    exit-path cleanup would close the connection out from under the open
+    cursor and the next fetch dies with ``OperationalError: the
+    connection is closed`` (staging 2026-10-07: ``geoimages_pin --all``
+    lost a >1 h sweep this way). The background/command pipeline
+    (``pinning.sync_place_images``) must pass ``False``; request-side
+    callers keep the default.
     """
     try:
         return async_to_sync(async_fn)(*args, **kwargs)
     finally:
-        _release_thread_db_connections()
+        if release_db:
+            _release_thread_db_connections()
 
 
 def _release_thread_db_connections() -> None:
@@ -77,6 +87,10 @@ def _release_thread_db_connections() -> None:
     wrappers), and their release follows the normal transaction lifecycle.
     The provider phase itself runs in autocommit, so the incident's leak
     path is fully covered.
+
+    Never run this on a thread holding a long-lived server-side cursor
+    (``queryset.iterator()``): the cursor's connection would be closed
+    out from under it — see ``run_async(release_db=False)``.
     """
     from django.db import connections
 

@@ -79,6 +79,61 @@ class TestSyncPlaceImages:
         hut.refresh_from_db()
         assert hut.images_pinned_at is not None
 
+    def test_sync_bridge_keeps_db_connection(self, hut, monkeypatch):
+        """The command pipeline must not release the thread's DB connection.
+
+        ``sync_place_images`` runs while the caller (``geoimages_pin --all``)
+        iterates a server-side cursor; the bridge's exit-path cleanup would
+        close that connection mid-cursor (staging 2026-10-07)."""
+        import server.apps.geometries.providers as providers_mod
+        from server.apps.geometries.providers import base as providers_base
+
+        seen = {}
+        real_run_async = providers_base.run_async
+
+        def spy_run_async(fn, *args, **kwargs):
+            seen["release_db"] = kwargs.get("release_db", True)
+            kwargs["release_db"] = False
+            return real_run_async(fn, *args, **kwargs)
+
+        monkeypatch.setattr(providers_mod, "run_async", spy_run_async)
+        stub = _FetchStub([_result(score=70)])
+        monkeypatch.setattr(
+            "server.apps.geometries.providers.fetch_images_for_place", stub
+        )
+
+        sync_place_images(hut)
+
+        assert stub.calls == 1  # sanity: the pipeline still ran
+        assert seen["release_db"] is False
+
+
+class TestRunAsyncReleaseDb:
+    """The bridge's exit-path connection cleanup honours ``release_db``."""
+
+    async def _work(self):
+        return "ok"
+
+    def test_default_releases_connections(self, monkeypatch):
+        from server.apps.geometries.providers import base as providers_base
+
+        calls = []
+        monkeypatch.setattr(
+            providers_base, "_release_thread_db_connections", lambda: calls.append(1)
+        )
+        assert providers_base.run_async(self._work) == "ok"
+        assert calls == [1]
+
+    def test_release_db_false_skips_cleanup(self, monkeypatch):
+        from server.apps.geometries.providers import base as providers_base
+
+        calls = []
+        monkeypatch.setattr(
+            providers_base, "_release_thread_db_connections", lambda: calls.append(1)
+        )
+        assert providers_base.run_async(self._work, release_db=False) == "ok"
+        assert calls == []
+
     def test_sync_pins_geoplace(self, seed_data, monkeypatch):
         from server.apps.geometries.models import GeoPlace
 
