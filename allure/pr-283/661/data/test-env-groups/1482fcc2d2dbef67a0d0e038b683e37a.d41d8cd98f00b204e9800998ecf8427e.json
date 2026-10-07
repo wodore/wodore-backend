@@ -1,1 +1,0 @@
-{"id":"1482fcc2d2dbef67a0d0e038b683e37a.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.availability.test_throttling.TestAvailabilityWiring#test_throttles_use_client_ip_on_the_shared_alias","name":"test_throttles_use_client_ip_on_the_shared_alias","status":"passed","testResultsByEnv":{"default":"8a3fe85764843f966d6b9438eb136972"}}
