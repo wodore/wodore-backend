@@ -1,0 +1,13 @@
+{% load static %}
+{% include "django/forms/widgets/text.html" %}
+<div class="bbox-widget" data-bbox-input-id="{{ widget.attrs.id }}"
+     style="height: 320px; margin-top: 4px; border: 1px solid var(--border-color, #ccc); border-radius: 4px;"></div>
+<p class="help" style="margin-top: 2px;">
+  Shift + drag on the map to draw the rectangle (or type
+  lon_min,lat_min,lon_max,lat_max above).
+</p>
+{# Self-contained assets: the admin runner's run form does not render {{ form.media }}. #}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v10.9.0/ol.css">
+<link rel="stylesheet" href="{% static 'gis/css/ol3.css' %}">
+<script src="https://cdn.jsdelivr.net/npm/ol@v10.9.0/dist/ol.js"></script>
+<script src="{% static 'geometries/js/bbox_widget.js' %}" defer></script>
