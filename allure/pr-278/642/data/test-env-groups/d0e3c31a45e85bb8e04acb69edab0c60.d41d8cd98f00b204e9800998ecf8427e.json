@@ -1,1 +1,0 @@
-{"id":"d0e3c31a45e85bb8e04acb69edab0c60.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.geometries.test_image_response_cache.TestEndpointCaching#test_stale_fallback_on_failure","name":"test_stale_fallback_on_failure","status":"passed","testResultsByEnv":{"default":"31b8edfc9a484d8baf31a4d32799b1ef"}}
