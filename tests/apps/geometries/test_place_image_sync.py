@@ -294,9 +294,56 @@ class TestGeoimagesPinCommand:
         with pytest.raises(CommandError):
             call_command("geoimages_pin", place="nope")
 
-    def test_requires_scope(self):
-        with pytest.raises(CommandError):
-            call_command("geoimages_pin")
+    def test_default_targets_unpinned_only(self, hut, monkeypatch, capsys):
+        """Default (no args) pins only places never synced from providers."""
+        seen = []
+
+        class _SweepStub(_FetchStub):
+            async def __call__(self, **kwargs):
+                seen.append(kwargs.get("place_slug"))
+                return [], {"location": {"lat": 1.0, "lon": 1.0}}
+
+        monkeypatch.setattr(
+            "server.apps.geometries.providers.fetch_images_for_place", _SweepStub([])
+        )
+
+        # Unpinned hut → default mode sweeps it.
+        call_command("geoimages_pin")
+        out = capsys.readouterr().out
+        assert "unpinned only" in out and hut.slug in seen
+
+        # Pinned hut → default mode skips it; --all still sweeps it.
+        hut.images_pinned_at = timezone.now()
+        hut.save(update_fields=["images_pinned_at"])
+        seen.clear()
+        call_command("geoimages_pin")
+        out = capsys.readouterr().out
+        assert "Nothing to do" in out and hut.slug not in seen
+
+        seen.clear()
+        call_command("geoimages_pin", all=True)
+        assert hut.slug in seen
+
+    def test_type_filter_applies_to_sweep(self, hut, seed_data, monkeypatch, capsys):
+        from server.apps.geometries.models import GeoPlace
+
+        place = GeoPlace.objects.filter(is_active=True, is_public=True).first()
+        assert place is not None
+        pin_place_images(place, [_result(score=10)])  # geoplace now has pins
+        seen = []
+
+        class _SweepStub(_FetchStub):
+            async def __call__(self, **kwargs):
+                seen.append(kwargs.get("place_slug"))
+                return [], {"location": {"lat": 1.0, "lon": 1.0}}
+
+        monkeypatch.setattr(
+            "server.apps.geometries.providers.fetch_images_for_place", _SweepStub([])
+        )
+        call_command("geoimages_pin", all=True, type="hut")
+        out = capsys.readouterr().out
+        assert hut.slug in seen and place.slug not in seen
+        assert "(full sweep)" in out
 
     def test_all_sweep_covers_huts_and_pinned_geoplaces(
         self, hut, seed_data, monkeypatch
