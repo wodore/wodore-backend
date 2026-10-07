@@ -250,8 +250,8 @@ jobs:
           cat > /tmp/smoke.ts <<'TS'
           import type { paths, components } from './wodore_v1.d.ts';
           type Schemas = components['schemas'];
-          type Huts = paths['/v1/huts/huts']['get']['responses']['200']
-            ['content']['application/json'];
+          type Resp = paths['/v1/huts/huts']['get']['responses']['200'];
+          type Huts = Resp['content']['application/json'];
           const check: (h: Huts) => Huts = h => h;
           const schema: Schemas['HutSchemaList'] | undefined = undefined;
           console.log(check, schema);
