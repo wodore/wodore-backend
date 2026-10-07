@@ -1,0 +1,1 @@
+{"id":"cc7d52b2b09d669aa0f7cdf5ce515a7d.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.translations.test_llm#test_translate_does_not_retry_client_errors","name":"test_translate_does_not_retry_client_errors","status":"passed","testResultsByEnv":{"default":"c9d0c482724b42e75e3f809303baae34"}}

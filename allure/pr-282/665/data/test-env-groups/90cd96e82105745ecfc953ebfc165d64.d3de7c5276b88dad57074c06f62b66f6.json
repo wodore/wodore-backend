@@ -1,0 +1,1 @@
+{"id":"90cd96e82105745ecfc953ebfc165d64.d3de7c5276b88dad57074c06f62b66f6","fullName":"tests.apps.geometries.test_panoramax_provider.TestProducerAllowList#test_non_approved_producer_is_skipped_entirely","name":"test_non_approved_producer_is_skipped_entirely[some-random-user]","status":"passed","testResultsByEnv":{"default":"7b4783b9edf36b0421f19626b9eff7b5"}}
