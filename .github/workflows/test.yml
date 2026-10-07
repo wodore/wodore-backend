@@ -19,17 +19,9 @@ env:
   OIDC_OP_BASE_URL: "https://notset"
 
 permissions:
-  pull-requests: write
+  contents: read
+  # JUnit check-run annotations (mikepenz/action-junit-report)
   checks: write
-  # Publishing the Allure report + history to the gh-pages branch
-  contents: write
-
-# Queue test runs per ref: the report and history pushes to gh-pages must
-# not race each other on the same PR/branch (runs of different PRs may
-# still overlap, as before).
-concurrency:
-  group: allure-${{ github.ref }}
-  cancel-in-progress: false
 
 jobs:
   tests:
@@ -48,16 +40,6 @@ jobs:
           git fetch --tags --force
           python3 -m server.apps.apiversions.registry_check
 
-      - name: Resolve report context
-        id: ctx
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            PR_NUM=${{ github.event.pull_request.number }}
-            echo "dir=allure/pr-${PR_NUM}" >> "$GITHUB_OUTPUT"
-          else
-            echo "dir=allure/main" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Compute cache keys
         id: cache-keys
         run: |
@@ -75,13 +57,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: /tmp/pgdata
-          key: testdb-postgis16-v${{ steps.cache-keys.outputs.version }}-${{ steps.cache-keys.outputs.migration-hash }}
-
-      - name: Cache Allure (npm)
-        uses: actions/cache@v5
-        with:
-          path: ~/.npm
-          key: allure-${{ runner.os }}
+          key: >-
+            testdb-postgis16-v${{ steps.cache-keys.outputs.version }}-${{
+            steps.cache-keys.outputs.migration-hash }}
 
       # ── Start PostgreSQL + Install GDAL in parallel ─────────────────────
       # Both run as background processes within this step, wait blocks until
@@ -118,8 +96,11 @@ jobs:
 
           # --- Install GDAL in background ---
           (
-            sudo apt-get install -y --no-install-recommends gdal-bin 2>/tmp/gdal-err.log || \
-              (sudo apt-get update && sudo apt-get install -y --no-install-recommends gdal-bin)
+            sudo apt-get install -y --no-install-recommends \
+              gdal-bin 2>/tmp/gdal-err.log || \
+              (sudo apt-get update && \
+                sudo apt-get install -y --no-install-recommends \
+                gdal-bin)
             echo "GDAL install complete"
           ) &
 
@@ -129,7 +110,10 @@ jobs:
       # ── Setup Python environment (runs while PG + GDAL install) ─────────
 
       - name: Setup token for Python installation
-        run: git config --global url."https://${{ secrets.MY_USERNAME }}:${{ secrets.MY_TOKEN }}@github.com".insteadOf ssh://git@github.com
+        run: |
+          AUTH="${{ secrets.MY_USERNAME }}:${{ secrets.MY_TOKEN }}"
+          git config --global \
+            "url.https://${AUTH}@github.com".insteadOf ssh://git@github.com
 
       - name: Set up the environment
         uses: ./.github/actions/setup-venv
@@ -150,7 +134,10 @@ jobs:
             os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'server.settings')
             django.setup()
             from django.conf import settings
-            print(' '.join(a.rsplit('.', 1)[-1] for a in settings.INSTALLED_APPS if a.startswith('server.apps.')))
+            print(' '.join(
+              a.rsplit('.', 1)[-1]
+              for a in settings.INSTALLED_APPS
+              if a.startswith('server.apps.')))
           ")
           uv run python manage.py makemigrations --check --dry-run $APPS
 
@@ -158,176 +145,40 @@ jobs:
 
       - name: Run tests
         run: |
+          mkdir -p junit-results
           if [[ "${{ steps.cache-db.outputs.cache-hit }}" != "true" ]]; then
-            uv run pytest --no-header -q --create-db -v --alluredir allure-results --clean-alluredir
+            uv run pytest --no-header -q --create-db -v \
+              --alluredir allure-results --clean-alluredir \
+              --junitxml=junit-results/tests.xml
           else
-            uv run pytest --no-header -q -v --alluredir allure-results --clean-alluredir
+            uv run pytest --no-header -q -v \
+              --alluredir allure-results --clean-alluredir \
+              --junitxml=junit-results/tests.xml
           fi
 
       # ── Report ──────────────────────────────────────────────────────────
-      # Same pattern as the frontend (wodore-frontend-quasar test.yml):
-      # full report on GitHub Pages per run/context, trend history per
-      # context, one deduplicated PR comment updated in place, and report
-      # directories removed when the PR closes.
+      # Regular runs no longer touch gh-pages (publishing raced between
+      # concurrent PRs and failed the whole job). Failed tests surface as
+      # inline JUnit check-run annotations; the full Allure report is
+      # generated on demand from the uploaded results artifact via
+      # .github/workflows/allure-report.yml (manual dispatch).
 
-      # Restore this context's Allure history (per PR, and per main
-      # branch) so the trend graph builds across runs. First run has no
-      # history — tolerated. EMPIRICAL: allure@3 reads history from
-      # <results-root>/history/ — a SIBLING of the results dir passed to
-      # generate — and does NOT write history back into the report; the
-      # next run's history is rebuilt from this report's per-test data
-      # after generate ("Build next-run history" step below).
-      - name: Fetch Allure history
-        run: |
-          git fetch --depth=1 origin \
-            gh-pages:refs/remotes/origin/gh-pages || true
-          mkdir -p allure-results/history
-          CTX="${{ steps.ctx.outputs.dir }}"
-          HIST="${CTX}/history/history.json"
-          if git cat-file -e "origin/gh-pages:${HIST}" 2>/dev/null; then
-            git show "origin/gh-pages:${HIST}" \
-              > allure-results/history/history.json
-          fi
-
-      # allure@3 (Allure Report 3): the allure-action reads the v3 summary
-      # format; the v2 allure-commandline report is not parseable by it
-      - name: Generate Allure report
+      - name: JUnit report (annotations)
         if: always()
-        run: npx -y allure@3 generate allure-results
-
-      - name: Publish report to GitHub Pages
-        if: always()
-        uses: peaceiris/actions-gh-pages@v4
+        uses: mikepenz/action-junit-report@v6
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./allure-report
-          destination_dir: ${{ steps.ctx.outputs.dir }}/${{ github.run_number }}
-          keep_files: true
-          commit_message: >-
-            Allure report for run ${{ github.run_number }}
+          report_paths: "junit-results/*.xml"
 
-      # allure@3 does NOT write history back into the report; rebuild the
-      # next run's history.json from this report's per-test data. Capped at
-      # 2000 entries to bound the gh-pages file size.
-      - name: Build next-run history
+      # Raw Allure results for the MANUAL report workflow — cheap to
+      # upload, no gh-pages publishing on regular runs.
+      - name: Upload Allure results (for the manual report workflow)
         if: always()
-        run: |
-          cat > /tmp/build-history.js <<'EOF'
-          const fs = require('fs');
-          const h = {};
-          const d = 'allure-report/data/test-results';
-          for (const f of fs.readdirSync(d)) {
-            const j = JSON.parse(fs.readFileSync(d + '/' + f));
-            h[j.historyId] = {
-              status: j.status,
-              statusDetails: j.statusDetails || {},
-              trace: '',
-              stop: j.stop,
-            };
-          }
-          const capped = {};
-          for (const k of Object.keys(h).slice(0, 2000)) capped[k] = h[k];
-          fs.mkdirSync('allure-results/history', { recursive: true });
-          fs.writeFileSync(
-            'allure-results/history/history.json',
-            JSON.stringify(capped),
-          );
-          EOF
-          node /tmp/build-history.js
-
-      # Persist the history via plain git — a second peaceiris publish in
-      # the same job deadlocks on `checkout --orphan gh-pages` (branch
-      # already exists). Same checkout pattern as the cleanup job.
-      - name: Check out gh-pages for history
-        if: always()
-        uses: actions/checkout@v6
+        uses: actions/upload-artifact@v4
         with:
-          ref: gh-pages
-          path: gh-pages
-
-      - name: Commit Allure history
-        if: always()
-        run: |
-          CTX="${{ steps.ctx.outputs.dir }}"
-          mkdir -p "gh-pages/${CTX}/history"
-          cp allure-results/history/history.json \
-            "gh-pages/${CTX}/history/history.json"
-          cd gh-pages
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "${CTX}/history/history.json"
-          if git diff --cached --quiet; then
-            echo "History unchanged - nothing to commit"
-          else
-            git commit -m \
-              "Allure history for ${CTX} (run ${{ github.run_number }})"
-            git push origin HEAD:gh-pages
-          fi
-
-      # Single comment per PR, updated in place (never duplicated). The
-      # allure-action posts its summary-table comment (with View links via
-      # remote-href) once per run. Keep exactly ONE: delete all older
-      # Allure comments (table + legacy marker), newest survives.
-      - name: Post Allure summary
-        if: always()
-        uses: allure-framework/allure-action@v0.6.6
-        with:
-          report-directory: "./allure-report"
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          # Renders View links into the summary table's Report column
-          remote-href: >-
-            https://wodore.github.io/wodore-backend/allure/${{
-            steps.ctx.outputs.dir }}/${{ github.run_number }}/
-
-      # Full report hosted on GitHub Pages, one directory per run per
-      # context (PR / main); the shared history dir per context is
-      # republished from the freshly generated report below.
-      - name: Deduplicate Allure comments on PR
-        if: always() && github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const num = context.payload.pull_request.number;
-            const { data: comments } = await github.rest.issues
-              .listComments({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: num,
-                per_page: 100,
-              });
-            const isAllure = (c) =>
-              c.user.login === 'github-actions[bot]' &&
-              (c.body.includes('| Name | Duration | Stats |') ||
-                c.body.includes('<!-- allure-report -->'));
-            const allure = comments.filter(isAllure)
-              .sort((a, b) => a.id - b.id);
-            for (const c of allure.slice(0, -1)) {
-              await github.rest.issues.deleteComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: c.id,
-              });
-            }
-            // Keep the full-report link on the surviving comment itself
-            const newest = allure[allure.length - 1];
-            if (newest) {
-              const url = [
-                'https://wodore.github.io/wodore-backend/',
-                `allure/pr-${num}/${{ github.run_number }}/`,
-              ].join('');
-              const sha = context.payload.pull_request.head.sha.slice(0, 7);
-              const link = `**Full report:** ${url}` +
-                ` (run ${{ github.run_number }}, ${sha})`;
-              const body = newest.body.replace(
-                /\n?\*\*Full report:\*\*.*$/m, '',
-              ).trimEnd() + `\n\n${link}`;
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: newest.id,
-                body,
-              });
-            }
+          name: allure-results
+          path: allure-results/
+          retention-days: 14
+          if-no-files-found: ignore
 
       - name: Fix PG data dir permissions for caching
         if: always() && steps.cache-db.outputs.cache-hit != 'true'
@@ -341,6 +192,13 @@ jobs:
     name: Remove PR reports
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    permissions:
+      contents: write # pushing report removals to gh-pages
+    concurrency:
+      # Serialize with the manual Allure publish (allure-report.yml) —
+      # every gh-pages push joins this group or the two race.
+      group: gh-pages-push
+      cancel-in-progress: false
 
     steps:
       - name: Check out gh-pages
@@ -392,7 +250,8 @@ jobs:
           cat > /tmp/smoke.ts <<'TS'
           import type { paths, components } from './wodore_v1.d.ts';
           type Schemas = components['schemas'];
-          type Huts = paths['/v1/huts/huts']['get']['responses']['200']['content']['application/json'];
+          type Huts = paths['/v1/huts/huts']['get']['responses']['200']
+            ['content']['application/json'];
           const check: (h: Huts) => Huts = h => h;
           const schema: Schemas['HutSchemaList'] | undefined = undefined;
           console.log(check, schema);
