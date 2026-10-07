@@ -12,6 +12,7 @@ class ErrorCode(StrEnum):
     """Machine-readable error codes — one per client behavior."""
 
     validation_error = "validation_error"
+    throttled = "throttled"
     not_authenticated = "not_authenticated"
     insufficient_permission = "insufficient_permission"
     not_found = "not_found"

@@ -44,6 +44,7 @@ _base_settings = (
     "components/csp.py",
     "components/unfold.py",
     "components/caches.py",
+    "components/throttling.py",
     "components/oidc.py",
     "components/auth_local.py",
     "components/email.py",

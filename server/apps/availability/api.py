@@ -21,6 +21,7 @@ from django.db.models.functions import Coalesce, JSONObject
 
 from server.apps.api.controller import ApiController, cache_headers, raise_not_found
 from server.apps.api.query import BboxQuery, bbox_polygon
+from server.apps.api.throttling import AVAILABILITY_THROTTLES
 from server.apps.translations import LanguageQuery, activate
 
 from .models import HutAvailability, HutAvailabilityHistory
@@ -120,6 +121,7 @@ class HutAvailabilityGeojsonController(ApiController):
     @modify(
         operation_id="get_hut_availability_geojson",
         headers=cache_headers(600),  # Cache for 10 minutes
+        throttling=AVAILABILITY_THROTTLES,
     )
     def get(
         self,
@@ -249,6 +251,7 @@ class HutAvailabilityCurrentController(ApiController):
     @modify(
         operation_id="get_hut_availability_current",
         headers=cache_headers(300),  # Cache for 5 minutes
+        throttling=AVAILABILITY_THROTTLES,
     )
     def get(
         self,
@@ -383,6 +386,7 @@ class HutAvailabilityTrendController(ApiController):
     @modify(
         operation_id="get_hut_availability_trend",
         headers=cache_headers(600),  # Cache for 10 minutes
+        throttling=AVAILABILITY_THROTTLES,
     )
     def get(
         self,

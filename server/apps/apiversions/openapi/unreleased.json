@@ -7738,6 +7738,46 @@
               }
             },
             "description": "Raised when returned response does not match the response schema"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Raised when throttling rate was hit",
+            "headers": {
+              "Retry-After": {
+                "description": "Indicates how long the user agent should wait before making a follow-up request",
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "The maximum number of requests permitted in the current time window",
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "The number of requests remaining in the current time window",
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "The number of seconds until the current rate limit window resets",
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         },
         "summary": "get_hut_availability_geojson \u2014 Get availability as GeoJSON for map visualization.",
@@ -9023,6 +9063,46 @@
               }
             },
             "description": "Raised when returned response does not match the response schema"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Raised when throttling rate was hit",
+            "headers": {
+              "Retry-After": {
+                "description": "Indicates how long the user agent should wait before making a follow-up request",
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "The maximum number of requests permitted in the current time window",
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "The number of requests remaining in the current time window",
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "The number of seconds until the current rate limit window resets",
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         },
         "summary": "get_hut_availability_current \u2014 Get current hut availability.",
@@ -9032,7 +9112,7 @@
     },
     "/v1/huts/{slug}/availability/{date}/trend": {
       "get": {
-        "description": "Shows how availability changed over time for a specific date.",
+        "description": "Shows how availability changed over time for a specific date.\n\nWire-schema disposition (OpenSpec adopt-django-readers 3.3):\nalready minimal \u2014 the hut fetch reads only ``slug``/``id`` (no\nFK access, nothing to join) and the single history query joins\n``hut_type`` for the row loop. Two queries total, pinned by\nTestAvailabilityQueryCount.",
         "operationId": "get_hut_availability_trend",
         "parameters": [
           {
@@ -9141,6 +9221,46 @@
               }
             },
             "description": "Raised when returned response does not match the response schema"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Raised when throttling rate was hit",
+            "headers": {
+              "Retry-After": {
+                "description": "Indicates how long the user agent should wait before making a follow-up request",
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "The maximum number of requests permitted in the current time window",
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "The number of requests remaining in the current time window",
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "The number of seconds until the current rate limit window resets",
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         },
         "summary": "get_hut_availability_trend \u2014 Get historical availability trend data.",

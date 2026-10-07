@@ -3,14 +3,13 @@
 import pydantic
 from dmr import Body, Query, modify
 from dmr.routing import path
-from dmr.throttling import Rate, SyncThrottle
-from dmr.throttling.cache_keys import RemoteAddr
 from pydantic import Field
 
 from django.conf import settings
 from django.core.mail import EmailMessage
 
 from server.apps.api.controller import ApiController
+from server.apps.api.throttling import FEEDBACK_THROTTLE
 
 from .models import Feedback
 from .schemas import FeedbackCreate, ResponseSchema
@@ -27,9 +26,7 @@ class FeedbackController(ApiController):
         operation_id="create_feedback",
         # Public, unauthenticated, stores a row AND sends admin email:
         # brute-force/spam protection before anything else lands on it.
-        throttling=[
-            SyncThrottle(5, Rate.minute, cache_key=RemoteAddr()),
-        ],
+        throttling=[FEEDBACK_THROTTLE],
     )
     def post(
         self,
