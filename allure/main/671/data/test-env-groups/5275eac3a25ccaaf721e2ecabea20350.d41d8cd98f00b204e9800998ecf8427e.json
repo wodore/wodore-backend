@@ -1,0 +1,1 @@
+{"id":"5275eac3a25ccaaf721e2ecabea20350.d41d8cd98f00b204e9800998ecf8427e","fullName":"tests.apps.availability.test_throttling.TestClientIpBuckets#test_burst_trips_after_limit","name":"test_burst_trips_after_limit","status":"passed","testResultsByEnv":{"default":"09ec038e9bec69e59a6c51101a0d9d68"}}
