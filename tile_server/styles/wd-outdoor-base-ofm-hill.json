@@ -31,6 +31,10 @@
       "bounds": [5.140242, 45.398181, 11.47757, 48.230651],
       "attribution": "© <a href='https://www.swisstopo.admin.ch'>swisstopo</a>"
     },
+    "rocks": {
+      "type": "raster",
+      "url": "https://tiles.maptoolkit.org/rocks.json"
+    },
     "dem-mapterhorn": {
       "type": "raster-dem",
       "tiles": ["https://tiles.mapterhorn.com/{z}/{x}/{y}.webp"],
@@ -315,6 +319,39 @@
       }
     },
     {
+      "id": "nature_rocks",
+      "type": "raster",
+      "source": "rocks",
+      "minzoom": 11,
+      "paint": {
+        "raster-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          11,
+          0.22,
+          11.5,
+          0.34,
+          12,
+          0.42,
+          13,
+          0.44,
+          14,
+          0.5,
+          15,
+          0.42,
+          16,
+          0.34,
+          17,
+          0.24
+        ],
+        "raster-hue-rotate": 0,
+        "raster-saturation": 0,
+        "raster-brightness-max": 1,
+        "raster-brightness-min": 0.2
+      }
+    },
+    {
       "id": "waterway_tunnel",
       "type": "line",
       "source": "openmaptiles",
@@ -376,8 +413,8 @@
       "source-layer": "waterway",
       "filter": [
         "all",
-        ["!=", ["get", "class"], "river"],
-        ["!=", ["get", "brunnel"], "tunnel"]
+        ["!=", ["get", "brunnel"], "tunnel"],
+        ["match", ["get", "class"], ["ditch", "drain"], false, true]
       ],
       "layout": {
         "line-cap": "round"
@@ -399,6 +436,37 @@
           20,
           3
         ],
+        "line-blur": 0.4
+      },
+      "minzoom": 11
+    },
+    {
+      "id": "waterway_minor",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "waterway",
+      "minzoom": 14,
+      "filter": [
+        "all",
+        ["!=", ["get", "brunnel"], "tunnel"],
+        ["match", ["get", "class"], ["ditch", "drain"], true, false]
+      ],
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#A9CFE8",
+        "line-width": [
+          "interpolate",
+          ["exponential", 1.2],
+          ["zoom"],
+          14,
+          0.5,
+          20,
+          2
+        ],
+        "line-opacity": 0.85,
         "line-blur": 0.4
       }
     },
