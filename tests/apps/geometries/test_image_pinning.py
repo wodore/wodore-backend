@@ -3,11 +3,14 @@ Covers the pin service (dedupe across syncs, score semantics, internal-result
 skipping, metadata merge) and the endpoint fast path / lazy write-through.
 """
 
+from datetime import UTC, datetime
+
 import pytest
 
 from tests.helpers import PrefixedClient as TestClient
 
 from django.contrib.gis.geos import Point
+from django.utils import timezone
 
 from server.apps.geometries import image_response_cache as irc
 from server.apps.geometries.pinning import pin_place_images, place_has_visible_pins
@@ -322,6 +325,47 @@ class TestPlaceEndpointPins:
         assert fetch.calls == 2
 
 
+class TestCaptureDateAwareness:
+    """Providers may hand through naive capture times (EXIF carries no
+    zone) — the pin boundary must store timezone-aware values, else Django
+    warns and stores an ambiguously-interpreted datetime."""
+
+    def test_naive_capture_time_pinned_aware(self, hut, recwarn):
+        result = _result()
+        result.captured_at = datetime(2019, 6, 1, 11, 1, 41)  # noqa: DTZ001 — naive, like Commons
+        stats = pin_place_images(hut, [result])
+        assert stats.created == 1
+        assert not [w for w in recwarn if "naive datetime" in str(w.message)]
+        image = Image.objects.get(source_ident="wikicommons:File:Test.jpg")
+        assert image.capture_date is not None
+        assert timezone.is_aware(image.capture_date)
+
+    def test_naive_capture_time_refresh_stays_aware(self, hut):
+        result = _result()
+        result.captured_at = datetime(2019, 6, 1, 11, 1, 41)  # noqa: DTZ001
+        pin_place_images(hut, [result])
+        result.captured_at = datetime(2020, 7, 2, 12, 2, 42)  # noqa: DTZ001
+        stats = pin_place_images(hut, [result])
+        assert stats.updated == 1
+        image = Image.objects.get(source_ident="wikicommons:File:Test.jpg")
+        assert image.capture_date is not None
+        assert timezone.is_aware(image.capture_date)
+        assert image.capture_date.year == 2020
+
+    def test_aware_capture_time_untouched(self, hut):
+        aware = datetime(2019, 6, 1, 11, 1, 41, tzinfo=UTC)
+        result = _result()
+        result.captured_at = aware
+        pin_place_images(hut, [result])
+        image = Image.objects.get(source_ident="wikicommons:File:Test.jpg")
+        assert image.capture_date == aware
+
+    def test_missing_capture_time_stays_none(self, hut):
+        pin_place_images(hut, [_result()])
+        image = Image.objects.get(source_ident="wikicommons:File:Test.jpg")
+        assert image.capture_date is None
+
+
 class TestUrlSanitization:
     """Provider URLs must be storable (URLField) and cache-stable."""
 
@@ -388,7 +432,7 @@ class TestDefaultCaption:
         image = Image.objects.get(
             source_ident="wikicommons:File:Trail signs near X.jpg"
         )
-        assert image.caption_en == "Trail signs near X"
+        assert image.caption_en == "Trail signs near X"  # type: ignore[attr-defined]  # modeltrans-generated
 
     def test_caption_optional(self, seed_data):
         from server.apps.images.models import Image, License

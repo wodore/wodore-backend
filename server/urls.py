@@ -10,7 +10,7 @@ files serving technique in development.
 """
 
 from dmr.routing import build_404_handler, build_500_handler
-from health_check import Cache, Database, Storage
+from health_check import Cache, Storage
 from health_check.views import HealthCheckView
 
 from django.conf import settings
@@ -21,12 +21,14 @@ from django.urls import include, path
 from django.views.generic import TemplateView
 
 from .apps.api import api_v1 as api_v1_module
+from .apps.api import assets_view
 from .apps.api.serializer import WodoreSerializer
 from .apps.apiversions.docs import VersionedSwagger
 from .apps.local_auth import account_views
 from .apps.main import urls as django_admin_urls
 from .apps.main import views as main_views
 from .apps.main.views import index
+from .core.db_health import FastDatabaseReadinessCheck, PoolStatsDatabaseCheck
 
 admin.autodiscover()
 
@@ -40,14 +42,35 @@ urlpatterns = [
     # Apps:
     path("main/", include(django_admin_urls, namespace="main")),
     # Health checks:
+    # /health/ is the DEEP check (database + cache + storage) - use it for
+    # readiness probes: "can this pod serve traffic right now?".
     path(
         "health/",
         HealthCheckView.as_view(
             checks=[
-                (Database, {}),
+                (PoolStatsDatabaseCheck, {}),
                 (Cache, {"cache_key": None}),
                 (Storage, {}),
             ],
+        ),
+    ),
+    # /health/live/ is the SHALLOW check - no dependencies at all. Use it
+    # for k8s liveness probes: "is the process (and, under ASGI, the event
+    # loop) alive?". A dependency check there would restart perfectly
+    # healthy pods during a database hiccup (restart storm against an
+    # already-struggling dependency).
+    path("health/live/", HealthCheckView.as_view(checks=[])),
+    # /health/ready/ is the FAST readiness check: the DB touch carries a
+    # hard per-check budget (default 2s), so an exhausted pool answers a
+    # clean 503 quickly instead of hanging until the kubelet probe times
+    # out (2026-10-05 staging wedge: 15s probe < 30s pool wait meant only
+    # "context deadline exceeded", plus one zombie health check per
+    # probe). Probe with a timeout of ~3x the budget. The deep /health/
+    # above stays for humans and debugging.
+    path(
+        "health/ready/",
+        HealthCheckView.as_view(
+            checks=[(FastDatabaseReadinessCheck, {"budget_seconds": 2.0})]
         ),
     ),
     # Locale:
@@ -67,6 +90,14 @@ urlpatterns = [
     # Text and xml static files:
     path("robots.txt", main_views.robots_txt),
     path("llms.txt", main_views.llms_txt),
+    # Backend-served brand assets (og/imagor pipeline references —
+    # e.g. the watermark composited onto og photos). No frontend
+    # dependency: the files are bundled in server/apps/api/assets/.
+    path(
+        "assets/logo/<str:name>",
+        assets_view.serve_logo,
+        name="logo-asset",
+    ),
     path(
         "humans.txt",
         TemplateView.as_view(

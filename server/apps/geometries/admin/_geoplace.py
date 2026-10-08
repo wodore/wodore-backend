@@ -214,6 +214,8 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         "importance_display",
         "review_tag",
         "description_quality_display",
+        "visits_30d",
+        "visits_365d",
         "is_public",
         "is_active",
         "timestamps_display",
@@ -271,6 +273,8 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         "is_public",
         "is_active",
         "importance",
+        "visits_30d",
+        "visits_365d",
         "created",
         "modified",
     )
@@ -280,7 +284,17 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
     list_per_page = 50
 
     def get_queryset(self, request):
-        return super().get_queryset(request).prefetch_related("categories__parent")
+        from server.apps.visits.models import visit_window_annotation
+
+        return (
+            super()
+            .get_queryset(request)
+            .prefetch_related("categories__parent")
+            .annotate(
+                visits_30d=visit_window_annotation(GeoPlace, days=30),
+                visits_365d=visit_window_annotation(GeoPlace, days=365),
+            )
+        )
 
     def get_inlines(self, request, obj):
         """Return inlines for admin."""
@@ -422,6 +436,16 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             show_text=True,
             active=True,
         )
+
+    @display(description=_("Visits 30d"), ordering="visits_30d")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    def visits_30d(self, obj: GeoPlace) -> int:
+        """Visit sum over the last 30 days (openspec: place-visit-counter)."""
+        return obj.visits_30d  # pyright: ignore[reportAttributeAccessIssue]  # get_queryset annotation
+
+    @display(description=_("Visits 1y"), ordering="visits_365d")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    def visits_365d(self, obj: GeoPlace) -> int:
+        """Visit sum over the last year (openspec: place-visit-counter)."""
+        return obj.visits_365d  # pyright: ignore[reportAttributeAccessIssue]  # get_queryset annotation
 
     @display(description=_("Created/Modified"), ordering="modified")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def timestamps_display(self, obj: GeoPlace) -> str:

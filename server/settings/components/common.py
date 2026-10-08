@@ -107,6 +107,15 @@ FRONTEND_DOMAIN = (
     else "http://localhost:9000"
 )
 
+# This backend's own public base URL — used to build absolute asset
+# URLs when no request is in scope (the og helpers fall back to it;
+# with a request they use build_absolute_uri instead).
+BACKEND_DOMAIN = (
+    config("BACKEND_DOMAIN")
+    if config("BACKEND_DOMAIN", None)
+    else "http://localhost:8000"
+)
+
 DJANGO_ADMIN_URL = (
     config("DJANGO_ADMIN_URL")
     if config("DJANGO_ADMIN_URL", None)
@@ -263,6 +272,36 @@ DATABASES = {
     },
 }
 
+# Async-mode database pooling (PoC, env-gated; openspec: async-api-staging).
+#
+# Django's guidance for ASGI: disable per-connection persistence
+# (CONN_MAX_AGE) and use the backend's connection pool instead, sized to
+# the target in-flight query concurrency (each bridged request worker
+# thread checks a connection out of the pool). Requires psycopg[pool].
+if config("POSTGRES_POOL", cast=bool, default=False):
+    DATABASES["default"].update(
+        {
+            "CONN_MAX_AGE": 0,
+            "OPTIONS": {
+                **DATABASES["default"]["OPTIONS"],
+                # psycopg_pool ConnectionPool kwargs (Django passes this
+                # dict as **pool_options; "pool": True would use defaults,
+                # which start at min_size=4).
+                "pool": {
+                    "min_size": 2,
+                    "max_size": config("POSTGRES_POOL_SIZE", cast=int, default=10),
+                    # Wall-clock budget for one pool checkout. Keep it below
+                    # the k8s readiness deadline so an exhausted pool yields
+                    # a fast, loggable failure instead of psycopg-pool's
+                    # default 30s hang (2026-10-05 staging wedge).
+                    "timeout": config(
+                        "POSTGRES_POOL_TIMEOUT", cast=float, default=30.0
+                    ),
+                },
+            },
+        }
+    )
+
 # Configure django-postgres-extra to wrap PostGIS backend
 POSTGRES_EXTRA_DB_BACKEND_BASE = "django.contrib.gis.db.backends.postgis"
 
@@ -380,6 +419,18 @@ IMAGOR_KEY = config("IMAGOR_KEY", None)
 
 # Martin vector tile server
 MARTIN_TILE_URL = config("MARTIN_TILE_URL", "http://localhost:8075")
+
+# Geo image providers: overall wall-clock budget for one provider
+# fan-out and per-provider outbound HTTP timeout (seconds). P0 2026-10-05:
+# 30s provider timeouts and no overall budget let one cold fan-out hold
+# requests (and their pooled DB connections) for 30-60s+, until upstream
+# cancellation leaked psycopg pool checkouts and killed pod readiness.
+# Stragglers are cancelled at the budget deadline; partial results serve
+# the request. Set IMAGES_FANOUT_BUDGET_SECONDS <= 0 to disable the budget.
+IMAGES_FANOUT_BUDGET_SECONDS = config("IMAGES_FANOUT_BUDGET_SECONDS", 10.0, cast=float)
+IMAGES_PROVIDER_HTTP_TIMEOUT_SECONDS = config(
+    "IMAGES_PROVIDER_HTTP_TIMEOUT_SECONDS", 10.0, cast=float
+)
 # Templates
 # https://docs.djangoproject.com/en/4.2/ref/templates/api
 
@@ -433,6 +484,9 @@ AUTHENTICATION_BACKENDS = (
 )
 
 PASSWORD_HASHERS = [
+    # Argon2id with OWASP-grade cost (Django's default memory_cost is 512 KiB
+    # - far below the ~19 MiB floor); see server/apps/accounts/password_hashers.py
+    "server.apps.accounts.password_hashers.TunedArgon2PasswordHasher",
     "django.contrib.auth.hashers.Argon2PasswordHasher",
     "django.contrib.auth.hashers.PBKDF2PasswordHasher",
     "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",

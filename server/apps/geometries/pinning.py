@@ -12,6 +12,7 @@ See openspec change ``pin-external-images``.
 """
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 import structlog
 
@@ -52,6 +53,20 @@ class PinStats:
 def _source_ident(result: ImageResult) -> str:
     """Stable dedupe key for a provider result."""
     return f"{result.provider}:{result.source_id}"[:512]
+
+
+def _aware(dt: datetime | None) -> datetime | None:
+    """Make a provider capture time timezone-aware (naive → UTC).
+
+    EXIF/capture times carry no zone info and providers may hand them
+    through unparsed (Wikimedia ``date_taken``, stale cached results).
+    Assigning a naive datetime to ``Image.capture_date`` trips Django's
+    USE_TZ RuntimeWarning, so guard the model boundary here — matching the
+    providers' own naive-means-UTC convention (``normalize_datetime``).
+    """
+    if dt is None or dt.tzinfo is not None:
+        return dt
+    return dt.replace(tzinfo=UTC)
 
 
 def _sanitize_url(url: str | None) -> str:
@@ -170,12 +185,12 @@ def pin_place_images(place, results: list[ImageResult]) -> PinStats:
             defaults={
                 "source_org": org,
                 "license": license_obj,
-                "author": result.author or "",
+                "author": (result.author or "")[:255],
                 "author_url": result.author_url or "",
                 "source_url": _sanitize_url(result.source_url),
                 "source_url_raw": _sanitize_url(result.url_large),
                 "caption_en": _default_caption(result.source_id or ""),
-                "capture_date": result.captured_at,
+                "capture_date": _aware(result.captured_at),
                 "provider_synced_at": now,
                 "image_meta": _merge_image_meta_from_result(result),
             },
@@ -191,7 +206,7 @@ def pin_place_images(place, results: list[ImageResult]) -> PinStats:
                 image.source_url = sanitized_source
             image.source_org = org
             image.license = license_obj
-            image.capture_date = result.captured_at
+            image.capture_date = _aware(result.captured_at)
             image.provider_synced_at = now
             image.image_meta = _merge_image_meta(image, result)
             image.save()
@@ -273,28 +288,35 @@ def place_type_of(place) -> str:
     raise TypeError(f"Unsupported place type for pinning: {type(place)!r}")
 
 
-def sync_place_images(place, *, radius: float = PIN_SYNC_RADIUS_M, check_origins=False):
+def sync_place_images(
+    place, *, radius: float = PIN_SYNC_RADIUS_M, check_origins=False, budget=None
+):
     """Run the live provider pipeline for a place and pin the results.
 
     Background counterpart of the endpoints' lazy write-through: same
     provider call, same dedupe/score semantics. Provider-layer caches are
     respected (``update_cache=False``) — the TTL layering keeps upstream
     requests bounded (24 h pins ≤ 7 d wikimedia ≤ 30 d camp2camp).
+    ``budget`` (seconds) overrides the fan-out budget for this sync — the
+    request-path default trades completeness for latency, background
+    sweeps may want to wait longer (``<= 0`` disables the budget).
     """
-    import asyncio
-
-    from .providers import fetch_images_for_place
+    from .providers import fetch_images_for_place, run_async
 
     place_type = place_type_of(place)
-    results, _place_info = asyncio.run(
-        fetch_images_for_place(
-            place_slug=place.slug,
-            place_type=place_type,
-            radius=radius,
-            sources=None,
-            limit=100,
-            update_cache=False,
-        )
+    results, _place_info = run_async(
+        fetch_images_for_place,
+        place_slug=place.slug,
+        place_type=place_type,
+        radius=radius,
+        sources=None,
+        limit=100,
+        update_cache=False,
+        budget=budget,
+        # Command/background path: the calling thread may hold the sweep's
+        # server-side cursor (``queryset.iterator()``) across this call —
+        # the bridge's exit-path connection cleanup would close it.
+        release_db=False,
     )
     stats = pin_place_images(place, results)
     if check_origins:

@@ -164,8 +164,14 @@ class Command(BaseCommand):
             target_path, dry_run, stats, include_list, variants, Category
         )
 
+        # 1b. Copy static sprites (basemap settlement dots, station markers)
+        self._sync_static_sprites(target_path, dry_run, stats)
+
         # 2. Copy style files
         self._sync_styles(target_path, dry_run, stats)
+
+        # 2b. Copy font files (TTF for Martin glyph serving)
+        self._sync_fonts(target_path, dry_run, stats)
 
         # 3. Generate and copy martin.yaml config with sprite paths
         self._sync_config(target_path, dry_run, stats, merge_file_path)
@@ -329,6 +335,83 @@ class Command(BaseCommand):
                 dry_run,
                 stats,
                 label=f"style: {style_file.stem}",
+            )
+
+    def _sync_static_sprites(self, target_path, dry_run, stats):
+        """Copy static sprite SVG files (basemap settlement dots, stations)."""
+        self.stdout.write("\n[1b] Syncing static sprites...")
+
+        source_dir = Path(settings.BASE_DIR) / "tile_server" / "sprites"
+
+        if not source_dir.exists():
+            self.stdout.write(
+                self.style.WARNING(
+                    f"  ⚠ Static sprites directory not found: {source_dir}"
+                )
+            )
+            return
+
+        # Ensure sprite_dirs is initialized in stats
+        if "sprite_dirs" not in stats:
+            stats["sprite_dirs"] = []
+
+        for sprite_category_dir in sorted(source_dir.iterdir()):
+            if not sprite_category_dir.is_dir():
+                continue
+
+            category_name = sprite_category_dir.name
+            target_dir = target_path / "sprites" / category_name
+
+            # Register in sprite_dirs for martin.yaml config
+            if category_name not in stats["sprite_dirs"]:
+                stats["sprite_dirs"].append(category_name)
+
+            svg_files = list(sprite_category_dir.glob("*.svg"))
+            self.stdout.write(f"  {category_name}: {len(svg_files)} SVG(s)")
+
+            for svg_file in sorted(svg_files):
+                target_file = target_dir / svg_file.name
+                self._copy_file(
+                    svg_file,
+                    target_file,
+                    target_dir,
+                    dry_run,
+                    stats,
+                    label=f"static-sprite: {category_name}/{svg_file.stem}",
+                )
+
+    def _sync_fonts(self, target_path, dry_run, stats):
+        """Copy TTF font files for Martin glyph serving."""
+        self.stdout.write("\n[2b] Syncing font files...")
+
+        source_dir = Path(settings.BASE_DIR) / "tile_server" / "fonts"
+
+        if not source_dir.exists():
+            self.stdout.write(
+                self.style.WARNING(f"  ⚠ Fonts directory not found: {source_dir}")
+            )
+            return
+
+        target_dir = target_path / "fonts"
+        font_files = list(source_dir.glob("*.ttf")) + list(source_dir.glob("*.otf"))
+
+        if not font_files:
+            self.stdout.write(
+                self.style.WARNING(f"  ⚠ No font files found in {source_dir}")
+            )
+            return
+
+        self.stdout.write(f"  Found {len(font_files)} font file(s)")
+
+        for font_file in sorted(font_files):
+            target_file = target_dir / font_file.name
+            self._copy_file(
+                font_file,
+                target_file,
+                target_dir,
+                dry_run,
+                stats,
+                label=f"font: {font_file.stem}",
             )
 
     def _sync_config(self, target_path, dry_run, stats, merge_file_path=""):

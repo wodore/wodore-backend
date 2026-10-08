@@ -20,6 +20,7 @@ from http import HTTPStatus
 from dmr import APIError, Controller, NewHeader
 from dmr.endpoint import Endpoint
 from dmr.errors import ErrorType, format_error
+from dmr.exceptions import TooManyRequestsError
 from dmr.serializer import BaseSerializer
 from typing_extensions import TypedDict, override
 
@@ -56,14 +57,28 @@ class ApiController(Controller[WodoreSerializer]):
 
         Validation errors (bad query/body input) map to
         ``code="validation_error"`` and keep the message(s) in
-        ``detail`` so clients can show something useful.
+        ``detail`` so clients can show something useful. Throttle
+        rejections map to ``code="throttled"`` so clients back off
+        instead of blaming their request shape (openspec: api-throttling).
         """
+        if isinstance(error, TooManyRequestsError):
+            return {
+                "code": ErrorCode.throttled,
+                "detail": str(error) or "Too many requests.",
+            }
         if isinstance(error, str):
             return {"code": ErrorCode.validation_error, "detail": error}
         default = format_error(error, loc=loc, error_type=error_type)
         messages = "; ".join(detail["msg"] for detail in default["detail"])
+        rate_limited = any(
+            detail.get("type") == str(ErrorType.ratelimit)
+            for detail in default["detail"]
+            if isinstance(detail, dict)
+        )
         return {
-            "code": ErrorCode.validation_error,
+            "code": (
+                ErrorCode.throttled if rate_limited else ErrorCode.validation_error
+            ),
             "detail": messages or str(error),
         }
 

@@ -169,6 +169,11 @@ COPY --from=builder-base "/usr/local/bin/tini" "/usr/local/bin/tini"
 
 # This is a special case. We need to run this script as an entry point:
 COPY ./docker/django/entrypoint.sh /docker-entrypoint.sh
+# Server start chain (#263): start.sh is exec'd by the default CMD (and
+# by k8s args); gunicorn_config.py is imported as
+# python:docker.django.gunicorn_config (implicit namespace package).
+COPY --chown=web:web ./docker/django/start.sh /code/docker/django/start.sh
+COPY --chown=web:web ./docker/django/gunicorn_config.py /code/docker/django/gunicorn_config.py
 
 # Setting up proper permissions:
 RUN chmod +x '/docker-entrypoint.sh' \
@@ -193,7 +198,9 @@ chown web:web /code/static
 # network, no production signing key needed - without this the
 # auth settings raise at build time).
 DJANGO_ENV=test python manage.py collectstatic --noinput
-printf 'export BUILD_TIMESTAMP=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%S.%6NZ)" > /code/.build_timestamp
+# Use python (not date +%N) for parity with Dockerfile.alpine:
+# isoformat() is RFC3339 and parseable on every supported Python.
+printf 'export BUILD_TIMESTAMP=%s\n' "$(python -c 'from datetime import datetime, timezone; print(datetime.now(timezone.utc).isoformat())')" > /code/.build_timestamp
 chmod 644 /code/.build_timestamp
 EOF
 
@@ -205,6 +212,9 @@ USER web
 
 # We customize how our app is loaded with the custom entrypoint:
 ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
+
+# Default command: the generic server start script (see Dockerfile.alpine).
+CMD ["bash", "./docker/django/start.sh"]
 
 
 # The following stage is only for production:

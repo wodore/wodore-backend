@@ -21,7 +21,7 @@ from pydantic import Field
 from django.conf import settings
 from django.contrib.postgres.aggregates import JSONBAgg
 from django.db.models import Case, F, Value, When
-from django.db.models.functions import Coalesce, Concat, JSONObject
+from django.db.models.functions import JSONObject
 from django.http import HttpRequest, HttpResponse
 from django.urls import reverse_lazy
 
@@ -47,6 +47,8 @@ from ..schemas import (
     LicenseInfoSchema,
     OrganizationBaseSchema,
 )
+from ._hut_spec import prepare_hut_detail
+from .annotations import annotate_hut_images, annotate_hut_sources
 from .etag_utils import (
     cached_200,
     cached_304,
@@ -143,6 +145,14 @@ class HutSearchController(ApiController):
             qs = qs.filter(location__intersects=bbox_polygon(query.bbox))
 
         # Skip the DB cost when the field isn't in the selection
+        # Readers disposition (OpenSpec §4.3, benchmarked N=50 via
+        # scripts/benchmark/readers_hot_paths.py): the readers variant
+        # measures at parity (p50 −9%…−0% across runs, noise on identical
+        # SQL) — but the conversion is override-only (the wire schema
+        # cannot drive hut_type/sources; the projection is a manual
+        # loop), so it would swap eight explicit lines for equivalent
+        # indirection. Hand-tuned on purpose; rerun the benchmark script
+        # before revisiting.
         wants_hut_type = field_selected(query, "huts", "hut_type")
         wants_sources = field_selected(query, "huts", "sources")
         if wants_hut_type:
@@ -353,53 +363,8 @@ class HutsController(ApiController):
                 default=Value(False),
             ),
             availability_source_ref__slug=F("availability_source_ref__slug"),
-            sources=JSONBAgg(
-                JSONObject(
-                    logo=Concat(Value(media_url), F("org_set__logo")),
-                    fullname="org_set__fullname_i18n",
-                    slug="org_set__slug",
-                    name="org_set__name_i18n",
-                    link="orgs_source__link",
-                    source_id="orgs_source__source_id",
-                    public="org_set__is_public",
-                ),
-                distinct=True,
-            ),
-            images=JSONBAgg(
-                JSONObject(
-                    image="image_set__image",
-                    image_url=Concat(Value(iam_media_url), F("image_set__image")),
-                    image_meta=JSONObject(
-                        crop="image_set__image_meta__crop",
-                        focal="image_set__image_meta__focal",
-                        width="image_set__image_meta__width",
-                        height="image_set__image_meta__height",
-                    ),
-                    caption="image_set__caption_i18n",
-                    license=JSONObject(
-                        slug="image_set__license__slug",
-                        name="image_set__license__name_i18n",
-                        fullname="image_set__license__fullname_i18n",
-                        description="image_set__license__description_i18n",
-                        url="image_set__license__url_i18n",
-                    ),
-                    author="image_set__author",
-                    author_url="image_set__author_url",
-                    source_url="image_set__source_url",
-                    organization=JSONObject(
-                        logo=Concat(Value(media_url), F("image_set__source_org__logo")),
-                        fullname="image_set__source_org__fullname_i18n",
-                        slug="image_set__source_org__slug",
-                        name="image_set__source_org__name_i18n",
-                        url="image_set__source_org__url",
-                    ),
-                    attribution=Value(""),
-                ),
-                ordering=(
-                    F("image_set__details__score").desc(nulls_last=True),
-                    "image_set__details__id",
-                ),
-            ),
+            sources=annotate_hut_sources(media_url=media_url),
+            images=annotate_hut_images(media_url=iam_media_url),
             translations=JSONObject(
                 description=JSONObject(
                     de="description_de",
@@ -621,6 +586,11 @@ class HutsGeojsonController(ApiController):
 
         if select_related_fields:
             qs = qs.select_related(*select_related_fields)
+        # Readers disposition (OpenSpec §4.3): the whole FeatureCollection
+        # is assembled in PostgreSQL (GeoJSON expression over
+        # JSONObject/JSONBAgg) — a readers variant would load every hut
+        # into Python. KEEP per scripts/benchmark/readers_hot_paths.py
+        # (SQL aggregate; 1 query).
         if query.embed_all or query.embed_capacity:
             annot = get_json_obj(
                 flat=query.flat,
@@ -753,89 +723,7 @@ class HutDetailController(ApiController):
             return cached_304(self, etag, last_modified, max_age=60)
 
         media_abs_url = request.build_absolute_uri(settings.MEDIA_URL)
-        qs = qs.select_related(
-            "hut_type_open", "hut_type_closed", "hut_owner", "availability_source_ref"
-        ).annotate(
-            has_availability=Case(
-                When(availability_source_ref__isnull=False, then=Value(True)),
-                default=Value(False),
-            ),
-            availability_source_ref__slug=F("availability_source_ref__slug"),
-            sources=JSONBAgg(
-                JSONObject(
-                    logo=Concat(Value(media_abs_url), F("org_set__logo")),
-                    fullname="org_set__fullname_i18n",
-                    slug="org_set__slug",
-                    name="org_set__name_i18n",
-                    link="orgs_source__link",
-                    source_id="orgs_source__source_id",
-                    public="org_set__is_public",
-                    active="org_set__is_active",
-                    order="org_set__order",
-                ),
-                distinct=True,
-            ),
-            images=JSONBAgg(
-                JSONObject(
-                    image="image_set__image",
-                    image_meta=JSONObject(
-                        crop="image_set__image_meta__crop",
-                        focal="image_set__image_meta__focal",
-                        width="image_set__image_meta__width",
-                        height="image_set__image_meta__height",
-                    ),
-                    review_status="image_set__review_status",
-                    caption="image_set__caption_i18n",
-                    license=JSONObject(
-                        slug="image_set__license__slug",
-                        is_active="image_set__license__is_active",
-                        name=Coalesce(
-                            "image_set__license__name_i18n",
-                            "image_set__license__slug",
-                        ),
-                        fullname=Coalesce(
-                            "image_set__license__fullname_i18n",
-                            "image_set__license__name_i18n",
-                            "image_set__license__slug",
-                        ),
-                        description="image_set__license__description_i18n",
-                        url="image_set__license__url_i18n",
-                        no_publication="image_set__license__no_publication",
-                    ),
-                    author="image_set__author",
-                    author_url="image_set__author_url",
-                    source_url="image_set__source_url",
-                    organization=JSONObject(
-                        logo=Concat(
-                            Value(media_abs_url), F("image_set__source_org__logo")
-                        ),
-                        fullname="image_set__source_org__fullname_i18n",
-                        slug="image_set__source_org__slug",
-                        name="image_set__source_org__name_i18n",
-                        url="image_set__source_org__url",
-                    ),
-                    attribution=Value(""),
-                ),
-                ordering=(
-                    F("image_set__details__score").desc(nulls_last=True),
-                    "image_set__details__id",
-                ),
-            ),
-            translations=JSONObject(
-                description=JSONObject(
-                    de="description_de",
-                    en="description_en",
-                    fr="description_fr",
-                    it="description_it",
-                ),
-                name=JSONObject(
-                    de="name_de",
-                    en="name_en",
-                    fr="name_fr",
-                    it="name_it",
-                ),
-            ),
-        )
+        qs = prepare_hut_detail(qs, media_url=media_abs_url)
         hut_db = qs.first()
         if hut_db is None:
             msg = f"Could not find '{slug}'."

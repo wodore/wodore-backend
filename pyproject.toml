@@ -20,7 +20,7 @@ dependencies = [
   "python-decouple==3.*",      # https://pypi.org/project/python-decouple/
   "structlog==25.*",           # https://pypi.org/project/structlog/
   "django-colorfield==0.14.*", # https://pypi.org/project/django-colorfield/
-  "pillow==11.*",              # https://pypi.org/project/Pillow/
+  "pillow==12.*",              # https://pypi.org/project/Pillow/
   "django-model-utils==5.*",   # https://pypi.org/project/django-model-utils/
   "django-jsoneditor==0.2.*",  # https://pypi.org/project/django-jsoneditor/
   "django-modeltrans==0.9.*",  # https://pypi.org/project/django-modeltrans/
@@ -28,7 +28,7 @@ dependencies = [
   "django-cors-headers==4.*",  # https://pypi.org/project/django-cors-headers/
   "django-extensions==4.*",    # https://pypi.org/project/django-extensions/
   #"django-unfold==0.43.*",            # https://pypi.org/project/django-unfold/
-  "django-unfold==0.87.*",                 # https://pypi.org/project/django-unfold/
+  "django-unfold==0.108.*",                # https://pypi.org/project/django-unfold/
   "django-q2>=1.11.0",                     # https://pypi.org/project/django-q2/
   "django-admin-runner[django-q2,unfold]", # https://github.com/burgdev/django-admin-runner
   "msgspec==0.22.*",                       # https://pypi.org/project/msgspec/
@@ -43,7 +43,7 @@ dependencies = [
   "easydict==1.*",                         # https://pypi.org/project/easydict/
   "xmltodict>=0.13.0,<0.14.0",             # https://pypi.org/project/xmltodict/
   "dickens==2.*",                          # https://pypi.org/project/dickens/
-  "psycopg==3.*",                          # https://pypi.org/project/psycopg/
+  "psycopg[pool]==3.*",                          # https://pypi.org/project/psycopg/
   "mozilla-django-oidc==5.*",              # https://pypi.org/project/mozilla-django-oidc/
   "authlib==1.*",                          # https://pypi.org/project/authlib/
   "load-dotenv==0.1.*",                    # https://pypi.org/project/load-dotenv/
@@ -68,6 +68,9 @@ dependencies = [
   "argon2-cffi>=25.1.0",
   "fido2>=2.2.1",
   "django-modern-rest[msgspec,openapi,pydantic]>=0.16.0,<0.17",
+  "django-readers>=2.5.1",
+  "uvicorn[standard]>=0.54.0",  # uvloop + httptools for the ASGI runtime (ASGI_ENABLED=1)
+  "uvicorn-worker>=0.4.0",
 ]
 
 
@@ -90,7 +93,6 @@ dev = [
   "django-extra-checks==0.*",      # https://pypi.org/project/django-extra-checks/
   "django-stubs-ext==5.*",         # https://pypi.org/project/django-stubs-ext/
   "django-stubs==5.*",             # https://pypi.org/project/django-stubs/
-  "nplusone==1.*",                 # https://pypi.org/project/nplusone/
   "wemake-python-styleguide==1.*", # https://pypi.org/project/wemake-python-styleguide/
   "flake8-pytest-style==2.*",      # https://pypi.org/project/flake8-pytest-style/
   "flake8-django==1.*",            # https://pypi.org/project/flake8-django/
@@ -150,6 +152,9 @@ dev = [
 [tool.uv.sources]
 django-postgres-extra = { git = "https://github.com/armonge/django-postgres-extra.git", branch = "feat/django-6" }
 hut-services-private = { git = "ssh://git@github.com/wodore/hut-services-private", branch = "main" }
+# django-admin-runner: pinned to the unreleased heartbeat-liveness commit —
+# switch back to PyPI at the next official release (>= 0.4.0).
+django-admin-runner = { git = "https://github.com/burgdev/django-admin-runner", rev = "9efeb32279c9f315bab3b1e92f5a3acf57b9598e" }
 # hut-services-private = { path = "/home/tobias/git/wodore/hut-services-private", editable = true }
 # hut-services = { git = "ssh://git@github.com/wodore/hut-services", branch = "main" }
 # hut-services = { path = "/home/tobias/git/wodore/hut-services", editable = true } # local DEV
@@ -273,6 +278,11 @@ unfixable = [
   "T20",  # Removes print statements
   "F841", # Removes unused variables
 ]
+
+# Event-loop safety: blocking calls (sync sleep/HTTP) inside async functions
+# are the async failure mode (one call stalls every concurrent request in
+# the process) - lint them at CI time (openspec: async-api-staging).
+extend-select = ["ASYNC"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]

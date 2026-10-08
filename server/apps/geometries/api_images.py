@@ -1,6 +1,5 @@
 """Image aggregation endpoints on dmr (mounted at /geo/images/)."""
 
-import asyncio
 import logging
 
 import pydantic
@@ -14,6 +13,8 @@ from django.contrib.gis.measure import D
 from django.http import HttpRequest
 
 from server.apps.api.controller import ApiController, cache_headers, raise_not_found
+from server.apps.api.ogmap import RENDER_VERSION
+from server.apps.images.og import OG_MAP_EFFECT, OG_MAP_MARKER_SCALE, OG_MAP_ZOOM
 from server.apps.translations import LanguageQuery, activate
 
 from . import image_response_cache
@@ -29,6 +30,7 @@ from .providers import (
     fetch_images_from_providers,
     post_process_images,
     provider_registry,
+    run_async,
 )
 from .schemas import (
     DEFAULT_THUMBHASHES,
@@ -150,11 +152,13 @@ class _PlaceImagesQuery(_CachedOnlyMixin, LanguageQuery):
             "data from providers"
         ),
     )
-    fallback: bool = Field(
-        False,
+    static_map_fallback: bool = Field(
+        True,
         description=(
             "When the entity has no images, include the generated "
-            "static-map card as a single feature (is_fallback=true)"
+            "static-map card (zoom 15, spotlight effect, type-symbol "
+            "marker) as a single feature (is_fallback=true). Opt out "
+            "with false to receive a plain empty collection."
         ),
     )
 
@@ -172,16 +176,23 @@ class HutSlugPath(pydantic.BaseModel):
 
 
 def _empty_images_response(
-    *, lat: float, lon: float, radius: float, sources_list: list[str] | None
+    *,
+    lat: float,
+    lon: float,
+    radius: float,
+    sources_list: list[str] | None,
+    features: list | None = None,
 ) -> ImageCollectionResponse:
-    """Empty FeatureCollection for ``cached_only`` misses: nothing was
-    cached, so the answer is "no images" — without contacting any
-    provider."""
+    """(Near-)empty FeatureCollection for ``cached_only`` misses:
+    nothing was cached, so the answer is whatever the caller's
+    ``static_map_fallback`` adds — without contacting any provider.
+    Never written back to the cache."""
+    features = features or []
     return ImageCollectionResponse(
         type="FeatureCollection",
-        features=[],
+        features=features,
         metadata=ImageMetadataSchema(
-            total=0,
+            total=len(features),
             sources_queried=sources_list or [],
             query_radius_m=radius,
             center=ImageCenterSchema(lat=lat, lon=lon),
@@ -300,25 +311,24 @@ class NearbyImagesController(ApiController):
                 "using coordinate only"
             )
 
-        all_places = list(geoplaces) + list(huts)
-
         logger.debug(
             f"📸 Fetching images from "
             f"{len(provider_registry.get_all_providers())} providers..."
         )
 
+        fetch_failed = False
         try:
-            results = asyncio.run(
-                fetch_images_from_providers(
-                    geoplaces=all_places,  # Pass both GeoPlaces and Huts
-                    lat=query.lat,
-                    lon=query.lon,
-                    radius=query.radius,
-                    sources=sources_list,
-                    precision=query.precision,
-                    limit=query.limit,
-                    update_cache=query.update_cache,
-                )
+            results = run_async(
+                fetch_images_from_providers,
+                geoplaces=geoplaces,  # GeoPlaces and Huts dispatched by type
+                huts=huts,  # (hut_to_schema, no osm_tags attribute)
+                lat=query.lat,
+                lon=query.lon,
+                radius=query.radius,
+                sources=sources_list,
+                precision=query.precision,
+                limit=query.limit,
+                update_cache=query.update_cache,
             )
         except Exception as e:  # stale-cache fallback below
             logger.error(f"Error fetching images from providers: {e}")
@@ -330,6 +340,7 @@ class NearbyImagesController(ApiController):
                 )
                 return cached
             results = []
+            fetch_failed = True
 
         # Sort by score (primary), then by distance (secondary)
         results.sort(key=lambda r: (-r.score, r.distance_m))
@@ -352,7 +363,11 @@ class NearbyImagesController(ApiController):
         response = ImageCollectionResponse(
             type="FeatureCollection", features=features, metadata=metadata
         )
-        image_response_cache.set_response(resp_key, response)
+        if not fetch_failed:
+            # Cache successful aggregations only — an exception fallback
+            # (stale miss, empty features) must not poison the response
+            # cache for the next visitor.
+            image_response_cache.set_response(resp_key, response)
         return response
 
 
@@ -365,8 +380,11 @@ def _map_fallback_feature(
     modified,
     place_type: str,
 ) -> dict:
-    """Static-map fallback feature for entities without any images
-    (only included when the caller passes fallback=true)."""
+    """Static-map fallback feature for entities without any images.
+
+    Generated exactly like the og preview cards (server.apps.images.og):
+    zoom 15, spotlight effect, scaled type-symbol marker — in the
+    gallery's size variants."""
     from urllib.parse import urlencode
 
     def map_url(size: str) -> str:
@@ -375,15 +393,101 @@ def _map_fallback_feature(
                 "place": slug,
                 "place_type": place_type,
                 "size": size,
-                "v": f"{modified:%Y%m%dT%H%M%S}",
+                "zoom": OG_MAP_ZOOM,
+                "effect": OG_MAP_EFFECT,
+                "marker_scale": OG_MAP_MARKER_SCALE,
+                # No baked attribution strip: the OpenTopoMap/OSM credits
+                # travel in the feature's license/author/attribution
+                # metadata instead (the gallery renders them like for
+                # provider photos).
+                "attribution": "false",
+                # v busts BOTH caches: the raw render storage and the
+                # imagor composites built on this URL (renderer changes
+                # propagate via RENDER_VERSION).
+                "v": f"{modified:%Y%m%dT%H%M%S}r{RENDER_VERSION}",
             }
         )
         return request.build_absolute_uri(f"/v1/geo/map/static?{query}")
 
-    landscape_sm, landscape_md = map_url("600x315"), map_url("1200x630")
-    square_sm = map_url("600x600")
-    attribution_short = (
+    # Same variant pipeline as the provider photos: one map render per
+    # aspect group as the source, then signed imagor downscale variants
+    # (xs–xl, quality 85) with the identical size presets — the
+    # gallery treats the fallback exactly like any other image and
+    # imagor caches/transforms it like one.
+    from server.apps.geometries.providers.base import (
+        _calculate_constrained_size,
+    )
+    from server.apps.images.transfomer import ImagorImage
+
+    quality = 85
+    aspect_sources = {
+        # aspect group: (source render size, variant presets)
+        "square": (
+            (1000, 1000),
+            {
+                "xs": (200, 200),
+                "sm": (400, 400),
+                "md": (1200, 1200),
+                "lg": (2000, 2000),
+                "xl": (4000, 4000),
+            },
+        ),
+        "landscape": (
+            (1200, 630),
+            {
+                "xs": (200, 133),
+                "sm": (400, 267),
+                "md": (1200, 800),
+                "lg": (2000, 1333),
+                "xl": (4000, 2666),
+            },
+        ),
+        "portrait": (
+            (1000, 1500),
+            {
+                "xs": (133, 200),
+                "sm": (267, 400),
+                "md": (900, 1350),
+                "lg": (1500, 2250),
+                "xl": (3000, 4500),
+            },
+        ),
+    }
+    urls: dict = {}
+    sizes: dict = {"raw": {"width": 1200, "height": 630}}
+    for group, ((sw, sh), presets) in aspect_sources.items():
+        source = ImagorImage(map_url(f"{sw}x{sh}"))
+        variants = {}
+        for key, (tw, th) in presets.items():
+            cw, ch = _calculate_constrained_size(tw, th, sw, sh)
+            variants[key] = source.transform(
+                size=f"{cw}x{ch}", quality=quality
+            ).get_full_url()
+            if group == "landscape":
+                # The feature's own orientation is landscape — report
+                # its constrained dims (mirrors _build_sizes).
+                sizes[key] = {"width": cw, "height": ch}
+        urls[group] = variants
+    landscape_raw = map_url("1200x630")
+    urls["original"] = {
+        # raw stays the direct endpoint URL: the og compose wraps it in
+        # imagor itself (og_map_card_url).
+        "raw": landscape_raw,
+        "proxy": ImagorImage(landscape_raw).transform().get_full_url(),
+    }
+    # License/attribution metadata mirrors the provider photos (same
+    # shape, HTML links) — the gallery renders it exactly like any
+    # other image's credits. Map data: OpenTopoMap tiles are CC-BY-SA
+    # derivatives of OpenStreetMap data (with SRTM elevation).
+    license_url = "https://creativecommons.org/licenses/by-sa/4.0/"
+    attribution_full = (
         "© OpenTopoMap (CC-BY-SA) · © SRTM · © OpenStreetMap contributors"
+    )
+    license_short = f'<a href="{license_url}" target="_blank">CC-BY-SA-4.0</a>'
+    attribution_author = (
+        "© OpenTopoMap / "
+        '<a href="https://www.openstreetmap.org/copyright" '
+        'target="_blank" rel="nofollow">OpenStreetMap contributors</a>'
     )
     return {
         "type": "Feature",
@@ -402,48 +506,25 @@ def _map_fallback_feature(
             "captured_at": None,
             "distance_m": 0.0,
             "attribution": {
-                "short": attribution_short,
-                "full": attribution_short,
+                "short": f"{license_short} · {attribution_author}",
+                "full": attribution_full,
                 "license_icon": None,
-                "license_short": "CC-BY-SA",
+                "license_short": license_short,
                 "license_full": "CC BY-SA 4.0",
-                "author": "OpenTopoMap / OpenStreetMap contributors",
+                "author": attribution_author,
             },
-            "author": None,
+            "author": {
+                "name": "OpenTopoMap / OpenStreetMap contributors",
+                "url": None,
+            },
             "license": {
                 "slug": "cc-by-sa-4-0",
                 "name": "CC BY-SA 4.0 (map data)",
-                "url": "https://creativecommons.org/licenses/by-sa/4.0/",
+                "url": license_url,
                 "icon": None,
             },
-            "urls": {
-                "original": {"raw": landscape_md, "proxy": landscape_md},
-                "square": {
-                    "xs": square_sm,
-                    "sm": square_sm,
-                    "md": square_sm,
-                    "lg": square_sm,
-                    "xl": square_sm,
-                },
-                "landscape": {
-                    "xs": landscape_sm,
-                    "sm": landscape_sm,
-                    "md": landscape_md,
-                    "lg": landscape_md,
-                    "xl": landscape_md,
-                },
-                "portrait": {
-                    "xs": landscape_sm,
-                    "sm": landscape_sm,
-                    "md": landscape_md,
-                    "lg": landscape_md,
-                    "xl": landscape_md,
-                },
-            },
-            "sizes": {
-                "sm": {"width": 600, "height": 315},
-                "md": {"width": 1200, "height": 630},
-            },
+            "urls": urls,
+            "sizes": sizes,
             "is_portrait": False,
             "place": None,
             "score": 0,
@@ -488,7 +569,7 @@ class PlaceImagesController(ApiController):
             sources=query.sources,
             lang=query.lang,
             limit=query.limit,
-            fallback=query.fallback,
+            fallback=query.static_map_fallback,
         )
         cached = None
         if not query.update_cache:
@@ -497,20 +578,21 @@ class PlaceImagesController(ApiController):
                 return cached
         if query.cached_only:
             # Fast call: the cached response if any (stale included), else
-            # an empty collection — providers are never contacted and
-            # nothing is written back.
-            if cached is not None:
-                return cached
+            # the empty collection with at most the static-map fallback —
+            # providers are never contacted and nothing is written back.
             place = GeoPlace.objects.filter(
                 slug=place_slug, is_active=True, is_public=True
             ).first()
             if place is None:
                 raise_not_found(f"GeoPlace '{place_slug}' not found")
-            return _empty_images_response(
-                lat=place.location.y,
-                lon=place.location.x,
+            return cached_only_response(
+                cached=cached,
+                entity=place,
+                request=request,
+                place_type="geoplace",
                 radius=query.radius,
                 sources_list=sources_list,
+                static_map_fallback=query.static_map_fallback,
             )
 
         from .pinning import maybe_enqueue_place_refresh, place_has_visible_pins
@@ -555,15 +637,14 @@ class PlaceImagesController(ApiController):
                 raise
         else:
             try:
-                results, place_info = asyncio.run(
-                    fetch_images_for_place(
-                        place_slug=place_slug,
-                        place_type="geoplace",
-                        radius=query.radius,
-                        sources=sources_list,
-                        limit=query.limit,
-                        update_cache=query.update_cache,
-                    )
+                results, place_info = run_async(
+                    fetch_images_for_place,
+                    place_slug=place_slug,
+                    place_type="geoplace",
+                    radius=query.radius,
+                    sources=sources_list,
+                    limit=query.limit,
+                    update_cache=query.update_cache,
                 )
             except Exception as e:  # stale-cache fallback below
                 logger.error(f"Error fetching images for place '{place_slug}': {e}")
@@ -593,7 +674,7 @@ class PlaceImagesController(ApiController):
                         sources=query.sources,
                         lang=query.lang,
                         limit=query.limit,
-                        fallback=query.fallback,
+                        fallback=query.static_map_fallback,
                     )
                 except Exception as e:
                     logger.error(f"Error pinning images for place '{place_slug}': {e}")
@@ -605,7 +686,12 @@ class PlaceImagesController(ApiController):
             results, force_provider_refresh=query.update_cache
         )
 
-        if query.fallback and not features and place is not None and place.location:
+        if (
+            query.static_map_fallback
+            and not features
+            and place is not None
+            and place.location
+        ):
             features = [
                 _map_fallback_feature(
                     request,
@@ -672,7 +758,7 @@ class HutImagesController(ApiController):
             sources=query.sources,
             lang=query.lang,
             limit=query.limit,
-            fallback=query.fallback,
+            fallback=query.static_map_fallback,
         )
         cached = None
         if not query.update_cache:
@@ -683,20 +769,21 @@ class HutImagesController(ApiController):
 
         if query.cached_only:
             # Fast call: the cached response if any (stale included), else
-            # an empty collection — providers are never contacted and
-            # nothing is written back.
-            if cached is not None:
-                return cached
+            # the empty collection with at most the static-map fallback —
+            # providers are never contacted and nothing is written back.
             hut = Hut.objects.filter(
                 slug=hut_slug, is_active=True, is_public=True
             ).first()
             if hut is None:
                 raise_not_found(f"Hut '{hut_slug}' not found")
-            return _empty_images_response(
-                lat=hut.location.y,
-                lon=hut.location.x,
+            return cached_only_response(
+                cached=cached,
+                entity=hut,
+                request=request,
+                place_type="hut",
                 radius=query.radius,
                 sources_list=sources_list,
+                static_map_fallback=query.static_map_fallback,
             )
 
         from .pinning import place_has_visible_pins
@@ -735,15 +822,14 @@ class HutImagesController(ApiController):
                 raise
         else:
             try:
-                results, place_info = asyncio.run(
-                    fetch_images_for_place(
-                        place_slug=hut_slug,
-                        place_type="hut",
-                        radius=query.radius,
-                        sources=sources_list,
-                        limit=query.limit,
-                        update_cache=query.update_cache,
-                    )
+                results, place_info = run_async(
+                    fetch_images_for_place,
+                    place_slug=hut_slug,
+                    place_type="hut",
+                    radius=query.radius,
+                    sources=sources_list,
+                    limit=query.limit,
+                    update_cache=query.update_cache,
                 )
             except Exception as e:
                 logger.error(f"Error fetching images for hut '{hut_slug}': {e}")
@@ -768,7 +854,7 @@ class HutImagesController(ApiController):
                         sources=query.sources,
                         lang=query.lang,
                         limit=query.limit,
-                        fallback=query.fallback,
+                        fallback=query.static_map_fallback,
                     )
                 except Exception as e:
                     logger.error(f"Error pinning images for hut '{hut_slug}': {e}")
@@ -780,7 +866,12 @@ class HutImagesController(ApiController):
             results, force_provider_refresh=query.update_cache
         )
 
-        if query.fallback and not features and hut is not None and hut.location:
+        if (
+            query.static_map_fallback
+            and not features
+            and hut is not None
+            and hut.location
+        ):
             features = [
                 _map_fallback_feature(
                     request,
@@ -813,10 +904,106 @@ class HutImagesController(ApiController):
 
 
 #: The hut/place page gallery's request shape (frontend ``useHutImages``/
-#: ``useMediaImages``: radius 50 m, 20 images, all sources, no map
-#: fallback). The og:image lookups must read exactly the cache entries
-#: these parameters produce — the same images the pages render.
-GALLERY_QUERY_SHAPE = {"radius": 50.0, "sources": None, "limit": 20, "fallback": False}
+#: ``useMediaImages``: radius 50 m, 20 images, all sources) plus the
+#: endpoints' default static-map fallback. The og:image lookups must
+#: read exactly the cache entries these parameters produce — the same
+#: images the pages render (fallback features are skipped there).
+GALLERY_QUERY_SHAPE = {"radius": 50.0, "sources": None, "limit": 20, "fallback": True}
+
+
+def cached_only_response(
+    *,
+    cached: ImageCollectionResponse | None,
+    entity,
+    request: HttpRequest,
+    place_type: str,
+    radius: float,
+    sources_list: list[str] | None,
+    static_map_fallback: bool,
+) -> ImageCollectionResponse:
+    """The ``cached_only=true`` answer for one entity (Hut or
+    GeoPlace): the cached response if any (stale included), else the
+    empty collection with at most the static-map fallback feature.
+
+    Providers are never contacted and nothing is written back. Shared
+    by the controllers' cached_only branches and the in-process og
+    helpers (``hut_gallery_response``/``place_gallery_response``).
+    ``entity`` is duck-typed: slug, location, modified."""
+    if cached is not None:
+        return cached
+    location = entity.location
+    features = []
+    if static_map_fallback and location is not None:
+        features = [
+            _map_fallback_feature(
+                request,
+                slug=entity.slug,
+                lat=location.y,
+                lon=location.x,
+                modified=entity.modified,
+                place_type=place_type,
+            )
+        ]
+    return _empty_images_response(
+        lat=location.y if location is not None else 0.0,
+        lon=location.x if location is not None else 0.0,
+        radius=radius,
+        sources_list=sources_list,
+        features=features,
+    )
+
+
+def hut_gallery_response(
+    hut, request: HttpRequest, *, lang: str | None
+) -> ImageCollectionResponse:
+    """The image service's answer for the hut page's gallery, default
+    parameters, for in-process callers (the hut meta og:image).
+
+    Identical to ``GET /v1/geo/images/hut/{slug}?cached_only=true``:
+    the cached gallery response if any (stale included; imagery is
+    language-independent — the requested language's entry first, then
+    any other), else the static-map fallback feature."""
+    cached = None
+    for candidate_lang in dict.fromkeys((lang, "en", "de", "fr", "it")):
+        if candidate_lang is None:
+            continue
+        entry = cached_hut_images(hut.slug, lang=candidate_lang)
+        if entry is not None and entry.features:
+            cached = entry
+            break
+    return cached_only_response(
+        cached=cached,
+        entity=hut,
+        request=request,
+        place_type="hut",
+        radius=GALLERY_QUERY_SHAPE["radius"],
+        sources_list=None,
+        static_map_fallback=GALLERY_QUERY_SHAPE["fallback"],
+    )
+
+
+def place_gallery_response(
+    place, request: HttpRequest, *, lang: str | None = None
+) -> ImageCollectionResponse:
+    """The image service's answer for the place page's gallery (the
+    place SEO surface's og:image) — see :func:`hut_gallery_response`.
+    The place meta endpoint has no lang parameter, so any cached
+    language's entry counts."""
+    cached = None
+    for candidate_lang in ("en", "de", "fr", "it"):
+        entry = cached_place_images(place.slug, lang=candidate_lang)
+        if entry is not None and entry.features:
+            cached = entry
+            break
+    return cached_only_response(
+        cached=cached,
+        entity=place,
+        request=request,
+        place_type="geoplace",
+        radius=GALLERY_QUERY_SHAPE["radius"],
+        sources_list=None,
+        static_map_fallback=GALLERY_QUERY_SHAPE["fallback"],
+    )
 
 
 def cached_hut_images(hut_slug: str, *, lang: str) -> ImageCollectionResponse | None:

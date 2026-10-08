@@ -11,6 +11,7 @@ import pytest
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.test import override_settings
 from django.utils import timezone
 
 from server.apps.geometries import image_response_cache as irc
@@ -79,6 +80,87 @@ class TestSyncPlaceImages:
         hut.refresh_from_db()
         assert hut.images_pinned_at is not None
 
+    def test_sync_bridge_keeps_db_connection(self, hut, monkeypatch):
+        """The command pipeline must not release the thread's DB connection.
+
+        ``sync_place_images`` runs while the caller (``geoimages_pin --all``)
+        iterates a server-side cursor; the bridge's exit-path cleanup would
+        close that connection mid-cursor (staging 2026-10-07)."""
+        import server.apps.geometries.providers as providers_mod
+        from server.apps.geometries.providers import base as providers_base
+
+        seen = {}
+        real_run_async = providers_base.run_async
+
+        def spy_run_async(fn, *args, **kwargs):
+            seen["release_db"] = kwargs.get("release_db", True)
+            kwargs["release_db"] = False
+            return real_run_async(fn, *args, **kwargs)
+
+        monkeypatch.setattr(providers_mod, "run_async", spy_run_async)
+        stub = _FetchStub([_result(score=70)])
+        monkeypatch.setattr(
+            "server.apps.geometries.providers.fetch_images_for_place", stub
+        )
+
+        sync_place_images(hut)
+
+        assert stub.calls == 1  # sanity: the pipeline still ran
+        assert seen["release_db"] is False
+
+
+class TestRunAsyncReleaseDb:
+    """The bridge's exit-path connection cleanup honours ``release_db``."""
+
+    async def _work(self):
+        return "ok"
+
+    def test_default_releases_connections(self, monkeypatch):
+        from server.apps.geometries.providers import base as providers_base
+
+        calls = []
+        monkeypatch.setattr(
+            providers_base, "_release_thread_db_connections", lambda: calls.append(1)
+        )
+        assert providers_base.run_async(self._work) == "ok"
+        assert calls == [1]
+
+    def test_release_db_false_skips_cleanup(self, monkeypatch):
+        from server.apps.geometries.providers import base as providers_base
+
+        calls = []
+        monkeypatch.setattr(
+            providers_base, "_release_thread_db_connections", lambda: calls.append(1)
+        )
+        assert providers_base.run_async(self._work, release_db=False) == "ok"
+        assert calls == []
+
+    def test_author_over_column_length_is_trimmed(self, hut):
+        """Provider author strings longer than varchar(255) get trimmed.
+
+        Untrimmed they aborted the whole place's pin run with
+        'value too long for type character varying(255)'."""
+        result = _result(score=50)
+        result.author = "x" * 300
+        pin_place_images(hut, [result])
+        image = Image.objects.get(source_ident="wikicommons:File:Test.jpg")
+        assert len(image.author) == 255
+
+    def test_source_url_over_old_column_length_pins(self, hut):
+        """URLs longer than the old varchar(500) must not abort the run.
+
+        Trimming would break the URL, so the columns were widened to 1000
+        (staging: 'value too long for type character varying(500)' on a
+        geoplace pin run)."""
+        long_url = (
+            "https://upload.wikimedia.org/wikipedia/commons/" + "a" * 540 + ".jpg"
+        )
+        result = _result(score=50, url=long_url)
+        pin_place_images(hut, [result])
+        image = Image.objects.get(source_ident="wikicommons:File:Test.jpg")
+        assert image.source_url_raw.startswith("https://upload.wikimedia.org/")
+        assert len(image.source_url_raw) > 500
+
     def test_sync_pins_geoplace(self, seed_data, monkeypatch):
         from server.apps.geometries.models import GeoPlace
 
@@ -90,7 +172,9 @@ class TestSyncPlaceImages:
         )
         stats = sync_place_images(place)
         assert stats.created == 1
-        assert place.image_associations.count() == 1
+        from server.apps.geometries.models import GeoPlaceImageAssociation
+
+        assert GeoPlaceImageAssociation.objects.filter(geo_place=place).count() == 1
 
     def test_task_unknown_slug_is_logged_not_raised(self):
         sync_place_images_task("hut", "does-not-exist")  # must not raise
@@ -237,9 +321,115 @@ class TestGeoimagesPinCommand:
         with pytest.raises(CommandError):
             call_command("geoimages_pin", place="nope")
 
-    def test_requires_scope(self):
+    def test_default_targets_unpinned_only(self, hut, monkeypatch, capsys):
+        """Default (no args) pins only places never synced from providers."""
+        seen = []
+
+        class _SweepStub(_FetchStub):
+            async def __call__(self, **kwargs):
+                seen.append(kwargs.get("place_slug"))
+                return [], {"location": {"lat": 1.0, "lon": 1.0}}
+
+        monkeypatch.setattr(
+            "server.apps.geometries.providers.fetch_images_for_place", _SweepStub([])
+        )
+
+        # Unpinned hut → default mode sweeps it.
+        call_command("geoimages_pin")
+        out = capsys.readouterr().out
+        assert "unpinned only" in out and hut.slug in seen
+
+        # Pinned hut → default mode skips it; --all still sweeps it.
+        hut.images_pinned_at = timezone.now()
+        hut.save(update_fields=["images_pinned_at"])
+        seen.clear()
+        call_command("geoimages_pin")
+        out = capsys.readouterr().out
+        assert "Nothing to do" in out and hut.slug not in seen
+
+        seen.clear()
+        call_command("geoimages_pin", all=True)
+        assert hut.slug in seen
+
+    def test_type_filter_applies_to_sweep(self, hut, seed_data, monkeypatch, capsys):
+        from server.apps.geometries.models import GeoPlace
+
+        place = GeoPlace.objects.filter(is_active=True, is_public=True).first()
+        assert place is not None
+        pin_place_images(place, [_result(score=10)])  # geoplace now has pins
+        seen = []
+
+        class _SweepStub(_FetchStub):
+            async def __call__(self, **kwargs):
+                seen.append(kwargs.get("place_slug"))
+                return [], {"location": {"lat": 1.0, "lon": 1.0}}
+
+        monkeypatch.setattr(
+            "server.apps.geometries.providers.fetch_images_for_place", _SweepStub([])
+        )
+        call_command("geoimages_pin", all=True, type="hut")
+        out = capsys.readouterr().out
+        assert hut.slug in seen and place.slug not in seen
+        assert "(full sweep)" in out
+
+    def test_bbox_filters_sweep(self, hut, monkeypatch, capsys):
+        """--bbox restricts the sweep to places inside the envelope."""
+        seen = []
+
+        class _SweepStub(_FetchStub):
+            async def __call__(self, **kwargs):
+                seen.append(kwargs.get("place_slug"))
+                return [], {"location": {"lat": 1.0, "lon": 1.0}}
+
+        monkeypatch.setattr(
+            "server.apps.geometries.providers.fetch_images_for_place", _SweepStub([])
+        )
+
+        # A bbox in the Pacific excludes the Alpine seed hut.
+        call_command("geoimages_pin", bbox="-179.0,-50.0,-178.0,-49.0")
+        out = capsys.readouterr().out
+        assert "Nothing to do" in out and "+ bbox" in out and hut.slug not in seen
+
+        # A worldwide bbox includes it.
+        seen.clear()
+        call_command("geoimages_pin", bbox="-180.0,-90.0,180.0,90.0")
+        out = capsys.readouterr().out
+        assert hut.slug in seen
+
+    def test_invalid_bbox_raises(self):
         with pytest.raises(CommandError):
-            call_command("geoimages_pin")
+            call_command("geoimages_pin", bbox="not,a,bbox")
+
+    def test_bbox_widget_renders(self):
+        """Smoke test: the widget renders the map container and the input."""
+        from server.apps.geometries.widgets import BBoxWidget
+
+        html = BBoxWidget().render("bbox", "7.5,46.0,8.5,46.8")
+        assert "bbox-widget" in html
+        assert 'name="bbox"' in html and 'value="7.5,46.0,8.5,46.8"' in html
+        assert "bbox_widget.js" in html
+
+    def test_assess_skipped_when_place_has_no_pins(self, hut, monkeypatch, capsys):
+        """--assess (and warmup) are pointless for places without pins."""
+        assessed = []
+        monkeypatch.setattr(
+            "server.apps.images.assessment.assess_place_pins",
+            lambda place, force=False: assessed.append(place.slug) or {"assessed": 0},
+        )
+        stub = _FetchStub([])  # no provider results → no pins
+        monkeypatch.setattr(
+            "server.apps.geometries.providers.fetch_images_for_place", stub
+        )
+
+        call_command("geoimages_pin", place=hut.slug, assess=True)
+        out = capsys.readouterr().out
+        assert "assessed pins" not in out and assessed == []
+
+        # Pins exist → assess runs.
+        pin_place_images(hut, [_result(score=50)])
+        call_command("geoimages_pin", place=hut.slug, assess=True)
+        out = capsys.readouterr().out
+        assert "assessed pins" in out and hut.slug in assessed
 
     def test_all_sweep_covers_huts_and_pinned_geoplaces(
         self, hut, seed_data, monkeypatch
@@ -247,6 +437,7 @@ class TestGeoimagesPinCommand:
         from server.apps.geometries.models import GeoPlace
 
         place = GeoPlace.objects.filter(is_active=True, is_public=True).first()
+        assert place is not None
         pin_place_images(place, [_result(score=10)])  # geoplace now has pins
 
         seen = []
@@ -261,6 +452,26 @@ class TestGeoimagesPinCommand:
         )
         call_command("geoimages_pin", all=True)
         assert hut.slug in seen and place.slug in seen
+
+    def test_budget_flag_threads_to_fanout(self, hut, monkeypatch):
+        """--budget (seconds) reaches the fan-out; the command default is
+        3× the request-path budget (background sweeps wait longer)."""
+        seen = []
+
+        class _BudgetRecorder(_FetchStub):
+            async def __call__(self, **kwargs):
+                seen.append(kwargs.get("budget"))
+                return await super().__call__(**kwargs)
+
+        monkeypatch.setattr(
+            "server.apps.geometries.providers.fetch_images_for_place",
+            _BudgetRecorder([]),
+        )
+        call_command("geoimages_pin", place=hut.slug)
+        call_command("geoimages_pin", place=hut.slug, budget=25)
+        with override_settings(IMAGES_FANOUT_BUDGET_SECONDS=5):
+            call_command("geoimages_pin", place=hut.slug)
+        assert seen == [30.0, 25, 15.0]
 
 
 class TestImagorWarmup:

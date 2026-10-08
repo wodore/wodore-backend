@@ -1,0 +1,17 @@
+{
+  "worktree": {
+    "setup": ["workz sync --isolated --quiet .", "scripts/lane-setup.sh"],
+    "teardown": ["scripts/lane-teardown.sh"]
+  },
+  "scripts": {
+    "test": { "command": "scripts/lane-run.sh .venv/bin/pytest" },
+    "migrate": {
+      "command": "scripts/lane-run.sh .venv/bin/python manage.py migrate"
+    },
+    "martin:start": { "command": "scripts/lane-martin.sh start" },
+    "martin:stop": { "command": "scripts/lane-martin.sh stop" },
+    "runserver": { "type": "service", "command": "scripts/lane-dev.sh fg" },
+    "runserver:attach": { "command": "scripts/lane-dev.sh attach" },
+    "runserver:kill": { "command": "scripts/lane-dev.sh kill" }
+  }
+}
