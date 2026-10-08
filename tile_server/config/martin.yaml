@@ -97,7 +97,10 @@ postgres:
       clip_geom: true
 
       # Points overzoom fine beyond maxzoom; no need for z17-20 tile generation
-      minzoom: 7
+      # minzoom 5 (not 7): full-country views (e.g. all of New Zealand sit
+      # around z5-6) must serve hut tiles - the frontend hut overlay floor is
+      # also z5 (OVERLAY_MIN_ZOOM).
+      minzoom: 5
       maxzoom: 16
 
     # GeoPlaces vector tiles (using view with precomputed JOINs)
