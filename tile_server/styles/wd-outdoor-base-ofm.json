@@ -529,6 +529,226 @@
       "filter": ["!=", ["get", "ele"], 0]
     },
     {
+      "id": "peak-rank1",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "mountain_peak",
+      "minzoom": 8,
+      "filter": [
+        "all",
+        ["==", ["get", "class"], "peak"],
+        ["has", "name"],
+        ["==", ["get", "rank"], 1],
+        [">=", ["to-number", ["get", "ele"]], 2200]
+      ],
+      "layout": {
+        "icon-image": "wd-maps:peak",
+        "icon-size": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          7,
+          0.7,
+          12,
+          0.9,
+          14,
+          1.2
+        ],
+        "text-field": [
+          "format",
+          ["coalesce", ["get", "name:latin"], ["get", "name"]],
+          {},
+          "\n\n",
+          {},
+          ["to-string", ["get", "ele"]],
+          {
+            "font-scale": 0.76,
+            "text-color": "hsla(28, 10%, 48%, 1)"
+          }
+        ],
+        "text-font": ["Barlow SemiBold Italic", "Noto Sans Italic"],
+        "text-offset": [0, 0],
+        "text-size": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          8,
+          11,
+          12,
+          12.5,
+          16,
+          15
+        ],
+        "text-letter-spacing": 0.02,
+        "text-max-width": 7,
+        "text-justify": "center",
+        "text-anchor": "center",
+        "symbol-sort-key": ["to-number", ["get", "rank"], 99],
+        "icon-allow-overlap": true,
+        "text-allow-overlap": true
+      },
+      "paint": {
+        "text-color": "hsla(28, 14%, 42%, 1)",
+        "text-halo-color": "rgba(242, 247, 244, 0.9)",
+        "text-halo-width": 1.2,
+        "icon-opacity": 0.9,
+        "text-halo-blur": 1
+      }
+    },
+    {
+      "id": "peak-rank1-all",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "mountain_peak",
+      "minzoom": 11,
+      "filter": [
+        "all",
+        ["==", ["get", "class"], "peak"],
+        ["has", "name"],
+        ["==", ["get", "rank"], 1],
+        ["<", ["to-number", ["get", "ele"]], 2200]
+      ],
+      "layout": {
+        "icon-image": "wd-maps:peak",
+        "icon-size": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          11,
+          0.7,
+          12,
+          0.9,
+          14,
+          1.2
+        ],
+        "text-field": [
+          "format",
+          ["coalesce", ["get", "name:latin"], ["get", "name"]],
+          {},
+          "\n\n",
+          {},
+          ["to-string", ["get", "ele"]],
+          {
+            "font-scale": 0.76,
+            "text-color": "hsla(28, 10%, 48%, 1)"
+          }
+        ],
+        "text-font": ["Barlow SemiBold Italic", "Noto Sans Italic"],
+        "text-offset": [0, 0],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 11, 10.5, 16, 14],
+        "text-letter-spacing": 0.02,
+        "text-max-width": 7,
+        "text-justify": "center",
+        "text-anchor": "center",
+        "symbol-sort-key": ["to-number", ["get", "rank"], 99],
+        "icon-allow-overlap": true,
+        "text-allow-overlap": true
+      },
+      "paint": {
+        "text-color": "hsla(28, 14%, 42%, 1)",
+        "text-halo-color": "rgba(242, 247, 244, 0.9)",
+        "text-halo-width": 1.2,
+        "icon-opacity": 0.85,
+        "text-halo-blur": 1
+      }
+    },
+    {
+      "id": "peak-rank2",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "mountain_peak",
+      "minzoom": 9.5,
+      "filter": [
+        "all",
+        ["==", ["get", "class"], "peak"],
+        ["has", "name"],
+        ["==", ["get", "rank"], 2]
+      ],
+      "layout": {
+        "text-field": [
+          "format",
+          ["coalesce", ["get", "name:latin"], ["get", "name"]],
+          {},
+          "\n\n",
+          {},
+          ["to-string", ["get", "ele"]],
+          {
+            "font-scale": 0.76,
+            "text-color": "hsla(28, 10%, 48%, 1)"
+          }
+        ],
+        "text-font": ["Barlow SemiBold Italic", "Noto Sans Italic"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 11.5, 10, 16, 13],
+        "text-letter-spacing": 0.02,
+        "text-max-width": 7,
+        "text-offset": [0, 0],
+        "text-justify": "center",
+        "icon-image": "wd-maps:peak",
+        "icon-size": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          9.5,
+          0.7,
+          12,
+          0.9,
+          14,
+          1.2
+        ],
+        "text-anchor": "center",
+        "symbol-sort-key": ["to-number", ["get", "rank"], 99],
+        "icon-allow-overlap": true,
+        "text-allow-overlap": true
+      },
+      "paint": {
+        "text-color": "hsla(28, 14%, 42%, 1)",
+        "text-halo-color": "rgba(242, 247, 244, 0.9)",
+        "text-halo-width": 1.2,
+        "text-halo-blur": 1
+      }
+    },
+    {
+      "id": "peak-minor",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "mountain_peak",
+      "minzoom": 11.5,
+      "filter": [
+        "all",
+        ["==", ["get", "class"], "peak"],
+        ["match", ["get", "rank"], [1, 2], false, true],
+        ["has", "name"]
+      ],
+      "layout": {
+        "text-field": [
+          "format",
+          ["coalesce", ["get", "name:latin"], ["get", "name"]],
+          {},
+          "\n\n",
+          {},
+          ["to-string", ["get", "ele"]],
+          {
+            "font-scale": 0.76,
+            "text-color": "hsla(28, 10%, 48%, 1)"
+          }
+        ],
+        "text-font": ["Barlow SemiBold Italic", "Noto Sans Italic"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 13, 9.5, 16, 11.5],
+        "text-letter-spacing": 0.02,
+        "text-max-width": 7,
+        "text-offset": [0, 0],
+        "text-justify": "center",
+        "text-anchor": "center",
+        "symbol-sort-key": ["to-number", ["get", "rank"], 99]
+      },
+      "paint": {
+        "text-color": "hsla(28, 14%, 42%, 1)",
+        "text-halo-color": "rgba(242, 247, 244, 0.9)",
+        "text-halo-width": 1.2,
+        "text-halo-blur": 1
+      }
+    },
+    {
       "id": "contour-labels",
       "type": "symbol",
       "source": "contours",
@@ -3878,212 +4098,6 @@
       }
     },
     {
-      "id": "peak-rank1",
-      "type": "symbol",
-      "source": "openmaptiles",
-      "source-layer": "mountain_peak",
-      "minzoom": 8,
-      "filter": [
-        "all",
-        ["==", ["get", "class"], "peak"],
-        ["==", ["get", "rank"], 1],
-        [">=", ["to-number", ["get", "ele"]], 2200]
-      ],
-      "layout": {
-        "icon-image": "wd-maps:peak",
-        "icon-size": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          7,
-          0.7,
-          12,
-          0.9,
-          14,
-          1.2
-        ],
-        "text-field": [
-          "format",
-          ["coalesce", ["get", "name:latin"], ["get", "name"]],
-          {},
-          "\n",
-          {},
-          ["to-string", ["get", "ele"]],
-          {
-            "font-scale": 0.76,
-            "text-color": "hsla(28, 10%, 48%, 1)"
-          }
-        ],
-        "text-font": ["Barlow SemiBold Italic", "Noto Sans Italic"],
-        "text-offset": [0, 0],
-        "text-size": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          8,
-          11,
-          12,
-          12.5,
-          16,
-          15
-        ],
-        "text-letter-spacing": 0.02,
-        "text-max-width": 7,
-        "text-justify": "center",
-        "text-line-height": 2.2
-      },
-      "paint": {
-        "text-color": "hsla(28, 14%, 42%, 1)",
-        "text-halo-color": "rgba(242, 247, 244, 0.9)",
-        "text-halo-width": 1.2,
-        "icon-opacity": 0.9,
-        "text-halo-blur": 1
-      }
-    },
-    {
-      "id": "peak-rank1-all",
-      "type": "symbol",
-      "source": "openmaptiles",
-      "source-layer": "mountain_peak",
-      "minzoom": 11,
-      "filter": [
-        "all",
-        ["==", ["get", "class"], "peak"],
-        ["==", ["get", "rank"], 1],
-        ["<", ["to-number", ["get", "ele"]], 2200]
-      ],
-      "layout": {
-        "icon-image": "wd-maps:peak",
-        "icon-size": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          11,
-          0.7,
-          12,
-          0.9,
-          14,
-          1.2
-        ],
-        "text-field": [
-          "format",
-          ["coalesce", ["get", "name:latin"], ["get", "name"]],
-          {},
-          "\n",
-          {},
-          ["to-string", ["get", "ele"]],
-          {
-            "font-scale": 0.76,
-            "text-color": "hsla(28, 10%, 48%, 1)"
-          }
-        ],
-        "text-font": ["Barlow SemiBold Italic", "Noto Sans Italic"],
-        "text-offset": [0, 0],
-        "text-size": ["interpolate", ["linear"], ["zoom"], 11, 10.5, 16, 14],
-        "text-letter-spacing": 0.02,
-        "text-max-width": 7,
-        "text-justify": "center",
-        "text-line-height": 2.2
-      },
-      "paint": {
-        "text-color": "hsla(28, 14%, 42%, 1)",
-        "text-halo-color": "rgba(242, 247, 244, 0.9)",
-        "text-halo-width": 1.2,
-        "icon-opacity": 0.85,
-        "text-halo-blur": 1
-      }
-    },
-    {
-      "id": "peak-rank2",
-      "type": "symbol",
-      "source": "openmaptiles",
-      "source-layer": "mountain_peak",
-      "minzoom": 9.5,
-      "filter": [
-        "all",
-        ["==", ["get", "class"], "peak"],
-        ["==", ["get", "rank"], 2]
-      ],
-      "layout": {
-        "text-field": [
-          "format",
-          ["coalesce", ["get", "name:latin"], ["get", "name"]],
-          {},
-          "\n",
-          {},
-          ["to-string", ["get", "ele"]],
-          {
-            "font-scale": 0.76,
-            "text-color": "hsla(28, 10%, 48%, 1)"
-          }
-        ],
-        "text-font": ["Barlow SemiBold Italic", "Noto Sans Italic"],
-        "text-size": ["interpolate", ["linear"], ["zoom"], 11.5, 10, 16, 13],
-        "text-letter-spacing": 0.02,
-        "text-max-width": 7,
-        "text-offset": [0, 0],
-        "text-justify": "center",
-        "icon-image": "wd-maps:peak",
-        "icon-size": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          9.5,
-          0.7,
-          12,
-          0.9,
-          14,
-          1.2
-        ],
-        "text-line-height": 2.2
-      },
-      "paint": {
-        "text-color": "hsla(28, 14%, 42%, 1)",
-        "text-halo-color": "rgba(242, 247, 244, 0.9)",
-        "text-halo-width": 1.2,
-        "text-halo-blur": 1
-      }
-    },
-    {
-      "id": "peak-minor",
-      "type": "symbol",
-      "source": "openmaptiles",
-      "source-layer": "mountain_peak",
-      "minzoom": 11.5,
-      "filter": [
-        "all",
-        ["==", ["get", "class"], "peak"],
-        ["match", ["get", "rank"], [1, 2], false, true],
-        ["has", "name"]
-      ],
-      "layout": {
-        "text-field": [
-          "format",
-          ["coalesce", ["get", "name:latin"], ["get", "name"]],
-          {},
-          "\n",
-          {},
-          ["to-string", ["get", "ele"]],
-          {
-            "font-scale": 0.76,
-            "text-color": "hsla(28, 10%, 48%, 1)"
-          }
-        ],
-        "text-font": ["Barlow SemiBold Italic", "Noto Sans Italic"],
-        "text-size": ["interpolate", ["linear"], ["zoom"], 13, 9.5, 16, 11.5],
-        "text-letter-spacing": 0.02,
-        "text-max-width": 7,
-        "text-offset": [0, 1.1],
-        "text-justify": "center"
-      },
-      "paint": {
-        "text-color": "hsla(28, 14%, 42%, 1)",
-        "text-halo-color": "rgba(242, 247, 244, 0.9)",
-        "text-halo-width": 1.2,
-        "text-halo-blur": 1
-      }
-    },
-    {
       "id": "highway-name-path",
       "type": "symbol",
       "source": "openmaptiles",
@@ -4253,7 +4267,7 @@
         "icon-image": [
           "step",
           ["zoom"],
-          "ofm:ofm:ofm:ofm:ofm:ofm:ofm:circle_11_black",
+          "ofm:ofm:ofm:ofm:ofm:ofm:ofm:ofm:circle_11_black",
           10,
           ""
         ],
@@ -4298,7 +4312,7 @@
         "icon-image": [
           "step",
           ["zoom"],
-          "ofm:ofm:ofm:ofm:ofm:ofm:ofm:circle_11_black",
+          "ofm:ofm:ofm:ofm:ofm:ofm:ofm:ofm:circle_11_black",
           10,
           ""
         ],
@@ -4376,7 +4390,7 @@
         "icon-image": [
           "step",
           ["zoom"],
-          "ofm:ofm:ofm:ofm:ofm:ofm:ofm:circle_11_black",
+          "ofm:ofm:ofm:ofm:ofm:ofm:ofm:ofm:circle_11_black",
           9,
           ""
         ],
@@ -4444,7 +4458,7 @@
         "icon-image": [
           "step",
           ["zoom"],
-          "ofm:ofm:ofm:ofm:ofm:ofm:ofm:circle_11_black",
+          "ofm:ofm:ofm:ofm:ofm:ofm:ofm:ofm:circle_11_black",
           9,
           ""
         ],
