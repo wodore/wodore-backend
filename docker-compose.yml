@@ -1,6 +1,5 @@
 volumes:
   django-static:
-  martin-cache:
 
 services:
   db:
@@ -86,34 +85,6 @@ services:
     command: --config /martin_sync/config/martin.yaml --webui enable-for-all
     depends_on:
       - db
-
-  # NGINX proxy_cache for Martin terrain postprocessing output (hillshade
-  # PNGs + contour MVTs): Martin bakes/traces these on the fly but does NOT
-  # cache the postprocessed tiles (only the upstream elevation tiles), so
-  # warm tiles need this cache in front. Pattern from
-  # https://maplibre.org/martin/run-with-nginx/ — config:
-  # tile_server/nginx/nginx.conf.template (env-expanded by the nginx image).
-  # Opt-in (does not start with a bare `docker compose up`):
-  #   docker compose --profile terrain-cache up -d martin martin-cache
-  martin-cache:
-    image: nginx:alpine
-    container_name: django-local-martin-cache
-    restart: unless-stopped
-    profiles:
-      - terrain-cache
-    ports:
-      - "8078:80"
-    networks:
-      - postgresnet
-    volumes:
-      - ./tile_server/nginx:/etc/nginx/templates:ro
-      - ./tile_server/nginx/default.conf.disabled:/etc/nginx/conf.d/default.conf:ro
-      - martin-cache:/var/cache/nginx
-    environment:
-      # docker service DNS name on the postgresnet network
-      MARTIN_UPSTREAM: martin:3000
-    depends_on:
-      - martin
 
         #web:
         #  <<: &web

@@ -117,11 +117,11 @@ Services are defined in `docker-compose.yml`:
   - Terrain postprocessing (Martin ≥ 1.16): `contours` — server-traced MVT
     contour lines from Mapterhorn (Terrarium webp, layer `contour`, tags
     `ele`+`major`, `/contours/{z}/{x}/{y}`); `hillshade` — baked raster PNG
-    from AWS Terrain Tiles normal tiles (`/hillshade/{z}/{x}/{y}`, stub).
+    from AWS Terrain Tiles normal tiles (`/hillshade/{z}/{x}/{y}`).
     Martin caches only the upstream elevation tiles, NOT the postprocessed
-    output — warm terrain tiles need the `martin-cache` nginx proxy_cache
-    service (compose profile `terrain-cache`, port 8078; lane sidecar on
-    `PORT_END-1`; config `tile_server/nginx/martin-terrain-cache.conf.template`).
+    output — warm terrain tiles will be cached at the prod cluster edge
+    (reference nginx proxy_cache config: `_work/261008_ofm_mtk_parity.md`
+    in the PR #292 lane).
     Test style: `wd-terrain-test` (`tile_server/styles/wd-terrain-test.json`).
 
 ## Common Patterns
@@ -312,10 +312,7 @@ temporary untracked copy in the main checkout bootstraps it).
 lane-scoped Martin with `scripts/lane-martin.sh start` (docker, same image
 and config as the compose instance, serving the **lane database** on the
 workz port `PORT_END`; `lane-run.sh` points `MARTIN_TILE_URL` there
-automatically). The script also starts an nginx terrain proxy_cache sidecar
-on `PORT_END-1` (warm hillshade/contour tiles for frontend perf testing;
-`stop` removes both containers but keeps the cache volume). Refill the lane
-`martin_sync` when you need current tiles
+automatically). Refill the lane `martin_sync` when you need current tiles
 (`scripts/lane-run.sh .venv/bin/python manage.py martin_sync`) — martin
 loads its config at startup, so `stop` + `start` afterwards to pick the
 refill up. Teardown stops the container automatically (`pre_done`);

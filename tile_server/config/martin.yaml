@@ -31,6 +31,9 @@ postgres:
       # Layer ID (used in vector tiles)
       layer_id: huts
 
+      # Cache-Control: short — carries has_availability state
+      cache_control: public, max-age=3600
+
       # Schema and table/view name
       schema: public
       table: huts_for_tiles
@@ -103,6 +106,9 @@ postgres:
       # Layer ID (used in vector tiles)
       layer_id: geoplaces
       id_columns: slug
+
+      # Cache-Control: 1 day — changes with POI edits
+      cache_control: public, max-age=86400
 
       # Schema and table/view name
       schema: public
@@ -204,6 +210,10 @@ postgres:
       function: get_geoplaces_for_tiles
       id_columns: slug
 
+      # Cache-Control: 1 day — changes with POI edits (the function-level
+      # tile cache in Postgres is the primary defense; this is the edge hint)
+      cache_control: public, max-age=86400
+
       # Zoom levels (function handles importance + clustering automatically)
       # Points overzoom fine beyond maxzoom
       minzoom: 3
@@ -214,17 +224,25 @@ postgres:
 #     offloads the client-side maplibre-contour plugin; layer `contour`,
 #     tags `ele` (int m) + `major` (bool))
 #   hillshade - AWS Terrain Tiles Mapzen *normal* tiles -> baked raster PNG
-#     (config-only stub for now - not verified, see _work notes)
 # Both outputs REPLACE the source tiles, served at
 # /hillshade/{z}/{x}/{y} and /contours/{z}/{x}/{y}.
 # Free, world-wide, no API key:
 # https://registry.opendata.aws/terrain-tiles/
 #
 # Martin caches the upstream elevation/normal tiles internally (3x3
-# neighbourhood per output tile) but NOT the postprocessed output - warm
-# output tiles need the nginx proxy_cache service
-# (tile_server/nginx/martin-terrain-cache.conf.template,
-# docker-compose `martin-cache`, lane sidecar: scripts/lane-martin.sh).
+# neighbourhood per output tile) but NOT the postprocessed output — warm
+# output tiles will be cached at the prod cluster edge (a reference nginx
+# proxy_cache config is documented in _work/261008_ofm_mtk_parity.md of
+# PR #292; deliberately NOT shipped in this repo).
+#
+# Cache-Control policy (Martin native `cache_control`, per-source values
+# override the top-level default):
+#   default        604800  (1 week)  - styles/catalog/misc tiles
+#   huts            3600   (1 hour)  - carries has_availability state
+#   geoplaces*     86400   (1 day)   - changes with POI edits
+#   contours     2592000   (30 days) - DEM changes ~never
+#   hillshade    2592000   (30 days) - DEM changes ~never
+cache_control: public, max-age=604800
 passthrough:
   sources:
     hillshade:
@@ -233,20 +251,23 @@ passthrough:
       # Upstream serves no TileJSON - declare zoom bounds so Martin
       # stops at z15 (verified: normal/15 answers 200).
       maxzoom: 15
-      cache_control: public, max-age=86400
+      cache_control: public, max-age=2592000
       convert_to_hillshade: auto
     contours:
-      # Preferred upstream: Mapterhorn (Terrarium-encoded webp) - the same
-      # source the OFM style consumes client-side (dem-mapterhorn): global
-      # 30m + national DEMs (CH 2m/partial 0.5m, AT 1m, DE 0.25-1m, IT
-      # Alpine 2-5m). https://mapterhorn.com/attribution
-      # Fallback if Martin cannot decode webp: AWS Terrain Tiles terrarium
-      # PNG (global ~30m, coarser in the Alps):
-      # https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png
-      url: https://tiles.mapterhorn.com/{z}/{x}/{y}.webp
+      # Upstream: AWS Terrain Tiles terrarium PNG (global ~30m, coarser in the
+      # Alps but CLEAN tile geometry). The preferred Mapterhorn Terrarium webp
+      # source (global 30m + national DEMs: CH 2m/partial 0.5m, AT 1m,
+      # DE 0.25-1m, IT Alpine 2-5m — https://mapterhorn.com/attribution)
+      # produces straight contour artifacts along DEM inner-tile boundaries
+      # (maplibre/martin#3281, verified in the PR #292 lane): switch back once
+      # fixed upstream.
+      url: >-
+        https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png
       maxzoom: 15
-      cache_control: public, max-age=86400
-      attribution: "<a href='https://mapterhorn.com/attribution'>Mapterhorn</a>"
+      cache_control: public, max-age=2592000
+      attribution: >-
+        <a href='https://registry.opendata.aws/terrain-tiles/'>AWS Terrain
+        Tiles</a>
       # zoom_intervals mirror the client-side maplibre-contour thresholds
       # of wd-outdoor-base-ofm.json (z*interval*major):
       # 11*200*1000 ~ 12*100*500 ~ 14*50*200 ~ 15*20*100 ->
