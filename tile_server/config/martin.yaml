@@ -20,7 +20,13 @@ postgres:
   max_feature_count: 5000 # either a positive integer, or null=unlimited (default)
 
   # Automatically compute bounds for tables
-  auto_bounds: quick
+  # No auto bounds: martin computes source bounds at startup and advertises
+  # them in the TileJSON; maplibre silently skips tile requests outside
+  # them, so huts imported after a martin restart stayed invisible until
+  # the next restart (and the quick sampler produced a wrong envelope).
+  # Without bounds maplibre fetches every requested tile - empty tiles are
+  # cheap at this table size (max_feature_count, z7-16).
+  auto_bounds: false
 
   auto_publish: false
 
@@ -91,7 +97,10 @@ postgres:
       clip_geom: true
 
       # Points overzoom fine beyond maxzoom; no need for z17-20 tile generation
-      minzoom: 7
+      # minzoom 5 (not 7): full-country views (e.g. all of New Zealand sit
+      # around z5-6) must serve hut tiles - the frontend hut overlay floor is
+      # also z5 (OVERLAY_MIN_ZOOM).
+      minzoom: 5
       maxzoom: 16
 
     # GeoPlaces vector tiles (using view with precomputed JOINs)
