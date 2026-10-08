@@ -1925,7 +1925,7 @@ wheels = [
 [[package]]
 name = "hut-services"
 version = "0.5.1"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/wodore/hut-services?branch=main#80a8ca4f8532bde976d8ee2f6e612ce4ba3f3cbe" }
 dependencies = [
     { name = "bs4" },
     { name = "dateparser" },
@@ -1933,7 +1933,6 @@ dependencies = [
     { name = "easydict" },
     { name = "geojson-pydantic" },
     { name = "httpx" },
-    { name = "joblib" },
     { name = "overpy" },
     { name = "phonenumbers" },
     { name = "pillow" },
@@ -1945,15 +1944,11 @@ dependencies = [
     { name = "wikidata" },
     { name = "xmltodict" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/cf/c2/341d42cf27d00ce10d3ca64bd3dfdbf92a0b116182a0c18a14a487614996/hut_services-0.5.1.tar.gz", hash = "sha256:9a2eee8ca6d7ff9488757a8bfd7ec155c927533999e90c592c85128bad4bd239", size = 159095, upload-time = "2026-10-04T17:46:17.58Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/55/cf/9b99a2004273f1bc5195c29194752b1db42c16d0467700dda9fc39246db8/hut_services-0.5.1-py3-none-any.whl", hash = "sha256:43881409d1f687ef51de7dff4d9aa99c31eb8d4678a34ddf04c6d5678df44bcc", size = 66121, upload-time = "2026-10-04T17:46:16.22Z" },
-]
 
 [[package]]
 name = "hut-services-private"
 version = "0.5.0"
-source = { git = "ssh://git@github.com/wodore/hut-services-private?branch=main#5144f753549eab8f958d145d188f604050ce39db" }
+source = { git = "ssh://git@github.com/wodore/hut-services-private?branch=main#3976f4ca5f9b02ba1c334145d418d471d31f5b84" }
 dependencies = [
     { name = "httpx" },
     { name = "hut-services" },
@@ -5489,7 +5484,7 @@ requires-dist = [
     { name = "geojson-pydantic", specifier = "==1.*" },
     { name = "gunicorn", specifier = "==25.*" },
     { name = "httpx", specifier = ">=0.25.0" },
-    { name = "hut-services", specifier = ">=0.4.0" },
+    { name = "hut-services", git = "https://github.com/wodore/hut-services?branch=main" },
     { name = "hut-services-private", marker = "extra == 'private'", git = "ssh://git@github.com/wodore/hut-services-private?branch=main" },
     { name = "jinja2", specifier = "==3.*" },
     { name = "load-dotenv", specifier = "==0.1.*" },

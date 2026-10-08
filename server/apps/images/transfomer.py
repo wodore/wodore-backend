@@ -5,11 +5,12 @@ from typing import Literal
 from urllib.parse import quote as url_quote
 
 import requests
-from hut_services.core.cache import file_cache
 
 from django.conf import settings
 from django.db.models.fields.files import ImageFieldFile
 from django.utils.html import format_html
+
+from server.core.utils import get_redirect_url
 
 # https://github.com/cshum/imagor
 
@@ -48,18 +49,6 @@ class TransformedImage:
             str: The transformed image URL.
         """
         return self.url
-
-
-@file_cache(expire_in_seconds=3600 * 24 * 30)
-def get_redirect_url(url: str) -> str:
-    """Calls url with a redirect and returns the redirected url. This function is cached."""
-    resp = requests.head(
-        url,
-        allow_redirects=True,
-        timeout=10,
-        headers={"User-Agent": settings.BOT_AGENT},
-    )  # follows redirect
-    return resp.url
 
 
 class ImagorImage:

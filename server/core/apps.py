@@ -3,6 +3,7 @@ Core app configuration.
 """
 
 import pgtrigger
+import structlog
 
 from django.apps import AppConfig, apps
 
@@ -58,3 +59,32 @@ class CoreConfig(AppConfig):
                 except KeyError:
                     # Trigger already registered, skip
                     pass
+
+        # hut-services: replace the library's default file cache (pickles
+        # under <tempdir>/py_file_cache) with the Django database cache.
+        # Its CacheBackend protocol matches BaseCache as-is, so the cache is
+        # injected as-is (hut-services docs/caching.md). Wired in ready() -
+        # after apps load, never at import time - because the ``cached``
+        # wrapper resolves the backend on every call.
+        # Only wire when the configured alias actually is database-backed;
+        # otherwise the library would silently keep writing files.
+        from typing import cast
+
+        from hut_services.core.cache import CacheBackend, set_default_cache_backend
+
+        from django.core.cache import caches
+        from django.core.cache.backends.db import DatabaseCache
+
+        hut_services_cache = caches["hut_services"]
+        if isinstance(hut_services_cache, DatabaseCache):
+            # Runtime-conformant: BaseCache implements CacheBackend as-is
+            # (hut-services docs). The cast only bridges pyright rejecting
+            # Django's ``delete() -> bool`` against the protocol's declared
+            # ``delete() -> None`` (the return value is discarded).
+            set_default_cache_backend(cast(CacheBackend, hut_services_cache))
+        else:
+            structlog.get_logger("server.core").warning(
+                "hut_services cache alias is not DatabaseCache (%s) - "
+                "hut-services falls back to its file cache backend",
+                type(hut_services_cache).__name__,
+            )
