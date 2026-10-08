@@ -153,6 +153,14 @@ UNFOLD = {
                         ),
                     },
                     {
+                        "title": _("Icons"),
+                        "icon": "interests",
+                        "link": reverse_lazy("admin:symbols_icon_changelist"),
+                        "permission": lambda request: request.user.has_perm(
+                            "symbols.view_icon"
+                        ),
+                    },
+                    {
                         "title": _("Contacts"),
                         "icon": "contacts",
                         "link": reverse_lazy("admin:contacts_contact_changelist"),

@@ -1,11 +1,14 @@
 import uuid
 
 from model_utils.fields import MonitorField
+from modeltrans.fields import TranslationField
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
+from server.apps.categories.models import Category
 from server.apps.licenses.models import License
 from server.apps.organizations.models import Organization
 from server.core.managers import BaseMutlilingualManager
@@ -211,3 +214,322 @@ class SymbolGroup(Symbol):
         proxy = True
         verbose_name = _("Symbol Group")
         verbose_name_plural = _("Symbol Groups")
+
+
+class SymbolCollection(TimeStampedModel):
+    """A pack of icons from one source (e.g. ``fluent-emoji``).
+
+    Same concept as meteo's ``WeatherCodeSymbolCollection``: creating a
+    pack is a data operation, not a code change. ``extra`` records the
+    pinned upstream refs an import ran against (openspec: icon-library).
+    """
+
+    i18n = TranslationField(fields=())  # No translatable fields currently
+    objects = BaseMutlilingualManager()
+
+    slug = models.SlugField(
+        max_length=100,
+        unique=True,
+        db_index=True,
+        verbose_name=_("Slug"),
+        help_text=_("Unique identifier for this icon pack"),
+    )
+    source_org = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="symbol_collections",
+        verbose_name=_("Source Organization"),
+        help_text=_("Organization providing this icon pack"),
+    )
+    extra = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name=_("Extra Metadata"),
+        help_text=_(
+            "Additional metadata as JSON. Import commands record their "
+            "pinned upstream refs here."
+        ),
+    )
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        verbose_name = _("Symbol Collection")
+        verbose_name_plural = _("Symbol Collections")
+        ordering = ("slug",)
+
+    def __str__(self) -> str:
+        return self.slug
+
+
+class Icon(TimeStampedModel):
+    """One icon within a pack (openspec: icon-library).
+
+    Identity is ``(pack, slug)``: the same upstream slug may exist in
+    several packs, each with its own assets and keywords. The three
+    symbol slots follow ``Category``'s naming exactly so
+    ``resolve_symbol_urls()`` works unchanged. ``category`` references a
+    non-root (subgroup) ``Category`` for taxonomy browsing; roots are
+    rejected in ``clean()`` (a DB CHECK cannot span joins).
+    """
+
+    i18n = TranslationField(fields=("name",))
+    objects = BaseMutlilingualManager()
+
+    pack = models.ForeignKey(
+        SymbolCollection,
+        on_delete=models.PROTECT,
+        related_name="icons",
+        db_index=True,
+        verbose_name=_("Pack"),
+        help_text=_("Icon pack this icon belongs to"),
+    )
+    slug = models.SlugField(
+        max_length=100,
+        db_index=True,
+        verbose_name=_("Slug"),
+        help_text=_("Upstream icon identifier, unique within the pack"),
+    )
+    name = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        verbose_name=_("Name"),
+        help_text=_("Display name (English source; translated via i18n)"),
+    )
+    name_i18n: str
+    order = models.PositiveSmallIntegerField(
+        default=0,
+        db_index=True,
+        verbose_name=_("Order"),
+        help_text=_("Display order (lower values appear first)"),
+    )
+    is_active = models.BooleanField(
+        default=True,
+        db_index=True,
+        verbose_name=_("Active"),
+        help_text=_("Only shown to admin if not active"),
+    )
+    unicode = models.CharField(
+        max_length=64,
+        blank=True,
+        null=True,
+        db_index=True,
+        verbose_name=_("Unicode"),
+        help_text=_(
+            "Unicode hexcode(s), variation selectors stripped "
+            "(e.g. '26FA' or '1F468-200D-2764')"
+        ),
+    )
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="icons",
+        limit_choices_to=models.Q(parent__isnull=False),
+        verbose_name=_("Category"),
+        help_text=_("CLDR subgroup category (non-root)"),
+    )
+
+    symbol_detailed = models.ForeignKey(
+        Symbol,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="icons_detailed",
+        limit_choices_to={"style": "detailed"},
+        verbose_name=_("Symbol (Detailed)"),
+        help_text=_("Reference to detailed symbol from Symbols app"),
+    )
+    symbol_simple = models.ForeignKey(
+        Symbol,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="icons_simple",
+        limit_choices_to={"style": "simple"},
+        verbose_name=_("Symbol (Simple)"),
+        help_text=_("Reference to simple symbol from Symbols app"),
+    )
+    symbol_mono = models.ForeignKey(
+        Symbol,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="icons_mono",
+        limit_choices_to={"style": "mono"},
+        verbose_name=_("Symbol (Mono)"),
+        help_text=_("Reference to monochrome symbol from Symbols app"),
+    )
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        verbose_name = _("Icon")
+        verbose_name_plural = _("Icons")
+        ordering = ("pack__slug", "order", "slug")
+        indexes = (models.Index(fields=["pack", "order", "slug"]),)
+        constraints = (
+            models.UniqueConstraint(
+                fields=["pack", "slug"],
+                name="symbols_icon_pack_slug_unique",
+            ),
+        )
+
+    def __str__(self) -> str:
+        return f"{self.pack.slug}:{self.slug}"
+
+    def clean(self):
+        """Reject root categories (subgroups only, see design D4)."""
+        super().clean()
+        if self.category_id and self.category.parent_id is None:  # pyright: ignore[reportAttributeAccessIssue]  # FK attnames: django-stubs gap
+            raise ValidationError(
+                {"category": _("Icons may only reference non-root categories.")}
+            )
+
+    @classmethod
+    def get_fields_all(cls) -> list[str]:
+        return [
+            "id",
+            "pack",
+            "slug",
+            "name",
+            "order",
+            "is_active",
+            "unicode",
+            "category",
+            "symbol_detailed",
+            "symbol_simple",
+            "symbol_mono",
+        ]
+
+
+class IconKeyword(TimeStampedModel):
+    """Localized search keyword for an icon (openspec: icon-library).
+
+    ``keyword`` keeps the original form for display, ``keyword_folded``
+    is accent- and case-folded for matching. Sources: emojibase-data
+    labels + tags per UI locale (design D5).
+    """
+
+    objects = BaseMutlilingualManager()
+
+    icon = models.ForeignKey(
+        Icon,
+        on_delete=models.CASCADE,
+        related_name="keywords",
+        db_index=True,
+        verbose_name=_("Icon"),
+    )
+    locale = models.CharField(
+        max_length=8,
+        db_index=True,
+        verbose_name=_("Locale"),
+        help_text=_("Language code of this keyword (de, en, fr, it)"),
+    )
+    keyword = models.CharField(
+        max_length=200,
+        verbose_name=_("Keyword"),
+        help_text=_("Original keyword form (label or tag)"),
+    )
+    keyword_folded = models.CharField(
+        max_length=200,
+        verbose_name=_("Keyword (folded)"),
+        help_text=_("Accent- and case-folded form used for matching"),
+    )
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        verbose_name = _("Icon Keyword")
+        verbose_name_plural = _("Icon Keywords")
+        ordering = ("icon", "locale", "keyword_folded")
+        indexes = (models.Index(fields=["locale", "keyword_folded"]),)
+        constraints = (
+            models.UniqueConstraint(
+                fields=["icon", "locale", "keyword_folded"],
+                name="symbols_iconkeyword_icon_locale_folded_unique",
+            ),
+        )
+
+    def __str__(self) -> str:
+        return f"{self.locale}:{self.keyword}"
+
+
+class IconCuratedList(TimeStampedModel):
+    """A named, admin-curated icon shortlist (openspec: icon-library).
+
+    Pickers request lists by slug (``GET /v1/icons?list=activities``):
+    activities, overlays, basemaps markers — any context wanting a
+    hand-picked set. Curation is pure admin data: the import never
+    touches it, so re-imports cannot clobber manual curation.
+    """
+
+    i18n = TranslationField(fields=("name",))
+    objects = BaseMutlilingualManager()
+
+    slug = models.SlugField(
+        max_length=100,
+        unique=True,
+        db_index=True,
+        verbose_name=_("Slug"),
+        help_text=_("List identifier requested by clients (e.g. 'activities')"),
+    )
+    name = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        verbose_name=_("Name"),
+        help_text=_("Display name (English source; translated via i18n)"),
+    )
+    name_i18n: str
+    icons = models.ManyToManyField(
+        Icon,
+        through="IconCuratedListEntry",
+        related_name="curated_lists",
+        blank=True,
+        verbose_name=_("Icons"),
+        help_text=_("Curated icons, managed in the admin"),
+    )
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        verbose_name = _("Icon Curated List")
+        verbose_name_plural = _("Icon Curated Lists")
+        ordering = ("slug",)
+
+    def __str__(self) -> str:
+        return self.slug
+
+
+class IconCuratedListEntry(TimeStampedModel):
+    """Membership of one icon in one curated list.
+
+    An explicit through model (not an auto M2M table) so membership
+    changes carry timestamps — the icons-endpoint ETag keys on them.
+    """
+
+    objects = BaseMutlilingualManager()
+
+    curated_list = models.ForeignKey(
+        IconCuratedList,
+        on_delete=models.CASCADE,
+        related_name="entries",
+        db_index=True,
+        verbose_name=_("Curated list"),
+    )
+    icon = models.ForeignKey(
+        Icon,
+        on_delete=models.CASCADE,
+        related_name="curated_list_entries",
+        db_index=True,
+        verbose_name=_("Icon"),
+    )
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        verbose_name = _("Icon Curated List Entry")
+        verbose_name_plural = _("Icon Curated List Entries")
+        ordering = ("curated_list", "icon__order", "icon__slug")
+        constraints = (
+            models.UniqueConstraint(
+                fields=["curated_list", "icon"],
+                name="symbols_iconcuratedlistentry_list_icon_unique",
+            ),
+        )
+
+    def __str__(self) -> str:
+        return f"{self.curated_list_id}:{self.icon_id}"
