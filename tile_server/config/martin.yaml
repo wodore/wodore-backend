@@ -17,7 +17,7 @@ postgres:
   # Default SRID for spatial queries
   default_srid: 4326
 
-  max_feature_count: 5000 # either a positive integer, or null=unlimited (default)
+  max_feature_count: 5000 # positive int, or null=unlimited (default)
 
   # Automatically compute bounds for tables
   auto_bounds: quick
@@ -97,7 +97,8 @@ postgres:
     # GeoPlaces vector tiles (using view with precomputed JOINs)
     # This source serves all data without dynamic filtering
     # Recommended for: Simple use cases, backward compatibility
-    # Alternative: Use geoplaces_fn for advanced filtering (language, categories, fields)
+    # Alternative: Use geoplaces_fn for advanced filtering
+    # (language, categories, fields)
     geoplaces_view:
       # Layer ID (used in vector tiles)
       layer_id: geoplaces
@@ -158,7 +159,7 @@ postgres:
       maxzoom: 16
 
   functions:
-    # GeoPlaces vector tiles (using function with dynamic filtering and clustering)
+    # GeoPlaces vector tiles (function source: dynamic filtering and clustering)
     # This source supports advanced filtering via URL query parameters
     # Recommended for: Production use with dynamic tile optimization
     # See: server/apps/geometries/models/tiles_view.py for documentation
@@ -170,13 +171,17 @@ postgres:
     #   cache_ttl=0        # Disable caching (generate fresh tiles)
     #
     # Usage examples (all parameters use comma-separated strings):
-    #   /geoplaces/{z}/{x}/{y}                                              # All defaults (German, clustering enabled, 1hr cache)
-    #   /geoplaces/{z}/{x}/{y}?cache_ttl=7200                                 # 2 hour cache
-    #   /geoplaces/{z}/{x}/{y}?cache_ttl=0                                    # No caching (fresh tiles)
-    #   /geoplaces/{z}/{x}/{y}?lang=en                                      # English labels
-    #   /geoplaces/{z}/{x}/{y}?cluster_max_zoom=10                         # Extend clustering to z10
-    #   /geoplaces/{z}/{x}/{y}?cluster_max_zoom=null                        # Disable clustering
-    #   /geoplaces/{z}/{x}/{y}?cluster_radius_m=10000                       # Larger clusters (10km at z8)
+    #   /geoplaces/{z}/{x}/{y}
+    #     -> all defaults (German, clustering enabled, 1hr cache)
+    #   /geoplaces/{z}/{x}/{y}?cache_ttl=7200   # 2 hour cache
+    #   /geoplaces/{z}/{x}/{y}?cache_ttl=0      # no caching (fresh tiles)
+    #   /geoplaces/{z}/{x}/{y}?lang=en          # English labels
+    #   /geoplaces/{z}/{x}/{y}?cluster_max_zoom=10
+    #     -> extend clustering to z10
+    #   /geoplaces/{z}/{x}/{y}?cluster_max_zoom=null
+    #     -> disable clustering
+    #   /geoplaces/{z}/{x}/{y}?cluster_radius_m=10000
+    #     -> larger clusters (10km at z8)
     #
     # Clustering behavior (defaults):
     #   z0-8: All POIs clustered by (category, grid_cell)
@@ -199,10 +204,63 @@ postgres:
       function: get_geoplaces_for_tiles
       id_columns: slug
 
-      # Zoom levels (function handles importance filtering and clustering automatically)
+      # Zoom levels (function handles importance + clustering automatically)
       # Points overzoom fine beyond maxzoom
       minzoom: 3
       maxzoom: 16
+
+# Server-side terrain postprocessing (Martin >= 1.16):
+#   contours - Mapterhorn Terrarium tiles -> traced vector MVT (PRIORITY:
+#     offloads the client-side maplibre-contour plugin; layer `contour`,
+#     tags `ele` (int m) + `major` (bool))
+#   hillshade - AWS Terrain Tiles Mapzen *normal* tiles -> baked raster PNG
+#     (config-only stub for now - not verified, see _work notes)
+# Both outputs REPLACE the source tiles, served at
+# /hillshade/{z}/{x}/{y} and /contours/{z}/{x}/{y}.
+# Free, world-wide, no API key:
+# https://registry.opendata.aws/terrain-tiles/
+#
+# Martin caches the upstream elevation/normal tiles internally (3x3
+# neighbourhood per output tile) but NOT the postprocessed output - warm
+# output tiles need the nginx proxy_cache service
+# (tile_server/nginx/martin-terrain-cache.conf.template,
+# docker-compose `martin-cache`, lane sidecar: scripts/lane-martin.sh).
+passthrough:
+  sources:
+    hillshade:
+      url: >-
+        https://elevation-tiles-prod.s3.amazonaws.com/normal/{z}/{x}/{y}.png
+      # Upstream serves no TileJSON - declare zoom bounds so Martin
+      # stops at z15 (verified: normal/15 answers 200).
+      maxzoom: 15
+      cache_control: public, max-age=86400
+      convert_to_hillshade: auto
+    contours:
+      # Preferred upstream: Mapterhorn (Terrarium-encoded webp) - the same
+      # source the OFM style consumes client-side (dem-mapterhorn): global
+      # 30m + national DEMs (CH 2m/partial 0.5m, AT 1m, DE 0.25-1m, IT
+      # Alpine 2-5m). https://mapterhorn.com/attribution
+      # Fallback if Martin cannot decode webp: AWS Terrain Tiles terrarium
+      # PNG (global ~30m, coarser in the Alps):
+      # https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png
+      url: https://tiles.mapterhorn.com/{z}/{x}/{y}.webp
+      maxzoom: 15
+      cache_control: public, max-age=86400
+      attribution: "<a href='https://mapterhorn.com/attribution'>Mapterhorn</a>"
+      # zoom_intervals mirror the client-side maplibre-contour thresholds
+      # of wd-outdoor-base-ofm.json (z*interval*major):
+      # 11*200*1000 ~ 12*100*500 ~ 14*50*200 ~ 15*20*100 ->
+      # 200m@z11, 100m@z12-13, 50m@z14, 20m@z15, none below z11 (MTK parity).
+      convert_to_contour:
+        zoom_intervals:
+          0: 0 # no contours below z11
+          11: 200
+          12: 100
+          14: 50
+          15: 20
+        # every 5th line tagged major:true ->
+        # z11: 1000m index, z12: 500m, z15: 100m
+        major_interval: 5
 
 # Fonts (TTF) for MapLibre glyph serving
 # Martin generates PBF ranges on the fly from TTF files
@@ -221,8 +279,8 @@ sprites:
     # database categories + static sprite directories (tile_server/sprites/)
 
   #sources:
-  #  # SVG images in this directory will be published as a "categories" sprite source
-  #  # Default: /sprite/sprites (mounted in docker-compose from ./martin_sync/sprites)
+  #  # SVG images here will be published as a "categories" sprite source
+  #  # Default: /sprite/sprites (docker-compose mount ./martin_sync/sprites)
   #  # Production: /sprite/sprites (mounted from PVC after martin_sync command)
   #  categories: ${SPRITE_PATH:-/sprite/sprites}
 # MBTiles file sources

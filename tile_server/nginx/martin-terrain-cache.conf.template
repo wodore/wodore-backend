@@ -1,0 +1,68 @@
+# NGINX proxy_cache for Martin terrain postprocessing outputs
+# (server-traced contour MVTs; the hillshade stub is cached the same way
+# if/when it gets enabled for verification).
+#
+# Martin does NOT cache the postprocessed output - only the upstream
+# elevation/normal tiles it reads (3x3 neighbourhood per output tile).
+# This proxy is the warm layer, following the documented pattern:
+# https://maplibre.org/martin/run-with-nginx/
+#
+# Deployed as:
+#   - docker-compose service `martin-cache` (profile: terrain-cache)
+#   - lane sidecar via scripts/lane-martin.sh (port PORT_END-1)
+#
+# This file is a TEMPLATE: the nginx image expands ${MARTIN_UPSTREAM}
+# (host:port of the Martin instance to proxy) at container start, writing
+# the result to /etc/nginx/conf.d/. It therefore must contain ONLY
+# http-context directives (no worker_processes/events/http wrapper).
+#
+# The lane/compose mounts place an empty file over the stock
+# /etc/nginx/conf.d/default.conf so this server is the only one on :80.
+#
+# NEVER point this proxy at tiles.maptoolkit.org sources - the Maptoolkit
+# Community License forbids proxying/caching their tiles. Terrain endpoints
+# only (Mapterhorn / AWS Terrain Tiles, free and unrestricted).
+
+# Terrain output tiles are immutable per (z, x, y) - cache hard.
+proxy_cache_path /var/cache/nginx/terrain
+                 levels=1:2
+                 max_size=10g
+                 use_temp_path=off
+                 keys_zone=terrain_cache:10m;
+
+# Fallback TTL for responses without Cache-Control; Martin sends
+# `public, max-age=86400` on the terrain sources (per-source
+# cache_control in tile_server/config/martin.yaml), which governs.
+proxy_cache_valid 200 204 302 30d;
+proxy_cache_valid 404 1m;
+
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+
+    # Martin terrain tile endpoints only (tile requests have a path:
+    # /hillshade/{z}/{x}/{y} and /contours/{z}/{x}/{y}). TileJSON docs
+    # (/hillshade, /contours) and everything else fall through to the
+    # plain proxy below.
+    location ~ ^/(hillshade|contours)/ {
+        proxy_pass http://${MARTIN_UPSTREAM};
+        proxy_cache terrain_cache;
+        proxy_cache_lock on;
+        proxy_cache_revalidate on;
+        proxy_cache_use_stale error timeout http_500 http_502 http_503 http_504;
+        # Debug/testing: HIT = warm cache, MISS = cold bake/trace.
+        add_header X-Cache-Status $upstream_cache_status;
+    }
+
+    # Everything else (catalog, styles, fonts, sprites, DB-backed tiles):
+    # plain reverse proxy, no cache.
+    location / {
+        proxy_pass http://${MARTIN_UPSTREAM};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host:$server_port;
+        proxy_redirect off;
+    }
+}
