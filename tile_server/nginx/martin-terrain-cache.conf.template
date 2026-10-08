@@ -44,8 +44,16 @@ server {
     # /hillshade/{z}/{x}/{y} and /contours/{z}/{x}/{y}). TileJSON docs
     # (/hillshade, /contours) and everything else fall through to the
     # plain proxy below.
+    # Martin rewrites relative style URLs (glyphs, tiles) to absolute URLs
+    # from the request's perceived host: X-Forwarded-Host first, then Host.
+    # So the proxy MUST forward the client's original host INCLUDING port
+    # ($http_host) in both — plain $host drops the port and $server_port is
+    # the in-container port (80), either way Martin bakes broken
+    # http://localhost/... (:80) URLs into styles and TileJSONs.
     location ~ ^/(hillshade|contours)/ {
         proxy_pass http://${MARTIN_UPSTREAM};
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Host $http_host;
         proxy_cache terrain_cache;
         proxy_cache_lock on;
         proxy_cache_revalidate on;
@@ -58,11 +66,12 @@ server {
     # plain reverse proxy, no cache.
     location / {
         proxy_pass http://${MARTIN_UPSTREAM};
-        proxy_set_header Host $host;
+        # $http_host (not $host/$server_port): keep the port, see above.
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host:$server_port;
         proxy_redirect off;
     }
 }
