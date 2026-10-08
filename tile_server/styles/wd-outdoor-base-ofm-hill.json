@@ -20,13 +20,6 @@
       "maxzoom": 15,
       "attribution": "<a href='https://registry.opendata.aws/terrain-tiles/'>AWS Terrain Tiles</a>"
     },
-    "hillshade-server": {
-      "type": "raster",
-      "tiles": ["/hillshade/{z}/{x}/{y}"],
-      "tileSize": 512,
-      "maxzoom": 15,
-      "attribution": "<a href='https://registry.opendata.aws/terrain-tiles/'>AWS Terrain Tiles</a>"
-    },
     "swiss-relief": {
       "type": "raster",
       "tiles": [
@@ -37,6 +30,14 @@
       "maxzoom": 16,
       "bounds": [5.140242, 45.398181, 11.47757, 48.230651],
       "attribution": "© <a href='https://www.swisstopo.admin.ch'>swisstopo</a>"
+    },
+    "dem-mapterhorn": {
+      "type": "raster-dem",
+      "tiles": ["https://tiles.mapterhorn.com/{z}/{x}/{y}.webp"],
+      "encoding": "terrarium",
+      "tileSize": 256,
+      "maxzoom": 15,
+      "attribution": " | © <a href='https://mapterhorn.com/attribution'>Mapterhorn</a>"
     }
   },
   "sprite": [
@@ -421,27 +422,24 @@
     },
     {
       "id": "hillshade",
-      "type": "raster",
-      "source": "hillshade-server",
+      "type": "hillshade",
+      "source": "dem-mapterhorn",
       "minzoom": 6,
       "paint": {
-        "raster-opacity": [
+        "hillshade-exaggeration": [
           "interpolate",
           ["linear"],
           ["zoom"],
           6,
-          0.2,
-          9,
-          0.42,
-          11,
-          0.44,
-          12,
-          0.56,
-          15,
-          0.62
+          0.06,
+          10,
+          0.16,
+          13,
+          0.36
         ],
-        "raster-brightness-min": 0.45,
-        "raster-resampling": "linear"
+        "hillshade-shadow-color": "#50483A",
+        "hillshade-highlight-color": "#FFFFFF",
+        "hillshade-accent-color": "#5E5544"
       }
     },
     {
