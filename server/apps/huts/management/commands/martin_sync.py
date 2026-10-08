@@ -414,7 +414,7 @@ class Command(BaseCommand):
                 label=f"font: {font_file.stem}",
             )
 
-    def _sync_config(self, target_path, dry_run, stats, merge_file_path="")::
+    def _sync_config(self, target_path, dry_run, stats, merge_file_path=""):
         """Generate and copy martin.yaml config file with sprite paths."""
         self.stdout.write("\n[3/3] Generating config file...")
 
