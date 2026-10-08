@@ -345,7 +345,9 @@ class Command(BaseCommand):
 
         if not source_dir.exists():
             self.stdout.write(
-                self.style.WARNING(f"  ⚠ Static sprites directory not found: {source_dir}")
+                self.style.WARNING(
+                    f"  ⚠ Static sprites directory not found: {source_dir}"
+                )
             )
             return
 
@@ -365,9 +367,7 @@ class Command(BaseCommand):
                 stats["sprite_dirs"].append(category_name)
 
             svg_files = list(sprite_category_dir.glob("*.svg"))
-            self.stdout.write(
-                f"  {category_name}: {len(svg_files)} SVG(s)"
-            )
+            self.stdout.write(f"  {category_name}: {len(svg_files)} SVG(s)")
 
             for svg_file in sorted(svg_files):
                 target_file = target_dir / svg_file.name
