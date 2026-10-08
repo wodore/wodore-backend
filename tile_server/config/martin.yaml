@@ -20,7 +20,13 @@ postgres:
   max_feature_count: 5000 # either a positive integer, or null=unlimited (default)
 
   # Automatically compute bounds for tables
-  auto_bounds: quick
+  # No auto bounds: martin computes source bounds at startup and advertises
+  # them in the TileJSON; maplibre silently skips tile requests outside
+  # them, so huts imported after a martin restart stayed invisible until
+  # the next restart (and the quick sampler produced a wrong envelope).
+  # Without bounds maplibre fetches every requested tile - empty tiles are
+  # cheap at this table size (max_feature_count, z7-16).
+  auto_bounds: false
 
   auto_publish: false
 
