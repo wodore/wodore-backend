@@ -2157,6 +2157,17 @@
       "type": "raster",
       "tileSize": 360
     },
+    "swiss-relief": {
+      "type": "raster",
+      "tiles": [
+        "https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissalti3d-reliefschattierung_monodirektional/default/current/3857/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "minzoom": 8,
+      "maxzoom": 16,
+      "bounds": [5.140242, 45.398181, 11.47757, 48.230651],
+      "attribution": "© <a href='https://www.swisstopo.admin.ch'>swisstopo</a>"
+    },
     "bathymetry": {
       "url": "https://tiles.maptoolkit.org/raster_bathymetry.json",
       "type": "raster-dem",
@@ -2587,24 +2598,24 @@
             "match",
             ["get", "type"],
             "wood",
-            "hsla(138, 20%, 87%, 1)",
+            "hsla(138, 20%, 87%, 0.88)",
             "farmland",
             "hsla(55, 13%, 92%, 0.22)",
             ["wetland", "tidalflat"],
-            "hsla(100, 10%, 91%, 1)",
+            "hsla(100, 10%, 91%, 0.88)",
             "rock",
-            "hsla(70, 6%, 93%, 1)",
+            "hsla(70, 6%, 93%, 0.88)",
             "sand",
-            "hsla(45, 15%, 92%, 1)",
+            "hsla(45, 15%, 92%, 0.88)",
             "scrub",
             "hsla(85, 12%, 89%, 0.45)",
             "fell",
             "hsla(70, 10%, 90%, 0.45)",
             "ice",
-            "hsla(193, 42%, 91%, 1)",
+            "hsla(193, 42%, 91%, 0.88)",
             "salt_desert",
-            "hsla(193, 38%, 93%, 1)",
-            "hsla(75, 8%, 93%, 1)"
+            "hsla(193, 38%, 93%, 0.88)",
+            "hsla(75, 8%, 93%, 0.88)"
           ]
         ],
         "fill-outline-color": [
@@ -2904,6 +2915,34 @@
         "maptoolkit:legend": {
           "hidden": true
         }
+      }
+    },
+    {
+      "id": "swiss-relief",
+      "type": "raster",
+      "source": "swiss-relief",
+      "minzoom": 11,
+      "paint": {
+        "raster-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          11,
+          0.1,
+          12,
+          0.16,
+          13,
+          0.19,
+          14,
+          0.22,
+          15,
+          0.19,
+          16,
+          0.14,
+          17,
+          0.1
+        ],
+        "raster-resampling": "linear"
       }
     },
     {
