@@ -2,7 +2,10 @@ import textwrap
 from enum import Enum
 from typing import Literal
 
+import requests
+
 from django.conf import settings
+from django.core.cache import caches
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
@@ -14,6 +17,39 @@ class UpdateCreateStatus(str, Enum):
     deleted = "deleted"
     exists = "exists"
     ignored = "ignored"
+
+
+# Shared by the images and symbols media transformers (formerly two
+# module-scoped hut-services ``@cached`` copies). 30 days: redirect targets
+# (e.g. commons.wikimedia) are stable, and re-probing costs one HTTP HEAD
+# inside the request path.
+_REDIRECT_URL_TIMEOUT = 3600 * 24 * 30
+
+
+def get_redirect_url(url: str) -> str:
+    """Follow ``url``'s redirects and return the final URL, cached for 30 days.
+
+    Stored in the ``persistent`` database cache (the repo's alias for
+    long-term media data: shared across workers, survives restarts) under
+    one ``media:redirect:`` namespace shared by all media transformers.
+    Deliberately plain Django caching - generic media infrastructure must
+    not couple to hut-services' cache (its keys embed the hut-services
+    package version and its ``clear_cache()`` would evict these entries).
+    A failing HEAD request is never cached: the exception propagates and
+    the next call retries.
+    """
+    return caches["persistent"].get_or_set(
+        f"media:redirect:{url}",
+        lambda: (
+            requests.head(
+                url,
+                allow_redirects=True,
+                timeout=10,
+                headers={"User-Agent": settings.BOT_AGENT},
+            ).url
+        ),
+        timeout=_REDIRECT_URL_TIMEOUT,
+    )
 
 
 def text_shorten_html(
