@@ -52,7 +52,7 @@ dependencies = [
   "tzdata>=2025.3",                        # https://pypi.org/project/tzdata/
   "click==8.*",                            # https://pypi.org/project/click/
   "pyyaml==6.*",                           # https://pypi.org/project/PyYAML/
-  "hut-services>=0.4.0",          # https://github.com/wodore/hut-services (0.4: ABC get_bookings total_fallback; 0.3: free_tolerance + TotalFallback)
+  "hut-services>=0.4.0",          # https://github.com/wodore/hut-services (0.5: pluggable cache backend: file_cache→cached, clear_file_cache→clear_cache, joblib dropped)
   "django-computedfields>=0.3.0", # https://pypi.org/project/django-computedfields/
   "django-storages[s3]>=1.14.6",
   "django-pgtrigger>=4.17.0",
@@ -156,7 +156,8 @@ hut-services-private = { git = "ssh://git@github.com/wodore/hut-services-private
 # switch back to PyPI at the next official release (>= 0.4.0).
 django-admin-runner = { git = "https://github.com/burgdev/django-admin-runner", rev = "9efeb32279c9f315bab3b1e92f5a3acf57b9598e" }
 # hut-services-private = { path = "/home/tobias/git/wodore/hut-services-private", editable = true }
-# hut-services = { git = "ssh://git@github.com/wodore/hut-services", branch = "main" }
+# hut-services: tracked as git main (matches hut-services-private pin in PR #33) - revert to PyPI at the next release
+hut-services = { git = "https://github.com/wodore/hut-services", branch = "main" }
 # hut-services = { path = "/home/tobias/git/wodore/hut-services", editable = true } # local DEV
 # django-admin-runner = { path = "/home/tobias/git/burgdev/django-admin-runner", editable = true }
 

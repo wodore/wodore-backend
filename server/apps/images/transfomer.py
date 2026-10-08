@@ -5,7 +5,7 @@ from typing import Literal
 from urllib.parse import quote as url_quote
 
 import requests
-from hut_services.core.cache import file_cache
+from hut_services.core.cache import cached
 
 from django.conf import settings
 from django.db.models.fields.files import ImageFieldFile
@@ -50,7 +50,7 @@ class TransformedImage:
         return self.url
 
 
-@file_cache(expire_in_seconds=3600 * 24 * 30)
+@cached(expire_in_seconds=3600 * 24 * 30)
 def get_redirect_url(url: str) -> str:
     """Calls url with a redirect and returns the redirected url. This function is cached."""
     resp = requests.head(
