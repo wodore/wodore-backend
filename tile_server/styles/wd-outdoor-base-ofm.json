@@ -30,7 +30,7 @@
     "swiss-relief": {
       "type": "raster",
       "tiles": [
-        "https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissalti3d-reliefschattierung_monodirektional/default/current/3857/{z}/{x}/{y}.png"
+        "https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swisssurface3d-reliefschattierung_monodirektional/default/current/3857/{z}/{x}/{y}.png"
       ],
       "tileSize": 256,
       "minzoom": 8,
