@@ -20,8 +20,8 @@
       "url": "https://icons.maptoolkit.org/water~hsl_182_65_80"
     },
     {
-      "id": "wd-base",
-      "url": "/sprite/wd"
+      "id": "outdoor-base",
+      "url": "/sprite/outdoor-base"
     }
   ],
   "glyphs": "/font/{fontstack}/{range}.pbf",
@@ -15433,7 +15433,7 @@
             ],
             "capital"
           ],
-          "wd-base:wd-star",
+          "outdoor-base:star",
           [
             "all",
             [
@@ -15453,7 +15453,7 @@
               8
             ]
           ],
-          "wd-base:wd-ring-dot",
+          "outdoor-base:ring-dot",
           [
             "all",
             [
@@ -15473,7 +15473,7 @@
               8
             ]
           ],
-          "wd-base:wd-ring",
+          "outdoor-base:ring",
           [
             "all",
             [
@@ -15493,8 +15493,8 @@
               10
             ]
           ],
-          "wd-base:wd-ring",
-          "wd-base:wd-ring"
+          "outdoor-base:ring",
+          "outdoor-base:ring"
         ],
         "icon-optional": true,
         "text-optional": false,
@@ -17546,7 +17546,7 @@
             ],
             "capital"
           ],
-          "wd-base:wd-star",
+          "outdoor-base:star",
           [
             "all",
             [
@@ -17566,7 +17566,7 @@
               8
             ]
           ],
-          "wd-base:wd-ring-dot",
+          "outdoor-base:ring-dot",
           [
             "all",
             [
@@ -17586,7 +17586,7 @@
               8
             ]
           ],
-          "wd-base:wd-ring",
+          "outdoor-base:ring",
           [
             "all",
             [
@@ -17606,8 +17606,8 @@
               10
             ]
           ],
-          "wd-base:wd-ring",
-          "wd-base:wd-ring"
+          "outdoor-base:ring",
+          "outdoor-base:ring"
         ],
         "icon-optional": true,
         "text-optional": false,
@@ -19971,7 +19971,7 @@
             ],
             "capital"
           ],
-          "wd-base:wd-star",
+          "outdoor-base:star",
           [
             "all",
             [
@@ -19991,7 +19991,7 @@
               8
             ]
           ],
-          "wd-base:wd-ring-dot",
+          "outdoor-base:ring-dot",
           [
             "all",
             [
@@ -20011,7 +20011,7 @@
               8
             ]
           ],
-          "wd-base:wd-ring",
+          "outdoor-base:ring",
           [
             "all",
             [
@@ -20031,8 +20031,8 @@
               10
             ]
           ],
-          "wd-base:wd-ring",
-          "wd-base:wd-ring"
+          "outdoor-base:ring",
+          "outdoor-base:ring"
         ],
         "icon-optional": true,
         "text-optional": false,
@@ -22120,7 +22120,7 @@
             ],
             "capital"
           ],
-          "wd-base:wd-star",
+          "outdoor-base:star",
           [
             "all",
             [
@@ -22140,7 +22140,7 @@
               8
             ]
           ],
-          "wd-base:wd-ring-dot",
+          "outdoor-base:ring-dot",
           [
             "all",
             [
@@ -22160,7 +22160,7 @@
               8
             ]
           ],
-          "wd-base:wd-ring",
+          "outdoor-base:ring",
           [
             "all",
             [
@@ -22180,8 +22180,8 @@
               10
             ]
           ],
-          "wd-base:wd-ring",
-          "wd-base:wd-ring"
+          "outdoor-base:ring",
+          "outdoor-base:ring"
         ],
         "icon-optional": true,
         "text-optional": false,
@@ -23886,7 +23886,7 @@
             ],
             "capital"
           ],
-          "wd-base:wd-star",
+          "outdoor-base:star",
           [
             "all",
             [
@@ -23906,7 +23906,7 @@
               8
             ]
           ],
-          "wd-base:wd-ring-dot",
+          "outdoor-base:ring-dot",
           [
             "all",
             [
@@ -23926,7 +23926,7 @@
               8
             ]
           ],
-          "wd-base:wd-ring",
+          "outdoor-base:ring",
           [
             "all",
             [
@@ -23946,8 +23946,8 @@
               10
             ]
           ],
-          "wd-base:wd-ring",
-          "wd-base:wd-ring"
+          "outdoor-base:ring",
+          "outdoor-base:ring"
         ],
         "icon-optional": true,
         "text-optional": false,
