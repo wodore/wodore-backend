@@ -1,4 +1,4 @@
-# Why
+## Why
 
 Group icons in the frontend are picked from Iconify at runtime
 (`fluent-emoji-flat:*` names): search depends on a third-party API, keyword
