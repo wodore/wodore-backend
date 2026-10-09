@@ -13,7 +13,10 @@ import pytest
 from django.utils import timezone
 
 from server.apps.availability.models import HutAvailability
-from server.apps.availability.services import AvailabilityService
+from server.apps.availability.services import (
+    AvailabilityService,
+    _sanitize_negative_free,
+)
 from server.apps.huts.models import Hut
 from server.apps.organizations.models import Organization
 
@@ -34,6 +37,11 @@ def _booking(date: datetime.date, free: int = 5, total: int = 10) -> SimpleNames
         link="",
         hut_type=None,
     )
+
+
+def _places_booking(date: datetime.date, free: int | None) -> SimpleNamespace:
+    """Stand-in shaped like the hut-services ``BookingSchema`` (nested places)."""
+    return SimpleNamespace(date=date, places=SimpleNamespace(free=free))
 
 
 def _hut_booking(source: str, source_id: str, bookings: list) -> SimpleNamespace:
@@ -113,3 +121,27 @@ class TestProcessHutsBatch:
         assert results[0].success is True
         assert results[0].records_created == 600
         assert HutAvailability.objects.filter(hut=hut).count() == 600
+
+
+class TestSanitizeNegativeFree:
+    def test_negative_free_sentinel_becomes_none(self):
+        """DOC/Tyler reports unpublished counts as ``TotalAvailable = -1``.
+
+        Regression test: the -1 sentinel flowed into the availability rows
+        and violated the DB ``free >= 0`` check, killing the whole batch
+        for every affected hut (seen on DOC Great Walk huts, 2026-10).
+        """
+        hut_booking = _hut_booking(
+            "tyler",
+            "123",
+            [
+                _places_booking(datetime.date(2030, 7, 1), free=-1),
+                _places_booking(datetime.date(2030, 7, 2), free=3),
+                _places_booking(datetime.date(2030, 7, 3), free=None),
+            ],
+        )
+        bookings = {123: hut_booking}
+
+        _sanitize_negative_free(bookings)
+
+        assert [b.places.free for b in hut_booking.bookings] == [None, 3, None]
