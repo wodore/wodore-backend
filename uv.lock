@@ -1948,7 +1948,7 @@ dependencies = [
 [[package]]
 name = "hut-services-private"
 version = "0.5.0"
-source = { git = "ssh://git@github.com/wodore/hut-services-private?branch=main#3976f4ca5f9b02ba1c334145d418d471d31f5b84" }
+source = { git = "ssh://git@github.com/wodore/hut-services-private?branch=main#3188da097776177ccbf862dff92f4999446ec04c" }
 dependencies = [
     { name = "httpx" },
     { name = "hut-services" },
