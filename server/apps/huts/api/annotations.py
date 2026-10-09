@@ -90,7 +90,10 @@ def annotate_hut_images(*, media_url: str = "", detail: bool = False):
             attribution=Value(""),
             **extra,
         ),
-        ordering=(
+        # Django 6 renamed the aggregate-ordering kwarg from ``ordering``
+        # to ``order_by``; the old name is silently dropped (see the
+        # availability geojson for the same regression).
+        order_by=(
             F("image_set__details__score").desc(nulls_last=True),
             "image_set__details__id",
         ),

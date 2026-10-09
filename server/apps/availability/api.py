@@ -200,7 +200,12 @@ class HutAvailabilityGeojsonController(ApiController):
                         output_field=models.CharField(),
                     ),
                 ),
-                ordering="availability_date",
+                # Django 6 renamed the aggregate-ordering kwarg from
+                # ``ordering`` to ``order_by``; the old name lands in
+                # ``**extra`` and is dropped SILENTLY — the response days
+                # then come back in plan-dependent (unordered) sequence,
+                # which broke map consumers reading days by index.
+                order_by="availability_date",
             ),
         )
 
