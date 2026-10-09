@@ -162,6 +162,15 @@ CONTENT_SECURITY_POLICY["DIRECTIVES"]["script-src"] += ("ajax.googleapis.com",)
 CONTENT_SECURITY_POLICY["DIRECTIVES"]["connect-src"] += ("'self'",)
 CONTENT_SECURITY_POLICY["DIRECTIVES"]["img-src"] += ("http:",)
 
+# Demo page (demos/mapcompare) + basemap styles fetch external tiles:
+CONTENT_SECURITY_POLICY["DIRECTIVES"]["connect-src"] += (
+    "https://wmts.geo.admin.ch",  # swisstopo relief WMTS
+    "https://tiles.maptoolkit.org",  # MTK vector/raster tiles
+    "https://icons.maptoolkit.org",  # MTK sprites
+    "https://tiles.mapterhorn.com",  # Mapterhorn DEM (client relief variants)
+    "https://elevation-tiles-prod.s3.amazonaws.com",  # AWS Terrain Tiles (hillshade)
+)
+
 
 # django-test-migrations
 # https://github.com/wemake-services/django-test-migrations
