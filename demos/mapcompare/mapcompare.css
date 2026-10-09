@@ -1,0 +1,137 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  font:
+    13px/1.4 system-ui,
+    sans-serif;
+  color: #1c1c1c;
+}
+
+#bar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 6px 10px;
+  background: #f2f7f4;
+  border-bottom: 1px solid #d0d8d2;
+}
+
+#bar button {
+  font: inherit;
+  padding: 4px 10px;
+  border: 1px solid #9aa8a0;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
+
+#bar button:hover {
+  background: #e8efe9;
+}
+
+#tileserver {
+  color: #4d6b58;
+  font-family: ui-monospace, monospace;
+}
+
+#permalink {
+  margin-left: auto;
+  color: #4d6b58;
+  font-family: ui-monospace, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40%;
+}
+
+.mode {
+  position: absolute;
+  top: 37px;
+  bottom: 0;
+  left: 0;
+  right: 0;
+}
+
+#map {
+  position: absolute;
+  inset: 0;
+}
+
+#compare-wrap {
+  position: absolute;
+  inset: 0;
+}
+
+.compare-side {
+  position: absolute;
+  inset: 0;
+}
+
+/* compare slider (built-in — see mapcompare.js) */
+#compare-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  margin-left: -2px;
+  background: #fff;
+  border: 1px solid #4d6b58;
+  cursor: ew-resize;
+  z-index: 10;
+  touch-action: none;
+}
+
+#compare-handle::after {
+  content: "\2194";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 14px;
+  color: #1c1c1c;
+  background: #fff;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #4d6b58;
+}
+
+/* keep each side's style switcher inside its half */
+#compare-a .maplibregl-ctrl-top-left {
+  max-width: 50%;
+}
+
+#compare-b .maplibregl-ctrl-top-left {
+  left: auto;
+  right: 100%;
+  position: absolute;
+}
+
+/* stats.js sets position:fixed;top:0;left:0 on its own dom element.
+   Anchor the wrapper and reset the inner element to static so the
+   panel lands below the header on the right. */
+#fps-panel {
+  position: fixed;
+  top: 45px;
+  right: 8px;
+  z-index: 1000;
+  cursor: pointer;
+}
+
+#fps-dom {
+  position: static !important;
+  top: auto !important;
+  left: auto !important;
+}
+
+.compare-swipe-arrow {
+  background: #fff;
+}
