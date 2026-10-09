@@ -44,7 +44,8 @@ from server.apps.symbols.models import (
 )
 from server.apps.symbols.utils import resolve_symbol_urls
 
-CACHE_MAX_AGE = 7 * 24 * 60 * 60  # 7 days in seconds
+CACHE_MAX_AGE = 60 * 60  # 1 hour — curated-list changes propagate fast;
+# the ETag keeps revalidation correct, hard refresh is immediate
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
 FUZZY_MIN_TERM_LEN = 4
@@ -80,6 +81,12 @@ class IconsQuery(
         ),
     )
     pack: str | None = Field(None, description="Filter by pack slug")
+    slug: str | None = Field(
+        None,
+        description=(
+            "Exact icon slug lookup (combine with pack to resolve one stored icon)"
+        ),
+    )
     category: str | None = Field(
         None,
         description=(
@@ -252,6 +259,8 @@ def _search(query: IconsQuery) -> list[Icon]:
     )
     if query.pack:
         base = base.filter(pack__slug=query.pack)
+    if query.slug:
+        base = base.filter(slug=query.slug)
     if query.list:
         base = base.filter(curated_lists__slug=query.list)
     if query.category:
@@ -283,7 +292,10 @@ def _to_dto(icon: Icon, request: HttpRequest) -> IconDto:
         unicode=icon.unicode or None,
         category=category.parent.slug if category else None,
         subcategory=category.slug if category else None,
-        lists=sorted(cl.slug for cl in icon.curated_lists.all()),
+        lists=sorted(
+            cl.slug  # pyright: ignore[reportAttributeAccessIssue]  # reverse M2M: django-stubs gap
+            for cl in icon.curated_lists.all()
+        ),
         urls=IconUrls.model_validate(urls) if urls else None,
     )
 

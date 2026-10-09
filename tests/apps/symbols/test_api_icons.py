@@ -127,6 +127,22 @@ def test_pack_filter(client):
     assert {item["pack"] for item in response.json()} == {"noto-emoji"}
 
 
+def test_slug_exact_lookup(client):
+    """Frontend resolves a stored icon (pack + slug) to its asset URLs."""
+    response = client.get(
+        "/v1/icons/", {"pack": "fluent-emoji", "slug": "tent", "lang": "en"}
+    )
+    assert response.status_code == 200
+    (icon,) = response.json()
+    assert icon["slug"] == "tent"
+    assert icon["urls"]["detailed"]
+    # Without pack: every pack carrying the slug.
+    across = client.get("/v1/icons/", {"slug": "tent"}).json()
+    assert {item["pack"] for item in across} == {"fluent-emoji", "noto-emoji"}
+    # Unknown slug -> empty result, not an error.
+    assert client.get("/v1/icons/", {"slug": "nope"}).json() == []
+
+
 def test_category_facet_and_pagination(client):
     """Spec: category facet paginates."""
     response = client.get("/v1/icons/", {"category": "place-other"})
@@ -167,7 +183,7 @@ class TestCaching:
     def test_cache_headers_and_304(self, client):
         response = client.get("/v1/icons/", {"search": "tent"})
         assert response.status_code == 200
-        assert response["Cache-Control"] == "public, max-age=604800"
+        assert response["Cache-Control"] == "public, max-age=3600"
         etag = response["ETag"]
         assert etag.startswith('"')
         assert response["Last-Modified"]
