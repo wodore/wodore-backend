@@ -163,3 +163,10 @@ if settings.DEBUG:  # pragma: no cover
         ]
     except ModuleNotFoundError:
         pass
+
+    # Dev demo pages (mapcompare etc.) — development only, the view
+    # additionally 404s unless DEBUG:
+    urlpatterns = [
+        path("demos/", include("server.apps.demos.urls")),
+        *urlpatterns,
+    ]

@@ -107,6 +107,8 @@ if WITH_DEV:
     INSTALLED_APPS += (
         # Better debug:
         "debug_toolbar",
+        # Dev demo pages (mapcompare etc.), DEBUG-gated:
+        "server.apps.demos",
         # Linting migrations:
         "django_migration_linter",
         # django-test-migrations:
