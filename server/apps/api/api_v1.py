@@ -36,6 +36,7 @@ from server.apps.huts.api import paths as huts_paths
 from server.apps.meteo import api as meteo_api
 from server.apps.organizations import api as organizations_api
 from server.apps.symbols import api as symbols_api
+from server.apps.symbols import api_icons as icons_api
 from server.apps.utils import api as utils_api
 
 
@@ -56,6 +57,7 @@ def build_router() -> Router:
         Router("organizations/", organizations_api.paths, tags=["organization"])
     )
     router.include(Router("symbols/", symbols_api.paths, tags=["symbols"]))
+    router.include(Router("icons/", icons_api.paths, tags=["icons"]))
     router.include(Router("feedback/", feedbacks_api.paths, tags=["feedback"]))
     # Root (version, sitemaps) last — least specific.
     router.include(Router("", utils_api.paths, tags=["utils"]))

@@ -37,7 +37,8 @@ licenses.
 
 #### Scenario: Full import
 
-- WHEN an operator runs `import_emoji --ref <pin> [--noto-ref <pin>]`
+- WHEN an operator runs `icon_import --source fluent --ref <pin>` (and
+  `icon_import --source noto --ref <pin>` for the secondary pack)
 - THEN every upstream icon exists exactly once per pack with slug,
   hexcode, taxonomy reference, and its symbol slots populated
 - AND the upstream refs and licenses are recorded
@@ -68,14 +69,15 @@ original form retained for display.
 
 ### Requirement: Searchable icons endpoint
 The system SHALL expose `GET /v1/icons` with `search`, `lang`, `pack`,
-`category`, `curated`, `limit`, and `offset` parameters. Search SHALL
+`category`, `list`, `limit`, and `offset` parameters. Search SHALL
 match localized keywords and slug with prefix ranking above substring
 ranking, SHALL apply typo tolerance (edit distance ≤ 2) for terms of at
 least 4 characters when no exact matches exist, and SHALL return each
-icon's slug, pack, unicode, category, subcategory, curated flag, and
-per-slot asset URLs (detailed, simple, mono). Empty search with
-`curated=true` SHALL return the curated shortlist ordered by a stable
-sort key. The endpoint SHALL be additive (no API contract version bump).
+icon's slug, pack, unicode, category, subcategory, the slugs of curated
+lists containing it, and per-slot asset URLs (detailed, simple, mono).
+Empty search with `list=<slug>` SHALL return that curated list ordered
+by a stable sort key. The endpoint SHALL be additive (no API contract
+version bump).
 
 #### Scenario: Ranked localized search
 
@@ -99,10 +101,33 @@ sort key. The endpoint SHALL be additive (no API contract version bump).
 - WHEN `pack=noto-emoji`
 - THEN only icons of that pack are returned
 
-#### Scenario: Curated shortlist
+#### Scenario: Curated list
 
-- WHEN `curated=true` with no search term
-- THEN the curated activity shortlist is returned
+- WHEN `list=activities` with no search term
+- THEN that curated list is returned (the seeded basic activity
+  shortlist by default; further lists are managed in the admin)
+
+### Requirement: Admin-curated lists
+The system SHALL maintain named curated icon lists (unique slug,
+display name, admin-managed icon membership via a timestamped through
+model). Lists SHALL be contextual (e.g. `activities`, `overlays`,
+`basemap` markers); creating one SHALL be a data operation. Imports
+SHALL NOT create, modify, or delete curated lists or memberships. A
+default `activities` list SHALL be seeded with the basic activity
+icons, and list membership changes SHALL invalidate the icons-endpoint
+cache.
+
+#### Scenario: Manual curation in the admin
+
+- WHEN a curator adds or removes an icon from a curated list in the
+  admin
+- THEN the API reflects the change immediately and cached responses
+  invalidate (ETag changes)
+
+#### Scenario: Import never touches curation
+
+- WHEN an icon import (re-)runs at any ref
+- THEN curated lists and memberships are unchanged
 
 ### Requirement: Read-only, cacheable serving
 The icons endpoint SHALL be public, read-only, and cacheable (ETag or

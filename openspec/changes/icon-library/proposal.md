@@ -61,7 +61,8 @@ referenced)
   `server.apps.symbols` (+ migrations)
 - **Reused models**: `Symbol` (asset layer), `Category` (taxonomy),
   `License`, `Organization`, `TimeStampedModel`, modeltrans i18n
-- **Import**: `import_emoji --ref <pin> [--noto-ref <pin>]`; idempotent
+- **Import**: `icon_import --source <source> --ref <pin>` (pluggable
+  sources); idempotent
   upserts; records upstream refs + licenses for attribution tooling
 - **API**: `GET /v1/icons` — `search`, `lang`, `pack`, `category`,
   `curated`, `limit/offset`; public read-only, cacheable
