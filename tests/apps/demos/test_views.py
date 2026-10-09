@@ -20,4 +20,5 @@ def test_mapcompare_view_renders_with_debug(rf: RequestFactory) -> None:
     assert isinstance(response, HttpResponse)
     assert response.status_code == 200
     assert b"maplibre-gl.js" in response.content
-    assert b"demos/mapcompare" in response.content
+    assert b"tileserver-input" in response.content
+    assert b"inspect-popup" in response.content
