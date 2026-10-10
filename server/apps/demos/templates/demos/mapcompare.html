@@ -1,0 +1,639 @@
+{% load static %}<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Wodore basemap compare</title>
+
+    <!-- Vendored assets (pinned versions, no CDN, works offline) -->
+    <link rel="stylesheet" href="{% static 'demos/vendor/maplibre-gl.css' %}" />
+    <link
+      rel="stylesheet"
+      href="{% static 'demos/vendor/map-gl-style-switcher.css' %}"
+    />
+
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        font:
+          13px/1.4 system-ui,
+          sans-serif;
+        color: #1c1c1c;
+      }
+
+      #bar {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        padding: 6px 10px;
+        background: #f2f7f4;
+        border-bottom: 1px solid #d0d8d2;
+      }
+
+      #bar button {
+        font: inherit;
+        padding: 4px 10px;
+        border: 1px solid #9aa8a0;
+        border-radius: 4px;
+        background: #fff;
+        cursor: pointer;
+      }
+
+      #bar button:hover {
+        background: #e8efe9;
+      }
+
+      #bar label {
+        color: #4d6b58;
+        white-space: nowrap;
+      }
+
+      #tileserver-input {
+        font:
+          12px ui-monospace,
+          monospace;
+        padding: 3px 6px;
+        border: 1px solid #9aa8a0;
+        border-radius: 4px;
+        width: 240px;
+      }
+
+      #martin-link {
+        font-size: 12px;
+        color: #4d6b58;
+      }
+
+      #martin-link a {
+        color: #2a6;
+        text-decoration: none;
+      }
+
+      #martin-link a:hover {
+        text-decoration: underline;
+      }
+
+      #permalink {
+        margin-left: auto;
+        color: #4d6b58;
+        font-family: ui-monospace, monospace;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 30%;
+      }
+
+      .mode {
+        position: absolute;
+        top: 37px;
+        bottom: 0;
+        left: 0;
+        right: 0;
+      }
+
+      #map {
+        position: absolute;
+        inset: 0;
+      }
+
+      #compare-wrap {
+        position: absolute;
+        inset: 0;
+      }
+
+      .compare-side {
+        position: absolute;
+        inset: 0;
+      }
+
+      /* keep each side's style switcher inside its half */
+      #compare-a .maplibregl-ctrl-top-left {
+        max-width: 50%;
+      }
+
+      #compare-b .maplibregl-ctrl-top-left {
+        left: auto;
+        right: 100%;
+        position: absolute;
+      }
+
+      /* compare slider (built-in) */
+      #compare-handle {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+        margin-left: -2px;
+        background: #fff;
+        border: 1px solid #4d6b58;
+        cursor: ew-resize;
+        z-index: 10;
+        touch-action: none;
+      }
+
+      #compare-handle::after {
+        content: "↔";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 14px;
+        color: #1c1c1c;
+        background: #fff;
+        border-radius: 50%;
+        width: 22px;
+        height: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #4d6b58;
+      }
+
+      /* stats.js panel: pin it below the header, right side */
+      #fps-panel {
+        position: fixed;
+        top: 45px;
+        right: 8px;
+        z-index: 1000;
+        cursor: pointer;
+      }
+
+      #fps-dom {
+        position: static !important;
+        top: auto !important;
+        left: auto !important;
+      }
+
+      /* built-in inspect popup */
+      .inspect-popup {
+        font:
+          11px ui-monospace,
+          monospace;
+        background: #fff;
+        border: 1px solid #9aa8a0;
+        border-radius: 4px;
+        padding: 4px 8px;
+        max-width: 340px;
+      }
+
+      .inspect-popup .layer-id {
+        font-weight: 700;
+        color: #2a6;
+      }
+
+      .inspect-popup .source-layer {
+        color: #666;
+      }
+
+      .inspect-popup .props {
+        color: #333;
+        margin-top: 2px;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+    </style>
+  </head>
+  <body>
+    <header id="bar">
+      <button id="mode-toggle" type="button">Compare mode</button>
+      <button id="inspect-toggle" type="button" hidden>Inspect: off</button>
+      <label for="tileserver-input">Tile server:</label>
+      <input
+        id="tileserver-input"
+        type="text"
+        title="Martin base URL (persisted in localStorage; ?tileserver= overrides on load)"
+      />
+      <span id="martin-link"
+        ><a target="_blank" rel="noopener">Martin webui ↗</a></span
+      >
+      <span id="permalink" title="current view, copy me"></span>
+    </header>
+
+    <!-- normal mode -->
+    <main id="normal" class="mode">
+      <div id="map"></div>
+    </main>
+
+    <!-- compare mode -->
+    <main id="compare" class="mode" hidden>
+      <div id="compare-wrap">
+        <div id="compare-a" class="compare-side"></div>
+        <div id="compare-b" class="compare-side"></div>
+      </div>
+    </main>
+
+    <script src="{% static 'demos/vendor/maplibre-gl.js' %}"></script>
+    <script src="{% static 'demos/vendor/map-gl-style-switcher.js' %}"></script>
+    <script src="{% static 'demos/vendor/stats.min.js' %}"></script>
+    <script>
+      /* Wodore basemap compare — dev tool (server.apps.demos).
+       *
+       * Vendored pins: maplibre-gl@5.6.0 UMD, map-gl-style-switcher@0.10.1
+       * UMD, stats.js@0.17.0 (FPS via rAF — mapbox-gl-framerate is not on
+       * npm). Inspect is a built-in popup (maplibre-gl-inspect@0.0.10 was
+       * incompatible with maplibre-gl 5.x — documented in the PR).
+       */
+      (function () {
+        "use strict";
+
+        var q = new URLSearchParams(location.search);
+        var DEFAULT_BASE = "http://localhost:3739";
+        var TILE_BASE = (
+          q.get("tileserver") ||
+          localStorage.getItem("mapcompare:tileserver") ||
+          DEFAULT_BASE
+        ).replace(/\/+$/, "");
+
+        var FALLBACK_STYLES = [
+          "wd-outdoor-base-mtk",
+          "wd-outdoor-base-mtk-hill",
+          "wd-outdoor-base-ofm",
+          "wd-outdoor-base-ofm-hill",
+        ];
+        var state = {
+          style: q.get("style") || "wd-outdoor-base-mtk",
+          styleB: q.get("styleB") || "wd-outdoor-base-ofm",
+          zoom: parseFloat(q.get("z") || "12"),
+          center: [
+            parseFloat(q.get("lon") || "11.4041"),
+            parseFloat(q.get("lat") || "47.2692"),
+          ],
+          mode: q.get("mode") === "compare" ? "compare" : "normal",
+          inspect: false,
+        };
+        var styleIds = FALLBACK_STYLES.slice();
+
+        var els = {
+          modeToggle: document.getElementById("mode-toggle"),
+          inspectToggle: document.getElementById("inspect-toggle"),
+          tileserverInput: document.getElementById("tileserver-input"),
+          martinLink: document.querySelector("#martin-link a"),
+          permalink: document.getElementById("permalink"),
+          normal: document.getElementById("normal"),
+          compare: document.getElementById("compare"),
+        };
+
+        var normalMap = null;
+        var compareMaps = null;
+        var fpsStats = null;
+        var fpsRaf = 0;
+        var inspectPopup = null;
+        var inspectHandler = null;
+
+        // ---------- tileserver ----------
+        function updateTileserverUI() {
+          els.tileserverInput.value = TILE_BASE;
+          els.martinLink.href = TILE_BASE + "/?tab=styles";
+        }
+
+        function setTileserver(url) {
+          var clean = url.trim().replace(/\/+$/, "");
+          if (!clean || clean === TILE_BASE) return;
+          TILE_BASE = clean;
+          localStorage.setItem("mapcompare:tileserver", TILE_BASE);
+          updateTileserverUI();
+          syncPermalink();
+          bootCatalog(); // re-fetch styles, rebuild switchers
+        }
+
+        els.tileserverInput.addEventListener("change", function () {
+          setTileserver(this.value);
+        });
+        els.tileserverInput.addEventListener("keydown", function (e) {
+          if (e.key === "Enter") {
+            setTileserver(this.value);
+            this.blur();
+          }
+        });
+
+        // ---------- helpers ----------
+        function styleUrl(id) {
+          return TILE_BASE + "/style/" + id + ".json";
+        }
+
+        function switcherStyles() {
+          return styleIds.map(function (id) {
+            return {
+              id: id,
+              name: id.replace(/^wd-outdoor-base-/, ""),
+              uri: styleUrl(id),
+            };
+          });
+        }
+
+        function syncPermalink() {
+          var p = new URLSearchParams();
+          p.set("tileserver", TILE_BASE);
+          p.set("style", state.style);
+          if (state.mode === "compare") p.set("styleB", state.styleB);
+          p.set("z", state.zoom.toFixed(2));
+          p.set("lon", state.center[0].toFixed(5));
+          p.set("lat", state.center[1].toFixed(5));
+          if (state.mode === "compare") p.set("mode", "compare");
+          history.replaceState(null, "", location.pathname + "?" + p);
+          els.permalink.textContent =
+            "z" + state.zoom.toFixed(1) + " " + state.style;
+        }
+
+        function trackView(map) {
+          map.on("moveend", function () {
+            state.center = map.getCenter().toArray();
+            state.zoom = map.getZoom();
+            syncPermalink();
+          });
+        }
+
+        function makeMap(container, styleId) {
+          return new maplibregl.Map({
+            container: container,
+            style: styleUrl(styleId),
+            center: state.center,
+            zoom: state.zoom,
+            attributionControl: { compact: true },
+          });
+        }
+
+        function addSwitcher(map, which) {
+          var ctrl = new mapglstyleswitcher.StyleSwitcherControl({
+            styles: switcherStyles(),
+            activeStyleId: which === "B" ? state.styleB : state.style,
+            showImages: false,
+            onAfterStyleChange: function (prev, next) {
+              if (!next) return;
+              map.setStyle(next.uri);
+              if (which === "B") state.styleB = next.id;
+              else state.style = next.id;
+              syncPermalink();
+            },
+          });
+          map.addControl(ctrl, "top-left");
+        }
+
+        // ---------- FPS (stats.js, rAF driven) ----------
+        function startFps() {
+          if (fpsStats) return;
+          fpsStats = new Stats();
+          fpsStats.showPanel(0);
+          fpsStats.dom.id = "fps-dom";
+          var wrap = document.createElement("div");
+          wrap.id = "fps-panel";
+          wrap.appendChild(fpsStats.dom);
+          document.body.appendChild(wrap);
+          var tick = function () {
+            fpsStats.begin();
+            fpsStats.end();
+            fpsRaf = requestAnimationFrame(tick);
+          };
+          fpsRaf = requestAnimationFrame(tick);
+        }
+        function stopFps() {
+          if (!fpsStats) return;
+          cancelAnimationFrame(fpsRaf);
+          var wrap = document.getElementById("fps-panel");
+          if (wrap) wrap.remove();
+          fpsStats = null;
+        }
+
+        // ---------- inspect (built-in popup) ----------
+        // maplibre-gl-inspect@0.0.10 is incompatible with maplibre-gl 5.x
+        // (its ESM bundle imports a peer `maplibre-gl` that resolves to a
+        // second, older instance). This built-in does what the user needs:
+        // click a feature → popup with layer.id + source-layer + props.
+        function toggleInspect() {
+          state.inspect = !state.inspect;
+          els.inspectToggle.textContent =
+            "Inspect: " + (state.inspect ? "on" : "off");
+          if (state.inspect) enableInspect();
+          else disableInspect();
+        }
+
+        function enableInspect() {
+          if (!normalMap || inspectHandler) return;
+          inspectHandler = function (e) {
+            var feats = normalMap.queryRenderedFeatures(e.point);
+            if (!feats.length) {
+              if (inspectPopup) {
+                inspectPopup.remove();
+                inspectPopup = null;
+              }
+              return;
+            }
+            var f = feats[0];
+            var props = Object.keys(f.properties || {})
+              .slice(0, 8)
+              .map(function (k) {
+                return k + ": " + JSON.stringify(f.properties[k]);
+              })
+              .join("\n");
+            var html =
+              '<div class="inspect-popup">' +
+              '<span class="layer-id">' +
+              f.layer.id +
+              "</span>" +
+              ' <span class="source-layer">(' +
+              (f.sourceLayer || f.source || "?") +
+              ")</span>" +
+              (props ? '<div class="props">' + props + "</div>" : "") +
+              "</div>";
+            if (inspectPopup) inspectPopup.remove();
+            inspectPopup = new maplibregl.Popup({
+              closeButton: false,
+              closeOnClick: false,
+            })
+              .setLngLat(e.lngLat)
+              .setHTML(html)
+              .addTo(normalMap);
+          };
+          normalMap.on("click", inspectHandler);
+          normalMap.getCanvas().style.cursor = "crosshair";
+        }
+
+        function disableInspect() {
+          if (normalMap && inspectHandler) {
+            normalMap.off("click", inspectHandler);
+            normalMap.getCanvas().style.cursor = "";
+          }
+          inspectHandler = null;
+          if (inspectPopup) {
+            inspectPopup.remove();
+            inspectPopup = null;
+          }
+        }
+
+        // ---------- modes ----------
+        function enterNormal() {
+          teardown();
+          els.normal.hidden = false;
+          els.compare.hidden = true;
+          els.inspectToggle.hidden = false;
+          normalMap = makeMap("map", state.style);
+          addSwitcher(normalMap, "A");
+          trackView(normalMap);
+          startFps();
+          if (state.inspect) enableInspect();
+          els.modeToggle.textContent = "Compare mode";
+        }
+
+        function enterCompare() {
+          teardown();
+          els.normal.hidden = true;
+          els.compare.hidden = false;
+          els.inspectToggle.hidden = true;
+          disableInspect();
+
+          var a = makeMap("compare-a", state.style);
+          var b = makeMap("compare-b", state.styleB);
+          addSwitcher(a, "A");
+          addSwitcher(b, "B");
+          trackView(a);
+          compareMaps = {
+            a: a,
+            b: b,
+            handle: makeCompareSlider(a, b, "compare-wrap"),
+          };
+          els.modeToggle.textContent = "Normal mode";
+        }
+
+        // ---------- compare slider (built-in) ----------
+        function makeCompareSlider(mapA, mapB, wrapId) {
+          var wrap = document.getElementById(wrapId);
+          var sideB = document.getElementById("compare-b");
+          var handle = document.createElement("div");
+          handle.id = "compare-handle";
+          wrap.appendChild(handle);
+
+          var pos = 0.5;
+          var syncA = true;
+          function apply() {
+            var x = Math.round(pos * wrap.clientWidth);
+            sideB.style.clipPath = "inset(0 0 0 " + x + "px)";
+            handle.style.left = x + "px";
+          }
+          function syncCameras(src, dst) {
+            dst.jumpTo({
+              center: src.getCenter(),
+              zoom: src.getZoom(),
+              bearing: src.getBearing(),
+              pitch: src.getPitch(),
+            });
+          }
+          mapA.on("move", function () {
+            if (syncA) syncCameras(mapA, mapB);
+          });
+          mapB.on("move", function () {
+            if (!syncA) syncCameras(mapB, mapA);
+          });
+          mapA.on("movestart", function () {
+            syncA = true;
+          });
+          mapB.on("movestart", function () {
+            syncA = false;
+          });
+
+          var dragging = false;
+          handle.addEventListener("pointerdown", function (e) {
+            dragging = true;
+            handle.setPointerCapture(e.pointerId);
+            e.preventDefault();
+          });
+          handle.addEventListener("pointermove", function (e) {
+            if (!dragging) return;
+            var rect = wrap.getBoundingClientRect();
+            pos = Math.min(
+              1,
+              Math.max(0, (e.clientX - rect.left) / rect.width),
+            );
+            apply();
+          });
+          handle.addEventListener("pointerup", function () {
+            dragging = false;
+          });
+
+          mapA.on("resize", apply);
+          apply();
+          return {
+            remove: function () {
+              handle.remove();
+              sideB.style.clipPath = "";
+            },
+          };
+        }
+
+        function teardown() {
+          stopFps();
+          disableInspect();
+          if (compareMaps) {
+            if (compareMaps.handle && compareMaps.handle.remove) {
+              try {
+                compareMaps.handle.remove();
+              } catch (err) {
+                void err;
+              }
+            }
+            if (compareMaps.a) compareMaps.a.remove();
+            if (compareMaps.b) compareMaps.b.remove();
+            compareMaps = null;
+          }
+          if (normalMap) {
+            normalMap.remove();
+            normalMap = null;
+          }
+        }
+
+        // ---------- catalog / boot ----------
+        function bootCatalog() {
+          fetch(TILE_BASE + "/catalog")
+            .then(function (r) {
+              return r.ok ? r.json() : null;
+            })
+            .then(function (cat) {
+              if (cat && cat.styles && Object.keys(cat.styles).length) {
+                var ids = Object.keys(cat.styles).filter(function (id) {
+                  return id !== "huts";
+                });
+                ids.sort(function (x, y) {
+                  var ix = FALLBACK_STYLES.indexOf(x);
+                  var iy = FALLBACK_STYLES.indexOf(y);
+                  ix = ix < 0 ? 99 + (x < y ? -1 : x > y ? 1 : 0) : ix;
+                  iy = iy < 0 ? 99 + (x < y ? -1 : x > y ? 1 : 0) : iy;
+                  return ix - iy;
+                });
+                styleIds = ids;
+              }
+            })
+            .catch(function () {
+              /* offline catalog: keep fallback list */
+            })
+            .finally(function () {
+              if (state.mode === "compare") {
+                enterCompare();
+              } else {
+                enterNormal();
+              }
+              syncPermalink();
+            });
+        }
+
+        // ---------- boot ----------
+        updateTileserverUI();
+        els.modeToggle.addEventListener("click", function () {
+          state.mode = state.mode === "compare" ? "normal" : "compare";
+          if (state.mode === "compare") {
+            enterCompare();
+          } else {
+            enterNormal();
+          }
+          syncPermalink();
+        });
+        els.inspectToggle.addEventListener("click", toggleInspect);
+
+        bootCatalog();
+      })();
+    </script>
+  </body>
+</html>

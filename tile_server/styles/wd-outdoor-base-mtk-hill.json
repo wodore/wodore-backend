@@ -2157,13 +2157,6 @@
       "type": "raster",
       "tileSize": 360
     },
-    "hillshade-server": {
-      "type": "raster",
-      "tiles": ["/hillshade/{z}/{x}/{y}"],
-      "tileSize": 512,
-      "maxzoom": 15,
-      "attribution": "<a href='https://registry.opendata.aws/terrain-tiles/'>AWS Terrain Tiles</a>"
-    },
     "swiss-relief": {
       "type": "raster",
       "tiles": [
@@ -2174,6 +2167,33 @@
       "maxzoom": 16,
       "bounds": [5.140242, 45.398181, 11.47757, 48.230651],
       "attribution": "© <a href='https://www.swisstopo.admin.ch'>swisstopo</a>"
+    },
+    "bathymetry": {
+      "url": "https://tiles.maptoolkit.org/raster_bathymetry.json",
+      "type": "raster-dem",
+      "minzoom": 0,
+      "maxzoom": 9,
+      "tileSize": 512,
+      "encoding": "terrarium"
+    },
+    "rgb-tiles": {
+      "url": "https://tiles.maptoolkit.org/terrainrgb.json",
+      "type": "raster-dem",
+      "encoding": "terrarium"
+    },
+    "rgb-tiles-blur-min": {
+      "type": "raster-dem",
+      "url": "https://tiles.maptoolkit.org/terrainrgb.json",
+      "maxzoom": 15,
+      "encoding": "terrarium",
+      "tileSize": 2048
+    },
+    "rgb-tiles-blur-med": {
+      "type": "raster-dem",
+      "url": "https://tiles.maptoolkit.org/terrainrgb.json",
+      "maxzoom": 15,
+      "encoding": "terrarium",
+      "tileSize": 4096
     }
   },
   "layers": [
@@ -2263,26 +2283,39 @@
       }
     },
     {
-      "id": "relief_hillshade_server",
-      "type": "raster",
-      "source": "hillshade-server",
-      "minzoom": 5,
+      "id": "water_bathymetry",
+      "source": "bathymetry",
+      "type": "color-relief",
+      "minzoom": 8,
+      "maxzoom": 23,
+      "layout": {
+        "visibility": "visible"
+      },
       "paint": {
-        "raster-opacity": [
+        "color-relief-color": [
           "interpolate",
           ["linear"],
-          ["zoom"],
-          5,
-          0.5,
-          9,
-          0.55,
-          12,
-          0.58,
-          15,
-          0.62
-        ],
-        "raster-brightness-min": 0.4,
-        "raster-resampling": "linear"
+          ["elevation"],
+          -1000,
+          "hsla(203, 70%, 85%, 1)",
+          -500,
+          "hsla(203, 70%, 85%, 1)",
+          -250,
+          "hsla(203, 70%, 85%, 1)",
+          -100,
+          "hsla(203, 70%, 85%, 1)",
+          -30,
+          "hsla(203, 70%, 85%, 1)",
+          -0.1,
+          "hsla(203, 70%, 85%, 1)",
+          0,
+          "hsla(203, 70%, 85%, 0)"
+        ]
+      },
+      "metadata": {
+        "maptoolkit:legend": {
+          "hidden": true
+        }
       }
     },
     {
@@ -3047,6 +3080,107 @@
           "role": "main",
           "group": "relief",
           "key": "contour_multicolored"
+        }
+      }
+    },
+    {
+      "id": "relief_hillshade_ao_min",
+      "type": "hillshade",
+      "paint": {
+        "hillshade-exaggeration": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          4,
+          0.26,
+          6.5,
+          0.36,
+          8.5,
+          0.4,
+          12,
+          0.54,
+          16,
+          0.5
+        ],
+        "hillshade-shadow-color": "hsla(205, 10%, 55%, 0.22)",
+        "hillshade-accent-color": "hsla(-9, 0%, 0%, 0)",
+        "hillshade-highlight-color": "hsla(192, 100%, 85%, 0)"
+      },
+      "layout": {
+        "visibility": "visible"
+      },
+      "source": "rgb-tiles-blur-min",
+      "maxzoom": 23,
+      "minzoom": 0,
+      "metadata": {
+        "maptoolkit:legend": {
+          "hidden": true
+        }
+      }
+    },
+    {
+      "id": "relief_hillshade_ao_med",
+      "type": "hillshade",
+      "paint": {
+        "hillshade-exaggeration": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          4,
+          0.26,
+          6.5,
+          0.36,
+          8.5,
+          0.4,
+          12,
+          0.54,
+          16,
+          0.5
+        ],
+        "hillshade-shadow-color": "hsla(-9, 0%, 30%, 0.22)",
+        "hillshade-accent-color": "hsla(-9, 0%, 0%, 0)",
+        "hillshade-highlight-color": "hsla(192, 100%, 85%, 0)"
+      },
+      "layout": {
+        "visibility": "visible"
+      },
+      "source": "rgb-tiles-blur-med",
+      "maxzoom": 23,
+      "minzoom": 0,
+      "metadata": {
+        "maptoolkit:legend": {
+          "hidden": true
+        }
+      }
+    },
+    {
+      "id": "relief_hillshade_dramatic",
+      "type": "hillshade",
+      "paint": {
+        "hillshade-illumination-anchor": "viewport",
+        "hillshade-accent-color": "hsla(0, 0%, 0%, 0)",
+        "hillshade-shadow-color": "hsla(210, 14%, 38%, 0.46)",
+        "hillshade-highlight-color": "hsla(45, 60%, 96%, 0.55)",
+        "hillshade-illumination-direction": 315,
+        "hillshade-exaggeration": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          4,
+          0.24,
+          9.5,
+          0.36
+        ]
+      },
+      "layout": {
+        "visibility": "visible"
+      },
+      "source": "rgb-tiles",
+      "maxzoom": 14,
+      "minzoom": 0,
+      "metadata": {
+        "maptoolkit:legend": {
+          "hidden": true
         }
       }
     },

@@ -48,15 +48,15 @@ services:
         sha256
         #IMAGOR_SIGNER_TRUNCATE: 40
 
-      FILE_LOADER_BASE_DIR: /mnt/data/source # enable file loader by specifying base dir
+      FILE_LOADER_BASE_DIR: /mnt/data/source # file loader via base dir
 
-      #HTTP_LOADER_ALLOWED_SOURCES: 127.0.0.1,localhost # enable HTTP loader for local URLs
+      #HTTP_LOADER_ALLOWED_SOURCES: 127.0.0.1,localhost # local URLs
 
-      FILE_STORAGE_BASE_DIR: /mnt/data/storage # enable file storage by specifying base dir
+      FILE_STORAGE_BASE_DIR: /mnt/data/storage # file storage via base dir
       FILE_STORAGE_MKDIR_PERMISSION: 0755 # optional
       FILE_STORAGE_WRITE_PERMISSION: 0666 # optional
 
-      FILE_RESULT_STORAGE_BASE_DIR: /mnt/data/result # enable file result storage by specifying base dir
+      FILE_RESULT_STORAGE_BASE_DIR: /mnt/data/result # results via base dir
       FILE_RESULT_STORAGE_MKDIR_PERMISSION: 0755 # optional
       FILE_RESULT_STORAGE_WRITE_PERMISSION: 0666 # optional
       IMAGOR_RESULT_STORAGE_PATH_STYLE: size
@@ -78,7 +78,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-wodore}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wodore}
       POSTGRES_DB: ${POSTGRES_DB:-wodore}
-      DATABASE_URL: "postgresql://${POSTGRES_USER:-wodore}:${POSTGRES_PASSWORD:-wodore}@db:5432/${POSTGRES_DB:-wodore}"
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-wodore}:\
+        ${POSTGRES_PASSWORD:-wodore}@db:5432/${POSTGRES_DB:-wodore}"
       MARTIN_SYNC_MOUNT: /martin_sync
       RUST_LOG: debug
     command: --config /martin_sync/config/martin.yaml --webui enable-for-all
