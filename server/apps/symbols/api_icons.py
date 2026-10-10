@@ -303,7 +303,13 @@ def _hydrate(icon_ids: list[int]) -> list[Icon]:
         .prefetch_related("curated_lists")
     )
     by_id = {icon.pk: icon for icon in icons}
-    return [by_id[icon_id] for icon_id in icon_ids]
+    return [
+        icon
+        for icon_id in icon_ids
+        # Graceful skip: an icon deactivated/deleted between the scan
+        # and hydration queries must not crash the request.
+        if (icon := by_id.get(icon_id)) is not None
+    ]
 
 
 def _search(query: IconsQuery) -> list[Icon]:
@@ -372,17 +378,17 @@ def _registry_maxima() -> dict[str, datetime | None]:
     }
 
 
-def _last_modified_from(maxima: dict[str, datetime | None]) -> tuple[str, object]:
-    """(http-date string, latest datetime) across the asset tables."""
+def _last_modified_from(maxima: dict[str, datetime | None]) -> str:
+    """http-date of the latest registry modification.
+
+    Covers every registry table, not only the asset slots: curated-list
+    edits change response bytes and must refresh Last-Modified too.
+    """
     latest = max(
-        (
-            value
-            for value in (maxima["icon"], maxima["keyword"], maxima["symbol"])
-            if value is not None
-        ),
+        (value for value in maxima.values() if value is not None),
         default=None,
     )
-    return http_date(latest.timestamp()) if latest else http_date(0), latest
+    return http_date(latest.timestamp()) if latest else http_date(0)
 
 
 def _etag(
@@ -411,7 +417,11 @@ def _etag(
             list(
                 Category.objects.filter(
                     Q(parent__slug="emoji") | Q(parent__parent__slug="emoji")
-                ).values_list("id", "slug")
+                )
+                # Stable row order: sort_keys does not sort list rows,
+                # and physical order would jitter the hash.
+                .order_by("id")
+                .values_list("id", "slug")
             ),
             sort_keys=True,
             default=str,
@@ -468,7 +478,7 @@ class IconsController(ApiController):
         query = parsed_query
         maxima = _registry_maxima()
         etag = _etag(request, query, maxima)
-        last_modified = _last_modified_from(maxima)[0]
+        last_modified = _last_modified_from(maxima)
         if _etag_matches(request, etag):
             return self.to_response(
                 None,
