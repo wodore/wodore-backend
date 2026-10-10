@@ -4,6 +4,7 @@ from model_utils.fields import MonitorField
 from modeltrans.fields import TranslationField
 
 from django.contrib.auth import get_user_model
+from django.contrib.postgres.indexes import GinIndex
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -439,7 +440,16 @@ class IconKeyword(TimeStampedModel):
         verbose_name = _("Icon Keyword")
         verbose_name_plural = _("Icon Keywords")
         ordering = ("icon", "locale", "keyword_folded")
-        indexes = (models.Index(fields=["locale", "keyword_folded"]),)
+        indexes = (
+            models.Index(fields=["locale", "keyword_folded"]),
+            # Trigram GIN: serves the ranked search's leading-wildcard
+            # ``keyword_folded__contains`` scans (mirrors hut/geoplace).
+            GinIndex(
+                fields=["keyword_folded"],
+                name="iconkeyword_folded_trgm_idx",
+                opclasses=["gin_trgm_ops"],
+            ),
+        )
         constraints = (
             models.UniqueConstraint(
                 fields=["icon", "locale", "keyword_folded"],
@@ -532,4 +542,4 @@ class IconCuratedListEntry(TimeStampedModel):
         )
 
     def __str__(self) -> str:
-        return f"{self.curated_list_id}:{self.icon_id}"
+        return f"{self.curated_list_id}:{self.icon_id}"  # pyright: ignore[reportAttributeAccessIssue]  # FK attnames: django-stubs gap
