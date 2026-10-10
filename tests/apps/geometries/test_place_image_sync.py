@@ -396,6 +396,25 @@ class TestGeoimagesPinCommand:
         out = capsys.readouterr().out
         assert hut.slug in seen
 
+    def test_bbox_antimeridian(self, hut, monkeypatch, capsys):
+        """--bbox crossing the antimeridian works (NZ-style box)."""
+        seen = []
+
+        class _SweepStub(_FetchStub):
+            async def __call__(self, **kwargs):
+                seen.append(kwargs.get("place_slug"))
+                return [], {"location": {"lat": 1.0, "lon": 1.0}}
+
+        monkeypatch.setattr(
+            "server.apps.geometries.providers.fetch_images_for_place", _SweepStub([])
+        )
+
+        # The previously-rejected spelling (lons below -180) now parses to
+        # a wrapped multipolygon; the Alpine seed hut stays outside it.
+        call_command("geoimages_pin", bbox="-202.88683,-51.74934,-160.53732,-30.64888")
+        out = capsys.readouterr().out
+        assert "Nothing to do" in out and "+ bbox" in out and hut.slug not in seen
+
     def test_invalid_bbox_raises(self):
         with pytest.raises(CommandError):
             call_command("geoimages_pin", bbox="not,a,bbox")
