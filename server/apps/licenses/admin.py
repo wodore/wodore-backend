@@ -51,6 +51,14 @@ class LicenseAdmin(ModelAdmin):
         "order_small",
     )
     list_display_links = ("slug", "name_i18n")
+    list_editable = (
+        "is_active",
+        "attribution_required",
+        "no_commercial",
+        "no_modifying",
+        "share_alike",
+        "no_publication",
+    )
     list_filter = (
         (
             "review_status",

@@ -22,11 +22,22 @@ validate_lic_slug = RegexValidator(
 )
 
 
+class LicenseSlugField(models.SlugField):
+    """SlugField that also allows dots (e.g. ``cc-by-4.0``).
+
+    Validators passed via ``validators=`` run *in addition to* the field's
+    ``default_validators`` (Django's ``validate_slug``, which rejects dots),
+    so the permissive regex must replace the defaults, not supplement them.
+    """
+
+    default_validators = [validate_lic_slug]
+
+
 class License(TimeStampedModel):
     i18n = TranslationField(fields=("name", "fullname", "description", "url"))
     objects = BaseMutlilingualManager()
 
-    slug = models.SlugField(unique=True, validators=[validate_lic_slug])
+    slug = LicenseSlugField(unique=True)
     name = models.CharField(
         max_length=40, default="", blank=True, null=True, verbose_name=_("Shortname")
     )
