@@ -10,6 +10,21 @@ def _imported(imported_db):
     """Both packs imported (see conftest)."""
 
 
+def test_tie_break_prefers_primary_pack(client):
+    """Equal-rank ties order deterministically: primary pack first.
+
+    ``(order, slug)`` ties (same slug imported in both packs, equal
+    order) previously sorted by row return order — pages could flicker
+    and Fluent/Noto styles interleave randomly. The pack slug is the
+    final tie-break, so fluent-emoji (primary) wins.
+    """
+    response = client.get("/v1/icons/", {"search": "tent", "lang": "en"})
+    assert response.status_code == 200
+    tents = [item for item in response.json() if item["slug"] == "tent"]
+    assert len(tents) == 2
+    assert next(item["pack"] for item in tents) == "fluent-emoji"
+
+
 def test_localized_ranking(client):
     """Spec: search=zelt&lang=de returns tent icons."""
     response = client.get("/v1/icons/", {"search": "zelt", "lang": "de"})
@@ -199,7 +214,7 @@ class TestCaching:
         assert first != second
         assert first != third
 
-    def test_etag_tracks_content_changes(self, monkeypatch, imported_db):
+    def test_etag_tracks_content_changes(self, imported_db):
         """Registry modifications invalidate the ETag.
 
         The wiring (per-table ``modified`` maxima in the hash) is tested
@@ -213,22 +228,17 @@ class TestCaching:
 
         from django.test import RequestFactory
 
-        from server.apps.symbols.api_icons import IconsQuery, _etag
-        from server.apps.symbols.models import Icon
+        from server.apps.symbols.api_icons import IconsQuery, _etag, _registry_maxima
 
         request = RequestFactory().get("/v1/icons/")
         query = IconsQuery(lang="en")
-        first = _etag(request, query)
+        maxima = _registry_maxima()
+        first = _etag(request, query, maxima)
 
         later = datetime.datetime(2030, 1, 1, tzinfo=datetime.timezone.utc)
-        real_aggregate = Icon.objects.aggregate
-
-        def bumped_aggregate(*args, **kwargs):
-            result = real_aggregate(*args, **kwargs)
-            if "m" in result:
-                result = {**result, "m": later}
-            return result
-
-        monkeypatch.setattr(Icon.objects, "aggregate", bumped_aggregate)
-        second = _etag(request, query)
+        # Bump exactly one table's maximum: a change in any single table
+        # must invalidate, even when another table is newer.
+        second = _etag(request, query, {**maxima, "icon": later})
         assert second != first
+        third = _etag(request, query, {**maxima, "entry": later})
+        assert third not in (first, second)

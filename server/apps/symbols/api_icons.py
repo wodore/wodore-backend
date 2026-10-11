@@ -9,15 +9,17 @@ Public, read-only, ETag-cached ranked search over the icon registry:
 - ``pack`` / ``category`` (CLDR subgroup) / ``list`` (curated
   shortlist, e.g. ``activities``) are facets;
   ``limit``/``offset`` paginate. Without ``search`` results follow the
-  stable ``(order, slug)`` sort — ``list=<slug>`` then yields that
-  curated shortlist.
+  stable ``(order, pack, slug)`` sort — ``list=<slug>`` then yields
+  that curated shortlist.
 - Keyword matching unions the requested locale with English so sparse
   locale data degrades gracefully.
 """
 
 import hashlib
 import json
+from datetime import datetime
 from http import HTTPStatus
+from typing import NamedTuple
 
 import pydantic
 from dmr import Query, ResponseSpec, validate
@@ -26,7 +28,8 @@ from dmr.routing import path
 from pydantic import Field
 
 from django.conf import settings
-from django.db.models import Max, Q
+from django.db import connection
+from django.db.models import Q
 from django.http import HttpRequest, HttpResponse
 from django.utils.http import http_date
 
@@ -36,10 +39,7 @@ from server.apps.categories.models import Category
 from server.apps.symbols.icon_data import fold_keyword
 from server.apps.symbols.models import (
     Icon,
-    IconCuratedList,
-    IconCuratedListEntry,
     IconKeyword,
-    Symbol,
     SymbolCollection,
 )
 from server.apps.symbols.utils import resolve_symbol_urls
@@ -64,6 +64,15 @@ _CACHE_HEADER_SPECS = {
     "Last-Modified": HeaderSpec(description="Last modification date"),
     "Cache-Control": HeaderSpec(description="Caching policy"),
 }
+
+
+class _IconMeta(NamedTuple):
+    """Ranking-relevant fields of one icon (the cheap scan set)."""
+
+    pk: int
+    order: int
+    pack: str
+    slug: str
 
 
 class IconsQuery(
@@ -169,11 +178,11 @@ def _keyword_matches(term: str, langs: list[str]) -> dict[int, int]:
     return matches
 
 
-def _slug_matches(term: str, icons: list[Icon]) -> dict[int, int]:
+def _slug_matches(term: str, metas: list[_IconMeta]) -> dict[int, int]:
     """Exact/prefix/substring slug matches within the facet result set."""
     matches: dict[int, int] = {}
-    for icon in icons:
-        folded = fold_keyword(icon.slug)
+    for meta in metas:
+        folded = fold_keyword(meta.slug)
         if folded == term:
             rank = RANK_EXACT
         elif folded.startswith(term):
@@ -182,7 +191,7 @@ def _slug_matches(term: str, icons: list[Icon]) -> dict[int, int]:
             rank = RANK_SUBSTRING
         else:
             continue
-        matches[icon.pk] = rank
+        matches[meta.pk] = rank
     return matches
 
 
@@ -208,26 +217,30 @@ def _fuzzy_matches(term: str, langs: list[str]) -> dict[int, int]:
     return matches
 
 
-def _ranked_ids(icons: list[Icon], terms: list[str], langs: list[str]) -> list[int]:
+def _ranked_ids(
+    metas: list[_IconMeta], terms: list[str], langs: list[str]
+) -> list[int]:
     """Icon ids matching ALL terms, ordered best-first.
 
-    ``icons`` is the facet-filtered base set (capped); keyword matches
+    ``metas`` is the facet-filtered base set (capped); keyword matches
     outside it are discarded. Per term the best match rank of an icon
     counts; the icon's total rank is the worst (max) across terms. Ties
-    break by order/slug.
+    break by ``(order, pack, slug)`` — deterministic across pages
+    (same-slug icons in both packs would otherwise order by row return
+    order; the primary pack wins).
     """
-    icons_by_id = {icon.pk: icon for icon in icons}
+    metas_by_id = {meta.pk: meta for meta in metas}
     per_term: list[dict[int, int]] = []
     for term in terms:
         matches = _keyword_matches(term, langs)
-        for icon_id, rank in _slug_matches(term, icons).items():
+        for icon_id, rank in _slug_matches(term, metas).items():
             if icon_id not in matches or rank < matches[icon_id]:
                 matches[icon_id] = rank
         if not matches:
             # Typo tolerance only when the term matches nothing exactly.
             matches = _fuzzy_matches(term, langs)
         matches = {
-            icon_id: rank for icon_id, rank in matches.items() if icon_id in icons_by_id
+            icon_id: rank for icon_id, rank in matches.items() if icon_id in metas_by_id
         }
         if not matches:
             return []
@@ -237,26 +250,16 @@ def _ranked_ids(icons: list[Icon], terms: list[str], langs: list[str]) -> list[i
         common,
         key=lambda icon_id: (
             max(m[icon_id] for m in per_term),
-            icons_by_id[icon_id].order,
-            icons_by_id[icon_id].slug,
+            metas_by_id[icon_id].order,
+            metas_by_id[icon_id].pack,
+            metas_by_id[icon_id].slug,
         ),
     )
 
 
-def _search(query: IconsQuery) -> list[Icon]:
-    """Resolve one icons request to a page of icons."""
-    base = (
-        Icon.objects.filter(is_active=True)
-        .select_related(
-            "pack",
-            "category__parent",
-            "symbol_detailed",
-            "symbol_simple",
-            "symbol_mono",
-        )
-        .prefetch_related("curated_lists")
-        .order_by("order", "slug")
-    )
+def _facet_base(query: IconsQuery):
+    """Active icons under the facet filters, stable ``(order, pack, slug)``."""
+    base = Icon.objects.filter(is_active=True).order_by("order", "pack__slug", "slug")
     if query.pack:
         base = base.filter(pack__slug=query.pack)
     if query.slug:
@@ -269,17 +272,63 @@ def _search(query: IconsQuery) -> list[Icon]:
             | Q(category__identifier=query.category)
             | Q(category__parent__slug=query.category)
         )
+    return base
+
+
+def _facet_metas(query: IconsQuery) -> list[_IconMeta]:
+    """Ranking scan set: ``(pk, order, pack, slug)`` tuples, no heavy joins.
+
+    Bounded like the previous full-row scan (design risks); keyword
+    matching and slug folding need exactly these fields.
+    """
+    return [
+        _IconMeta(pk, order, pack, slug)
+        for pk, order, pack, slug in _facet_base(query).values_list(
+            "pk", "order", "pack__slug", "slug"
+        )[:_FACET_LIMIT]
+    ]
+
+
+def _hydrate(icon_ids: list[int]) -> list[Icon]:
+    """Load full icons for one page, preserving the given order."""
+    icons = (
+        Icon.objects.filter(pk__in=icon_ids)
+        .select_related(
+            "pack",
+            "category__parent",
+            "symbol_detailed",
+            "symbol_simple",
+            "symbol_mono",
+        )
+        .prefetch_related("curated_lists")
+    )
+    by_id = {icon.pk: icon for icon in icons}
+    return [
+        icon
+        for icon_id in icon_ids
+        # Graceful skip: an icon deactivated/deleted between the scan
+        # and hydration queries must not crash the request.
+        if (icon := by_id.get(icon_id)) is not None
+    ]
+
+
+def _search(query: IconsQuery) -> list[Icon]:
+    """Resolve one icons request to a page of icons.
+
+    Ranking runs on the cheap meta scan set; only the result page is
+    hydrated with joins/prefetches (≤ ``limit`` rows, not the whole
+    facet set).
+    """
+    metas = _facet_metas(query)
     terms = [
         folded for folded in (fold_keyword(t) for t in query.search.split()) if folded
     ]
     if not terms:
-        return list(base[query.offset : query.offset + query.limit])
-    icons = list(base[:_FACET_LIMIT])
+        page = [meta.pk for meta in metas][query.offset : query.offset + query.limit]
+        return _hydrate(page)
     langs = _match_locales(query.lang)
-    ids = _ranked_ids(icons, terms, langs)
-    page = ids[query.offset : query.offset + query.limit]
-    icons_by_id = {icon.pk: icon for icon in icons}
-    return [icons_by_id[icon_id] for icon_id in page]
+    ids = _ranked_ids(metas, terms, langs)
+    return _hydrate(ids[query.offset : query.offset + query.limit])
 
 
 def _to_dto(icon: Icon, request: HttpRequest) -> IconDto:
@@ -294,40 +343,73 @@ def _to_dto(icon: Icon, request: HttpRequest) -> IconDto:
         subcategory=category.slug if category else None,
         lists=sorted(
             cl.slug  # pyright: ignore[reportAttributeAccessIssue]  # reverse M2M: django-stubs gap
-            for cl in icon.curated_lists.all()
+            for cl in icon.curated_lists.all()  # pyright: ignore[reportAttributeAccessIssue]  # reverse M2M: django-stubs gap
         ),
         urls=IconUrls.model_validate(urls) if urls else None,
     )
 
 
-def _last_modified() -> tuple[str, object]:
-    """(http-date string, latest datetime) across registry tables."""
-    latest = None
-    for model in (Icon, IconKeyword, Symbol):
-        modified = model.objects.aggregate(m=Max("modified"))["m"]
-        if modified is not None and (latest is None or modified > latest):
-            latest = modified
-    return http_date(latest.timestamp()) if latest else http_date(0), latest
+def _registry_maxima() -> dict[str, datetime | None]:
+    """Modified maxima of every ETag-relevant table in ONE roundtrip.
+
+    Per-table maxima (NOT a global max): a change in any single table
+    must invalidate, even when another table is newer. Both the ETag
+    and Last-Modified derive from this single read. Fully literal SQL
+    (no parameters, no interpolation): the table names are stable
+    schema facts, and a compound SELECT cannot reference the ORM
+    Meta.ordering anyway.
+    """
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT "
+            "(SELECT MAX(modified) FROM symbols_icon), "
+            "(SELECT MAX(modified) FROM symbols_iconkeyword), "
+            "(SELECT MAX(modified) FROM symbols_symbol), "
+            "(SELECT MAX(modified) FROM symbols_iconcuratedlist), "
+            "(SELECT MAX(modified) FROM symbols_iconcuratedlistentry)"
+        )
+        icon, keyword, symbol, list_, entry = cursor.fetchone()
+    return {
+        "icon": icon,
+        "keyword": keyword,
+        "symbol": symbol,
+        "list": list_,
+        "entry": entry,
+    }
 
 
-def _etag(request: HttpRequest, query: IconsQuery) -> str:
+def _last_modified_from(maxima: dict[str, datetime | None]) -> str:
+    """http-date of the latest registry modification.
+
+    Covers every registry table, not only the asset slots: curated-list
+    edits change response bytes and must refresh Last-Modified too.
+    """
+    latest = max(
+        (value for value in maxima.values() if value is not None),
+        default=None,
+    )
+    return http_date(latest.timestamp()) if latest else http_date(0)
+
+
+def _etag(
+    request: HttpRequest, query: IconsQuery, maxima: dict[str, datetime | None]
+) -> str:
     """Content ETag over the registry state + request keys.
 
-    Keyed on table modification maxima (re-imports and asset
+    Keyed on the per-table modification maxima (re-imports and asset
     replacements invalidate), a content hash of the emoji taxonomy
-    (localized names carry no timestamp, like the huts endpoint), and
+    slugs (the response only ever carries slugs — localized category
+    names do not surface, so renames alone need not invalidate), and
     the query parameters + API version (versioned 304 safety).
     """
     parts = [
-        # Per-table maxima (NOT the global max): a change in any single
-        # table must invalidate, even when another table is newer.
-        str(Icon.objects.aggregate(m=Max("modified"))["m"]),
-        str(IconKeyword.objects.aggregate(m=Max("modified"))["m"]),
-        str(Symbol.objects.aggregate(m=Max("modified"))["m"]),
+        str(maxima["icon"]),
+        str(maxima["keyword"]),
+        str(maxima["symbol"]),
         # Curated-list membership is timestamped via the explicit through
         # model, so admin curation invalidates immediately.
-        str(IconCuratedList.objects.aggregate(m=Max("modified"))["m"]),
-        str(IconCuratedListEntry.objects.aggregate(m=Max("modified"))["m"]),
+        str(maxima["list"]),
+        str(maxima["entry"]),
         repr(
             list(SymbolCollection.objects.order_by("pk").values_list("slug", "extra"))
         ),
@@ -335,7 +417,11 @@ def _etag(request: HttpRequest, query: IconsQuery) -> str:
             list(
                 Category.objects.filter(
                     Q(parent__slug="emoji") | Q(parent__parent__slug="emoji")
-                ).values_list("id", "slug", "name", "i18n")
+                )
+                # Stable row order: sort_keys does not sort list rows,
+                # and physical order would jitter the hash.
+                .order_by("id")
+                .values_list("id", "slug")
             ),
             sort_keys=True,
             default=str,
@@ -390,8 +476,9 @@ class IconsController(ApiController):
         """
         request: HttpRequest = self.request
         query = parsed_query
-        etag = _etag(request, query)
-        last_modified = _last_modified()[0]
+        maxima = _registry_maxima()
+        etag = _etag(request, query, maxima)
+        last_modified = _last_modified_from(maxima)
         if _etag_matches(request, etag):
             return self.to_response(
                 None,
