@@ -164,7 +164,8 @@ CONTENT_SECURITY_POLICY["DIRECTIVES"]["img-src"] += ("http:",)
 
 # Demo page (demos/mapcompare) + basemap styles fetch external tiles:
 CONTENT_SECURITY_POLICY["DIRECTIVES"]["connect-src"] += (
-    "https://wmts.geo.admin.ch",  # swisstopo relief WMTS
+    "http://localhost:3739",  # lane Martin (demos page tile server)
+    "https://wmts.geo.admin.ch",  # swisstopo relief + pixelkarte WMTS
     "https://tiles.maptoolkit.org",  # MTK vector/raster tiles
     "https://icons.maptoolkit.org",  # MTK sprites
     "https://tiles.mapterhorn.com",  # Mapterhorn DEM (client relief variants)

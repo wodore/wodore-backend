@@ -116,12 +116,6 @@
         max-width: 50%;
       }
 
-      #compare-b .maplibregl-ctrl-top-left {
-        left: auto;
-        right: 100%;
-        position: absolute;
-      }
-
       /* compare slider (built-in) */
       #compare-handle {
         position: absolute;
@@ -242,7 +236,7 @@
         "use strict";
 
         var q = new URLSearchParams(location.search);
-        var DEFAULT_BASE = "http://localhost:3739";
+        var DEFAULT_BASE = "https://tiles.stg.wodore.com";
         var TILE_BASE = (
           q.get("tileserver") ||
           localStorage.getItem("mapcompare:tileserver") ||
@@ -371,7 +365,9 @@
               syncPermalink();
             },
           });
-          map.addControl(ctrl, "top-left");
+          // Side B's switcher goes top-right: the compare slider's clip-path
+          // on compare-b hides top-left controls
+          map.addControl(ctrl, which === "B" ? "top-right" : "top-left");
         }
 
         // ---------- FPS (stats.js, rAF driven) ----------
