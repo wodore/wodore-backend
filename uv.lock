@@ -1925,7 +1925,7 @@ wheels = [
 [[package]]
 name = "hut-services"
 version = "0.5.1"
-source = { git = "https://github.com/wodore/hut-services?branch=main#80a8ca4f8532bde976d8ee2f6e612ce4ba3f3cbe" }
+source = { git = "https://github.com/wodore/hut-services?branch=main#1977a80e3110068cd99d74ffd9bd510b3a63290a" }
 dependencies = [
     { name = "bs4" },
     { name = "dateparser" },
@@ -1948,7 +1948,7 @@ dependencies = [
 [[package]]
 name = "hut-services-private"
 version = "0.5.0"
-source = { git = "ssh://git@github.com/wodore/hut-services-private?branch=main#f0234c4cc21b271298b224998328a3918d567a9e" }
+source = { git = "ssh://git@github.com/wodore/hut-services-private?branch=main#07275f9e291a0baa4a60526b2be006efa445c90d" }
 dependencies = [
     { name = "httpx" },
     { name = "hut-services" },
