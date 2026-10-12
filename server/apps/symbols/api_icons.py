@@ -89,7 +89,13 @@ class IconsQuery(
             "typo tolerance. Empty returns browsable (faceted) results."
         ),
     )
-    pack: str | None = Field(None, description="Filter by pack slug")
+    pack: str | None = Field(
+        None,
+        description=(
+            "Filter by pack slug; comma-separated slugs filter to the "
+            "union of those packs"
+        ),
+    )
     slug: str | None = Field(
         None,
         description=(
@@ -261,7 +267,8 @@ def _facet_base(query: IconsQuery):
     """Active icons under the facet filters, stable ``(order, pack, slug)``."""
     base = Icon.objects.filter(is_active=True).order_by("order", "pack__slug", "slug")
     if query.pack:
-        base = base.filter(pack__slug=query.pack)
+        packs = [slug.strip() for slug in query.pack.split(",") if slug.strip()]
+        base = base.filter(pack__slug__in=packs)
     if query.slug:
         base = base.filter(slug=query.slug)
     if query.list:

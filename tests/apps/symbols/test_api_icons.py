@@ -142,6 +142,35 @@ def test_pack_filter(client):
     assert {item["pack"] for item in response.json()} == {"noto-emoji"}
 
 
+def test_pack_filter_multi(client):
+    """Spec: comma-separated pack slugs filter to the union of packs."""
+    response = client.get("/v1/icons/", {"pack": "noto-emoji,fluent-emoji"})
+    assert response.status_code == 200
+    assert response.json()
+    assert {item["pack"] for item in response.json()} == {
+        "fluent-emoji",
+        "noto-emoji",
+    }
+    # Whitespace around slugs is tolerated.
+    spaced = client.get("/v1/icons/", {"pack": " noto-emoji , fluent-emoji "})
+    assert {item["pack"] for item in spaced.json()} == {
+        "fluent-emoji",
+        "noto-emoji",
+    }
+    # Unknown slugs simply contribute nothing (facet, not a validation error).
+    partial = client.get("/v1/icons/", {"pack": "noto-emoji,nope"})
+    assert {item["pack"] for item in partial.json()} == {"noto-emoji"}
+    # Multi-pack combines with search like the single-pack facet does.
+    searched = client.get(
+        "/v1/icons/",
+        {"pack": "noto-emoji,fluent-emoji", "search": "zelt", "lang": "de"},
+    )
+    assert {item["pack"] for item in searched.json()} == {
+        "fluent-emoji",
+        "noto-emoji",
+    }
+
+
 def test_slug_exact_lookup(client):
     """Frontend resolves a stored icon (pack + slug) to its asset URLs."""
     response = client.get(
