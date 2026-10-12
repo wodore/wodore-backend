@@ -4,6 +4,14 @@ Layout: color SVGs at ``2D/svg/emoji_u<codepoints>.svg`` (codepoints
 ``_``-joined lowercase hex, no variation selectors). One style only:
 color → detailed. Slugs join on the hexcode; files without an
 emojibase match keep a filename-derived slug without keywords.
+
+Country flags ship outside that set, under
+``third_party/region-flags/waved-svg`` (public domain): the waved
+SVGs are the emoji-flag artwork of ``NotoColorEmoji-flagsonly.ttf``,
+named exactly like the 2D set (``emoji_u1f1e8_1f1ed.svg``) — same
+parse, same emojibase join, also imported as detailed. The flat
+ISO-code ``svg/`` set next to it covers the flat-rectangular ground
+already served by the ``flag-icons`` pack and is not imported.
 """
 
 from collections.abc import Iterator
@@ -48,21 +56,29 @@ class NotoSource(IconSource):
     ) -> Iterator[IconCandidate]:
         self.reset()
         for svg_path in sorted(source_dir.glob("emoji_u*.svg")):
-            codepoints = svg_path.stem[len("emoji_u") :].split("_")
-            hexcode = normalize_hexcode("-".join(codepoints))
-            entry = entries.get(hexcode)
-            if entry is not None:
-                slug = self.unique_slug(entry["slug"])
-            else:
-                # Slugify: raw stems contain underscores (codepoints are
-                # `_`-joined) — icon slugs are kebab-case everywhere.
-                slug = self.unique_slug(
-                    slugify(svg_path.stem.replace("emoji_u", "emoji-", 1))
-                )
-            yield IconCandidate(
-                slug=slug,
-                fallback_name=svg_path.stem,
-                hexcode=hexcode,
-                styles={"detailed": svg_path},
-                entry=entry,
+            yield self._candidate(svg_path, entries)
+        # ``<base>/noto/2D/svg`` → ``<base>/noto`` → region flags.
+        flags_dir = source_dir.parents[1] / "third_party" / "region-flags" / "waved-svg"
+        if flags_dir.is_dir():
+            for svg_path in sorted(flags_dir.glob("emoji_u*.svg")):
+                yield self._candidate(svg_path, entries)
+
+    def _candidate(self, svg_path: Path, entries: dict[str, dict]) -> IconCandidate:
+        codepoints = svg_path.stem[len("emoji_u") :].split("_")
+        hexcode = normalize_hexcode("-".join(codepoints))
+        entry = entries.get(hexcode)
+        if entry is not None:
+            slug = self.unique_slug(entry["slug"])
+        else:
+            # Slugify: raw stems contain underscores (codepoints are
+            # `_`-joined) — icon slugs are kebab-case everywhere.
+            slug = self.unique_slug(
+                slugify(svg_path.stem.replace("emoji_u", "emoji-", 1))
             )
+        return IconCandidate(
+            slug=slug,
+            fallback_name=svg_path.stem,
+            hexcode=hexcode,
+            styles={"detailed": svg_path},
+            entry=entry,
+        )

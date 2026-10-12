@@ -78,6 +78,29 @@ def emoji_fixture(tmp_path: Path) -> Path:
     for codepoints in ("26fa", "1f97e", "0023"):
         _write(noto / f"emoji_u{codepoints}.svg", SVG)
 
+    # Noto country flags: waved emoji artwork under third_party (the
+    # 2D set itself carries no flags — flags ship flagsonly).
+    waved = root / "noto" / "third_party" / "region-flags" / "waved-svg"
+    _write(waved / "emoji_u1f1e8_1f1ed.svg", SVG)  # flag: Switzerland
+    _write(
+        waved / "emoji_u1f3f4_e0067_e0062_e0065_e006e_e0067_e007f.svg",
+        SVG,
+    )  # flag: England (subdivision tag sequence)
+
+    # --- flag-icons (two ratios per code) ---
+    for ratio in ("4x3", "1x1"):
+        _write(root / "flag-icons" / "flags" / ratio / "ch.svg", SVG)
+        # Regional flag without a Unicode emoji equivalent: skipped.
+        _write(root / "flag-icons" / "flags" / ratio / "es-ct.svg", SVG)
+
+    # --- circle-flags (round, top-level country codes only) ---
+    circle = root / "circle-flags" / "flags"
+    _write(circle / "ch.svg", SVG)
+    _write(circle / "gb-eng.svg", SVG)
+    # Variants/language flags: no emoji mapping / not walked.
+    _write(circle / "us-confederate_battle.svg", SVG)
+    _write(circle / "language" / "en-us.svg", SVG)
+
     # --- emojibase ---
     base = root / "emojibase"
     _write(
@@ -88,8 +111,9 @@ def emoji_fixture(tmp_path: Path) -> Path:
                 "2": "component",
                 "5": "travel-places",
                 "7": "objects",
+                "9": "flags",
             },
-            "hierarchy": {"1": [12], "2": [], "5": [53], "7": [65]},
+            "hierarchy": {"1": [12], "2": [], "5": [53], "7": [65], "9": [251, 252]},
         },
     )
     en_data = [
@@ -116,6 +140,25 @@ def emoji_fixture(tmp_path: Path) -> Path:
         # the import — NOT via the `type` field (that is presentation
         # metadata and marks real emoji like camping as type 0).
         {"label": "zero width joiner", "hexcode": "200D", "group": 2},
+        # Emoji country flags (regional-indicator pair + tag sequence).
+        {
+            "label": "flag: Switzerland",
+            "hexcode": "1F1E8-1F1ED",
+            "tags": ["swiss"],
+            "type": 1,
+            "order": 4600,
+            "group": 9,
+            "subgroup": 251,
+        },
+        {
+            "label": "flag: England",
+            "hexcode": "1F3F4-E0067-E0062-E0065-E006E-E0067-E007F",
+            "tags": [],
+            "type": 1,
+            "order": 4601,
+            "group": 9,
+            "subgroup": 252,
+        },
     ]
     de_data = [
         {
@@ -137,6 +180,24 @@ def emoji_fixture(tmp_path: Path) -> Path:
             "group": 7,
             "subgroup": 65,
         },
+        {
+            "label": "Fahne: Schweiz",
+            "hexcode": "1F1E8-1F1ED",
+            "tags": [],
+            "type": 1,
+            "order": 4600,
+            "group": 9,
+            "subgroup": 251,
+        },
+        {
+            "label": "Fahne: England",
+            "hexcode": "1F3F4-E0067-E0062-E0065-E006E-E0067-E007F",
+            "tags": [],
+            "type": 1,
+            "order": 4601,
+            "group": 9,
+            "subgroup": 252,
+        },
     ]
     _write(base / "en" / "data.json", en_data)
     _write(base / "de" / "data.json", de_data)
@@ -146,11 +207,14 @@ def emoji_fixture(tmp_path: Path) -> Path:
             {"key": "people-body", "message": "people & body", "order": 1},
             {"key": "travel-places", "message": "travel & places", "order": 5},
             {"key": "objects", "message": "objects", "order": 7},
+            {"key": "flags", "message": "flags", "order": 9},
         ],
         "subgroups": [
             {"key": "hands", "message": "hands", "order": 12},
             {"key": "place-other", "message": "other places", "order": 53},
             {"key": "clothing", "message": "clothing", "order": 65},
+            {"key": "country-flag", "message": "country-flag", "order": 251},
+            {"key": "subdivision-flag", "message": "subdivision-flag", "order": 252},
         ],
     }
     de_messages = {
@@ -158,11 +222,18 @@ def emoji_fixture(tmp_path: Path) -> Path:
             {"key": "people-body", "message": "Menschen & Körper", "order": 1},
             {"key": "travel-places", "message": "Reisen & Orte", "order": 5},
             {"key": "objects", "message": "Objekte", "order": 7},
+            {"key": "flags", "message": "Flaggen", "order": 9},
         ],
         "subgroups": [
             {"key": "hands", "message": "Hände", "order": 12},
             {"key": "place-other", "message": "andere Orte", "order": 53},
             {"key": "clothing", "message": "Kleidung", "order": 65},
+            {"key": "country-flag", "message": "Landesflagge", "order": 251},
+            {
+                "key": "subdivision-flag",
+                "message": "Flagge der Untergliederung",
+                "order": 252,
+            },
         ],
     }
     _write(base / "en" / "messages.json", en_messages)

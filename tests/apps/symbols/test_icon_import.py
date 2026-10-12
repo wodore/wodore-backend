@@ -51,11 +51,17 @@ def _run_fluent_only(root: Path, extra: tuple = ()) -> str:
     return _run(root, source="fluent", ref="test-ref", extra=extra)
 
 
-def _run_both(root: Path, extra: tuple = ()) -> str:
-    """Import both packs (two source invocations)."""
-    return _run(root, source="fluent", ref="test-ref", extra=extra) + _run(
-        root, source="noto", ref="noto-ref", extra=extra
-    )
+def _run_all(root: Path, extra: tuple = ()) -> str:
+    """Import all packs (one invocation per source)."""
+    output = ""
+    for source, ref in (
+        ("fluent", "test-ref"),
+        ("noto", "noto-ref"),
+        ("flag-icons", "fi-ref"),
+        ("circle-flags", "cf-ref"),
+    ):
+        output += _run(root, source=source, ref=ref, extra=extra)
+    return output
 
 
 class TestFullImport:
@@ -63,7 +69,7 @@ class TestFullImport:
 
     @pytest.fixture(autouse=True)
     def _imported(self, emoji_fixture):
-        self.output = _run_both(emoji_fixture)
+        self.output = _run_all(emoji_fixture)
 
     def test_packs_refs_licenses_orgs_recorded(self):
         fluent = SymbolCollection.objects.get(slug="fluent-emoji")
@@ -178,11 +184,94 @@ class TestFullImport:
         assert Category.objects.filter(slug="emoji", parent=None).count() == 1
 
 
+class TestFlagImports:
+    """Country flags: noto region flags + the two flag packs."""
+
+    @pytest.fixture(autouse=True)
+    def _imported(self, emoji_fixture):
+        _run_all(emoji_fixture)
+
+    def test_noto_region_flags_imported(self):
+        """Flags ship under third_party, named like the 2D set."""
+        icon = Icon.objects.get(pack__slug="noto-emoji", slug="flag-switzerland")
+        assert icon.unicode == "1F1E8-1F1ED"
+        assert icon.name == "flag: Switzerland"
+        assert icon.category.slug == "country-flag"
+        assert icon.category.parent.slug == "flags"
+        assert icon.category.parent.parent.slug == "emoji"
+        assert set(
+            Symbol.objects.filter(slug="noto-emoji-flag-switzerland").values_list(
+                "style", flat=True
+            )
+        ) == {"detailed"}
+
+    def test_subdivision_flag_tag_sequence(self):
+        """England joins via its tag-sequence hexcode."""
+        icon = Icon.objects.get(pack__slug="circle-flags", slug="flag-england")
+        assert icon.unicode == "1F3F4-E0067-E0062-E0065-E006E-E0067-E007F"
+        assert icon.category.slug == "subdivision-flag"
+
+    def test_flag_icons_two_ratios(self):
+        """4:3 → detailed, 1:1 → simple: one icon, two styles."""
+        icon = Icon.objects.get(pack__slug="flag-icons", slug="flag-switzerland")
+        assert set(
+            Symbol.objects.filter(slug="flag-icons-flag-switzerland").values_list(
+                "style", flat=True
+            )
+        ) == {"detailed", "simple"}
+        assert icon.symbol_detailed.svg_file
+        assert icon.symbol_simple.svg_file
+
+    def test_circle_flags_single_style(self):
+        icon = Icon.objects.get(pack__slug="circle-flags", slug="flag-switzerland")
+        assert set(
+            Symbol.objects.filter(slug="circle-flags-flag-switzerland").values_list(
+                "style", flat=True
+            )
+        ) == {"detailed"}
+        assert icon.symbol_detailed.svg_file
+
+    def test_flag_packs_orgs_and_shared_license(self):
+        assert (
+            SymbolCollection.objects.get(slug="flag-icons").source_org.slug == "lipis"
+        )
+        assert (
+            SymbolCollection.objects.get(slug="circle-flags").source_org.slug
+            == "hatscripts"
+        )
+        assert (
+            SymbolCollection.objects.get(slug="circle-flags").extra["ref"] == "cf-ref"
+        )
+        # MIT is shared with fluent: one row, three packs.
+        assert License.objects.filter(slug="mit").count() == 1
+
+    def test_non_emoji_flags_skipped(self):
+        """No Unicode emoji → not imported (the join is the whitelist)."""
+        assert not Icon.objects.filter(slug="es-ct").exists()
+        assert not Icon.objects.filter(slug__contains="confederate").exists()
+        assert not Icon.objects.filter(slug__contains="en-us").exists()
+        assert Icon.objects.filter(pack__slug="circle-flags").count() == 2
+
+    def test_flag_keywords_localized(self):
+        icon = Icon.objects.get(pack__slug="flag-icons", slug="flag-switzerland")
+        assert icon.keywords.filter(  # pyright: ignore[reportAttributeAccessIssue]  # reverse FK: django-stubs gap
+            locale="de", keyword_folded="fahne: schweiz"
+        ).exists()
+
+    def test_flag_slug_parity_across_packs(self):
+        """The same flag is the same icon (slug) in every pack."""
+        assert set(
+            Icon.objects.filter(slug="flag-switzerland").values_list(
+                "pack__slug", flat=True
+            )
+        ) == {"noto-emoji", "flag-icons", "circle-flags"}
+
+
 class TestIdempotentRerun:
     """Re-running at the same ref creates no duplicates (spec)."""
 
     def test_rerun_creates_nothing(self, emoji_fixture):
-        _run_both(emoji_fixture)
+        _run_all(emoji_fixture)
         counts = {
             Icon: Icon.objects.count(),
             Symbol: Symbol.objects.count(),
@@ -190,7 +279,7 @@ class TestIdempotentRerun:
             Category: Category.objects.count(),
             SymbolCollection: SymbolCollection.objects.count(),
         }
-        output = _run_both(emoji_fixture)
+        output = _run_all(emoji_fixture)
         assert Icon.objects.count() == counts[Icon]
         assert Symbol.objects.count() == counts[Symbol]
         assert IconKeyword.objects.count() == counts[IconKeyword]
@@ -202,8 +291,8 @@ class TestIdempotentRerun:
         assert "categories_created: 0" in output
 
     def test_taxonomy_rerun_no_duplicate_categories(self, emoji_fixture):
-        _run_both(emoji_fixture)
-        _run_both(emoji_fixture)
+        _run_all(emoji_fixture)
+        _run_all(emoji_fixture)
         assert Category.objects.filter(slug="emoji", parent=None).count() == 1
         assert Category.objects.filter(slug="travel-places").count() == 1
         assert Category.objects.filter(slug="place-other").count() == 1
@@ -228,7 +317,7 @@ class TestRerunPreservesCuration:
 
 class TestDryRun:
     def test_dry_run_writes_nothing(self, emoji_fixture):
-        _run_both(emoji_fixture, extra=("--dry-run",))
+        _run_all(emoji_fixture, extra=("--dry-run",))
         assert Icon.objects.count() == 0
         assert Symbol.objects.count() == 0
         assert IconKeyword.objects.count() == 0
