@@ -3610,6 +3610,128 @@
         "title": "HutTypeSchema",
         "type": "object"
       },
+      "IconDto": {
+        "description": "One icon of the registry.",
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "CLDR group slug",
+            "title": "Category"
+          },
+          "lists": {
+            "description": "Slugs of curated lists containing this icon",
+            "items": {
+              "type": "string"
+            },
+            "title": "Lists",
+            "type": "array"
+          },
+          "pack": {
+            "description": "Pack slug",
+            "title": "Pack",
+            "type": "string"
+          },
+          "slug": {
+            "description": "Icon slug, unique within its pack",
+            "title": "Slug",
+            "type": "string"
+          },
+          "subcategory": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "CLDR subgroup slug",
+            "title": "Subcategory"
+          },
+          "unicode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Unicode hexcode(s), variation selectors stripped",
+            "title": "Unicode"
+          },
+          "urls": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IconUrls"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Per-style asset URLs"
+          }
+        },
+        "required": ["slug", "pack", "lists", "urls"],
+        "title": "IconDto",
+        "type": "object"
+      },
+      "IconUrls": {
+        "description": "Per-style asset URLs of an icon.",
+        "properties": {
+          "detailed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Detailed style SVG URL",
+            "title": "Detailed"
+          },
+          "mono": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Mono style SVG URL",
+            "title": "Mono"
+          },
+          "simple": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Simple style SVG URL",
+            "title": "Simple"
+          }
+        },
+        "title": "IconUrls",
+        "type": "object"
+      },
       "ImageAttributionSchema": {
         "description": "Ready-to-display attribution.",
         "properties": {
@@ -4371,6 +4493,269 @@
         "title": "ImageVariantUrlsSchema",
         "type": "object"
       },
+      "LayerSummary": {
+        "additionalProperties": true,
+        "description": "Catalog entry for one layer (all its variants share the identity).",
+        "properties": {
+          "anchors": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Anchors"
+          },
+          "attributions": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Attributions",
+            "type": "array"
+          },
+          "categories": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Config"
+          },
+          "coverage_bbox": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Coverage Bbox"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "fallback": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Fallback"
+          },
+          "fallback_min_zoom": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Fallback Min Zoom"
+          },
+          "icon": {
+            "default": "",
+            "title": "Icon",
+            "type": "string"
+          },
+          "icon_badge": {
+            "default": "",
+            "title": "Icon Badge",
+            "type": "string"
+          },
+          "interaction": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Interaction"
+          },
+          "is_default": {
+            "default": false,
+            "title": "Is Default",
+            "type": "boolean"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "License"
+          },
+          "max_zoom": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Max Zoom"
+          },
+          "min_zoom": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Min Zoom"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "order": {
+            "default": 0,
+            "title": "Order",
+            "type": "integer"
+          },
+          "parameters": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ParameterSummary"
+            },
+            "title": "Parameters",
+            "type": "array"
+          },
+          "preview_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Preview Url"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "show": {
+            "default": true,
+            "title": "Show",
+            "type": "boolean"
+          },
+          "slot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Slot"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "variants": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/LayerVariant"
+            },
+            "title": "Variants",
+            "type": "array"
+          }
+        },
+        "required": ["slug", "role"],
+        "title": "LayerSummary",
+        "type": "object"
+      },
+      "LayerVariant": {
+        "additionalProperties": true,
+        "description": "One device-tier variant of a layer.",
+        "properties": {
+          "inline_style": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Inline Style"
+          },
+          "spec": {
+            "title": "Spec",
+            "type": "string"
+          },
+          "style_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Style Url"
+          }
+        },
+        "required": ["spec"],
+        "title": "LayerVariant",
+        "type": "object"
+      },
       "LicenseInfoSchema": {
         "description": "Important information, for example for an image",
         "properties": {
@@ -4530,6 +4915,30 @@
         },
         "required": ["lat", "lon"],
         "title": "LocationSchema",
+        "type": "object"
+      },
+      "MapCatalogResponse": {
+        "description": "Top-level catalog payload.",
+        "properties": {
+          "layers": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/LayerSummary"
+            },
+            "title": "Layers",
+            "type": "array"
+          },
+          "slots": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Slots",
+            "type": "array"
+          }
+        },
+        "title": "MapCatalogResponse",
         "type": "object"
       },
       "MediaUrlModeEnum": {
@@ -5087,6 +5496,50 @@
         },
         "required": ["slug"],
         "title": "OwnerSchema",
+        "type": "object"
+      },
+      "ParameterSummary": {
+        "additionalProperties": true,
+        "description": "Parameter schema entry (drives the client settings UI).",
+        "properties": {
+          "constraints": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Constraints"
+          },
+          "default": {
+            "default": null,
+            "title": "Default"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "default": "",
+            "title": "Label",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": ["slug", "kind"],
+        "title": "ParameterSummary",
         "type": "object"
       },
       "PhoneSchema": {
@@ -9361,6 +9814,330 @@
         "tags": ["hut"]
       },
       "summary": "Minimal hut metadata for the edge."
+    },
+    "/v1/icons/": {
+      "get": {
+        "description": "Ranked icon search (ETag-cached).",
+        "operationId": "get_icons",
+        "parameters": [
+          {
+            "description": "Select language code: de, en, fr, it.",
+            "in": "query",
+            "name": "lang",
+            "schema": {
+              "default": "en",
+              "description": "Select language code: de, en, fr, it.",
+              "pattern": "(de|en|fr|it)",
+              "title": "Lang",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Search term(s); matches localized keywords and slugs with typo tolerance. Empty returns browsable (faceted) results.",
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "default": "",
+              "description": "Search term(s); matches localized keywords and slugs with typo tolerance. Empty returns browsable (faceted) results.",
+              "title": "Search",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter by pack slug; comma-separated slugs filter to the union of those packs",
+            "in": "query",
+            "name": "pack",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Filter by pack slug; comma-separated slugs filter to the union of those packs",
+              "title": "Pack"
+            }
+          },
+          {
+            "description": "Exact icon slug lookup (combine with pack to resolve one stored icon)",
+            "in": "query",
+            "name": "slug",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Exact icon slug lookup (combine with pack to resolve one stored icon)",
+              "title": "Slug"
+            }
+          },
+          {
+            "description": "Filter by CLDR subgroup slug (a group slug matches all its subgroups)",
+            "in": "query",
+            "name": "category",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Filter by CLDR subgroup slug (a group slug matches all its subgroups)",
+              "title": "Category"
+            }
+          },
+          {
+            "description": "Only icons of this curated list (slug, e.g. 'activities')",
+            "in": "query",
+            "name": "list",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Only icons of this curated list (slug, e.g. 'activities')",
+              "title": "List"
+            }
+          },
+          {
+            "description": "Page size",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "description": "Page size",
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Pagination offset",
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
+              "description": "Pagination offset",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/IconDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Cache-Control": {
+                "description": "Caching policy",
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "description": "Content hash (API-version keyed)",
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Last-Modified": {
+                "description": "Last modification date",
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            },
+            "description": "Not Modified",
+            "headers": {
+              "Cache-Control": {
+                "description": "Caching policy",
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "description": "Content hash (API-version keyed)",
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Last-Modified": {
+                "description": "Last modification date",
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Raised when request components cannot be parsed"
+          },
+          "406": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Raised when provided `Accept` header cannot be satisfied"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Raised when returned response does not match the response schema"
+          }
+        },
+        "summary": "get_icons \u2014 Search icons.",
+        "tags": ["icons"]
+      },
+      "summary": "Searchable icon registry (emoji packs, openspec: icon-library)."
+    },
+    "/v1/map/catalog": {
+      "get": {
+        "description": "Metadata index for map clients: identities, labels in the\nrequest language, icons, parameter schemas, device-tier\nvariants, category projections and coverage bounds. Large\nstyles are referenced by URL, small ones inlined.",
+        "operationId": "map-catalog",
+        "parameters": [
+          {
+            "description": "Select language code: de, en, fr, it.",
+            "in": "query",
+            "name": "lang",
+            "schema": {
+              "default": "en",
+              "description": "Select language code: de, en, fr, it.",
+              "pattern": "(de|en|fr|it)",
+              "title": "Lang",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter by layer role (basemap | overlay)",
+            "in": "query",
+            "name": "role",
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(basemap|overlay)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Filter by layer role (basemap | overlay)",
+              "title": "Role"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MapCatalogResponse"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Raised when request components cannot be parsed"
+          },
+          "406": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Raised when provided `Accept` header cannot be satisfied"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Raised when returned response does not match the response schema"
+          }
+        },
+        "summary": "map-catalog \u2014 Map layer catalog (overlays and basemaps).",
+        "tags": ["map"]
+      },
+      "summary": "The light layer index \u2014 metadata only, never style blobs."
     },
     "/v1/meteo/symbol/{collection}/{time}/{code}.svg": {
       "get": {
