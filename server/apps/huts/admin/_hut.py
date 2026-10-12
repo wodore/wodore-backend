@@ -12,6 +12,7 @@ from django_admin_runner.admin import CommandRunnerModelAdminMixin
 from django.conf import settings
 from django.contrib import admin
 from django.contrib.postgres.aggregates import JSONBAgg
+from django.db.models import F
 from django.db.models.functions import JSONObject, Lower
 from django.http import HttpRequest
 from django.shortcuts import redirect
@@ -264,7 +265,11 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         images = obj.image_set.select_related("source_org", "license")
         total = images.count()
         shown = 0
-        for i, img in enumerate(images.order_by("details__score").all()[:max_images]):
+        for i, img in enumerate(
+            images.order_by(F("details__score").desc(nulls_last=True), "pk")[
+                :max_images
+            ]
+        ):
             shown += 1
             link = reverse("admin:images_image_change", args=[img.pk])
             img_tag = f"""
@@ -299,7 +304,7 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             # 500'd the whole change page for pinned huts).
             view_url = img.source_url_raw or (img.image.url if img.image else "")
             view_button = (
-                f"<span><a class='text-xs' href=\"{view_url}\" target='_blank> "
+                f"<span><a class='text-xs' href=\"{view_url}\" target='_blank'> "
                 f"<span class='material-symbols-outlined'> visibility </span> </a>"
                 if view_url
                 else ""
@@ -339,7 +344,9 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
                 .get_html()
             )
 
-        img = obj.image_set.order_by("details__score").first()
+        img = obj.image_set.order_by(
+            F("details__score").desc(nulls_last=True), "pk"
+        ).first()
         if img:
             return img.get_image_tag(radius=15, height=50, width=50)
         return ""

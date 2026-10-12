@@ -129,26 +129,22 @@ class CamptocampProvider(ImageProvider):
                     "Found waypoints", provider="camptocamp", count=len(waypoints)
                 )
 
-                # Step 2: Get details for each waypoint and extract images
+                # Step 2: Get details for each waypoint and extract images.
+                # Filter donors FIRST, then cap: non-donor waypoints (summits,
+                # passes, parking — the majority in alpine bboxes) must not
+                # consume the waypoint budget.
+                donors = [
+                    waypoint
+                    for waypoint in waypoints
+                    if waypoint.get("waypoint_type") in self.image_waypoint_types
+                ]
                 results = []
                 max_waypoints = min(
-                    len(waypoints), max(1, limit // 5)
+                    len(donors), max(1, limit // 5)
                 )  # Assume ~5 images per waypoint
-                for waypoint in waypoints[
+                for waypoint in donors[
                     :max_waypoints
                 ]:  # Limit waypoints based on desired result count
-                    # The list response carries waypoint_type; skip everything
-                    # outside the donor types (see image_waypoint_types) —
-                    # server-side type filtering is not supported by the API.
-                    waypoint_type = waypoint.get("waypoint_type")
-                    if waypoint_type not in self.image_waypoint_types:
-                        logger.debug(
-                            "Skipping camptocamp waypoint (type not a donor)",
-                            provider="camptocamp",
-                            waypoint_id=waypoint.get("document_id"),
-                            waypoint_type=waypoint_type,
-                        )
-                        continue
                     try:
                         waypoint_id = waypoint.get("document_id")
                         if not waypoint_id:

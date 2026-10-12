@@ -595,18 +595,10 @@ class Hut(TimeStampedModel):
                 .first()
             )
             # Imports stack upward from UPLOAD_DEFAULT_SCORE (newest import
-            # first) and stop at SCORE_MAX — the API contract caps scores at 100.
-            photo_score = (
-                HutImageAssociation.UPLOAD_DEFAULT_SCORE
-                if not last_img
-                else min(
-                    max(
-                        last_img.score or 0,
-                        HutImageAssociation.UPLOAD_DEFAULT_SCORE - 1,
-                    )
-                    + 1,
-                    HutImageAssociation.SCORE_MAX,
-                )
+            # first) and stop at SCORE_MAX — the API contract caps scores at
+            # 100, so the per-photo increments must not run past it.
+            photo_score = HutImageAssociation.import_score(
+                last_img.score if last_img else None
             )
             for photo in src_hut_photos:
                 img = Image.create_image_from_schema(
@@ -619,7 +611,7 @@ class Hut(TimeStampedModel):
                     img.save()
                     img.refresh_from_db()
                     pa = HutImageAssociation(image=img, hut=hut_db, score=photo_score)
-                    photo_score += 1
+                    photo_score = HutImageAssociation.import_score(photo_score)
                     pa.save()
                     # hut_db.image_set.add(img)
         return hut_db
@@ -761,18 +753,10 @@ class Hut(TimeStampedModel):
                     )
                     # Imports stack upward from UPLOAD_DEFAULT_SCORE (newest
                     # import first) and stop at SCORE_MAX — the API contract
-                    # caps scores at 100.
-                    photo_score = (
-                        HutImageAssociation.UPLOAD_DEFAULT_SCORE
-                        if not last_img
-                        else min(
-                            max(
-                                last_img.score or 0,
-                                HutImageAssociation.UPLOAD_DEFAULT_SCORE - 1,
-                            )
-                            + 1,
-                            HutImageAssociation.SCORE_MAX,
-                        )
+                    # caps scores at 100, so the per-photo increments must
+                    # not run past it.
+                    photo_score = HutImageAssociation.import_score(
+                        last_img.score if last_img else None
                     )
                     for img in v:
                         img.save()
@@ -781,7 +765,7 @@ class Hut(TimeStampedModel):
                             image=img, hut=hut_db, defaults={"score": photo_score}
                         )
                         # pa.save()
-                        photo_score += 1
+                        photo_score = HutImageAssociation.import_score(photo_score)
                         # hut_db.image_set.add(i)
                         if created:
                             updated = UpdateCreateStatus.updated

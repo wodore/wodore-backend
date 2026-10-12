@@ -49,6 +49,17 @@ class HutImageAssociation(TimeStampedModel):
     #: and stop here — >10 imports share the top slot, ordering falls back to id).
     SCORE_MAX = 99
 
+    @classmethod
+    def import_score(cls, previous: int | None) -> int:
+        """Score for the next import photo: stacks upward from
+        ``UPLOAD_DEFAULT_SCORE`` (newest import first) and stops at
+        ``SCORE_MAX`` — the image endpoints validate scores against 0–100,
+        so an uncapped ``+= 1`` loop would re-mint >100 scores (and 500s)
+        on large or repeated imports."""
+        if previous is None:
+            return cls.UPLOAD_DEFAULT_SCORE
+        return min(max(previous, cls.UPLOAD_DEFAULT_SCORE - 1) + 1, cls.SCORE_MAX)
+
     image = models.ForeignKey(
         Image, on_delete=models.CASCADE, db_index=True, related_name="details"
     )
