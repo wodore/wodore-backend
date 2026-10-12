@@ -1,10 +1,13 @@
 """Flag Icons source plugin (lipis/flag-icons, MIT).
 
 Layout: flat flag SVGs keyed by ISO 3166 code at ``flags/4x3/<code>.svg``
-and ``flags/1x1/<code>.svg``. Ratios map to ``Symbol`` styles: 4x3 →
-detailed, 1x1 → simple. Only codes with a Unicode emoji equivalent are
-imported (see ``flags.py``) — the repo also carries regional/variant
-flags (``es-ct``, ``sh-ac``, …) that have no emoji identity.
+and ``flags/1x1/<code>.svg``. Flat flags are ``simple`` style (the
+wavy emoji flags of the noto pack are the detailed variant); the two
+ratios import as separate icons with distinct slugs — 4:3 as
+``flag-switzerland``, the square crop as ``flag-switzerland-square``.
+Only codes with a Unicode emoji equivalent are imported (see
+``flags.py``) — the repo also carries regional/variant flags
+(``es-ct``, ``sh-ac``, …) that have no emoji identity.
 """
 
 from collections.abc import Iterator
@@ -34,15 +37,17 @@ FLAG_ICONS_SPEC = SourceSpec(
     extract_marker="flags",
 )
 
-#: Subdirectories (aspect ratios) mapped to ``Symbol`` styles.
-FLAG_ICONS_STYLES: tuple[tuple[str, str], ...] = (
-    ("4x3", "detailed"),
-    ("1x1", "simple"),
+#: Aspect-ratio directories imported as slug variants — all simple
+#: style, the square crop distinguished by slug and name suffix.
+FLAG_ICONS_VARIANTS: tuple[tuple[str, str, str], ...] = (
+    # (ratio directory, slug suffix, name suffix)
+    ("4x3", "", ""),
+    ("1x1", "-square", " (square)"),
 )
 
 
 class FlagIconsSource(IconSource):
-    """Country flags, rectangular — 4:3 and 1:1 ratios."""
+    """Country flags, rectangular — 4:3 and square variants."""
 
     spec: ClassVar[SourceSpec] = FLAG_ICONS_SPEC
 
@@ -53,15 +58,15 @@ class FlagIconsSource(IconSource):
         self, source_dir: Path, entries: dict[str, dict]
     ) -> Iterator[IconCandidate]:
         self.reset()
-        # Both ratios describe the same flag: merge into one candidate
-        # carrying two styles (the icon upsert is idempotent either way).
-        styles_by_code: dict[str, dict[str, Path]] = {}
-        for ratio, style in FLAG_ICONS_STYLES:
+        for ratio, slug_suffix, name_suffix in FLAG_ICONS_VARIANTS:
             for svg_path in sorted((source_dir / ratio).glob("*.svg")):
-                styles_by_code.setdefault(svg_path.stem, {})[style] = svg_path
-        for code in sorted(styles_by_code):
-            candidate = flag_candidate(
-                code, styles_by_code[code], entries, self.unique_slug
-            )
-            if candidate is not None:
-                yield candidate
+                candidate = flag_candidate(
+                    svg_path.stem,
+                    {"simple": svg_path},
+                    entries,
+                    self.unique_slug,
+                    slug_suffix=slug_suffix,
+                    name_suffix=name_suffix,
+                )
+                if candidate is not None:
+                    yield candidate

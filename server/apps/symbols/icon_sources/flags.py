@@ -58,9 +58,13 @@ def flag_candidate(
     styles: dict[str, Path],
     entries: dict[str, dict],
     unique_slug: Callable[[str], str],
+    slug_suffix: str = "",
+    name_suffix: str = "",
 ) -> IconCandidate | None:
     """Build the emojibase-joined candidate for one flag code.
 
+    ``slug_suffix``/``name_suffix`` distinguish same-flag variants
+    imported as separate icons (e.g. flag-icons' square crop).
     Returns ``None`` when the code has no Unicode emoji equivalent —
     flag sources import only the emoji set (the join is the whitelist,
     see module docstring).
@@ -69,8 +73,12 @@ def flag_candidate(
     entry = entries.get(hexcode) if hexcode else None
     if entry is None:
         return None
+    if name_suffix:
+        # The import names icons from the entry, not the fallback —
+        # decorate it so the variant label reaches ``Icon.name``.
+        entry = {**entry, "name": f"{entry['name']}{name_suffix}"}
     return IconCandidate(
-        slug=unique_slug(entry["slug"]),
+        slug=unique_slug(f"{entry['slug']}{slug_suffix}"),
         fallback_name=entry["name"],
         hexcode=hexcode,
         styles=styles,

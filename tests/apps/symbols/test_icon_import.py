@@ -211,16 +211,22 @@ class TestFlagImports:
         assert icon.unicode == "1F3F4-E0067-E0062-E0065-E006E-E0067-E007F"
         assert icon.category.slug == "subdivision-flag"
 
-    def test_flag_icons_two_ratios(self):
-        """4:3 → detailed, 1:1 → simple: one icon, two styles."""
-        icon = Icon.objects.get(pack__slug="flag-icons", slug="flag-switzerland")
-        assert set(
-            Symbol.objects.filter(slug="flag-icons-flag-switzerland").values_list(
-                "style", flat=True
-            )
-        ) == {"detailed", "simple"}
-        assert icon.symbol_detailed.svg_file
-        assert icon.symbol_simple.svg_file
+    def test_flag_icons_ratio_variants(self):
+        """4:3 and 1:1 are separate simple icons (square-suffixed slug)."""
+        rect = Icon.objects.get(pack__slug="flag-icons", slug="flag-switzerland")
+        square = Icon.objects.get(
+            pack__slug="flag-icons", slug="flag-switzerland-square"
+        )
+        assert rect.name == "flag: Switzerland"
+        assert square.name == "flag: Switzerland (square)"
+        for icon in (rect, square):
+            assert set(
+                Symbol.objects.filter(slug=f"flag-icons-{icon.slug}").values_list(
+                    "style", flat=True
+                )
+            ) == {"simple"}
+            assert icon.symbol_simple.svg_file
+            assert icon.symbol_detailed is None
 
     def test_circle_flags_single_style(self):
         icon = Icon.objects.get(pack__slug="circle-flags", slug="flag-switzerland")
@@ -228,8 +234,9 @@ class TestFlagImports:
             Symbol.objects.filter(slug="circle-flags-flag-switzerland").values_list(
                 "style", flat=True
             )
-        ) == {"detailed"}
-        assert icon.symbol_detailed.svg_file
+        ) == {"simple"}
+        assert icon.symbol_simple.svg_file
+        assert icon.symbol_detailed is None
 
     def test_flag_packs_orgs_and_shared_license(self):
         assert (
@@ -251,6 +258,8 @@ class TestFlagImports:
         assert not Icon.objects.filter(slug__contains="confederate").exists()
         assert not Icon.objects.filter(slug__contains="en-us").exists()
         assert Icon.objects.filter(pack__slug="circle-flags").count() == 2
+        # ch (4:3 + square) only — es-ct skipped in both ratios.
+        assert Icon.objects.filter(pack__slug="flag-icons").count() == 2
 
     def test_flag_keywords_localized(self):
         icon = Icon.objects.get(pack__slug="flag-icons", slug="flag-switzerland")
