@@ -2,8 +2,10 @@
 
 openspec: icon-library — one idempotent command per source:
 
-    icon_import --source fluent --ref <pin>   # Fluent Emoji (MIT)
-    icon_import --source noto  --ref <pin>    # Noto Emoji (Apache-2.0)
+    icon_import --source fluent --ref <pin>        # Fluent Emoji (MIT)
+    icon_import --source noto --ref <pin>          # Noto Emoji incl. region flags (Apache-2.0)
+    icon_import --source flag-icons --ref <pin>    # lipis flag-icons (MIT)
+    icon_import --source circle-flags --ref <pin>  # HatScripts circle-flags (MIT)
 
 Sources plug in via ``server.apps.symbols.icon_sources`` (adding one is
 a new plugin module + registry entry — no schema, API, or command

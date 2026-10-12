@@ -11,15 +11,25 @@ schema, API, or command changes.
 """
 
 from .base import IconCandidate, IconSource, SourceSpec
+from .circle_flags import CircleFlagsSource
+from .flag_icons import FlagIconsSource
 from .fluent import FluentSource
 from .noto import NotoSource
 
 SOURCES: dict[str, IconSource] = {
-    source.spec.key: source for source in (FluentSource(), NotoSource())
+    source.spec.key: source
+    for source in (
+        FluentSource(),
+        NotoSource(),
+        FlagIconsSource(),
+        CircleFlagsSource(),
+    )
 }
 
 __all__ = [
     "SOURCES",
+    "CircleFlagsSource",
+    "FlagIconsSource",
     "FluentSource",
     "IconCandidate",
     "IconSource",
