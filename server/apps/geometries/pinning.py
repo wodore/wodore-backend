@@ -163,8 +163,8 @@ def pin_place_images(place, results: list[ImageResult]) -> PinStats:
 
     Existing pins get their mutable fields refreshed (URLs can change when a
     file is re-uploaded at the origin); association scores are only ever set
-    once — manual curation survives later syncs. Internal (``wodore``)
-    results are skipped: those images already live in our DB. The same image
+    once — manual curation survives later syncs. Internal (``wodore``) results
+    are skipped: those images already live in our DB. The same image
     can be pinned to several places; scores are per association.
     """
     assoc_model, place_field, invalidate = _association_for(place)
@@ -172,7 +172,15 @@ def pin_place_images(place, results: list[ImageResult]) -> PinStats:
     now = timezone.now()
 
     for result in results:
-        if result.provider == INTERNAL_PROVIDER_SLUG:
+        # Internal results must never be re-pinned: the Wodore provider passes
+        # existing pins/uploads through (provider = source_org slug, source_id
+        # = the row's source_ident). Re-pinning them would mint a new Image
+        # with the provider prefix stacked onto the ident
+        # ("camptocamp:camptocamp:...") and a duplicate association — every
+        # sweep doubled every visible pin (staging 2026-10).
+        if result.provider == INTERNAL_PROVIDER_SLUG or (result.extra or {}).get(
+            "internal_pin"
+        ):
             stats.skipped += 1
             continue
 
@@ -214,7 +222,11 @@ def pin_place_images(place, results: list[ImageResult]) -> PinStats:
 
         assoc, assoc_created = assoc_model.objects.get_or_create(
             image=image,
-            defaults={"score": min(max(result.score, 0), 32767)},
+            # Curated uploads live in 90–99; provider pins stay below them
+            # (see HutImageAssociation) while remaining valid API scores.
+            defaults={
+                "score": min(max(result.score, 0), assoc_model.PROVIDER_SCORE_MAX)
+            },
             **{place_field: place},
         )
         if assoc_created:

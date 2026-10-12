@@ -11,6 +11,7 @@ Fetches images from Camptocamp API using bbox queries.
 # Result api:
 #   http://localhost:8000/v1/geo/images/hut/hollandia?lang=de&radius=50&limit=20&update_cache=1
 
+import json
 from datetime import datetime
 
 import structlog
@@ -37,6 +38,16 @@ class CamptocampProvider(ImageProvider):
     source = "camptocamp"
     cache_ttl = 30 * 24 * 3600  # 31 days
     priority = 3  # Lower priority than wodore/wikidata
+
+    #: Only these waypoint types donate images. The /waypoints bbox search
+    #: cannot filter types server-side (``t=`` etc. are silently ignored) and
+    #: would otherwise drag in summits, passes, parking lots, climbing crags
+    #: and webcams near the queried place — hut-page galleries should show
+    #: the place, not its surroundings (user decision 2026-10-12: overnight
+    #: places only). Routes are never queried (they live under /routes).
+    image_waypoint_types: frozenset[str] = frozenset(
+        {"hut", "gite", "shelter", "camp_site", "bivouac"}
+    )
 
     def __init__(self, lang: str = "de"):
         """
@@ -118,16 +129,26 @@ class CamptocampProvider(ImageProvider):
                     "Found waypoints", provider="camptocamp", count=len(waypoints)
                 )
 
-                # Step 2: Get details for each waypoint and extract images
+                # Step 2: Get details for each waypoint and extract images.
+                # Filter donors FIRST, then cap: non-donor waypoints (summits,
+                # passes, parking — the majority in alpine bboxes) must not
+                # consume the waypoint budget.
+                donors = [
+                    waypoint
+                    for waypoint in waypoints
+                    if waypoint.get("waypoint_type") in self.image_waypoint_types
+                ]
                 results = []
                 max_waypoints = min(
-                    len(waypoints), max(1, limit // 5)
+                    len(donors), max(1, limit // 5)
                 )  # Assume ~5 images per waypoint
-                for waypoint in waypoints[
+                for waypoint in donors[
                     :max_waypoints
                 ]:  # Limit waypoints based on desired result count
                     try:
                         waypoint_id = waypoint.get("document_id")
+                        if not waypoint_id:
+                            continue
                         logger.debug(
                             "Fetching waypoint",
                             provider="camptocamp",
@@ -261,8 +282,6 @@ class CamptocampProvider(ImageProvider):
 
         if geom_json:
             try:
-                import json
-
                 geom_obj = json.loads(geom_json)
                 coordinates = geom_obj.get("coordinates", [])
                 if len(coordinates) >= 2:
@@ -662,10 +681,10 @@ if __name__ == "__main__":
             for i, result in enumerate(results[:3], 1):
                 print(f"\n{i}. {result.source_id}")
                 print(f"   Distance: {result.distance_m:.0f}m")
-                print(f"   License: {result.license_name}")
+                print(f"   License: {result.license_slug}")
                 print(f"   Author: {result.author}")
                 print(f"   Attribution: {result.attribution}")
-                print(f"   URL: {result.urls['original']}")
+                print(f"   URL: {result.url_large}")
 
     # Run test
     asyncio.run(test_camptocamp())
