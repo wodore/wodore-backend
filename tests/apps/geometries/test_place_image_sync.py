@@ -342,6 +342,13 @@ class TestGeoimagesPinCommand:
         # Pinned hut → default mode skips it; --all still sweeps it.
         hut.images_pinned_at = timezone.now()
         hut.save(update_fields=["images_pinned_at"])
+        # Deterministic: mark every other place synced too (the test DB may
+        # carry unpinned geoplaces from the seed or earlier runs).
+        from server.apps.geometries.models import GeoPlace
+
+        GeoPlace.objects.filter(images_pinned_at__isnull=True).update(
+            images_pinned_at=timezone.now()
+        )
         seen.clear()
         call_command("geoimages_pin")
         out = capsys.readouterr().out
@@ -420,13 +427,15 @@ class TestGeoimagesPinCommand:
             call_command("geoimages_pin", bbox="not,a,bbox")
 
     def test_bbox_widget_renders(self):
-        """Smoke test: the widget renders the map container and the input."""
+        """Smoke test: widget renders the map, input, and draw toolbar."""
         from server.apps.geometries.widgets import BBoxWidget
 
         html = BBoxWidget().render("bbox", "7.5,46.0,8.5,46.8")
         assert "bbox-widget" in html
         assert 'name="bbox"' in html and 'value="7.5,46.0,8.5,46.8"' in html
         assert "bbox_widget.js" in html
+        assert 'class="bbox-draw-btn"' in html
+        assert 'type="button"' in html  # must never submit the run form
 
     def test_assess_skipped_when_place_has_no_pins(self, hut, monkeypatch, capsys):
         """--assess (and warmup) are pointless for places without pins."""
