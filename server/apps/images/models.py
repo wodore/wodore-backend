@@ -258,8 +258,11 @@ class Image(TimeStampedModel):
                 focal_str = None
                 crop_start = None
                 crop_stop = None
+            # Pinned external images have no local file — fall back to the raw
+            # source URL so admin thumbnails work for pins too.
+            source = self.image if self.image else self.source_url_raw
             img = (
-                ImagorImage(self.image)
+                ImagorImage(source)
                 .transform(
                     size=f"{width}x{height}",
                     focal=focal_str,

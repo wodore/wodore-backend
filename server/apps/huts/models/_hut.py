@@ -594,13 +594,19 @@ class Hut(TimeStampedModel):
                 .order_by("-score")
                 .first()
             )
+            # Imports stack upward from UPLOAD_DEFAULT_SCORE (newest import
+            # first) and stop at SCORE_MAX — the API contract caps scores at 100.
             photo_score = (
                 HutImageAssociation.UPLOAD_DEFAULT_SCORE
                 if not last_img
-                else max(
-                    last_img.score or 0, HutImageAssociation.UPLOAD_DEFAULT_SCORE - 1
+                else min(
+                    max(
+                        last_img.score or 0,
+                        HutImageAssociation.UPLOAD_DEFAULT_SCORE - 1,
+                    )
+                    + 1,
+                    HutImageAssociation.SCORE_MAX,
                 )
-                + 1
             )
             for photo in src_hut_photos:
                 img = Image.create_image_from_schema(
@@ -753,14 +759,20 @@ class Hut(TimeStampedModel):
                         .order_by("-score")
                         .first()
                     )
+                    # Imports stack upward from UPLOAD_DEFAULT_SCORE (newest
+                    # import first) and stop at SCORE_MAX — the API contract
+                    # caps scores at 100.
                     photo_score = (
                         HutImageAssociation.UPLOAD_DEFAULT_SCORE
                         if not last_img
-                        else max(
-                            last_img.score or 0,
-                            HutImageAssociation.UPLOAD_DEFAULT_SCORE - 1,
+                        else min(
+                            max(
+                                last_img.score or 0,
+                                HutImageAssociation.UPLOAD_DEFAULT_SCORE - 1,
+                            )
+                            + 1,
+                            HutImageAssociation.SCORE_MAX,
                         )
-                        + 1
                     )
                     for img in v:
                         img.save()

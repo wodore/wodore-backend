@@ -30,6 +30,11 @@ class DeletePolicy(models.TextChoices):
 
 
 class GeoPlaceImageAssociation(TimeStampedModel):
+    # Mirror of HutImageAssociation's score bands: provider pins stay in
+    # 0–89, curated content would live in 90–99 (geoplaces currently have no
+    # uploads — kept for parity so pin_place_images can clamp uniformly).
+    PROVIDER_SCORE_MAX = 89
+
     image = models.ForeignKey(
         Image, on_delete=models.CASCADE, db_index=True, related_name="geoplace_details"
     )
@@ -42,7 +47,9 @@ class GeoPlaceImageAssociation(TimeStampedModel):
     score = models.PositiveSmallIntegerField(
         blank=True,
         null=True,
-        help_text=_("Display score — higher is shown first."),
+        help_text=_(
+            "Display score — higher is shown first; pinned external images stay in 0–89."
+        ),
     )
 
     def __str__(self) -> str:

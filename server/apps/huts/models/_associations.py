@@ -38,9 +38,16 @@ class HutContactAssociation(TimeStampedModel):
 
 
 class HutImageAssociation(TimeStampedModel):
-    # Uploaded/imported images outrank pinned external images (provider scores
-    # are 0–100; curation is deliberate content — see openspec pin-external-images).
-    UPLOAD_DEFAULT_SCORE = 1000
+    # Display-order bands inside the API contract's 0–100 (the image endpoints
+    # validate properties.score against that): curated uploads/imports live in
+    # 90–99 (deliberate content outranks pins), pinned external images are
+    # clamped to 0–89 by pin_place_images (their provider score).
+    UPLOAD_DEFAULT_SCORE = 90
+    #: Highest score a pinned external image association may carry.
+    PROVIDER_SCORE_MAX = 89
+    #: Hard display-order ceiling (imports stack upward from UPLOAD_DEFAULT_SCORE
+    #: and stop here — >10 imports share the top slot, ordering falls back to id).
+    SCORE_MAX = 99
 
     image = models.ForeignKey(
         Image, on_delete=models.CASCADE, db_index=True, related_name="details"
@@ -52,7 +59,8 @@ class HutImageAssociation(TimeStampedModel):
         blank=True,
         null=True,
         help_text=_(
-            "Display score — higher is shown first; pinned external images carry their provider score."
+            "Display score — higher is shown first; curated uploads live in 90–99, "
+            "pinned external images in 0–89."
         ),
     )
 
