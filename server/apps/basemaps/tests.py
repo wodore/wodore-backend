@@ -351,3 +351,100 @@ class TestStyleEndpoint:
         response = client.get("/v1/map/styles/nope.json")
         assert response.status_code == 404
         assert response.json()["code"] == "not_found"
+
+
+# ── Legends ────────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestLegends:
+    def _seed(self):
+        from django.core.management import call_command
+
+        call_command("map_seed", verbosity=0)
+
+    def test_catalog_serves_category_driven_legend(self):
+        self._seed()
+        client = Client()
+        payload = client.get("/v1/map/catalog", {"lang": "en"}).json()
+        huts = next(l for l in payload["layers"] if l["slug"] == "huts")
+        assert huts["legend"] is not None
+        section = huts["legend"]["sections"][0]
+        assert section["type"] == "symbol_dual"
+        # Category-driven section embeds the minimal projection
+        assert "category" in section
+
+    def test_catalog_serves_static_legend_items(self):
+        self._seed()
+        client = Client()
+        payload = client.get("/v1/map/catalog", {"lang": "en"}).json()
+        transport = next(l for l in payload["layers"] if l["slug"] == "transport-stops")
+        items = transport["legend"]["sections"][0]["items"]
+        assert {"label": "Train", "color": "#C60018"} in [
+            {"label": i["label"], "color": i["color"]} for i in items
+        ]
+
+    def test_legend_external_links_m2m(self):
+        self._seed()
+        from server.apps.external_links.models import ExternalLink
+
+        assert ExternalLink.objects.filter(
+            url="https://www.schweizmobil.ch/de/wanderland.html"
+        ).exists()
+        client = Client()
+        payload = client.get("/v1/map/catalog", {"lang": "en"}).json()
+        hiking = next(
+            l
+            for l in payload["layers"]
+            if l["slug"] == "ch.swisstopo.swisstlm3d-wanderwege"
+        )
+        urls = [link["url"] for link in hiking["legend"]["links"]]
+        assert "https://www.schweizmobil.ch/de/wanderland.html" in urls
+
+    def test_legend_token_passthrough(self):
+        from server.apps.basemaps.models import (
+            MapLegend,
+            MapLegendItem,
+            MapLegendSection,
+        )
+
+        self._seed()
+        legend = MapLegend.objects.create(title="Variable legend")
+        section = MapLegendSection.objects.create(
+            legend=legend, order=99, title="Lines", type="line"
+        )
+        MapLegendItem.objects.create(
+            section=section,
+            order=0,
+            label="Trail",
+            color="{{trail_color}}",
+            width="{{trail_width}}",
+        )
+        MapLayer.objects.filter(slug="mtb").update(legend=legend)
+
+        from django.core.cache import cache
+
+        cache.clear()  # catalog is page-cached — see fresh data
+        client = Client()
+        payload = client.get("/v1/map/catalog", {"lang": "en"}).json()
+        entry = next(l for l in payload["layers"] if l["slug"] == "mtb")
+        item = entry["legend"]["sections"][0]["items"][0]
+        assert item["color"] == "{{trail_color}}"
+        assert item["width"] == "{{trail_width}}"
+
+    def test_variants_share_slug_level_legend(self):
+        self._seed()
+        huts = MapLayer.objects.get(slug="huts")
+        assert huts.legend is not None
+        MapLayer.objects.create(
+            slug="huts",
+            spec=MapLayer.Spec.high,
+            role=huts.role,
+            name=huts.name,
+            style=huts.style,
+            legend=huts.legend,
+        )
+        legend_ids = set(
+            MapLayer.objects.filter(slug="huts").values_list("legend_id", flat=True)
+        )
+        assert None not in legend_ids and len(legend_ids) == 1

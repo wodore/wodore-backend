@@ -216,6 +216,201 @@ class MapCoverage(TimeStampedModel):
         return tuple(extent)
 
 
+class MapLegend(TimeStampedModel):
+    """A layer legend — sections of items explaining the layer's data.
+
+    Slug-level by design: every variant (spec) row of a layer points at
+    the same legend (per-variant divergence is possible but discouraged
+    — a legend explains the data, which does not change with device
+    tier). Category-driven sections resolve their items from the
+    category tree at serve time; static items carry colors/widths that
+    MAY reference parameter tokens (``{{param}}``) so legends reflect
+    user-customized values (resolved client-side like style tokens).
+    """
+
+    title = models.CharField(
+        max_length=100,
+        default="",
+        blank=True,
+        help_text=_("Legend title (fallback: layer name)"),
+    )
+    description = models.TextField(
+        max_length=1000,
+        default="",
+        blank=True,
+        help_text=_("Legend intro text"),
+    )
+    i18n = TranslationField(fields=("title", "description"))
+
+    links = models.ManyToManyField(
+        "external_links.ExternalLink",
+        through="MapLegendLink",
+        related_name="map_legends",
+        blank=True,
+        verbose_name=_("Links"),
+        help_text=_("Related external links (more info, sources)"),
+    )
+
+    if TYPE_CHECKING:
+        # Reverse relations (typed for checkers).
+        sections: QuerySet[MapLegendSection]
+        legend_links: QuerySet[MapLegendLink]
+        layers: QuerySet[MapLayer]
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        verbose_name = _("Map legend")
+        verbose_name_plural = _("Map legends")
+        ordering = ("pk",)
+
+    def __str__(self) -> str:
+        target = self.layers.first() if hasattr(self, "layers") else None
+        return f"Legend: {target.slug}" if target else f"Legend #{self.pk}"
+
+
+class MapLegendSection(TimeStampedModel):
+    """Ordered legend section — category-driven or static items."""
+
+    class Type(models.TextChoices):
+        symbol_detailed = "symbol_detailed", _("detailed symbols")
+        symbol_simple = "symbol_simple", _("simple symbols")
+        symbol_mono = "symbol_mono", _("monochrome symbols")
+        symbol_dual = "symbol_dual", _("dual symbols")
+        line = "line", _("lines")
+        area = "area", _("areas")
+        point = "point", _("points")
+
+    legend = models.ForeignKey(
+        MapLegend,
+        on_delete=models.CASCADE,
+        related_name="sections",
+        db_index=True,
+    )
+    order = models.PositiveSmallIntegerField(default=0, db_index=True)
+    title = models.CharField(max_length=100, default="", blank=True)
+    description = models.TextField(max_length=400, default="", blank=True)
+    i18n = TranslationField(fields=("title", "description"))
+    type = models.CharField(
+        max_length=20,
+        choices=Type.choices,
+        default=Type.symbol_detailed,
+        help_text=_("How items in this section render"),
+    )
+    category = models.ForeignKey(
+        "categories.Category",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="legend_sections",
+        db_index=True,
+        help_text=_(
+            "Category-driven section: items resolve from this category "
+            "tree (overrides static items)"
+        ),
+    )
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        verbose_name = _("Legend section")
+        verbose_name_plural = _("Legend sections")
+        ordering = ("legend", "order", "pk")
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(
+                    type__in=[
+                        "symbol_detailed",
+                        "symbol_simple",
+                        "symbol_mono",
+                        "symbol_dual",
+                        "line",
+                        "area",
+                        "point",
+                    ]
+                ),
+                name="basemaps_maplegendsection_type_valid",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return self.title or f"Section #{self.pk}"
+
+
+class MapLegendItem(TimeStampedModel):
+    """Static legend item — values may reference parameter tokens."""
+
+    section = models.ForeignKey(
+        MapLegendSection,
+        on_delete=models.CASCADE,
+        related_name="items",
+        db_index=True,
+    )
+    order = models.PositiveSmallIntegerField(default=0, db_index=True)
+    label = models.CharField(max_length=100, default="", blank=True)
+    description = models.TextField(max_length=400, default="", blank=True)
+    i18n = TranslationField(fields=("label", "description"))
+    color = models.CharField(
+        max_length=100,
+        default="",
+        blank=True,
+        help_text=_(
+            "Item color (hex) — may reference a parameter token like "
+            "{{trail_color}} so the legend follows user customization"
+        ),
+    )
+    width = models.CharField(
+        max_length=50,
+        default="",
+        blank=True,
+        help_text=_(
+            "Line/size value — may reference a parameter token (e.g. {{trail_width}})"
+        ),
+    )
+    icon = models.CharField(
+        max_length=100,
+        default="",
+        blank=True,
+        help_text=_("Icon library reference (optional)"),
+    )
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        verbose_name = _("Legend item")
+        verbose_name_plural = _("Legend items")
+        ordering = ("section", "order", "pk")
+
+    def __str__(self) -> str:
+        return self.label or f"Item #{self.pk}"
+
+
+class MapLegendLink(TimeStampedModel):
+    """Ordered legend ↔ external link join."""
+
+    legend = models.ForeignKey(
+        MapLegend,
+        on_delete=models.CASCADE,
+        related_name="legend_links",
+        db_index=True,
+    )
+    link = models.ForeignKey(
+        "external_links.ExternalLink",
+        on_delete=models.CASCADE,
+        related_name="legend_link_joins",
+        db_index=True,
+    )
+    order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        verbose_name = _("Legend link")
+        verbose_name_plural = _("Legend links")
+        ordering = ("legend", "order", "pk")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("legend", "link"),
+                name="unique_legend_link",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.legend} ← {self.link}"
+
+
 class MapLayer(TimeStampedModel):
     """A map layer: overlay or basemap, one row per device-tier variant.
 
@@ -414,6 +609,15 @@ class MapLayer(TimeStampedModel):
         related_name="map_layers",
         verbose_name=_("License"),
         help_text=_("License under which this layer's data is used"),
+    )
+    legend = models.ForeignKey(
+        MapLegend,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="layers",
+        verbose_name=_("Legend"),
+        help_text=_("Shared by all spec variants of this layer (slug-level)"),
     )
 
     parameters = models.ManyToManyField(

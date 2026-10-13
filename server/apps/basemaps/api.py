@@ -104,6 +104,7 @@ class LayerSummary(pydantic.BaseModel):
     categories: list[dict[str, Any]] = []
     attributions: list[dict[str, Any]] = []
     license: dict[str, Any] | None = None
+    legend: dict[str, Any] | None = None
     variants: list[LayerVariant] = []
 
 
@@ -158,6 +159,8 @@ def _build_layer_summaries(queryset) -> list[LayerSummary]:
         "layer_parameters__parameter",
         "layer_categories__category",
         "layer_attributions__organization",
+        "legend__sections__items",
+        "legend__legend_links__link",
     ):
         summary = summaries.get(layer.slug)
         if summary is None:
@@ -212,6 +215,7 @@ def _build_summary(layer: MapLayer) -> LayerSummary:
 
     return LayerSummary(
         slug=layer.slug,
+        legend=_legend_payload(layer),
         role=layer.role,
         name=layer.name_i18n or layer.name,  # noqa: WPS308
         description=layer.description_i18n or layer.description,  # noqa: WPS308
@@ -236,6 +240,55 @@ def _build_summary(layer: MapLayer) -> LayerSummary:
         license=license_payload,
         variants=[],
     )
+
+
+def _legend_payload(layer: MapLayer) -> dict[str, Any] | None:
+    """Serialize the slug-level legend (frontend-compatible shape).
+
+    Category-driven sections embed the minimal category projection;
+    static items carry colors/widths verbatim — ``{{param}}`` tokens
+    pass through so clients resolve them with the same defaults ∪
+    user-overrides walk they use for styles (variable-aware legends).
+    """
+    legend = layer.legend
+    if legend is None:
+        return None
+    sections: list[dict[str, Any]] = []
+    for section in legend.sections.all():
+        entry: dict[str, Any] = {
+            "title": section.title_i18n or section.title,  # noqa: WPS308
+            "description": section.description_i18n  # noqa: WPS308
+            or section.description,
+            "type": section.type,
+        }
+        if section.category_id and section.category is not None:
+            entry["category"] = _category_projection(
+                section.category, "legend", section.order
+            )
+        else:
+            entry["items"] = [
+                {
+                    "label": item.label_i18n or item.label,  # noqa: WPS308
+                    "description": item.description_i18n  # noqa: WPS308
+                    or item.description,
+                    "color": item.color,
+                    "width": item.width,
+                    "icon": item.icon,
+                }
+                for item in section.items.all()
+            ]
+        sections.append(entry)
+    links = [
+        {
+            "name": join.link.label_i18n or join.link.label,  # noqa: WPS308
+            "url": join.link.url,
+        }
+        for join in legend.legend_links.all()
+    ]
+    payload: dict[str, Any] = {"sections": sections}
+    if links:
+        payload["links"] = links
+    return payload
 
 
 def _build_variant(layer: MapLayer) -> LayerVariant:

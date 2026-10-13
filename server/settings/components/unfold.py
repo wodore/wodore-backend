@@ -364,6 +364,7 @@ UNFOLD = {
                 "basemaps.mapparameter",
                 "basemaps.mapcoverage",
                 "basemaps.mapslot",
+                "basemaps.maplegend",
             ],
             "items": [
                 {
@@ -385,6 +386,13 @@ UNFOLD = {
                     "link": reverse_lazy("admin:basemaps_mapcoverage_changelist"),
                     "permission": lambda request: request.user.has_perm(
                         "basemaps.view_mapcoverage"
+                    ),
+                },
+                {
+                    "title": _("Legends"),
+                    "link": reverse_lazy("admin:basemaps_maplegend_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "basemaps.view_maplegend"
                     ),
                 },
             ],

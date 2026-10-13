@@ -39,3 +39,5 @@
 - [x] 6.1 Unit tests: resolver (tokens, env, absolutization, variant fallback), model constraints (style XOR, unique slug+spec, unknown token, attribution required)
 - [x] 6.2 Contract tests + API snapshot committed
 - [x] 6.3 `inv tests` (lane runner: `scripts/lane-run.sh .venv/bin/pytest`) green
+
+- [x] 1.8 MapLegend/Section/Item/Link models (ExternalLink M2M, token-capable colors/widths), catalog serialization, seed migration of config legends, admin + TABS

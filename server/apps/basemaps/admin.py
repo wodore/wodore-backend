@@ -8,7 +8,7 @@ live style preview (MapLibre GL, resolved mode) via ``<id>/preview/``.
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import Any
 
 from django.contrib import admin
 from django.http import HttpRequest, HttpResponse
@@ -26,6 +26,10 @@ from .models import (
     MapLayerAttribution,
     MapLayerCategory,
     MapLayerParameter,
+    MapLegend,
+    MapLegendItem,
+    MapLegendLink,
+    MapLegendSection,
     MapParameter,
     MapSlot,
 )
@@ -57,6 +61,63 @@ class MapLayerAttributionInline(admin.TabularInline):
     tab = True
     extra = 0
     autocomplete_fields = ("organization",)
+
+
+class MapLegendItemInline(admin.TabularInline):
+    """Static legend items (colors/widths may hold parameter tokens)."""
+
+    model = MapLegendItem
+    tab = True
+    extra = 0
+
+
+class MapLegendSectionInline(admin.TabularInline):
+    """Legend sections on the legend admin."""
+
+    model = MapLegendSection
+    tab = True
+    extra = 0
+    autocomplete_fields = ("category",)
+    show_change_link = True
+
+
+class MapLegendLinkInline(admin.TabularInline):
+    """Ordered external links on the legend admin."""
+
+    model = MapLegendLink
+    tab = True
+    extra = 0
+    autocomplete_fields = ("link",)
+
+
+@admin.register(MapLegend)
+class MapLegendAdmin(ModelAdmin):
+    """Legend curation: sections (category-driven or static), links."""
+
+    list_display = ("__str__", "section_count", "layer_count")
+    search_fields = ("title", "sections__title", "sections__items__label")
+    inlines = (
+        MapLegendSectionInline,
+        MapLegendLinkInline,
+    )
+
+    @display(description=_("Sections"))
+    def section_count(self, obj: MapLegend) -> int:
+        return MapLegendSection.objects.filter(legend=obj).count()
+
+    @display(description=_("Layers"))
+    def layer_count(self, obj: MapLegend) -> int:
+        return MapLayer.objects.filter(legend=obj).count()
+
+
+@admin.register(MapLegendSection)
+class MapLegendSectionAdmin(ModelAdmin):
+    """Section detail admin (items inline)."""
+
+    list_display = ("__str__", "legend", "type", "order", "category")
+    list_filter = ("type",)
+    autocomplete_fields = ("legend", "category")
+    inlines = (MapLegendItemInline,)
 
 
 @admin.register(MapSlot)
@@ -120,12 +181,12 @@ class MapLayerAdmin(ModelAdmin):
         "fallback",
         "license",
     )
-    inlines: ClassVar[tuple[type[admin.TabularInline], ...]] = (
+    inlines = (
         MapLayerParameterInline,
         MapLayerCategoryInline,
         MapLayerAttributionInline,
     )
-    readonly_fields: ClassVar[tuple[str, ...]] = ("style_serving_url",)
+    readonly_fields = ("style_serving_url",)
     fieldsets = (
         (
             None,

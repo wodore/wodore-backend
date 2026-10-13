@@ -4613,6 +4613,19 @@
             "title": "Is Default",
             "type": "boolean"
           },
+          "legend": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Legend"
+          },
           "license": {
             "anyOf": [
               {

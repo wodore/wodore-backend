@@ -121,3 +121,17 @@ The system SHALL provide an idempotent `map_seed` command provisioning slots, pa
 
 - **WHEN** the resolved style for `wd-outdoor-base-mtk` is compared with `tile_server/styles/wd-outdoor-base-mtk.json`
 - **THEN** they are identical except absolutized sprite/glyph/tile URLs
+
+### Requirement: Map legend registry
+
+The system SHALL maintain legends (`MapLegend`) with ordered sections (`MapLegendSection`: i18n title/description, render type, optional category FK for category-driven sections) and static items (`MapLegendItem`: i18n label/description, color/width that MAY reference parameter tokens, icon ref). Legend links SHALL be M2M to `external_links.ExternalLink` (ordered through `MapLegendLink`). `MapLayer.legend` SHALL reference a legend shared by all spec variants of the layer (slug-level; per-variant divergence is possible but discouraged). The catalog SHALL serialize legends in the frontend-compatible shape with tokens passed through verbatim for client-side resolution.
+
+#### Scenario: Variable-aware legend item
+
+- **WHEN** a legend item's color references a parameter token (e.g. `{{trail_color}}`)
+- **THEN** the catalog serves the token verbatim and clients resolve it with the same defaults ∪ user-overrides walk used for styles
+
+#### Scenario: Variants share one legend
+
+- **WHEN** a layer exists in multiple spec variants
+- **THEN** all variant rows reference the same legend row and the catalog emits exactly one legend for the slug

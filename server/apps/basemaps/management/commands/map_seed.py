@@ -24,9 +24,14 @@ from server.apps.basemaps.models import (
     MapLayerAttribution,
     MapLayerCategory,
     MapLayerParameter,
+    MapLegend,
+    MapLegendItem,
+    MapLegendLink,
+    MapLegendSection,
     MapParameter,
     MapSlot,
 )
+from server.apps.external_links.models import ExternalLink
 from server.apps.organizations.models import Organization
 
 FIXTURES = Path(__file__).resolve().parent.parent.parent / "fixtures" / "styles"
@@ -112,6 +117,157 @@ ORGS = [
 # CH + border strips (frontend ch-swisstopo-full bbox parity)
 CH_BBOX = (5.7, 45.6, 10.9, 48.1)
 
+# Legends per layer slug — category-driven sections or static items
+# (colors/widths may hold {{parameter}} tokens). Links reuse
+# external_links.ExternalLink rows (get-or-create by URL).
+LEGENDS: dict[str, dict[str, Any]] = {
+    "huts": {
+        "sections": [
+            {
+                "title": "Accommodation",
+                "description": "Hut types by symbol.",
+                "type": "symbol_dual",
+                "category": "accommodation",
+            }
+        ]
+    },
+    "huts-availability": {
+        "sections": [
+            {
+                "title": "Availability",
+                "description": "Occupancy status per day.",
+                "type": "symbol_detailed",
+                "category": "availability",
+            }
+        ]
+    },
+    "transport-stops": {
+        "sections": [
+            {
+                "title": "Transport stops",
+                "type": "point",
+                "items": [
+                    {"label": "Train", "color": "#C60018"},
+                    {"label": "Bus", "color": "#2d327d"},
+                    {"label": "Other", "color": "#0079C7"},
+                ],
+            }
+        ]
+    },
+    "ch.swisstopo.swisstlm3d-wanderwege": {
+        "sections": [
+            {
+                "title": "Hiking trails",
+                "description": "Trail categories by difficulty.",
+                "type": "line",
+                "items": [
+                    {"label": "Wanderweg", "color": "#fdc200"},
+                    {"label": "Bergwanderweg", "color": "#ff0000"},
+                    {"label": "Alpinwanderweg", "color": "#0000ff"},
+                ],
+            }
+        ],
+        "links": [
+            {
+                "name": "Wanderland Schweiz",
+                "url": "https://www.schweizmobil.ch/de/wanderland.html",
+            },
+            {
+                "name": "SAC scale",
+                "url": "https://www.sac-cas.ch/de/huetten-und-touren/sac-tourenportal/schwierigkeitsskala/",
+            },
+        ],
+    },
+    "slopes": {
+        "sections": [
+            {
+                "title": "Difficulty",
+                "type": "line",
+                "items": [
+                    {"label": "Green", "color": "#4CAF50"},
+                    {"label": "Blue", "color": "#2196F3"},
+                    {"label": "Red", "color": "#F44336"},
+                    {"label": "Black", "color": "#212121"},
+                ],
+            }
+        ]
+    },
+    "ch.swisstopo.hangneigung-ueber_30": {
+        "sections": [
+            {
+                "title": "Slope angle",
+                "type": "area",
+                "items": [
+                    {"label": "30° - 35°", "color": "#f2e50a"},
+                    {"label": "35° - 40°", "color": "#f46f24"},
+                    {"label": "40° - 45°", "color": "#de055b"},
+                    {"label": "> 45°", "color": "#c889bb"},
+                ],
+            }
+        ],
+        "links": [
+            {
+                "name": "Avalanche bulletin",
+                "url": "https://www.slf.ch/de/lawinenbulletin-und-schneesituation.html",
+            },
+        ],
+    },
+    "wildruhe_und_jagdbann": {
+        "sections": [
+            {
+                "title": "Protected areas",
+                "type": "area",
+                "items": [
+                    {"label": "By law", "color": "#ff9b8d"},
+                    {"label": "Recommended", "color": "#ffed80"},
+                ],
+            }
+        ],
+    },
+    "ch.bafu.alpweiden-herdenschutzhunde": {
+        "sections": [
+            {
+                "title": "Guard dog zones",
+                "type": "area",
+                "items": [{"label": "Pastures", "color": "#ffb300"}],
+            }
+        ],
+    },
+    "ch.swisstopo-karto.skitouren": {
+        "links": [
+            {
+                "name": "Skitourenkarte",
+                "url": "https://www.swisstopo.admin.ch/de/karten-daten-online/karten-geodaten/freizeitkarten/skitourenkarte.html",
+            },
+            {
+                "name": "Avalanche bulletin",
+                "url": "https://www.slf.ch/de/lawinenbulletin-und-schneesituation.html",
+            },
+        ]
+    },
+    "ch.swisstopo.schneeschuhwandern": {
+        "links": [
+            {
+                "name": "Snowshoe trails",
+                "url": "https://www.swisstopo.admin.ch/de/karten-daten-online/karten-geodaten/freizeitkarten/schneeschuhwandern.html",
+            },
+        ]
+    },
+    "mtb": {
+        "links": [
+            {
+                "name": "Mountainbikeland",
+                "url": "https://www.schweizmobil.ch/de/mountainbikeland.html",
+            },
+        ]
+    },
+    "cycling": {
+        "links": [
+            {"name": "Veloland", "url": "https://www.schweizmobil.ch/de/veloland.html"},
+        ]
+    },
+}
+
 
 def _opacity_param(
     slug: str, label: str, zoom_out: float, zoom_main: float, zoom_in: float
@@ -182,17 +338,6 @@ LAYERS: list[dict[str, Any]] = [
                     "filterExpression": "in",
                 }
             ],
-            "legend": {
-                "sections": [
-                    {
-                        "title": "Accommodation",
-                        "description": "Hut types by symbol.",
-                        "category": "accommodation",
-                        "type": "symbol_dual",
-                        "items": [],
-                    }
-                ]
-            },
         },
         "interaction": {
             "click": {"layers": ["wd-huts"], "behavior": "hut-detail", "min_zoom": 8}
@@ -211,19 +356,6 @@ LAYERS: list[dict[str, Any]] = [
         "parameters": {"date": None},
         "attributions": [],
         "categories": [{"slug": "availability", "use": "legend"}],
-        "config": {
-            "legend": {
-                "sections": [
-                    {
-                        "title": "Availability",
-                        "description": "Occupancy status per day.",
-                        "category": "availability",
-                        "type": "symbol_detailed",
-                        "items": [],
-                    }
-                ]
-            }
-        },
     },
     {
         "slug": "transport-stops",
@@ -627,6 +759,7 @@ class Command(BaseCommand):
             "coverage": coverage if parent.get("coverage") == "ch" else None,
             "fallback_min_zoom": parent.get("fallback_min_zoom"),
             "anchors": variant.get("anchors", parent.get("anchors")),
+            "legend": self._seed_legend(parent["slug"]),
         }
 
         layer, was_created = MapLayer.objects.update_or_create(
@@ -645,6 +778,81 @@ class Command(BaseCommand):
         self._sync_attributions(layer, parent, orgs)
 
         return int(was_created), changed
+
+    def _seed_legend(self, slug: str) -> MapLegend | None:
+        """Create/update the slug-level legend (shared by all variants)."""
+        definition = LEGENDS.get(slug)
+        if definition is None:
+            existing = MapLayer.objects.filter(slug=slug).first()
+            return existing.legend if existing else None
+
+        legend = MapLayer.objects.filter(slug=slug).first()
+        legend = (
+            legend.legend if legend and legend.legend else MapLegend.objects.create()
+        )
+        MapLegend.objects.filter(pk=legend.pk).update(
+            title=definition.get("title", ""),
+            description=definition.get("description", ""),
+        )
+
+        wanted_sections = definition.get("sections", [])
+        existing_section_ids = set()
+        for order, section_def in enumerate(wanted_sections):
+            category = None
+            if section_def.get("category"):
+                from server.apps.categories.models import Category
+
+                category = Category.objects.filter(
+                    slug=section_def["category"], parent__isnull=True
+                ).first()
+            section, _ = MapLegendSection.objects.update_or_create(
+                legend=legend,
+                order=order,
+                defaults={
+                    "title": section_def.get("title", ""),
+                    "description": section_def.get("description", ""),
+                    "type": section_def.get("type", "symbol_detailed"),
+                    "category": category,
+                },
+            )
+            existing_section_ids.add(section.pk)
+            for item_order, item_def in enumerate(section_def.get("items", [])):
+                MapLegendItem.objects.update_or_create(
+                    section=section,
+                    order=item_order,
+                    defaults={
+                        "label": item_def.get("label", ""),
+                        "description": item_def.get("description", ""),
+                        "color": item_def.get("color", ""),
+                        "width": item_def.get("width", ""),
+                        "icon": item_def.get("icon", ""),
+                    },
+                )
+        # Drop surplus seeded sections beyond the wanted list
+        for section in legend.sections.all():
+            if section.pk not in existing_section_ids and section.order >= len(
+                wanted_sections
+            ):
+                section.delete()
+
+        for order, link_def in enumerate(definition.get("links", [])):
+            link = self._external_link(link_def["name"], link_def["url"])
+            MapLegendLink.objects.update_or_create(
+                legend=legend, link=link, defaults={"order": order}
+            )
+        return legend
+
+    @staticmethod
+    def _external_link(name: str, url: str) -> ExternalLink:
+        """Get-or-create an external link by URL (stable identifier)."""
+        import hashlib
+
+        identifier = hashlib.sha256(url.encode()).hexdigest()[:10]
+        link, _ = ExternalLink.objects.update_or_create(
+            url=url,
+            defaults={"identifier": identifier, "label": name},
+        )
+        return link
 
     def _sync_parameters(
         self, layer: MapLayer, parent: dict[str, Any], params: dict[str, MapParameter]
