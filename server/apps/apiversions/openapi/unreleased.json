@@ -6125,7 +6125,7 @@
   "info": {
     "description": "Clients pin a contract version with the `Api-Version` header or the `api_version` query parameter (e.g. `2026-10-01`); no version given serves the latest. Deprecated versions are announced via `Deprecation`/`Sunset` headers; see `/v1/version` for supported versions and `/CHANGELOG_API.md` (repo) for the API changelog.",
     "title": "Wodore API",
-    "version": "2026-10-13"
+    "version": "unreleased"
   },
   "openapi": "3.1.0",
   "paths": {

@@ -197,5 +197,5 @@ class TestSchema:
     def test_new_version_registered(self):
         from server.apps.apiversions import registry
 
-        assert "2026-10-13" in registry.versions()
-        assert registry.current_version() == "2026-10-13"
+        assert "unreleased" in registry.versions()
+        assert registry.current_version() == "unreleased"
