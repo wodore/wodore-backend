@@ -454,9 +454,9 @@ def _category_symbol_redirect(
             )
         raise_not_found(f"Category '{slug}' not found")
 
-    if variant == SymbolVariantEnum.detailed:
+    if variant == SymbolVariantEnum.color:
         symbol = category.symbol_color
-    elif variant == SymbolVariantEnum.simple:
+    elif variant == SymbolVariantEnum.primitive:
         symbol = category.symbol_primitive
     else:  # mono
         symbol = category.symbol_mono
