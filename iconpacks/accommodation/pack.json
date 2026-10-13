@@ -3,7 +3,8 @@
   "name": "accommodation",
   "version": "0.1.0",
   "provenance": {
-    "created_by": "user"
+    "created_by": "user",
+    "source": "wodore-backend PR #314"
   },
   "spec": {
     "viewBox": "0 0 48 48",
@@ -29,18 +30,18 @@
   },
   "styles": {
     "import-mono": {
-      "label": "Imported mono marker",
+      "label": "Imported mono (POI style)",
       "construction": "solid",
       "color_mode": "mono",
       "detail": "medium",
-      "fill": "#000000",
+      "fill": "currentColor",
       "max_nodes": 800,
       "min_gap": 0.0,
       "render_sizes": [24, 48],
-      "note": "Transitional: legacy pin-style marker imported from martin_sync. Redesign toward mono-line in a later round."
+      "note": "Baseline from PR #314 redesign. Refine via pipeline rounds toward a unified style family."
     },
     "import-primitive": {
-      "label": "Imported primitive (flat)",
+      "label": "Imported primitive (marker)",
       "construction": "solid",
       "color_mode": "color",
       "detail": "medium",
@@ -48,10 +49,10 @@
       "max_nodes": 800,
       "min_gap": 0.0,
       "render_sizes": [24, 48],
-      "note": "Transitional: simplified flat set from martin_sync. Redesign toward primitive style later."
+      "note": "Baseline from PR #314: filled shape with white halo stroke for map legibility. Refine via pipeline rounds."
     },
     "import-color": {
-      "label": "Imported color (detailed)",
+      "label": "Imported color (POI style)",
       "construction": "solid",
       "color_mode": "color",
       "detail": "high",
@@ -59,29 +60,19 @@
       "max_nodes": 1600,
       "min_gap": 0.0,
       "render_sizes": [24, 48],
-      "note": "Transitional: detailed color set from martin_sync. Redesign toward lineal-color later."
+      "note": "Baseline from PR #314 redesign. Refine via pipeline rounds toward lineal-color."
     }
   },
   "schedule": [4, 2, 1],
   "icons": {
-    "hut": {
-      "brief": "Staffed alpine hut: gabled roof, door, small window",
+    "accommodation": {
+      "brief": "Category root: generic accommodation marker",
       "variants": {
         "mono": {
           "style": "import-mono",
-          "status": "todo",
-          "comments": [
-            {
-              "round": "import",
-              "text": "imported mono is the generic placeholder pin — needs real mono design"
-            }
-          ]
-        },
-        "primitive": {
-          "style": "import-primitive",
           "status": "approved",
           "chosen": {
-            "run": "import",
+            "run": "pr314",
             "variant": "source"
           }
         },
@@ -89,255 +80,15 @@
           "style": "import-color",
           "status": "approved",
           "chosen": {
-            "run": "import",
+            "run": "pr314",
             "variant": "source"
           }
-        }
-      }
-    },
-    "selfhut": {
-      "brief": "Self-catering hut: hut with cutlery mark, unstaffed",
-      "variants": {
-        "mono": {
-          "style": "import-mono",
-          "status": "todo",
-          "comments": [
-            {
-              "round": "import",
-              "text": "imported mono is the generic placeholder pin — needs real mono design"
-            }
-          ]
         },
         "primitive": {
           "style": "import-primitive",
           "status": "approved",
           "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        },
-        "color": {
-          "style": "import-color",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        }
-      }
-    },
-    "hotel": {
-      "brief": "Hotel: multi-storey building with star",
-      "variants": {
-        "mono": {
-          "style": "import-mono",
-          "status": "todo",
-          "comments": [
-            {
-              "round": "import",
-              "text": "imported mono is the generic placeholder pin — needs real mono design"
-            }
-          ]
-        },
-        "primitive": {
-          "style": "import-primitive",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        },
-        "color": {
-          "style": "import-color",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        }
-      }
-    },
-    "bhotel": {
-      "brief": "Berghotel (mountain hotel): large building, star, altitude feel",
-      "variants": {
-        "mono": {
-          "style": "import-mono",
-          "status": "todo",
-          "comments": [
-            {
-              "round": "import",
-              "text": "imported mono is the generic placeholder pin — needs real mono design"
-            }
-          ]
-        },
-        "primitive": {
-          "style": "import-primitive",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        },
-        "color": {
-          "style": "import-color",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        }
-      }
-    },
-    "hostel": {
-      "brief": "Hostel: building with bed mark",
-      "variants": {
-        "mono": {
-          "style": "import-mono",
-          "status": "todo",
-          "comments": [
-            {
-              "round": "import",
-              "text": "imported mono is the generic placeholder pin — needs real mono design"
-            }
-          ]
-        },
-        "primitive": {
-          "style": "import-primitive",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        },
-        "color": {
-          "style": "import-color",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        }
-      }
-    },
-    "bivouac": {
-      "brief": "Bivouac: tiny emergency shelter box",
-      "variants": {
-        "mono": {
-          "style": "import-mono",
-          "status": "todo",
-          "comments": [
-            {
-              "round": "import",
-              "text": "imported mono is the generic placeholder pin — needs real mono design"
-            }
-          ]
-        },
-        "primitive": {
-          "style": "import-primitive",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        },
-        "color": {
-          "style": "import-color",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        }
-      }
-    },
-    "shelter": {
-      "brief": "Shelter: open-front roof, wind protection",
-      "variants": {
-        "mono": {
-          "style": "import-mono",
-          "status": "todo",
-          "comments": [
-            {
-              "round": "import",
-              "text": "imported mono is the generic placeholder pin — needs real mono design"
-            }
-          ]
-        },
-        "primitive": {
-          "style": "import-primitive",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        },
-        "color": {
-          "style": "import-color",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        }
-      }
-    },
-    "camping": {
-      "brief": "Camping site: tent",
-      "variants": {
-        "mono": {
-          "style": "import-mono",
-          "status": "todo",
-          "comments": [
-            {
-              "round": "import",
-              "text": "imported mono is the generic placeholder pin — needs real mono design"
-            }
-          ]
-        },
-        "primitive": {
-          "style": "import-primitive",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        },
-        "color": {
-          "style": "import-color",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        }
-      }
-    },
-    "campgr": {
-      "brief": "Campground: tent on pitch with tree",
-      "variants": {
-        "mono": {
-          "style": "import-mono",
-          "status": "todo",
-          "comments": [
-            {
-              "round": "import",
-              "text": "imported mono is the generic placeholder pin — needs real mono design"
-            }
-          ]
-        },
-        "primitive": {
-          "style": "import-primitive",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        },
-        "color": {
-          "style": "import-color",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
+            "run": "pr314",
             "variant": "source"
           }
         }
@@ -348,19 +99,9 @@
       "variants": {
         "mono": {
           "style": "import-mono",
-          "status": "todo",
-          "comments": [
-            {
-              "round": "import",
-              "text": "imported mono is the generic placeholder pin — needs real mono design"
-            }
-          ]
-        },
-        "primitive": {
-          "style": "import-primitive",
           "status": "approved",
           "chosen": {
-            "run": "import",
+            "run": "pr314",
             "variant": "source"
           }
         },
@@ -368,30 +109,28 @@
           "style": "import-color",
           "status": "approved",
           "chosen": {
-            "run": "import",
+            "run": "pr314",
+            "variant": "source"
+          }
+        },
+        "primitive": {
+          "style": "import-primitive",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
             "variant": "source"
           }
         }
       }
     },
-    "resta": {
-      "brief": "Restaurant at accommodation: building with cutlery",
+    "bhotel": {
+      "brief": "Berghotel (mountain hotel): large building, star, altitude feel",
       "variants": {
         "mono": {
           "style": "import-mono",
-          "status": "todo",
-          "comments": [
-            {
-              "round": "import",
-              "text": "imported mono is the generic placeholder pin — needs real mono design"
-            }
-          ]
-        },
-        "primitive": {
-          "style": "import-primitive",
           "status": "approved",
           "chosen": {
-            "run": "import",
+            "run": "pr314",
             "variant": "source"
           }
         },
@@ -399,7 +138,102 @@
           "style": "import-color",
           "status": "approved",
           "chosen": {
-            "run": "import",
+            "run": "pr314",
+            "variant": "source"
+          }
+        },
+        "primitive": {
+          "style": "import-primitive",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        }
+      }
+    },
+    "bivouac": {
+      "brief": "Bivouac: tiny emergency shelter box",
+      "variants": {
+        "mono": {
+          "style": "import-mono",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        },
+        "color": {
+          "style": "import-color",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        },
+        "primitive": {
+          "style": "import-primitive",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        }
+      }
+    },
+    "campgr": {
+      "brief": "Campground: tent on pitch with tree",
+      "variants": {
+        "mono": {
+          "style": "import-mono",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        },
+        "color": {
+          "style": "import-color",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        },
+        "primitive": {
+          "style": "import-primitive",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        }
+      }
+    },
+    "camping": {
+      "brief": "Camping site: tent",
+      "variants": {
+        "mono": {
+          "style": "import-mono",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        },
+        "color": {
+          "style": "import-color",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        },
+        "primitive": {
+          "style": "import-primitive",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
             "variant": "source"
           }
         }
@@ -412,15 +246,7 @@
           "style": "import-mono",
           "status": "approved",
           "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        },
-        "primitive": {
-          "style": "import-primitive",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
+            "run": "pr314",
             "variant": "source"
           }
         },
@@ -428,7 +254,189 @@
           "style": "import-color",
           "status": "approved",
           "chosen": {
-            "run": "import",
+            "run": "pr314",
+            "variant": "source"
+          }
+        },
+        "primitive": {
+          "style": "import-primitive",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        }
+      }
+    },
+    "hostel": {
+      "brief": "Hostel: building with bed mark",
+      "variants": {
+        "mono": {
+          "style": "import-mono",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        },
+        "color": {
+          "style": "import-color",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        },
+        "primitive": {
+          "style": "import-primitive",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        }
+      }
+    },
+    "hotel": {
+      "brief": "Hotel: multi-storey building with star",
+      "variants": {
+        "mono": {
+          "style": "import-mono",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        },
+        "color": {
+          "style": "import-color",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        },
+        "primitive": {
+          "style": "import-primitive",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        }
+      }
+    },
+    "hut": {
+      "brief": "Staffed alpine hut: gabled roof, door, small window",
+      "variants": {
+        "mono": {
+          "style": "import-mono",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        },
+        "color": {
+          "style": "import-color",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        },
+        "primitive": {
+          "style": "import-primitive",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        }
+      }
+    },
+    "resta": {
+      "brief": "Restaurant at accommodation: building with cutlery",
+      "variants": {
+        "mono": {
+          "style": "import-mono",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        },
+        "color": {
+          "style": "import-color",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        },
+        "primitive": {
+          "style": "import-primitive",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        }
+      }
+    },
+    "selfhut": {
+      "brief": "Self-catering hut: hut with cutlery mark, unstaffed",
+      "variants": {
+        "mono": {
+          "style": "import-mono",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        },
+        "color": {
+          "style": "import-color",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        },
+        "primitive": {
+          "style": "import-primitive",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        }
+      }
+    },
+    "shelter": {
+      "brief": "Shelter: open-front roof, wind protection",
+      "variants": {
+        "mono": {
+          "style": "import-mono",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        },
+        "color": {
+          "style": "import-color",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
+            "variant": "source"
+          }
+        },
+        "primitive": {
+          "style": "import-primitive",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
             "variant": "source"
           }
         }
@@ -439,19 +447,9 @@
       "variants": {
         "mono": {
           "style": "import-mono",
-          "status": "todo",
-          "comments": [
-            {
-              "round": "import",
-              "text": "imported mono is the generic placeholder pin — needs real mono design"
-            }
-          ]
-        },
-        "primitive": {
-          "style": "import-primitive",
           "status": "approved",
           "chosen": {
-            "run": "import",
+            "run": "pr314",
             "variant": "source"
           }
         },
@@ -459,7 +457,15 @@
           "style": "import-color",
           "status": "approved",
           "chosen": {
-            "run": "import",
+            "run": "pr314",
+            "variant": "source"
+          }
+        },
+        "primitive": {
+          "style": "import-primitive",
+          "status": "approved",
+          "chosen": {
+            "run": "pr314",
             "variant": "source"
           }
         }
@@ -472,15 +478,7 @@
           "style": "import-mono",
           "status": "approved",
           "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        },
-        "primitive": {
-          "style": "import-primitive",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
+            "run": "pr314",
             "variant": "source"
           }
         },
@@ -488,20 +486,7 @@
           "style": "import-color",
           "status": "approved",
           "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        }
-      }
-    },
-    "root": {
-      "brief": "Category root: generic accommodation marker",
-      "variants": {
-        "mono": {
-          "style": "import-mono",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
+            "run": "pr314",
             "variant": "source"
           }
         },
@@ -509,15 +494,7 @@
           "style": "import-primitive",
           "status": "approved",
           "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        },
-        "color": {
-          "style": "import-color",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
+            "run": "pr314",
             "variant": "source"
           }
         }
