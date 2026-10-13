@@ -91,7 +91,8 @@
             "variant": "source"
           }
         }
-      }
+      },
+      "main_color": "#346751"
     },
     "alp": {
       "brief": "Alpine farm hut (Alphütte): hut with meadow",
@@ -120,7 +121,8 @@
             "variant": "source"
           }
         }
-      }
+      },
+      "main_color": "#846a15"
     },
     "bhotel": {
       "brief": "Berghotel (mountain hotel): large building, star, altitude feel",
@@ -149,7 +151,8 @@
             "variant": "source"
           }
         }
-      }
+      },
+      "main_color": "#29626b"
     },
     "bivouac": {
       "brief": "Bivouac: tiny emergency shelter box",
@@ -178,7 +181,8 @@
             "variant": "source"
           }
         }
-      }
+      },
+      "main_color": "#346751"
     },
     "campgr": {
       "brief": "Campground: tent on pitch with tree",
@@ -207,7 +211,8 @@
             "variant": "source"
           }
         }
-      }
+      },
+      "main_color": "#bfab25"
     },
     "camping": {
       "brief": "Camping site: tent",
@@ -236,7 +241,8 @@
             "variant": "source"
           }
         }
-      }
+      },
+      "main_color": "#bfab25"
     },
     "closed": {
       "brief": "Closed / out of season: accommodation with strike",
@@ -265,7 +271,8 @@
             "variant": "source"
           }
         }
-      }
+      },
+      "main_color": "#bf211e"
     },
     "hostel": {
       "brief": "Hostel: building with bed mark",
@@ -294,7 +301,8 @@
             "variant": "source"
           }
         }
-      }
+      },
+      "main_color": "#29626b"
     },
     "hotel": {
       "brief": "Hotel: multi-storey building with star",
@@ -323,7 +331,8 @@
             "variant": "source"
           }
         }
-      }
+      },
+      "main_color": "#29626b"
     },
     "hut": {
       "brief": "Staffed alpine hut: gabled roof, door, small window",
@@ -352,7 +361,8 @@
             "variant": "source"
           }
         }
-      }
+      },
+      "main_color": "#346751"
     },
     "resta": {
       "brief": "Restaurant at accommodation: building with cutlery",
@@ -381,7 +391,8 @@
             "variant": "source"
           }
         }
-      }
+      },
+      "main_color": "#bf211e"
     },
     "selfhut": {
       "brief": "Self-catering hut: hut with cutlery mark, unstaffed",
@@ -410,7 +421,8 @@
             "variant": "source"
           }
         }
-      }
+      },
+      "main_color": "#346751"
     },
     "shelter": {
       "brief": "Shelter: open-front roof, wind protection",
@@ -439,7 +451,8 @@
             "variant": "source"
           }
         }
-      }
+      },
+      "main_color": "#346751"
     },
     "special": {
       "brief": "Special accommodation: generic mark",
@@ -468,7 +481,8 @@
             "variant": "source"
           }
         }
-      }
+      },
+      "main_color": "#bfab25"
     },
     "unknown": {
       "brief": "Unknown type: question mark over shelter",
@@ -497,7 +511,8 @@
             "variant": "source"
           }
         }
-      }
+      },
+      "main_color": "#89919a"
     }
   }
 }
