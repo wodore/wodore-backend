@@ -21,6 +21,20 @@ def release_state(monkeypatch):
     return state
 
 
+@pytest.fixture(autouse=True)
+def unreleased_current(monkeypatch):
+    """Keep an 'unreleased' version current regardless of the real registry.
+
+    The real registry is fully frozen once a release ships (all dates), so
+    these tests inject their own unreleased current version to pin the
+    check's release-state logic."""
+    extra = registry.VersionChange(
+        version=registry.UNRELEASED, description="test-only unreleased current"
+    )
+    monkeypatch.setattr(registry, "REGISTRY", registry.REGISTRY + [extra])
+    return extra
+
+
 @pytest.fixture
 def two_versions(monkeypatch):
     extra = registry.VersionChange(

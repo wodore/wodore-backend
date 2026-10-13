@@ -637,7 +637,7 @@ class TestStaticMapFallbackVersioning:
     def test_current_version_includes_fallback(self, hut_slug, client):
         response = client.get(f"/v1/geo/images/hut/{hut_slug}", {"sources": "wodore"})
         assert response.status_code == 200
-        assert response["Api-Version"] == "unreleased"
+        assert response["Api-Version"] == "2026-10-13"
         features = response.json()["features"]
         assert [f["properties"]["is_fallback"] for f in features] == [True]
 
