@@ -9,7 +9,11 @@ from dmr.headers import HeaderSpec
 from dmr.routing import path
 from pydantic import Field
 
-from server.apps.api.controller import ApiController, raise_not_found
+from server.apps.api.controller import (
+    REDIRECT_CACHE_CONTROL,
+    ApiController,
+    raise_not_found,
+)
 from server.apps.api.query import dump_sparse, dump_sparse_list, sparse_fields_query
 from server.apps.api.readers import spec_from_schema
 from server.apps.translations import activate
@@ -41,9 +45,6 @@ def _prepared_symbols(base_qs):
     at all: its former join was dead weight and is gone.
     """
     return _SYMBOL_PREPARE(base_qs)
-
-
-CACHE_MAX_AGE = 7 * 24 * 60 * 60  # 7 days in seconds
 
 
 class SymbolQuery(LanguageQuery, SymbolFields):
@@ -200,7 +201,7 @@ class SymbolSvgController(ApiController):
         raise RedirectTo(
             symbol.svg_file.url,
             status_code=HTTPStatus.FOUND,
-            headers={"Cache-Control": f"max-age={CACHE_MAX_AGE}"},
+            headers={"Cache-Control": REDIRECT_CACHE_CONTROL},
         )
 
 
