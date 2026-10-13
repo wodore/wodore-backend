@@ -153,7 +153,7 @@ REGISTRY: list[VersionChange] = [
         ),
     ),
     VersionChange(
-        version=UNRELEASED,
+        version="2026-10-13",
         description=(
             "Harmonize response narrowing: replace include_X=no|slug|all "
             "with JSON:API sparse fieldsets (fields[TYPE]) on all search "
