@@ -135,8 +135,8 @@ class CategoryManager(BaseMutlilingualManager):
         """Return custom queryset with optimized parent and symbol relationships."""
         return CategoryQuerySet(self.model, using=self._db).select_related(
             "parent",
-            "symbol_detailed",
-            "symbol_simple",
+            "symbol_color",
+            "symbol_primitive",
             "symbol_mono",
         )
 

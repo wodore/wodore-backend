@@ -174,7 +174,7 @@ def _og_image(hut: Hut, request: HttpRequest, lang: str) -> str:
     symbol_url = None
     if hut.hut_type_open is not None:
         symbols = resolve_symbol_urls(hut.hut_type_open, {"request": request})
-        symbol_url = symbols.get("detailed") if symbols else None
+        symbol_url = symbols.get("color") if symbols else None
     return og_card_url(symbol_url)
 
 

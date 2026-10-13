@@ -746,14 +746,14 @@ def _get_license_info(slug: str | None) -> dict[str, Any]:
         icons = {}
         if license_obj.category:
             try:
-                # Category has symbol_detailed, symbol_simple, symbol_mono fields
+                # Category has symbol_color, symbol_primitive, symbol_mono fields
                 category = license_obj.category
 
                 # Map Category symbol fields to icon style names
                 # Use svg_file.url which returns full URL from FileField
                 symbol_fields = {
-                    "detailed": category.symbol_detailed,
-                    "simple": category.symbol_simple,
+                    "color": category.symbol_color,
+                    "primitive": category.symbol_primitive,
                     "mono": category.symbol_mono,
                 }
 
@@ -880,8 +880,8 @@ def _build_attribution(
     if license_icons:
         license_icon_url = (
             license_icons.get("mono")
-            or license_icons.get("simple")
-            or license_icons.get("detailed")
+            or license_icons.get("primitive")
+            or license_icons.get("color")
         )
 
     # License icon as img tag

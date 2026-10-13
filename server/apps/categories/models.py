@@ -44,8 +44,8 @@ class Category(ComputedFieldsModel, models.Model):
         "name",
         "description",
         "order",
-        "symbol_detailed",
-        "symbol_simple",
+        "symbol_color",
+        "symbol_primitive",
         "symbol_mono",
         "parent",
         "default",
@@ -106,26 +106,26 @@ class Category(ComputedFieldsModel, models.Model):
     )
 
     # Symbol references (ForeignKeys to Symbol app)
-    symbol_detailed = models.ForeignKey(
+    symbol_color = models.ForeignKey(
         "symbols.Symbol",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="categories_detailed",
-        verbose_name=_("Symbol (Detailed)"),
-        help_text=_("Reference to detailed symbol from Symbols app"),
-        limit_choices_to={"style": "detailed"},
+        related_name="categories_color",
+        verbose_name=_("Symbol (Color)"),
+        help_text=_("Reference to color symbol from Symbols app"),
+        limit_choices_to={"style": "color"},
     )
 
-    symbol_simple = models.ForeignKey(
+    symbol_primitive = models.ForeignKey(
         "symbols.Symbol",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="categories_simple",
-        verbose_name=_("Symbol (Simple)"),
-        help_text=_("Reference to simple symbol from Symbols app"),
-        limit_choices_to={"style": "simple"},
+        related_name="categories_primitive",
+        verbose_name=_("Symbol (Primitive)"),
+        help_text=_("Reference to primitive symbol from Symbols app"),
+        limit_choices_to={"style": "primitive"},
     )
 
     symbol_mono = models.ForeignKey(
@@ -323,7 +323,7 @@ class Category(ComputedFieldsModel, models.Model):
         Returns the most common color as hex string or None if no SVG found.
         """
         # Try to get an SVG file from symbols (in order of preference)
-        symbol = self.symbol_detailed or self.symbol_simple or self.symbol_mono
+        symbol = self.symbol_color or self.symbol_primitive or self.symbol_mono
 
         if not symbol or not symbol.svg_file or not symbol.svg_file.path:
             return None

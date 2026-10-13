@@ -10,8 +10,8 @@ __all__ = ["DayTimeEnum", "IncludeModeEnum", "SymbolStyleEnum"]
 class SymbolStyleEnum(str, Enum):
     """Symbol style variants."""
 
-    detailed = "detailed"
-    simple = "simple"
+    color = "color"
+    primitive = "primitive"
     mono = "mono"
 
 
@@ -35,8 +35,8 @@ class CategoryRefSchema(BaseModel):
 
     slug: str
     name: str | None = None
-    symbol_detailed: str | None = None
-    symbol_simple: str | None = None
+    symbol_color: str | None = None
+    symbol_primitive: str | None = None
     symbol_mono: str | None = None
 
 

@@ -222,12 +222,9 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
 
     @display(description="")
     def symbol_img(self, obj):  # new
-        if (
-            obj.hut_type_open.symbol_detailed
-            and obj.hut_type_open.symbol_detailed.svg_file
-        ):
+        if obj.hut_type_open.symbol_color and obj.hut_type_open.symbol_color.svg_file:
             return mark_safe(
-                f'<img src="{obj.hut_type_open.symbol_detailed.svg_file.url}" width="50px"/>'
+                f'<img src="{obj.hut_type_open.symbol_color.svg_file.url}" width="50px"/>'
             )
         return "-"
 

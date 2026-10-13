@@ -208,8 +208,8 @@ class IconAdmin(ModelAdmin):
     list_select_related = (
         "pack",
         "category__parent",
-        "symbol_detailed",
-        "symbol_simple",
+        "symbol_color",
+        "symbol_primitive",
         "symbol_mono",
     )
     readonly_fields = ("id", "created", "modified")
@@ -248,7 +248,7 @@ class IconAdmin(ModelAdmin):
     def symbol_previews(self, obj):
         """Preview thumbnails of the three symbol slots."""
         cells = []
-        for style in ("detailed", "simple", "mono"):
+        for style in ("color", "primitive", "mono"):
             symbol = getattr(obj, f"symbol_{style}", None)
             if symbol is not None and symbol.svg_file:
                 cells.append(

@@ -364,7 +364,7 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             return ""
 
         # Try symbols in priority order: detailed → simple → mono
-        for symbol_attr in ["symbol_detailed", "symbol_simple", "symbol_mono"]:
+        for symbol_attr in ["symbol_color", "symbol_primitive", "symbol_mono"]:
             symbol = getattr(first_category, symbol_attr, None)
             if symbol and symbol.svg_file and symbol.svg_file.name:
                 return mark_safe(

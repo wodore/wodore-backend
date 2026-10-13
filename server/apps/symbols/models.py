@@ -19,13 +19,13 @@ User = get_user_model()
 
 
 class _SymbolStyleChoices(models.TextChoices):
-    detailed = "detailed", "detailed"
-    simple = "simple", "simple"
+    color = "color", "color"
+    primitive = "primitive", "primitive"
     mono = "mono", "mono"
     outlined = "outlined", "outlined"
     filled = "filled", "filled"
-    detailed_animated = "detailed-animated", "detailed-animated"
-    simple_animated = "simple-animated", "simple-animated"
+    color_animated = "color-animated", "color-animated"
+    primitive_animated = "primitive-animated", "primitive-animated"
     mono_animated = "mono-animated", "mono-animated"
     outlined_animated = "outlined-animated", "outlined-animated"
     filled_animated = "filled-animated", "filled-animated"
@@ -56,7 +56,7 @@ class Symbol(TimeStampedModel):
     style = models.CharField(
         max_length=20,
         choices=_SymbolStyleChoices.choices,
-        default=_SymbolStyleChoices.detailed,
+        default=_SymbolStyleChoices.color,
         db_index=True,
         verbose_name=_("Style"),
         help_text=_("Symbol style variant"),
@@ -331,25 +331,25 @@ class Icon(TimeStampedModel):
         help_text=_("CLDR subgroup category (non-root)"),
     )
 
-    symbol_detailed = models.ForeignKey(
+    symbol_color = models.ForeignKey(
         Symbol,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="icons_detailed",
-        limit_choices_to={"style": "detailed"},
-        verbose_name=_("Symbol (Detailed)"),
-        help_text=_("Reference to detailed symbol from Symbols app"),
+        related_name="icons_color",
+        limit_choices_to={"style": "color"},
+        verbose_name=_("Symbol (Color)"),
+        help_text=_("Reference to color symbol from Symbols app"),
     )
-    symbol_simple = models.ForeignKey(
+    symbol_primitive = models.ForeignKey(
         Symbol,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="icons_simple",
-        limit_choices_to={"style": "simple"},
-        verbose_name=_("Symbol (Simple)"),
-        help_text=_("Reference to simple symbol from Symbols app"),
+        related_name="icons_primitive",
+        limit_choices_to={"style": "primitive"},
+        verbose_name=_("Symbol (Primitive)"),
+        help_text=_("Reference to primitive symbol from Symbols app"),
     )
     symbol_mono = models.ForeignKey(
         Symbol,
@@ -396,8 +396,8 @@ class Icon(TimeStampedModel):
             "is_active",
             "unicode",
             "category",
-            "symbol_detailed",
-            "symbol_simple",
+            "symbol_color",
+            "symbol_primitive",
             "symbol_mono",
         ]
 

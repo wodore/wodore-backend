@@ -64,11 +64,11 @@ def build_category_dict(
     }
 
     if media_mode != MediaUrlModeEnum.no:
-        data["symbol_detailed"] = resolve_media_url(
-            request, category.symbol_detailed, media_mode
+        data["symbol_color"] = resolve_media_url(
+            request, category.symbol_color, media_mode
         )
-        data["symbol_simple"] = resolve_media_url(
-            request, category.symbol_simple, media_mode
+        data["symbol_primitive"] = resolve_media_url(
+            request, category.symbol_primitive, media_mode
         )
         data["symbol_mono"] = resolve_media_url(
             request, category.symbol_mono, media_mode
@@ -88,8 +88,8 @@ def _load_category_tree(is_active: bool):
     """
     qs = Category.objects.select_related(
         "parent",
-        "symbol_detailed",
-        "symbol_simple",
+        "symbol_color",
+        "symbol_primitive",
         "symbol_mono",
     )
     if is_active:
@@ -455,9 +455,9 @@ def _category_symbol_redirect(
         raise_not_found(f"Category '{slug}' not found")
 
     if variant == SymbolVariantEnum.detailed:
-        symbol = category.symbol_detailed
+        symbol = category.symbol_color
     elif variant == SymbolVariantEnum.simple:
-        symbol = category.symbol_simple
+        symbol = category.symbol_primitive
     else:  # mono
         symbol = category.symbol_mono
 

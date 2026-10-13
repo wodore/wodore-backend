@@ -2,7 +2,7 @@
 
 Layout: round flag SVGs keyed by ISO 3166 code at ``flags/<code>.svg``
 (the ``gh-pages`` branch is the code branch — pin it as the ref).
-One style only: round → simple. As with flag-icons, only codes with
+One style only: round → primitive. As with flag-icons, only codes with
 a Unicode emoji equivalent are imported (see ``flags.py``); the repo
 also carries subdivisions, historical variants and language flags.
 """
@@ -51,7 +51,7 @@ class CircleFlagsSource(IconSource):
         # next to the country flags and are not emoji-keyed.
         for svg_path in sorted(source_dir.glob("*.svg")):
             candidate = flag_candidate(
-                svg_path.stem, {"simple": svg_path}, entries, self.unique_slug
+                svg_path.stem, {"primitive": svg_path}, entries, self.unique_slug
             )
             if candidate is not None:
                 yield candidate

@@ -69,7 +69,7 @@ class OwnerHutAssociationsAdmin(ModelAdmin):
                 mark_safe(
                     f'<a href="{obj.hut_owner.url}" target="_blank">{obj.hut_owner.url}</a>'
                 ),
-            )  # , mark_safe(f'<img src = "{obj.type.symbol_simple.url}" width = "24"/>')
+            )  # , mark_safe(f'<img src = "{obj.type.symbol_primitive.url}" width = "24"/>')
         return ("-", "")
 
     @display(description=_("Hut"), header=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
@@ -78,7 +78,7 @@ class OwnerHutAssociationsAdmin(ModelAdmin):
             obj.name_i18n,
             obj.hut_type_open.name_i18n,
             mark_safe(
-                f'<img src = "{obj.hut_type_open.symbol_simple.url}" width = "24"/>'
+                f'<img src = "{obj.hut_type_open.symbol_primitive.url}" width = "24"/>'
             ),
         )
 

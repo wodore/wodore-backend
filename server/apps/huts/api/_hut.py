@@ -102,11 +102,11 @@ def _hut_type_symbol_block(request: HttpRequest, hut_type) -> dict:
         "mono": request.build_absolute_uri(hut_type.symbol_mono.svg_file.url)
         if hut_type.symbol_mono
         else None,
-        "detailed": request.build_absolute_uri(hut_type.symbol_detailed.svg_file.url)
-        if hut_type.symbol_detailed
+        "color": request.build_absolute_uri(hut_type.symbol_color.svg_file.url)
+        if hut_type.symbol_color
         else None,
-        "simple": request.build_absolute_uri(hut_type.symbol_simple.svg_file.url)
-        if hut_type.symbol_simple
+        "primitive": request.build_absolute_uri(hut_type.symbol_primitive.svg_file.url)
+        if hut_type.symbol_primitive
         else None,
     }
 
@@ -159,11 +159,11 @@ class HutSearchController(ApiController):
             qs = qs.select_related(
                 "hut_type_open",
                 "hut_type_closed",
-                "hut_type_open__symbol_detailed",
-                "hut_type_open__symbol_simple",
+                "hut_type_open__symbol_color",
+                "hut_type_open__symbol_primitive",
                 "hut_type_open__symbol_mono",
-                "hut_type_closed__symbol_detailed",
-                "hut_type_closed__symbol_simple",
+                "hut_type_closed__symbol_color",
+                "hut_type_closed__symbol_primitive",
                 "hut_type_closed__symbol_mono",
             )
         if wants_sources:

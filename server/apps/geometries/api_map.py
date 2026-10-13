@@ -61,13 +61,13 @@ def _entity_symbol(entity, request: HttpRequest) -> str | None:
     else:
         category = (
             entity.categories.filter(is_active=True)
-            .select_related("symbol_detailed")
+            .select_related("symbol_color")
             .first()
         )
         if category is None:
             return None
         symbols = resolve_symbol_urls(category, {"request": request})
-    return symbols.get("detailed") if symbols else None
+    return symbols.get("color") if symbols else None
 
 
 def _resolve_place(

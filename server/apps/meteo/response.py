@@ -16,8 +16,8 @@ class CategoryValue(pydantic.BaseModel):
     slug: str | None = None
     name: str | None = None
     parent: str | None = None
-    symbol_detailed: str | None = None
-    symbol_simple: str | None = None
+    symbol_color: str | None = None
+    symbol_primitive: str | None = None
     symbol_mono: str | None = None
 
 

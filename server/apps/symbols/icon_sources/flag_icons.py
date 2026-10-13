@@ -1,8 +1,8 @@
 """Flag Icons source plugin (lipis/flag-icons, MIT).
 
 Layout: flat flag SVGs keyed by ISO 3166 code at ``flags/4x3/<code>.svg``
-and ``flags/1x1/<code>.svg``. Flat flags are ``simple`` style (the
-wavy emoji flags of the noto pack are the detailed variant); the two
+and ``flags/1x1/<code>.svg``. Flat flags are ``primitive`` style (the
+wavy emoji flags of the noto pack are the color-style variant); the two
 ratios import as separate icons with distinct slugs — 4:3 as
 ``flag-switzerland``, the square crop as ``flag-switzerland-square``.
 Only codes with a Unicode emoji equivalent are imported (see
@@ -62,7 +62,7 @@ class FlagIconsSource(IconSource):
             for svg_path in sorted((source_dir / ratio).glob("*.svg")):
                 candidate = flag_candidate(
                     svg_path.stem,
-                    {"simple": svg_path},
+                    {"primitive": svg_path},
                     entries,
                     self.unique_slug,
                     slug_suffix=slug_suffix,
