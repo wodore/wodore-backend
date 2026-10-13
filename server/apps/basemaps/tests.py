@@ -536,3 +536,22 @@ class TestVersionFieldAndRenderCache:
         layer.save()
         second = client.get("/v1/map/styles/huts.json")
         assert second.headers["ETag"] != first.headers["ETag"]
+
+
+class TestSeedStyleSpecConformance:
+    def test_huts_icon_size_keeps_zoom_top_level(self):
+        """MapLibre style-spec: zoom only as top-level interpolate input."""
+        huts = seed_lib.HUTS_STYLE
+        symbol = next(l for l in huts["layers"] if l["id"] == "wd-huts")
+        icon_size = symbol["layout"]["icon-size"]
+        assert icon_size[0] == "interpolate"
+        assert icon_size[2] == ["zoom"]
+        assert icon_size[3] == 7  # first stop zoom
+        # token folds into each stop value (valid expression position)
+        assert icon_size[4] == ["*", 0.1, "{{huts.icon_scale}}"]
+
+    def test_single_brace_api_url_substituted(self):
+        out = absolutize_urls(
+            {"data": "{API_URL}/v1/x.geojson"}, "http://m", api_url="https://api"
+        )
+        assert out["data"] == "https://api/v1/x.geojson"

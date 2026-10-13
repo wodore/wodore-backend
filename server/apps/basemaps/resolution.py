@@ -109,7 +109,8 @@ def substitute_env(value: str, extra: dict[str, str] | None = None) -> str:
 def _absolutize_url(url: str, tile_server_url: str, api_url: str) -> str:
     """Absolutize one URL: placeholders first, then root-relative refs."""
     if api_url:
-        url = url.replace("{{API_URL}}", api_url.rstrip("/"))
+        trimmed = api_url.rstrip("/")
+        url = url.replace("{{API_URL}}", trimmed).replace("{API_URL}", trimmed)
     if url.startswith("{{"):
         return url
     if url.startswith("/"):
