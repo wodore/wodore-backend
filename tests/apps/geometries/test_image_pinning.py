@@ -37,6 +37,7 @@ def _result(
     source_id: str = "File:Test.jpg",
     score: int = 80,
     url: str = "https://upload.wikimedia.org/wikipedia/commons/thumb/Test_1920.jpg",
+    extra: dict | None = None,
 ) -> ImageResult:
     return ImageResult(
         provider=provider,
@@ -54,6 +55,7 @@ def _result(
         width=1920,
         height=1080,
         score=score,
+        extra=extra,
     )
 
 
@@ -116,6 +118,68 @@ class TestPinService:
         assert stats.skipped == 1
         assert stats.created == 0
         assert not HutImageAssociation.objects.filter(hut=hut).exists()
+
+    def test_internal_pin_passthrough_skipped(self, hut):
+        """Provider passthroughs of existing pins must not be re-pinned.
+
+        WodoreProvider reports pins with provider = source_org slug and
+        source_id = the row's source_ident; re-pinning minted a new Image
+        with the provider prefix stacked onto the ident and a duplicate
+        association — every sync doubled every visible pin (staging 2026-10).
+        """
+        pin_place_images(
+            hut, [_result(provider="camptocamp", source_id="waypoint_1_a.jpg")]
+        )
+        passthrough = _result(
+            provider="camptocamp",
+            source_id="camptocamp:waypoint_1_a.jpg",
+            extra={"internal_pin": True},
+        )
+        stats = pin_place_images(hut, [passthrough])
+        assert stats.skipped == 1
+        assert stats.created == 0
+        assert not Image.objects.filter(
+            source_ident="camptocamp:camptocamp:waypoint_1_a.jpg"
+        ).exists()
+        assert HutImageAssociation.objects.filter(hut=hut).count() == 1
+
+    def test_internal_pin_passthrough_skipped_for_geoplaces(self):
+        """Same guard on the GeoPlace path — pins stay single there too."""
+        from tests.factories.geometries import GeoPlaceFactory
+
+        from server.apps.geometries.models import GeoPlaceImageAssociation
+
+        place = GeoPlaceFactory(slug="pin-dupe-place")
+        pin_place_images(
+            place,
+            [_result(provider="camptocamp", source_id="waypoint_2_b.jpg")],
+        )
+        passthrough = _result(
+            provider="camptocamp",
+            source_id="camptocamp:waypoint_2_b.jpg",
+            extra={"internal_pin": True},
+        )
+        stats = pin_place_images(place, [passthrough])
+        assert stats.skipped == 1
+        assert GeoPlaceImageAssociation.objects.filter(geo_place=place).count() == 1
+        assert not Image.objects.filter(
+            source_ident="camptocamp:camptocamp:waypoint_2_b.jpg"
+        ).exists()
+
+    def test_provider_scores_clamped_to_pin_band(self, hut):
+        """Provider pins stay ≤ 89 — curated uploads own 90–99, and the
+        image endpoints validate scores against the API contract (0–100)."""
+        pin_place_images(
+            hut, [_result(score=95), _result(source_id="File:Mid.jpg", score=50)]
+        )
+        strong = HutImageAssociation.objects.get(
+            hut=hut, image__source_ident="wikicommons:File:Test.jpg"
+        )
+        mid = HutImageAssociation.objects.get(
+            hut=hut, image__source_ident="wikicommons:File:Mid.jpg"
+        )
+        assert strong.score == 89
+        assert mid.score == 50
 
     def test_meta_merge_preserves_curated_focal(self, hut):
         pin_place_images(hut, [_result()])
@@ -263,7 +327,9 @@ class TestPinGeoplace:
         place_assoc = GeoPlaceImageAssociation.objects.get(
             geo_place=place, image__source_ident="wikicommons:File:Test.jpg"
         )
-        assert hut_assoc.score == 90
+        # Provider scores above the pin band clamp to 89 — curated uploads
+        # (90–99) always outrank pins (see HutImageAssociation).
+        assert hut_assoc.score == 89
         assert place_assoc.score == 40  # per-place curation
 
 

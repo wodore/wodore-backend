@@ -1,6 +1,23 @@
 """
 Provider for refuges.info images.
-Uses source_id from GeoPlace source associations with organization slug 'refuges'.
+
+Uses the official JSON API (no HTML scraping, no redirects):
+
+- ``GET /api/commentaires?id_point={id}`` — the point's comments, each with
+  capture date, caption, author and photo references. Serves 200 directly;
+  the HTML page ``/point/{id}`` 301-redirects to its canonical slug URL and
+  httpx's ``raise_for_status()`` treats that redirect as an error, which
+  silently killed the old scraper when the site added canonical URLs
+  (staging 2026-10).
+- ``GET /api/point?id={id}`` — point details; ``properties.lien`` carries the
+  canonical page URL used for source deep-links (cached long-term).
+
+Photo URLs are built deterministically from the comment id:
+``/photos_points/{id}-originale.jpeg`` (large) and ``-reduite.jpeg``
+(medium). The API's own ``photo-*`` fields are unreliable — they often point
+at the vignette and miss the ``?`` before ``md=`` — so both the variant and
+the ``md`` cache-buster are simply dropped. Verified against photos from
+2013 to 2026: always ``.jpeg``, both variants answer 200.
 """
 
 # Test urls:
@@ -8,13 +25,21 @@ Uses source_id from GeoPlace source associations with organization slug 'refuges
 #   https://www.refuges.info/point/6069/cabane-non-gardee/abri-de-Beauregard
 #   http://192.168.1.50:8000/v1/geo/images/hut/beauregard?lang=de&radius=50&limit=20
 
+import html
 from datetime import datetime, timezone
 
 import structlog
+from asgiref.sync import sync_to_async
 
 from django.contrib.gis.geos import Point
 
-from .base import ImageProvider, ImageResult, provider_http_timeout
+from .base import (
+    CACHE_LONGTERM,
+    ImageProvider,
+    ImageResult,
+    get_persistent_cache,
+    provider_http_timeout,
+)
 from .schemas import GeoPlaceSchema
 from .scoring import (
     calculate_age_penalty,
@@ -22,6 +47,8 @@ from .scoring import (
 )
 
 logger = structlog.get_logger()
+
+API_BASE = "https://www.refuges.info"
 
 
 class RefugesInfoProvider(ImageProvider):
@@ -121,9 +148,13 @@ class RefugesInfoProvider(ImageProvider):
                     settings, "BOT_AGENT", "WodoreBackend/1.0 (+https://wodore.ch)"
                 )
             }
-            async with httpx.AsyncClient(
-                timeout=provider_http_timeout(), headers=headers
-            ) as client:
+            async with (
+                httpx.AsyncClient(
+                    timeout=provider_http_timeout(),
+                    headers=headers,
+                    follow_redirects=True,  # resilience: the API answers 200, but never die on a redirect
+                ) as client
+            ):
                 for source_id, place in place_map.items():
                     try:
                         logger.debug(
@@ -163,7 +194,7 @@ class RefugesInfoProvider(ImageProvider):
         place: GeoPlaceSchema,
     ) -> list[ImageResult]:
         """
-        Fetch images from refuges.info for a single source ID.
+        Fetch images from refuges.info for a single source ID via the JSON API.
 
         Args:
             client: HTTP client
@@ -174,102 +205,53 @@ class RefugesInfoProvider(ImageProvider):
             List of ImageResult objects
         """
         try:
-            from bs4 import BeautifulSoup
-
-            url = f"https://www.refuges.info/point/{source_id}"
-            logger.debug("Fetching URL", url=url)
-
-            response = await client.get(url)
+            response = await client.get(
+                f"{API_BASE}/api/commentaires", params={"id_point": source_id}
+            )
             response.raise_for_status()
+            comments = response.json()
 
-            soup = BeautifulSoup(response.content, "html.parser")
-            comments = soup.find_all("li")
+            # The API returns a dict keyed by index ("0", "1", …) — order is
+            # the page's newest-first comment order.
+            if isinstance(comments, list):  # defensive: older deployments
+                comments = {str(i): c for i, c in enumerate(comments)}
+
+            canonical_url = await self._canonical_point_url(client, source_id)
 
             results = []
-            for comment in comments:
+            for comment in comments.values():
                 try:
-                    photos_div = comment.find("div", class_="photos")
-                    if not photos_div:
+                    if not any(
+                        str(key).startswith("photo-") for key in (comment or {})
+                    ):
+                        continue
+                    comment_id = comment.get("id_commentaire")
+                    if not comment_id:
                         continue
 
-                    image_link = photos_div.find("a")
-                    if not image_link:
-                        continue
+                    # Deterministic URLs from the comment id — the API's own
+                    # photo-* fields are unreliable (often the vignette, and
+                    # the "?" before md= is missing). No md cache-buster.
+                    image_url = f"{API_BASE}/photos_points/{comment_id}-originale.jpeg"
+                    medium_url = f"{API_BASE}/photos_points/{comment_id}-reduite.jpeg"
 
-                    image_url = f"https://www.refuges.info{image_link['href']}".split(
-                        "?"
-                    )[0]
+                    capture_date = self._parse_capture_date(
+                        comment.get("date_commentaire"), source_id
+                    )
+                    caption = html.unescape(
+                        comment.get("texte_commentaire") or ""
+                    ).strip()
+                    author = (comment.get("auteur_commentaire") or "").strip() or None
 
-                    # Get date from texte_sur_image div
-                    date_div = photos_div.find("div", class_="texte_sur_image")
-                    if not date_div:
-                        continue
+                    src_ident = f"C{comment_id}"  # stable across the old scraper's pins
+                    src_url = (
+                        f"{canonical_url}#{src_ident}"
+                        if canonical_url
+                        else f"{API_BASE}/point/{source_id}#{src_ident}"
+                    )
 
-                    capture_date_str_fr = date_div.text.strip()
-                    capture_date = None
-                    if capture_date_str_fr:
-                        try:
-                            import dateparser
-
-                            capture_date = dateparser.parse(
-                                capture_date_str_fr,
-                                languages=["fr"],
-                                settings={
-                                    "TO_TIMEZONE": "UTC",
-                                    "PREFER_DATES_FROM": "past",
-                                },
-                            )
-                            # Ensure timezone-aware datetime and set default time to 12:00
-                            if capture_date:
-                                if capture_date.tzinfo is None:
-                                    capture_date = capture_date.replace(
-                                        tzinfo=timezone.utc
-                                    )
-                                # If time is 00:00, assume no time was specified and use 12:00
-                                if capture_date.hour == 0 and capture_date.minute == 0:
-                                    capture_date = capture_date.replace(
-                                        hour=12, minute=0
-                                    )
-                        except Exception as e:
-                            logger.warning(
-                                "Could not parse date",
-                                date_str=capture_date_str_fr,
-                                source_id=source_id,
-                                error=str(e),
-                            )
-
-                    # Get caption from blockquote if it exists
-                    caption = ""
-                    blockquote = comment.find("blockquote")
-                    if blockquote:
-                        caption = blockquote.text.strip()
-
-                    # Extract author information from commentaire_metainfo div
-                    author = None
-                    author_url = None
-                    metainfo_div = comment.find("div", class_="commentaire_metainfo")
-                    if metainfo_div:
-                        author_link = metainfo_div.find("a")
-                        if author_link:
-                            author_name = author_link.text.strip()
-                            # Clean up whitespace from the author name
-                            author_name = " ".join(author_name.split())
-                            if author_name:
-                                author = author_name
-                            # Extract author URL (profile link)
-                            if author_link.get("href"):
-                                author_url = (
-                                    f"https://www.refuges.info{author_link['href']}"
-                                )
-
-                    # Get source info
-                    src_ident = f"C{image_url.split('/')[-1].split('-')[0]}"  # Extract ID from image URL
-                    src_url = f"https://www.refuges.info/point/{source_id}#{src_ident}"
-
-                    # Build attribution
                     attribution = f'via <a href="{src_url}" target="_blank" rel="nofollow">refuges.info</a>'
 
-                    # Calculate score
                     score = self._score_refugesinfo_image(
                         has_caption=bool(caption),
                         has_author=bool(author),
@@ -277,7 +259,6 @@ class RefugesInfoProvider(ImageProvider):
                         captured_at=capture_date,
                     )
 
-                    # Create Point from GeoPlaceSchema lat/lon
                     location = Point(place.lon, place.lat, srid=4326)
 
                     result = ImageResult(
@@ -291,9 +272,9 @@ class RefugesInfoProvider(ImageProvider):
                         license_slug="cc-by-sa-2.0-fr",  # refuges.info uses CC-BY-SA-2.0-FR
                         attribution=attribution,
                         author=author,
-                        author_url=author_url,
+                        author_url=None,
                         url_large=image_url,
-                        url_medium=None,
+                        url_medium=medium_url,
                         place={
                             "id": place.id,
                             "slug": place.slug,
@@ -311,12 +292,13 @@ class RefugesInfoProvider(ImageProvider):
                             "refuges_id": source_id,
                         },
                     )
-
                     results.append(result)
 
                 except Exception as e:
                     logger.warning(
-                        "Error processing image from refuges.info", error=str(e)
+                        "Error processing refuges.info comment",
+                        error=str(e),
+                        source_id=source_id,
                     )
                     continue
 
@@ -329,6 +311,58 @@ class RefugesInfoProvider(ImageProvider):
                 error=str(e),
             )
             return []
+
+    async def _canonical_point_url(self, client, source_id: str) -> str | None:
+        """The point's canonical page URL (``properties.lien`` of /api/point).
+
+        Cached long-term per point id — lien only changes when the site
+        re-slugs the point. Returns None when the API fails; callers fall
+        back to the short /point/{id} URL (which the site 301-redirects —
+        harmless for browsers, this is attribution metadata only).
+        """
+        cache = get_persistent_cache()
+        cache_key = self._get_metadata_cache_key(f"point_lien:{source_id}")
+        cached = await sync_to_async(cache.get)(cache_key)
+        if cached:
+            return cached
+        try:
+            response = await client.get(
+                f"{API_BASE}/api/point", params={"id": source_id}
+            )
+            response.raise_for_status()
+            features = response.json().get("features", [])
+            lien = (
+                (features[0].get("properties") or {}).get("lien") if features else None
+            )
+        except Exception as e:
+            logger.debug(
+                "Could not fetch refuges.info point URL",
+                source_id=source_id,
+                error=str(e),
+            )
+            return None
+        if lien:
+            await sync_to_async(cache.set)(cache_key, lien, CACHE_LONGTERM)
+        return lien
+
+    def _parse_capture_date(self, date_str: str | None, source_id: str):
+        """Parse ``date_commentaire`` (e.g. '2026-08-16 18:14:02.018925+02').
+
+        ``datetime.fromisoformat`` handles the site's offset format directly;
+        naive values are treated as UTC (provider-wide convention).
+        """
+        if not date_str:
+            return None
+        try:
+            capture_date = datetime.fromisoformat(str(date_str))
+        except (ValueError, TypeError):
+            logger.warning(
+                "Could not parse date", date_str=date_str, source_id=source_id
+            )
+            return None
+        if capture_date.tzinfo is None:
+            capture_date = capture_date.replace(tzinfo=timezone.utc)
+        return capture_date
 
     def _score_refugesinfo_image(
         self,
