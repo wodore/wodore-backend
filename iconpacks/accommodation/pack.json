@@ -1,0 +1,503 @@
+{
+  "schema": 2,
+  "name": "accommodation",
+  "version": "0.1.0",
+  "provenance": {
+    "created_by": "user"
+  },
+  "spec": {
+    "viewBox": "0 0 48 48",
+    "live_area": {
+      "padding": 3
+    },
+    "stroke": {
+      "width": 3,
+      "linecap": "round",
+      "linejoin": "round"
+    },
+    "fill": "none",
+    "allowed_elements": [
+      "path",
+      "circle",
+      "rect",
+      "line",
+      "polyline",
+      "polygon",
+      "ellipse"
+    ],
+    "precision": 0.5
+  },
+  "styles": {
+    "import-mono": {
+      "label": "Imported mono marker",
+      "construction": "solid",
+      "color_mode": "mono",
+      "detail": "medium",
+      "fill": "#000000",
+      "max_nodes": 800,
+      "min_gap": 0.0,
+      "render_sizes": [24, 48],
+      "note": "Transitional: legacy pin-style marker imported from martin_sync. Redesign toward mono-line in a later round."
+    },
+    "import-simple": {
+      "label": "Imported simple (flat color)",
+      "construction": "solid",
+      "color_mode": "color",
+      "detail": "medium",
+      "fill": "imported",
+      "max_nodes": 800,
+      "min_gap": 0.0,
+      "render_sizes": [24, 48],
+      "note": "Transitional: simplified flat-color set imported from martin_sync. Redesign toward primitive/filled later."
+    },
+    "import-detailed": {
+      "label": "Imported detailed (color)",
+      "construction": "solid",
+      "color_mode": "color",
+      "detail": "high",
+      "fill": "imported",
+      "max_nodes": 1600,
+      "min_gap": 0.0,
+      "render_sizes": [24, 48],
+      "note": "Transitional: detailed color set imported from martin_sync. Redesign toward lineal-color later."
+    }
+  },
+  "schedule": [4, 2, 1],
+  "icons": {
+    "hut": {
+      "brief": "Staffed alpine hut: gabled roof, door, small window",
+      "variants": {
+        "mono": {
+          "style": "import-mono",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "simple": {
+          "style": "import-simple",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "detailed": {
+          "style": "import-detailed",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        }
+      }
+    },
+    "selfhut": {
+      "brief": "Self-catering hut: hut with cutlery mark, unstaffed",
+      "variants": {
+        "mono": {
+          "style": "import-mono",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "simple": {
+          "style": "import-simple",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "detailed": {
+          "style": "import-detailed",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        }
+      }
+    },
+    "hotel": {
+      "brief": "Hotel: multi-storey building with star",
+      "variants": {
+        "mono": {
+          "style": "import-mono",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "simple": {
+          "style": "import-simple",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "detailed": {
+          "style": "import-detailed",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        }
+      }
+    },
+    "bhotel": {
+      "brief": "Berghotel (mountain hotel): large building, star, altitude feel",
+      "variants": {
+        "mono": {
+          "style": "import-mono",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "simple": {
+          "style": "import-simple",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "detailed": {
+          "style": "import-detailed",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        }
+      }
+    },
+    "hostel": {
+      "brief": "Hostel: building with bed mark",
+      "variants": {
+        "mono": {
+          "style": "import-mono",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "simple": {
+          "style": "import-simple",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "detailed": {
+          "style": "import-detailed",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        }
+      }
+    },
+    "bivouac": {
+      "brief": "Bivouac: tiny emergency shelter box",
+      "variants": {
+        "mono": {
+          "style": "import-mono",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "simple": {
+          "style": "import-simple",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "detailed": {
+          "style": "import-detailed",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        }
+      }
+    },
+    "shelter": {
+      "brief": "Shelter: open-front roof, wind protection",
+      "variants": {
+        "mono": {
+          "style": "import-mono",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "simple": {
+          "style": "import-simple",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "detailed": {
+          "style": "import-detailed",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        }
+      }
+    },
+    "camping": {
+      "brief": "Camping site: tent",
+      "variants": {
+        "mono": {
+          "style": "import-mono",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "simple": {
+          "style": "import-simple",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "detailed": {
+          "style": "import-detailed",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        }
+      }
+    },
+    "campgr": {
+      "brief": "Campground: tent on pitch with tree",
+      "variants": {
+        "mono": {
+          "style": "import-mono",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "simple": {
+          "style": "import-simple",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "detailed": {
+          "style": "import-detailed",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        }
+      }
+    },
+    "alp": {
+      "brief": "Alpine farm hut (Alphütte): hut with meadow",
+      "variants": {
+        "mono": {
+          "style": "import-mono",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "simple": {
+          "style": "import-simple",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "detailed": {
+          "style": "import-detailed",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        }
+      }
+    },
+    "resta": {
+      "brief": "Restaurant at accommodation: building with cutlery",
+      "variants": {
+        "mono": {
+          "style": "import-mono",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "simple": {
+          "style": "import-simple",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "detailed": {
+          "style": "import-detailed",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        }
+      }
+    },
+    "closed": {
+      "brief": "Closed / out of season: accommodation with strike",
+      "variants": {
+        "mono": {
+          "style": "import-mono",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "simple": {
+          "style": "import-simple",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "detailed": {
+          "style": "import-detailed",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        }
+      }
+    },
+    "special": {
+      "brief": "Special accommodation: generic mark",
+      "variants": {
+        "mono": {
+          "style": "import-mono",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "simple": {
+          "style": "import-simple",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "detailed": {
+          "style": "import-detailed",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        }
+      }
+    },
+    "unknown": {
+      "brief": "Unknown type: question mark over shelter",
+      "variants": {
+        "mono": {
+          "style": "import-mono",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "simple": {
+          "style": "import-simple",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "detailed": {
+          "style": "import-detailed",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        }
+      }
+    },
+    "root": {
+      "brief": "Category root: generic accommodation marker",
+      "variants": {
+        "mono": {
+          "style": "import-mono",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "simple": {
+          "style": "import-simple",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        },
+        "detailed": {
+          "style": "import-detailed",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          }
+        }
+      }
+    }
+  }
+}
