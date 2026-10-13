@@ -13,7 +13,12 @@ from django.db.models import Count, Q
 from django.http import HttpRequest, HttpResponse
 from django.views.decorators.cache import cache_page
 
-from server.apps.api.controller import ApiController, cache_headers, raise_not_found
+from server.apps.api.controller import (
+    REDIRECT_CACHE_CONTROL,
+    ApiController,
+    cache_headers,
+    raise_not_found,
+)
 from server.apps.api.error_codes import ErrorCode
 from server.apps.translations import LanguageQuery, activate, override
 
@@ -502,7 +507,7 @@ class CategorySymbolSvgParentController(ApiController):
         raise RedirectTo(
             url,
             status_code=HTTPStatus.FOUND,
-            headers={"Cache-Control": f"public, max-age={CACHE_MAX_AGE}"},
+            headers={"Cache-Control": REDIRECT_CACHE_CONTROL},
         )
 
 
@@ -526,7 +531,7 @@ class CategorySymbolSvgController(ApiController):
         raise RedirectTo(
             url,
             status_code=HTTPStatus.FOUND,
-            headers={"Cache-Control": f"public, max-age={CACHE_MAX_AGE}"},
+            headers={"Cache-Control": REDIRECT_CACHE_CONTROL},
         )
 
 

@@ -17,7 +17,12 @@ from pydantic import Field
 
 from django.http import HttpRequest
 
-from server.apps.api.controller import ApiController, cache_headers, raise_not_found
+from server.apps.api.controller import (
+    REDIRECT_CACHE_CONTROL,
+    ApiController,
+    cache_headers,
+    raise_not_found,
+)
 from server.apps.api.projection import field_selected
 from server.apps.api.query import sparse_fields_query
 from server.apps.categories.models import Category
@@ -485,7 +490,7 @@ class WeatherSvgController(ApiController):
         raise RedirectTo(
             symbol.svg_file.url,
             status_code=HTTPStatus.FOUND,
-            headers={"Cache-Control": f"public, max-age={CACHE_MAX_AGE}"},
+            headers={"Cache-Control": REDIRECT_CACHE_CONTROL},
         )
 
 

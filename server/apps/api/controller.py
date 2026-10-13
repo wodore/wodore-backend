@@ -117,3 +117,12 @@ def cache_headers(max_age: int) -> dict[str, NewHeader]:
     return {
         "Cache-Control": NewHeader(value=f"public, max-age={max_age}"),
     }
+
+
+#: ``Cache-Control`` for the SVG redirect endpoints (categories, meteo,
+#: symbols): caches may reuse the 302 for a day and keep serving it
+#: stale for up to a week while revalidating in the background. The
+#: redirect target is content-unique media (re-uploads change the file
+#: name), so a briefly stale redirect is cheap — without the short
+#: max-age a replaced icon would stay stale for the full window.
+REDIRECT_CACHE_CONTROL = "public, max-age=86400, stale-while-revalidate=604800"

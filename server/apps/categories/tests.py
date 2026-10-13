@@ -40,7 +40,10 @@ class TestCategorySymbolSvg:
 
         assert response.status_code == 302
         assert response["Location"] == symbol.svg_file.url
-        assert response["Cache-Control"] == "public, max-age=604800"
+        assert (
+            response["Cache-Control"]
+            == "public, max-age=86400, stale-while-revalidate=604800"
+        )
 
     def test_redirects_to_svg_with_parent(self):
         symbol = _make_symbol("test-hut")

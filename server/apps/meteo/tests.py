@@ -77,7 +77,10 @@ class TestWeatherCodeSvg:
 
         assert response.status_code == 302
         assert response["Location"] == weather_svg.svg_file.url
-        assert response["Cache-Control"] == "public, max-age=604800"
+        assert (
+            response["Cache-Control"]
+            == "public, max-age=86400, stale-while-revalidate=604800"
+        )
 
     def test_unknown_collection_returns_404(self):
         response = Client().get("/v1/meteo/symbol/test-nope/day/0.svg")
