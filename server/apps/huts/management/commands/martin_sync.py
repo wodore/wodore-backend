@@ -164,9 +164,6 @@ class Command(BaseCommand):
             target_path, dry_run, stats, include_list, variants, Category
         )
 
-        # 1b. Copy static sprites (basemap settlement dots, station markers)
-        self._sync_static_sprites(target_path, dry_run, stats)
-
         # 2. Copy font files (TTF for Martin glyph serving)
         # (Styles are no longer synced: the backend serves them from the
         # basemaps registry at /v1/map/styles/<slug>.json — MapLibre styles
