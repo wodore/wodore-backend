@@ -39,8 +39,8 @@
       "render_sizes": [24, 48],
       "note": "Transitional: legacy pin-style marker imported from martin_sync. Redesign toward mono-line in a later round."
     },
-    "import-simple": {
-      "label": "Imported simple (flat color)",
+    "import-primitive": {
+      "label": "Imported primitive (flat)",
       "construction": "solid",
       "color_mode": "color",
       "detail": "medium",
@@ -48,10 +48,10 @@
       "max_nodes": 800,
       "min_gap": 0.0,
       "render_sizes": [24, 48],
-      "note": "Transitional: simplified flat-color set imported from martin_sync. Redesign toward primitive/filled later."
+      "note": "Transitional: simplified flat set from martin_sync. Redesign toward primitive style later."
     },
-    "import-detailed": {
-      "label": "Imported detailed (color)",
+    "import-color": {
+      "label": "Imported color (detailed)",
       "construction": "solid",
       "color_mode": "color",
       "detail": "high",
@@ -59,7 +59,7 @@
       "max_nodes": 1600,
       "min_gap": 0.0,
       "render_sizes": [24, 48],
-      "note": "Transitional: detailed color set imported from martin_sync. Redesign toward lineal-color later."
+      "note": "Transitional: detailed color set from martin_sync. Redesign toward lineal-color later."
     }
   },
   "schedule": [4, 2, 1],
@@ -69,22 +69,24 @@
       "variants": {
         "mono": {
           "style": "import-mono",
+          "status": "todo",
+          "comments": [
+            {
+              "round": "import",
+              "text": "imported mono is the generic placeholder pin — needs real mono design"
+            }
+          ]
+        },
+        "primitive": {
+          "style": "import-primitive",
           "status": "approved",
           "chosen": {
             "run": "import",
             "variant": "source"
           }
         },
-        "simple": {
-          "style": "import-simple",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        },
-        "detailed": {
-          "style": "import-detailed",
+        "color": {
+          "style": "import-color",
           "status": "approved",
           "chosen": {
             "run": "import",
@@ -98,22 +100,24 @@
       "variants": {
         "mono": {
           "style": "import-mono",
+          "status": "todo",
+          "comments": [
+            {
+              "round": "import",
+              "text": "imported mono is the generic placeholder pin — needs real mono design"
+            }
+          ]
+        },
+        "primitive": {
+          "style": "import-primitive",
           "status": "approved",
           "chosen": {
             "run": "import",
             "variant": "source"
           }
         },
-        "simple": {
-          "style": "import-simple",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        },
-        "detailed": {
-          "style": "import-detailed",
+        "color": {
+          "style": "import-color",
           "status": "approved",
           "chosen": {
             "run": "import",
@@ -127,22 +131,24 @@
       "variants": {
         "mono": {
           "style": "import-mono",
+          "status": "todo",
+          "comments": [
+            {
+              "round": "import",
+              "text": "imported mono is the generic placeholder pin — needs real mono design"
+            }
+          ]
+        },
+        "primitive": {
+          "style": "import-primitive",
           "status": "approved",
           "chosen": {
             "run": "import",
             "variant": "source"
           }
         },
-        "simple": {
-          "style": "import-simple",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        },
-        "detailed": {
-          "style": "import-detailed",
+        "color": {
+          "style": "import-color",
           "status": "approved",
           "chosen": {
             "run": "import",
@@ -156,22 +162,24 @@
       "variants": {
         "mono": {
           "style": "import-mono",
+          "status": "todo",
+          "comments": [
+            {
+              "round": "import",
+              "text": "imported mono is the generic placeholder pin — needs real mono design"
+            }
+          ]
+        },
+        "primitive": {
+          "style": "import-primitive",
           "status": "approved",
           "chosen": {
             "run": "import",
             "variant": "source"
           }
         },
-        "simple": {
-          "style": "import-simple",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        },
-        "detailed": {
-          "style": "import-detailed",
+        "color": {
+          "style": "import-color",
           "status": "approved",
           "chosen": {
             "run": "import",
@@ -185,22 +193,24 @@
       "variants": {
         "mono": {
           "style": "import-mono",
+          "status": "todo",
+          "comments": [
+            {
+              "round": "import",
+              "text": "imported mono is the generic placeholder pin — needs real mono design"
+            }
+          ]
+        },
+        "primitive": {
+          "style": "import-primitive",
           "status": "approved",
           "chosen": {
             "run": "import",
             "variant": "source"
           }
         },
-        "simple": {
-          "style": "import-simple",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        },
-        "detailed": {
-          "style": "import-detailed",
+        "color": {
+          "style": "import-color",
           "status": "approved",
           "chosen": {
             "run": "import",
@@ -214,22 +224,24 @@
       "variants": {
         "mono": {
           "style": "import-mono",
+          "status": "todo",
+          "comments": [
+            {
+              "round": "import",
+              "text": "imported mono is the generic placeholder pin — needs real mono design"
+            }
+          ]
+        },
+        "primitive": {
+          "style": "import-primitive",
           "status": "approved",
           "chosen": {
             "run": "import",
             "variant": "source"
           }
         },
-        "simple": {
-          "style": "import-simple",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        },
-        "detailed": {
-          "style": "import-detailed",
+        "color": {
+          "style": "import-color",
           "status": "approved",
           "chosen": {
             "run": "import",
@@ -243,22 +255,24 @@
       "variants": {
         "mono": {
           "style": "import-mono",
+          "status": "todo",
+          "comments": [
+            {
+              "round": "import",
+              "text": "imported mono is the generic placeholder pin — needs real mono design"
+            }
+          ]
+        },
+        "primitive": {
+          "style": "import-primitive",
           "status": "approved",
           "chosen": {
             "run": "import",
             "variant": "source"
           }
         },
-        "simple": {
-          "style": "import-simple",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        },
-        "detailed": {
-          "style": "import-detailed",
+        "color": {
+          "style": "import-color",
           "status": "approved",
           "chosen": {
             "run": "import",
@@ -272,22 +286,24 @@
       "variants": {
         "mono": {
           "style": "import-mono",
+          "status": "todo",
+          "comments": [
+            {
+              "round": "import",
+              "text": "imported mono is the generic placeholder pin — needs real mono design"
+            }
+          ]
+        },
+        "primitive": {
+          "style": "import-primitive",
           "status": "approved",
           "chosen": {
             "run": "import",
             "variant": "source"
           }
         },
-        "simple": {
-          "style": "import-simple",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        },
-        "detailed": {
-          "style": "import-detailed",
+        "color": {
+          "style": "import-color",
           "status": "approved",
           "chosen": {
             "run": "import",
@@ -301,22 +317,24 @@
       "variants": {
         "mono": {
           "style": "import-mono",
+          "status": "todo",
+          "comments": [
+            {
+              "round": "import",
+              "text": "imported mono is the generic placeholder pin — needs real mono design"
+            }
+          ]
+        },
+        "primitive": {
+          "style": "import-primitive",
           "status": "approved",
           "chosen": {
             "run": "import",
             "variant": "source"
           }
         },
-        "simple": {
-          "style": "import-simple",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        },
-        "detailed": {
-          "style": "import-detailed",
+        "color": {
+          "style": "import-color",
           "status": "approved",
           "chosen": {
             "run": "import",
@@ -330,22 +348,24 @@
       "variants": {
         "mono": {
           "style": "import-mono",
+          "status": "todo",
+          "comments": [
+            {
+              "round": "import",
+              "text": "imported mono is the generic placeholder pin — needs real mono design"
+            }
+          ]
+        },
+        "primitive": {
+          "style": "import-primitive",
           "status": "approved",
           "chosen": {
             "run": "import",
             "variant": "source"
           }
         },
-        "simple": {
-          "style": "import-simple",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        },
-        "detailed": {
-          "style": "import-detailed",
+        "color": {
+          "style": "import-color",
           "status": "approved",
           "chosen": {
             "run": "import",
@@ -359,22 +379,24 @@
       "variants": {
         "mono": {
           "style": "import-mono",
+          "status": "todo",
+          "comments": [
+            {
+              "round": "import",
+              "text": "imported mono is the generic placeholder pin — needs real mono design"
+            }
+          ]
+        },
+        "primitive": {
+          "style": "import-primitive",
           "status": "approved",
           "chosen": {
             "run": "import",
             "variant": "source"
           }
         },
-        "simple": {
-          "style": "import-simple",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        },
-        "detailed": {
-          "style": "import-detailed",
+        "color": {
+          "style": "import-color",
           "status": "approved",
           "chosen": {
             "run": "import",
@@ -394,16 +416,16 @@
             "variant": "source"
           }
         },
-        "simple": {
-          "style": "import-simple",
+        "primitive": {
+          "style": "import-primitive",
           "status": "approved",
           "chosen": {
             "run": "import",
             "variant": "source"
           }
         },
-        "detailed": {
-          "style": "import-detailed",
+        "color": {
+          "style": "import-color",
           "status": "approved",
           "chosen": {
             "run": "import",
@@ -417,22 +439,24 @@
       "variants": {
         "mono": {
           "style": "import-mono",
+          "status": "todo",
+          "comments": [
+            {
+              "round": "import",
+              "text": "imported mono is the generic placeholder pin — needs real mono design"
+            }
+          ]
+        },
+        "primitive": {
+          "style": "import-primitive",
           "status": "approved",
           "chosen": {
             "run": "import",
             "variant": "source"
           }
         },
-        "simple": {
-          "style": "import-simple",
-          "status": "approved",
-          "chosen": {
-            "run": "import",
-            "variant": "source"
-          }
-        },
-        "detailed": {
-          "style": "import-detailed",
+        "color": {
+          "style": "import-color",
           "status": "approved",
           "chosen": {
             "run": "import",
@@ -452,16 +476,16 @@
             "variant": "source"
           }
         },
-        "simple": {
-          "style": "import-simple",
+        "primitive": {
+          "style": "import-primitive",
           "status": "approved",
           "chosen": {
             "run": "import",
             "variant": "source"
           }
         },
-        "detailed": {
-          "style": "import-detailed",
+        "color": {
+          "style": "import-color",
           "status": "approved",
           "chosen": {
             "run": "import",
@@ -481,16 +505,16 @@
             "variant": "source"
           }
         },
-        "simple": {
-          "style": "import-simple",
+        "primitive": {
+          "style": "import-primitive",
           "status": "approved",
           "chosen": {
             "run": "import",
             "variant": "source"
           }
         },
-        "detailed": {
-          "style": "import-detailed",
+        "color": {
+          "style": "import-color",
           "status": "approved",
           "chosen": {
             "run": "import",
