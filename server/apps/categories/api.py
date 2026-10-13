@@ -480,8 +480,8 @@ class CategorySymbolSvgParentController(ApiController):
     def get(self, parsed_path: Path[_SymbolSvgParentPath]) -> None:
         """Redirect to a category SVG (with parent).
 
-        Variant options: detailed, simple, mono
-        Example: /v1/categories/symbol/detailed/map/transport.svg
+        Variant options: color, primitive, mono
+        Example: /v1/categories/symbol/color/map/transport.svg
 
         If the category doesn't have a symbol for the variant, returns 404.
         """
@@ -500,7 +500,7 @@ class CategorySymbolSvgController(ApiController):
     def get(self, parsed_path: Path[_SymbolSvgPath]) -> None:
         """Redirect to the SVG icon for a category.
 
-        Variant options: detailed, simple, mono
+        Variant options: color, primitive, mono
         Slug can be a simple slug (e.g., 'transport') or root category
 
         If the category doesn't have a symbol for the variant, returns 404.
