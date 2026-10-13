@@ -10,7 +10,8 @@ removed. Shape change: slug shorthand values are now objects.
 from http import HTTPStatus
 
 import pydantic
-from dmr import APIError, Path, Query, RedirectTo, modify
+from dmr import APIError, Path, Query, RedirectTo, ResponseSpec, modify
+from dmr.headers import HeaderSpec
 from dmr.routing import path
 from pydantic import Field
 
@@ -424,6 +425,16 @@ class WeatherSvgController(ApiController):
     @modify(
         operation_id="get_weather_code_svg",
         headers=cache_headers(CACHE_MAX_AGE),
+        extra_responses=[
+            ResponseSpec(
+                None,
+                status_code=HTTPStatus.FOUND,
+                headers={
+                    "Location": HeaderSpec(),
+                    "Cache-Control": HeaderSpec(),
+                },
+            ),
+        ],
     )
     def get(self, parsed_path: Path[WeatherSvgPath]) -> None:
         """Redirect to a weather code SVG.
@@ -474,6 +485,7 @@ class WeatherSvgController(ApiController):
         raise RedirectTo(
             symbol.svg_file.url,
             status_code=HTTPStatus.FOUND,
+            headers={"Cache-Control": f"public, max-age={CACHE_MAX_AGE}"},
         )
 
 

@@ -4,7 +4,8 @@ from http import HTTPStatus
 from typing import Any
 
 import pydantic
-from dmr import APIError, Path, Query, RedirectTo, modify
+from dmr import APIError, Path, Query, RedirectTo, ResponseSpec, modify
+from dmr.headers import HeaderSpec
 from dmr.routing import external_path, path
 from pydantic import Field
 
@@ -470,12 +471,23 @@ def _category_symbol_redirect(
     return symbol.svg_file.url
 
 
+_REDIRECT_SPEC = ResponseSpec(
+    None,
+    status_code=HTTPStatus.FOUND,
+    headers={
+        "Location": HeaderSpec(),
+        "Cache-Control": HeaderSpec(),
+    },
+)
+
+
 class CategorySymbolSvgParentController(ApiController):
     """Redirect to the SVG icon for a category with explicit parent."""
 
     @modify(
         operation_id="get_category_symbol_svg_with_parent",
         headers=cache_headers(CACHE_MAX_AGE),
+        extra_responses=[_REDIRECT_SPEC],
     )
     def get(self, parsed_path: Path[_SymbolSvgParentPath]) -> None:
         """Redirect to a category SVG (with parent).
@@ -487,7 +499,11 @@ class CategorySymbolSvgParentController(ApiController):
         """
         full_slug = f"{parsed_path.parent}.{parsed_path.slug}"
         url = _category_symbol_redirect(parsed_path.variant, full_slug)
-        raise RedirectTo(url, status_code=HTTPStatus.FOUND)
+        raise RedirectTo(
+            url,
+            status_code=HTTPStatus.FOUND,
+            headers={"Cache-Control": f"public, max-age={CACHE_MAX_AGE}"},
+        )
 
 
 class CategorySymbolSvgController(ApiController):
@@ -496,6 +512,7 @@ class CategorySymbolSvgController(ApiController):
     @modify(
         operation_id="get_category_symbol_svg",
         headers=cache_headers(CACHE_MAX_AGE),
+        extra_responses=[_REDIRECT_SPEC],
     )
     def get(self, parsed_path: Path[_SymbolSvgPath]) -> None:
         """Redirect to the SVG icon for a category.
@@ -506,7 +523,11 @@ class CategorySymbolSvgController(ApiController):
         If the category doesn't have a symbol for the variant, returns 404.
         """
         url = _category_symbol_redirect(parsed_path.variant, parsed_path.slug)
-        raise RedirectTo(url, status_code=HTTPStatus.FOUND)
+        raise RedirectTo(
+            url,
+            status_code=HTTPStatus.FOUND,
+            headers={"Cache-Control": f"public, max-age={CACHE_MAX_AGE}"},
+        )
 
 
 def get_categories_markdown(request: HttpRequest) -> HttpResponse:
