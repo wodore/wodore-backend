@@ -67,27 +67,43 @@ def _resolve_tokens(value: Any, values: dict[str, Any]) -> Any:
     return value
 
 
+def collect_env_names(value: Any) -> set[str]:
+    """Names referenced by ``{{env:NAME}}`` tokens anywhere in a tree.
+
+    Resolution is name-scoped on purpose: building a full settings map
+    per string node made serving large styles pathologically slow
+    (``str()`` of every uppercase Django setting × thousands of nodes).
+    """
+    names: set[str] = set()
+    for node in _walk_strings(value):
+        names.update(ENV_TOKEN_RE.findall(node))
+    return names
+
+
+def build_env(names: set[str], extra: dict[str, str] | None = None) -> dict[str, str]:
+    """Resolve the given env names once (OS env ∪ Django settings)."""
+    env = dict(extra or {})
+    for name in names:
+        if name in env:
+            continue
+        if name in os.environ:
+            env[name] = os.environ[name]
+        elif hasattr(settings, name):
+            env[name] = str(getattr(settings, name))
+    return env
+
+
 def substitute_env(value: str, extra: dict[str, str] | None = None) -> str:
-    """Resolve ``{{env:NAME}}`` tokens from settings/OS environment."""
-    env = dict(os.environ)
-    env.update(
-        {
-            name: str(getattr(settings, name))
-            for name in dir(settings)
-            if name.isupper() and not name.startswith("_")
-        }
-    )
-    if extra:
-        env.update(extra)
+    """Resolve ``{{env:NAME}}`` tokens in a single string.
 
-    def _replace(match: re.Match[str]) -> str:
-        name = match.group(1)
-        resolved = env.get(name)
-        if resolved is None:
-            return match.group(0)
-        return resolved
-
-    return ENV_TOKEN_RE.sub(_replace, value)
+    Kept for single-string use (style URLs); tree serving goes through
+    :func:`substitute_env_tree`, which resolves each name exactly once.
+    """
+    names = set(ENV_TOKEN_RE.findall(value))
+    if not names:
+        return value
+    env = build_env(names, extra)
+    return ENV_TOKEN_RE.sub(lambda m: env.get(m.group(1), m.group(0)), value)
 
 
 def _absolutize_url(url: str, tile_server_url: str, api_url: str) -> str:
@@ -148,15 +164,35 @@ def resolve_style(
     return resolved
 
 
-def substitute_env_tree(value: Any) -> Any:
-    """Substitute ``{{env:NAME}}`` tokens inside string nodes of a tree."""
+def substitute_env_tree(value: Any, env: dict[str, str] | None = None) -> Any:
+    """Substitute ``{{env:NAME}}`` tokens inside string nodes of a tree.
+
+    ``env`` may be prebuilt via :func:`build_env`; when omitted it is
+    derived from the tokens actually present (one pass, names only).
+    """
+    if env is None:
+        env = build_env(collect_env_names(value))
+    if not env:
+        return value
     if isinstance(value, str):
-        return substitute_env(value)
+        return ENV_TOKEN_RE.sub(lambda m: env.get(m.group(1), m.group(0)), value)
     if isinstance(value, dict):
-        return {key: substitute_env_tree(child) for key, child in value.items()}
+        return {key: substitute_env_tree(child, env) for key, child in value.items()}
     if isinstance(value, list):
-        return [substitute_env_tree(child) for child in value]
+        return [substitute_env_tree(child, env) for child in value]
     return value
+
+
+def _walk_strings(value: Any):
+    """Yield every string node in a JSON tree (dicts, lists, scalars)."""
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for child in value.values():
+            yield from _walk_strings(child)
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            yield from _walk_strings(child)
 
 
 def style_endpoint_url(slug: str, spec: str | None = None) -> str:

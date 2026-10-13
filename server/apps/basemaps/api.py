@@ -105,6 +105,7 @@ class LayerSummary(pydantic.BaseModel):
     attributions: list[dict[str, Any]] = []
     license: dict[str, Any] | None = None
     legend: dict[str, Any] | None = None
+    version: str | None = None
     variants: list[LayerVariant] = []
 
 
@@ -216,6 +217,7 @@ def _build_summary(layer: MapLayer) -> LayerSummary:
     return LayerSummary(
         slug=layer.slug,
         legend=_legend_payload(layer),
+        version=layer.modified.isoformat(),
         role=layer.role,
         name=layer.name_i18n or layer.name,  # noqa: WPS308
         description=layer.description_i18n or layer.description,  # noqa: WPS308
@@ -368,6 +370,18 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
         response.headers["Cache-Control"] = f"public, max-age={CACHE_MAX_AGE}"
         return response
 
+    cached = _style_cache_get(layer, tokenized)
+    if cached is not None:
+        body, etag = cached
+        if request.headers.get("If-None-Match") == etag:
+            response = HttpResponse(status=HTTPStatus.NOT_MODIFIED)
+        else:
+            response = HttpResponse(body, content_type="application/json")
+        response.headers["ETag"] = etag
+        response.headers["Cache-Control"] = f"public, max-age={CACHE_MAX_AGE}"
+        response.headers["X-Map-Spec"] = layer.spec
+        return response
+
     api_url = request.build_absolute_uri("/").rstrip("/")
     values = layer.authored_parameter_values()
     # Runtime date params get a serve-time default so the resolved style
@@ -416,12 +430,36 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
 def _inject_serving_metadata(
     payload: dict[str, Any], layer: MapLayer
 ) -> dict[str, Any]:
-    """Attach served-spec reporting (variant selection transparency)."""
+    """Attach served-spec reporting + version (client cache sync)."""
     metadata = payload.setdefault("metadata", {})
     if isinstance(metadata, dict):
         metadata["wd:served_spec"] = layer.spec
         metadata["wd:slug"] = layer.slug
+        metadata["wd:version"] = layer.modified.isoformat()
     return payload
+
+
+def _style_cache_key(layer: MapLayer, tokenized: bool) -> str:
+    """Render cache key — version-bumped by ``modified`` automatically."""
+    return (
+        f"basemaps:style:{layer.pk}:{layer.spec}:"
+        f"{'tokenized' if tokenized else 'resolved'}:"
+        f"{layer.modified.isoformat()}"
+    )
+
+
+def _style_cache_get(layer: MapLayer, tokenized: bool) -> tuple[str, str] | None:
+    from django.core.cache import cache
+
+    return cache.get(_style_cache_key(layer, tokenized))
+
+
+def _style_cache_set(layer: MapLayer, tokenized: bool, body: str, etag: str) -> None:
+    from django.core.cache import cache
+
+    # No TTL: the key embeds ``modified`` — any style/parameter edit
+    # changes the key and the old entry falls out naturally.
+    cache.set(_style_cache_key(layer, tokenized), (body, etag), timeout=None)
 
 
 def _style_error(detail: str, status: HTTPStatus) -> HttpResponse:

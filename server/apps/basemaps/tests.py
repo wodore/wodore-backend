@@ -448,3 +448,91 @@ class TestLegends:
             MapLayer.objects.filter(slug="huts").values_list("legend_id", flat=True)
         )
         assert None not in legend_ids and len(legend_ids) == 1
+
+
+# ── Style serving performance & version sync ───────────────────────────
+
+
+class TestEnvResolutionScoping:
+    def test_collect_env_names(self):
+        tree = {
+            "url": "https://x/?key={{env:A_KEY}}",
+            "layers": [{"id": "{{env:B_KEY}}"}],
+        }
+        from server.apps.basemaps.resolution import collect_env_names
+
+        assert collect_env_names(tree) == {"A_KEY", "B_KEY"}
+
+    def test_build_env_resolves_only_requested_names(self, monkeypatch):
+        from server.apps.basemaps.resolution import build_env
+
+        monkeypatch.setenv("WODORE_TEST_KEY", "v1")
+        env = build_env({"WODORE_TEST_KEY"})
+        assert env == {"WODORE_TEST_KEY": "v1"}
+
+    def test_tree_substitution_single_pass(self, monkeypatch):
+        from server.apps.basemaps.resolution import substitute_env_tree
+
+        monkeypatch.setenv("WODORE_TEST_KEY", "k")
+        tree = {
+            "a": "{{env:WODORE_TEST_KEY}}",
+            "b": ["{{env:WODORE_TEST_KEY}}", "plain"],
+        }
+        out = substitute_env_tree(tree)
+        assert out == {"a": "k", "b": ["k", "plain"]}
+
+
+@pytest.mark.django_db
+class TestVersionFieldAndRenderCache:
+    def _seed(self):
+        from django.core.management import call_command
+
+        call_command("map_seed", verbosity=0)
+
+    def test_catalog_carries_version(self):
+        self._seed()
+        client = Client()
+        payload = client.get("/v1/map/catalog", {"lang": "en"}).json()
+        entry = next(l for l in payload["layers"] if l["slug"] == "huts")
+        assert entry["version"]  # ISO timestamp — client cache-sync key
+        layer = MapLayer.objects.get(slug="huts", spec=MapLayer.Spec.medium)
+        assert entry["version"] == layer.modified.isoformat()
+
+    def test_style_metadata_carries_version(self):
+        from django.core.cache import cache
+
+        self._seed()
+        cache.clear()
+        client = Client()
+        style = client.get("/v1/map/styles/huts.json").json()
+        layer = MapLayer.objects.get(slug="huts", spec=MapLayer.Spec.medium)
+        assert style["metadata"]["wd:version"] == layer.modified.isoformat()
+
+    def test_render_cache_hits_and_stays_consistent(self):
+        from django.core.cache import cache
+
+        self._seed()
+        cache.clear()
+        client = Client()
+        first = client.get("/v1/map/styles/huts.json")
+        etag = first.headers["ETag"]
+        # Cached render: identical body and ETag on the second request
+        second = client.get("/v1/map/styles/huts.json")
+        assert second.headers["ETag"] == etag
+        assert second.content == first.content
+        # And a 304 once the client sends the ETag back
+        third = client.get("/v1/map/styles/huts.json", HTTP_IF_NONE_MATCH=etag)
+        assert third.status_code == 304
+
+    def test_style_edit_invalidates_cache(self):
+        from django.core.cache import cache
+
+        self._seed()
+        cache.clear()
+        client = Client()
+        first = client.get("/v1/map/styles/huts.json")
+        layer = MapLayer.objects.get(slug="huts", spec=MapLayer.Spec.medium)
+        layer.style["layers"][0]["minzoom"] = 6
+        layer.save()
+        second = client.get("/v1/map/styles/huts.json")
+        assert second.headers["ETag"] != first.headers["ETag"]
