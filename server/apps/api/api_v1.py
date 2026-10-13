@@ -28,6 +28,7 @@ API_DESCRIPTION = (
 )
 
 # Import order mirrors the URL assembly below (most specific first).
+from server.apps.basemaps import api as map_api
 from server.apps.categories import api as categories_api
 from server.apps.feedbacks import api as feedbacks_api
 from server.apps.geometries import api as geo_api
@@ -51,6 +52,7 @@ def build_router() -> Router:
     router.include(Router("geo/images/", geo_images_api.paths, tags=["geoimages"]))
     router.include(Router("geo/", geo_api.paths, tags=["geometries"]))
     router.include(Router("categories/", categories_api.paths, tags=["category"]))
+    router.include(Router("map/", map_api.paths, tags=["map"]))
     router.include(Router("huts/", huts_paths, tags=["hut"]))
     router.include(Router("meteo/", meteo_api.paths, tags=["meteo"]))
     router.include(

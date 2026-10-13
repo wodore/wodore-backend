@@ -315,3 +315,15 @@ shared config — stays in the **main checkout**, never in a worktree.
 
 **Imagor rule:** work that touches **imagor** is done in the main
 checkout — the shared container reads the main checkout's media setup.
+
+### Map layers (basemaps app)
+
+Overlays and basemaps live in `server/apps/basemaps` (WEP010 phase 2):
+`MapLayer` rows (role basemap|overlay, `(slug, spec)` device-tier variants),
+parameters (scalar + `opacity-curve` widgets, `{{token}}` nodes in styles),
+category links, coverage. Serving: `GET /v1/map/catalog` (dmr) and
+`GET /v1/map/styles/{slug}.json` (plain view; resolved by default,
+`?mode=tokenized` for customizing clients, `?spec=` variant selection).
+`map_seed` provisions the frontend-parity catalog (run after category seeds).
+`martin_sync` no longer syncs styles — Martin serves tiles/sprites/fonts only;
+styles are served by the API from the registry.

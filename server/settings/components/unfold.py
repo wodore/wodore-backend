@@ -360,6 +360,45 @@ UNFOLD = {
     "TABS": [
         {
             "models": [
+                "basemaps.maplayer",
+                "basemaps.mapparameter",
+                "basemaps.mapcoverage",
+                "basemaps.mapslot",
+                "basemaps.maplegend",
+            ],
+            "items": [
+                {
+                    "title": _("Map layers"),
+                    "link": reverse_lazy("admin:basemaps_maplayer_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "basemaps.view_maplayer"
+                    ),
+                },
+                {
+                    "title": _("Parameters"),
+                    "link": reverse_lazy("admin:basemaps_mapparameter_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "basemaps.view_mapparameter"
+                    ),
+                },
+                {
+                    "title": _("Coverages"),
+                    "link": reverse_lazy("admin:basemaps_mapcoverage_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "basemaps.view_mapcoverage"
+                    ),
+                },
+                {
+                    "title": _("Legends"),
+                    "link": reverse_lazy("admin:basemaps_maplegend_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "basemaps.view_maplegend"
+                    ),
+                },
+            ],
+        },
+        {
+            "models": [
                 "huts.hut",
                 "huts.hutsource",
             ],

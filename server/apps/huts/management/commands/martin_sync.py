@@ -167,10 +167,10 @@ class Command(BaseCommand):
         # 1b. Copy static sprites (basemap settlement dots, station markers)
         self._sync_static_sprites(target_path, dry_run, stats)
 
-        # 2. Copy style files
-        self._sync_styles(target_path, dry_run, stats)
-
-        # 2b. Copy font files (TTF for Martin glyph serving)
+        # 2. Copy font files (TTF for Martin glyph serving)
+        # (Styles are no longer synced: the backend serves them from the
+        # basemaps registry at /v1/map/styles/<slug>.json — MapLibre styles
+        # live in the database now, Martin serves tiles/sprites/fonts only.)
         self._sync_fonts(target_path, dry_run, stats)
 
         # 3. Generate and copy martin.yaml config with sprite paths
@@ -299,87 +299,6 @@ class Command(BaseCommand):
         else:
             self.stdout.write("  ✓ No old files to remove")
 
-    def _sync_styles(self, target_path, dry_run, stats):
-        """Copy MapLibre style JSON files."""
-        self.stdout.write("\n[2/3] Syncing style files...")
-
-        # Source: tile_server/styles/ in Git repo
-        source_dir = Path(settings.BASE_DIR) / "tile_server" / "styles"
-
-        if not source_dir.exists():
-            self.stdout.write(
-                self.style.WARNING(f"  ⚠ Styles directory not found: {source_dir}")
-            )
-            return
-
-        # Target: <target>/styles/
-        target_dir = target_path / "styles"
-
-        # Find all JSON style files
-        style_files = list(source_dir.glob("*.json"))
-
-        if not style_files:
-            self.stdout.write(
-                self.style.WARNING(f"  ⚠ No style files found in {source_dir}")
-            )
-            return
-
-        self.stdout.write(f"  Found {len(style_files)} style file(s)")
-
-        for style_file in sorted(style_files):
-            target_file = target_dir / style_file.name
-            self._copy_file(
-                style_file,
-                target_file,
-                target_dir,
-                dry_run,
-                stats,
-                label=f"style: {style_file.stem}",
-            )
-
-    def _sync_static_sprites(self, target_path, dry_run, stats):
-        """Copy static sprite SVG files (basemap settlement dots, stations)."""
-        self.stdout.write("\n[1b] Syncing static sprites...")
-
-        source_dir = Path(settings.BASE_DIR) / "tile_server" / "sprites"
-
-        if not source_dir.exists():
-            self.stdout.write(
-                self.style.WARNING(
-                    f"  ⚠ Static sprites directory not found: {source_dir}"
-                )
-            )
-            return
-
-        # Ensure sprite_dirs is initialized in stats
-        if "sprite_dirs" not in stats:
-            stats["sprite_dirs"] = []
-
-        for sprite_category_dir in sorted(source_dir.iterdir()):
-            if not sprite_category_dir.is_dir():
-                continue
-
-            category_name = sprite_category_dir.name
-            target_dir = target_path / "sprites" / category_name
-
-            # Register in sprite_dirs for martin.yaml config
-            if category_name not in stats["sprite_dirs"]:
-                stats["sprite_dirs"].append(category_name)
-
-            svg_files = list(sprite_category_dir.glob("*.svg"))
-            self.stdout.write(f"  {category_name}: {len(svg_files)} SVG(s)")
-
-            for svg_file in sorted(svg_files):
-                target_file = target_dir / svg_file.name
-                self._copy_file(
-                    svg_file,
-                    target_file,
-                    target_dir,
-                    dry_run,
-                    stats,
-                    label=f"static-sprite: {category_name}/{svg_file.stem}",
-                )
-
     def _sync_fonts(self, target_path, dry_run, stats):
         """Copy TTF font files for Martin glyph serving."""
         self.stdout.write("\n[2b] Syncing font files...")
@@ -504,9 +423,7 @@ class Command(BaseCommand):
                 "  No sprite directories synced, paths field removed from config"
             )
 
-        # Configure styles path
-        config["styles"] = {"paths": "${MARTIN_SYNC_MOUNT:-/martin_sync}/styles"}
-        self.stdout.write("  Configured styles path")
+        self.stdout.write("  No styles path configured (styles served by the API)")
 
         # Target: <target>/config/martin.yaml
         target_dir = target_path / "config"

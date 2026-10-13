@@ -153,6 +153,7 @@ INSTALLED_APPS: tuple[str, ...] = (
     "server.apps.translations",
     "server.apps.huts",
     "server.apps.availability",
+    "server.apps.basemaps",
     "server.apps.meteo",
     "server.apps.external_geonames",
     "server.apps.geometries",
