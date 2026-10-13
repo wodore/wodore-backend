@@ -96,11 +96,11 @@ class TestFullImport:
             Symbol.objects.filter(slug="fluent-emoji-tent").values_list(
                 "style", flat=True
             )
-        ) == {"detailed", "simple", "mono"}
-        assert icon.symbol_detailed.style == "detailed"
-        assert icon.symbol_simple.style == "simple"
+        ) == {"color", "primitive", "mono"}
+        assert icon.symbol_color.style == "color"
+        assert icon.symbol_primitive.style == "primitive"
         assert icon.symbol_mono.style == "mono"
-        assert icon.symbol_detailed.svg_file
+        assert icon.symbol_color.svg_file
 
     def test_fe0f_stripped_hexcode_join(self):
         """emojibase '2764-FE0F' joins fluent metadata '2764'."""
@@ -118,7 +118,7 @@ class TestFullImport:
             Symbol.objects.filter(slug="fluent-emoji-hiking-boot").values_list(
                 "style", flat=True
             )
-        ) == {"detailed", "simple", "mono"}
+        ) == {"color", "primitive", "mono"}
 
     def test_import_does_not_touch_curation(self):
         """Curation is admin data: the import creates no memberships.
@@ -151,7 +151,7 @@ class TestFullImport:
             Symbol.objects.filter(slug="noto-emoji-tent").values_list(
                 "style", flat=True
             )
-        ) == {"detailed"}
+        ) == {"color"}
 
     def test_noto_unmatched_slug_fallback(self):
         icon = Icon.objects.get(pack__slug="noto-emoji", slug="emoji-0023")
@@ -203,7 +203,7 @@ class TestFlagImports:
             Symbol.objects.filter(slug="noto-emoji-flag-switzerland").values_list(
                 "style", flat=True
             )
-        ) == {"detailed"}
+        ) == {"color"}
 
     def test_subdivision_flag_tag_sequence(self):
         """England joins via its tag-sequence hexcode."""
@@ -224,9 +224,9 @@ class TestFlagImports:
                 Symbol.objects.filter(slug=f"flag-icons-{icon.slug}").values_list(
                     "style", flat=True
                 )
-            ) == {"simple"}
-            assert icon.symbol_simple.svg_file
-            assert icon.symbol_detailed is None
+            ) == {"primitive"}
+            assert icon.symbol_primitive.svg_file
+            assert icon.symbol_color is None
 
     def test_circle_flags_single_style(self):
         icon = Icon.objects.get(pack__slug="circle-flags", slug="flag-switzerland")
@@ -234,9 +234,9 @@ class TestFlagImports:
             Symbol.objects.filter(slug="circle-flags-flag-switzerland").values_list(
                 "style", flat=True
             )
-        ) == {"simple"}
-        assert icon.symbol_simple.svg_file
-        assert icon.symbol_detailed is None
+        ) == {"primitive"}
+        assert icon.symbol_primitive.svg_file
+        assert icon.symbol_color is None
 
     def test_flag_packs_orgs_and_shared_license(self):
         assert (

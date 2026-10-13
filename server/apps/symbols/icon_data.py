@@ -19,8 +19,8 @@ DEFAULT_LOCALES = ("de", "en", "fr", "it")
 
 #: Upstream Fluent Emoji styles mapped to ``Symbol`` styles (design D1).
 FLUENT_STYLES: tuple[tuple[str, str], ...] = (
-    ("Color", "detailed"),
-    ("Flat", "simple"),
+    ("Color", "color"),
+    ("Flat", "primitive"),
     ("High Contrast", "mono"),
 )
 

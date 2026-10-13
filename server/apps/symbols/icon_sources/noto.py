@@ -2,14 +2,14 @@
 
 Layout: color SVGs at ``2D/svg/emoji_u<codepoints>.svg`` (codepoints
 ``_``-joined lowercase hex, no variation selectors). One style only:
-color → detailed. Slugs join on the hexcode; files without an
+color → color-style. Slugs join on the hexcode; files without an
 emojibase match keep a filename-derived slug without keywords.
 
 Country flags ship outside that set, under
 ``third_party/region-flags/waved-svg`` (public domain): the waved
 SVGs are the emoji-flag artwork of ``NotoColorEmoji-flagsonly.ttf``,
 named exactly like the 2D set (``emoji_u1f1e8_1f1ed.svg``) — same
-parse, same emojibase join, also imported as detailed. The flat
+parse, same emojibase join, also imported as color style. The flat
 ISO-code ``svg/`` set next to it covers the flat-rectangular ground
 already served by the ``flag-icons`` pack and is not imported.
 """
@@ -79,6 +79,6 @@ class NotoSource(IconSource):
             slug=slug,
             fallback_name=svg_path.stem,
             hexcode=hexcode,
-            styles={"detailed": svg_path},
+            styles={"color": svg_path},
             entry=entry,
         )

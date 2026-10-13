@@ -170,7 +170,13 @@ REGISTRY: list[VersionChange] = [
             "opt-in fallback) is restored for pinned clients by stripping "
             "fallback features; clients that opted in via fallback=true "
             "should switch to static_map_fallback=true. nearby keeps no "
-            "fallback (no entity to center)."
+            "fallback (no entity to center). ALSO: rename the category "
+            "symbol variants detailed/simple -> color/primitive platform-wide "
+            "(design 261012): the symbol dict keys on hut/category endpoints "
+            "become {color, primitive, mono} and the flat "
+            "symbol_detailed/symbol_simple DTO keys (geometries/meteo) "
+            "become symbol_color/symbol_primitive. No downgrade: old keys are "
+            "removed outright (no consumers outside our own frontend)."
         ),
         responses={
             "images_for_hut": _strip_static_map_fallback,

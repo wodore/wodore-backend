@@ -47,25 +47,25 @@ class ChildCategoryInline(admin.TabularInline):
     can_delete = False  # Prevent deletion from inline
     verbose_name = _("Child Category")
     verbose_name_plural = _("Child Categories")
-    autocomplete_fields = ("symbol_detailed", "symbol_simple", "symbol_mono")
+    autocomplete_fields = ("symbol_color", "symbol_primitive", "symbol_mono")
 
     def get_queryset(self, request: HttpRequest):
         """Optimize queryset for inline display."""
         qs = super().get_queryset(request)
         return qs.select_related(
-            "symbol_detailed", "symbol_simple", "symbol_mono"
+            "symbol_color", "symbol_primitive", "symbol_mono"
         ).order_by("order", "slug")
 
     @display(description="")
     def symbol_preview(self, obj):
         """Display symbol preview."""
-        if obj.symbol_detailed and obj.symbol_detailed.svg_file:
+        if obj.symbol_color and obj.symbol_color.svg_file:
             return mark_safe(
-                f'<img src="{obj.symbol_detailed.svg_file.url}" alt="{obj.slug}" style="width: 24px; height: 24px;" />'
+                f'<img src="{obj.symbol_color.svg_file.url}" alt="{obj.slug}" style="width: 24px; height: 24px;" />'
             )
-        elif obj.symbol_simple and obj.symbol_simple.svg_file:
+        elif obj.symbol_primitive and obj.symbol_primitive.svg_file:
             return mark_safe(
-                f'<img src="{obj.symbol_simple.svg_file.url}" alt="{obj.slug}" style="width: 24px; height: 24px;" />'
+                f'<img src="{obj.symbol_primitive.svg_file.url}" alt="{obj.slug}" style="width: 24px; height: 24px;" />'
             )
         return "-"
 
@@ -119,8 +119,8 @@ class CategoryAdmin(ModelAdmin):
     autocomplete_fields = (
         "parent",
         "default",
-        "symbol_detailed",
-        "symbol_simple",
+        "symbol_color",
+        "symbol_primitive",
         "symbol_mono",
     )
 
@@ -164,7 +164,7 @@ class CategoryAdmin(ModelAdmin):
         ),
         (
             _("Symbols"),
-            {"fields": (("symbol_detailed", "symbol_simple", "symbol_mono"),)},
+            {"fields": (("symbol_color", "symbol_primitive", "symbol_mono"),)},
         ),
         (
             _("Additional Data"),
@@ -221,8 +221,8 @@ class CategoryAdmin(ModelAdmin):
             # Count categories using this symbol
             group["category_count"] = (
                 Category.objects.filter(
-                    Q(symbol_detailed__slug=slug)
-                    | Q(symbol_simple__slug=slug)
+                    Q(symbol_color__slug=slug)
+                    | Q(symbol_primitive__slug=slug)
                     | Q(symbol_mono__slug=slug)
                 )
                 .distinct()
@@ -252,8 +252,8 @@ class CategoryAdmin(ModelAdmin):
         return qs.select_related(
             "parent",
             "default",
-            "symbol_detailed",
-            "symbol_simple",
+            "symbol_color",
+            "symbol_primitive",
             "symbol_mono",
         )
 
@@ -273,9 +273,9 @@ class CategoryAdmin(ModelAdmin):
     @display(description=_("Symbol"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def symbol_img(self, obj):
         """Display detailed symbol."""
-        if obj.symbol_detailed and obj.symbol_detailed.svg_file:
+        if obj.symbol_color and obj.symbol_color.svg_file:
             return mark_safe(
-                f'<img src="{obj.symbol_detailed.svg_file.url}" width="34" alt="symbol"/>'
+                f'<img src="{obj.symbol_color.svg_file.url}" width="34" alt="symbol"/>'
             )
         return "-"
 

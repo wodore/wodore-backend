@@ -54,7 +54,7 @@ class Command(BaseCommand):
             "--category-variants",
             type=str,
             default="",
-            help="Comma-separated list of category variants to sync (e.g., detailed,simple,mono). "
+            help="Comma-separated list of category variants to sync (e.g., color,primitive,mono). "
             "Default: all available variants",
         )
         parser.add_argument(
@@ -214,7 +214,7 @@ class Command(BaseCommand):
         # Get root categories to check (same filtering as sync)
         root_categories = Category.objects.filter(
             is_active=True, parent=None
-        ).select_related("symbol_detailed", "symbol_simple", "symbol_mono")
+        ).select_related("symbol_color", "symbol_primitive", "symbol_mono")
 
         # Filter by include_list if specified
         if include_list is not None:
@@ -241,7 +241,7 @@ class Command(BaseCommand):
             # Add child category files
             children = Category.objects.filter(
                 is_active=True, parent=root_category
-            ).select_related("symbol_detailed", "symbol_simple", "symbol_mono")
+            ).select_related("symbol_color", "symbol_primitive", "symbol_mono")
 
             for child in children:
                 for variant in variants:
@@ -476,7 +476,7 @@ class Command(BaseCommand):
         # Get root categories (no parent)
         root_categories = Category.objects.filter(
             is_active=True, parent=None
-        ).select_related("symbol_detailed", "symbol_simple", "symbol_mono")
+        ).select_related("symbol_color", "symbol_primitive", "symbol_mono")
 
         # Filter by include_list if specified
         if include_list is not None:
@@ -518,7 +518,7 @@ class Command(BaseCommand):
             # Get all children of this root category
             children = Category.objects.filter(
                 is_active=True, parent=root_category
-            ).select_related("symbol_detailed", "symbol_simple", "symbol_mono")
+            ).select_related("symbol_color", "symbol_primitive", "symbol_mono")
 
             if children.exists():
                 self.stdout.write(f"    Found {children.count()} children")

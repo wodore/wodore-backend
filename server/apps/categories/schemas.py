@@ -20,8 +20,8 @@ class MediaUrlModeEnum(str, Enum):
 class SymbolVariantEnum(str, Enum):
     """Symbol variant types for categories."""
 
-    detailed = "detailed"
-    simple = "simple"
+    color = "color"
+    primitive = "primitive"
     mono = "mono"
 
 
@@ -37,8 +37,8 @@ class CategoryTreeSchema(pydantic.BaseModel):
     identifier: str  # Full path identifier (e.g., "map.accommodation.hut")
     color: str  # Theme color as hex (e.g., "#4B8E43")
 
-    symbol_detailed: str | None = None
-    symbol_simple: str | None = None
+    symbol_color: str | None = None
+    symbol_primitive: str | None = None
     symbol_mono: str | None = None
 
     children: list["CategoryTreeSchema"] | bool = False
@@ -57,8 +57,8 @@ class CategoryListItemSchema(pydantic.BaseModel):
     color: str  # Theme color as hex (e.g., "#4B8E43")
     children: bool  # Whether this category has children
 
-    symbol_detailed: str | None = None
-    symbol_simple: str | None = None
+    symbol_color: str | None = None
+    symbol_primitive: str | None = None
     symbol_mono: str | None = None
 
 
@@ -75,8 +75,8 @@ class CategoryMapSchema(pydantic.BaseModel):
     color: str  # Theme color as hex (e.g., "#4B8E43")
     children_count: int  # Number of direct children
 
-    symbol_detailed: str | None = None
-    symbol_simple: str | None = None
+    symbol_color: str | None = None
+    symbol_primitive: str | None = None
     symbol_mono: str | None = None
 
     children: dict[str, "CategoryMapSchema"] = {}

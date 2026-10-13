@@ -34,8 +34,8 @@ def prefetch_categories(queryset):
     return queryset.prefetch_related(
         "categories",
         "categories__parent",
-        "categories__symbol_detailed",
-        "categories__symbol_simple",
+        "categories__symbol_color",
+        "categories__symbol_primitive",
         "categories__symbol_mono",
     )
 

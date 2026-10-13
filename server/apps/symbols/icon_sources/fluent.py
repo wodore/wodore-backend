@@ -3,7 +3,7 @@
 Layout: ``assets/<Name>/{Color,Flat,High Contrast}/*.svg`` or the
 skin-tone variant ``assets/<Name>/Default/<Style>/*.svg``, with a
 ``metadata.json`` per folder carrying the unicode hexcode and CLDR
-slug. Styles map Color→detailed, Flat→simple, High Contrast→mono.
+slug. Styles map Color→color, Flat→primitive, High Contrast→mono.
 """
 
 import json

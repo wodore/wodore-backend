@@ -119,8 +119,8 @@ class IconsQuery(
 class IconUrls(pydantic.BaseModel):
     """Per-style asset URLs of an icon."""
 
-    detailed: str | None = Field(None, description="Detailed style SVG URL")
-    simple: str | None = Field(None, description="Simple style SVG URL")
+    color: str | None = Field(None, description="Color style SVG URL")
+    primitive: str | None = Field(None, description="Primitive style SVG URL")
     mono: str | None = Field(None, description="Mono style SVG URL")
 
 
@@ -303,8 +303,8 @@ def _hydrate(icon_ids: list[int]) -> list[Icon]:
         .select_related(
             "pack",
             "category__parent",
-            "symbol_detailed",
-            "symbol_simple",
+            "symbol_color",
+            "symbol_primitive",
             "symbol_mono",
         )
         .prefetch_related("curated_lists")

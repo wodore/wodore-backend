@@ -66,16 +66,16 @@ def test_response_schema(client):
     assert icon["category"] == "travel-places"
     assert icon["subcategory"] == "place-other"
     assert icon["lists"] == []  # curation is manual admin data
-    assert icon["urls"]["detailed"].endswith(".svg")
-    assert icon["urls"]["detailed"].startswith("http://testserver/")
-    assert icon["urls"]["simple"]
+    assert icon["urls"]["color"].endswith(".svg")
+    assert icon["urls"]["color"].startswith("http://testserver/")
+    assert icon["urls"]["primitive"]
     assert icon["urls"]["mono"]
     # noto has one style only (design D1); unset optional fields are
     # ABSENT from the JSON (project exclude_unset convention), not null.
     noto = client.get("/v1/icons/", {"search": "tent", "pack": "noto-emoji"}).json()
     (noto_icon,) = noto
-    assert noto_icon["urls"]["detailed"]
-    assert noto_icon["urls"].get("simple") is None
+    assert noto_icon["urls"]["color"]
+    assert noto_icon["urls"].get("primitive") is None
     assert noto_icon["urls"].get("mono") is None
 
 
@@ -179,7 +179,7 @@ def test_slug_exact_lookup(client):
     assert response.status_code == 200
     (icon,) = response.json()
     assert icon["slug"] == "tent"
-    assert icon["urls"]["detailed"]
+    assert icon["urls"]["color"]
     # Without pack: every pack carrying the slug.
     across = client.get("/v1/icons/", {"slug": "tent"}).json()
     assert {item["pack"] for item in across} == {"fluent-emoji", "noto-emoji"}

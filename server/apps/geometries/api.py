@@ -147,8 +147,8 @@ class OverlayCategoriesController(ApiController):
         categories = (
             Category.objects.select_related(
                 "parent",
-                "symbol_detailed",
-                "symbol_simple",
+                "symbol_color",
+                "symbol_primitive",
                 "symbol_mono",
             )
             .filter(parent__isnull=True, slug__in=category_slugs, is_active=True)
@@ -168,14 +168,14 @@ class OverlayCategoriesController(ApiController):
                     "identifier": cat.get_identifier(),
                     "color": cat.color,
                     "children": cat.has_children(),
-                    "symbol_detailed": (
-                        request.build_absolute_uri(cat.symbol_detailed.svg_file.url)
-                        if cat.symbol_detailed and cat.symbol_detailed.svg_file
+                    "symbol_color": (
+                        request.build_absolute_uri(cat.symbol_color.svg_file.url)
+                        if cat.symbol_color and cat.symbol_color.svg_file
                         else None
                     ),
-                    "symbol_simple": (
-                        request.build_absolute_uri(cat.symbol_simple.svg_file.url)
-                        if cat.symbol_simple and cat.symbol_simple.svg_file
+                    "symbol_primitive": (
+                        request.build_absolute_uri(cat.symbol_primitive.svg_file.url)
+                        if cat.symbol_primitive and cat.symbol_primitive.svg_file
                         else None
                     ),
                     "symbol_mono": (
@@ -527,8 +527,8 @@ class AmenityController(ApiController):
                 .prefetch_related(
                     "categories",
                     "categories__parent",
-                    "categories__symbol_detailed",
-                    "categories__symbol_simple",
+                    "categories__symbol_color",
+                    "categories__symbol_primitive",
                     "categories__symbol_mono",
                 )
                 .only(

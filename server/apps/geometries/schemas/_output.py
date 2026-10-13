@@ -27,9 +27,9 @@ class SymbolSchema(pydantic.BaseModel):
     @staticmethod
     def resolve_simple(obj: Any, request: HttpRequest | None = None) -> str | None:
         """Get simple symbol URL."""
-        if not hasattr(obj, "symbol_simple") or not obj.symbol_simple:
+        if not hasattr(obj, "symbol_primitive") or not obj.symbol_primitive:
             return None
-        path = str(obj.symbol_simple)
+        path = str(obj.symbol_primitive)
         if path.startswith("http"):
             return path
         media_url = getattr(settings, "MEDIA_URL", "/media/")
@@ -40,9 +40,9 @@ class SymbolSchema(pydantic.BaseModel):
     @staticmethod
     def resolve_detailed(obj: Any, request: HttpRequest | None = None) -> str | None:
         """Get detailed symbol URL."""
-        if not hasattr(obj, "symbol_detailed") or not obj.symbol_detailed:
+        if not hasattr(obj, "symbol_color") or not obj.symbol_color:
             return None
-        path = str(obj.symbol_detailed)
+        path = str(obj.symbol_color)
         if path.startswith("http"):
             return path
         media_url = getattr(settings, "MEDIA_URL", "/media/")

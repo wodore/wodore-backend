@@ -49,7 +49,7 @@ class HutTypesAdmin(ModelAdmin):
         ),
         (
             _("Symbols & Icon"),
-            {"fields": (("symbol_detailed", "symbol_simple", "symbol_mono"),)},
+            {"fields": (("symbol_color", "symbol_primitive", "symbol_mono"),)},
         ),
     )
 
@@ -85,16 +85,14 @@ class HutTypesAdmin(ModelAdmin):
     )
     def title(self, obj):
         avatar = ""
-        if obj.symbol_simple and obj.symbol_simple.svg_file:
-            avatar = self.avatar(obj.symbol_simple.svg_file.url)
+        if obj.symbol_primitive and obj.symbol_primitive.svg_file:
+            avatar = self.avatar(obj.symbol_primitive.svg_file.url)
         return (obj.name_i18n, obj.description_i18n, avatar)
 
     @display(description=_("Symbol"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def symbol_img(self, obj):  # new
-        if obj.symbol_detailed and obj.symbol_detailed.svg_file:
-            return mark_safe(
-                f'<img src="{obj.symbol_detailed.svg_file.url}" width="34"/>'
-            )
+        if obj.symbol_color and obj.symbol_color.svg_file:
+            return mark_safe(f'<img src="{obj.symbol_color.svg_file.url}" width="34"/>')
         return "-"
 
     @display(description=_("Icon"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
