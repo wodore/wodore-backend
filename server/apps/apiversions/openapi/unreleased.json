@@ -4725,6 +4725,18 @@
             },
             "title": "Variants",
             "type": "array"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Version"
           }
         },
         "required": ["slug", "role"],
