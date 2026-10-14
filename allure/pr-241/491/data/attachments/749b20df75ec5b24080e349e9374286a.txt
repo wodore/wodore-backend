@@ -1,4 +1,0 @@
-hut 'bergg': translated fr: name (saved)
-
-1 instance(s) processed, 1 field(s) translated
-✓ Translating missing fields... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% • 0:00:00
