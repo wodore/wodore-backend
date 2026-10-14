@@ -33,6 +33,11 @@ www.{$DOMAIN_NAME} {
 		# MEDIA_ROOT
 		root * /var/www/django/media
 
+		# File names are content-unique (Django storage never
+		# overwrites an existing name), so every upload is a new URL:
+		# caches can keep media for a year without going stale.
+		header Cache-Control "public, max-age=31536000, immutable"
+
 		file_server
 	}
 

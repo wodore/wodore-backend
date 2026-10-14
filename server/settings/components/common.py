@@ -323,7 +323,14 @@ if config("AWS_ACCESS_KEY_ID", ""):
     AWS_S3_SECURE_URLS = True
     AWS_S3_USE_SSL = True
     AWS_QUERYSTRING_AUTH = False
-    AWS_S3_FILE_OVERWRITE = False  # Overwrite files with same name
+    AWS_S3_FILE_OVERWRITE = False  # New uploads get unique file names
+    # Content-unique names make uploaded objects immutable: cache them
+    # for a year. The metadata travels with the object when S3/rclone
+    # is the origin; the Caddyfile media block sets the same header at
+    # the edge for disk-served media.
+    AWS_S3_OBJECT_PARAMETERS = {
+        "CacheControl": "public, max-age=31536000, immutable",
+    }
     AWS_DEFAULT_ACL = "public-read"  # Recommended with rclone proxy
     AWS_QUERYSTRING_EXPIRE = 3600 * 24 * 7  # max 7 days
     AWS_S3_SIGNATURE_VERSION = "s3v4"
