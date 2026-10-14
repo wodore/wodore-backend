@@ -35,20 +35,34 @@ CACHE_MAX_AGE = 7 * 24 * 60 * 60  # 7 days in seconds
 
 
 def resolve_media_url(
-    request: HttpRequest, symbol, mode: MediaUrlModeEnum
+    request: HttpRequest,
+    category: Category,
+    variant: SymbolVariantEnum,
+    mode: MediaUrlModeEnum,
 ) -> str | None:
-    """Resolve media URL based on mode."""
-    if not symbol or mode == MediaUrlModeEnum.no:
+    """Resolve the icon URL for a category symbol, by mode.
+
+    Returns the stable SVG redirect URL (``/v1/categories/symbol/...``)
+    rather than the direct media link: the redirect tier is cached and
+    its target is re-resolved on every (re)fetch, while media file names
+    change on each symbol re-upload.
+    """
+    if mode == MediaUrlModeEnum.no or not getattr(
+        category, f"symbol_{variant.value}", None
+    ):
         return None
 
-    if hasattr(symbol, "svg_file") and symbol.svg_file:
-        if mode == MediaUrlModeEnum.relative:
-            # Return relative path from media root
-            return symbol.svg_file.url
-        # absolute
-        return request.build_absolute_uri(symbol.svg_file.url)
+    if category.parent:
+        path = (
+            f"/v1/categories/symbol/{variant.value}"
+            f"/{category.parent.slug}/{category.slug}.svg"
+        )
+    else:
+        path = f"/v1/categories/symbol/{variant.value}/{category.slug}.svg"
 
-    return None
+    if mode == MediaUrlModeEnum.relative:
+        return path
+    return request.build_absolute_uri(path)
 
 
 def build_category_dict(
@@ -71,13 +85,13 @@ def build_category_dict(
 
     if media_mode != MediaUrlModeEnum.no:
         data["symbol_color"] = resolve_media_url(
-            request, category.symbol_color, media_mode
+            request, category, SymbolVariantEnum.color, media_mode
         )
         data["symbol_primitive"] = resolve_media_url(
-            request, category.symbol_primitive, media_mode
+            request, category, SymbolVariantEnum.primitive, media_mode
         )
         data["symbol_mono"] = resolve_media_url(
-            request, category.symbol_mono, media_mode
+            request, category, SymbolVariantEnum.mono, media_mode
         )
 
     return data
@@ -248,8 +262,8 @@ class _CategoryQuery(LanguageQuery):
     media_mode: MediaUrlModeEnum = Field(  # type: ignore[assignment]
         MediaUrlModeEnum.absolute,
         description=(
-            "How to return media URLs: 'no' (exclude), 'relative' "
-            "(relative paths), 'absolute' (full URLs)"
+            "How to return icon URLs: 'no' (exclude), 'relative' "
+            "(API paths), 'absolute' (full URLs)"
         ),
     )
 

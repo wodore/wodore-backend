@@ -10,11 +10,11 @@ import pydantic
 
 
 class MediaUrlModeEnum(str, Enum):
-    """Media URL mode for image fields."""
+    """Icon URL mode for symbol fields."""
 
-    no = "no"  # Exclude media fields
-    relative = "relative"  # Return relative paths (e.g., /media/...)
-    absolute = "absolute"  # Return absolute URLs (e.g., http://...)
+    no = "no"  # Exclude symbol fields
+    relative = "relative"  # API path (e.g., /v1/categories/symbol/color/hut.svg)
+    absolute = "absolute"  # Full URL (e.g., https://hub.wodore.com/v1/...)
 
 
 class SymbolVariantEnum(str, Enum):
