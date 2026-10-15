@@ -1,184 +1,198 @@
 {
-  "detailed/alp": {
+  "detailed/accommodation": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 0,
     "y": 0
+  },
+  "detailed/alp": {
+    "height": 48,
+    "pixelRatio": 1,
+    "width": 48,
+    "x": 0,
+    "y": 48
   },
   "detailed/alt/basic-hotel-alt1": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 0,
-    "y": 48
+    "y": 96
   },
   "detailed/alt/hut-alt1": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 0,
-    "y": 96
+    "y": 144
   },
   "detailed/alt/unattended-hut-alt1": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 0,
-    "y": 144
+    "y": 192
   },
   "detailed/bhotel": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
-    "x": 0,
-    "y": 192
+    "x": 48,
+    "y": 0
   },
   "detailed/bivouac": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 48,
-    "y": 0
+    "y": 48
   },
   "detailed/campgr": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 48,
-    "y": 48
+    "y": 96
   },
   "detailed/camping": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 48,
-    "y": 96
+    "y": 144
   },
   "detailed/closed": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 48,
-    "y": 144
+    "y": 192
   },
   "detailed/hostel": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
-    "x": 48,
-    "y": 192
+    "x": 96,
+    "y": 0
   },
   "detailed/hotel": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 96,
-    "y": 0
+    "y": 48
   },
   "detailed/hut": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 96,
-    "y": 48
+    "y": 96
   },
   "detailed/resta": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 96,
-    "y": 96
+    "y": 144
   },
   "detailed/selfhut": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 96,
-    "y": 144
+    "y": 192
   },
   "detailed/shelter": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
-    "x": 96,
-    "y": 192
+    "x": 144,
+    "y": 0
   },
   "detailed/special": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 144,
-    "y": 0
+    "y": 48
   },
   "detailed/unknown": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 144,
-    "y": 48
+    "y": 96
   },
   "occupation_empty": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 144,
-    "y": 96
+    "y": 144
   },
   "occupation_full": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 144,
-    "y": 144
-  },
-  "occupation_high": {
-    "height": 48,
-    "pixelRatio": 1,
-    "width": 48,
-    "x": 144,
     "y": 192
   },
-  "occupation_low": {
+  "occupation_high": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 192,
     "y": 0
   },
-  "occupation_medium": {
+  "occupation_low": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 192,
     "y": 48
   },
-  "occupation_unknown": {
+  "occupation_medium": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 192,
     "y": 96
   },
-  "simple/alp": {
+  "occupation_unknown": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 192,
     "y": 144
   },
-  "simple/bhotel": {
+  "simple/accommodation": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 192,
     "y": 192
   },
-  "simple/bivouac": {
+  "simple/alp": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 240,
+    "y": 0
+  },
+  "simple/bhotel": {
+    "height": 48,
+    "pixelRatio": 1,
+    "width": 48,
+    "x": 240,
+    "y": 48
+  },
+  "simple/bivouac": {
+    "height": 24,
+    "pixelRatio": 1,
+    "width": 24,
+    "x": 480,
     "y": 0
   },
   "simple/campgr": {
@@ -186,42 +200,42 @@
     "pixelRatio": 1,
     "width": 48,
     "x": 240,
-    "y": 48
+    "y": 96
   },
   "simple/camping": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 240,
-    "y": 96
+    "y": 144
   },
   "simple/closed": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 240,
-    "y": 144
-  },
-  "simple/hostel": {
-    "height": 48,
-    "pixelRatio": 1,
-    "width": 48,
-    "x": 240,
     "y": 192
   },
-  "simple/hotel": {
+  "simple/hostel": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 288,
     "y": 0
   },
-  "simple/hut": {
+  "simple/hotel": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 336,
     "y": 0
+  },
+  "simple/hut": {
+    "height": 24,
+    "pixelRatio": 1,
+    "width": 24,
+    "x": 480,
+    "y": 24
   },
   "simple/resta": {
     "height": 48,
@@ -231,31 +245,31 @@
     "y": 0
   },
   "simple/selfhut": {
+    "height": 24,
+    "pixelRatio": 1,
+    "width": 24,
+    "x": 288,
+    "y": 144
+  },
+  "simple/shelter": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 432,
     "y": 0
   },
-  "simple/shelter": {
+  "simple/special": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 288,
     "y": 48
   },
-  "simple/special": {
-    "height": 48,
-    "pixelRatio": 1,
-    "width": 48,
-    "x": 288,
-    "y": 96
-  },
   "simple/unknown": {
     "height": 48,
     "pixelRatio": 1,
     "width": 48,
     "x": 288,
-    "y": 144
+    "y": 96
   }
 }
