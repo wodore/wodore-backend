@@ -590,15 +590,15 @@
         }
 
         // ---------- catalog / boot ----------
-        function fetchBackendCatalog() {
-          // Backend catalog (same origin): /v1/map/catalog returns layers
-          // with style_url pointing to /v1/map/styles/{slug}.json
-          return fetch("/v1/map/catalog")
+        // Backend catalog is the single source of truth for the style list.
+        // The tileserver field controls terrain tiles, not style listing.
+        function bootCatalog() {
+          fetch("/v1/map/catalog")
             .then(function (r) {
               return r.ok ? r.json() : null;
             })
             .then(function (cat) {
-              if (!cat || !cat.layers) return false;
+              if (!cat || !cat.layers) return;
               var ids = [];
               backendStyles = {};
               for (var i = 0; i < cat.layers.length; i++) {
@@ -608,12 +608,8 @@
                 if (layer.variants && layer.variants.length) {
                   for (var j = 0; j < layer.variants.length; j++) {
                     var v = layer.variants[j];
-                    if (v.style_url) {
+                    if (v.style_url && v.style_url.startsWith("/")) {
                       url = v.style_url;
-                      break;
-                    }
-                    if (v.inline_style) {
-                      url = "/v1/map/styles/" + layer.slug + ".json";
                       break;
                     }
                   }
@@ -622,46 +618,10 @@
                 backendStyles[layer.slug] = url;
                 ids.push(layer.slug);
               }
-              if (ids.length) {
-                styleIds = ids;
-                return true;
-              }
-              return false;
+              if (ids.length) styleIds = ids;
             })
             .catch(function () {
-              return false;
-            });
-        }
-
-        function fetchMartinCatalog() {
-          return fetch(TILE_BASE + "/catalog")
-            .then(function (r) {
-              return r.ok ? r.json() : null;
-            })
-            .then(function (cat) {
-              if (cat && cat.styles && Object.keys(cat.styles).length) {
-                var ids = Object.keys(cat.styles).filter(function (id) {
-                  return id !== "huts";
-                });
-                ids.sort(function (x, y) {
-                  var ix = FALLBACK_STYLES.indexOf(x);
-                  var iy = FALLBACK_STYLES.indexOf(y);
-                  ix = ix < 0 ? 99 + (x < y ? -1 : x > y ? 1 : 0) : ix;
-                  iy = iy < 0 ? 99 + (x < y ? -1 : x > y ? 1 : 0) : iy;
-                  return ix - iy;
-                });
-                styleIds = ids;
-              }
-            })
-            .catch(function () {
-              /* offline catalog: keep fallback list */
-            });
-        }
-
-        function bootCatalog() {
-          fetchBackendCatalog()
-            .then(function (ok) {
-              if (!ok) return fetchMartinCatalog();
+              /* backend catalog unavailable: keep fallback list */
             })
             .finally(function () {
               if (state.mode === "compare") {
