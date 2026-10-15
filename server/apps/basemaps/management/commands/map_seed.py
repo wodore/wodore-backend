@@ -585,6 +585,18 @@ LAYERS: list[dict[str, Any]] = [
         "attributions": ["openfreemap"],
     },
     {
+        "slug": "mtk-outdoor",
+        "role": MapLayer.Role.basemap,
+        "name": "Maptoolkit Outdoor (upstream)",
+        "description": (
+            "Original upstream Maptoolkit outdoor style with client-side "
+            "relief (raster-dem + bathymetry + AO passes)."
+        ),
+        "spec": MapLayer.Spec.high,
+        "style": _fixture_style("mtk-outdoor"),
+        "attributions": ["maptoolkit"],
+    },
+    {
         "slug": "ch-swisstopo-light",
         "role": MapLayer.Role.basemap,
         "name": "Swiss light basemap",
