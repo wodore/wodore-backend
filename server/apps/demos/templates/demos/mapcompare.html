@@ -202,8 +202,8 @@
         type="text"
         title="Martin base URL (persisted in localStorage; ?tileserver= overrides on load)"
       />
-      <span id="martin-link"
-        ><a target="_blank" rel="noopener">Martin webui ↗</a></span
+      <span id="catalog-link"
+        ><a target="_blank" rel="noopener">Catalog ↗</a></span
       >
       <span id="permalink" title="current view, copy me"></span>
     </header>
@@ -266,7 +266,7 @@
           modeToggle: document.getElementById("mode-toggle"),
           inspectToggle: document.getElementById("inspect-toggle"),
           tileserverInput: document.getElementById("tileserver-input"),
-          martinLink: document.querySelector("#martin-link a"),
+          catalogLink: document.querySelector("#catalog-link a"),
           permalink: document.getElementById("permalink"),
           normal: document.getElementById("normal"),
           compare: document.getElementById("compare"),
@@ -282,7 +282,7 @@
         // ---------- tileserver ----------
         function updateTileserverUI() {
           els.tileserverInput.value = TILE_BASE;
-          els.martinLink.href = TILE_BASE + "/?tab=styles";
+          els.catalogLink.href = "/v1/map/catalog";
         }
 
         function setTileserver(url) {
