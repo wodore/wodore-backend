@@ -530,6 +530,10 @@ LAYERS: list[dict[str, Any]] = [
         "attributions": ["bafu", "swisstopo"],
     },
     # ── Basemaps ──────────────────────────────────────────────────────
+    # Picker visibility (frontend parity): only product basemaps carry
+    # show=True — internal variants (hill A/B, upstream reference) and
+    # automatic fallbacks stay hidden but active (fallback chains and
+    # saved selections keep resolving). Order drives the picker sort.
     {
         "slug": "wd-outdoor-base-mtk",
         "role": MapLayer.Role.basemap,
@@ -537,6 +541,7 @@ LAYERS: list[dict[str, Any]] = [
         "description": "Outdoor basemap (Maptoolkit-based fork).",
         "spec": MapLayer.Spec.high,
         "is_default": True,
+        "order": 0,
         "fallback": "wd-outdoor-base-ofm",
         "anchors": {"ways": {"before": None}, "background": {"before": None}},
         "style": _fixture_style("wd-outdoor-base-mtk"),
@@ -548,6 +553,8 @@ LAYERS: list[dict[str, Any]] = [
         "name": "Wodore Outdoor (OpenFreeMap)",
         "description": "Keyless outdoor basemap fallback (OpenFreeMap).",
         "spec": MapLayer.Spec.high,
+        "order": 5,
+        "show": False,  # hidden fallback (wd-outdoor-base-mtk chains to it)
         "style": _fixture_style("wd-outdoor-base-ofm"),
         "attributions": ["openfreemap"],
     },
@@ -560,6 +567,8 @@ LAYERS: list[dict[str, Any]] = [
             "(higher-res in CH; heavier on the GPU)."
         ),
         "spec": MapLayer.Spec.high,
+        "order": 6,
+        "show": False,  # A/B variant, not a product entry
         "style": _fixture_style("wd-outdoor-base-mtk-hill"),
         "attributions": ["maptoolkit"],
     },
@@ -569,6 +578,8 @@ LAYERS: list[dict[str, Any]] = [
         "name": "Wodore Outdoor (OpenFreeMap, client relief)",
         "description": "OpenFreeMap fallback with the original client hillshade.",
         "spec": MapLayer.Spec.high,
+        "order": 7,
+        "show": False,  # A/B variant of the hidden fallback
         "style": _fixture_style("wd-outdoor-base-ofm-hill"),
         "attributions": ["openfreemap"],
     },
@@ -581,6 +592,8 @@ LAYERS: list[dict[str, Any]] = [
             "relief (raster-dem + bathymetry + AO passes)."
         ),
         "spec": MapLayer.Spec.high,
+        "order": 8,
+        "show": False,  # upstream visual reference, not shipped
         "style": _fixture_style("mtk-outdoor"),
         "attributions": ["maptoolkit"],
     },
@@ -590,6 +603,7 @@ LAYERS: list[dict[str, Any]] = [
         "name": "World Topo",
         "description": "Worldwide topo raster (mapproxy world_topo facade, caps at z16).",
         "spec": MapLayer.Spec.high,
+        "order": 1,
         "style": _fixture_style("world-topo"),
         "attributions": ["openstreetmap"],
     },
@@ -602,6 +616,7 @@ LAYERS: list[dict[str, Any]] = [
             "world_satellite + OpenFreeMap vector)."
         ),
         "spec": MapLayer.Spec.high,
+        "order": 2,
         "style": _fixture_style("world-satellite-hybrid"),
         "attributions": ["openstreetmap", "openfreemap"],
     },
@@ -611,7 +626,8 @@ LAYERS: list[dict[str, Any]] = [
         "name": "Swiss light basemap",
         "description": "swisstopo vector light basemap.",
         "spec": MapLayer.Spec.high,
-        "show": False,
+        "order": 9,
+        "show": False,  # replaced by wd-outdoor-base-mtk as THE vector map
         "style_url": (
             "https://vectortiles.geo.admin.ch/styles/"
             "ch.swisstopo.lightbasemap.vt/style.json"
@@ -634,6 +650,7 @@ LAYERS: list[dict[str, Any]] = [
         "name": "Swiss raster map",
         "description": "swisstopo pixelkarte (CH coverage).",
         "spec": MapLayer.Spec.medium,
+        "order": 3,
         "coverage": "ch",
         "fallback_min_zoom": 7,
         "style": lib.swisstopo_pixelkarte_style(),
@@ -645,6 +662,7 @@ LAYERS: list[dict[str, Any]] = [
         "name": "Satellite hybrid",
         "description": "MapTiler satellite hybrid.",
         "spec": MapLayer.Spec.high,
+        "order": 4,
         "style_url": (
             "https://api.maptiler.com/maps/hybrid/style.json"
             "?key={{env:WODORE_MAPTILER_API_KEY}}"
@@ -661,6 +679,8 @@ LAYERS: list[dict[str, Any]] = [
         "name": "OpenFreeMap liberty",
         "description": "Keyless OpenFreeMap liberty style.",
         "spec": MapLayer.Spec.high,
+        "order": 10,
+        "show": False,  # automatic keyless fallback, not a product entry
         "style_url": "https://tiles.openfreemap.org/styles/liberty",
         "attributions": ["openfreemap"],
     },
