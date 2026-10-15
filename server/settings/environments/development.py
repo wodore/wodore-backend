@@ -71,6 +71,7 @@ ALLOWED_HOSTS = [
     "0.0.0.0",
     "127.0.0.1",
     "[::1]",
+    "home",  # tailscale hostname
 ]
 
 # Add local IP dynamically if available
@@ -107,6 +108,8 @@ if WITH_DEV:
     INSTALLED_APPS += (
         # Better debug:
         "debug_toolbar",
+        # Dev demo pages (mapcompare etc.), open when DEBUG:
+        "server.apps.demos",
         # Linting migrations:
         "django_migration_linter",
         # django-test-migrations:
@@ -120,6 +123,7 @@ if WITH_DEV:
         # django-extra-checks:
         "extra_checks",
     )
+    DEMOS_ENABLED = True
 
 
 # Django debug toolbar:
@@ -159,6 +163,16 @@ DEBUG_TOOLBAR_CONFIG = {
 CONTENT_SECURITY_POLICY["DIRECTIVES"]["script-src"] += ("ajax.googleapis.com",)
 CONTENT_SECURITY_POLICY["DIRECTIVES"]["connect-src"] += ("'self'",)
 CONTENT_SECURITY_POLICY["DIRECTIVES"]["img-src"] += ("http:",)
+
+# Demo page (demos/mapcompare) + basemap styles fetch external tiles:
+CONTENT_SECURITY_POLICY["DIRECTIVES"]["connect-src"] += (
+    "http://localhost:3739",  # lane Martin (demos page tile server)
+    "https://wmts.geo.admin.ch",  # swisstopo relief + pixelkarte WMTS
+    "https://tiles.maptoolkit.org",  # MTK vector/raster tiles
+    "https://icons.maptoolkit.org",  # MTK sprites
+    "https://tiles.mapterhorn.com",  # Mapterhorn DEM (client relief variants)
+    "https://elevation-tiles-prod.s3.amazonaws.com",  # AWS Terrain Tiles (hillshade)
+)
 
 
 # django-test-migrations

@@ -1,9 +1,14 @@
 """Map catalog and style endpoints.
 
-* ``GET /v1/map/catalog`` — light metadata index (dmr controller,
+* ``GET /v1/map/styles`` — Martin-compatible style index (dmr
+  controller): flat map of style-slug → {path, name, icon, role,
+  description, is_default}, plus tiles/sprites/fonts/settings sections.
+  Supports ``?lang=`` and ``?spec=`` (self-resolves to nearest variant).
+* ``GET /v1/map/config`` — rich map configuration (dmr controller,
   contract-tested): identity, i18n labels, icons, parameters with
   schemas, spec variants, category projections, coverage bounds,
   style URLs for big styles. Never inlines base style documents.
+  The frontend basemap picker consumes this.
 * ``GET /v1/map/styles/{slug}.json`` — the style itself (plain Django
   view, hidden from the OpenAPI schema like other file endpoints):
   resolved by default (a plain MapLibre style for any client),
@@ -41,6 +46,16 @@ CACHE_MAX_AGE = 6 * 60 * 60  # 6 hours in seconds
 #: Styles larger than this many bytes are never inlined in the catalog
 #: (the entry carries the style endpoint URL instead).
 INLINE_STYLE_MAX_BYTES = 8_192
+
+
+class MapStylesQuery(LanguageQuery):
+    """Query params for the Martin-compatible style index."""
+
+    spec: str | None = Field(
+        None,
+        description="Device-tier spec (low | medium | high); self-resolves to nearest",
+        pattern="^(low|medium|high)$",
+    )
 
 
 class MapCatalogQuery(LanguageQuery):
@@ -117,10 +132,69 @@ class MapCatalogResponse(pydantic.BaseModel):
 
 
 class MapCatalogController(ApiController):
-    """The light layer index — metadata only, never style blobs."""
+    """Martin-compatible catalog — fast, lightweight, selector-ready.
+
+    Returns a flat map of style-slug → entry with the metadata a frontend
+    overlay/basemap selector needs (name, description, icon, badge, role,
+    order, slot, is_default, zoom range, coverage, fallback), plus
+    tiles/sprites/fonts/settings sections matching Martin's catalog shape.
+    Supports ``?lang=`` for localized names and ``?spec=`` for
+    device-tier resolution (exact → nearest → single).
+    """
 
     @modify(
         operation_id="map-catalog",
+        headers=cache_headers(CACHE_MAX_AGE),
+    )
+    def get(
+        self,
+        parsed_query: Query[MapStylesQuery],
+    ) -> dict[str, Any]:
+        """Martin-compatible catalog with selector metadata."""
+        queryset = MapLayer.objects.filter(is_active=True).select_related(
+            "slot", "coverage", "license", "fallback"
+        )
+
+        styles: dict[str, Any] = {}
+        with override(parsed_query.lang):
+            for layer in queryset:
+                if layer.slug in styles:
+                    continue  # variants share identity; keep the first
+                styles[layer.slug] = {
+                    "path": style_endpoint_url(layer.slug),
+                    "name": str(layer.name_i18n or layer.name),
+                    "description": str(
+                        layer.description_i18n or layer.description or ""
+                    ),
+                    "icon": layer.icon or "",
+                    "icon_badge": layer.icon_badge or "",
+                    "role": layer.role,
+                    "order": layer.order,
+                    "slot": layer.slot.slug if layer.slot else None,
+                    "is_default": layer.is_default,
+                    "show": layer.show,
+                    "min_zoom": layer.min_zoom,
+                    "max_zoom": layer.max_zoom,
+                    "preview_url": layer.preview_url,
+                    "fallback": layer.fallback.slug if layer.fallback else None,
+                }
+                if layer.coverage:
+                    styles[layer.slug]["coverage_bbox"] = layer.coverage.bbox
+
+        return {
+            "tiles": {},  # served by Martin, not the backend
+            "sprites": {},  # served by Martin
+            "fonts": {},  # served by Martin
+            "styles": styles,
+            "settings": {"rendering": False},
+        }
+
+
+class MapConfigController(ApiController):
+    """The rich map configuration — metadata index, never style blobs."""
+
+    @modify(
+        operation_id="map-config",
         headers=cache_headers(CACHE_MAX_AGE),
     )
     def get(
@@ -477,6 +551,11 @@ paths: list[Any] = [
         "catalog",
         cache_page(CACHE_MAX_AGE)(MapCatalogController.as_view()),
         name="map-catalog",
+    ),
+    path(
+        "config",
+        cache_page(CACHE_MAX_AGE)(MapConfigController.as_view()),
+        name="map-config",
     ),
     external_path(
         "styles/<slug>.json",

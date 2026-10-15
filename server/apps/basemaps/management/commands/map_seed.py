@@ -564,6 +564,60 @@ LAYERS: list[dict[str, Any]] = [
         "attributions": ["openfreemap"],
     },
     {
+        "slug": "wd-outdoor-base-mtk-hill",
+        "role": MapLayer.Role.basemap,
+        "name": "Wodore Outdoor (client relief)",
+        "description": (
+            "Outdoor basemap with the original client-side raster-dem relief "
+            "(higher-res in CH; heavier on the GPU)."
+        ),
+        "spec": MapLayer.Spec.high,
+        "style": _fixture_style("wd-outdoor-base-mtk-hill"),
+        "attributions": ["maptoolkit"],
+    },
+    {
+        "slug": "wd-outdoor-base-ofm-hill",
+        "role": MapLayer.Role.basemap,
+        "name": "Wodore Outdoor (OpenFreeMap, client relief)",
+        "description": "OpenFreeMap fallback with the original client hillshade.",
+        "spec": MapLayer.Spec.high,
+        "style": _fixture_style("wd-outdoor-base-ofm-hill"),
+        "attributions": ["openfreemap"],
+    },
+    {
+        "slug": "mtk-outdoor",
+        "role": MapLayer.Role.basemap,
+        "name": "Maptoolkit Outdoor (upstream)",
+        "description": (
+            "Original upstream Maptoolkit outdoor style with client-side "
+            "relief (raster-dem + bathymetry + AO passes)."
+        ),
+        "spec": MapLayer.Spec.high,
+        "style": _fixture_style("mtk-outdoor"),
+        "attributions": ["maptoolkit"],
+    },
+    {
+        "slug": "world-topo",
+        "role": MapLayer.Role.basemap,
+        "name": "World Topo",
+        "description": "Worldwide topo raster (mapproxy world_topo facade, caps at z16).",
+        "spec": MapLayer.Spec.high,
+        "style": _fixture_style("world-topo"),
+        "attributions": ["openstreetmap"],
+    },
+    {
+        "slug": "world-satellite-hybrid",
+        "role": MapLayer.Role.basemap,
+        "name": "Satellite (hybrid)",
+        "description": (
+            "Aerial imagery with street/place overlay (mapproxy "
+            "world_satellite + OpenFreeMap vector)."
+        ),
+        "spec": MapLayer.Spec.high,
+        "style": _fixture_style("world-satellite-hybrid"),
+        "attributions": ["openstreetmap", "openfreemap"],
+    },
+    {
         "slug": "ch-swisstopo-light",
         "role": MapLayer.Role.basemap,
         "name": "Swiss light basemap",
