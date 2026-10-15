@@ -1,6 +1,7 @@
 """Tests for the demos app (mapcompare view)."""
 
-from django.contrib.auth.models import AnonymousUser, User
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.http import HttpResponse
 from django.test import RequestFactory, override_settings
 
@@ -32,7 +33,8 @@ def test_mapcompare_rejects_non_superuser_in_staging(
     rf: RequestFactory, db: None
 ) -> None:
     """Non-DEBUG (staging): authenticated non-superusers also redirected."""
-    user = User.objects.create_user(username="staff", password="x")
+    User = get_user_model()
+    user = User.objects.create_user(email="staff@test", password="x")
     request = rf.get("/demos/mapcompare/")
     request.user = user
     response = mapcompare(request)
@@ -41,7 +43,8 @@ def test_mapcompare_rejects_non_superuser_in_staging(
 
 def test_mapcompare_allows_superuser_in_staging(rf: RequestFactory, db: None) -> None:
     """Non-DEBUG (staging): superusers get the page."""
-    admin = User.objects.create_superuser(username="root", password="x", email="r@t")
+    UserModel = get_user_model()
+    admin = UserModel.objects.create_superuser(email="root@test", password="x")
     request = rf.get("/demos/mapcompare/")
     request.user = admin
     response = mapcompare(request)
