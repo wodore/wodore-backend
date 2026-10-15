@@ -247,7 +247,7 @@ class TestSeed:
         from django.core.management import call_command
 
         call_command("map_seed", verbosity=0)
-        layer = MapLayer.objects.get(slug="huts-availability")
+        layer = MapLayer.objects.get(slug="huts")
         values = layer.authored_parameter_values()
         values["date"] = timezone.localdate().isoformat()
         resolved = resolve_style(layer.style, values)
@@ -265,7 +265,7 @@ class TestCatalogEndpoint:
 
         call_command("map_seed", verbosity=0)
         client = Client()
-        response = client.get("/v1/map/catalog", {"lang": "en"})
+        response = client.get("/v1/map/config", {"lang": "en"})
         assert response.status_code == 200
         payload = response.json()
         slugs = {layer["slug"] for layer in payload["layers"]}
@@ -285,7 +285,7 @@ class TestCatalogEndpoint:
 
         call_command("map_seed", verbosity=0)
         client = Client()
-        response = client.get("/v1/map/catalog", {"lang": "en", "role": "overlay"})
+        response = client.get("/v1/map/config", {"lang": "en", "role": "overlay"})
         assert response.status_code == 200
         assert all(layer["role"] == "overlay" for layer in response.json()["layers"])
 
@@ -366,7 +366,7 @@ class TestLegends:
     def test_catalog_serves_category_driven_legend(self):
         self._seed()
         client = Client()
-        payload = client.get("/v1/map/catalog", {"lang": "en"}).json()
+        payload = client.get("/v1/map/config", {"lang": "en"}).json()
         huts = next(l for l in payload["layers"] if l["slug"] == "huts")
         assert huts["legend"] is not None
         section = huts["legend"]["sections"][0]
@@ -374,10 +374,72 @@ class TestLegends:
         # Category-driven section embeds the minimal projection
         assert "category" in section
 
+    def test_huts_layer_merged_with_availability(self):
+        """huts-availability folded into huts: one overlay, two sources,
+        one slug-level legend with two sections."""
+        from server.apps.categories.models import Category
+
+        # The availability category tree is curated (manually created on
+        # staging; fresh DBs seed it later) — create the root so the
+        # category links are exercised deterministically.
+        Category.objects.get_or_create(
+            slug="availability", parent=None, defaults={"name": "Availability"}
+        )
+        self._seed()
+        assert not MapLayer.objects.filter(slug="huts-availability").exists()
+        huts = MapLayer.objects.get(slug="huts")
+        assert "wd-huts" in huts.style["sources"]
+        assert "wd-bookings" in huts.style["sources"]
+        layer_ids = {layer["id"] for layer in huts.style["layers"]}
+        assert {"wd-huts", "wd-huts-selected", "wd-huts-occupation"} <= layer_ids
+        assert "wd-huts-occupation-day3" in layer_ids
+        # The date parameter drives the geojson source of the merged layer
+        assert {link.parameter.slug for link in huts.layer_parameters.all()} == {
+            "huts.icon_scale",
+            "date",
+        }
+        # One legend, two sections: accommodation + availability (the
+        # availability category resolves when the tree exists — staging
+        # has it; the section itself is seeded regardless).
+        assert huts.legend is not None
+        section_types = [s.type for s in huts.legend.sections.all()]
+        assert section_types == ["symbol_dual", "symbol_detailed"]
+        categories = [
+            section.category.slug
+            for section in huts.legend.sections.all()
+            if section.category
+        ]
+        assert categories == ["accommodation", "availability"]
+        # Category links: accommodation filter+legend, availability legend
+        uses = {(link.category.slug, link.use) for link in huts.layer_categories.all()}
+        assert uses == {
+            ("accommodation", "filter"),
+            ("accommodation", "legend"),
+            ("availability", "legend"),
+        }
+
+    def test_huts_sprites_match_martin_serving(self):
+        """Icon names must match what Martin serves from the DB category
+        sync (color/mono/primitive variants + SDF) — the old frontend
+        simple/detailed prefixes exist in no served sprite."""
+        self._seed()
+        huts = MapLayer.objects.get(slug="huts").style
+        sprite_urls = {s["id"]: s["url"] for s in huts["sprite"]}
+        assert (
+            sprite_urls["wd"] == "{TILE_SERVER_URL}/sprite/accommodation,availability"
+        )
+        assert sprite_urls["wd-sdf"] == "{TILE_SERVER_URL}/sdf_sprite/accommodation"
+        body = json.dumps(huts)
+        assert "simple/" not in body
+        assert "detailed/" not in body
+        assert "wd:primitive/accommodation.unknown" in body
+        assert "wd-sdf:mono/accommodation.unknown" in body
+        assert "wd:color/availability.unknown" in body
+
     def test_catalog_serves_static_legend_items(self):
         self._seed()
         client = Client()
-        payload = client.get("/v1/map/catalog", {"lang": "en"}).json()
+        payload = client.get("/v1/map/config", {"lang": "en"}).json()
         transport = next(l for l in payload["layers"] if l["slug"] == "transport-stops")
         items = transport["legend"]["sections"][0]["items"]
         assert {"label": "Train", "color": "#C60018"} in [
@@ -392,7 +454,7 @@ class TestLegends:
             url="https://www.schweizmobil.ch/de/wanderland.html"
         ).exists()
         client = Client()
-        payload = client.get("/v1/map/catalog", {"lang": "en"}).json()
+        payload = client.get("/v1/map/config", {"lang": "en"}).json()
         hiking = next(
             l
             for l in payload["layers"]
@@ -426,7 +488,7 @@ class TestLegends:
 
         cache.clear()  # catalog is page-cached — see fresh data
         client = Client()
-        payload = client.get("/v1/map/catalog", {"lang": "en"}).json()
+        payload = client.get("/v1/map/config", {"lang": "en"}).json()
         entry = next(l for l in payload["layers"] if l["slug"] == "mtb")
         item = entry["legend"]["sections"][0]["items"][0]
         assert item["color"] == "{{trail_color}}"
@@ -492,7 +554,7 @@ class TestVersionFieldAndRenderCache:
     def test_catalog_carries_version(self):
         self._seed()
         client = Client()
-        payload = client.get("/v1/map/catalog", {"lang": "en"}).json()
+        payload = client.get("/v1/map/config", {"lang": "en"}).json()
         entry = next(l for l in payload["layers"] if l["slug"] == "huts")
         assert entry["version"]  # ISO timestamp — client cache-sync key
         layer = MapLayer.objects.get(slug="huts", spec=MapLayer.Spec.medium)
