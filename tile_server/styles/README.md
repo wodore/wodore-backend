@@ -9,6 +9,7 @@ Everything in **this directory** (top level, `*.json`) is copied by
 | `wd-outdoor-base-mtk.json` | `wd-outdoor-base-mtk` | **Default outdoor basemap** — Wodore fork of the Maptoolkit hiking style (Maptoolkit Community License: attribution + logo required, no pre-fetch/offline/print). |
 | `wd-outdoor-base-ofm.json` | `wd-outdoor-base-ofm` | Keyless OpenFreeMap outdoor fallback (unrestricted — auto-selected when Maptoolkit tiles fail; right choice for any future offline/print feature).                |
 | `huts.json`                | `huts`                | Hut overlay style (app-rendered on top of the basemap).                                                                                                           |
+| `wd-terrain-test.json`     | `wd-terrain-test`     | Server-side terrain A/B test style: Martin-postprocessed contours (Mapterhorn upstream, `convert_to_contour`) + hillshade stub, no basemap. For perf comparison with the client-side plugin. |
 
 ## `src/` — upstream sources (NOT served)
 

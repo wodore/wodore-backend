@@ -163,3 +163,11 @@ if settings.DEBUG:  # pragma: no cover
         ]
     except ModuleNotFoundError:
         pass
+
+# Demo pages (mapcompare etc.) — available in development (DEBUG, open)
+# and staging (DEMOS_ENABLED, superuser-only). Production has neither.
+if getattr(settings, "DEMOS_ENABLED", False):
+    urlpatterns = [
+        path("demos/", include("server.apps.demos.urls")),
+        *urlpatterns,
+    ]
