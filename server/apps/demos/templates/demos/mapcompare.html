@@ -590,33 +590,26 @@
         }
 
         // ---------- catalog / boot ----------
-        // Backend catalog is the single source of truth for the style list.
-        // The tileserver field controls terrain tiles, not style listing.
+        // Martin-compatible style index: GET /v1/map/styles returns
+        // { styles: { slug: { path, name, icon, role, is_default } } }
         function bootCatalog() {
-          fetch("/v1/map/catalog")
+          fetch("/v1/map/styles")
             .then(function (r) {
               return r.ok ? r.json() : null;
             })
             .then(function (cat) {
-              if (!cat || !cat.layers) return;
+              if (!cat || !cat.styles) return;
               var ids = [];
               backendStyles = {};
-              for (var i = 0; i < cat.layers.length; i++) {
-                var layer = cat.layers[i];
-                if (layer.role !== "basemap") continue;
-                var url = null;
-                if (layer.variants && layer.variants.length) {
-                  for (var j = 0; j < layer.variants.length; j++) {
-                    var v = layer.variants[j];
-                    if (v.style_url && v.style_url.startsWith("/")) {
-                      url = v.style_url;
-                      break;
-                    }
-                  }
-                }
-                if (!url) url = "/v1/map/styles/" + layer.slug + ".json";
-                backendStyles[layer.slug] = url;
-                ids.push(layer.slug);
+              for (var slug in cat.styles) {
+                if (!Object.prototype.hasOwnProperty.call(cat.styles, slug))
+                  continue;
+                var entry = cat.styles[slug];
+                if (entry.role && entry.role !== "basemap") continue;
+                var url = entry.path || "/v1/map/styles/" + slug + ".json";
+                if (!url.startsWith("/")) continue; // skip external URLs
+                backendStyles[slug] = url;
+                ids.push(slug);
               }
               if (ids.length) styleIds = ids;
             })

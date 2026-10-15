@@ -1,9 +1,14 @@
 """Map catalog and style endpoints.
 
-* ``GET /v1/map/catalog`` — light metadata index (dmr controller,
+* ``GET /v1/map/styles`` — Martin-compatible style index (dmr
+  controller): flat map of style-slug → {path, name, icon, role,
+  description, is_default}, plus tiles/sprites/fonts/settings sections.
+  Supports ``?lang=`` and ``?spec=`` (self-resolves to nearest variant).
+* ``GET /v1/map/config`` — rich map configuration (dmr controller,
   contract-tested): identity, i18n labels, icons, parameters with
   schemas, spec variants, category projections, coverage bounds,
   style URLs for big styles. Never inlines base style documents.
+  The frontend basemap picker consumes this.
 * ``GET /v1/map/styles/{slug}.json`` — the style itself (plain Django
   view, hidden from the OpenAPI schema like other file endpoints):
   resolved by default (a plain MapLibre style for any client),
@@ -41,6 +46,16 @@ CACHE_MAX_AGE = 6 * 60 * 60  # 6 hours in seconds
 #: Styles larger than this many bytes are never inlined in the catalog
 #: (the entry carries the style endpoint URL instead).
 INLINE_STYLE_MAX_BYTES = 8_192
+
+
+class MapStylesQuery(LanguageQuery):
+    """Query params for the Martin-compatible style index."""
+
+    spec: str | None = Field(
+        None,
+        description="Device-tier spec (low | medium | high); self-resolves to nearest",
+        pattern="^(low|medium|high)$",
+    )
 
 
 class MapCatalogQuery(LanguageQuery):
@@ -114,6 +129,54 @@ class MapCatalogResponse(pydantic.BaseModel):
 
     slots: list[dict[str, Any]] = []
     layers: list[LayerSummary] = []
+
+
+class MapStylesController(ApiController):
+    """Martin-compatible style index — fast, lightweight, selector-ready.
+
+    Returns a flat map of style-slug → entry with just enough metadata
+    for a frontend selector (name, icon, role, is_default). Also includes
+    tiles/sprites/fonts/settings sections matching Martin's catalog shape.
+    Supports ``?lang=`` for localized names and ``?spec=`` for
+    device-tier resolution (exact → nearest → single).
+    """
+
+    @modify(
+        operation_id="map-styles-index",
+        headers=cache_headers(CACHE_MAX_AGE),
+    )
+    def get(
+        self,
+        parsed_query: Query[MapStylesQuery],
+    ) -> dict[str, Any]:
+        """Martin-compatible style index."""
+        queryset = MapLayer.objects.filter(is_active=True).select_related(
+            "slot", "coverage", "license", "fallback"
+        )
+
+        styles: dict[str, Any] = {}
+        with override(parsed_query.lang):
+            for layer in queryset:
+                if layer.slug in styles:
+                    continue  # variants share identity; keep the first
+                styles[layer.slug] = {
+                    "path": style_endpoint_url(layer.slug),
+                    "name": str(layer.name_i18n or layer.name),
+                    "description": str(
+                        layer.description_i18n or layer.description or ""
+                    ),
+                    "icon": layer.icon or "",
+                    "role": layer.role,
+                    "is_default": layer.is_default,
+                }
+
+        return {
+            "tiles": {},  # served by Martin, not the backend
+            "sprites": {},  # served by Martin
+            "fonts": {},  # served by Martin
+            "styles": styles,
+            "settings": {"rendering": False},
+        }
 
 
 class MapCatalogController(ApiController):
@@ -474,7 +537,12 @@ def _style_error(detail: str, status: HTTPStatus) -> HttpResponse:
 
 paths: list[Any] = [
     path(
-        "catalog",
+        "styles",
+        cache_page(CACHE_MAX_AGE)(MapStylesController.as_view()),
+        name="map-styles-index",
+    ),
+    path(
+        "config",
         cache_page(CACHE_MAX_AGE)(MapCatalogController.as_view()),
         name="map-catalog",
     ),
