@@ -199,6 +199,10 @@ chmod +x '/docker-entrypoint.sh'
 # network, no production signing key needed - without this the
 # auth settings raise at build time).
 DJANGO_ENV=test python manage.py collectstatic --noinput
+# Regression guard (see Dockerfile.alpine): sentinel checks that every
+# runtime-registered app contributed its static files.
+test -f /code/static/demos/vendor/maplibre-gl.js
+test -f /code/static/local_auth/css/account.css
 # Generate build timestamp automatically during build. Use python (not
 # date +%N) for parity with Dockerfile.alpine: isoformat() is RFC3339 and
 # parseable on every supported Python.
