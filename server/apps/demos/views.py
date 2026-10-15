@@ -1,6 +1,7 @@
 from typing import Any
 
 from django.conf import settings
+from django.contrib.auth.views import redirect_to_login
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 
@@ -21,16 +22,20 @@ def _widen_csp(view: Any) -> Any:
 
 @_widen_csp
 def mapcompare(request: HttpRequest) -> HttpResponse:
-    """Basemap style compare + FPS page (dev-only).
+    """Basemap style compare + FPS page.
 
-    Belt-and-braces: the URLs are only included when DEBUG is on, but the
-    view double-checks so a misconfigured include can never leak the demo
-    to a non-DEBUG deployment. The CSP decorator widens connect-src to
-    any tileserver the user enters (acceptable: dev-only, triple-gated).
+    Access control:
+    - development (DEBUG=True): open, no auth
+    - staging (DEMOS_ENABLED=True, DEBUG=False): superuser only,
+      redirects to the admin login if not authenticated
+    - production: 404 (app not registered, URLs not included)
     """
 
-    if not settings.DEBUG:
-        from django.http import Http404
+    if settings.DEBUG:
+        return render(request, "demos/mapcompare.html")
 
-        raise Http404
+    # Non-DEBUG (staging): require superuser
+    if not request.user.is_authenticated or not request.user.is_superuser:
+        return redirect_to_login(request.get_full_path())
+
     return render(request, "demos/mapcompare.html")
