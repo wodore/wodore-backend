@@ -564,6 +564,27 @@ LAYERS: list[dict[str, Any]] = [
         "attributions": ["openfreemap"],
     },
     {
+        "slug": "wd-outdoor-base-mtk-hill",
+        "role": MapLayer.Role.basemap,
+        "name": "Wodore Outdoor (client relief)",
+        "description": (
+            "Outdoor basemap with the original client-side raster-dem relief "
+            "(higher-res in CH; heavier on the GPU)."
+        ),
+        "spec": MapLayer.Spec.high,
+        "style": _fixture_style("wd-outdoor-base-mtk-hill"),
+        "attributions": ["maptoolkit"],
+    },
+    {
+        "slug": "wd-outdoor-base-ofm-hill",
+        "role": MapLayer.Role.basemap,
+        "name": "Wodore Outdoor (OpenFreeMap, client relief)",
+        "description": "OpenFreeMap fallback with the original client hillshade.",
+        "spec": MapLayer.Spec.high,
+        "style": _fixture_style("wd-outdoor-base-ofm-hill"),
+        "attributions": ["openfreemap"],
+    },
+    {
         "slug": "ch-swisstopo-light",
         "role": MapLayer.Role.basemap,
         "name": "Swiss light basemap",
