@@ -71,6 +71,7 @@ ALLOWED_HOSTS = [
     "0.0.0.0",
     "127.0.0.1",
     "[::1]",
+    "home",  # tailscale hostname
 ]
 
 # Add local IP dynamically if available
