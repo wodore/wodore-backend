@@ -307,8 +307,16 @@
 
         // ---------- helpers ----------
         function styleUrl(id) {
+          // Backend-served styles (from /v1/map/styles/) take precedence;
+          // fall back to Martin for styles the backend doesn't know.
+          if (styleIds.indexOf(id) >= 0 && backendStyles[id]) {
+            return backendStyles[id];
+          }
           return TILE_BASE + "/style/" + id + ".json";
         }
+
+        // Style slugs -> backend style URLs (filled by fetchBackendCatalog)
+        var backendStyles = {};
 
         function switcherStyles() {
           return styleIds.map(function (id) {
@@ -582,8 +590,51 @@
         }
 
         // ---------- catalog / boot ----------
-        function bootCatalog() {
-          fetch(TILE_BASE + "/catalog")
+        function fetchBackendCatalog() {
+          // Backend catalog (same origin): /v1/map/catalog returns layers
+          // with style_url pointing to /v1/map/styles/{slug}.json
+          return fetch("/v1/map/catalog")
+            .then(function (r) {
+              return r.ok ? r.json() : null;
+            })
+            .then(function (cat) {
+              if (!cat || !cat.layers) return false;
+              var ids = [];
+              backendStyles = {};
+              for (var i = 0; i < cat.layers.length; i++) {
+                var layer = cat.layers[i];
+                if (layer.role !== "basemap") continue;
+                var url = null;
+                if (layer.variants && layer.variants.length) {
+                  for (var j = 0; j < layer.variants.length; j++) {
+                    var v = layer.variants[j];
+                    if (v.style_url) {
+                      url = v.style_url;
+                      break;
+                    }
+                    if (v.inline_style) {
+                      url = "/v1/map/styles/" + layer.slug + ".json";
+                      break;
+                    }
+                  }
+                }
+                if (!url) url = "/v1/map/styles/" + layer.slug + ".json";
+                backendStyles[layer.slug] = url;
+                ids.push(layer.slug);
+              }
+              if (ids.length) {
+                styleIds = ids;
+                return true;
+              }
+              return false;
+            })
+            .catch(function () {
+              return false;
+            });
+        }
+
+        function fetchMartinCatalog() {
+          return fetch(TILE_BASE + "/catalog")
             .then(function (r) {
               return r.ok ? r.json() : null;
             })
@@ -604,6 +655,13 @@
             })
             .catch(function () {
               /* offline catalog: keep fallback list */
+            });
+        }
+
+        function bootCatalog() {
+          fetchBackendCatalog()
+            .then(function (ok) {
+              if (!ok) return fetchMartinCatalog();
             })
             .finally(function () {
               if (state.mode === "compare") {
