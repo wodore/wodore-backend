@@ -131,25 +131,26 @@ class MapCatalogResponse(pydantic.BaseModel):
     layers: list[LayerSummary] = []
 
 
-class MapStylesController(ApiController):
-    """Martin-compatible style index — fast, lightweight, selector-ready.
+class MapCatalogController(ApiController):
+    """Martin-compatible catalog — fast, lightweight, selector-ready.
 
-    Returns a flat map of style-slug → entry with just enough metadata
-    for a frontend selector (name, icon, role, is_default). Also includes
+    Returns a flat map of style-slug → entry with the metadata a frontend
+    overlay/basemap selector needs (name, description, icon, badge, role,
+    order, slot, is_default, zoom range, coverage, fallback), plus
     tiles/sprites/fonts/settings sections matching Martin's catalog shape.
     Supports ``?lang=`` for localized names and ``?spec=`` for
     device-tier resolution (exact → nearest → single).
     """
 
     @modify(
-        operation_id="map-styles-index",
+        operation_id="map-catalog",
         headers=cache_headers(CACHE_MAX_AGE),
     )
     def get(
         self,
         parsed_query: Query[MapStylesQuery],
     ) -> dict[str, Any]:
-        """Martin-compatible style index."""
+        """Martin-compatible catalog with selector metadata."""
         queryset = MapLayer.objects.filter(is_active=True).select_related(
             "slot", "coverage", "license", "fallback"
         )
@@ -166,9 +167,19 @@ class MapStylesController(ApiController):
                         layer.description_i18n or layer.description or ""
                     ),
                     "icon": layer.icon or "",
+                    "icon_badge": layer.icon_badge or "",
                     "role": layer.role,
+                    "order": layer.order,
+                    "slot": layer.slot.slug if layer.slot else None,
                     "is_default": layer.is_default,
+                    "show": layer.show,
+                    "min_zoom": layer.min_zoom,
+                    "max_zoom": layer.max_zoom,
+                    "preview_url": layer.preview_url,
+                    "fallback": layer.fallback.slug if layer.fallback else None,
                 }
+                if layer.coverage:
+                    styles[layer.slug]["coverage_bbox"] = layer.coverage.bbox_bounds
 
         return {
             "tiles": {},  # served by Martin, not the backend
@@ -179,11 +190,11 @@ class MapStylesController(ApiController):
         }
 
 
-class MapCatalogController(ApiController):
-    """The light layer index — metadata only, never style blobs."""
+class MapConfigController(ApiController):
+    """The rich map configuration — metadata index, never style blobs."""
 
     @modify(
-        operation_id="map-catalog",
+        operation_id="map-config",
         headers=cache_headers(CACHE_MAX_AGE),
     )
     def get(
@@ -537,14 +548,14 @@ def _style_error(detail: str, status: HTTPStatus) -> HttpResponse:
 
 paths: list[Any] = [
     path(
-        "styles",
-        cache_page(CACHE_MAX_AGE)(MapStylesController.as_view()),
-        name="map-styles-index",
+        "catalog",
+        cache_page(CACHE_MAX_AGE)(MapCatalogController.as_view()),
+        name="map-catalog",
     ),
     path(
         "config",
-        cache_page(CACHE_MAX_AGE)(MapCatalogController.as_view()),
-        name="map-catalog",
+        cache_page(CACHE_MAX_AGE)(MapConfigController.as_view()),
+        name="map-config",
     ),
     external_path(
         "styles/<slug>.json",

@@ -593,7 +593,7 @@
         // Martin-compatible style index: GET /v1/map/styles returns
         // { styles: { slug: { path, name, icon, role, is_default } } }
         function bootCatalog() {
-          fetch("/v1/map/styles")
+          fetch("/v1/map/catalog")
             .then(function (r) {
               return r.ok ? r.json() : null;
             })
