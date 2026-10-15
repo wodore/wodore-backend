@@ -179,7 +179,7 @@ class MapCatalogController(ApiController):
                     "fallback": layer.fallback.slug if layer.fallback else None,
                 }
                 if layer.coverage:
-                    styles[layer.slug]["coverage_bbox"] = layer.coverage.bbox_bounds
+                    styles[layer.slug]["coverage_bbox"] = layer.coverage.bbox
 
         return {
             "tiles": {},  # served by Martin, not the backend
