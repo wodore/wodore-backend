@@ -200,6 +200,41 @@ class TestAuthoredOverrideOrder:
 
 @pytest.mark.django_db
 class TestSeed:
+    def test_basemap_picker_visibility(self, django_db_setup):
+        """Only product basemaps are pickable — internal variants and
+        automatic fallbacks stay hidden but active (fallback chains,
+        saved selections and spec variants keep resolving)."""
+        from django.core.management import call_command
+
+        call_command("map_seed", verbosity=0)
+        visible = list(
+            MapLayer.objects.filter(
+                role=MapLayer.Role.basemap, is_active=True, show=True
+            )
+            .order_by("order", "slug")
+            .values_list("slug", flat=True)
+            .distinct()
+        )
+        assert visible == [
+            "wd-outdoor-base-mtk",  # default outdoor
+            "world-topo",
+            "world-satellite-hybrid",
+            "ch-swisstopo-full",
+            "maptiler-hybrid",
+        ]
+        hidden = {
+            "wd-outdoor-base-ofm",  # hidden fallback (mtk chains to it)
+            "wd-outdoor-base-mtk-hill",  # A/B variant
+            "wd-outdoor-base-ofm-hill",  # A/B variant
+            "mtk-outdoor",  # upstream reference
+            "ch-swisstopo-light",  # replaced by wd-outdoor-base-mtk
+            "openfreemap-liberty",  # automatic keyless fallback
+        }
+        rows = MapLayer.objects.filter(slug__in=hidden)
+        assert rows.count() >= len(hidden)
+        assert not rows.filter(show=True).exists()
+        assert rows.filter(is_active=True).exists()  # hidden ≠ inactive
+
     def test_seed_idempotent(self, django_db_setup):
         from django.core.management import call_command
 
