@@ -37,6 +37,12 @@ class TestHutsApi:
         data = response.json()
         assert data["slug"] == hut.slug
         assert data["name"] == hut.name
+        # The embedded hut type must carry its (localized) name — a plain
+        # ``name_i18n`` validation alias dropped the ``name`` key of the
+        # _resolve_symbol dict and served null, hiding bed counts in the
+        # apps (unreleased API regression, caught on staging).
+        assert data["type_open"]["slug"] == hut.hut_type_open.slug  # pyright: ignore[reportOptionalSubscript]
+        assert data["type_open"]["name"], data["type_open"]  # pyright: ignore[reportOptionalSubscript]
         # The annotate-heavy relations that broke in #202/#190:
         assert "sources" in data
         assert "images" in data

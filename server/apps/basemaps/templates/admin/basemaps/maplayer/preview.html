@@ -1,0 +1,71 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }} | {% trans "Basemaps" %}{% endblock %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link href="https://unpkg.com/maplibre-gl@5.9.0/dist/maplibre-gl.css" rel="stylesheet" />
+  <style>
+    #wd-style-preview {
+      width: 100%;
+      height: 70vh;
+      border-radius: 8px;
+    }
+    .wd-preview-note {
+      margin: 8px 0 12px;
+      opacity: 0.8;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <h1>{{ title }}</h1>
+
+  {% if style_url %}
+    <p class="wd-preview-note">
+      {% blocktrans trimmed with url=style_url %}
+        Served (resolved mode, defaults) at <code>{{ url }}</code> — the same
+        document any MapLibre client fetches.
+      {% endblocktrans %}
+    </p>
+  {% elif external_style_url %}
+    <p class="wd-preview-note">
+      {% blocktrans trimmed with url=external_style_url %}
+        This layer references an externally authored style:
+        <code>{{ url }}</code>
+      {% endblocktrans %}
+    </p>
+  {% else %}
+    <p>{% trans "No style to preview." %}</p>
+  {% endif %}
+
+  {% if style_url or external_style_url %}
+    <div
+      id="wd-style-preview"
+      data-style-url="{{ style_url }}"
+      data-external-url="{{ external_style_url }}"
+    ></div>
+
+    <script src="https://unpkg.com/maplibre-gl@5.9.0/dist/maplibre-gl.js"></script>
+    <script>
+      (function () {
+        var container = document.getElementById("wd-style-preview");
+        if (!container) return;
+        var target = container.dataset.styleUrl || container.dataset.externalUrl;
+        if (!target) return;
+        // Resolve relative endpoint paths against this admin origin.
+        if (target.indexOf("/") === 0) {
+          target = window.location.origin + target;
+        }
+        var map = new maplibregl.Map({
+          container: container,
+          style: target,
+          center: [8.2, 46.8],
+          zoom: 7,
+        });
+        map.addControl(new maplibregl.NavigationControl());
+      })();
+    </script>
+  {% endif %}
+{% endblock %}

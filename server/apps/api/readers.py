@@ -38,7 +38,7 @@ def _to_one_pair(name: str, related_model: type[Model], child_spec: Spec) -> Pai
 
     1. ``only('relation_name')`` implies ``select_related`` traversal of
        the relation; the multilingual queryset then defers sibling
-       translated fields (e.g. ``Category.symbol_detailed``) and Django
+       translated fields (e.g. ``Category.symbol_color``) and Django
        rejects the combination ("cannot be both deferred and traversed").
     2. any ``only()`` without ``i18n`` defers it, breaking translated
        attribute access (handled separately via ``_include_i18n``).

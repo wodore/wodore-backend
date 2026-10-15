@@ -43,6 +43,7 @@ HIDDEN_URL_NAMES = frozenset(
         "get_place_markdown",
         "get_categories_markdown",
         "get_static_map",
+        "map-style",
     }
 )
 

@@ -20,11 +20,19 @@ logger = structlog.get_logger()
 
 
 def _assessment_extra(img) -> dict | None:
-    """Thumbhashes for the serving pipeline (quality stays backend-only)."""
+    """Result ``extra`` for internal (DB-backed) images.
+
+    Thumbhashes for the serving pipeline (quality stays backend-only) plus
+    the ``internal_pin`` marker: ``pin_place_images`` must never re-pin these
+    passthrough results — the provider reports existing pins/uploads with
+    provider = source_org slug and source_id = source_ident, so a re-pin
+    would mint a prefix-stacked duplicate row ("org:org:...").
+    """
     meta = img.image_meta or {}
+    extra: dict = {"internal_pin": True}
     if meta.get("thumbhashes"):
-        return {"thumbhashes": meta["thumbhashes"]}
-    return None
+        extra["thumbhashes"] = meta["thumbhashes"]
+    return extra
 
 
 class WodoreProvider(ImageProvider):

@@ -61,7 +61,8 @@ expects, so URL serialization works unchanged. Uniqueness is
 Category's `unique_slug_per_parent` — with a NOT NULL `pack` (avoids the
 Postgres NULLs-distinct hole that nullable scopers have). `Icon` adds
 what `Category` cannot carry: nullable indexed `unicode` hexcode (join
-key for keyword data), `curated`, and the keyword index. A dedicated
+key for keyword data; optional — identity is the slug) and the keyword
+index. A dedicated
 model is required: `Category`'s identity is position in the place taxonomy
 (`(slug, parent)`), an icon's identity is membership in a pack — shared-
 tree icons would collide across packs, per-pack trees would duplicate the
@@ -97,8 +98,12 @@ the original retained for display.
 Categories are browse facets, not the search index (a search for "zelt"
 must not require knowing the Travel & Places group). Matching runs on
 `IconKeyword` + slug with prefix > substring scoring and Levenshtein ≤ 2
-typo tolerance for terms ≥ 4 chars, capped by `limit/offset`. `curated`
-marks the ~18-icon activity shortlist the picker shows before any query.
+typo tolerance for terms ≥ 4 chars, capped by `limit/offset`. Curated
+shortlists are `IconCuratedList` rows (unique slug, admin-managed
+membership via a timestamped through model — the ETag keys on it):
+`activities` is seeded with the basic activity icons; overlays, basemap
+markers etc. are just more lists. The import never touches them, so
+re-imports cannot clobber manual curation.
 
 ## Risks / Trade-offs
 

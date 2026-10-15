@@ -10,13 +10,19 @@ removed. Shape change: slug shorthand values are now objects.
 from http import HTTPStatus
 
 import pydantic
-from dmr import APIError, Path, Query, RedirectTo, modify
+from dmr import APIError, Path, Query, RedirectTo, ResponseSpec, modify
+from dmr.headers import HeaderSpec
 from dmr.routing import path
 from pydantic import Field
 
 from django.http import HttpRequest
 
-from server.apps.api.controller import ApiController, cache_headers, raise_not_found
+from server.apps.api.controller import (
+    REDIRECT_CACHE_CONTROL,
+    ApiController,
+    cache_headers,
+    raise_not_found,
+)
 from server.apps.api.projection import field_selected
 from server.apps.api.query import sparse_fields_query
 from server.apps.categories.models import Category
@@ -63,8 +69,8 @@ class CategoryDTO(BaseModel):
     slug: str
     name: str | None = None
     parent: str | None = None
-    symbol_detailed: str | None = None
-    symbol_simple: str | None = None
+    symbol_color: str | None = None
+    symbol_primitive: str | None = None
     symbol_mono: str | None = None
 
 
@@ -116,13 +122,13 @@ def _category_obj(request: HttpRequest, category: Category) -> dict | None:
     if category.parent:
         data["parent"] = category.parent.slug
         data["slug"] = f"{category.parent.slug}.{category.slug}"
-    if category.symbol_detailed:
-        data["symbol_detailed"] = request.build_absolute_uri(
-            category.symbol_detailed.svg_file.url
+    if category.symbol_color:
+        data["symbol_color"] = request.build_absolute_uri(
+            category.symbol_color.svg_file.url
         )
-    if category.symbol_simple:
-        data["symbol_simple"] = request.build_absolute_uri(
-            category.symbol_simple.svg_file.url
+    if category.symbol_primitive:
+        data["symbol_primitive"] = request.build_absolute_uri(
+            category.symbol_primitive.svg_file.url
         )
     if category.symbol_mono:
         data["symbol_mono"] = request.build_absolute_uri(
@@ -309,8 +315,8 @@ class WeatherCodesController(ApiController):
                 select_related_fields.extend(
                     [
                         "category__parent",
-                        "category__symbol_detailed",
-                        "category__symbol_simple",
+                        "category__symbol_color",
+                        "category__symbol_primitive",
                         "category__symbol_mono",
                     ]
                 )
@@ -382,8 +388,8 @@ class WeatherCodeController(ApiController):
                 select.extend(
                     [
                         "category__parent",
-                        "category__symbol_detailed",
-                        "category__symbol_simple",
+                        "category__symbol_color",
+                        "category__symbol_primitive",
                         "category__symbol_mono",
                     ]
                 )
@@ -424,6 +430,16 @@ class WeatherSvgController(ApiController):
     @modify(
         operation_id="get_weather_code_svg",
         headers=cache_headers(CACHE_MAX_AGE),
+        extra_responses=[
+            ResponseSpec(
+                None,
+                status_code=HTTPStatus.FOUND,
+                headers={
+                    "Location": HeaderSpec(),
+                    "Cache-Control": HeaderSpec(),
+                },
+            ),
+        ],
     )
     def get(self, parsed_path: Path[WeatherSvgPath]) -> None:
         """Redirect to a weather code SVG.
@@ -474,6 +490,7 @@ class WeatherSvgController(ApiController):
         raise RedirectTo(
             symbol.svg_file.url,
             status_code=HTTPStatus.FOUND,
+            headers={"Cache-Control": REDIRECT_CACHE_CONTROL},
         )
 
 

@@ -4,7 +4,8 @@ from http import HTTPStatus
 from typing import Any
 
 import pydantic
-from dmr import APIError, Path, Query, RedirectTo, modify
+from dmr import APIError, Path, Query, RedirectTo, ResponseSpec, modify
+from dmr.headers import HeaderSpec
 from dmr.routing import external_path, path
 from pydantic import Field
 
@@ -12,7 +13,12 @@ from django.db.models import Count, Q
 from django.http import HttpRequest, HttpResponse
 from django.views.decorators.cache import cache_page
 
-from server.apps.api.controller import ApiController, cache_headers, raise_not_found
+from server.apps.api.controller import (
+    REDIRECT_CACHE_CONTROL,
+    ApiController,
+    cache_headers,
+    raise_not_found,
+)
 from server.apps.api.error_codes import ErrorCode
 from server.apps.translations import LanguageQuery, activate, override
 
@@ -64,11 +70,11 @@ def build_category_dict(
     }
 
     if media_mode != MediaUrlModeEnum.no:
-        data["symbol_detailed"] = resolve_media_url(
-            request, category.symbol_detailed, media_mode
+        data["symbol_color"] = resolve_media_url(
+            request, category.symbol_color, media_mode
         )
-        data["symbol_simple"] = resolve_media_url(
-            request, category.symbol_simple, media_mode
+        data["symbol_primitive"] = resolve_media_url(
+            request, category.symbol_primitive, media_mode
         )
         data["symbol_mono"] = resolve_media_url(
             request, category.symbol_mono, media_mode
@@ -88,8 +94,8 @@ def _load_category_tree(is_active: bool):
     """
     qs = Category.objects.select_related(
         "parent",
-        "symbol_detailed",
-        "symbol_simple",
+        "symbol_color",
+        "symbol_primitive",
         "symbol_mono",
     )
     if is_active:
@@ -454,10 +460,10 @@ def _category_symbol_redirect(
             )
         raise_not_found(f"Category '{slug}' not found")
 
-    if variant == SymbolVariantEnum.detailed:
-        symbol = category.symbol_detailed
-    elif variant == SymbolVariantEnum.simple:
-        symbol = category.symbol_simple
+    if variant == SymbolVariantEnum.color:
+        symbol = category.symbol_color
+    elif variant == SymbolVariantEnum.primitive:
+        symbol = category.symbol_primitive
     else:  # mono
         symbol = category.symbol_mono
 
@@ -470,24 +476,39 @@ def _category_symbol_redirect(
     return symbol.svg_file.url
 
 
+_REDIRECT_SPEC = ResponseSpec(
+    None,
+    status_code=HTTPStatus.FOUND,
+    headers={
+        "Location": HeaderSpec(),
+        "Cache-Control": HeaderSpec(),
+    },
+)
+
+
 class CategorySymbolSvgParentController(ApiController):
     """Redirect to the SVG icon for a category with explicit parent."""
 
     @modify(
         operation_id="get_category_symbol_svg_with_parent",
         headers=cache_headers(CACHE_MAX_AGE),
+        extra_responses=[_REDIRECT_SPEC],
     )
     def get(self, parsed_path: Path[_SymbolSvgParentPath]) -> None:
         """Redirect to a category SVG (with parent).
 
-        Variant options: detailed, simple, mono
-        Example: /v1/categories/symbol/detailed/map/transport.svg
+        Variant options: color, primitive, mono
+        Example: /v1/categories/symbol/color/map/transport.svg
 
         If the category doesn't have a symbol for the variant, returns 404.
         """
         full_slug = f"{parsed_path.parent}.{parsed_path.slug}"
         url = _category_symbol_redirect(parsed_path.variant, full_slug)
-        raise RedirectTo(url, status_code=HTTPStatus.FOUND)
+        raise RedirectTo(
+            url,
+            status_code=HTTPStatus.FOUND,
+            headers={"Cache-Control": REDIRECT_CACHE_CONTROL},
+        )
 
 
 class CategorySymbolSvgController(ApiController):
@@ -496,17 +517,22 @@ class CategorySymbolSvgController(ApiController):
     @modify(
         operation_id="get_category_symbol_svg",
         headers=cache_headers(CACHE_MAX_AGE),
+        extra_responses=[_REDIRECT_SPEC],
     )
     def get(self, parsed_path: Path[_SymbolSvgPath]) -> None:
         """Redirect to the SVG icon for a category.
 
-        Variant options: detailed, simple, mono
+        Variant options: color, primitive, mono
         Slug can be a simple slug (e.g., 'transport') or root category
 
         If the category doesn't have a symbol for the variant, returns 404.
         """
         url = _category_symbol_redirect(parsed_path.variant, parsed_path.slug)
-        raise RedirectTo(url, status_code=HTTPStatus.FOUND)
+        raise RedirectTo(
+            url,
+            status_code=HTTPStatus.FOUND,
+            headers={"Cache-Control": REDIRECT_CACHE_CONTROL},
+        )
 
 
 def get_categories_markdown(request: HttpRequest) -> HttpResponse:

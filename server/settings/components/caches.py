@@ -24,6 +24,28 @@ CACHES = {
             "CULL_FREQUENCY": 4,  # Remove 25% of oldest entries when full
         },
     },
+    # hut-services library cache (see server/core/apps.py: ready() injects this
+    # alias as the lib's cache backend via set_default_cache_backend).
+    # Database backend so external-service responses survive restarts and are
+    # shared across workers - the lib's own default would write pickles to
+    # <tempdir>/py_file_cache. Dedicated alias/table so the lib's clear_cache()
+    # cannot evict other apps' entries. The table is created by the no-args
+    # `manage.py createcachetable` (and automatically on test databases).
+    "hut_services": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "django_cache_hut_services",
+        "TIMEOUT": 172800,  # 2 days - mirrors the lib's HUT_SERVICE_EXPIRE_SECONDS default
+        "OPTIONS": {
+            # Measured working set is low thousands of rows (HRS universe:
+            # 518 huts; file-cache ground truth: 873 entries / 13 MB total,
+            # p95 51 KB, max 0.8 MB) - 20k is ~10x headroom while bounding
+            # table/TOAST byte growth more tightly. Culling stays at 25% per
+            # eviction round, same policy as "persistent" (which keeps its
+            # intentional 100k design ceiling).
+            "MAX_ENTRIES": 20000,
+            "CULL_FREQUENCY": 4,
+        },
+    },
     "shared": {
         # Cross-process cache for django-q2 cluster status (sentinel and
         # worker stats). LocMem is per-process: without a shared backend

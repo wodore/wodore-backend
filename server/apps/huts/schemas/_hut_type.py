@@ -8,6 +8,7 @@ compatibility.
 import typing as t
 
 from pydantic import (
+    AliasChoices,
     BaseModel,
     ConfigDict,
     Field,
@@ -27,7 +28,11 @@ class HutTypeSchema(BaseModel):
     order: int | None = Field(None, validation_alias="order")
     slug: str
     color: str
-    name: str | None = Field(None, validation_alias="name_i18n")
+    # ``name_i18n`` first: ORM objects expose the localized getter, while the
+    # ``_resolve_symbol`` dict below hands pydantic the plain ``name`` key
+    # (a plain ``name_i18n`` alias would drop it — hut type names arrived as
+    # null on the unreleased API, hiding bed counts in the apps).
+    name: str | None = Field(None, validation_alias=AliasChoices("name_i18n", "name"))
     symbol: dict[str, str | None] | None = None
 
     @model_validator(mode="before")

@@ -342,6 +342,13 @@ class TestGeoimagesPinCommand:
         # Pinned hut → default mode skips it; --all still sweeps it.
         hut.images_pinned_at = timezone.now()
         hut.save(update_fields=["images_pinned_at"])
+        # Deterministic: mark every other place synced too (the test DB may
+        # carry unpinned geoplaces from the seed or earlier runs).
+        from server.apps.geometries.models import GeoPlace
+
+        GeoPlace.objects.filter(images_pinned_at__isnull=True).update(
+            images_pinned_at=timezone.now()
+        )
         seen.clear()
         call_command("geoimages_pin")
         out = capsys.readouterr().out
@@ -396,18 +403,39 @@ class TestGeoimagesPinCommand:
         out = capsys.readouterr().out
         assert hut.slug in seen
 
+    def test_bbox_antimeridian(self, hut, monkeypatch, capsys):
+        """--bbox crossing the antimeridian works (NZ-style box)."""
+        seen = []
+
+        class _SweepStub(_FetchStub):
+            async def __call__(self, **kwargs):
+                seen.append(kwargs.get("place_slug"))
+                return [], {"location": {"lat": 1.0, "lon": 1.0}}
+
+        monkeypatch.setattr(
+            "server.apps.geometries.providers.fetch_images_for_place", _SweepStub([])
+        )
+
+        # The previously-rejected spelling (lons below -180) now parses to
+        # a wrapped multipolygon; the Alpine seed hut stays outside it.
+        call_command("geoimages_pin", bbox="-202.88683,-51.74934,-160.53732,-30.64888")
+        out = capsys.readouterr().out
+        assert "Nothing to do" in out and "+ bbox" in out and hut.slug not in seen
+
     def test_invalid_bbox_raises(self):
         with pytest.raises(CommandError):
             call_command("geoimages_pin", bbox="not,a,bbox")
 
     def test_bbox_widget_renders(self):
-        """Smoke test: the widget renders the map container and the input."""
+        """Smoke test: widget renders the map, input, and draw toolbar."""
         from server.apps.geometries.widgets import BBoxWidget
 
         html = BBoxWidget().render("bbox", "7.5,46.0,8.5,46.8")
         assert "bbox-widget" in html
         assert 'name="bbox"' in html and 'value="7.5,46.0,8.5,46.8"' in html
         assert "bbox_widget.js" in html
+        assert 'class="bbox-draw-btn"' in html
+        assert 'type="button"' in html  # must never submit the run form
 
     def test_assess_skipped_when_place_has_no_pins(self, hut, monkeypatch, capsys):
         """--assess (and warmup) are pointless for places without pins."""

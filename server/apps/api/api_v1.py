@@ -28,6 +28,7 @@ API_DESCRIPTION = (
 )
 
 # Import order mirrors the URL assembly below (most specific first).
+from server.apps.basemaps import api as map_api
 from server.apps.categories import api as categories_api
 from server.apps.feedbacks import api as feedbacks_api
 from server.apps.geometries import api as geo_api
@@ -36,6 +37,7 @@ from server.apps.huts.api import paths as huts_paths
 from server.apps.meteo import api as meteo_api
 from server.apps.organizations import api as organizations_api
 from server.apps.symbols import api as symbols_api
+from server.apps.symbols import api_icons as icons_api
 from server.apps.utils import api as utils_api
 
 
@@ -50,12 +52,14 @@ def build_router() -> Router:
     router.include(Router("geo/images/", geo_images_api.paths, tags=["geoimages"]))
     router.include(Router("geo/", geo_api.paths, tags=["geometries"]))
     router.include(Router("categories/", categories_api.paths, tags=["category"]))
+    router.include(Router("map/", map_api.paths, tags=["map"]))
     router.include(Router("huts/", huts_paths, tags=["hut"]))
     router.include(Router("meteo/", meteo_api.paths, tags=["meteo"]))
     router.include(
         Router("organizations/", organizations_api.paths, tags=["organization"])
     )
     router.include(Router("symbols/", symbols_api.paths, tags=["symbols"]))
+    router.include(Router("icons/", icons_api.paths, tags=["icons"]))
     router.include(Router("feedback/", feedbacks_api.paths, tags=["feedback"]))
     # Root (version, sitemaps) last — least specific.
     router.include(Router("", utils_api.paths, tags=["utils"]))

@@ -341,11 +341,11 @@ class HutAvailabilityViewInline(admin.TabularInline):
     def hut_type_icon(self, obj):
         if (
             obj.hut_type
-            and obj.hut_type.symbol_simple
-            and obj.hut_type.symbol_simple.svg_file
+            and obj.hut_type.symbol_primitive
+            and obj.hut_type.symbol_primitive.svg_file
         ):
             return mark_safe(
-                f'<img src="{obj.hut_type.symbol_simple.svg_file.url}" alt="{obj.hut_type.name}" style="width: 20px; height: 20px;" />'
+                f'<img src="{obj.hut_type.symbol_primitive.svg_file.url}" alt="{obj.hut_type.name}" style="width: 20px; height: 20px;" />'
             )
         return "-"
 
@@ -472,11 +472,11 @@ class HutAvailabilityAdmin(ModelAdmin):
     def hut_type_icon(self, obj):
         if (
             obj.hut_type
-            and obj.hut_type.symbol_simple
-            and obj.hut_type.symbol_simple.svg_file
+            and obj.hut_type.symbol_primitive
+            and obj.hut_type.symbol_primitive.svg_file
         ):
             return mark_safe(
-                f'<img src="{obj.hut_type.symbol_simple.svg_file.url}" alt="{obj.hut_type.name}" style="width: 20px; height: 20px;" />'
+                f'<img src="{obj.hut_type.symbol_primitive.svg_file.url}" alt="{obj.hut_type.name}" style="width: 20px; height: 20px;" />'
             )
         return "-"
 
@@ -635,11 +635,11 @@ class HutAvailabilityHistoryAdmin(ModelAdmin):
     def hut_type_icon(self, obj):
         if (
             obj.hut_type
-            and obj.hut_type.symbol_simple
-            and obj.hut_type.symbol_simple.svg_file
+            and obj.hut_type.symbol_primitive
+            and obj.hut_type.symbol_primitive.svg_file
         ):
             return mark_safe(
-                f'<img src="{obj.hut_type.symbol_simple.svg_file.url}" alt="{obj.hut_type.name}" style="width: 20px; height: 20px;" />'
+                f'<img src="{obj.hut_type.symbol_primitive.svg_file.url}" alt="{obj.hut_type.name}" style="width: 20px; height: 20px;" />'
             )
         return "-"
 

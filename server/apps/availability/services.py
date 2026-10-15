@@ -37,6 +37,24 @@ BATCH_STATEMENT_TIMEOUT_MS = 120_000
 BULK_WRITE_BATCH_SIZE = 500
 
 
+def _sanitize_negative_free(bookings: dict) -> None:  # type: ignore[type-arg]
+    """Clamp negative ``places.free`` sentinels to ``None`` (in place).
+
+    Some sources report unknown free counts as negative numbers — DOC's
+    Tyler API returns ``TotalAvailable = -1`` for "count not published"
+    (Great Walk huts). The availability tables enforce ``free >= 0``, so
+    unknown counts must arrive as ``None``: without this clamp every
+    batch containing such a date dies on
+    ``availability_hutavailability_free_check`` and the affected hut's
+    whole availability update is lost.
+    """
+    for hut_booking in bookings.values():
+        for booking in hut_booking.bookings:
+            places = getattr(booking, "places", None)
+            if places is not None and places.free is not None and places.free < 0:
+                places.free = None
+
+
 class UpdateResult(NamedTuple):
     """Result of updating a single hut's availability"""
 
@@ -110,7 +128,6 @@ class AvailabilityService:
             "hut_type_open", "hut_type_closed", "availability_source_ref"
         )
         obj = obj.filter(slug__in=hut_slugs)
-
         # TODO: Future optimization - parallel service calls
         # If we have multiple booking services (hrs, sac, etc.), we could fetch them
         # concurrently using ThreadPoolExecutor or asyncio to reduce total fetch time.
@@ -250,6 +267,8 @@ class AvailabilityService:
                 # Ensure source_id is always a string (may come as int from DB)
                 if "source_id" in h and h["source_id"] is not None:
                     h["source_id"] = str(h["source_id"])
+
+        _sanitize_negative_free(bookings)
         return [HutBookingsSchema(**h) for h in huts]
 
     @staticmethod
