@@ -196,11 +196,11 @@
     <header id="bar">
       <button id="mode-toggle" type="button">Compare mode</button>
       <button id="inspect-toggle" type="button" hidden>Inspect: off</button>
-      <label for="tileserver-input">Tile server:</label>
+      <label for="tileserver-input">Catalog:</label>
       <input
         id="tileserver-input"
         type="text"
-        title="Martin base URL (persisted in localStorage; ?tileserver= overrides on load)"
+        title="Catalog URL (persisted; ?catalog= overrides on load; e.g. http://localhost:3745/v1/map/catalog or http://localhost:3739/catalog for Martin)"
       />
       <span id="catalog-link"
         ><a target="_blank" rel="noopener">Catalog ↗</a></span
@@ -236,12 +236,11 @@
         "use strict";
 
         var q = new URLSearchParams(location.search);
-        var DEFAULT_BASE = "https://tiles.stg.wodore.com";
-        var TILE_BASE = (
-          q.get("tileserver") ||
-          localStorage.getItem("mapcompare:tileserver") ||
-          DEFAULT_BASE
-        ).replace(/\/+$/, "");
+        var DEFAULT_CATALOG = location.origin + "/v1/map/catalog";
+        var CATALOG_URL =
+          q.get("catalog") ||
+          localStorage.getItem("mapcompare:catalog") ||
+          DEFAULT_CATALOG;
 
         var FALLBACK_STYLES = [
           "wd-outdoor-base-mtk",
@@ -279,17 +278,25 @@
         var inspectPopup = null;
         var inspectHandler = null;
 
-        // ---------- tileserver ----------
+        // ---------- catalog URL ----------
+        function catalogOrigin() {
+          try {
+            return new URL(CATALOG_URL).origin;
+          } catch (e) {
+            return "";
+          }
+        }
+
         function updateTileserverUI() {
-          els.tileserverInput.value = TILE_BASE;
-          els.catalogLink.href = "/v1/map/catalog";
+          els.tileserverInput.value = CATALOG_URL;
+          els.catalogLink.href = CATALOG_URL;
         }
 
         function setTileserver(url) {
-          var clean = url.trim().replace(/\/+$/, "");
-          if (!clean || clean === TILE_BASE) return;
-          TILE_BASE = clean;
-          localStorage.setItem("mapcompare:tileserver", TILE_BASE);
+          var clean = url.trim();
+          if (!clean || clean === CATALOG_URL) return;
+          CATALOG_URL = clean;
+          localStorage.setItem("mapcompare:catalog", CATALOG_URL);
           updateTileserverUI();
           syncPermalink();
           bootCatalog(); // re-fetch styles, rebuild switchers
@@ -307,12 +314,10 @@
 
         // ---------- helpers ----------
         function styleUrl(id) {
-          // Backend-served styles (from /v1/map/styles/) take precedence;
-          // fall back to Martin for styles the backend doesn't know.
-          if (styleIds.indexOf(id) >= 0 && backendStyles[id]) {
-            return backendStyles[id];
-          }
-          return TILE_BASE + "/style/" + id + ".json";
+          // Backend catalog entries have explicit paths; Martin entries need
+          // /style/{id}.json constructed from the catalog origin
+          if (backendStyles[id]) return backendStyles[id];
+          return catalogOrigin() + "/style/" + id + ".json";
         }
 
         // Style slugs -> backend style URLs (filled by fetchBackendCatalog)
@@ -330,7 +335,7 @@
 
         function syncPermalink() {
           var p = new URLSearchParams();
-          p.set("tileserver", TILE_BASE);
+          p.set("catalog", CATALOG_URL);
           p.set("style", state.style);
           if (state.mode === "compare") p.set("styleB", state.styleB);
           p.set("z", state.zoom.toFixed(2));
@@ -590,10 +595,13 @@
         }
 
         // ---------- catalog / boot ----------
-        // Martin-compatible style index: GET /v1/map/styles returns
-        // { styles: { slug: { path, name, icon, role, is_default } } }
+        // Fetches CATALOG_URL and parses the response. Works with both our
+        // backend catalog (/v1/map/catalog, entries have .path relative URLs
+        // and selector metadata) and Martin's catalog (/catalog, entries
+        // have filesystem paths — style URLs constructed from origin).
         function bootCatalog() {
-          fetch("/v1/map/catalog")
+          var origin = catalogOrigin();
+          fetch(CATALOG_URL)
             .then(function (r) {
               return r.ok ? r.json() : null;
             })
@@ -606,15 +614,21 @@
                   continue;
                 var entry = cat.styles[slug];
                 if (entry.role && entry.role !== "basemap") continue;
-                var url = entry.path || "/v1/map/styles/" + slug + ".json";
-                if (!url.startsWith("/")) continue; // skip external URLs
+                // Backend: entry.path is a relative URL like /v1/map/styles/slug.json
+                // Martin: entry.path is a filesystem path — construct /style/slug.json
+                var url;
+                if (entry.path && entry.path.startsWith("/")) {
+                  url = origin + entry.path;
+                } else {
+                  url = origin + "/style/" + slug + ".json";
+                }
                 backendStyles[slug] = url;
                 ids.push(slug);
               }
               if (ids.length) styleIds = ids;
             })
             .catch(function () {
-              /* backend catalog unavailable: keep fallback list */
+              /* catalog unavailable: keep fallback list */
             })
             .finally(function () {
               if (state.mode === "compare") {
