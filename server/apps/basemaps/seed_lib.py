@@ -147,7 +147,186 @@ def swisstopo_overlay_style(
     }
 
 
-# ── Huts overlay (vector) ─────────────────────────────────────────────
+# ── Huts + availability overlay (vector + geojson, frontend parity) ──
+#
+# Mirrors the CURRENT frontend ``hutsStyle`` (overlay-huts.ts): one style,
+# both sources. Sprites match what Martin serves from the database
+# category sync (``color/``, ``mono/``, ``primitive/`` variants — there
+# is no ``simple/``/``detailed/`` variant) plus the SDF sprite for
+# runtime-tinted mono glyphs.
+
+
+def _avail_colors(day: int) -> list[Any]:
+    return [
+        "match",
+        ["get", "occupancy_status", ["at", day, ["get", "data"]]],
+        "empty",
+        "#25BF5E",
+        "low",
+        "#F6AD4B",
+        "medium",
+        "#EA9A37",
+        "free_unknown",
+        "#7FAB88",
+        "high",
+        "#C3731F",
+        "full",
+        "#961A17",
+        "rgba(0,0,0,0)",
+    ]
+
+
+def _occupation_day_layer(day: int) -> dict[str, Any]:
+    """One day column of the availability strip (frontend parity)."""
+
+    def occ_translate(day: int) -> list[Any]:
+        return [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            9,
+            [
+                "literal",
+                [(day - 1.5) * 7, 11 + abs(day - 1.5) * -2],
+            ],
+            20,
+            [
+                "literal",
+                [(day - 1.5) * 40, 90 + abs(day - 1.5) * -10],
+            ],
+        ]
+
+    return {
+        "id": f"wd-huts-occupation-day{day}",
+        "type": "symbol",
+        "source": "wd-bookings",
+        "minzoom": 6,
+        "layout": {
+            "visibility": "visible",
+            "text-field": [
+                "case",
+                ["<", day, ["length", ["get", "data"]]],
+                [
+                    "case",
+                    # Unknown day: a single "?" — the source reports
+                    # free=0/total=0 with no real counts, so "0\n0"
+                    # would be misleading.
+                    [
+                        "==",
+                        ["get", "occupancy_status", ["at", day, ["get", "data"]]],
+                        "unknown",
+                    ],
+                    "?",
+                    [
+                        "concat",
+                        # free is null if the source does not publish the
+                        # count (free_unknown)
+                        [
+                            "case",
+                            [
+                                "==",
+                                ["get", "free", ["at", day, ["get", "data"]]],
+                                None,
+                            ],
+                            "?",
+                            [
+                                "to-string",
+                                ["get", "free", ["at", day, ["get", "data"]]],
+                            ],
+                        ],
+                        "\n",
+                        [
+                            "case",
+                            [
+                                "==",
+                                ["get", "total", ["at", day, ["get", "data"]]],
+                                None,
+                            ],
+                            "?",
+                            [
+                                "to-string",
+                                ["get", "total", ["at", day, ["get", "data"]]],
+                            ],
+                        ],
+                    ],
+                ],
+                "",
+            ],
+            "text-size": ["interpolate", ["linear"], ["zoom"], 12, 7, 14, 10],
+            # Match the wd-outdoor-base-mtk basemap typography (place-label
+            # voice + non-latin fallback, same Martin glyph endpoint).
+            "text-font": ["Barlow Semi Condensed SemiBold", "Noto Sans Bold"],
+            "icon-allow-overlap": True,
+            "text-allow-overlap": True,
+            "icon-image": [
+                "coalesce",
+                [
+                    "image",
+                    [
+                        "concat",
+                        "wd:color/availability.",
+                        [
+                            "case",
+                            ["<", day, ["length", ["get", "data"]]],
+                            [
+                                "get",
+                                "occupancy_status",
+                                ["at", day, ["get", "data"]],
+                            ],
+                            "unknown",
+                        ],
+                    ],
+                ],
+                ["image", "wd:color/availability.unknown"],
+            ],
+            "icon-size": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                7,
+                0.1,
+                12,
+                0.3,
+                15,
+                0.6,
+            ],
+        },
+        "paint": {
+            "icon-translate": occ_translate(day),
+            "text-translate": occ_translate(day),
+            # The wd-outdoor-base-mtk style's standard pale halo — keeps
+            # the numbers readable where dots overlap terrain labels.
+            "text-halo-color": "rgba(242, 247, 244, 0.9)",
+            "text-halo-width": 0.8,
+            "text-opacity": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                9,
+                0,
+                10,
+                0.4,
+                12,
+                0.6,
+            ],
+            "icon-opacity": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                6,
+                0,
+                8,
+                0.8,
+                9,
+                1,
+                11,
+                1,
+                13,
+                0.7,
+            ],
+        },
+    }
+
 
 HUTS_STYLE: dict[str, Any] = {
     "version": 8,
@@ -158,10 +337,59 @@ HUTS_STYLE: dict[str, Any] = {
             "url": "{TILE_SERVER_URL}/huts",
             "promoteId": "slug",
         },
+        "wd-bookings": {
+            "type": "geojson",
+            "data": "{API_URL}/v1/huts/availability/{{date}}.geojson",
+            "promoteId": "hut_id",
+        },
     },
-    "sprite": [{"id": "wd", "url": "{TILE_SERVER_URL}/sprite/accommodation"}],
+    "sprite": [
+        # Martin serves the DB-synced category sprites; the combined URL
+        # merges accommodation + availability under the "wd" id, and the
+        # SDF variant carries runtime-tintable mono silhouettes.
+        {"id": "wd", "url": "{TILE_SERVER_URL}/sprite/accommodation,availability"},
+        {"id": "wd-sdf", "url": "{TILE_SERVER_URL}/sdf_sprite/accommodation"},
+    ],
     "glyphs": GLYPHS,
     "layers": [
+        _occupation_day_layer(0),
+        _occupation_day_layer(1),
+        _occupation_day_layer(2),
+        _occupation_day_layer(3),
+        {
+            "id": "wd-huts-occupation",
+            "type": "circle",
+            "source": "wd-bookings",
+            "maxzoom": 13,
+            "layout": {"visibility": "visible"},
+            "paint": {
+                "circle-color": _avail_colors(0),
+                "circle-radius": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    7,
+                    4,
+                    9,
+                    10,
+                    20,
+                    60,
+                ],
+                "circle-opacity": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    4,
+                    0.8,
+                    8,
+                    0.6,
+                    9,
+                    0.5,
+                    11,
+                    0,
+                ],
+            },
+        },
         {
             "id": "wd-huts-selected",
             "type": "circle",
@@ -206,18 +434,24 @@ HUTS_STYLE: dict[str, Any] = {
                     ["get", "name"],
                     "",
                 ],
+                # Legible floor (the old 7px was sub-legible), capped
+                # like the basemap's own labels.
                 "text-size": [
                     "interpolate",
                     ["linear"],
                     ["zoom"],
                     7,
-                    7,
-                    9,
+                    8.5,
                     10,
-                    22,
-                    16,
+                    11,
+                    14,
+                    13.5,
+                    17,
+                    15,
                 ],
-                "text-font": ["Noto Sans Bold"],
+                # The brand label font and the basemap's place/peak label
+                # voice; Noto Sans Bold stays as the non-latin fallback.
+                "text-font": ["Barlow Semi Condensed SemiBold", "Noto Sans Bold"],
                 "text-anchor": "bottom",
                 "icon-allow-overlap": True,
                 "text-allow-overlap": False,
@@ -225,6 +459,12 @@ HUTS_STYLE: dict[str, Any] = {
                 "icon-overlap": "always",
                 "text-overlap": "never",
                 "text-optional": True,
+                # Zoom ladder: primitive (far out, tiny) → mono SDF
+                # (zoomed in, runtime-tinted). Below z9 the primitive
+                # sprite (small colored shape on white ring) reads
+                # better than a glyph at ~5px; from z9 up the SDF mono
+                # glyph with runtime tinting and a white halo border is
+                # the workhorse.
                 "icon-image": [
                     "step",
                     ["zoom"],
@@ -234,26 +474,47 @@ HUTS_STYLE: dict[str, Any] = {
                             "image",
                             [
                                 "concat",
-                                "wd:simple/",
+                                "wd:primitive/",
                                 ["get", "type_standard_identifier"],
                             ],
                         ],
-                        ["image", "wd:simple/accommodation.unknown"],
+                        ["image", "wd:primitive/accommodation.unknown"],
+                        # Fallback to mono if primitive isn't served
+                        [
+                            "image",
+                            [
+                                "concat",
+                                "wd-sdf:mono/",
+                                ["get", "type_standard_identifier"],
+                            ],
+                        ],
+                        ["image", "wd-sdf:mono/accommodation.unknown"],
                     ],
-                    11,
+                    9,
                     [
                         "coalesce",
                         [
                             "image",
                             [
                                 "concat",
-                                "wd:detailed/",
+                                "wd-sdf:mono/",
                                 ["get", "type_standard_identifier"],
                             ],
                         ],
-                        ["image", "wd:detailed/accommodation.unknown"],
+                        ["image", "wd-sdf:mono/accommodation.unknown"],
+                        [
+                            "image",
+                            [
+                                "concat",
+                                "wd:primitive/",
+                                ["get", "type_standard_identifier"],
+                            ],
+                        ],
+                        ["image", "wd:primitive/accommodation.unknown"],
                     ],
                 ],
+                # 48px art. Far out: small (0.1–0.3 like the original).
+                # Zoomed in: the glyph fills the space (0.5–1.25).
                 "icon-size": [
                     "interpolate",
                     ["linear"],
@@ -262,12 +523,30 @@ HUTS_STYLE: dict[str, Any] = {
                     ["*", 0.1, "{{huts.icon_scale}}"],
                     9,
                     ["*", 0.3, "{{huts.icon_scale}}"],
+                    11,
+                    ["*", 0.55, "{{huts.icon_scale}}"],
+                    13,
+                    ["*", 0.75, "{{huts.icon_scale}}"],
+                    16,
+                    ["*", 1.0, "{{huts.icon_scale}}"],
                     20,
-                    ["*", 2, "{{huts.icon_scale}}"],
+                    ["*", 1.25, "{{huts.icon_scale}}"],
                 ],
                 "visibility": "visible",
             },
             "paint": {
+                # SDF runtime tinting: type color from the tiles, white
+                # border around it.
+                "icon-color": [
+                    "coalesce",
+                    ["get", "type_standard_color"],
+                    "#718096",
+                ],
+                "icon-halo-color": "#ffffff",
+                "icon-halo-width": 2,
+                "icon-halo-blur": 0.15,
+                # Semi-transparent when zoomed out, full opacity when
+                # zoomed in.
                 "icon-opacity": [
                     "interpolate",
                     ["linear"],
@@ -276,12 +555,18 @@ HUTS_STYLE: dict[str, Any] = {
                     0.7,
                     10,
                     0.8,
-                    22,
-                    0.85,
+                    13,
+                    0.9,
+                    16,
+                    1,
                 ],
                 "text-opacity": ["step", ["zoom"], 0, 7, 1],
-                "text-halo-width": 2,
-                "text-halo-color": "#ffffff",
+                # Forest-deep (#224E3B) marks hut names as the product's
+                # own objects; halo = the style's standard pale
+                # green-white (AA on light imagery).
+                "text-color": "#224E3B",
+                "text-halo-width": 1.2,
+                "text-halo-color": "rgba(242, 247, 244, 0.9)",
                 "text-translate": [
                     "interpolate",
                     ["linear"],
@@ -294,215 +579,17 @@ HUTS_STYLE: dict[str, Any] = {
             },
         },
     ],
-    "metadata": {"wd:slot_layers": ["wd-huts", "wd-huts-selected"]},
-}
-
-
-# ── Availability overlay (split from the frontend huts overlay) ──────
-
-
-def _avail_colors(day: int) -> list[Any]:
-    return [
-        "match",
-        ["get", "occupancy_status", ["at", day, ["get", "data"]]],
-        "empty",
-        "#25BF5E",
-        "low",
-        "#F6AD4B",
-        "medium",
-        "#EA9A37",
-        "free_unknown",
-        "#7FAB88",
-        "high",
-        "#C3731F",
-        "full",
-        "#961A17",
-        "rgba(0,0,0,0)",
-    ]
-
-
-def _occupation_day_layer(day: int) -> dict[str, Any]:
-    def occ_translate(day: int) -> list[Any]:
-        return [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            9,
-            [
-                "literal",
-                [(day - 1.5) * 7, 11 + abs(day - 1.5) * -2],
-            ],
-            20,
-            [
-                "literal",
-                [(day - 1.5) * 40, 90 + abs(day - 1.5) * -10],
-            ],
-        ]
-
-    return {
-        "id": f"wd-huts-occupation-day{day}",
-        "type": "symbol",
-        "source": "wd-bookings",
-        "minzoom": 6,
-        "layout": {
-            "visibility": "visible",
-            "text-field": [
-                "case",
-                ["<", day, ["length", ["get", "data"]]],
-                [
-                    "concat",
-                    [
-                        "case",
-                        [
-                            "==",
-                            ["get", "free", ["at", day, ["get", "data"]]],
-                            None,
-                        ],
-                        "?",
-                        [
-                            "to-string",
-                            ["get", "free", ["at", day, ["get", "data"]]],
-                        ],
-                    ],
-                    "\n",
-                    [
-                        "case",
-                        [
-                            "==",
-                            ["get", "total", ["at", day, ["get", "data"]]],
-                            None,
-                        ],
-                        "?",
-                        [
-                            "to-string",
-                            ["get", "total", ["at", day, ["get", "data"]]],
-                        ],
-                    ],
-                ],
-                "",
-            ],
-            "text-size": ["interpolate", ["linear"], ["zoom"], 12, 7, 14, 10],
-            "text-font": ["Noto Sans Bold"],
-            "icon-allow-overlap": True,
-            "text-allow-overlap": True,
-            "icon-image": [
-                "coalesce",
-                [
-                    "image",
-                    [
-                        "concat",
-                        "wd:detailed/availability.",
-                        [
-                            "case",
-                            ["<", day, ["length", ["get", "data"]]],
-                            [
-                                "get",
-                                "occupancy_status",
-                                ["at", day, ["get", "data"]],
-                            ],
-                            "unknown",
-                        ],
-                    ],
-                ],
-                ["image", "wd:detailed/availability.unknown"],
-            ],
-            "icon-size": [
-                "interpolate",
-                ["linear"],
-                ["zoom"],
-                7,
-                0.1,
-                12,
-                0.3,
-                15,
-                0.6,
-            ],
-        },
-        "paint": {
-            "icon-translate": occ_translate(day),
-            "text-translate": occ_translate(day),
-            "text-opacity": [
-                "interpolate",
-                ["linear"],
-                ["zoom"],
-                9,
-                0,
-                10,
-                0.4,
-                12,
-                0.6,
-            ],
-            "icon-opacity": [
-                "interpolate",
-                ["linear"],
-                ["zoom"],
-                6,
-                0,
-                8,
-                0.8,
-                9,
-                1,
-                11,
-                1,
-                13,
-                0.7,
-            ],
-        },
-    }
-
-
-AVAILABILITY_STYLE: dict[str, Any] = {
-    "version": 8,
-    "name": "huts-availability",
-    "sources": {
-        "wd-bookings": {
-            "type": "geojson",
-            "data": "{API_URL}/v1/huts/availability/{{date}}.geojson",
-            "promoteId": "hut_id",
-        },
+    "metadata": {
+        "wd:slot_layers": [
+            "wd-huts-occupation-day0",
+            "wd-huts-occupation-day1",
+            "wd-huts-occupation-day2",
+            "wd-huts-occupation-day3",
+            "wd-huts-occupation",
+            "wd-huts-selected",
+            "wd-huts",
+        ],
     },
-    "sprite": [{"id": "wd", "url": "{TILE_SERVER_URL}/sprite/availability"}],
-    "glyphs": GLYPHS,
-    "layers": [
-        _occupation_day_layer(0),
-        _occupation_day_layer(1),
-        _occupation_day_layer(2),
-        _occupation_day_layer(3),
-        {
-            "id": "wd-huts-occupation",
-            "type": "circle",
-            "source": "wd-bookings",
-            "maxzoom": 13,
-            "layout": {"visibility": "visible"},
-            "paint": {
-                "circle-color": _avail_colors(0),
-                "circle-radius": [
-                    "interpolate",
-                    ["linear"],
-                    ["zoom"],
-                    7,
-                    4,
-                    9,
-                    10,
-                    20,
-                    60,
-                ],
-                "circle-opacity": [
-                    "interpolate",
-                    ["linear"],
-                    ["zoom"],
-                    4,
-                    0.8,
-                    8,
-                    0.6,
-                    9,
-                    0.5,
-                    11,
-                    0,
-                ],
-            },
-        },
-    ],
 }
 
 

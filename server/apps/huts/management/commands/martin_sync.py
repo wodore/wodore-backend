@@ -164,6 +164,11 @@ class Command(BaseCommand):
             target_path, dry_run, stats, include_list, variants, Category
         )
 
+        # 1b. Copy static sprites (basemap sprites like wd-maps: peak,
+        # station markers, rings — referenced root-relative by the
+        # backend-served basemap styles, so Martin must serve them too).
+        self._sync_static_sprites(target_path, dry_run, stats)
+
         # 2. Copy font files (TTF for Martin glyph serving)
         # (Styles are no longer synced: the backend serves them from the
         # basemaps registry at /v1/map/styles/<slug>.json — MapLibre styles
@@ -295,6 +300,60 @@ class Command(BaseCommand):
             )
         else:
             self.stdout.write("  ✓ No old files to remove")
+
+    def _sync_static_sprites(self, target_path, dry_run, stats):
+        """Copy static sprite SVG files (basemap sprites like wd-maps).
+
+        ``tile_server/sprites/<name>/`` directories are sprite collections
+        authored in the repo (peak/station/ring markers referenced by the
+        backend-served basemap styles). They are copied verbatim into the
+        martin_sync target and registered in ``sprite_dirs`` so the
+        generated martin.yaml serves them (``/sprite/<name>``).
+
+        Their flat layout (SVGs directly in the collection dir, no variant
+        subdirectories) keeps them outside ``_cleanup_old_sprites``, which
+        only prunes files inside variant dirs.
+        """
+        self.stdout.write("\n[1b] Syncing static sprites...")
+
+        source_dir = Path(settings.BASE_DIR) / "tile_server" / "sprites"
+
+        if not source_dir.exists():
+            self.stdout.write(
+                self.style.WARNING(
+                    f"  ⚠ Static sprites directory not found: {source_dir}"
+                )
+            )
+            return
+
+        # Ensure sprite_dirs is initialized in stats
+        if "sprite_dirs" not in stats:
+            stats["sprite_dirs"] = []
+
+        for sprite_category_dir in sorted(source_dir.iterdir()):
+            if not sprite_category_dir.is_dir():
+                continue
+
+            category_name = sprite_category_dir.name
+            target_dir = target_path / "sprites" / category_name
+
+            # Register in sprite_dirs for martin.yaml config
+            if category_name not in stats["sprite_dirs"]:
+                stats["sprite_dirs"].append(category_name)
+
+            svg_files = list(sprite_category_dir.glob("*.svg"))
+            self.stdout.write(f"  {category_name}: {len(svg_files)} SVG(s)")
+
+            for svg_file in sorted(svg_files):
+                target_file = target_dir / svg_file.name
+                self._copy_file(
+                    svg_file,
+                    target_file,
+                    target_dir,
+                    dry_run,
+                    stats,
+                    label=f"static-sprite: {category_name}/{svg_file.stem}",
+                )
 
     def _sync_fonts(self, target_path, dry_run, stats):
         """Copy TTF font files for Martin glyph serving."""

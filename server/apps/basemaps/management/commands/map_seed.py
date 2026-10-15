@@ -128,17 +128,13 @@ LEGENDS: dict[str, dict[str, Any]] = {
                 "description": "Hut types by symbol.",
                 "type": "symbol_dual",
                 "category": "accommodation",
-            }
-        ]
-    },
-    "huts-availability": {
-        "sections": [
+            },
             {
                 "title": "Availability",
                 "description": "Occupancy status per day.",
                 "type": "symbol_detailed",
                 "category": "availability",
-            }
+            },
         ]
     },
     "transport-stops": {
@@ -314,16 +310,22 @@ LAYERS: list[dict[str, Any]] = [
         "slug": "huts",
         "role": MapLayer.Role.overlay,
         "name": "Huts",
-        "description": "Mountain huts and bivouacs with type symbols.",
+        "description": (
+            "Mountain huts and bivouacs with type symbols and bed "
+            "availability per day (one overlay, both sources — frontend "
+            "hutsStyle parity)."
+        ),
         "icon": "huts",
         "slot": "ways",
         "order": 0,
+        "min_zoom": 5,
         "style": lib.HUTS_STYLE,
-        "parameters": {"huts.icon_scale": None},
+        "parameters": {"huts.icon_scale": None, "date": None},
         "attributions": [],
         "categories": [
             {"slug": "accommodation", "use": "filter"},
             {"slug": "accommodation", "use": "legend"},
+            {"slug": "availability", "use": "legend"},
         ],
         "config": {
             "filters": [
@@ -342,20 +344,6 @@ LAYERS: list[dict[str, Any]] = [
         "interaction": {
             "click": {"layers": ["wd-huts"], "behavior": "hut-detail", "min_zoom": 8}
         },
-    },
-    {
-        "slug": "huts-availability",
-        "role": MapLayer.Role.overlay,
-        "name": "Hut availability",
-        "description": "Bed availability per hut for the selected date.",
-        "icon": "huts",
-        "slot": "ways",
-        "order": 1,
-        "min_zoom": 6,
-        "style": lib.AVAILABILITY_STYLE,
-        "parameters": {"date": None},
-        "attributions": [],
-        "categories": [{"slug": "availability", "use": "legend"}],
     },
     {
         "slug": "transport-stops",
@@ -692,6 +680,8 @@ class Command(BaseCommand):
         orgs = self._seed_orgs()
         coverage = self._seed_coverage()
 
+        self._retire_merged_layers()
+
         for definition in LAYERS:
             variants = [definition] + definition.get("variants", [])
             for variant in variants:
@@ -709,6 +699,28 @@ class Command(BaseCommand):
         )
 
     # ── Steps ──────────────────────────────────────────────────────────
+
+    def _retire_merged_layers(self) -> None:
+        """Drop layers merged into another seed definition.
+
+        ``huts-availability`` was folded into ``huts`` (one overlay, both
+        sources). Seed rows for retired slugs are deleted explicitly —
+        the seed never deletes *curator-added* rows, only its own former
+        identities. The slug-level legend goes with the layer (kept only
+        when another layer still references it).
+        """
+        retired = ("huts-availability",)
+        layers = MapLayer.objects.filter(slug__in=retired)
+        legend_ids = set(
+            layers.exclude(legend=None).values_list("legend_id", flat=True)
+        )
+        deleted, _ = layers.delete()
+        if deleted:
+            self.stdout.write(
+                f"  Removed merged layer rows: {deleted} ({', '.join(retired)})"
+            )
+            # Legends orphaned by the merge (no layer references them anymore)
+            MapLegend.objects.filter(pk__in=legend_ids, layers__isnull=True).delete()
 
     def _seed_slots(self) -> dict[str, MapSlot]:
         slots: dict[str, MapSlot] = {}
