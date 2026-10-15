@@ -597,6 +597,27 @@ LAYERS: list[dict[str, Any]] = [
         "attributions": ["maptoolkit"],
     },
     {
+        "slug": "world-topo",
+        "role": MapLayer.Role.basemap,
+        "name": "World Topo",
+        "description": "Worldwide topo raster (mapproxy world_topo facade, caps at z16).",
+        "spec": MapLayer.Spec.high,
+        "style": _fixture_style("world-topo"),
+        "attributions": ["openstreetmap"],
+    },
+    {
+        "slug": "world-satellite-hybrid",
+        "role": MapLayer.Role.basemap,
+        "name": "Satellite (hybrid)",
+        "description": (
+            "Aerial imagery with street/place overlay (mapproxy "
+            "world_satellite + OpenFreeMap vector)."
+        ),
+        "spec": MapLayer.Spec.high,
+        "style": _fixture_style("world-satellite-hybrid"),
+        "attributions": ["openstreetmap", "openfreemap"],
+    },
+    {
         "slug": "ch-swisstopo-light",
         "role": MapLayer.Role.basemap,
         "name": "Swiss light basemap",
