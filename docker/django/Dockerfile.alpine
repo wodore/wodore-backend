@@ -209,6 +209,12 @@ chmod +x '/docker-entrypoint.sh'
 # is allowed (required when AUTH_PROVIDER=builtin).
 # (Was OIDC_ENABLED=false before the auth modernization, #183.)
 DJANGO_ENV=test python manage.py collectstatic --noinput
+# Regression guard (staging /demos/mapcompare/ vendor 404s, 2025-10):
+# apps conditionally registered in a runtime environment but missing
+# from DJANGO_ENV=test silently lose their static files here — sentinel
+# checks fail the build loudly instead of 404ing at runtime.
+test -f /code/static/demos/vendor/maplibre-gl.js
+test -f /code/static/local_auth/css/account.css
 # Generate build timestamp automatically during build. Use python
 # (not date +%N): busybox date on alpine does not support %N and emits
 # literal garbage, which crashed /v1/version (fromisoformat ValueError
