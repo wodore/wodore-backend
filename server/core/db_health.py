@@ -14,11 +14,20 @@ answers a fast, clean 503 instead of hanging until the kubelet probe times
 out (probe timeout 15s < pool wait 30s meant the pod only ever reported
 ``context deadline exceeded`` during the wedge, and every probe left a
 zombie health check running for its full pool wait).
+
+Issue #333 follow-up: k8s probes this endpoint every few seconds, so the
+check doubles as a **pool saturation sampler** — every probe samples
+``get_stats()`` and warns (rate-limited) while requests are still being
+served but the pool is fully checked out or queueing; a failed checkout
+logs the full stats at ERROR, capturing exactly the evidence both wedge
+incidents lacked.
 """
 
 import dataclasses
 import logging
 import threading
+import time
+from typing import Any
 
 from health_check.contrib.db_heartbeat.backends import DatabaseHeartBeatCheck
 from health_check.exceptions import ServiceUnavailable
@@ -26,6 +35,73 @@ from health_check.exceptions import ServiceUnavailable
 from django.db import connections
 
 logger = logging.getLogger(__name__)
+
+#: Seconds between saturation warnings per alias (probes run every few
+#: seconds; without the limit a wedged pool would spam one line per probe).
+SATURATION_LOG_INTERVAL = 60.0
+
+
+class PoolSaturationSampler:
+    """Rate-limited psycopg-pool saturation sampling (issue #333).
+
+    Called from the readiness check on every k8s probe. Two signals:
+
+    * ``pool_available == 0`` while the pool has connections — every slot
+      is checked out; the next slow holder tips into checkout timeouts.
+    * a rising ``requests_queued`` counter — some client had to wait for
+      a slot between probes, even if the pool recovered by sample time
+      (transient saturation, the corrected #333 wedge mechanism).
+
+    Never raises: sampling must not turn a passing readiness probe into
+    a failure.
+    """
+
+    def __init__(self, interval: float = SATURATION_LOG_INTERVAL) -> None:
+        self._interval = interval
+        self._last_warn: dict[str, float] = {}
+        self._last_queued: dict[str, int] = {}
+
+    def sample(self, alias: str, pool: Any) -> None:
+        try:
+            stats = pool.get_stats()
+        except Exception:  # pragma: no cover - never mask the probe
+            return
+        try:
+            available = int(stats.get("pool_available", 1))
+            size = int(stats.get("pool_size", 0))
+            max_size = int(stats.get("pool_max", 0))
+            queued = int(stats.get("requests_queued", 0))
+        except (TypeError, ValueError):  # pragma: no cover - defensive
+            return
+        previous = self._last_queued.get(alias)
+        self._last_queued[alias] = queued
+        clients_queued = previous is not None and queued > previous
+        saturated = size > 0 and available == 0
+        if not (saturated or clients_queued):
+            return
+        now = time.monotonic()
+        if now - self._last_warn.get(alias, 0.0) < self._interval:
+            return
+        self._last_warn[alias] = now
+        logger.warning(
+            "psycopg pool saturation (%s): %s/%s connections available, "
+            "%s checked out, %s clients queued total%s",
+            alias,
+            available,
+            max_size,
+            size - available,
+            queued,
+            " [clients queued since the last probe]" if clients_queued else "",
+        )
+
+
+#: Module sampler shared by the readiness probes (one per process).
+_sampler = PoolSaturationSampler()
+
+
+def sample_pool_saturation(alias: str, pool: Any) -> None:
+    """Sample pool saturation from a readiness probe (never raises)."""
+    _sampler.sample(alias, pool)
 
 
 class PoolStatsDatabaseCheck(DatabaseHeartBeatCheck):
@@ -44,8 +120,9 @@ class PoolStatsDatabaseCheck(DatabaseHeartBeatCheck):
 
     def _log_pool_stats(self) -> None:
         try:
-            # None unless the psycopg3 pool is configured (POSTGRES_POOL=1).
-            pool = connections[self.alias].pool
+            # None unless the psycopg3 pool is configured (POSTGRES_POOL=1);
+            # the attribute only exists on the psycopg backend wrapper.
+            pool = getattr(connections[self.alias], "pool", None)
         except Exception:  # pragma: no cover - never mask the check result
             return
         if pool is None:
@@ -80,12 +157,17 @@ class FastDatabaseReadinessCheck(DatabaseHeartBeatCheck):
         pool = self._pool_or_none()
         if pool is not None:
             self._check_via_pool(pool)
+            # The probe doubles as a saturation sample (issue #333):
+            # warn while requests still pass but the pool runs hot.
+            sample_pool_saturation(self.alias, pool)
             return
         self._check_via_thread()
 
     def _pool_or_none(self):
         try:
-            return connections[self.alias].pool
+            # The ``pool`` attribute exists only on the psycopg backend
+            # wrapper (POSTGRES_POOL=1); None everywhere else.
+            return getattr(connections[self.alias], "pool", None)
         except Exception:  # pragma: no cover - fall back to the heartbeat
             return None
 
@@ -103,6 +185,18 @@ class FastDatabaseReadinessCheck(DatabaseHeartBeatCheck):
         try:
             conn = pool.getconn(timeout=self.budget_seconds)
         except Exception as exc:
+            # Checkout timeout = the wedge symptom. Capture the pool's own
+            # stats at the exact moment (issue #333): the deep check logs
+            # them too, but readiness failures repeat every probe.
+            try:
+                logger.error(
+                    "psycopg pool checkout exceeded %ss (%s): stats=%s",
+                    self.budget_seconds,
+                    self.alias,
+                    pool.get_stats(),
+                )
+            except Exception:  # pragma: no cover - never mask the failure
+                pass
             raise ServiceUnavailable(
                 f"database pool checkout exceeded {self.budget_seconds}s: {exc}"
             )

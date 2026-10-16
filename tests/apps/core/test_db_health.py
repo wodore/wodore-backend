@@ -136,3 +136,148 @@ class TestReadyEndpoint:
         check_class, options = checks[0]
         assert check_class is FastDatabaseReadinessCheck
         assert options == {"budget_seconds": 2.0}
+
+
+class _StatsPool(_FakePool):
+    """_FakePool with configurable ``get_stats()`` payloads."""
+
+    def __init__(self, *, stats=None, **kwargs):
+        super().__init__(**kwargs)
+        self.stats = stats or {}
+
+    def get_stats(self):
+        return dict(self.stats)
+
+
+class TestPoolSaturationSampler:
+    """Issue #333: probe-driven sampling warns before the wedge bites."""
+
+    def _healthy_stats(self, **overrides):
+        return {
+            "pool_min": 2,
+            "pool_max": 5,
+            "pool_size": 2,
+            "pool_available": 2,
+            "requests_queued": 0,
+            **overrides,
+        }
+
+    def test_healthy_pool_stays_silent(self, monkeypatch):
+        from server.core import db_health
+
+        calls = []
+        monkeypatch.setattr(
+            db_health.logger, "warning", lambda msg, *a, **k: calls.append((msg, a))
+        )
+        db_health.PoolSaturationSampler().sample(
+            "default", _StatsPool(stats=self._healthy_stats())
+        )
+        assert not calls
+
+    def test_fully_checked_out_pool_warns(self, monkeypatch):
+        from server.core import db_health
+
+        calls = []
+        monkeypatch.setattr(
+            db_health.logger, "warning", lambda msg, *a, **k: calls.append((msg, a))
+        )
+        db_health.PoolSaturationSampler().sample(
+            "default",
+            _StatsPool(stats=self._healthy_stats(pool_size=5, pool_available=0)),
+        )
+        assert len(calls) == 1
+        rendered = calls[0][0] % calls[0][1]
+        assert "psycopg pool saturation (default)" in rendered
+        assert "0/5 connections available" in rendered
+        assert "5 checked out" in rendered
+
+    def test_warning_is_rate_limited(self, monkeypatch):
+        from server.core import db_health
+
+        calls = []
+        monkeypatch.setattr(
+            db_health.logger, "warning", lambda msg, *a, **k: calls.append((msg, a))
+        )
+        sampler = db_health.PoolSaturationSampler()
+        pool = _StatsPool(stats=self._healthy_stats(pool_size=5, pool_available=0))
+        sampler.sample("default", pool)
+        sampler.sample("default", pool)
+        assert len(calls) == 1
+
+    def test_rising_queued_counter_warns_even_after_recovery(self, monkeypatch):
+        """Transient saturation: clients queued between probes, but the
+        pool has slots again by sample time — the counter delta catches
+        it (the corrected #333 mechanism: storms saturate transiently)."""
+        from server.core import db_health
+
+        calls = []
+        monkeypatch.setattr(
+            db_health.logger, "warning", lambda msg, *a, **k: calls.append((msg, a))
+        )
+        sampler = db_health.PoolSaturationSampler()
+        sampler.sample("default", _StatsPool(stats=self._healthy_stats()))
+        sampler.sample(
+            "default",
+            _StatsPool(stats=self._healthy_stats(requests_queued=3)),
+        )
+        assert len(calls) == 1
+        rendered = calls[0][0] % calls[0][1]
+        assert "clients queued since the last probe" in rendered
+
+    def test_sampler_never_raises_on_broken_stats(self):
+        from server.core.db_health import PoolSaturationSampler
+
+        class _Broken:
+            def get_stats(self):
+                raise RuntimeError("pool closed")
+
+        PoolSaturationSampler().sample("default", _Broken())  # no raise
+
+    def test_readiness_failure_logs_pool_stats(self, caplog):
+        """A checkout timeout must capture the pool stats at the exact
+        moment — the evidence both wedge incidents lacked."""
+        pool = _StatsPool(
+            stats=self._healthy_stats(pool_size=5, pool_available=0),
+            checkout_delay=5.0,
+        )
+        check = FastDatabaseReadinessCheck(budget_seconds=0.05)
+        from unittest import mock
+
+        from server.core import db_health
+
+        errors = []
+        with (
+            mock.patch.object(type(check), "_pool_or_none", return_value=pool),
+            mock.patch.object(
+                db_health.logger, "error", lambda msg, *a, **k: errors.append((msg, a))
+            ),
+        ):
+            with pytest.raises(ServiceUnavailable, match="checkout exceeded"):
+                check.check_status()
+        assert len(errors) == 1
+        rendered = errors[0][0] % errors[0][1]
+        assert "stats=" in rendered
+        assert "'pool_available': 0" in rendered
+
+    def test_successful_probe_samples_saturation(self, caplog, monkeypatch):
+        from server.core import db_health
+
+        captured = {}
+
+        def _capture(alias, pool):
+            captured["alias"] = alias
+            captured["stats"] = pool.get_stats()
+
+        monkeypatch.setattr(db_health, "_sampler", db_health.PoolSaturationSampler())
+        monkeypatch.setattr(db_health, "sample_pool_saturation", _capture)
+        # The check_status closure calls the module function by name —
+        # patch the module attribute the check resolves at call time.
+        pool = _StatsPool(stats=self._healthy_stats())
+        check = FastDatabaseReadinessCheck(budget_seconds=2.0)
+        monkeypatch.setattr(
+            type(check), "_pool_or_none", lambda self: pool, raising=True
+        )
+        with caplog.at_level("WARNING"):
+            check.check_status()
+        assert captured["alias"] == "default"
+        assert captured["stats"]["pool_available"] == 2
