@@ -12,11 +12,11 @@
 
 - [ ] `MapLayersQuery` (lang, spec, role, show) + sparse fieldset composition
       on the layer schema
-- [ ] `GET /v1/map/layers` → `{"layers": [resolved…]}` via a shared
+- [ ] `GET /v1/map/layers` → `{"data": [resolved…], "count": N}` via a shared
       `_resolved_summary(layer, spec)` builder (served `spec`, `style_url`,
       `modified`, resolved-row fields; no `variants`, no inline styles)
 - [ ] `GET /v1/map/layers/{slug}` → same object, per-layer ETag
-- [ ] `GET /v1/map/slots` → `{"slots": [...]}`
+- [ ] `GET /v1/map/slots` → `{"data": [...], "count": N}`
 - [ ] Contract tests: envelope, resolution, `show`/`role` filters, sparse
       fieldsets (including 400 on unknown field names), hidden-basemap
       inclusion by default

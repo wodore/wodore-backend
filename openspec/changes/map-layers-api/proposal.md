@@ -7,13 +7,13 @@ The device-tier model also forces client-side variant selection (`pickVariant`) 
 ## What Changes
 
 - **`GET /v1/map/layers`** replaces `/v1/map/config` as the single catalog for clients:
-  - Response is `{ "layers": [...] }` — a collection envelope, no `variants[]` array. The backend resolves the variant server-side from `?spec=` and serves **one resolved layer per slug**: `spec` (what was served, fallback applied) and `style_url` (spec-resolved) instead of all variants.
+  - Response is the generic collection envelope `{ "data": [...], "count": N }` (house standard — no per-resource keys, no bare arrays; pagination would be additive if ever needed, none here), no `variants[]` array. The backend resolves the variant server-side from `?spec=` and serves **one resolved layer per slug**: `spec` (what was served, fallback applied) and `style_url` (spec-resolved) instead of all variants.
   - **No inline styles** anywhere (`INLINE_STYLE_MAX_BYTES` is removed) — style documents are served exclusively by the style endpoint, which is already version-keyed and ETagged per layer.
   - Spec-scoped fields come from the **resolved row**: `parameters`, `attributions`, `legend`, `config` (filters), `interaction`, `anchors`. Identity fields (slug, role, name, icon, order, show, is_default, zoom bounds, coverage) are slug-scoped.
   - Query params: `lang`, `spec` (wanted tier), `role`, `show` (opt-in visibility filter — default unfiltered because hidden fallback basemaps must stay resolvable client-side), and **sparse fieldsets** (`?fields[map_layers]=slug,name,…`, existing `SparseFieldsQuery` machinery).
   - Caching: **version-keyed ETag + revalidate-always** (`Cache-Control: public, max-age=0, must-revalidate, stale-if-error=604800`). The ETag input is catalog-version ∪ lang ∪ spec ∪ role ∪ fields ∪ resolved Api-Version. The version is a cheap exact aggregate (`max(modified)` + counts over every model the payload serializes), memoized ≤10 s; rendered bodies are cached in the Django cache keyed by that version (replaces `cache_page`, which is removed). One reload (online) always yields current data.
 - **`GET /v1/map/layers/{slug}`**: the same resolved layer object, per-layer ETag (`modified` ∪ spec ∪ lang). Shares the summary builder with the collection.
-- **`GET /v1/map/slots`**: `{ "slots": [...] }` — the slot list leaves the layers payload.
+- **`GET /v1/map/slots`**: `{ "data": [{slug, label, order}], "count": N }` — the slot list leaves the layers payload.
 - **`GET /v1/map/catalog`** is slimmed to Martin parity: `{ "styles": { "<slug>": { "name", "path" } } }`, `path` spec-resolved via `?spec=`. No selector metadata — it becomes the Martin-compat/debug view, not an app data source.
 - **`GET /v1/map/config` is removed** (folded into the still-unreleased API version together with the catalog slim-down; snapshot regenerated).
 - **Spec fallback chain becomes explicit and cheap-first**: `low → medium → high`, `medium → low → high`, `high → medium → low` (today `medium` falls back to `high` first — the exact-match/nearest/single walk upgrades mid-tier devices to the heaviest variant). The chain is pinned by tests.

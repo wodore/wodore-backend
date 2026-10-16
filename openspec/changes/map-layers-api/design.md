@@ -15,9 +15,14 @@ revalidation instead of TTLs**.
 
 ## Decision 1 — One catalog: `GET /v1/map/layers`
 
-Replaces `/v1/map/config`. Response is a collection envelope
-(`{"layers": [...]}`) — not a bare array (extensibility: count/pagination can
-be added additively; consistent with the house envelope rule).
+Replaces `/v1/map/config`. Response is the **generic collection envelope**
+(`{"data": [...], "count": N}`) — the house standard (JSON:API `data` /
+Stripe list-object lineage): no per-resource envelope keys (the resource
+type lives in the items and the type-scoped `fields[map_layers]` param), no
+bare arrays (additive room for pagination metadata). Pagination is an
+optional per-endpoint block (`page[size]` + opaque `page[cursor]` + `next`
+link) for unbounded datasets — layers/slots are bounded curated registries
+and serve plain `{data, count}` with no pagination params.
 
 Each entry is **the resolved layer** — no `variants[]`:
 
@@ -45,7 +50,7 @@ Each entry is **the resolved layer** — no `variants[]`:
   thin view from the same endpoint (existing `SparseFieldsQuery` machinery).
 
 `GET /v1/map/layers/{slug}` returns the same object; ETag per layer.
-`GET /v1/map/slots` returns `{"slots": [...]}` (2 rows; leaves the collection).
+`GET /v1/map/slots` returns `{"data": [...], "count": N}` (2 rows; leaves the collection).
 
 ## Decision 2 — Explicit spec fallback chain (behavior change)
 

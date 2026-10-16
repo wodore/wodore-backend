@@ -10,8 +10,9 @@ removed. See the ADDED requirements below.
 
 ### Requirement: Layers endpoint
 
-The system SHALL serve `GET /v1/map/layers` returning a collection envelope
-`{"layers": [...]}` with exactly one **resolved** layer per slug — no
+The system SHALL serve `GET /v1/map/layers` returning the generic
+collection envelope `{"data": [...], "count": N}` with exactly one
+**resolved** layer per slug — no
 `variants[]` array, no inline style documents. Each entry SHALL carry the
 served `spec` (fallback applied) and a `style_url` resolved for that spec, the
 layer's `modified` (ISO 8601) as the content version, and the resolved row's
@@ -53,14 +54,15 @@ served `spec` and `lang`.
 
 ### Requirement: Slots endpoint
 
-The system SHALL serve `GET /v1/map/slots` returning
-`{"slots": [{slug, label, order}]}`; the slot list SHALL NOT be part of the
-layers payload.
+The system SHALL serve `GET /v1/map/slots` returning the generic collection
+envelope `{"data": [{slug, label, order}], "count": N}`; the slot list SHALL
+NOT be part of the layers payload.
 
 #### Scenario: Slots out of band
 
 - **WHEN** `layers` is requested
-- **THEN** the response contains no `slots` key
+- **THEN** the response `data` contains only layer objects and carries no
+  slot entries
 
 ### Requirement: Martin-parity catalog
 
