@@ -233,6 +233,46 @@ class TestPoolSaturationSampler:
 
         PoolSaturationSampler().sample("default", _Broken())  # no raise
 
+    def test_boot_with_zero_connections_stays_silent(self, monkeypatch):
+        """pool_size == 0 before the pool has grown (min_size not yet
+        reached): available == 0 must NOT read as saturation."""
+        from server.core import db_health
+
+        calls = []
+        monkeypatch.setattr(
+            db_health.logger, "warning", lambda msg, *a, **k: calls.append((msg, a))
+        )
+        db_health.PoolSaturationSampler().sample(
+            "default",
+            _StatsPool(stats=self._healthy_stats(pool_size=0, pool_available=0)),
+        )
+        assert not calls
+
+    def test_none_stat_values_never_raise(self):
+        """Malformed stat payloads (None values) skip the sample silently
+        instead of poisoning the readiness probe."""
+        from server.core.db_health import PoolSaturationSampler
+
+        PoolSaturationSampler().sample(
+            "default", _StatsPool(stats={"pool_size": None, "pool_available": None})
+        )  # no raise
+
+    def test_rate_limit_window_reopens(self, monkeypatch):
+        """A zero interval keeps the window open — each saturated sample
+        warns (the clamp on the reopen path, mirrored from the 60s default
+        where reopening after the interval must warn again)."""
+        from server.core import db_health
+
+        calls = []
+        monkeypatch.setattr(
+            db_health.logger, "warning", lambda msg, *a, **k: calls.append((msg, a))
+        )
+        sampler = db_health.PoolSaturationSampler(interval=0.0)
+        pool = _StatsPool(stats=self._healthy_stats(pool_size=5, pool_available=0))
+        sampler.sample("default", pool)
+        sampler.sample("default", pool)
+        assert len(calls) == 2
+
     def test_readiness_failure_logs_pool_stats(self, caplog):
         """A checkout timeout must capture the pool stats at the exact
         moment — the evidence both wedge incidents lacked."""

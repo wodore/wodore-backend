@@ -89,7 +89,10 @@ class PoolSaturationSampler:
             alias,
             available,
             max_size,
-            size - available,
+            # Clamp: _get_measures() reads size/available without a lock;
+            # a torn read could momentarily invert the pair (cosmetic nit
+            # from the #334 review) — never render a negative count.
+            max(0, size - available),
             queued,
             " [clients queued since the last probe]" if clients_queued else "",
         )
