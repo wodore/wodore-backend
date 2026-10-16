@@ -16,6 +16,7 @@ Key invariants enforced here:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, ClassVar
 
 from modeltrans.fields import TranslationField
@@ -31,6 +32,11 @@ from . import validation
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
+else:
+    try:  # runtime import for the isinstance check in pick_variant
+        from django.db.models import QuerySet
+    except ImportError:  # pragma: no cover
+        QuerySet = None  # type: ignore[assignment]
 
 
 class MapSlot(TimeStampedModel):
@@ -429,7 +435,15 @@ class MapLayer(TimeStampedModel):
         medium = "medium", _("medium")
         high = "high", _("high (vector-capable)")
 
-    SPEC_ORDER: ClassVar[tuple[str, ...]] = ("low", "medium", "high")
+    #: Explicit device-tier fallback chains (map-layers-api): exact
+    #: match first, then the chain, then the single remaining variant.
+    #: ``medium`` degrades to the cheaper tier — a mid-tier device is
+    #: never upgraded to the heaviest variant on a tie.
+    SPEC_FALLBACKS: ClassVar[tuple[tuple[str, tuple[str, ...]], ...]] = (
+        ("low", ("medium", "high")),
+        ("medium", ("low", "high")),
+        ("high", ("medium", "low")),
+    )
 
     slug = models.CharField(
         max_length=100,
@@ -617,7 +631,10 @@ class MapLayer(TimeStampedModel):
         blank=True,
         related_name="layers",
         verbose_name=_("Legend"),
-        help_text=_("Shared by all spec variants of this layer (slug-level)"),
+        help_text=_(
+            "This variant row's legend (per-spec divergence possible; "
+            "sharing one legend row across variants is the seed default)"
+        ),
     )
 
     parameters = models.ManyToManyField(
@@ -756,14 +773,22 @@ class MapLayer(TimeStampedModel):
 
     @classmethod
     def pick_variant(
-        cls, queryset: QuerySet[MapLayer], spec: str | None
+        cls,
+        queryset: QuerySet[MapLayer] | Sequence[MapLayer],
+        spec: str | None,
     ) -> MapLayer | None:
-        """Select the device-tier variant: exact → nearest → single.
+        """Select the device-tier variant: exact → explicit chain → single.
 
-        A low-tier request with only a ``high`` variant serves it, and
-        vice versa (spec scenario 'Fallback in both directions').
+        Chains (cheap-first for ``medium``): ``low → medium → high``,
+        ``medium → low → high``, ``high → medium → low``. With no
+        requested spec the first row serves; an unknown spec falls back
+        to the single/first variant (query models reject invalid values
+        before this point).
         """
-        layers = list(queryset.filter(is_active=True))
+        if isinstance(queryset, QuerySet):
+            layers = list(queryset.filter(is_active=True))
+        else:
+            layers = [layer for layer in queryset if layer.is_active]
         if not layers:
             return None
         if spec is None:
@@ -771,17 +796,9 @@ class MapLayer(TimeStampedModel):
         by_spec = {layer.spec: layer for layer in layers}
         if spec in by_spec:
             return by_spec[spec]
-        order = list(cls.SPEC_ORDER)
-        try:
-            idx = order.index(spec)
-        except ValueError:
-            return layers[0]
-        for distance in range(1, len(order)):
-            for candidate_idx in (idx + distance, idx - distance):
-                if 0 <= candidate_idx < len(order):
-                    candidate = order[candidate_idx]
-                    if candidate in by_spec:
-                        return by_spec[candidate]
+        for candidate in dict(cls.SPEC_FALLBACKS).get(spec, ()):
+            if candidate in by_spec:
+                return by_spec[candidate]
         return layers[0]
 
 
