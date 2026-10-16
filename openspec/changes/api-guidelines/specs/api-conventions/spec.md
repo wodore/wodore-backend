@@ -1,27 +1,61 @@
 ## ADDED Requirements
 
-### Requirement: Collection envelope and bare singleton responses
+### Requirement: Generic collection envelope and bare singleton responses
 
-Collection endpoints SHALL return a top-level JSON object keyed by the
-resource name (e.g. `{"layers": [...]}`) and SHALL NOT return a bare
-top-level JSON array. Singleton endpoints SHALL return the bare resource
-object without a wrapping key. Endpoints created or meaningfully modified
-after this change SHALL follow this rule; endpoints that predate it keep
-their existing shapes until meaningfully modified.
+Collection endpoints SHALL return the generic collection envelope — a
+JSON object with a `data` array of the resources and a `count` equal to the
+number of items in that response — and SHALL NOT return a bare top-level
+JSON array or per-resource envelope keys (`{"layers": …}`). The resource
+type lives in the items and the type-scoped parameters
+(`fields[map_layers]=…`), not in the envelope. Singleton endpoints SHALL
+return the bare resource object without any wrapping key (neither
+`{"resource": …}` nor `{"data": …}`). Endpoints created or meaningfully
+modified after this change SHALL follow this rule; endpoints that predate it
+keep their existing shapes until meaningfully modified.
 
-#### Scenario: New collection endpoint returns an envelope
+#### Scenario: New collection endpoint returns the generic envelope
 
-- **WHEN** a new endpoint returning multiple resources of type `widgets` is
-  created after this change
-- **THEN** the success response is a JSON object whose top-level `widgets`
-  member is the array of resources, not a bare top-level array
+- **WHEN** a new endpoint returning multiple resources (e.g. a layer
+  registry collection) is created after this change
+- **THEN** the success response is `{"data": [...], "count": N}` where
+  `count` is the number of items in this response
+- **AND** the response has no per-resource envelope key and is not a bare
+  top-level array
 
 #### Scenario: Singleton endpoint returns the bare resource
 
 - **WHEN** a client fetches a single resource by its slug (e.g. a hut detail
   or a resolved map style document)
 - **THEN** the response body is the resource object itself, with no
-  `{"resource": …}` wrapper key
+  `{"resource": …}` or `{"data": …}` wrapper
+
+### Requirement: Optional pagination for growing collections
+
+Pagination SHALL be an optional, additive block offered only by endpoints
+over unbounded or growing datasets: a `page[size]` parameter with a server
+default and hard cap, and an opaque `page[cursor]` parameter. Clients SHALL
+navigate by following the response's `next` link, never by constructing
+cursors. A `total` member MAY be provided only when cheap to compute.
+Bounded curated registries (e.g. map layers, slots, category trees) SHALL
+serve the plain `{data, count}` envelope with no pagination parameters;
+adding pagination to such endpoints later SHALL remain an additive change.
+
+#### Scenario: Paginating a growing collection
+
+- **WHEN** a client requests a paginating collection endpoint (e.g. a
+  paginating huts list) without pagination parameters
+- **THEN** the server's default `page[size]` applies, the response's `data`
+  and `count` cover that page, and a `next` link is present when more pages
+  exist
+- **AND** following `next` returns the subsequent page without the client
+  constructing a cursor
+
+#### Scenario: Bounded registry serves plain envelope
+
+- **WHEN** a client requests a bounded curated registry (e.g. the layer
+  registry — 22 rows)
+- **THEN** the response is the plain `{"data": [...], "count": 22}`
+  envelope and the endpoint accepts no pagination parameters
 
 ### Requirement: Single error contract
 
@@ -146,8 +180,9 @@ downgrade transforms and a committed snapshot). Every route SHALL set
 
 #### Scenario: Making a grandfathered endpoint compliant is breaking
 
-- **WHEN** an existing bare-array collection endpoint is migrated to the
-  envelope shape
+- **WHEN** an existing collection endpoint with a non-conforming shape
+  (bare top-level array or per-resource envelope keys) is migrated to the
+  generic envelope
 - **THEN** the change follows the versioning runbook for breaking changes
   (VersionChange with downgrade transforms keyed by operation id, committed
   snapshot, `api:breaking` label)

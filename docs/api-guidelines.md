@@ -13,46 +13,81 @@ should be able to check a PR against a list.
 
 ## Response shape
 
-### Collections: envelope object
+### Collections: the generic envelope
 
-A response containing multiple resources of one type returns a top-level
-object keyed by the resource name — never a bare top-level array:
+A response containing multiple resources returns the generic collection
+envelope — `data` plus `count` — never a bare top-level array and never
+per-resource envelope keys:
 
 ```json
-GET /v1/map/config
+GET /v1/map/layers        (reference shape for new collection endpoints)
 {
-  "slots": [ … ],
-  "layers": [ … ]
+  "data": [ ...resolved layers... ],
+  "count": 22
 }
 ```
+
+- **`data`** — the array of resources.
+- **`count`** — the number of items in *this* response, always present.
+  (For paginating endpoints a `total` may be added — only when cheap.)
+
+The resource type lives in the items and the type-scoped parameters
+(`fields[map_layers]=…`), not in the envelope key. A client needs exactly one
+collection helper / TS generic for every list endpoint in the API.
+
+### Pagination: optional, additive, growing datasets only
+
+Endpoints over **unbounded or growing datasets** (a paginating huts list,
+activity feeds) MAY add pagination as an additive block:
+
+- `page[size]` — page size, with a server default and a hard cap;
+- `page[cursor]` — an **opaque** cursor; clients navigate by following the
+  response's `next` link, never by constructing cursors;
+- `total` — only when cheap to compute.
+
+**Bounded curated registries** (map layers, slots, category trees) serve the
+plain `{data, count}` envelope with **no** pagination parameters — adding
+pagination to them later stays additive.
 
 ### Singletons: the bare resource
 
 A response containing exactly one resource returns the resource object
-itself, unwrapped:
+itself, unwrapped — neither `{"hut": …}` nor `{"data": …}`:
 
-- `GET /v1/huts/{slug}` → the hut DTO (`HutSchemaDetails`), not
-  `{"hut": …}`
+- `GET /v1/huts/{slug}` → the hut DTO (`HutSchemaDetails`)
+- `GET /v1/map/layers/{slug}` → the layer (reference example)
 - `GET /v1/map/styles/{slug}.json` → the MapLibre style document itself
 
-### Why the envelope over a bare array
+### Why this envelope
 
-Bare arrays are marginally simpler, but:
+Bare arrays are marginally simpler, and per-resource keys read nicely in
+isolation — but:
 
-- **Extensibility.** An object grows new members additively — `count`,
-  pagination, deprecation metadata, sibling sections like the catalog's
-  `slots`. A top-level array can't take a new top-level field without
-  breaking every client that expects an array.
-- **Precedent.** JSON:API, the [Zalando REST API
+- **Uniformity.** Every collection parses identically: one client-side
+  helper, one TS generic (`Collection<T>`), one review rule. Per-resource
+  keys mean one helper per resource type and a per-endpoint guess.
+- **Extensibility.** An object grows new members additively — pagination
+  (`next`), metadata, deprecation notices — per endpoint as needed. A
+  top-level array can't take a new top-level field without breaking every
+  client that expects an array.
+- **Lineage.** JSON:API's `data` member and Stripe's list objects are the
+  two most-copied collection shapes in the industry; the [Zalando REST API
   Guidelines](https://opensource.zalando.com/restful-api-guidelines/) and
   the [Microsoft REST API
-  Guidelines](https://github.com/microsoft/api-guidelines) all mandate an
-  object as the top-level collection shape. Tooling and reviewers
+  Guidelines](https://github.com/microsoft/api-guidelines) likewise mandate
+  an object as the top-level collection shape. Tooling and reviewers
   pattern-match on it.
-- **JSON-hijacking heritage.** The original motivation for the industry
-  convention: in legacy browsers, array-topped JSON could be exfiltrated via
-  `<script>` tag + `Array`/`Object` constructor overrides. The attack is
-  historical; the convention it produced is durable and costs one key.
+- **JSON-hijacking heritage.** The original motivation for the
+  object-at-top convention: in legacy browsers, array-topped JSON could be
+  exfiltrated via `<script>` tag + `Array`/`Object` constructor overrides.
+  The attack is historical; the convention it produced is durable and costs
+  nothing.
+
+Per-resource keys also duplicate information the response already carries —
+the items' own shape and the type-scoped `fields[TYPE]` parameters — and they
+break down the moment one response wants more than one section (the map
+config's `slots` + `layers`): those are separate collections or separate
+endpoints, not envelope keys.
 
 Singletons stay bare because a wrapper adds a nesting level for exactly one
 element and no extensibility that the resource's own additive fields don't
@@ -60,17 +95,20 @@ already provide.
 
 ### Grandfathered shapes
 
-`GET /v1/huts` returns a bare top-level array, and `/v1/map/catalog` mirrors
-Martin's catalog shape (`{"styles": {slug: …}, "tiles": …}`). Both predate
-this standard and stay as they are until meaningfully modified — do not copy
-them as precedent for new endpoints. Use a shared envelope/generic helper
-when one exists for the resource type; don't improvise per-endpoint shapes.
+`GET /v1/huts` returns a bare top-level array, `/v1/map/catalog` mirrors
+Martin's catalog shape (`{"styles": {slug: …}, "tiles": …}`), and
+`/v1/map/config` uses per-resource envelope keys (`{"slots": [...],
+"layers": [...]}`). All three predate this standard and stay as they are
+until meaningfully modified — do not copy them as precedent for new
+endpoints. Use a shared envelope/generic helper when one exists; don't
+improvise per-endpoint shapes.
 
 ## Why not JSON:API
 
-We cherry-picked the good ideas (sparse fieldsets, typed error codes,
-content-versioned caching) but deliberately do not adopt JSON:API, OData, or
-any full external API specification:
+We cherry-picked the good ideas (sparse fieldsets, the generic `data`
+collection member, typed error codes, content-versioned caching) but
+deliberately do not adopt JSON:API, OData, or any full external API
+specification:
 
 - **The API is hand-rolled on dmr.** JSON:API is a framework-shaped spec —
   its media type, `data`/`attributes` nesting, `relationships`/`included`

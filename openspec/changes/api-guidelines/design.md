@@ -3,18 +3,18 @@
 The `/v1/` API is hand-rolled on django-modern-rest (dmr) controllers: one
 `Controller` class per path, typed pydantic query/body models, a shared
 `ApiController`, and a uniform `{code, detail}` error body raised via
-`APIError` / `raise_not_found`. Conventions grew organically per lane:
+`APIError` / `raise_not_found`. conventions grew organically per lane:
 `LanguageQuery` and `SparseFieldsQuery` centralize narrowing, ETag utilities
 (`server/apps/huts/api/etag_utils.py`) implement the DB-aggregate revalidation
-dance, and the basemaps app added envelope responses (`{"slots": [...],
-"layers": [...]}`), served-value reporting (`X-Map-Spec`), and a style cache
-keyed on `modified`. But nothing documents which parts are contract and which
-were one-off decisions, so recent lanes already drifted: two overlapping map
-catalog endpoints (`/v1/map/catalog`, `/v1/map/config`), 6-hour `cache_page`
-windows over DB-tracked data, and field naming inconsistency (`version`
-holding a row's `modified` timestamp). Date-based contract versioning
-(`docs/api-versioning.md`) pins old shapes but says nothing about what new
-shapes should look like.
+dance, and the basemaps app added per-resource-keyed envelope responses
+(`{"slots": [...], "layers": [...]}`), served-value reporting (`X-Map-Spec`),
+and a style cache keyed on `modified`. But nothing documents which parts are
+contract and which were one-off decisions, so recent lanes already drifted:
+two overlapping map catalog endpoints (`/v1/map/catalog`, `/v1/map/config`),
+6-hour `cache_page` windows over DB-tracked data, and field naming
+inconsistency (`version` holding a row's `modified` timestamp). Date-based
+contract versioning (`docs/api-versioning.md`) pins old shapes but says
+nothing about what new shapes should look like.
 
 ## Goals / Non-Goals
 
@@ -33,11 +33,11 @@ shapes should look like.
 The standard applies to endpoints **created or meaningfully modified** after
 this change. Existing endpoints are grandfathered until touched. Alternatives
 rejected: (a) migrating existing payloads now — every reshape (the `GET
-/v1/huts` bare top-level array, merging the two map catalogs) is a breaking
-change requiring a `VersionChange`, transforms, and frontend coordination, for
-zero client-visible gain; (b) rules as lint rules only — no lint covers
-"meaningfully modified", and semantics (which tier of caching applies) need
-prose anyway.
+/v1/huts` bare top-level array, the map config's per-resource envelope,
+merging the two map catalogs) is a breaking change requiring a `VersionChange`,
+transforms, and frontend coordination, for zero client-visible gain; (b) rules
+as lint rules only — no lint covers "meaningfully modified", and semantics
+(which tier of caching applies) need prose anyway.
 
 ### D2: House standard, not an adopted external specification
 
@@ -58,33 +58,50 @@ HATEOAS):
   `StyleSpecification` documents (`/v1/map/styles/{slug}.json`), Martin-shaped
   catalogs. JSON:API envelopes around them would be noise.
 - We already cherry-picked the ideas worth having: sparse fieldsets
-  (`fields[TYPE]`), typed error codes, content-versioned caching. Migrating to
-  the full spec would break every client for no new capability.
+  (`fields[TYPE]`), the generic `data` collection member, typed error
+  codes, content-versioned caching. Migrating to the full spec would break
+  every client for no new capability.
 
-### D3: Collections get an envelope; singletons are bare
+### D3: Collections get the generic `{data, count}` envelope; singletons are bare
 
-Collection responses return an object keyed by the resource name
-(`{"layers": [...]}`, `{"huts": [...]}`), never a bare top-level array;
-singleton responses return the bare resource object (`GET /v1/huts/{slug}`
-returns the hut; `GET /v1/map/styles/{slug}.json` returns the style document).
+Collection responses return the generic envelope `{"data": [...],
+"count": N}` (`count` = items in this response, always present) — never a
+bare top-level array, never per-resource envelope keys. Singleton responses
+return the bare resource object (`GET /v1/huts/{slug}` returns the hut;
+`GET /v1/map/styles/{slug}.json` returns the style document — not
+`{"data": …}`).
 
-Why the envelope (vs. bare arrays, which are marginally simpler):
+Why this envelope (vs. the two rejected alternatives):
 
-- **Extensibility**: `count`, pagination links, deprecation metadata, or
-  `{"slots": [...]}`-style sibling sections can be added additively; a bare
-  array cannot grow new top-level members without breaking clients that
-  expect an array.
-- **Industry precedent**: JSON:API, the Zalando REST guidelines, and the
-  Microsoft REST API guidelines all require an object as the top-level
-  collection shape — client tooling and reviewers pattern-match on it.
-- **JSON-hijacking heritage**: the original motivation for the industry
-  convention — array-topped JSON could be probed via `<script>` tag
-  overrides of `Array`/`Object` constructors in legacy browsers. The attack
-  is historical, but the convention it produced is durable and costs nothing.
+- vs. **bare arrays** (marginally simpler): an object grows new members
+  additively (`next` pagination links, metadata, deprecation notices) — a
+  top-level array cannot without breaking every client that expects an
+  array. Object-at-top is also the durable outcome of the JSON-hijacking
+  era (array-topped JSON was probeable via `<script>` tag + `Array`/
+  `Object` constructor overrides in legacy browsers).
+- vs. **per-resource keys** (`{"layers": […]}`, `{"huts": […]}`): the type
+  is already carried by the items and the type-scoped parameters
+  (`fields[map_layers]=…`) — the key duplicates information and costs N
+  client-side helpers instead of one TS generic (`Collection<T>`) for
+  every collection. Multi-section responses (the map config's `slots` +
+  `layers`) break down under a single key — those are separate
+  collections or separate endpoints, not envelope keys.
+- **lineage**: JSON:API's `data` member and Stripe's list objects are the
+  most-copied collection shapes in the industry; the Zalando and Microsoft
+  REST guidelines likewise mandate an object at the top. Tooling and
+  reviewers pattern-match on it.
 
-Singletons stay bare because wrapping (`{"hut": {...}}`) adds a level of
-nesting for exactly one element and no extensibility the resource's own
-additive fields don't already provide.
+Pagination is part of the same decision: an optional, **additive** block —
+`page[size]` (server default + hard cap) and opaque `page[cursor]`,
+navigation via a `next` link clients follow (never construct), `total` only
+when cheap — offered **only** by endpoints over unbounded/growing datasets.
+Bounded curated registries (layers, slots, category trees) serve plain
+`{data, count}` with no pagination parameters; adding pagination later
+stays additive per endpoint.
+
+Singletons stay bare because a wrapper adds a level of nesting for exactly
+one element and no extensibility that the resource's own additive fields
+don't already provide.
 
 ### D4: One error contract, additive problem-details later
 

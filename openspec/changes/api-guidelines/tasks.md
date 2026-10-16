@@ -1,9 +1,10 @@
 ## 1. Docs page (this change — documentation only)
 
 - [x] 1.1 Write `docs/api-guidelines.md`: the canonical long-form house API
-  standard — response shape (collection envelope / bare singleton +
-  rationale), why-not-JSON:API, single error contract, slugs + ISO
-  `modified`, standard query parameters, caching tiers, versioning
+  standard — response shape (generic `{data, count}` collection envelope +
+  optional `page[size]`/`page[cursor]` pagination for growing datasets /
+  bare singleton + rationale), why-not-JSON:API, single error contract, slugs
+  + ISO `modified`, standard query parameters, caching tiers, versioning
   integration, workflow
 - [x] 1.2 Add the mkdocs nav entry ("API Guidelines", after "API") in
   `mkdocs.yml`
@@ -15,10 +16,11 @@
 deferred and tracked here so it is not lost; none of it ships in this
 documentation-only change:
 
-- Shared collection-envelope helper (generic `{"<resource>": [...]}` response
-  model builder) — introduced when the next collection endpoint is built;
-  grandfathered endpoints adopt it only when meaningfully modified (each
-  adoption is a breaking change → versioning runbook).
+- Shared generic collection-envelope helper (a `{"data": [...], "count": N}`
+  response-model builder, optionally paired with the `page[size]`/
+  `page[cursor]` pagination block) — introduced when the next collection
+  endpoint is built; grandfathered endpoints adopt it only when meaningfully
+  modified (each adoption is a breaking change → versioning runbook).
 - Contract-test linting ideas (mechanically enforce the envelope rule and the
   error contract on the OpenAPI snapshot: fail if a new 2xx response schema
   is a bare top-level array or an error schema deviates from

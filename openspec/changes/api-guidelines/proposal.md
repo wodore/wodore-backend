@@ -12,8 +12,9 @@ an endpoint against.
 ## What Changes
 
 - New canonical documentation page `docs/api-guidelines.md` (mkdocs: "API
-  Guidelines"): the Wodore house API standard — response shape (collection envelope /
-  bare singleton), the single error contract, slug identifiers + ISO `modified`
+  Guidelines"): the Wodore house API standard — response shape (generic
+  `{data, count}` collection envelope with optional pagination for growing
+  datasets / bare singleton), the single error contract, slug identifiers + ISO `modified`
   timestamps, standard query parameters (`lang`, `fields[TYPE]`, server-side
   selection with served-value reporting), caching tiers (revalidate-always + ETag,
   immutable media, prohibitions), and API-versioning integration.
@@ -28,8 +29,9 @@ an endpoint against.
 
 ### New Capabilities
 
-- `api-conventions`: the house API design standard — envelope/singleton response
-  shape, single error contract, identifiers and timestamps, standard query
+- `api-conventions`: the house API design standard — generic collection envelope
+  + optional pagination / bare singleton response shape, single error contract,
+  identifiers and timestamps, standard query
   parameters, caching tiers, and versioning integration for every endpoint created
   or meaningfully modified after this change.
 
