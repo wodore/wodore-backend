@@ -176,7 +176,13 @@ REGISTRY: list[VersionChange] = [
             "become {color, primitive, mono} and the flat "
             "symbol_detailed/symbol_simple DTO keys (geometries/meteo) "
             "become symbol_color/symbol_primitive. No downgrade: old keys are "
-            "removed outright (no consumers outside our own frontend)."
+            "removed outright (no consumers outside our own frontend). "
+            "ALSO: error bodies across /v1/ gain the RFC 9457 problem "
+            "members type/title/status (instance where a resource path "
+            "exists) additively — code/detail and the application/json "
+            "media type are unchanged; additive, so no downgrade and "
+            "every version (pinned included) receives the enriched bodies "
+            "(openspec: error-api-problem-details)."
         ),
         responses={
             "images_for_hut": _strip_static_map_fallback,
