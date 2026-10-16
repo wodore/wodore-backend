@@ -5,6 +5,11 @@ Establishes the project-wide error contract on dmr:
 
     {"code": "<machine readable>", "detail": "<human readable>"}
 
+plus the RFC 9457 problem members ``type``/``title``/``status`` (and
+``instance`` where a resource path is identifiable) merged in once, at
+the ``to_error`` boundary every dmr error render funnels through
+(openspec: api-errors) — see :mod:`server.apps.api.error_codes`.
+
 This is the shape the API-versioning middleware has always used for
 version errors (``api_version_conflict`` etc.). The former django-ninja
 layer produced ``{"detail": "..."}`` for ``HttpError`` — unifying on the
@@ -17,25 +22,43 @@ one predictable format, documented in the OpenAPI schema via dmr's
 import typing
 from http import HTTPStatus
 
-from dmr import APIError, Controller, NewHeader
+from dmr import APIError, Controller, NewCookie, NewHeader
 from dmr.endpoint import Endpoint
 from dmr.errors import ErrorType, format_error
 from dmr.exceptions import TooManyRequestsError
+from dmr.renderers import Renderer
 from dmr.serializer import BaseSerializer
 from typing_extensions import TypedDict, override
 
 from django.http import Http404, HttpResponse
 
-from server.apps.api.error_codes import ErrorCode
+from server.apps.api.error_codes import ErrorCode, enrich_problem_details
 
 from .serializer import WodoreSerializer
 
 
 class ErrorDetail(TypedDict, total=False):
-    """Error body: ``code`` for clients, ``detail`` for humans."""
+    """Error body: ``code`` for clients, ``detail`` for humans.
+
+    RFC 9457 problem members are merged in at the ``to_error``
+    boundary on every error (openspec: api-errors): ``type``, ``title``
+    and ``status`` always; ``instance`` only for resource-scoped codes
+    (``not_found``, ``gone``) where a request path exists.
+    """
 
     code: str
     detail: str
+
+    #: RFC 9457: URI identifying the problem class
+    #: (``{BACKEND_DOMAIN}/errors/<code>``).
+    type: str
+    #: RFC 9457: short human summary from the ErrorCode registry.
+    title: str
+    #: RFC 9457: the HTTP status code, mirrored as an int.
+    status: int
+    #: RFC 9457: URI of the affected resource (request path); only
+    #: present for resource-scoped codes.
+    instance: str
 
 
 #: Endpoints that answer non-JSON (Markdown, SVG redirects, sitemaps)
@@ -98,6 +121,40 @@ class ApiController(Controller[WodoreSerializer]):
         # APIError (raised by handlers/auth) already carries its payload
         # in format_error shape and has a built-in handler; re-raise it.
         raise exc from None
+
+    @override
+    def to_error(
+        self,
+        raw_data: typing.Any,
+        *,
+        status_code: HTTPStatus,
+        headers: typing.Mapping[str, str] | None = None,
+        cookies: typing.Mapping[str, NewCookie] | None = None,
+        renderer: Renderer | None = None,
+    ) -> HttpResponse:
+        """Serialize error bodies with RFC 9457 problem members merged in.
+
+        Every dmr error render funnels through this method — direct
+        ``APIError`` raises (``raise_not_found``, auth, query parsing,
+        sunset guards), the ``Http404`` mapping above and the global
+        handler's ``format_error`` output — so this is the single
+        enrichment point (design.md D4): all controllers and the
+        plain/GeoJSON views raising our errors inherit without
+        per-endpoint work. Non-contract payloads pass through
+        untouched; the media type stays ``application/json``.
+        """
+        request = getattr(self, "request", None)
+        return super().to_error(
+            enrich_problem_details(
+                raw_data,
+                status=status_code,
+                path=getattr(request, "path", None),
+            ),
+            status_code=status_code,
+            headers=headers,
+            cookies=cookies,
+            renderer=renderer,
+        )
 
 
 def raise_not_found(detail: str) -> typing.NoReturn:

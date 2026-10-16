@@ -44,6 +44,26 @@ versions).
 mobile/web apps are). If a strict-schema third party ever depends on the API,
 revisit this row.
 
+### Error bodies: RFC 9457 problem details (openspec: api-errors)
+
+Every error response carries `code`/`detail` **plus** the RFC 9457 problem
+members `type`, `title` and `status` (and `instance` for resource-scoped
+codes — `not_found`, `gone` — where a request path exists). They are derived
+from the `ErrorCode` registry (`server/apps/api/error_codes.py`) and merged
+in once, at the shared `to_error` boundary, so every serving surface (dmr
+controllers, GeoJSON/plain views, the version middleware) inherits.
+
+- **Additive**: `code`/`detail` are preserved verbatim; `code` is a
+  registered RFC 9457 extension member. No version transform strips the
+  problem members — pinned clients receive them too.
+- **Media type stays `application/json`** — `application/problem+json` is a
+  client-visible change and an explicit non-goal; a possible future opt-in
+  is content negotiation (`Accept: application/problem+json`).
+- Adding fields to an error body is **additive**, not "changing error
+  codes/shape" — no new version is created for it.
+- Problem-type URIs (`{BACKEND_DOMAIN}/errors/<code>`) are permanent
+  identifiers; they don't need to be dereferenceable and are never recycled.
+
 You are never "too late to pin": the `VersionChange` and its downgrade
 transforms are written in the **same PR** as the breaking change — older
 shapes are reconstructed from the new code at the edge, not frozen.
