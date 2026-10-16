@@ -1369,7 +1369,7 @@
         "type": "string"
       },
       "ErrorDetail": {
-        "description": "Error body: ``code`` for clients, ``detail`` for humans.",
+        "description": "Error body: ``code`` for clients, ``detail`` for humans.\n\nRFC 9457 problem members are merged in at the ``to_error``\nboundary on every error (openspec: api-errors): ``type``, ``title``\nand ``status`` always; ``instance`` only for resource-scoped codes\n(``not_found``, ``gone``) where a request path exists.",
         "properties": {
           "code": {
             "title": "Code",
@@ -1377,6 +1377,22 @@
           },
           "detail": {
             "title": "Detail",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
             "type": "string"
           }
         },
@@ -6387,7 +6403,7 @@
     },
     "/v1/categories/symbol/{variant}/{parent}/{slug}.svg": {
       "get": {
-        "description": "Variant options: detailed, simple, mono\nExample: /v1/categories/symbol/detailed/map/transport.svg\n\nIf the category doesn't have a symbol for the variant, returns 404.",
+        "description": "Variant options: color, primitive, mono\nExample: /v1/categories/symbol/color/map/transport.svg\n\nIf the category doesn't have a symbol for the variant, returns 404.",
         "operationId": "get_category_symbol_svg_with_parent",
         "parameters": [
           {
@@ -6432,6 +6448,30 @@
             "description": "OK",
             "headers": {
               "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "302": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            },
+            "description": "Found",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Location": {
                 "required": true,
                 "schema": {
                   "type": "string"
@@ -6487,7 +6527,7 @@
     },
     "/v1/categories/symbol/{variant}/{slug}.svg": {
       "get": {
-        "description": "Variant options: detailed, simple, mono\nSlug can be a simple slug (e.g., 'transport') or root category\n\nIf the category doesn't have a symbol for the variant, returns 404.",
+        "description": "Variant options: color, primitive, mono\nSlug can be a simple slug (e.g., 'transport') or root category\n\nIf the category doesn't have a symbol for the variant, returns 404.",
         "operationId": "get_category_symbol_svg",
         "parameters": [
           {
@@ -6522,6 +6562,30 @@
             "description": "OK",
             "headers": {
               "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "302": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            },
+            "description": "Found",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Location": {
                 "required": true,
                 "schema": {
                   "type": "string"
@@ -10073,9 +10137,102 @@
       "summary": "Searchable icon registry (emoji packs, openspec: icon-library)."
     },
     "/v1/map/catalog": {
+      "description": "Returns a flat map of style-slug \u2192 entry with the metadata a frontend\noverlay/basemap selector needs (name, description, icon, badge, role,\norder, slot, is_default, zoom range, coverage, fallback), plus\ntiles/sprites/fonts/settings sections matching Martin's catalog shape.\nSupports ``?lang=`` for localized names and ``?spec=`` for\ndevice-tier resolution (exact \u2192 nearest \u2192 single).",
+      "get": {
+        "operationId": "map-catalog",
+        "parameters": [
+          {
+            "description": "Select language code: de, en, fr, it.",
+            "in": "query",
+            "name": "lang",
+            "schema": {
+              "default": "en",
+              "description": "Select language code: de, en, fr, it.",
+              "pattern": "(de|en|fr|it)",
+              "title": "Lang",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Device-tier spec (low | medium | high); self-resolves to nearest",
+            "in": "query",
+            "name": "spec",
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(low|medium|high)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Device-tier spec (low | medium | high); self-resolves to nearest",
+              "title": "Spec"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Raised when request components cannot be parsed"
+          },
+          "406": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Raised when provided `Accept` header cannot be satisfied"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Raised when returned response does not match the response schema"
+          }
+        },
+        "summary": "map-catalog \u2014 Martin-compatible catalog with selector metadata.",
+        "tags": ["map"]
+      },
+      "summary": "Martin-compatible catalog \u2014 fast, lightweight, selector-ready."
+    },
+    "/v1/map/config": {
       "get": {
         "description": "Metadata index for map clients: identities, labels in the\nrequest language, icons, parameter schemas, device-tier\nvariants, category projections and coverage bounds. Large\nstyles are referenced by URL, small ones inlined.",
-        "operationId": "map-catalog",
+        "operationId": "map-config",
         "parameters": [
           {
             "description": "Select language code: de, en, fr, it.",
@@ -10159,10 +10316,10 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "map-catalog \u2014 Map layer catalog (overlays and basemaps).",
+        "summary": "map-config \u2014 Map layer catalog (overlays and basemaps).",
         "tags": ["map"]
       },
-      "summary": "The light layer index \u2014 metadata only, never style blobs."
+      "summary": "The rich map configuration \u2014 metadata index, never style blobs."
     },
     "/v1/meteo/symbol/{collection}/{time}/{code}.svg": {
       "get": {
@@ -10214,6 +10371,30 @@
             "description": "OK",
             "headers": {
               "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "302": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            },
+            "description": "Found",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Location": {
                 "required": true,
                 "schema": {
                   "type": "string"

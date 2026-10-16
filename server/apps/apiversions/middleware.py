@@ -43,6 +43,8 @@ import structlog
 from django.http import HttpRequest, HttpResponse
 from django.utils.cache import patch_vary_headers
 
+from server.apps.api.error_codes import ErrorCode, problem_fields
+
 from . import registry
 from .transforms import downgrade_response
 
@@ -56,9 +58,17 @@ EXCLUDED_EXACT_PATHS = frozenset({"/v1/version"})
 SCHEMA_PATHS = frozenset({"/v1/docs", "/v1/openapi.json"})
 
 
-def _error_response(status: int, code: str, detail: str) -> HttpResponse:
+def _error_response(status: int, code: ErrorCode, detail: str) -> HttpResponse:
+    """Version errors in the shared Wodore error contract.
+
+    Enriched with the RFC 9457 problem members like every other
+    error body (openspec: api-errors); ``instance`` is omitted —
+    version errors are about the request, not a resource (design D3).
+    """
+    body = {"code": code, "detail": detail}
+    body.update(problem_fields(code, status=status))
     return HttpResponse(
-        json.dumps({"code": code, "detail": detail}),
+        json.dumps(body),
         content_type="application/json",
         status=status,
     )
@@ -82,7 +92,7 @@ def resolve_version(
             None,
             _error_response(
                 400,
-                "validation_error",
+                ErrorCode.validation_error,
                 f"'{VERSION_HEADER}' header ({header!r}) and "
                 f"'{VERSION_QUERY_PARAM}' query parameter ({query!r}) differ.",
             ),
@@ -100,7 +110,7 @@ def resolve_version(
             None,
             _error_response(
                 400,
-                "validation_error",
+                ErrorCode.validation_error,
                 f"Unknown API version {version!r}. Supported: {supported}.",
             ),
         )
@@ -133,7 +143,7 @@ class ApiVersionMiddleware:
             sunset = change.sunset_date if change else None
             return _error_response(
                 410,
-                "api_version_sunset",
+                ErrorCode.api_version_sunset,
                 f"API version {version!r} was sunset on "
                 f"{sunset.isoformat() if sunset else 'unknown'}. "
                 "Upgrade the pinned API version (see /v1/version).",

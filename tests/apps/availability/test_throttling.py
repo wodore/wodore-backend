@@ -83,6 +83,12 @@ class TestClientIpBuckets:
         body = json.loads(throttled.content)
         assert body["code"] == "throttled"
         assert body["detail"]
+        # RFC 9457 problem members (openspec: api-errors): the throttle
+        # error flows through the same shared ``to_error`` machinery.
+        assert body["status"] == 429
+        assert body["type"].endswith("/errors/throttled")
+        assert body["title"] == "Too many requests."
+        assert "instance" not in body  # not about an addressed resource
 
     def test_distinct_forwarded_clients_get_separate_buckets(self):
         """One tripped client must not throttle another (per-IP buckets)."""
