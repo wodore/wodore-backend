@@ -7,9 +7,10 @@ license: MIT
 # api-guidelines — Wodore house API standard
 
 The `/v1/` API standard. It applies to every endpoint **created or
-meaningfully modified** after the `api-conventions` openspec change —
-existing endpoints are grandfathered with their current shapes until they
-are touched. This skill is the canonical long-form reference; condensed
+meaningfully modified** after the `api-conventions` capability landed
+(openspec spec, archived change `2026-10-16-api-guidelines`) — existing
+endpoints are grandfathered with their current shapes until they are
+touched. This skill is the canonical long-form reference; condensed
 checklists may mirror it, but this document wins.
 
 The core principle: **predictability comes from few rules, mechanically
