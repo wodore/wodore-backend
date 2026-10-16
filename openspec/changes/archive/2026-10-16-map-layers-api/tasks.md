@@ -53,9 +53,11 @@
 
 ## 6. Frontend follow-up (wodore-frontend-quasar, separate PR)
 
-- [ ] Basemap store consumes `/v1/map/layers` (picker via sparse fieldset);
+- [x] Basemap store consumes `/v1/map/layers` (picker via sparse fieldset);
       delete `fetchBasemapCatalog`, `mapBasemapCatalogCache`,
       `refreshBasemaps`, `martinCatalogBasemap`, `STYLE_VERSION`,
       client-side `pickVariant`
-- [ ] Overlay store switches `version` → `modified`
-- [ ] Optional: `visibilitychange` revalidate for long-lived tabs
+- [x] Overlay store switches `version` → `modified`
+- [x] Optional: `visibilitychange` revalidate for long-lived tabs
+
+<!-- Frontend follow-up delivered in wodore-frontend-quasar #286 (+ boot-date fix #287), verified on staging 2026-10-16. -->

@@ -651,6 +651,7 @@ LAYERS: list[dict[str, Any]] = [
         "description": "swisstopo pixelkarte (CH coverage).",
         "spec": MapLayer.Spec.medium,
         "order": 3,
+        "show": False,  # owner call 2026-10-16: picker ships the top-3 only
         "coverage": "ch",
         "fallback_min_zoom": 7,
         "style": lib.swisstopo_pixelkarte_style(),
@@ -663,6 +664,7 @@ LAYERS: list[dict[str, Any]] = [
         "description": "MapTiler satellite hybrid.",
         "spec": MapLayer.Spec.high,
         "order": 4,
+        "show": False,  # owner call 2026-10-16: picker ships the top-3 only
         "style_url": (
             "https://api.maptiler.com/maps/hybrid/style.json"
             "?key={{env:WODORE_MAPTILER_API_KEY}}"
