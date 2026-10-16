@@ -1369,7 +1369,7 @@
         "type": "string"
       },
       "ErrorDetail": {
-        "description": "Error body: ``code`` for clients, ``detail`` for humans.",
+        "description": "Error body: ``code`` for clients, ``detail`` for humans.\n\nRFC 9457 problem members are merged in at the ``to_error``\nboundary on every error (openspec: api-errors): ``type``, ``title``\nand ``status`` always; ``instance`` only for resource-scoped codes\n(``not_found``, ``gone``) where a request path exists.",
         "properties": {
           "code": {
             "title": "Code",
@@ -1377,6 +1377,22 @@
           },
           "detail": {
             "title": "Detail",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
             "type": "string"
           }
         },
