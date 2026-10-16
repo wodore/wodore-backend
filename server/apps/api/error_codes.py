@@ -123,7 +123,11 @@ def enrich_problem_details(
     ``type``/``title``/``status`` (plus ``instance`` for resource-scoped
     codes when a request path is given); any other body — plain dmr
     payloads, non-dicts, foreign codes — passes through unchanged.
-    Existing members are never removed or overwritten.
+    ``code``/``detail`` and application-specific members are always
+    preserved; the RFC 9457 members are (re)written from the registry —
+    the registry is the single source of truth, so pre-existing values
+    for ``type``/``title``/``status``/``instance`` do not survive (review
+    finding: registry-wins semantics are deliberate and unit-pinned).
     """
     if not isinstance(body, dict):
         return body

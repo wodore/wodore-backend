@@ -52,7 +52,7 @@ class TestProblemRegistry:
         members = problem_fields(ErrorCode.not_found, status=404)
         assert members["status"] == 404
         assert isinstance(members["status"], int)
-        assert members["type"].endswith("/errors/not_found")
+        assert members["type"] == problem_type_uri(ErrorCode.not_found)
         assert "instance" not in members
 
     def test_problem_fields_includes_instance_when_given(self):
@@ -105,6 +105,22 @@ class TestProblemRegistry:
         assert enriched["instance"] == "/v1/x"
         assert original == {"code": "gone", "detail": "Sunset.", "extra": "kept"}
 
+    def test_registry_wins_over_preexisting_problem_members(self):
+        """Review finding #9: the registry is the single source of truth.
+
+        A body already carrying problem members (e.g. from an older
+        enrichment layer) has them rewritten from the registry — never
+        mixed-and-matched.
+        """
+        enriched = enrich_problem_details(
+            {"code": "not_found", "detail": "d", "type": "about:blank"},
+            status=404,
+            path="/x",
+        )
+        assert enriched["type"] == problem_type_uri(ErrorCode.not_found)
+        assert enriched["type"] != "about:blank"
+        assert enriched["status"] == 404
+
 
 class TestEndpointsShareEnrichment:
     """api-errors spec: shared machinery inheritance (dmr + GeoJSON)."""
@@ -142,6 +158,17 @@ class TestEndpointsShareEnrichment:
             code="not_found",
             instance="/v1/huts/nope/availability/2026-01-01",
         )
+
+    def test_method_not_allowed_405_is_enriched(self, seed_data, client):
+        """Review finding #2: 405s must share the contract too.
+
+        dmr's base ``handle_method_not_allowed`` bypasses ``to_error``;
+        the ``ApiController`` override routes it back through it.
+        """
+        response = client.delete("/v1/huts/huts")
+        assert response.status_code == 405
+        assert response.headers["Allow"] == "GET"
+        assert_problem_members(response.json(), status=405, code="validation_error")
 
     def test_openapi_error_schema_documents_problem_members(self, seed_data, client):
         """api-errors spec: OpenAPI error model documents the members."""
@@ -182,6 +209,65 @@ class TestPinnedVersionClients:
             status=404,
             code="not_found",
             instance="/v1/huts/does-not-exist",
+        )
+
+    def test_endpoint_sunset_410_gone_is_enriched(self, seed_data, client, monkeypatch):
+        """Review finding #4: ``gone`` is instance-scoped — a 410 from
+        the endpoint-sunset guard carries ``instance``."""
+        from datetime import date as date_cls
+
+        from server.apps.apiversions import registry
+
+        monkeypatch.setitem(
+            registry.ENDPOINT_DEPRECATIONS,
+            "get_hut_bookings",
+            registry.EndpointDeprecation(
+                announced=date_cls(2020, 1, 1),
+                sunset=date_cls(2020, 7, 1),
+                detail="gone",
+            ),
+        )
+        response = client.get("/v1/huts/bookings", {"slugs": "nothing"})
+        assert response.status_code == 410
+        assert_problem_members(
+            response.json(),
+            status=410,
+            code="gone",
+            instance="/v1/huts/bookings",
+        )
+
+    def test_auth_401_is_enriched(self, settings):
+        """Review finding #5: the auth handler's 401 body is enriched."""
+        import json as _json
+
+        from dmr import modify
+        from dmr.test import DMRRequestFactory
+
+        from server.apps.api.auth import AuthBearer
+        from server.apps.api.controller import ApiController
+
+        settings.OIDC_ENABLED = False
+        settings.ZITADEL_RP_ENABLED = False
+        settings.ZITADEL_ROLLBACK_ENABLED = False
+
+        class ProbeController(ApiController):
+            """Auth-not-configured probe (test_api_auth pattern)."""
+
+            @modify(operation_id="probe_auth_401_enriched", auth=[AuthBearer()])
+            def get(self) -> dict[str, bool]:
+                """Probe endpoint."""
+
+                return {"ok": True}
+
+        response = DMRRequestFactory().get(
+            "/probe", headers={"Authorization": "Bearer whatever"}
+        )
+        response = ProbeController.as_view()(response)
+        assert response.status_code == 401
+        assert_problem_members(
+            _json.loads(response.content),
+            status=401,
+            code="not_authenticated",
         )
 
 

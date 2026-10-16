@@ -36,6 +36,11 @@ from server.apps.api.error_codes import ErrorCode, enrich_problem_details
 
 from .serializer import WodoreSerializer
 
+#: Mirror of dmr's 405 message (``_METHOD_NOT_ALLOWED_MSG``) — kept
+#: local because dmr marks it private; format is
+#: ``'Method {method} is not allowed, allowed: {allowed}'``.
+_METHOD_NOT_ALLOWED_MSG = "Method {method} is not allowed, allowed: {allowed}"
+
 
 class ErrorDetail(TypedDict, total=False):
     """Error body: ``code`` for clients, ``detail`` for humans.
@@ -154,6 +159,28 @@ class ApiController(Controller[WodoreSerializer]):
             headers=headers,
             cookies=cookies,
             renderer=renderer,
+        )
+
+    @override
+    def handle_method_not_allowed(self, method: str) -> HttpResponse:
+        """405s share the enriched error contract (review finding #2).
+
+        dmr's base implementation renders with the low-level
+        ``build_response`` primitive, bypassing ``to_error`` — route it
+        through ``to_error`` so the RFC 9457 members are merged in and
+        the shared-machinery invariant holds for 405 responses too.
+        """
+        allowed_methods = sorted(self.api_endpoints.keys())
+        return self.to_error(
+            self.format_error(
+                _METHOD_NOT_ALLOWED_MSG.format(
+                    method=repr(method),
+                    allowed=repr(allowed_methods),
+                ),
+                error_type=ErrorType.not_allowed,
+            ),
+            status_code=HTTPStatus.METHOD_NOT_ALLOWED,
+            headers={"Allow": ", ".join(allowed_methods)},
         )
 
 
