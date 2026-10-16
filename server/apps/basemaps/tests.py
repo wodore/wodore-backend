@@ -242,8 +242,6 @@ class TestSeed:
             "wd-outdoor-base-mtk",  # default outdoor
             "world-topo",
             "world-satellite-hybrid",
-            "ch-swisstopo-full",
-            "maptiler-hybrid",
         ]
         hidden = {
             "wd-outdoor-base-ofm",  # hidden fallback (mtk chains to it)
@@ -252,6 +250,8 @@ class TestSeed:
             "mtk-outdoor",  # upstream reference
             "ch-swisstopo-light",  # replaced by wd-outdoor-base-mtk
             "openfreemap-liberty",  # automatic keyless fallback
+            "ch-swisstopo-full",  # owner call 2026-10-16: top-3 picker only
+            "maptiler-hybrid",  # owner call 2026-10-16: top-3 picker only
         }
         rows = MapLayer.objects.filter(slug__in=hidden)
         assert rows.count() >= len(hidden)
