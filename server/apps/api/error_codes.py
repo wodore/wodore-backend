@@ -23,8 +23,6 @@ from __future__ import annotations
 import typing
 from enum import StrEnum
 
-from django.conf import settings
-
 if typing.TYPE_CHECKING:
     from http import HTTPStatus
 
@@ -72,7 +70,13 @@ INSTANCE_SCOPED_CODES: typing.Final[frozenset[ErrorCode]] = frozenset(
 
 
 def problem_type_uri(code: ErrorCode) -> str:
-    """Stable problem-type URI (RFC 9457 ``type`` member) for a code."""
+    """Stable problem-type URI (RFC 9457 ``type`` member) for a code.
+
+    ``django.conf`` is imported lazily so this module stays importable
+    under bare python3 (the CI registry-check step has no django).
+    """
+    from django.conf import settings
+
     origin = settings.BACKEND_DOMAIN.rstrip("/")
     return f"{origin}/errors/{code.value}"
 
