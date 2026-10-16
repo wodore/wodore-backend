@@ -11,10 +11,13 @@ an endpoint against.
 
 ## What Changes
 
-- New canonical documentation page `docs/api-guidelines.md` (mkdocs: "API
-  Guidelines"): the Wodore house API standard — response shape (generic
+- New repo-tracked agent skill `.agents/skills/api-guidelines/SKILL.md` (the
+  canonical long-form reference, dmr-skill convention): the Wodore house API
+  standard — response shape (generic
   `{data, count}` collection envelope with optional pagination for growing
-  datasets / bare singleton), the single error contract, slug identifiers + ISO `modified`
+  datasets / bare singleton), the single error contract (RFC 9457-aligned:
+  `code`/`detail` + problem members via the shared machinery), slug
+  identifiers + ISO `modified`
   timestamps, standard query parameters (`lang`, `fields[TYPE]`, server-side
   selection with served-value reporting), caching tiers (revalidate-always + ETag,
   immutable media, prohibitions), and API-versioning integration.
@@ -30,7 +33,8 @@ an endpoint against.
 ### New Capabilities
 
 - `api-conventions`: the house API design standard — generic collection envelope
-  + optional pagination / bare singleton response shape, single error contract,
+  + optional pagination / bare singleton response shape, single error contract
+  (RFC 9457-aligned),
   identifiers and timestamps, standard query
   parameters, caching tiers, and versioning integration for every endpoint created
   or meaningfully modified after this change.
@@ -42,9 +46,11 @@ current, grandfathered contracts)
 
 ## Impact
 
-- **Docs**: `docs/api-guidelines.md` (new page) + `mkdocs.yml` nav entry. The
-  page becomes the canonical long-form reference; the condensed agent skill and
-  review checklists point at it.
+- **Docs/skills**: `.agents/skills/api-guidelines/SKILL.md` (new repo-tracked
+  agent skill). The skill becomes the canonical long-form reference —
+  auto-loaded by API-shape work; condensed checklists point at it. The error
+  section reflects the landed RFC 9457 enrichment (`error-api-problem-details`,
+  main #329).
 - **Code**: none in this change. Future enforcement helpers (shared envelope
   helper, contract-test linting) are recorded as apply-phase follow-ups in
   `tasks.md`.

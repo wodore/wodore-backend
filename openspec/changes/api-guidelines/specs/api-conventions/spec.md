@@ -63,20 +63,26 @@ API errors SHALL use the uniform body `{"code": "<ErrorCode>", "detail":
 "…"}` — `code` a machine-readable value from the shared `ErrorCode` enum
 (one per HTTP behavioral class), `detail` the human-readable specific reason
 — raised via `APIError(...)` / `raise_not_found(...)`, including plain
-(non-dmr) views. Endpoints SHALL NOT introduce parallel error shapes.
+(non-dmr) views. The RFC 9457 problem members (`type`, `title`, `status`,
+plus `instance` for resource-scoped codes) SHALL be merged by the shared
+error machinery per the `api-errors` capability; endpoints SHALL NOT
+introduce parallel error shapes or hand-write the problem members, and new
+`ErrorCode` members SHALL register their `title` and problem-type URI.
 
 #### Scenario: Missing resource
 
 - **WHEN** a client requests a slug that does not exist and the handler calls
   `raise_not_found(...)`
 - **THEN** the response status is 404 and the body is `{"code": "not_found",
-  "detail": …}` in the shared error shape
+  "detail": …}` plus the RFC 9457 members `type`, `title`, `status` and
+  `instance` identifying the requested resource path
 
 #### Scenario: Invalid query parameter
 
 - **WHEN** a client sends an unknown sparse-fieldset name or type bracket
-- **THEN** the response status is 400 with the shared error shape and the
-  `detail` names the valid values
+- **THEN** the response status is 400 with the shared error shape, the
+  `detail` names the valid values, the RFC 9457 members are present, and
+  `instance` is omitted (the error is about the request, not a resource)
 
 ### Requirement: Slug identifiers and ISO modified timestamps
 

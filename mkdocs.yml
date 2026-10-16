@@ -8,7 +8,6 @@ nav:
   - "Getting Started": index.md
   - "Links": infos.md
   - "API": api.md
-  - "API Guidelines": api-guidelines.md
   - "API Versioning": api-versioning.md
   - "Backups & Staging Data": backups.md
   - Packages: packages.md

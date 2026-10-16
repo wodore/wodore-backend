@@ -18,7 +18,8 @@ nothing about what new shapes should look like.
 
 ## Goals / Non-Goals
 
-- Goals: one canonical, long-form reference (`docs/api-guidelines.md`) for how
+- Goals: one canonical, long-form reference (the repo-tracked agent skill
+  `.agents/skills/api-guidelines/SKILL.md`) for how
   Wodore API endpoints are shaped; the same rules captured as the
   `api-conventions` capability spec so future changes extend them deliberately;
   every rule mechanically checkable in review.
@@ -103,17 +104,23 @@ Singletons stay bare because a wrapper adds a level of nesting for exactly
 one element and no extensibility that the resource's own additive fields
 don't already provide.
 
-### D4: One error contract, additive problem-details later
+### D4: One error contract — RFC 9457-aligned via the shared machinery
 
 Every error is `{"code": "<ErrorCode>", "detail": "…"}` — `code` is a
 machine-readable enum value (one per HTTP behavioral class the client acts on
 differently, `server/apps/api/error_codes.py`), `detail` is the
-human-readable specific reason. Raised exclusively via `APIError({...},
-status_code=…)` / `raise_not_found(...)` so dmr renders the shape uniformly;
-plain views reuse the same body (see `_style_error` in the basemaps app).
-RFC 9457 problem-details alignment (additive `type`/`title`/`status`/
-`instance`) is specced in the separate `error-api-problem-details` openspec
-change; until it lands, no parallel error formats.
+human-readable specific reason — raised exclusively via `APIError({...},
+status_code=…)` / `raise_not_found(...)`; plain views reuse the same body
+(see `_style_error` in the basemaps app). The `error-api-problem-details`
+change landed on main: every error body is additionally enriched with the
+RFC 9457 problem members (`type` — the code's permanent problem-type URI,
+`title` — the code's registry summary, `status` — int mirror, plus
+`instance` for resource-scoped codes), merged once at the shared boundary
+(`ApiController.to_error`) so dmr controllers, plain/GeoJSON views and the
+version middleware inherit without per-endpoint work, additively across all
+pinned versions. Guideline-level obligations: never parallel error shapes,
+never hand-write the problem members, and new `ErrorCode` members must
+register their `title` and type URI in the same registry.
 
 ### D5: Slugs for identity, `modified` for content version
 
@@ -178,9 +185,9 @@ endpoint must satisfy them.
   deliberately; the alternative (mass migration) is breaking everything at
   once. The doc marks grandfathered shapes explicitly so they are not copied
   as precedent.
-- [Docs drift from code] → the `api-conventions` spec + the "load before
-  endpoint work" agent skill anchor reviews; spec deltas force deliberate
-  changes.
+- [Docs drift from code] → the `api-conventions` spec + the repo-tracked
+  `api-guidelines` skill (this change's deliverable, auto-loaded by agents)
+  anchor reviews; spec deltas force deliberate changes.
 
 ## Migration Plan
 

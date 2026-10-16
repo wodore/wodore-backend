@@ -1,10 +1,16 @@
-# API Design Guidelines
+---
+name: api-guidelines
+description: Wodore house API standard — the canonical long-form reference. Apply whenever creating or modifying ANY API surface in wodore-backend: controllers (dmr), request/response schemas, query parameters, envelopes and pagination, error handling, caching/ETag headers, or API versioning. Also applies to openspec changes that touch API behavior. Load BEFORE writing endpoint code or proposals.
+license: MIT
+---
 
-The Wodore house API standard for `/v1/`. It applies to every endpoint
-**created or meaningfully modified** after this change — existing endpoints
-are grandfathered with their current shapes until they are touched. The
-condensed checklist lives in the agent skill; this page is the canonical
-long-form reference.
+# api-guidelines — Wodore house API standard
+
+The `/v1/` API standard. It applies to every endpoint **created or
+meaningfully modified** after the `api-conventions` openspec change —
+existing endpoints are grandfathered with their current shapes until they
+are touched. This skill is the canonical long-form reference; condensed
+checklists may mirror it, but this document wins.
 
 The core principle: **predictability comes from few rules, mechanically
 enforced** — not from adopting an external specification. Clients should be
@@ -107,7 +113,7 @@ improvise per-endpoint shapes.
 
 We cherry-picked the good ideas (sparse fieldsets, the generic `data`
 collection member, typed error codes, content-versioned caching) but
-deliberately do not adopt JSON:API, OData, or any full external API
+deliberately do **not** adopt JSON:API, OData, or any full external API
 specification:
 
 - **The API is hand-rolled on dmr.** JSON:API is a framework-shaped spec —
@@ -124,42 +130,62 @@ specification:
   (`/v1/map/styles/{slug}.json`), Martin-compatible catalogs. A JSON:API
   envelope around a style document would be pure noise.
 - **Migration would break everything for no gain.** Every reshape of every
-  payload is a breaking API version (see [API Versioning](api-versioning.md))
-  with downgrade transforms and frontend coordination — and the end state
-  would be strictly less flexible than what we have.
+  payload is a breaking API version (see `docs/api-versioning.md`) with
+  downgrade transforms and frontend coordination — and the end state would
+  be strictly less flexible than what we have.
 
 ## Errors — one contract everywhere
 
-Every error response is the same two-field object:
+Every error response is a single JSON object: the Wodore members `code` and
+`detail`, plus the RFC 9457 problem members `type`, `title`, `status`, and
+`instance` where a resource path is identifiable:
 
 ```json
 {
   "code": "not_found",
-  "detail": "No active map layer with slug 'nope'."
+  "detail": "No active map layer with slug 'nope'.",
+  "type": "https://hub.wodore.com/errors/not_found",
+  "title": "The requested resource was not found.",
+  "status": 404,
+  "instance": "/v1/map/styles/nope.json"
 }
 ```
 
-- **`code`** — a machine-readable value from the shared `ErrorCode` enum
-  (`server/apps/api/error_codes.py`): one code per HTTP behavioral class the
-  client acts on differently (`validation_error`, `throttled`,
+- **`code`** — a machine-readable value from the `ErrorCode` enum
+  (`server/apps/api/error_codes.py`): one code per HTTP behavioral class
+  the client acts on differently (`validation_error`, `throttled`,
   `not_authenticated`, `insufficient_permission`, `not_found`, `gone`,
-  `service_unavailable`).
+  `service_unavailable`, `api_version_sunset`). A registered RFC 9457
+  extension member.
 - **`detail`** — the human-readable specific reason (which field, which
-  slug, which limit).
+  slug, which limit); may vary per occurrence.
+- **`type`** — the code's stable problem-type URI
+  (`{BACKEND_DOMAIN}/errors/<code>`), built from the registry. A permanent
+  identifier (RFC 9457 §3.1.1): never recycled, need not be
+  dereferenceable.
+- **`title`** — the code's registered human summary (`PROBLEM_TITLES`);
+  MUST NOT vary per occurrence.
+- **`status`** — the HTTP status code mirrored as an integer.
+- **`instance`** — the affected resource path; only for resource-scoped
+  codes (`not_found`, `gone` — `INSTANCE_SCOPED_CODES`), omitted otherwise.
 
 Mechanics:
 
-- Raise `APIError({"code": …, "detail": …}, status_code=…)` — dmr renders
-  the shape uniformly.
-- Use `raise_not_found(detail)` for the standard 404.
-- Plain (non-dmr) views produce the same body — see `_style_error` in
-  `server/apps/basemaps/api.py`.
+- Raise `APIError({"code": …, "detail": …}, status_code=…)` — use
+  `raise_not_found(detail)` for the standard 404. Plain (non-dmr) views
+  raise the same errors (see `_style_error` in `server/apps/basemaps/api.py`).
+- The RFC 9457 members are merged **automatically** at the single
+  enrichment point (`ApiController.to_error` in
+  `server/apps/api/controller.py`): every dmr controller, plain view,
+  GeoJSON endpoint and the API-version middleware inherits them. Never
+  hand-write the problem members.
+- **New `ErrorCode` members must register their `title` and problem-type
+  URI** in the same registry (a unit test fails on gaps).
 - Never invent parallel error formats (bare strings, `{"error": …}`,
   exception dumps).
-
-RFC 9457 problem-details alignment (additive `type`/`title`/`status`/
-`instance`) is specced in the separate `error-api-problem-details` openspec
-change; until it lands, the two-field contract above is the whole contract.
+- The enrichment is additive across all pinned API versions — no version
+  transform strips the members (openspec capability `api-errors`, change
+  `error-api-problem-details`).
 
 ## Identifiers and timestamps
 
@@ -252,8 +278,8 @@ so the render cache is self-busting and needs no TTL.
 
 ## API versioning
 
-Full runbook: [API Versioning](api-versioning.md). The rules that interact
-with these guidelines:
+Full runbook: `docs/api-versioning.md`. The rules that interact with these
+guidelines:
 
 - **Additive changes need no version** — new endpoints, optional
   params/fields. Most guideline-driven new work is additive.
