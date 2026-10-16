@@ -1,20 +1,30 @@
-"""Map catalog and style endpoints.
+"""Map layer catalog, slots, Martin-parity view and style endpoints.
 
-* ``GET /v1/map/styles`` — Martin-compatible style index (dmr
-  controller): flat map of style-slug → {path, name, icon, role,
-  description, is_default}, plus tiles/sprites/fonts/settings sections.
-  Supports ``?lang=`` and ``?spec=`` (self-resolves to nearest variant).
-* ``GET /v1/map/config`` — rich map configuration (dmr controller,
-  contract-tested): identity, i18n labels, icons, parameters with
-  schemas, spec variants, category projections, coverage bounds,
-  style URLs for big styles. Never inlines base style documents.
-  The frontend basemap picker consumes this.
+* ``GET /v1/map/layers`` — THE catalog (dmr controller): the generic
+  collection envelope ``{"data": [...], "count": N}`` with exactly one
+  **resolved** layer per slug. ``?spec=`` is what the client *wants*
+  (the entry's ``spec`` reports what was served — exact → explicit
+  chain → single, server-side); no ``variants[]`` arrays, no inline
+  style documents. ``?lang=``, ``?role=``, ``?show=`` and sparse
+  fieldsets (``fields[map_layers]=…``) narrow the response.
+* ``GET /v1/map/layers/{slug}`` — one resolved layer (same shape as
+  the collection entries), per-layer ETag.
+* ``GET /v1/map/slots`` — the slot registry, generic collection
+  envelope.
+* ``GET /v1/map/catalog`` — Martin-parity debug view: ``styles`` map
+  of slug → ``{name, path}`` with ``?spec=`` resolved into ``path``.
+  No selector metadata — not an application data source.
 * ``GET /v1/map/styles/{slug}.json`` — the style itself (plain Django
   view, hidden from the OpenAPI schema like other file endpoints):
   resolved by default (a plain MapLibre style for any client),
   ``?mode=tokenized`` keeps parameter tokens for customizing clients,
-  ``?spec=`` selects the device-tier variant (exact → nearest →
-  single). ETag + 304 + Cache-Control.
+  ``?spec=`` selects the device-tier variant. ETag + 304.
+
+All evolving documents share one caching contract: a strong ETag and
+``Cache-Control: public, max-age=0, must-revalidate, stale-if-error``
+— one online reload is guaranteed fresh, offline serves the stored
+copy. Rendered bodies are cached keyed by the ETag (version-keyed ⇒
+self-busting); there is no time-based page cache.
 """
 
 from __future__ import annotations
@@ -22,82 +32,86 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from functools import wraps
 from http import HTTPStatus
 from typing import Any
+from urllib.parse import urlencode
 
 import pydantic
-from dmr import Query, modify
+from dmr import NewHeader, Path, Query, modify
 from dmr.routing import external_path, path
 from pydantic import Field
 
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
-from django.views.decorators.cache import cache_page
 
-from server.apps.api.controller import ApiController, cache_headers
+from server.apps.api.controller import ApiController, raise_not_found
 from server.apps.api.error_codes import ErrorCode
+from server.apps.api.query import dump_sparse, dump_sparse_list, sparse_fields_query
 from server.apps.translations import LanguageQuery, override
 
-from .models import MapLayer, MapParameter, MapSlot
+from .models import (
+    MapLayer,
+    MapLayerAttribution,
+    MapLayerCategory,
+    MapLayerParameter,
+    MapLegend,
+    MapLegendItem,
+    MapLegendLink,
+    MapLegendSection,
+    MapParameter,
+    MapSlot,
+)
 from .resolution import resolve_style, style_endpoint_url, substitute_env
 
 logger = logging.getLogger(__name__)
 
-CACHE_MAX_AGE = 6 * 60 * 60  # 6 hours in seconds
-#: Styles larger than this many bytes are never inlined in the catalog
-#: (the entry carries the style endpoint URL instead).
-INLINE_STYLE_MAX_BYTES = 8_192
+#: Revalidate-always caching for evolving documents (api-conventions):
+#: stored, but revalidated on every use — one online reload is fresh;
+#: offline/origin-down may serve the stored copy for a day.
+REVALIDATE_CACHE_CONTROL = "public, max-age=0, must-revalidate, stale-if-error=604800"
+
+#: Memo window for the exact catalog version aggregate. The bound is a
+#: freshness delay only — an edit becomes visible on reload once the
+#: memo expires (next-reload semantics, never a longer window).
+CATALOG_VERSION_TTL = 10
+
+#: Cache key of the memoized catalog version (tests clear it after edits).
+CATALOG_VERSION_CACHE_KEY = "basemaps:catalog-version"
+
+
+def revalidate_headers() -> dict[str, NewHeader]:
+    """``Cache-Control`` header spec for ``@modify(headers=...)``."""
+    return {"Cache-Control": NewHeader(value=REVALIDATE_CACHE_CONTROL)}
+
+
+# ── Query models ───────────────────────────────────────────────────────
 
 
 class MapStylesQuery(LanguageQuery):
-    """Query params for the Martin-compatible style index."""
+    """Query params for the Martin-parity catalog view."""
 
     spec: str | None = Field(
         None,
-        description="Device-tier spec (low | medium | high); self-resolves to nearest",
+        description="Device-tier spec (low | medium | high); resolved into path",
         pattern="^(low|medium|high)$",
     )
 
 
-class MapCatalogQuery(LanguageQuery):
-    """Query params for the catalog endpoint."""
+class MapLayerEntry(pydantic.BaseModel):
+    """One RESOLVED layer — the served variant, never a variant array.
 
-    role: str | None = Field(
-        None,
-        description="Filter by layer role (basemap | overlay)",
-        pattern="^(basemap|overlay)$",
-    )
+    Spec-scoped fields (``spec``, ``style_url``, ``parameters``,
+    ``attributions``, ``legend``, ``config``, ``interaction``,
+    ``anchors``) serialize from the resolved variant row; identity
+    fields are slug-scoped. All fields except ``slug`` are optional so
+    sparse fieldsets can narrow the entry.
+    """
 
+    model_config = pydantic.ConfigDict(extra="ignore")
 
-class ParameterSummary(pydantic.BaseModel):
-    """Parameter schema entry (drives the client settings UI)."""
-
-    model_config = pydantic.ConfigDict(extra="allow")
-
+    # Identity (slug-scoped)
     slug: str
-    kind: str
-    label: str = ""
-    description: str = ""
-    default: Any = None
-    constraints: dict[str, Any] | None = None
-
-
-class LayerVariant(pydantic.BaseModel):
-    """One device-tier variant of a layer."""
-
-    model_config = pydantic.ConfigDict(extra="allow")
-
-    spec: str
-    style_url: str | None = None
-    inline_style: dict[str, Any] | None = None
-
-
-class LayerSummary(pydantic.BaseModel):
-    """Catalog entry for one layer (all its variants share the identity)."""
-
-    model_config = pydantic.ConfigDict(extra="allow")
-
-    slug: str
-    role: str
+    role: str = ""
     name: str = ""
     description: str = ""
     icon: str = ""
@@ -111,157 +125,225 @@ class LayerSummary(pydantic.BaseModel):
     coverage_bbox: list[float] | None = None
     fallback_min_zoom: float | None = None
     fallback: str | None = None
-    anchors: dict[str, Any] | None = None
     preview_url: str | None = None
+
+    # Served variant (spec-scoped)
+    spec: str = ""
+    style_url: str = ""
+    modified: str = ""
+
+    # Rich metadata (spec-scoped; resolved row)
     config: dict[str, Any] | None = None
     interaction: dict[str, Any] | None = None
-    parameters: list[ParameterSummary] = []
+    anchors: dict[str, Any] | None = None
+    parameters: list[dict[str, Any]] = []
     categories: list[dict[str, Any]] = []
     attributions: list[dict[str, Any]] = []
     license: dict[str, Any] | None = None
     legend: dict[str, Any] | None = None
-    version: str | None = None
-    variants: list[LayerVariant] = []
 
 
-class MapCatalogResponse(pydantic.BaseModel):
-    """Top-level catalog payload."""
+class MapLayersEnvelope(pydantic.BaseModel):
+    """Generic collection envelope (api-conventions)."""
 
-    slots: list[dict[str, Any]] = []
-    layers: list[LayerSummary] = []
+    data: list[dict[str, Any]]
+    count: int
 
 
-class MapCatalogController(ApiController):
-    """Martin-compatible catalog — fast, lightweight, selector-ready.
+MapLayerFields = sparse_fields_query(map_layers=MapLayerEntry)
 
-    Returns a flat map of style-slug → entry with the metadata a frontend
-    overlay/basemap selector needs (name, description, icon, badge, role,
-    order, slot, is_default, zoom range, coverage, fallback), plus
-    tiles/sprites/fonts/settings sections matching Martin's catalog shape.
-    Supports ``?lang=`` for localized names and ``?spec=`` for
-    device-tier resolution (exact → nearest → single).
+
+class LayersQuery(LanguageQuery, MapLayerFields):
+    """Query parameters for the layers collection."""
+
+    spec: str | None = Field(
+        None,
+        description=(
+            "Device-tier spec the client WANTS (low | medium | high); "
+            "the backend resolves exact → explicit chain → single and "
+            "reports the served spec per entry"
+        ),
+        pattern="^(low|medium|high)$",
+    )
+    role: str | None = Field(
+        None,
+        description="Filter by layer role (basemap | overlay)",
+        pattern="^(basemap|overlay)$",
+    )
+    show: bool | None = Field(
+        None,
+        description=(
+            "Opt-in visibility filter (true | false). Default: all "
+            "layers — hidden fallback basemaps stay resolvable for "
+            "client-side fallback chains"
+        ),
+    )
+
+
+class SlotsQuery(LanguageQuery):
+    """Query parameters for the slots collection."""
+
+
+class LayerPath(pydantic.BaseModel):
+    """Path params for the layer detail endpoint."""
+
+    slug: str
+
+
+# ── Catalog version + conditional caching ─────────────────────────────
+
+
+def _catalog_version_models() -> tuple[type, ...]:
+    """Every model the layers/slots/catalog payloads serialize.
+
+    Imports live in the function to keep the app-import graph lean.
+    """
+    from server.apps.categories.models import Category
+    from server.apps.licenses.models import License
+    from server.apps.organizations.models import Organization
+
+    return (
+        MapLayer,
+        MapSlot,
+        MapParameter,
+        MapLegend,
+        MapLegendSection,
+        MapLegendItem,
+        MapLegendLink,
+        MapLayerCategory,
+        MapLayerParameter,
+        MapLayerAttribution,
+        Category,
+        Organization,
+        License,
+    )
+
+
+def catalog_version() -> str:
+    """Exact version of everything the catalog payloads serialize.
+
+    ``max(modified)`` catches edits, the row count catches deletes —
+    one aggregate per table, memoized for ``CATALOG_VERSION_TTL``
+    seconds (a freshness bound, not a staleness window: the memo only
+    delays an edit's visibility by at most the TTL).
+    """
+    from django.core.cache import cache
+    from django.db.models import Max
+
+    def compute() -> str:
+        parts = []
+        for model in _catalog_version_models():
+            agg: dict[str, Any] = {"c": model.objects.count()}
+            # Not every versioned model is TimeStamped (e.g. Category):
+            # count-only there — in-place edits on such models don't
+            # bump the version (documented limitation).
+            if "modified" in {f.name for f in model._meta.get_fields()}:
+                agg["m"] = model.objects.aggregate(m=Max("modified"))["m"]
+            stamp = agg["m"].isoformat() if agg.get("m") else "-"
+            parts.append(f"{model.__name__}:{agg['c']}:{stamp}")
+        return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
+
+    return str(
+        cache.get_or_set(CATALOG_VERSION_CACHE_KEY, compute, CATALOG_VERSION_TTL)
+    )
+
+
+def _layer_version(slug: str) -> str:
+    """Version input for one layer detail response (any variant row)."""
+    from django.db.models import Max
+
+    modified = MapLayer.objects.filter(slug=slug).aggregate(m=Max("modified")).get("m")
+    return modified.isoformat() if modified else ""
+
+
+def etag_page(version_fn: Any) -> Any:
+    """Conditional-request wrapper for dmr collection/detail views.
+
+    Computes a strong ETag from the version function plus every query
+    parameter and the resolved API version (the versioning middleware
+    may transform pinned responses — its ``Vary`` header keeps shared
+    caches honest). ``If-None-Match`` answers 304 without rendering;
+    otherwise the rendered body is cached keyed by the ETag
+    (version-keyed ⇒ self-busting — no time-based page cache).
     """
 
-    @modify(
-        operation_id="map-catalog",
-        headers=cache_headers(CACHE_MAX_AGE),
-    )
-    def get(
-        self,
-        parsed_query: Query[MapStylesQuery],
-    ) -> dict[str, Any]:
-        """Martin-compatible catalog with selector metadata."""
-        queryset = MapLayer.objects.filter(is_active=True).select_related(
-            "slot", "coverage", "license", "fallback"
-        )
+    def decorator(view: Any) -> Any:
+        @wraps(view)
+        def wrapped(request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
+            version = version_fn(request, **kwargs)
+            vary = "|".join(
+                (
+                    request.path,
+                    version,
+                    urlencode(sorted(request.GET.items())),
+                    getattr(request, "api_version", "") or "",
+                )
+            )
+            etag = f'"{hashlib.sha256(vary.encode()).hexdigest()[:20]}"'
+            match = request.headers.get("If-None-Match") == etag
+            if match:
+                response = HttpResponse(status=HTTPStatus.NOT_MODIFIED)
+            else:
+                from django.core.cache import cache
 
-        styles: dict[str, Any] = {}
-        with override(parsed_query.lang):
-            for layer in queryset:
-                if layer.slug in styles:
-                    continue  # variants share identity; keep the first
-                styles[layer.slug] = {
-                    "path": style_endpoint_url(layer.slug),
-                    "name": str(layer.name_i18n or layer.name),
-                    "description": str(
-                        layer.description_i18n or layer.description or ""
-                    ),
-                    "icon": layer.icon or "",
-                    "icon_badge": layer.icon_badge or "",
-                    "role": layer.role,
-                    "order": layer.order,
-                    "slot": layer.slot.slug if layer.slot else None,
-                    "is_default": layer.is_default,
-                    "show": layer.show,
-                    "min_zoom": layer.min_zoom,
-                    "max_zoom": layer.max_zoom,
-                    "preview_url": layer.preview_url,
-                    "fallback": layer.fallback.slug if layer.fallback else None,
-                }
-                if layer.coverage:
-                    styles[layer.slug]["coverage_bbox"] = layer.coverage.bbox
+                body = cache.get(f"basemaps:doc:{etag}")
+                if body is None:
+                    response = view(request, *args, **kwargs)
+                    if response.status_code == HTTPStatus.OK:
+                        cache.set(
+                            f"basemaps:doc:{etag}",
+                            response.content,
+                            timeout=24 * 60 * 60,
+                        )
+                else:
+                    response = HttpResponse(body, content_type="application/json")
+            if match or response.status_code == HTTPStatus.OK:
+                response.headers["ETag"] = etag
+                response.headers["Cache-Control"] = REVALIDATE_CACHE_CONTROL
+            return response
 
-        return {
-            "tiles": {},  # served by Martin, not the backend
-            "sprites": {},  # served by Martin
-            "fonts": {},  # served by Martin
-            "styles": styles,
-            "settings": {"rendering": False},
-        }
+        return wrapped
+
+    return decorator
 
 
-class MapConfigController(ApiController):
-    """The rich map configuration — metadata index, never style blobs."""
-
-    @modify(
-        operation_id="map-config",
-        headers=cache_headers(CACHE_MAX_AGE),
-    )
-    def get(
-        self,
-        parsed_query: Query[MapCatalogQuery],
-    ) -> MapCatalogResponse:
-        """Map layer catalog (overlays and basemaps).
-
-        Metadata index for map clients: identities, labels in the
-        request language, icons, parameter schemas, device-tier
-        variants, category projections and coverage bounds. Large
-        styles are referenced by URL, small ones inlined.
-        """
-        queryset = MapLayer.objects.filter(is_active=True).select_related(
-            "slot", "coverage", "license", "fallback"
-        )
-        if parsed_query.role:
-            queryset = queryset.filter(role=parsed_query.role)
-
-        with override(parsed_query.lang):
-            layers = _build_layer_summaries(queryset)
-            slots = [
-                {
-                    "slug": slot.slug,
-                    "label": slot.label_i18n or slot.label,  # noqa: WPS308
-                    "order": slot.order,
-                }
-                for slot in MapSlot.objects.all()
-            ]
-        return MapCatalogResponse(slots=slots, layers=layers)
+def _collection_version(request: HttpRequest, **_: Any) -> str:
+    return catalog_version()
 
 
-def _build_layer_summaries(queryset) -> list[LayerSummary]:
-    """Assemble catalog entries grouped by slug (variants merged)."""
-    summaries: dict[str, LayerSummary] = {}
-    for layer in queryset.prefetch_related(
-        "layer_parameters__parameter",
-        "layer_categories__category",
-        "layer_attributions__organization",
-        "legend__sections__items",
-        "legend__legend_links__link",
-    ):
-        summary = summaries.get(layer.slug)
-        if summary is None:
-            summary = _build_summary(layer)
-            summaries[layer.slug] = summary
-        summary.variants.append(_build_variant(layer))
-    return sorted(summaries.values(), key=lambda s: (s.role, s.order, s.slug))
+def _detail_version(request: HttpRequest, slug: str = "", **_: Any) -> str:
+    return _layer_version(slug)
 
 
-def _build_summary(layer: MapLayer) -> LayerSummary:
-    """One layer's shared metadata (from its first variant)."""
+# ── Resolved-layer serialization ──────────────────────────────────────
+
+
+def _style_url(layer: MapLayer) -> str:
+    """Serving URL of the resolved variant's style document."""
+    if layer.style is not None:
+        return style_endpoint_url(layer.slug, layer.spec)
+    # Externally authored: resolve env tokens server-side (API keys
+    # live in backend config and never reach the client as params).
+    return substitute_env(layer.style_url or "")
+
+
+def _resolved_entry(layer: MapLayer) -> dict[str, Any]:
+    """One resolved layer as a wire-shaped dict (i18n active)."""
     coverage_bbox = None
     if layer.coverage and layer.coverage.bbox:
         coverage_bbox = list(layer.coverage.bbox)
 
     parameters = [
-        ParameterSummary(
-            slug=link.parameter.slug,
-            kind=link.parameter.kind,
-            label=link.parameter.label_i18n,  # noqa: WPS308
-            description=link.parameter.description_i18n,  # noqa: WPS308
-            default=link.default_override
+        {
+            "slug": link.parameter.slug,
+            "kind": link.parameter.kind,
+            "label": link.parameter.label_i18n,  # noqa: WPS308
+            "description": link.parameter.description_i18n,  # noqa: WPS308
+            "default": link.default_override
             if link.default_override is not None
             else link.parameter.default,
-            constraints=link.parameter.constraints,
-        )
+            "constraints": link.parameter.constraints,
+        }
         for link in layer.layer_parameters.all()
     ]
 
@@ -288,38 +370,39 @@ def _build_summary(layer: MapLayer) -> LayerSummary:
             "url": layer.license.url,
         }
 
-    return LayerSummary(
-        slug=layer.slug,
-        legend=_legend_payload(layer),
-        version=layer.modified.isoformat(),
-        role=layer.role,
-        name=layer.name_i18n or layer.name,  # noqa: WPS308
-        description=layer.description_i18n or layer.description,  # noqa: WPS308
-        icon=layer.icon,
-        icon_badge=layer.icon_badge,
-        slot=layer.slot.slug if layer.slot else None,
-        order=layer.order,
-        show=layer.show,
-        is_default=layer.is_default,
-        min_zoom=layer.min_zoom,
-        max_zoom=layer.max_zoom,
-        coverage_bbox=coverage_bbox,
-        fallback_min_zoom=layer.fallback_min_zoom,
-        fallback=layer.fallback.slug if layer.fallback else None,
-        anchors=layer.anchors,
-        preview_url=layer.preview_url,
-        config=layer.config,
-        interaction=layer.interaction,
-        parameters=parameters,
-        categories=categories,
-        attributions=attributions,
-        license=license_payload,
-        variants=[],
-    )
+    return {
+        "slug": layer.slug,
+        "role": layer.role,
+        "name": layer.name_i18n or layer.name,  # noqa: WPS308
+        "description": layer.description_i18n or layer.description or "",  # noqa: WPS308
+        "icon": layer.icon or "",
+        "icon_badge": layer.icon_badge or "",
+        "slot": layer.slot.slug if layer.slot else None,
+        "order": layer.order,
+        "show": layer.show,
+        "is_default": layer.is_default,
+        "min_zoom": layer.min_zoom,
+        "max_zoom": layer.max_zoom,
+        "coverage_bbox": coverage_bbox,
+        "fallback_min_zoom": layer.fallback_min_zoom,
+        "fallback": layer.fallback.slug if layer.fallback else None,
+        "preview_url": layer.preview_url or None,
+        "spec": layer.spec,
+        "style_url": _style_url(layer),
+        "modified": layer.modified.isoformat(),
+        "config": layer.config,
+        "interaction": layer.interaction,
+        "anchors": layer.anchors,
+        "parameters": parameters,
+        "categories": categories,
+        "attributions": attributions,
+        "license": license_payload,
+        "legend": _legend_payload(layer),
+    }
 
 
 def _legend_payload(layer: MapLayer) -> dict[str, Any] | None:
-    """Serialize the slug-level legend (frontend-compatible shape).
+    """Serialize the resolved row's legend (frontend-compatible shape).
 
     Category-driven sections embed the minimal category projection;
     static items carry colors/widths verbatim — ``{{param}}`` tokens
@@ -367,23 +450,7 @@ def _legend_payload(layer: MapLayer) -> dict[str, Any] | None:
     return payload
 
 
-def _build_variant(layer: MapLayer) -> LayerVariant:
-    """One spec variant: inline small styles, reference big ones."""
-    variant = LayerVariant(spec=layer.spec)
-    if layer.style is not None:
-        encoded = len(json.dumps(layer.style, default=str))
-        if encoded <= INLINE_STYLE_MAX_BYTES:
-            variant.inline_style = layer.style
-        else:
-            variant.style_url = style_endpoint_url(layer.slug, layer.spec)
-    else:
-        # Externally authored: resolve env tokens server-side (API keys
-        # live in backend config and never reach the client as params).
-        variant.style_url = substitute_env(layer.style_url or "")
-    return variant
-
-
-def _category_projection(category, use: str, order: int) -> dict[str, Any]:
+def _category_projection(category: Any, use: str, order: int) -> dict[str, Any]:
     """Minimal stable category projection (spec D6 — no full DTO).
 
     Children included so level-aware legends/filters render without a
@@ -393,38 +460,195 @@ def _category_projection(category, use: str, order: int) -> dict[str, Any]:
     projection: dict[str, Any] = {
         "slug": category.slug,
         "identifier": category.identifier,
-        "name": category.name_i18n,  # noqa: WPS308
+        "name": category.name_i18n or category.name,  # noqa: WPS308
         "color": category.color,
         "use": use,
         "order": order,
         "children": [],
     }
-    for child in category.children.filter(is_active=True):
+    # Iterate the (prefetched) children and filter in Python — calling
+    # .filter() on a prefetched relation would issue a fresh query.
+    for child in category.children.all():
+        if not child.is_active:
+            continue
         projection["children"].append(
             {
                 "slug": child.slug,
                 "identifier": child.identifier,
-                "name": child.name_i18n,  # noqa: WPS308
+                "name": child.name_i18n or child.name,  # noqa: WPS308
                 "color": child.color,
             }
         )
     return projection
 
 
-# ── Style endpoint (plain view, hidden from the OpenAPI schema) ┐
-#                                                                  ┘
+def _prefetched_layers(**filters: Any) -> list[MapLayer]:
+    """Active layers with everything ``_resolved_entry`` serializes.
+
+    One query for the rows + select_related FKs, one per prefetch path —
+    ``_resolved_entry``/``_legend_payload``/``_category_projection``
+    read lazily otherwise (N+1 per layer/section/category).
+    """
+    from django.db.models import Prefetch
+
+    from server.apps.categories.models import Category
+
+    return list(
+        MapLayer.objects.filter(is_active=True, **filters)
+        .select_related("slot", "coverage", "license", "fallback")
+        .prefetch_related(
+            "layer_parameters__parameter",
+            "layer_categories__category",
+            "layer_attributions__organization",
+            "legend__sections__items",
+            "legend__sections__category",
+            "legend__legend_links__link",
+            Prefetch(
+                "layer_categories__category__children",
+                queryset=Category.objects.filter(is_active=True),
+            ),
+            Prefetch(
+                "legend__sections__category__children",
+                queryset=Category.objects.filter(is_active=True),
+            ),
+        )
+        .order_by("role", "order", "slug", "spec")
+    )
+
+
+def _resolved_layers(layers: list[MapLayer], spec: str | None) -> list[dict[str, Any]]:
+    """One resolved entry per slug (server-side spec resolution)."""
+    by_slug: dict[str, list[MapLayer]] = {}
+    for layer in layers:
+        by_slug.setdefault(layer.slug, []).append(layer)
+    resolved = [
+        picked
+        for picked in (MapLayer.pick_variant(group, spec) for group in by_slug.values())
+        if picked is not None
+    ]
+    resolved.sort(key=lambda layer: (layer.role, layer.order, layer.slug))
+    return [_resolved_entry(layer) for layer in resolved]
+
+
+# ── Controllers ────────────────────────────────────────────────────────
+
+
+class MapLayersController(ApiController):
+    """The map layer catalog — one resolved layer per slug."""
+
+    @modify(
+        operation_id="map-layers",
+        headers=revalidate_headers(),
+    )
+    def get(
+        self,
+        parsed_query: Query[LayersQuery],
+    ) -> MapLayersEnvelope:
+        """List resolved map layers (generic collection envelope).
+
+        The backend resolves the wanted ``spec`` per layer (exact →
+        explicit chain → single) and reports the served tier — clients
+        never select among variants. Sparse fieldsets narrow entries.
+        """
+        filters: dict[str, Any] = {}
+        if parsed_query.role:
+            filters["role"] = parsed_query.role
+        if parsed_query.show is not None:
+            filters["show"] = parsed_query.show
+        with override(parsed_query.lang):
+            entries = _resolved_layers(_prefetched_layers(**filters), parsed_query.spec)
+        data = dump_sparse_list(
+            MapLayerEntry, entries, parsed_query, "map_layers", "__all__"
+        )
+        return MapLayersEnvelope(data=data, count=len(data))  # type: ignore[arg-type]
+
+
+class MapLayerDetailController(ApiController):
+    """One resolved layer by slug."""
+
+    @modify(
+        operation_id="map-layer-detail",
+        headers=revalidate_headers(),
+    )
+    def get(
+        self,
+        parsed_path: Path[LayerPath],
+        parsed_query: Query[LayersQuery],
+    ) -> dict[str, Any]:
+        """Get one resolved layer (same shape as the collection entries).
+
+        Per-layer ETag folds the layer's ``modified``, the served
+        ``spec`` and ``lang`` — unchanged layers answer 304.
+        """
+        layer = MapLayer.pick_variant(
+            _prefetched_layers(slug=parsed_path.slug), parsed_query.spec
+        )
+        if layer is None:
+            raise_not_found(f"No active map layer with slug {parsed_path.slug!r}.")
+        with override(parsed_query.lang):
+            entry = _resolved_entry(layer)
+        return dump_sparse(MapLayerEntry, entry, parsed_query, "map_layers", "__all__")  # type: ignore[no-any-return]
+
+
+class MapSlotsController(ApiController):
+    """The slot registry."""
+
+    @modify(
+        operation_id="map-slots",
+        headers=revalidate_headers(),
+    )
+    def get(
+        self,
+        parsed_query: Query[SlotsQuery],
+    ) -> dict[str, Any]:
+        """List map slots (generic collection envelope)."""
+        with override(parsed_query.lang):
+            data = [
+                {
+                    "slug": slot.slug,
+                    "label": slot.label_i18n or slot.label,  # noqa: WPS308
+                    "order": slot.order,
+                }
+                for slot in MapSlot.objects.order_by("order", "slug")
+            ]
+        return {"data": data, "count": len(data)}
+
+
+class MapCatalogController(ApiController):
+    """Martin-compatible catalog — parity debug view, not app data."""
+
+    @modify(
+        operation_id="map-catalog",
+        headers=revalidate_headers(),
+    )
+    def get(
+        self,
+        parsed_query: Query[MapStylesQuery],
+    ) -> dict[str, Any]:
+        """Martin-parity catalog: slug → {name, path} only."""
+        styles: dict[str, Any] = {}
+        with override(parsed_query.lang):
+            for entry in _resolved_layers(_prefetched_layers(), parsed_query.spec):
+                styles[entry["slug"]] = {
+                    "name": entry["name"],
+                    "path": entry["style_url"],
+                }
+        return {"styles": styles}
+
+
+# ── Style endpoint (plain view, hidden from the OpenAPI schema) ───────
 
 
 def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
     """Serve a layer style — resolved by default, tokenized opt-in.
 
-    ``?spec=`` picks the device-tier variant (exact → nearest → single
-    — a low-tier request with only a ``high`` variant serves it, and
-    vice versa); the response reports the served spec. ``?v=`` is a
-    free-form cache buster the client ties to ``updated_at``.
+    ``?spec=`` picks the device-tier variant (exact → explicit chain →
+    single — the response reports the served spec); ``?v=`` is a
+    free-form cache buster the client may append.
     """
-    variants = MapLayer.objects.filter(slug=slug)
-    layer = MapLayer.pick_variant(variants, request.GET.get("spec"))
+    layer = MapLayer.pick_variant(
+        MapLayer.objects.filter(slug=slug), request.GET.get("spec")
+    )
     if layer is None:
         return _style_error(
             f"No active map layer with slug {slug!r}.", HTTPStatus.NOT_FOUND
@@ -441,7 +665,7 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
                 HTTPStatus.NOT_FOUND,
             )
         response = HttpResponseRedirect(resolved_url)
-        response.headers["Cache-Control"] = f"public, max-age={CACHE_MAX_AGE}"
+        response.headers["Cache-Control"] = REVALIDATE_CACHE_CONTROL
         return response
 
     cached = _style_cache_get(layer, tokenized)
@@ -452,7 +676,7 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
         else:
             response = HttpResponse(body, content_type="application/json")
         response.headers["ETag"] = etag
-        response.headers["Cache-Control"] = f"public, max-age={CACHE_MAX_AGE}"
+        response.headers["Cache-Control"] = REVALIDATE_CACHE_CONTROL
         response.headers["X-Map-Spec"] = layer.spec
         return response
 
@@ -495,8 +719,9 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
         response = HttpResponse(status=HTTPStatus.NOT_MODIFIED)
     else:
         response = HttpResponse(body, content_type="application/json")
+        _style_cache_set(layer, tokenized, body, etag)
     response.headers["ETag"] = etag
-    response.headers["Cache-Control"] = f"public, max-age={CACHE_MAX_AGE}"
+    response.headers["Cache-Control"] = REVALIDATE_CACHE_CONTROL
     response.headers["X-Map-Spec"] = layer.spec
     return response
 
@@ -548,14 +773,24 @@ def _style_error(detail: str, status: HTTPStatus) -> HttpResponse:
 
 paths: list[Any] = [
     path(
-        "catalog",
-        cache_page(CACHE_MAX_AGE)(MapCatalogController.as_view()),
-        name="map-catalog",
+        "layers",
+        etag_page(_collection_version)(MapLayersController.as_view()),
+        name="map-layers",
     ),
     path(
-        "config",
-        cache_page(CACHE_MAX_AGE)(MapConfigController.as_view()),
-        name="map-config",
+        "layers/<str:slug>",
+        etag_page(_detail_version)(MapLayerDetailController.as_view()),
+        name="map-layer-detail",
+    ),
+    path(
+        "slots",
+        etag_page(_collection_version)(MapSlotsController.as_view()),
+        name="map-slots",
+    ),
+    path(
+        "catalog",
+        etag_page(_collection_version)(MapCatalogController.as_view()),
+        name="map-catalog",
     ),
     external_path(
         "styles/<slug>.json",

@@ -4509,294 +4509,6 @@
         "title": "ImageVariantUrlsSchema",
         "type": "object"
       },
-      "LayerSummary": {
-        "additionalProperties": true,
-        "description": "Catalog entry for one layer (all its variants share the identity).",
-        "properties": {
-          "anchors": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Anchors"
-          },
-          "attributions": {
-            "default": [],
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Attributions",
-            "type": "array"
-          },
-          "categories": {
-            "default": [],
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Categories",
-            "type": "array"
-          },
-          "config": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Config"
-          },
-          "coverage_bbox": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "number"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Coverage Bbox"
-          },
-          "description": {
-            "default": "",
-            "title": "Description",
-            "type": "string"
-          },
-          "fallback": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Fallback"
-          },
-          "fallback_min_zoom": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Fallback Min Zoom"
-          },
-          "icon": {
-            "default": "",
-            "title": "Icon",
-            "type": "string"
-          },
-          "icon_badge": {
-            "default": "",
-            "title": "Icon Badge",
-            "type": "string"
-          },
-          "interaction": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Interaction"
-          },
-          "is_default": {
-            "default": false,
-            "title": "Is Default",
-            "type": "boolean"
-          },
-          "legend": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Legend"
-          },
-          "license": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "License"
-          },
-          "max_zoom": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Max Zoom"
-          },
-          "min_zoom": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Min Zoom"
-          },
-          "name": {
-            "default": "",
-            "title": "Name",
-            "type": "string"
-          },
-          "order": {
-            "default": 0,
-            "title": "Order",
-            "type": "integer"
-          },
-          "parameters": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/ParameterSummary"
-            },
-            "title": "Parameters",
-            "type": "array"
-          },
-          "preview_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Preview Url"
-          },
-          "role": {
-            "title": "Role",
-            "type": "string"
-          },
-          "show": {
-            "default": true,
-            "title": "Show",
-            "type": "boolean"
-          },
-          "slot": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Slot"
-          },
-          "slug": {
-            "title": "Slug",
-            "type": "string"
-          },
-          "variants": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/LayerVariant"
-            },
-            "title": "Variants",
-            "type": "array"
-          },
-          "version": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Version"
-          }
-        },
-        "required": ["slug", "role"],
-        "title": "LayerSummary",
-        "type": "object"
-      },
-      "LayerVariant": {
-        "additionalProperties": true,
-        "description": "One device-tier variant of a layer.",
-        "properties": {
-          "inline_style": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Inline Style"
-          },
-          "spec": {
-            "title": "Spec",
-            "type": "string"
-          },
-          "style_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Style Url"
-          }
-        },
-        "required": ["spec"],
-        "title": "LayerVariant",
-        "type": "object"
-      },
       "LicenseInfoSchema": {
         "description": "Important information, for example for an image",
         "properties": {
@@ -4958,28 +4670,24 @@
         "title": "LocationSchema",
         "type": "object"
       },
-      "MapCatalogResponse": {
-        "description": "Top-level catalog payload.",
+      "MapLayersEnvelope": {
+        "description": "Generic collection envelope (api-conventions).",
         "properties": {
-          "layers": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/LayerSummary"
-            },
-            "title": "Layers",
-            "type": "array"
+          "count": {
+            "title": "Count",
+            "type": "integer"
           },
-          "slots": {
-            "default": [],
+          "data": {
             "items": {
               "additionalProperties": true,
               "type": "object"
             },
-            "title": "Slots",
+            "title": "Data",
             "type": "array"
           }
         },
-        "title": "MapCatalogResponse",
+        "required": ["data", "count"],
+        "title": "MapLayersEnvelope",
         "type": "object"
       },
       "MediaUrlModeEnum": {
@@ -5537,50 +5245,6 @@
         },
         "required": ["slug"],
         "title": "OwnerSchema",
-        "type": "object"
-      },
-      "ParameterSummary": {
-        "additionalProperties": true,
-        "description": "Parameter schema entry (drives the client settings UI).",
-        "properties": {
-          "constraints": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Constraints"
-          },
-          "default": {
-            "default": null,
-            "title": "Default"
-          },
-          "description": {
-            "default": "",
-            "title": "Description",
-            "type": "string"
-          },
-          "kind": {
-            "title": "Kind",
-            "type": "string"
-          },
-          "label": {
-            "default": "",
-            "title": "Label",
-            "type": "string"
-          },
-          "slug": {
-            "title": "Slug",
-            "type": "string"
-          }
-        },
-        "required": ["slug", "kind"],
-        "title": "ParameterSummary",
         "type": "object"
       },
       "PhoneSchema": {
@@ -10137,7 +9801,6 @@
       "summary": "Searchable icon registry (emoji packs, openspec: icon-library)."
     },
     "/v1/map/catalog": {
-      "description": "Returns a flat map of style-slug \u2192 entry with the metadata a frontend\noverlay/basemap selector needs (name, description, icon, badge, role,\norder, slot, is_default, zoom range, coverage, fallback), plus\ntiles/sprites/fonts/settings sections matching Martin's catalog shape.\nSupports ``?lang=`` for localized names and ``?spec=`` for\ndevice-tier resolution (exact \u2192 nearest \u2192 single).",
       "get": {
         "operationId": "map-catalog",
         "parameters": [
@@ -10154,7 +9817,7 @@
             }
           },
           {
-            "description": "Device-tier spec (low | medium | high); self-resolves to nearest",
+            "description": "Device-tier spec (low | medium | high); resolved into path",
             "in": "query",
             "name": "spec",
             "schema": {
@@ -10168,7 +9831,7 @@
                 }
               ],
               "default": null,
-              "description": "Device-tier spec (low | medium | high); self-resolves to nearest",
+              "description": "Device-tier spec (low | medium | high); resolved into path",
               "title": "Spec"
             }
           }
@@ -10224,16 +9887,39 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "map-catalog \u2014 Martin-compatible catalog with selector metadata.",
+        "summary": "map-catalog \u2014 Martin-parity catalog: slug \u2192 {name, path} only.",
         "tags": ["map"]
       },
-      "summary": "Martin-compatible catalog \u2014 fast, lightweight, selector-ready."
+      "summary": "Martin-compatible catalog \u2014 parity debug view, not app data."
     },
-    "/v1/map/config": {
+    "/v1/map/layers": {
       "get": {
-        "description": "Metadata index for map clients: identities, labels in the\nrequest language, icons, parameter schemas, device-tier\nvariants, category projections and coverage bounds. Large\nstyles are referenced by URL, small ones inlined.",
-        "operationId": "map-config",
+        "description": "The backend resolves the wanted ``spec`` per layer (exact \u2192\nexplicit chain \u2192 single) and reports the served tier \u2014 clients\nnever select among variants. Sparse fieldsets narrow entries.",
+        "operationId": "map-layers",
         "parameters": [
+          {
+            "description": "Sparse fieldsets (JSON:API): `fields[TYPE]=name1,name2` narrows the response to the selected fields (`__all__` = every field). Valid TYPEs: map_layers.",
+            "explode": true,
+            "in": "query",
+            "name": "fields",
+            "schema": {
+              "anyOf": [
+                {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Sparse fieldsets (JSON:API): `fields[TYPE]=name1,name2` narrows the response to the selected fields (`__all__` = every field). Valid TYPEs: map_layers.",
+              "title": "Fields"
+            },
+            "style": "deepObject"
+          },
           {
             "description": "Select language code: de, en, fr, it.",
             "in": "query",
@@ -10244,6 +9930,25 @@
               "pattern": "(de|en|fr|it)",
               "title": "Lang",
               "type": "string"
+            }
+          },
+          {
+            "description": "Device-tier spec the client WANTS (low | medium | high); the backend resolves exact \u2192 explicit chain \u2192 single and reports the served spec per entry",
+            "in": "query",
+            "name": "spec",
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(low|medium|high)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Device-tier spec the client WANTS (low | medium | high); the backend resolves exact \u2192 explicit chain \u2192 single and reports the served spec per entry",
+              "title": "Spec"
             }
           },
           {
@@ -10264,6 +9969,24 @@
               "description": "Filter by layer role (basemap | overlay)",
               "title": "Role"
             }
+          },
+          {
+            "description": "Opt-in visibility filter (true | false). Default: all layers \u2014 hidden fallback basemaps stay resolvable for client-side fallback chains",
+            "in": "query",
+            "name": "show",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Opt-in visibility filter (true | false). Default: all layers \u2014 hidden fallback basemaps stay resolvable for client-side fallback chains",
+              "title": "Show"
+            }
           }
         ],
         "responses": {
@@ -10271,7 +9994,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MapCatalogResponse"
+                  "$ref": "#/components/schemas/MapLayersEnvelope"
                 }
               }
             },
@@ -10316,10 +10039,256 @@
             "description": "Raised when returned response does not match the response schema"
           }
         },
-        "summary": "map-config \u2014 Map layer catalog (overlays and basemaps).",
+        "summary": "map-layers \u2014 List resolved map layers (generic collection envelope).",
         "tags": ["map"]
       },
-      "summary": "The rich map configuration \u2014 metadata index, never style blobs."
+      "summary": "The map layer catalog \u2014 one resolved layer per slug."
+    },
+    "/v1/map/layers/{slug}": {
+      "get": {
+        "description": "Per-layer ETag folds the layer's ``modified``, the served\n``spec`` and ``lang`` \u2014 unchanged layers answer 304.",
+        "operationId": "map-layer-detail",
+        "parameters": [
+          {
+            "description": "Path params for the layer detail endpoint.",
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sparse fieldsets (JSON:API): `fields[TYPE]=name1,name2` narrows the response to the selected fields (`__all__` = every field). Valid TYPEs: map_layers.",
+            "explode": true,
+            "in": "query",
+            "name": "fields",
+            "schema": {
+              "anyOf": [
+                {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Sparse fieldsets (JSON:API): `fields[TYPE]=name1,name2` narrows the response to the selected fields (`__all__` = every field). Valid TYPEs: map_layers.",
+              "title": "Fields"
+            },
+            "style": "deepObject"
+          },
+          {
+            "description": "Select language code: de, en, fr, it.",
+            "in": "query",
+            "name": "lang",
+            "schema": {
+              "default": "en",
+              "description": "Select language code: de, en, fr, it.",
+              "pattern": "(de|en|fr|it)",
+              "title": "Lang",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Device-tier spec the client WANTS (low | medium | high); the backend resolves exact \u2192 explicit chain \u2192 single and reports the served spec per entry",
+            "in": "query",
+            "name": "spec",
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(low|medium|high)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Device-tier spec the client WANTS (low | medium | high); the backend resolves exact \u2192 explicit chain \u2192 single and reports the served spec per entry",
+              "title": "Spec"
+            }
+          },
+          {
+            "description": "Filter by layer role (basemap | overlay)",
+            "in": "query",
+            "name": "role",
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(basemap|overlay)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Filter by layer role (basemap | overlay)",
+              "title": "Role"
+            }
+          },
+          {
+            "description": "Opt-in visibility filter (true | false). Default: all layers \u2014 hidden fallback basemaps stay resolvable for client-side fallback chains",
+            "in": "query",
+            "name": "show",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Opt-in visibility filter (true | false). Default: all layers \u2014 hidden fallback basemaps stay resolvable for client-side fallback chains",
+              "title": "Show"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Raised when request components cannot be parsed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Raised when path parameters do not match"
+          },
+          "406": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Raised when provided `Accept` header cannot be satisfied"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Raised when returned response does not match the response schema"
+          }
+        },
+        "summary": "map-layer-detail \u2014 Get one resolved layer (same shape as the collection entries).",
+        "tags": ["map"]
+      },
+      "summary": "One resolved layer by slug."
+    },
+    "/v1/map/slots": {
+      "get": {
+        "operationId": "map-slots",
+        "parameters": [
+          {
+            "description": "Select language code: de, en, fr, it.",
+            "in": "query",
+            "name": "lang",
+            "schema": {
+              "default": "en",
+              "description": "Select language code: de, en, fr, it.",
+              "pattern": "(de|en|fr|it)",
+              "title": "Lang",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Raised when request components cannot be parsed"
+          },
+          "406": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Raised when provided `Accept` header cannot be satisfied"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Raised when returned response does not match the response schema"
+          }
+        },
+        "summary": "map-slots \u2014 List map slots (generic collection envelope).",
+        "tags": ["map"]
+      },
+      "summary": "The slot registry."
     },
     "/v1/meteo/symbol/{collection}/{time}/{code}.svg": {
       "get": {

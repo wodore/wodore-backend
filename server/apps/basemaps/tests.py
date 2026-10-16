@@ -166,16 +166,39 @@ class TestVariantSelection:
         picked = MapLayer.pick_variant(MapLayer.objects.filter(slug="multi"), "high")
         assert picked is not None and picked.spec == MapLayer.Spec.high
 
-    def test_nearest_tier(self):
+    def test_medium_degrades_to_low(self):
         _raster_layer(slug="nearest", spec=MapLayer.Spec.high).save()
         _raster_layer(slug="nearest", spec=MapLayer.Spec.low).save()
         picked = MapLayer.pick_variant(
             MapLayer.objects.filter(slug="nearest"), "medium"
         )
-        assert picked is not None and picked.spec in {
-            MapLayer.Spec.low,
-            MapLayer.Spec.high,
-        }
+        # Explicit chain (map-layers-api): medium → low → high — a
+        # mid-tier device never upgrades to the heaviest variant.
+        assert picked is not None and picked.spec == MapLayer.Spec.low
+
+    def test_full_chains(self):
+        for spec, expected in (
+            ("low", MapLayer.Spec.medium),
+            ("high", MapLayer.Spec.medium),
+        ):
+            _raster_layer(slug=f"chain-{spec}", spec=MapLayer.Spec.medium).save()
+            picked = MapLayer.pick_variant(
+                MapLayer.objects.filter(slug=f"chain-{spec}"), spec
+            )
+            assert picked is not None and picked.spec == expected
+
+    def test_no_spec_serves_first(self):
+        _raster_layer(slug="first", spec=MapLayer.Spec.low).save()
+        picked = MapLayer.pick_variant(MapLayer.objects.filter(slug="first"), None)
+        assert picked is not None and picked.spec == MapLayer.Spec.low
+
+    def test_pick_accepts_prefetched_sequences(self):
+        """The catalog resolves from prefetched lists, not querysets."""
+        _raster_layer(slug="seq", spec=MapLayer.Spec.low).save()
+        _raster_layer(slug="seq", spec=MapLayer.Spec.high).save()
+        layers = list(MapLayer.objects.filter(slug="seq"))
+        picked = MapLayer.pick_variant(layers, "medium")
+        assert picked is not None and picked.spec == MapLayer.Spec.low
 
 
 @pytest.mark.django_db
@@ -294,35 +317,181 @@ class TestSeed:
 
 
 @pytest.mark.django_db
-class TestCatalogEndpoint:
-    def test_catalog_light_and_grouped(self):
+class TestLayersEndpoint:
+    def _seed(self):
         from django.core.management import call_command
 
         call_command("map_seed", verbosity=0)
+
+    def test_layers_envelope_and_resolution(self):
+        self._seed()
         client = Client()
-        response = client.get("/v1/map/config", {"lang": "en"})
+        response = client.get("/v1/map/layers", {"lang": "en"})
         assert response.status_code == 200
         payload = response.json()
-        slugs = {layer["slug"] for layer in payload["layers"]}
-        assert "huts" in slugs
-        assert "wd-outdoor-base-mtk" in slugs
-        mtk = next(l for l in payload["layers"] if l["slug"] == "wd-outdoor-base-mtk")
-        # Big style never inlined — the variant references the endpoint.
-        for variant in mtk["variants"]:
-            assert variant.get("inline_style") is None
-            assert (
-                variant["style_url"]
-                == "/v1/map/styles/wd-outdoor-base-mtk.json?spec=high"
-            )
+        # Generic collection envelope (api-conventions)
+        assert set(payload) == {"data", "count"}
+        assert payload["count"] == len(payload["data"])
+        entries = {layer["slug"]: layer for layer in payload["data"]}
+        assert "huts" in entries
+        assert "wd-outdoor-base-mtk" in entries
+        for entry in entries.values():
+            # No variant arrays, no inline styles — one resolved layer
+            assert "variants" not in entry
+            assert entry["spec"] in ("low", "medium", "high")
+            assert entry["style_url"]
+            assert entry["modified"]  # ISO timestamp — client cache key
+        mtk = entries["wd-outdoor-base-mtk"]
+        assert mtk["style_url"] == "/v1/map/styles/wd-outdoor-base-mtk.json?spec=high"
 
-    def test_role_filter(self):
-        from django.core.management import call_command
-
-        call_command("map_seed", verbosity=0)
+    def test_role_and_show_filters(self):
+        self._seed()
         client = Client()
-        response = client.get("/v1/map/config", {"lang": "en", "role": "overlay"})
+        payload = client.get("/v1/map/layers", {"lang": "en", "role": "overlay"}).json()
+        assert payload["data"]
+        assert all(layer["role"] == "overlay" for layer in payload["data"])
+        # Default: hidden fallback basemaps stay resolvable (fallback
+        # chains are resolved client-side)
+        everything = client.get("/v1/map/layers", {"lang": "en"}).json()
+        assert any(
+            layer["slug"] == "wd-outdoor-base-ofm" and layer["show"] is False
+            for layer in everything["data"]
+        )
+        visible = client.get("/v1/map/layers", {"lang": "en", "show": "true"}).json()
+        assert all(layer["show"] is True for layer in visible["data"])
+        assert not any(
+            layer["slug"] == "wd-outdoor-base-ofm" for layer in visible["data"]
+        )
+
+    def test_medium_degrades_cheaply_over_http(self):
+        self._seed()
+        client = Client()
+        payload = client.get("/v1/map/layers", {"lang": "en", "spec": "medium"}).json()
+        entry = next(
+            layer for layer in payload["data"] if layer["slug"] == "ch-swisstopo-light"
+        )
+        # Variants: high (vector) + low (raster) — medium must degrade
+        # to the cheaper tier, never upgrade to high.
+        assert entry["spec"] == "low"
+        assert entry["style_url"].endswith("?spec=low")
+
+    def test_sparse_fieldsets(self):
+        self._seed()
+        client = Client()
+        payload = client.get(
+            "/v1/map/layers",
+            {"lang": "en", "fields[map_layers]": "slug,name,style_url"},
+        ).json()
+        assert payload["data"]
+        for entry in payload["data"]:
+            assert set(entry) == {"slug", "name", "style_url"}
+        # Unknown field name → 400 with the valid names listed
+        response = client.get(
+            "/v1/map/layers", {"lang": "en", "fields[map_layers]": "slug,nope"}
+        )
+        assert response.status_code == 400
+
+    def test_config_endpoint_removed(self):
+        self._seed()
+        response = Client().get("/v1/map/config", {"lang": "en"})
+        assert response.status_code == 404
+
+    def test_catalog_is_martin_parity_only(self):
+        self._seed()
+        payload = Client().get("/v1/map/catalog", {"lang": "en"}).json()
+        assert set(payload) == {"styles"}
+        for entry in payload["styles"].values():
+            assert set(entry) == {"name", "path"}
+            # Internal styles → style endpoint path; external styles →
+            # their (env-resolved server-side) absolute URL
+            assert entry["path"].startswith(("/v1/map/styles/", "http"))
+        mtk = payload["styles"]["wd-outdoor-base-mtk"]
+        assert mtk["path"].startswith("/v1/map/styles/wd-outdoor-base-mtk.json")
+
+    def test_catalog_spec_resolution(self):
+        """`?spec=` resolves into the path — exact tier when it exists,
+        explicit chain otherwise (single variant serves its own spec)."""
+        self._seed()
+        payload = Client().get("/v1/map/catalog", {"lang": "en", "spec": "low"}).json()
+        # ch-swisstopo-light HAS a low variant → path carries ?spec=low
+        assert payload["styles"]["ch-swisstopo-light"]["path"].endswith("?spec=low")
+        # wd-outdoor-base-mtk only exists at high → low falls through the
+        # chain to the single variant, whose spec is reported
+        assert payload["styles"]["wd-outdoor-base-mtk"]["path"].endswith("?spec=high")
+
+    def test_slots_endpoint(self):
+        self._seed()
+        payload = Client().get("/v1/map/slots", {"lang": "en"}).json()
+        assert set(payload) == {"data", "count"}
+        assert payload["count"] == len(payload["data"]) == 2
+        assert {slot["slug"] for slot in payload["data"]} == {"background", "ways"}
+        for slot in payload["data"]:
+            assert set(slot) == {"slug", "label", "order"}
+        # Slots ride their own endpoint, not the layers payload
+        layers = Client().get("/v1/map/layers", {"lang": "en"}).json()
+        assert "slots" not in layers
+
+    def test_layer_detail(self):
+        self._seed()
+        client = Client()
+        response = client.get("/v1/map/layers/huts", {"lang": "en"})
         assert response.status_code == 200
-        assert all(layer["role"] == "overlay" for layer in response.json()["layers"])
+        entry = response.json()
+        assert entry["slug"] == "huts"
+        assert entry["legend"]["sections"]  # same shape as collection entries
+        assert client.get("/v1/map/layers/nope", {"lang": "en"}).status_code == 404
+        # Per-layer ETag: conditional revalidate answers 304
+        etag = response.headers["ETag"]
+        assert "must-revalidate" in response.headers["Cache-Control"]
+        again = client.get(
+            "/v1/map/layers/huts", {"lang": "en"}, HTTP_IF_NONE_MATCH=etag
+        )
+        assert again.status_code == 304
+
+    def test_layers_etag_one_reload_freshness(self):
+        """Edit → conditional GET answers non-304 — no time window."""
+        from django.core.cache import cache
+
+        self._seed()
+        client = Client()
+        first = client.get("/v1/map/layers", {"lang": "en"})
+        etag = first.headers["ETag"]
+        assert "must-revalidate" in first.headers["Cache-Control"]
+        assert "stale-if-error" in first.headers["Cache-Control"]
+        # Unchanged → 304 without rendering
+        assert (
+            client.get(
+                "/v1/map/layers", {"lang": "en"}, HTTP_IF_NONE_MATCH=etag
+            ).status_code
+            == 304
+        )
+        # An edit becomes visible on the very next (conditional) reload.
+        # NOTE: ``modified`` is bumped by a Postgres trigger using NOW(),
+        # which is pinned to transaction start — inside one pytest test
+        # every update shares a timestamp, so the observable version
+        # input here is the row COUNT (create/delete); in production each
+        # update is its own transaction and moves Max(modified) too.
+        cache.clear()  # version memo + rendered body cache
+        _raster_layer(slug="freshness-probe", spec=MapLayer.Spec.high).save()
+        cache.clear()
+        fresh = client.get("/v1/map/layers", {"lang": "en"}, HTTP_IF_NONE_MATCH=etag)
+        assert fresh.status_code == 200
+        assert fresh.headers["ETag"] != etag
+
+    def test_layers_etag_varies_with_selection(self):
+        self._seed()
+        client = Client()
+        plain = client.get("/v1/map/layers", {"lang": "en"})
+        narrowed = client.get(
+            "/v1/map/layers", {"lang": "en", "fields[map_layers]": "slug"}
+        )
+        spec = client.get("/v1/map/layers", {"lang": "en", "spec": "low"})
+        etags = {
+            plain.headers["ETag"],
+            narrowed.headers["ETag"],
+            spec.headers["ETag"],
+        }
+        assert len(etags) == 3  # different projections, different ETags
 
 
 @pytest.mark.django_db
@@ -401,8 +570,8 @@ class TestLegends:
     def test_catalog_serves_category_driven_legend(self):
         self._seed()
         client = Client()
-        payload = client.get("/v1/map/config", {"lang": "en"}).json()
-        huts = next(l for l in payload["layers"] if l["slug"] == "huts")
+        payload = client.get("/v1/map/layers", {"lang": "en"}).json()
+        huts = next(l for l in payload["data"] if l["slug"] == "huts")
         assert huts["legend"] is not None
         section = huts["legend"]["sections"][0]
         assert section["type"] == "symbol_dual"
@@ -474,8 +643,8 @@ class TestLegends:
     def test_catalog_serves_static_legend_items(self):
         self._seed()
         client = Client()
-        payload = client.get("/v1/map/config", {"lang": "en"}).json()
-        transport = next(l for l in payload["layers"] if l["slug"] == "transport-stops")
+        payload = client.get("/v1/map/layers", {"lang": "en"}).json()
+        transport = next(l for l in payload["data"] if l["slug"] == "transport-stops")
         items = transport["legend"]["sections"][0]["items"]
         assert {"label": "Train", "color": "#C60018"} in [
             {"label": i["label"], "color": i["color"]} for i in items
@@ -489,10 +658,10 @@ class TestLegends:
             url="https://www.schweizmobil.ch/de/wanderland.html"
         ).exists()
         client = Client()
-        payload = client.get("/v1/map/config", {"lang": "en"}).json()
+        payload = client.get("/v1/map/layers", {"lang": "en"}).json()
         hiking = next(
             l
-            for l in payload["layers"]
+            for l in payload["data"]
             if l["slug"] == "ch.swisstopo.swisstlm3d-wanderwege"
         )
         urls = [link["url"] for link in hiking["legend"]["links"]]
@@ -523,8 +692,8 @@ class TestLegends:
 
         cache.clear()  # catalog is page-cached — see fresh data
         client = Client()
-        payload = client.get("/v1/map/config", {"lang": "en"}).json()
-        entry = next(l for l in payload["layers"] if l["slug"] == "mtb")
+        payload = client.get("/v1/map/layers", {"lang": "en"}).json()
+        entry = next(l for l in payload["data"] if l["slug"] == "mtb")
         item = entry["legend"]["sections"][0]["items"][0]
         assert item["color"] == "{{trail_color}}"
         assert item["width"] == "{{trail_width}}"
@@ -545,6 +714,38 @@ class TestLegends:
             MapLayer.objects.filter(slug="huts").values_list("legend_id", flat=True)
         )
         assert None not in legend_ids and len(legend_ids) == 1
+
+    def test_per_spec_legend_divergence(self):
+        """Each variant row serves its own legend (spec scenario)."""
+        from django.core.cache import cache
+
+        from server.apps.basemaps.models import MapLegend, MapLegendSection
+
+        self._seed()
+        low = _raster_layer(slug="diverge", spec=MapLayer.Spec.low)
+        high = _raster_layer(slug="diverge", spec=MapLayer.Spec.high)
+        legend_low = MapLegend.objects.create(title="Low legend")
+        MapLegendSection.objects.create(
+            legend=legend_low, order=0, title="Raster", type="line"
+        )
+        legend_high = MapLegend.objects.create(title="High legend")
+        MapLegendSection.objects.create(
+            legend=legend_high, order=0, title="Vector", type="point"
+        )
+        low.legend = legend_low
+        low.save()
+        high.legend = legend_high
+        high.save()
+        cache.clear()  # version memo — row counts changed
+        client = Client()
+        low_entry = client.get(
+            "/v1/map/layers/diverge", {"lang": "en", "spec": "low"}
+        ).json()
+        high_entry = client.get(
+            "/v1/map/layers/diverge", {"lang": "en", "spec": "high"}
+        ).json()
+        assert low_entry["legend"]["sections"][0]["title"] == "Raster"
+        assert high_entry["legend"]["sections"][0]["title"] == "Vector"
 
 
 # ── Style serving performance & version sync ───────────────────────────
@@ -589,11 +790,11 @@ class TestVersionFieldAndRenderCache:
     def test_catalog_carries_version(self):
         self._seed()
         client = Client()
-        payload = client.get("/v1/map/config", {"lang": "en"}).json()
-        entry = next(l for l in payload["layers"] if l["slug"] == "huts")
-        assert entry["version"]  # ISO timestamp — client cache-sync key
+        payload = client.get("/v1/map/layers", {"lang": "en"}).json()
+        entry = next(l for l in payload["data"] if l["slug"] == "huts")
+        assert entry["modified"]  # ISO timestamp — client cache-sync key
         layer = MapLayer.objects.get(slug="huts", spec=MapLayer.Spec.medium)
-        assert entry["version"] == layer.modified.isoformat()
+        assert entry["modified"] == layer.modified.isoformat()
 
     def test_style_metadata_carries_version(self):
         from django.core.cache import cache
