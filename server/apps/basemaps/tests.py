@@ -408,6 +408,17 @@ class TestLayersEndpoint:
         mtk = payload["styles"]["wd-outdoor-base-mtk"]
         assert mtk["path"].startswith("/v1/map/styles/wd-outdoor-base-mtk.json")
 
+    def test_catalog_spec_resolution(self):
+        """`?spec=` resolves into the path — exact tier when it exists,
+        explicit chain otherwise (single variant serves its own spec)."""
+        self._seed()
+        payload = Client().get("/v1/map/catalog", {"lang": "en", "spec": "low"}).json()
+        # ch-swisstopo-light HAS a low variant → path carries ?spec=low
+        assert payload["styles"]["ch-swisstopo-light"]["path"].endswith("?spec=low")
+        # wd-outdoor-base-mtk only exists at high → low falls through the
+        # chain to the single variant, whose spec is reported
+        assert payload["styles"]["wd-outdoor-base-mtk"]["path"].endswith("?spec=high")
+
     def test_slots_endpoint(self):
         self._seed()
         payload = Client().get("/v1/map/slots", {"lang": "en"}).json()
@@ -703,6 +714,38 @@ class TestLegends:
             MapLayer.objects.filter(slug="huts").values_list("legend_id", flat=True)
         )
         assert None not in legend_ids and len(legend_ids) == 1
+
+    def test_per_spec_legend_divergence(self):
+        """Each variant row serves its own legend (spec scenario)."""
+        from django.core.cache import cache
+
+        from server.apps.basemaps.models import MapLegend, MapLegendSection
+
+        self._seed()
+        low = _raster_layer(slug="diverge", spec=MapLayer.Spec.low)
+        high = _raster_layer(slug="diverge", spec=MapLayer.Spec.high)
+        legend_low = MapLegend.objects.create(title="Low legend")
+        MapLegendSection.objects.create(
+            legend=legend_low, order=0, title="Raster", type="line"
+        )
+        legend_high = MapLegend.objects.create(title="High legend")
+        MapLegendSection.objects.create(
+            legend=legend_high, order=0, title="Vector", type="point"
+        )
+        low.legend = legend_low
+        low.save()
+        high.legend = legend_high
+        high.save()
+        cache.clear()  # version memo — row counts changed
+        client = Client()
+        low_entry = client.get(
+            "/v1/map/layers/diverge", {"lang": "en", "spec": "low"}
+        ).json()
+        high_entry = client.get(
+            "/v1/map/layers/diverge", {"lang": "en", "spec": "high"}
+        ).json()
+        assert low_entry["legend"]["sections"][0]["title"] == "Raster"
+        assert high_entry["legend"]["sections"][0]["title"] == "Vector"
 
 
 # ── Style serving performance & version sync ───────────────────────────

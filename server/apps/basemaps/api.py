@@ -460,18 +460,22 @@ def _category_projection(category: Any, use: str, order: int) -> dict[str, Any]:
     projection: dict[str, Any] = {
         "slug": category.slug,
         "identifier": category.identifier,
-        "name": category.name_i18n,  # noqa: WPS308
+        "name": category.name_i18n or category.name,  # noqa: WPS308
         "color": category.color,
         "use": use,
         "order": order,
         "children": [],
     }
-    for child in category.children.filter(is_active=True):
+    # Iterate the (prefetched) children and filter in Python — calling
+    # .filter() on a prefetched relation would issue a fresh query.
+    for child in category.children.all():
+        if not child.is_active:
+            continue
         projection["children"].append(
             {
                 "slug": child.slug,
                 "identifier": child.identifier,
-                "name": child.name_i18n,  # noqa: WPS308
+                "name": child.name_i18n or child.name,  # noqa: WPS308
                 "color": child.color,
             }
         )
@@ -479,7 +483,16 @@ def _category_projection(category: Any, use: str, order: int) -> dict[str, Any]:
 
 
 def _prefetched_layers(**filters: Any) -> list[MapLayer]:
-    """Active layers with everything ``_resolved_entry`` serializes."""
+    """Active layers with everything ``_resolved_entry`` serializes.
+
+    One query for the rows + select_related FKs, one per prefetch path —
+    ``_resolved_entry``/``_legend_payload``/``_category_projection``
+    read lazily otherwise (N+1 per layer/section/category).
+    """
+    from django.db.models import Prefetch
+
+    from server.apps.categories.models import Category
+
     return list(
         MapLayer.objects.filter(is_active=True, **filters)
         .select_related("slot", "coverage", "license", "fallback")
@@ -488,7 +501,16 @@ def _prefetched_layers(**filters: Any) -> list[MapLayer]:
             "layer_categories__category",
             "layer_attributions__organization",
             "legend__sections__items",
+            "legend__sections__category",
             "legend__legend_links__link",
+            Prefetch(
+                "layer_categories__category__children",
+                queryset=Category.objects.filter(is_active=True),
+            ),
+            Prefetch(
+                "legend__sections__category__children",
+                queryset=Category.objects.filter(is_active=True),
+            ),
         )
         .order_by("role", "order", "slug", "spec")
     )
@@ -559,8 +581,7 @@ class MapLayerDetailController(ApiController):
         ``spec`` and ``lang`` — unchanged layers answer 304.
         """
         layer = MapLayer.pick_variant(
-            MapLayer.objects.filter(slug=parsed_path.slug, is_active=True),
-            parsed_query.spec,
+            _prefetched_layers(slug=parsed_path.slug), parsed_query.spec
         )
         if layer is None:
             raise_not_found(f"No active map layer with slug {parsed_path.slug!r}.")
