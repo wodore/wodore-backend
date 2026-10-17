@@ -58,6 +58,10 @@ all API contracts are untouched.)
 - **Settings**: new `server/settings/components/sentry.py`, included first
   in `server/settings/__init__.py` (before `logging.py`, so the logging
   hook is installed before logging is configured).
+- **django-q2**: `Q_CLUSTER["error_reporter"]` enables an in-repo Sentry
+  reporter (`server/core/q2_sentry.py`, registered via the
+  `djangoq.errorreporters` entry point) — q2 swallows task exceptions
+  otherwise, so the SDK never sees them.
 - **Configuration**: new environment variables `SENTRY_DSN` (activation),
   `SENTRY_TRACES_SAMPLE_RATE` (optional, default low), read via
   python-decouple like all other config. Staging/production get the DSN

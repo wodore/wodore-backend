@@ -75,6 +75,9 @@ dependencies = [
 ]
 
 
+[project.entry-points."djangoq.errorreporters"]
+wodore-sentry = "server.core.q2_sentry:SentryErrorReporter"
+
 [project.optional-dependencies]
 private = [
   # https://github.com/wodore/hut-services-private

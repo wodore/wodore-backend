@@ -114,12 +114,21 @@ free.
 `traces_sample_rate` from D4 (0.05 default — the geo/tile API is too hot
 for 1.0; one Django request easily fans out into many spans), health
 checks excluded by a minimal `traces_sampler` callback that returns 0
-for `/health/` transactions and the configured rate for everything else.
+for `/health/` requests and the configured rate for everything else.
 Note: sentry-sdk 2.72 has **no** `ignore_transactions` init option — the
 sampler is the supported mechanism (verified against the installed
 SDK); `rate == 0` therefore also means "no transactions at all"
 (errors-only mode), keeping a single knob. `send_default_pii=False`
 stays the fixed default (GDPR); no user/IP data attached.
+
+**Sampler input (review finding, verified in SDK source):** the
+transaction *name* is unusable for matching at sampling time — WSGI
+transactions are still `"generic WSGI request"` when the sampler runs
+(the Django route resolves later), and ASGI transaction names are full
+URLs. The sampler therefore reads the raw request path from the
+sampling context: `wsgi_environ["PATH_INFO"]` (WSGI runtime) or
+`asgi_scope["path"]` (ASGI runtime), both passed by the SDK's
+integrations; non-HTTP transactions fall back to their resolved name.
 
 ### D7. Logging: keep format, accept breadcrumb cosmetics
 
@@ -138,6 +147,23 @@ Adding `SENTRY_DSN` to Infisical staging → prod (no k8s manifest change:
 `get_env.sh` exports it automatically). Rollback = remove/empty the DSN
 and redeploy; the code path is inert without it. Roll-forward between
 vendors = swap DSN.
+
+### D9. django-q2 task failures via in-repo error reporter
+
+django-q2's worker catches every task exception and stores it as a
+string result — no re-raise (outside `sync=True`), no ERROR log — so
+neither the excepthook nor the logging integration sees anything. q2's
+own `error_reporter` hook is the right seam: the configured reporter's
+`report()` runs *inside* the worker's `except` block, where
+`sentry_sdk.capture_exception()` (no args) picks up the live
+`sys.exc_info()` on the same thread — full traceback, no reconstruction
+from stored strings. Implemented as a tiny in-repo reporter
+(`server.core.q2_sentry.SentryErrorReporter`, registered under the
+`djangoq.errorreporters` entry point, enabled via
+`Q_CLUSTER["error_reporter"]`), no-op without an active client. The
+external `django-q-sentry` package (last released 2022, built for
+django-q v1, reconstructs events from DB strings) was considered and
+rejected as stale and lower-fidelity.
 
 ## Risks / Trade-offs
 

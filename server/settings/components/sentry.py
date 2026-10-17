@@ -30,6 +30,7 @@ for human-readable filtering.
 
 import logging
 import os
+import re
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as pkg_version
 
@@ -41,7 +42,27 @@ from sentry_sdk.integrations.logging import LoggingIntegration
 # k8s probes must never create trace transactions (sentry-sdk 2.72 has no
 # `ignore_transactions` option — a small traces_sampler is the supported
 # mechanism; see design.md D6).
-_HEALTH_TRANSACTION_PATTERN = r"^/health/"
+_HEALTH_PATH_RE = re.compile(r"^/health/")
+
+
+def _transaction_path(sampling_context: dict) -> str:
+    """Best request path available at sampling time.
+
+    The transaction *name* is useless for matching at sampling time: WSGI
+    transactions are still named ``"generic WSGI request"`` (the Django
+    route resolves only later) and ASGI names are full URLs. Both runtimes
+    pass the raw request in the sampling context — read the path from
+    there; non-HTTP transactions fall back to their (already-resolved)
+    name.
+    """
+    wsgi_environ = sampling_context.get("wsgi_environ") or {}
+    path = wsgi_environ.get("PATH_INFO")
+    if not path:
+        asgi_scope = sampling_context.get("asgi_scope") or {}
+        path = asgi_scope.get("path")
+    if not path:
+        path = (sampling_context.get("transaction_context") or {}).get("name") or ""
+    return path or ""
 
 
 def _app_version() -> str | None:
@@ -53,16 +74,29 @@ def _app_version() -> str | None:
 
 
 # Resolved once at settings load; attached to every error event in
-# ``before_send`` — deterministic regardless of scope semantics (the
-# SDK has no ``default_tags`` init option in 2.72).
+# ``before_send`` (and every transaction in ``before_send_transaction``)
+# — deterministic regardless of scope semantics (the SDK has no
+# ``default_tags`` init option in 2.72).
 _APP_VERSION = _app_version()
 
 
-def _before_send(event: dict, hint: dict) -> dict:
-    """Attach the package semver to every error event."""
+def _stamp_app_version(event: dict) -> dict:
+    """Attach the package semver to an error or transaction event."""
     if _APP_VERSION:
         event.setdefault("tags", {})["app_version"] = _APP_VERSION
     return event
+
+
+def _before_send(event: dict, hint: dict) -> dict:
+    """Sentry init hook: error events."""
+    return _stamp_app_version(event)
+
+
+def _before_send_transaction(event: dict, hint: dict) -> dict:
+    """Sentry init hook: transaction events (spec: every event carries
+    release/environment/app_version — release and environment come from
+    init options, the tag from here)."""
+    return _stamp_app_version(event)
 
 
 def _traces_sampler(rate: float):
@@ -73,11 +107,7 @@ def _traces_sampler(rate: float):
     """
 
     def sample(sampling_context: dict) -> float:
-        transaction_context = sampling_context.get("transaction_context") or {}
-        name = transaction_context.get("name") or ""
-        import re
-
-        if re.match(_HEALTH_TRANSACTION_PATTERN, name):
+        if _HEALTH_PATH_RE.match(_transaction_path(sampling_context)):
             return 0.0
         return rate
 
@@ -122,6 +152,7 @@ def _init_error_tracking() -> None:
         ],
         traces_sampler=_traces_sampler(rate),
         before_send=_before_send,
+        before_send_transaction=_before_send_transaction,
     )
 
 

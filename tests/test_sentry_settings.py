@@ -109,13 +109,48 @@ class TestInitOptions:
 
 
 class TestTracesSampler:
-    def test_health_checks_never_traced(self, monkeypatch, recorded_init):
+    """Sampler tests use the sampling-context shapes the real SDK passes:
+
+    - WSGI (gunicorn default): ``{"wsgi_environ": <environ>}`` — the
+      transaction *name* is still ``"generic WSGI request"`` at sampling
+      time, so name-based matching would never fire
+    - ASGI (ASGI_ENABLED=1): ``{"asgi_scope": <scope>}`` — names are
+      full URLs there
+    """
+
+    def test_wsgi_health_checks_never_traced(self, monkeypatch, recorded_init):
         monkeypatch.setenv("SENTRY_DSN", "https://key@localhost/1")
 
         _reload()
 
         sampler = recorded_init[0]["traces_sampler"]
-        assert sampler({"transaction_context": {"name": "/health/complete/"}}) == 0.0
+        ctx = {
+            "wsgi_environ": {"PATH_INFO": "/health/complete/", "REQUEST_METHOD": "GET"}
+        }
+        assert sampler(ctx) == 0.0
+
+    def test_asgi_health_checks_never_traced(self, monkeypatch, recorded_init):
+        monkeypatch.setenv("SENTRY_DSN", "https://key@localhost/1")
+
+        _reload()
+
+        sampler = recorded_init[0]["traces_sampler"]
+        ctx = {"asgi_scope": {"type": "http", "path": "/health/ready/"}}
+        assert sampler(ctx) == 0.0
+
+    def test_unresolved_wsgi_name_does_not_match(self, monkeypatch, recorded_init):
+        # Regression guard for the review finding: matching on
+        # transaction_context.name ("generic WSGI request" at sampling
+        # time) must not accidentally exclude (or fail to exclude)
+        # anything — the path comes from wsgi_environ/asgi_scope.
+        monkeypatch.setenv("SENTRY_DSN", "https://key@localhost/1")
+
+        _reload()
+
+        sampler = recorded_init[0]["traces_sampler"]
+        assert (
+            sampler({"transaction_context": {"name": "generic WSGI request"}}) == 0.05
+        )
 
     def test_default_rate_applies_to_api_requests(self, monkeypatch, recorded_init):
         monkeypatch.setenv("SENTRY_DSN", "https://key@localhost/1")
@@ -124,7 +159,15 @@ class TestTracesSampler:
         _reload()
 
         sampler = recorded_init[0]["traces_sampler"]
-        assert sampler({"transaction_context": {"name": "/v1/huts/"}}) == 0.05
+        assert sampler({"wsgi_environ": {"PATH_INFO": "/v1/huts/"}}) == 0.05
+
+    def test_non_http_transactions_fall_back_to_name(self, monkeypatch, recorded_init):
+        monkeypatch.setenv("SENTRY_DSN", "https://key@localhost/1")
+
+        _reload()
+
+        sampler = recorded_init[0]["traces_sampler"]
+        assert sampler({"transaction_context": {"name": "/health/manual-job/"}}) == 0.0
 
     def test_rate_configurable_and_zero_disables(self, monkeypatch, recorded_init):
         monkeypatch.setenv("SENTRY_DSN", "https://key@localhost/1")
@@ -133,12 +176,12 @@ class TestTracesSampler:
         _reload()
 
         sampler = recorded_init[0]["traces_sampler"]
-        assert sampler({"transaction_context": {"name": "/v1/huts/"}}) == 0.5
+        assert sampler({"wsgi_environ": {"PATH_INFO": "/v1/huts/"}}) == 0.5
 
         monkeypatch.setenv("SENTRY_TRACES_SAMPLE_RATE", "0")
         _reload()
         sampler = recorded_init[1]["traces_sampler"]
-        assert sampler({"transaction_context": {"name": "/v1/huts/"}}) == 0.0
+        assert sampler({"wsgi_environ": {"PATH_INFO": "/v1/huts/"}}) == 0.0
 
 
 class TestBeforeSend:
@@ -152,3 +195,77 @@ class TestBeforeSend:
         before_send = recorded_init[0]["before_send"]
         event = before_send({}, {})
         assert event["tags"]["app_version"] == version("wodore-backend")
+
+    def test_app_version_tag_attached_to_transactions(self, monkeypatch, recorded_init):
+        from importlib.metadata import version
+
+        monkeypatch.setenv("SENTRY_DSN", "https://key@localhost/1")
+
+        _reload()
+
+        before_send_transaction = recorded_init[0]["before_send_transaction"]
+        event = before_send_transaction({"type": "transaction"}, {})
+        assert event["tags"]["app_version"] == version("wodore-backend")
+
+
+class TestQ2ErrorReporter:
+    """django-q2 swallows task exceptions (stored as string results, no
+    ERROR log); the in-repo reporter bridges them to the SDK."""
+
+    def test_cluster_wires_reporter(self):
+        # Q_CLUSTER carries the reporter config; django_q.conf loads it at
+        # import into the module-level error_reporter.
+        from django.conf import settings
+
+        assert settings.Q_CLUSTER["error_reporter"] == {"wodore-sentry": {}}
+
+        import django_q.conf as qconf
+
+        error_reporter = getattr(qconf, "error_reporter", None)
+        assert error_reporter is not None
+        targets = [type(t).__name__ for t in getattr(error_reporter, "targets", [])]
+        assert "SentryErrorReporter" in targets
+
+    def test_report_noop_without_active_client(self, monkeypatch):
+        import sentry_sdk
+
+        from server.core.q2_sentry import SentryErrorReporter
+
+        assert sentry_sdk.get_client().is_active() is False  # test env: no DSN
+        called = []
+        monkeypatch.setattr(
+            sentry_sdk, "capture_exception", lambda *a, **k: called.append(a)
+        )
+
+        try:
+            raise RuntimeError("boom")
+        except RuntimeError:
+            SentryErrorReporter().report()
+
+        assert called == []  # inert: SDK not active in dev/test/CI
+
+    def test_report_captures_live_exception_when_active(self, monkeypatch):
+        import sentry_sdk
+
+        from server.core.q2_sentry import SentryErrorReporter
+
+        monkeypatch.setattr(
+            sentry_sdk,
+            "get_client",
+            lambda: type("C", (), {"is_active": lambda self: True})(),
+        )
+        captured = []
+        monkeypatch.setattr(
+            sentry_sdk,
+            "capture_exception",
+            lambda *a, **k: captured.append(a),
+        )
+
+        try:
+            raise ValueError("task failed")
+        except ValueError:
+            SentryErrorReporter().report()
+
+        # capture_exception() with no args must pick up the live
+        # sys.exc_info() — this is the reporter's whole point.
+        assert captured == [()]
