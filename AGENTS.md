@@ -324,6 +324,32 @@ shared config — stays in the **main checkout**, never in a worktree.
 **Imagor rule:** work that touches **imagor** is done in the main
 checkout — the shared container reads the main checkout's media setup.
 
+### Error tracking (Sentry protocol)
+
+`sentry-sdk` (Sentry protocol) initialized in `server/settings/components/sentry.py`,
+included FIRST in the settings list (before logging config). Rules:
+
+- **DSN-gated**: no `SENTRY_DSN` env var → SDK never initializes (dev/test/CI
+  are always telemetry-free). Staging/prod get the DSN from Infisical.
+- **Vendor-neutral**: the DSN decides the destination — sentry.io or Better
+  Stack (Sentry-SDK-compatible ingestion). Switching vendors = swap DSN,
+  never a code change. Rollback = unset the DSN.
+- **Release = `GIT_HASH`** (per-commit deploys) in both staging and prod;
+  package semver rides along as an `app_version` event tag.
+- **`SENTRY_TRACES_SAMPLE_RATE`** (default 0.05, `0` = errors-only) — health
+  checks are never traced (sampler excludes `/health/`).
+- **PII stays off**: `send_default_pii=False` is fixed — do not flip without
+  a privacy review (no user IPs/identities in events). Caveat: this only
+  covers SDK-attached data (user, IP, cookies, request bodies) — PII that
+  app code writes *into log messages* still flows into breadcrumbs and
+  error events; keep tokens/emails out of log calls.
+- **django-q2 failures** reach Sentry via the in-repo error reporter
+  (`server/core/q2_sentry.py`, wired through `Q_CLUSTER["error_reporter"]`) —
+  q2 itself swallows task exceptions (string result, no ERROR log).
+- Existing structlog output (bridged through stdlib logging) becomes
+  breadcrumbs; `logger.error`+ becomes events. Log format unchanged
+  (JSON lines on stdout).
+
 ### Map layers (basemaps app)
 
 Overlays and basemaps live in `server/apps/basemaps` (WEP010 phase 2):

@@ -39,6 +39,11 @@ else:
 _ENV = environ["DJANGO_ENV"]
 
 _base_settings = (
+    # Error tracking (openspec: add-error-tracking) — FIRST on purpose:
+    # sentry_sdk.init installs its logging hook before logging.py runs
+    # dictConfig, and errors raised during settings import are captured.
+    # DSN-gated: inert without SENTRY_DSN (dev/test/CI).
+    "components/sentry.py",
     "components/common.py",
     "components/logging.py",
     "components/csp.py",

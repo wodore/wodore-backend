@@ -4614,6 +4614,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/75/19/f519ef8aa2f379935a44212c5744e2b3a46173bf04e0110fb7f4af4028c9/scour-0.38.2.tar.gz", hash = "sha256:6881ec26660c130c5ecd996ac6f6b03939dd574198f50773f2508b81a68e0daf", size = 52947, upload-time = "2020-11-22T14:05:55.677Z" }
 
 [[package]]
+name = "sentry-sdk"
+version = "2.72.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "certifi" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/26/c1/d2bbb2b03bdc2ef14b35e02b647b8489156c50b6e0b8bacc5fa303902e23/sentry_sdk-2.72.0.tar.gz", hash = "sha256:0d2ffbc28ee2e63cbaf3d015e93b448cffcc3ef3be03a44704ad36ade72faa95", size = 1069699, upload-time = "2026-10-12T13:08:11.195Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d0/0b/0dd9686842d9dc49c3ee84cced31c54bceb0fb52a826be7d3d4fe30d882a/sentry_sdk-2.72.0-py3-none-any.whl", hash = "sha256:3e13ace4ffd0b3cc78288236edfc4e4bd90eb12a396cc5845fa10a58ff289f50", size = 544754, upload-time = "2026-10-12T13:08:01.619Z" },
+]
+
+[[package]]
 name = "shapely"
 version = "2.1.2"
 source = { registry = "https://pypi.org/simple" }
@@ -5364,6 +5377,7 @@ dependencies = [
     { name = "python-decouple" },
     { name = "pyyaml" },
     { name = "rich" },
+    { name = "sentry-sdk" },
     { name = "structlog" },
     { name = "svgutils" },
     { name = "tzdata" },
@@ -5500,6 +5514,7 @@ requires-dist = [
     { name = "python-decouple", specifier = "==3.*" },
     { name = "pyyaml", specifier = "==6.*" },
     { name = "rich", specifier = "==14.*" },
+    { name = "sentry-sdk", specifier = ">=2.72,<3" },
     { name = "structlog", specifier = "==25.*" },
     { name = "svgutils", specifier = ">=0.3.4" },
     { name = "tzdata", specifier = ">=2025.3" },

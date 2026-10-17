@@ -602,6 +602,12 @@ Q_CLUSTER = {
     "timeout": 86400,  # 24 h
     "poll": 2,
     "max_attempts": 1,
+    # Task-failure bridge to the Sentry SDK (openspec: add-error-tracking):
+    # q2 swallows worker exceptions (stored as string results, no ERROR
+    # log), so without this the SDK never sees them. Loads the in-repo
+    # reporter registered under the `djangoq.errorreporters` entry point
+    # (server.core.q2_sentry); inert without SENTRY_DSN.
+    "error_reporter": {"wodore-sentry": {}},
     # Worker processes per qcluster — keep low: tasks are long-running and
     # heavy. Defaults to node CPU count if unset (too many on a VPS), so set
     # it explicitly (burginfra: WD_QCLUSTER_WORKERS -> Q_CLUSTER_WORKERS).
