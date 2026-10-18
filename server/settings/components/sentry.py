@@ -87,8 +87,40 @@ def _stamp_app_version(event: dict) -> dict:
     return event
 
 
+# --- Python 3.14 shield-cancellation noise --------------------------------
+#
+# CPython 3.14 rewrote ``asyncio.shield``: when the awaiting side is
+# cancelled while the shielded inner future is still pending, a later
+# exception on that inner future is reported through the event loop's
+# exception handler ("… exception in shielded future") instead of being
+# silently swallowed. asgiref's sync↔async bridge shields its
+# ``run_in_executor`` dispatches and converts task cancellation into
+# ``set_exception(CancelledError())`` on the bridged future — so under
+# ASGI every client disconnect mid-request (uvicorn cancels the request
+# task on ``http.disconnect``) now emits an asyncio ERROR log, which the
+# LoggingIntegration ships as an error event. One per aborted request,
+# e.g. a browser cancelling an admin page load (issue 154471293):
+# benign — the client is gone, there is nothing to fix server-side.
+# The exception-type check keeps real shielded exceptions flowing.
+
+
+def _is_shielded_cancel_noise(event: dict) -> bool:
+    """True for asyncio's "CancelledError exception in shielded future"
+    log events — client-abort noise from the py3.14 shield rework, not
+    an application error."""
+    if event.get("logger") != "asyncio":
+        return False
+    message = (event.get("logentry") or {}).get("message") or ""
+    if "exception in shielded future" not in message:
+        return False
+    values = (event.get("exception") or {}).get("values") or []
+    return bool(values) and values[-1].get("type") == "CancelledError"
+
+
 def _before_send(event: dict, hint: dict) -> dict:
     """Sentry init hook: error events."""
+    if _is_shielded_cancel_noise(event):
+        return None  # client aborted the request; not actionable
     return _stamp_app_version(event)
 
 
