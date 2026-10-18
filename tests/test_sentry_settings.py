@@ -196,6 +196,103 @@ class TestBeforeSend:
         event = before_send({}, {})
         assert event["tags"]["app_version"] == version("wodore-backend")
 
+    def test_shielded_cancellederror_dropped(self, monkeypatch, recorded_init):
+        # Issue 154471293: py3.14's rewritten asyncio.shield logs
+        # "CancelledError exception in shielded future" when uvicorn
+        # cancels the request task on client disconnect and asgiref's
+        # bridge surfaces CancelledError on the shielded future. Client
+        # aborts are not actionable — before_send must drop them.
+        monkeypatch.setenv("SENTRY_DSN", "https://key@localhost/1")
+
+        _reload()
+
+        before_send = recorded_init[0]["before_send"]
+        event = {
+            "logger": "asyncio",
+            "logentry": {"message": "CancelledError exception in shielded future"},
+            "exception": {
+                "values": [
+                    {
+                        "type": "CancelledError",
+                        "value": "",
+                        "mechanism": {"type": "logging", "handled": True},
+                    }
+                ]
+            },
+        }
+        assert before_send(event, {}) is None
+
+    def test_shielded_real_exception_kept(self, monkeypatch, recorded_init):
+        # Same asyncio logger and message shape, but a non-CancelledError
+        # exception: genuine failure inside shielded work — must pass.
+        monkeypatch.setenv("SENTRY_DSN", "https://key@localhost/1")
+
+        _reload()
+
+        before_send = recorded_init[0]["before_send"]
+        event = {
+            "logger": "asyncio",
+            "logentry": {"message": "ValueError exception in shielded future"},
+            "exception": {
+                "values": [
+                    {
+                        "type": "ValueError",
+                        "value": "boom",
+                        "mechanism": {"type": "logging", "handled": True},
+                    }
+                ]
+            },
+        }
+        assert "tags" in before_send(event, {})
+
+    def test_cancellederror_outside_asyncio_logger_kept(
+        self, monkeypatch, recorded_init
+    ):
+        # A CancelledError reported by anything but the asyncio logger
+        # (e.g. app code) is not shield noise — must pass through.
+        monkeypatch.setenv("SENTRY_DSN", "https://key@localhost/1")
+
+        _reload()
+
+        before_send = recorded_init[0]["before_send"]
+        event = {
+            "exception": {
+                "values": [
+                    {
+                        "type": "CancelledError",
+                        "value": "task cancelled",
+                        "mechanism": {"type": "logging", "handled": True},
+                    }
+                ]
+            },
+        }
+        assert "tags" in before_send(event, {})
+
+    def test_asyncio_unretrieved_future_exception_kept(
+        self, monkeypatch, recorded_init
+    ):
+        # Other asyncio-loop reports (e.g. unretrieved future exceptions)
+        # stay visible — the filter is scoped to the shield message.
+        monkeypatch.setenv("SENTRY_DSN", "https://key@localhost/1")
+
+        _reload()
+
+        before_send = recorded_init[0]["before_send"]
+        event = {
+            "logger": "asyncio",
+            "logentry": {"message": "Future exception was never retrieved"},
+            "exception": {
+                "values": [
+                    {
+                        "type": "CancelledError",
+                        "value": "",
+                        "mechanism": {"type": "logging", "handled": True},
+                    }
+                ]
+            },
+        }
+        assert "tags" in before_send(event, {})
+
     def test_app_version_tag_attached_to_transactions(self, monkeypatch, recorded_init):
         from importlib.metadata import version
 
