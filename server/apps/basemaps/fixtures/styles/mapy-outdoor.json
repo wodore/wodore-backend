@@ -5,7 +5,7 @@
     "mapy-outdoor": {
       "type": "raster",
       "tiles": [
-        "https://api.mapy.com/v1/maptiles/outdoor/{z}/{x}/{y}?apikey={{env:MAPY_COM_API_KEY}}"
+        "https://api.mapy.com/v1/maptiles/outdoor/256/{z}/{x}/{y}?lang=en&apikey={{env:MAPY_COM_API_KEY}}"
       ],
       "tileSize": 256,
       "maxzoom": 19,
