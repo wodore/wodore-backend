@@ -12,7 +12,7 @@
     "wd-satellite-raster": {
       "type": "raster",
       "tiles": [
-        "/raster/tiles/world_satellite/webmercator/{z}/{x}/{y}.webp?v=1"
+        "/raster/tiles/world_satellite/webmercator/{z}/{x}/{y}.jpeg?v=1"
       ],
       "tileSize": 256,
       "maxzoom": 19
