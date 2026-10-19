@@ -3116,7 +3116,7 @@
       "type": "hillshade",
       "source": "rgb-tiles",
       "minzoom": 2,
-      "maxzoom": 13.2,
+      "maxzoom": 24,
       "paint": {
         "hillshade-illumination-anchor": "viewport",
         "hillshade-illumination-direction": 315,
@@ -3131,9 +3131,21 @@
           10,
           0.45,
           13.2,
-          0.35
+          0.35,
+          16,
+          0.3
         ],
-        "hillshade-shadow-color": "hsla(210, 18%, 32%, 0.55)",
+        "hillshade-shadow-color": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          2,
+          "hsla(210, 18%, 32%, 0.55)",
+          12.8,
+          "hsla(210, 18%, 32%, 0.55)",
+          14,
+          "hsla(210, 18%, 32%, 0.30)"
+        ],
         "hillshade-highlight-color": "hsla(45, 60%, 97%, 0.4)",
         "hillshade-accent-color": "hsla(0, 0%, 0%, 0)"
       }
@@ -5867,21 +5879,26 @@
         "visibility": "visible"
       },
       "paint": {
-        "line-color": "hsla(40, 30%, 99%, 1)",
+        "line-color": [
+          "case",
+          ["==", ["get", "type"], "service"],
+          "hsla(40, 12%, 88%, 1)",
+          "hsla(40, 30%, 99%, 1)"
+        ],
         "line-width": [
           "interpolate",
           ["linear"],
           ["zoom"],
           11,
-          0.5,
+          ["case", ["==", ["get", "type"], "service"], 0.35, 0.5],
           13,
-          1.6,
+          ["case", ["==", ["get", "type"], "service"], 1, 1.6],
           15,
-          3.2,
+          ["case", ["==", ["get", "type"], "service"], 2, 3.2],
           16,
-          5.5,
+          ["case", ["==", ["get", "type"], "service"], 3.4, 5.5],
           19,
-          10
+          ["case", ["==", ["get", "type"], "service"], 6.5, 10]
         ],
         "line-blur": ["interpolate", ["linear"], ["zoom"], 8, 0.4, 14, 0.1],
         "line-opacity": 1
@@ -9296,7 +9313,7 @@
             "match",
             ["get", "category"],
             "country",
-            ["literal", ["Noto Sans SemiBold"]],
+            ["literal", ["Noto Sans Regular"]],
             "capital",
             ["literal", ["Noto Sans Bold"]],
             "big_place",
@@ -10384,7 +10401,7 @@
             "match",
             ["get", "category"],
             "country",
-            ["literal", ["Noto Sans SemiBold"]],
+            ["literal", ["Noto Sans Regular"]],
             "capital",
             ["literal", ["Noto Sans Bold"]],
             "big_place",
@@ -11650,7 +11667,7 @@
             "match",
             ["get", "category"],
             "country",
-            ["literal", ["Noto Sans SemiBold"]],
+            ["literal", ["Noto Sans Regular"]],
             "capital",
             ["literal", ["Noto Sans Bold"]],
             "big_place",
@@ -12787,7 +12804,7 @@
             "match",
             ["get", "category"],
             "country",
-            ["literal", ["Noto Sans SemiBold"]],
+            ["literal", ["Noto Sans Regular"]],
             "capital",
             ["literal", ["Noto Sans Bold"]],
             "big_place",
@@ -13717,7 +13734,7 @@
             "match",
             ["get", "category"],
             "country",
-            ["literal", ["Noto Sans SemiBold"]],
+            ["literal", ["Noto Sans Regular"]],
             "capital",
             ["literal", ["Noto Sans Bold"]],
             "big_place",
