@@ -383,6 +383,12 @@
         justify-content: center;
       }
 
+      /* display:flex would override the hidden attribute — without this
+         the backdrop covers the whole page and swallows every tap. */
+      #style-dialog-backdrop[hidden] {
+        display: none;
+      }
+
       #style-dialog {
         background: #fff;
         border: 1px solid #4d6b58;
