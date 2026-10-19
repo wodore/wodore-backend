@@ -29,11 +29,24 @@
 
       #bar {
         display: flex;
-        gap: 12px;
+        flex-wrap: wrap;
+        gap: 6px 12px;
         align-items: center;
         padding: 6px 10px;
         background: #f2f7f4;
         border-bottom: 1px solid #d0d8d2;
+      }
+
+      /* Mobile: shrink the catalog input so the bar wraps instead of
+         overflowing; permalink gives up its reserved width. */
+      @media (max-width: 640px) {
+        #tileserver-input {
+          width: min(240px, 58vw);
+        }
+        #permalink {
+          max-width: 100%;
+          flex-basis: 100%;
+        }
       }
 
       #bar button {
@@ -130,6 +143,38 @@
         touch-action: none;
       }
 
+      /* Portrait / tall viewports: stack the sides vertically (B below
+         the seam) and turn the handle into a horizontal bar. Toggled by
+         JS (wrap.clientHeight > wrap.clientWidth), not a media query, so
+         embedded/non-viewport sizes behave the same. */
+      #compare-handle.vertical {
+        top: 0;
+        bottom: auto;
+        left: 0;
+        right: 0;
+        width: auto;
+        height: 4px;
+        margin: -2px 0 0 0;
+        cursor: ns-resize;
+      }
+
+      #compare-handle.vertical::after {
+        content: "↕";
+      }
+
+      /* Vertical compare: B's top-right switcher would sit above the
+         seam and get clipped away — flip it to the bottom-right. */
+      #compare-wrap.compare-vertical #compare-b .maplibregl-ctrl-top-right {
+        top: auto;
+        bottom: 0;
+      }
+
+      #compare-wrap.compare-vertical #compare-b
+        .maplibregl-ctrl-top-right
+        .maplibregl-ctrl {
+        margin-bottom: 34px;
+      }
+
       #compare-handle::after {
         content: "↔";
         position: absolute;
@@ -161,6 +206,57 @@
         position: static !important;
         top: auto !important;
         left: auto !important;
+      }
+
+      /* Style switcher (vendored control, tuned here):
+         - list height tracks the viewport (vendored default is a fixed
+           300px — too short for 12 catalog basemaps on phones, and it
+           clipped inside the bottom half of a vertical compare)
+         - touch-sized rows, no wrap, readable names */
+      .maplibregl-ctrl.style-switcher .style-switcher-list {
+        max-height: min(70vh, 420px) !important;
+        overscroll-behavior: contain;
+      }
+
+      /* Two-line entries: display name over the slug. Scoped to the list
+         so the collapsed chip keeps the vendored row layout. */
+      .maplibregl-ctrl.style-switcher .style-switcher-list .style-switcher-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0;
+        min-height: 44px;
+        padding: 4px 8px;
+        white-space: normal;
+      }
+
+      .style-switcher-item .ss-name {
+        line-height: 1.25;
+      }
+
+      .style-switcher-item .ss-slug {
+        font:
+          10px/1.3 ui-monospace,
+          monospace;
+        color: #68766e;
+      }
+
+      .style-switcher-item .ss-star {
+        color: #d59b13;
+        margin-right: 3px;
+      }
+
+      @media (pointer: coarse) {
+        .maplibregl-ctrl.style-switcher .style-switcher-item {
+          min-height: 40px;
+          padding: 6px 10px;
+          transform: none; /* hover-lift reads as tap-jitter on touch */
+        }
+
+        .maplibregl-ctrl.style-switcher
+          .style-switcher-list
+          .style-switcher-item {
+          min-height: 48px;
+        }
       }
 
       /* built-in inspect popup */
@@ -322,12 +418,20 @@
 
         // Style slugs -> backend style URLs (filled by fetchBackendCatalog)
         var backendStyles = {};
+        // Style slugs -> display names from the catalog (fallback: slug)
+        var styleNames = {};
+
+        function styleDisplayName(id) {
+          var name = styleNames[id] || id.replace(/^wd-outdoor-base-/, "");
+          var prefix = id === "wd-outdoor-base-mtk-hill" ? "\u2605 " : "";
+          return prefix + name;
+        }
 
         function switcherStyles() {
           return styleIds.map(function (id) {
             return {
               id: id,
-              name: id.replace(/^wd-outdoor-base-/, ""),
+              name: styleDisplayName(id),
               uri: styleUrl(id),
             };
           });
@@ -365,6 +469,39 @@
           });
         }
 
+        // Reformat switcher list items into two lines (display name +
+        // slug). The vendored control re-renders on every expand, so a
+        // MutationObserver keeps the format applied; the list order
+        // matches switcherStyles() one-to-one (the collapsed chip after
+        // the list is left untouched).
+        function twoLineSwitcherItems(container, stylesArr) {
+          var items = container.querySelectorAll(
+            ".style-switcher-list .style-switcher-item",
+          );
+          for (var i = 0; i < items.length; i++) {
+            var el = items[i];
+            var s = stylesArr[i];
+            if (!s || el.dataset.twoLine) continue;
+            el.dataset.twoLine = "1";
+            var name = (s.name || "").replace(/^\u2605 /, "");
+            el.textContent = "";
+            if ((s.name || "").startsWith("\u2605 ")) {
+              var star = document.createElement("span");
+              star.className = "ss-star";
+              star.textContent = "\u2605";
+              el.appendChild(star);
+            }
+            var nameEl = document.createElement("span");
+            nameEl.className = "ss-name";
+            nameEl.textContent = name;
+            el.appendChild(nameEl);
+            var slug = document.createElement("span");
+            slug.className = "ss-slug";
+            slug.textContent = s.id;
+            el.appendChild(slug);
+          }
+        }
+
         function addSwitcher(map, which) {
           var ctrl = new mapglstyleswitcher.StyleSwitcherControl({
             styles: switcherStyles(),
@@ -381,6 +518,18 @@
           // Side B's switcher goes top-right: the compare slider's clip-path
           // on compare-b hides top-left controls
           map.addControl(ctrl, which === "B" ? "top-right" : "top-left");
+          // two-line items (name + slug), re-applied on every re-render
+          var container = ctrl._container;
+          if (container) {
+            var reformat = function () {
+              twoLineSwitcherItems(container, switcherStyles());
+            };
+            new MutationObserver(reformat).observe(container, {
+              childList: true,
+              subtree: true,
+            });
+            reformat();
+          }
         }
 
         // ---------- FPS (stats.js, rAF driven) ----------
@@ -517,31 +666,67 @@
           wrap.appendChild(handle);
 
           var pos = 0.5;
-          var syncA = true;
+          function isVertical() {
+            return wrap.clientHeight > wrap.clientWidth;
+          }
           function apply() {
-            var x = Math.round(pos * wrap.clientWidth);
-            sideB.style.clipPath = "inset(0 0 0 " + x + "px)";
-            handle.style.left = x + "px";
+            var vertical = isVertical();
+            handle.classList.toggle("vertical", vertical);
+            wrap.classList.toggle("compare-vertical", vertical);
+            if (vertical) {
+              var y = Math.round(pos * wrap.clientHeight);
+              sideB.style.clipPath = "inset(" + y + "px 0 0 0)";
+              handle.style.top = y + "px";
+              handle.style.left = "0";
+            } else {
+              var x = Math.round(pos * wrap.clientWidth);
+              sideB.style.clipPath = "inset(0 0 0 " + x + "px)";
+              handle.style.left = x + "px";
+              handle.style.top = "0";
+            }
+          }
+
+          // Camera sync: mirror moves one way only while a jumpTo is in
+          // flight. The previous movestart/syncA flag design ping-ponged —
+          // jumpTo fires movestart on the destination, flipping the sync
+          // direction mid-gesture, and the reverse sync cancelled touch
+          // pinch-zoom animations ("cannot zoom in compare mode"). The
+          // equality short-circuit also guards against a future maplibre
+          // emitting jumpTo's move asynchronously (the synchronous guard
+          // would already have cleared). jumpTo itself has no inertia, so
+          // skipping no-op jumps also stops redundant churn per inertial
+          // frame.
+          var syncing = false;
+          function sameCamera(a, b) {
+            var ca = a.getCenter();
+            var cb = b.getCenter();
+            return (
+              Math.abs(ca.lng - cb.lng) < 1e-9 &&
+              Math.abs(ca.lat - cb.lat) < 1e-9 &&
+              Math.abs(a.getZoom() - b.getZoom()) < 1e-6 &&
+              Math.abs(a.getBearing() - b.getBearing()) < 1e-6 &&
+              Math.abs(a.getPitch() - b.getPitch()) < 1e-6
+            );
           }
           function syncCameras(src, dst) {
-            dst.jumpTo({
-              center: src.getCenter(),
-              zoom: src.getZoom(),
-              bearing: src.getBearing(),
-              pitch: src.getPitch(),
-            });
+            if (syncing || sameCamera(src, dst)) return;
+            syncing = true;
+            try {
+              dst.jumpTo({
+                center: src.getCenter(),
+                zoom: src.getZoom(),
+                bearing: src.getBearing(),
+                pitch: src.getPitch(),
+              });
+            } finally {
+              syncing = false;
+            }
           }
           mapA.on("move", function () {
-            if (syncA) syncCameras(mapA, mapB);
+            syncCameras(mapA, mapB);
           });
           mapB.on("move", function () {
-            if (!syncA) syncCameras(mapB, mapA);
-          });
-          mapA.on("movestart", function () {
-            syncA = true;
-          });
-          mapB.on("movestart", function () {
-            syncA = false;
+            syncCameras(mapB, mapA);
           });
 
           var dragging = false;
@@ -553,13 +738,23 @@
           handle.addEventListener("pointermove", function (e) {
             if (!dragging) return;
             var rect = wrap.getBoundingClientRect();
-            pos = Math.min(
-              1,
-              Math.max(0, (e.clientX - rect.left) / rect.width),
-            );
+            if (isVertical()) {
+              pos = Math.min(
+                1,
+                Math.max(0, (e.clientY - rect.top) / rect.height),
+              );
+            } else {
+              pos = Math.min(
+                1,
+                Math.max(0, (e.clientX - rect.left) / rect.width),
+              );
+            }
             apply();
           });
           handle.addEventListener("pointerup", function () {
+            dragging = false;
+          });
+          handle.addEventListener("pointercancel", function () {
             dragging = false;
           });
 
@@ -568,6 +763,7 @@
           return {
             remove: function () {
               handle.remove();
+              wrap.classList.remove("compare-vertical");
               sideB.style.clipPath = "";
             },
           };
@@ -606,14 +802,14 @@
               return r.ok ? r.json() : null;
             })
             .then(function (cat) {
-              if (!cat || !cat.styles) return;
+              if (!cat || !cat.styles) return null;
               var ids = [];
               backendStyles = {};
+              styleNames = {};
               for (var slug in cat.styles) {
                 if (!Object.prototype.hasOwnProperty.call(cat.styles, slug))
                   continue;
                 var entry = cat.styles[slug];
-                if (entry.role && entry.role !== "basemap") continue;
                 // Backend: entry.path is a relative URL like /v1/map/styles/slug.json
                 // Martin: entry.path is a filesystem path — construct /style/slug.json
                 var url;
@@ -623,9 +819,36 @@
                   url = origin + "/style/" + slug + ".json";
                 }
                 backendStyles[slug] = url;
+                styleNames[slug] =
+                  entry.name ||
+                  slug.replace(/^wd-outdoor-base-/, "");
                 ids.push(slug);
               }
-              if (ids.length) styleIds = ids;
+              // Catalog style entries carry no role — overlays (huts,
+              // trails, …) leaked into the selector. The backend layers
+              // endpoint has it; when reachable, keep basemaps only
+              // (Martin catalogs have no layers endpoint → keep all,
+              // Martin only serves basemap-ish styles anyway).
+              var rolesUrl = origin + "/v1/map/layers";
+              return fetch(rolesUrl)
+                .then(function (r) {
+                  return r.ok ? r.json() : null;
+                })
+                .catch(function () {
+                  return null;
+                })
+                .then(function (ld) {
+                  if (ld && ld.data) {
+                    var roles = {};
+                    for (var i = 0; i < ld.data.length; i++) {
+                      roles[ld.data[i].slug] = ld.data[i].role;
+                    }
+                    ids = ids.filter(function (slug) {
+                      return !roles[slug] || roles[slug] === "basemap";
+                    });
+                  }
+                  if (ids.length) styleIds = ids;
+                });
             })
             .catch(function () {
               /* catalog unavailable: keep fallback list */

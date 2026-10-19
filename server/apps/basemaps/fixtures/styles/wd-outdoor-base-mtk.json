@@ -2306,11 +2306,11 @@
           4,
           "hsla(81, 30%, 96%, 0)",
           5,
-          "hsla(81, 30%, 96%, 0.55)",
+          "hsla(81, 30%, 96%, 0.45)",
           10,
-          "hsla(81, 30%, 96%, 0.8)",
+          "hsla(81, 30%, 96%, 0.5)",
           14,
-          "hsla(81, 30%, 96%, 0.92)"
+          "hsla(81, 30%, 96%, 0.55)"
         ]
       },
       "metadata": {
@@ -2567,7 +2567,31 @@
             "match",
             ["get", "type"],
             "wood",
-            "hsla(92, 43%, 82%, 0.85)",
+            "hsla(92, 43%, 82%, 0.78)",
+            "farmland",
+            "hsla(58, 46%, 88%, 0.78)",
+            ["wetland", "tidalflat"],
+            "hsla(103, 36%, 87%, 0.78)",
+            "rock",
+            "hsla(70, 8%, 91%, 0.78)",
+            "sand",
+            "hsla(36, 55%, 88%, 0.78)",
+            "scrub",
+            "hsla(86, 36%, 83%, 0.78)",
+            "fell",
+            "hsla(70, 40%, 85%, 0.78)",
+            "ice",
+            "hsla(182, 61%, 96%, 0.78)",
+            "salt_desert",
+            "hsla(182, 46%, 95%, 0.78)",
+            "hsla(81, 35%, 89%, 0.78)"
+          ],
+          12,
+          [
+            "match",
+            ["get", "type"],
+            "wood",
+            "hsla(92, 44%, 82%, 0.85)",
             "farmland",
             "hsla(58, 46%, 88%, 0.85)",
             ["wetland", "tidalflat"],
@@ -2581,58 +2605,34 @@
             "fell",
             "hsla(70, 40%, 85%, 0.85)",
             "ice",
-            "hsla(182, 61%, 96%, 0.85)",
+            "hsla(182, 62%, 96%, 0.85)",
             "salt_desert",
             "hsla(182, 46%, 95%, 0.85)",
             "hsla(81, 35%, 89%, 0.85)"
-          ],
-          12,
-          [
-            "match",
-            ["get", "type"],
-            "wood",
-            "hsla(92, 44%, 82%, 1)",
-            "farmland",
-            "hsla(58, 46%, 88%, 1)",
-            ["wetland", "tidalflat"],
-            "hsla(103, 36%, 87%, 1)",
-            "rock",
-            "hsla(70, 8%, 91%, 1)",
-            "sand",
-            "hsla(36, 55%, 88%, 1)",
-            "scrub",
-            "hsla(86, 36%, 83%, 1)",
-            "fell",
-            "hsla(70, 40%, 85%, 1)",
-            "ice",
-            "hsla(182, 62%, 96%, 1)",
-            "salt_desert",
-            "hsla(182, 46%, 95%, 1)",
-            "hsla(81, 35%, 89%, 1)"
           ],
           14,
           [
             "match",
             ["get", "type"],
             "wood",
-            "hsla(92, 46%, 80%, 1)",
+            "hsla(92, 46%, 80%, 0.85)",
             "farmland",
-            "hsla(58, 48%, 87%, 1)",
+            "hsla(58, 48%, 87%, 0.85)",
             ["wetland", "tidalflat"],
-            "hsla(103, 38%, 86%, 1)",
+            "hsla(103, 38%, 86%, 0.85)",
             "rock",
-            "hsla(70, 8%, 91%, 1)",
+            "hsla(70, 8%, 91%, 0.85)",
             "sand",
-            "hsla(36, 56%, 87%, 1)",
+            "hsla(36, 56%, 87%, 0.85)",
             "scrub",
-            "hsla(86, 38%, 82%, 1)",
+            "hsla(86, 38%, 82%, 0.85)",
             "fell",
-            "hsla(70, 42%, 84%, 1)",
+            "hsla(70, 42%, 84%, 0.85)",
             "ice",
-            "hsla(182, 64%, 96%, 1)",
+            "hsla(182, 64%, 96%, 0.85)",
             "salt_desert",
-            "hsla(182, 48%, 95%, 1)",
-            "hsla(81, 35%, 89%, 1)"
+            "hsla(182, 48%, 95%, 0.85)",
+            "hsla(81, 35%, 89%, 0.85)"
           ]
         ],
         "fill-outline-color": [
@@ -2938,7 +2938,7 @@
       "id": "swiss-relief",
       "type": "raster",
       "source": "swiss-relief",
-      "minzoom": 11,
+      "minzoom": 10.5,
       "paint": {
         "raster-opacity": [
           "interpolate",
@@ -10921,7 +10921,7 @@
             [
               "case",
               ["has", "ele"],
-              ["concat", "\n\n", ["to-string", ["get", "ele"]]],
+              ["concat", "\n​", ["to-string", ["get", "ele"]]],
               ""
             ],
             {
@@ -10951,7 +10951,7 @@
             [
               "case",
               ["has", "ele"],
-              ["concat", "\n\n", ["to-string", ["get", "ele"]]],
+              ["concat", "\n​", ["to-string", ["get", "ele"]]],
               ""
             ],
             {
@@ -11892,7 +11892,7 @@
             [
               "case",
               ["has", "ele"],
-              ["concat", "\n\n", ["to-string", ["get", "ele"]]],
+              ["concat", "\n​", ["to-string", ["get", "ele"]]],
               ""
             ],
             {
@@ -11922,7 +11922,7 @@
             [
               "case",
               ["has", "ele"],
-              ["concat", "\n\n", ["to-string", ["get", "ele"]]],
+              ["concat", "\n​", ["to-string", ["get", "ele"]]],
               ""
             ],
             {
@@ -12616,7 +12616,7 @@
             [
               "case",
               ["has", "ele"],
-              ["concat", "\n\n", ["to-string", ["get", "ele"]]],
+              ["concat", "\n​", ["to-string", ["get", "ele"]]],
               ""
             ],
             {
@@ -12646,7 +12646,7 @@
             [
               "case",
               ["has", "ele"],
-              ["concat", "\n\n", ["to-string", ["get", "ele"]]],
+              ["concat", "\n​", ["to-string", ["get", "ele"]]],
               ""
             ],
             {
