@@ -111,10 +111,14 @@
       }
 
 
-      /* Merged view chip: z / coords / current style slug, live. Wraps to
-         its own line on phones instead of being trimmed. */
+      /* Merged view chip: z / coords / style slug (+ load timing), live.
+         Always on its own header line — sharing the button line trimmed
+         the slug on phones. */
       #permalink {
-        margin-left: auto;
+        flex-basis: 100%;
+        max-width: none;
+        margin-left: 0;
+        text-align: left;
         color: #1c1c1c;
         background: rgba(255, 255, 255, 0.82);
         border: 1px solid #c5cfc8;
@@ -122,15 +126,8 @@
         padding: 2px 6px;
         font: 11px/1.4 ui-monospace, monospace;
         white-space: nowrap;
-      }
-
-      @media (max-width: 640px) {
-        #permalink {
-          flex-basis: 100%;
-          max-width: none;
-          margin-left: 0;
-          text-align: left;
-        }
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       #map {
@@ -681,7 +678,10 @@
 
         function addCopyControls(map, which) {
           // which: "A" (normal + compare A) or "B". Slug is read live so the
-          // buttons stay correct after a style switch.
+          // buttons stay correct after a style switch. Bottom corners: the
+          // expanding style switcher used to push these around when they
+          // shared the top corner, and bottom-right keeps them on side B's
+          // visible half in swipe mode.
           map.addControl(
             new CopyStyleControl(
               function () {
@@ -691,7 +691,7 @@
                 return map;
               },
             ),
-            which === "B" ? "top-right" : "top-left",
+            which === "B" ? "bottom-right" : "bottom-left",
           );
         }
 
@@ -708,7 +708,10 @@
           var lon = c.lng.toFixed(4) + "\u00b0" + (c.lng >= 0 ? "E" : "W");
           var slug = state.style;
           var parts = ["z" + map.getZoom().toFixed(2), lat + " " + lon, slug];
-          if (loadTiming && loadTiming.map === map) {
+          // Load timing only when there is room — on phones the chip must
+          // show z + coords + slug without trimming.
+          var roomForTiming = window.innerWidth >= 500;
+          if (roomForTiming && loadTiming && loadTiming.map === map) {
             if (loadTiming.tilesMs != null)
               parts.push("load " + (loadTiming.tilesMs / 1000).toFixed(1) + "s");
             if (loadTiming.idleMs != null)
@@ -1033,7 +1036,8 @@
           // mode so it doubles as the state display.
           els.modeToggle.textContent =
             kind === "swipe" ? "Compare 1:1" : "Normal mode";
-          startFps();
+          // FPS panel is normal-mode only — in compare modes it fought
+          // with the switcher menus for space.
         }
 
         // ---------- camera sync (shared by swipe and 1:1) ----------
@@ -1281,7 +1285,14 @@
           els.catalogToggle.textContent = els.catalogRow.hidden
             ? "Catalog \u25be"
             : "Catalog \u25b4";
-          if (!els.catalogRow.hidden) els.tileserverInput.focus();
+          // Autofocus only with a fine pointer — on phones it pops the
+          // keyboard over the map.
+          if (
+            !els.catalogRow.hidden &&
+            window.matchMedia("(pointer: fine)").matches
+          ) {
+            els.tileserverInput.focus();
+          }
         });
         if (els.catalogRow.hidden) els.catalogToggle.textContent = "Catalog \u25be";
 
