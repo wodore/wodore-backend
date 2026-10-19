@@ -27,6 +27,19 @@
         color: #1c1c1c;
       }
 
+      /* Header sizes naturally (wraps on phones); the map area fills the
+         rest — no hardcoded header height to drift out of sync. */
+      body {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .mode {
+        position: relative;
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+
       #bar {
         display: flex;
         flex-wrap: wrap;
@@ -94,19 +107,6 @@
         width: 240px;
       }
 
-      #martin-link {
-        font-size: 12px;
-        color: #4d6b58;
-      }
-
-      #martin-link a {
-        color: #2a6;
-        text-decoration: none;
-      }
-
-      #martin-link a:hover {
-        text-decoration: underline;
-      }
 
       #permalink {
         margin-left: auto;
@@ -116,14 +116,6 @@
         overflow: hidden;
         text-overflow: ellipsis;
         max-width: 30%;
-      }
-
-      .mode {
-        position: absolute;
-        top: 37px;
-        bottom: 0;
-        left: 0;
-        right: 0;
       }
 
       #map {
@@ -210,7 +202,8 @@
         border: 1px solid #4d6b58;
       }
 
-      /* stats.js panel: pin it below the header, right side */
+      /* stats.js panel: JS pins it below the header (height varies when
+         the header wraps on phones) */
       #fps-panel {
         position: fixed;
         top: 45px;
@@ -308,11 +301,26 @@
         }
       }
 
-      /* Compare modes (swipe + 1:1) hide the attribution expand buttons
-         (both class spellings across maplibre versions). */
-      #compare-wrap .maplibregl-ctrl-attrib-button,
-      #compare-wrap .maplibre-ctrl-attrib-button {
+      /* Compare modes hide the whole attribution control — collapsed
+         "© …" bars on both halves stack up at the seam/bottom and read as
+         clutter (both class spellings across maplibre versions). The style
+         documents themselves still carry attribution, and normal mode keeps
+         its single control. */
+      #compare-wrap .maplibregl-ctrl-attrib,
+      #compare-wrap .maplibre-ctrl-attrib {
         display: none;
+      }
+
+      /* Per-map copy controls (maplibre ctrl-group buttons) */
+      .maplibregl-ctrl-group button.wd-copy-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .maplibregl-ctrl-group button.wd-copy-btn.wd-copied {
+        background: #e4f4e4;
+        color: #1c5c1c;
       }
 
       /* Position readout (zoom/lat/lon) in the header — so screenshots
@@ -414,10 +422,23 @@
 
         var q = new URLSearchParams(location.search);
         var DEFAULT_CATALOG = location.origin + "/v1/map/catalog";
-        var CATALOG_URL =
-          q.get("catalog") ||
-          localStorage.getItem("mapcompare:catalog") ||
-          DEFAULT_CATALOG;
+        // localStorage can throw (private mode / blocked storage) — a throw
+        // here would kill the whole script and leave no map at all.
+        var storedCatalog = null;
+        try {
+          storedCatalog = localStorage.getItem("mapcompare:catalog");
+        } catch (err) {
+          void err;
+        }
+        var CATALOG_URL = q.get("catalog") || storedCatalog || DEFAULT_CATALOG;
+
+        // Parsed+clamped numeric URL param (NaN/garbage falls back to the
+        // default instead of poisoning the camera and the permalink).
+        function numParam(raw, fallback, min, max) {
+          var v = parseFloat(raw);
+          if (!isFinite(v)) return fallback;
+          return Math.min(max, Math.max(min, v));
+        }
 
         var FALLBACK_STYLES = [
           "wd-outdoor-base-mtk-hill", // the product default (frontend PR #292)
@@ -428,10 +449,10 @@
         var state = {
           style: q.get("style") || "wd-outdoor-base-mtk-hill",
           styleB: q.get("styleB") || "wd-outdoor-base-ofm",
-          zoom: parseFloat(q.get("z") || "12"),
+          zoom: numParam(q.get("z"), 12, 0, 22),
           center: [
-            parseFloat(q.get("lon") || "11.4041"),
-            parseFloat(q.get("lat") || "47.2692"),
+            numParam(q.get("lon"), 11.4041, -180, 180),
+            numParam(q.get("lat"), 47.2692, -85, 85),
           ],
           mode: (function () {
             var m = q.get("mode");
@@ -462,6 +483,9 @@
         var fpsRaf = 0;
         var inspectPopup = null;
         var inspectHandler = null;
+        // MutationObservers of live style switchers — disconnected on
+        // teardown so mode switches never accumulate stale observers.
+        var switcherObservers = [];
 
         // ---------- catalog URL ----------
         function catalogOrigin() {
@@ -474,14 +498,22 @@
 
         function updateTileserverUI() {
           els.tileserverInput.value = CATALOG_URL;
-          els.catalogLink.href = CATALOG_URL;
+          // Only http(s) origins — the value is free text and a javascript:
+          // URL would execute on click.
+          els.catalogLink.href = /^https?:/i.test(CATALOG_URL)
+            ? CATALOG_URL
+            : "about:blank";
         }
 
         function setTileserver(url) {
           var clean = url.trim();
           if (!clean || clean === CATALOG_URL) return;
           CATALOG_URL = clean;
-          localStorage.setItem("mapcompare:catalog", CATALOG_URL);
+          try {
+            localStorage.setItem("mapcompare:catalog", CATALOG_URL);
+          } catch (err) {
+            void err; // private mode — the URL still applies for this session
+          }
           updateTileserverUI();
           syncPermalink();
           bootCatalog(); // re-fetch styles, rebuild switchers
@@ -509,10 +541,14 @@
         var backendStyles = {};
         // Style slugs -> display names from the catalog (fallback: slug)
         var styleNames = {};
+        // The catalog's default basemap (from /v1/map/layers is_default); the
+        // star marks whatever the catalog says is default — falls back to the
+        // product default slug when no layers endpoint answered.
+        var catalogDefaultSlug = "wd-outdoor-base-mtk-hill";
 
         function styleDisplayName(id) {
           var name = styleNames[id] || id.replace(/^wd-outdoor-base-/, "");
-          var prefix = id === "wd-outdoor-base-mtk-hill" ? "\u2605 " : "";
+          var prefix = id === catalogDefaultSlug ? "\u2605 " : "";
           return prefix + name;
         }
 
@@ -547,6 +583,104 @@
             state.zoom = map.getZoom();
             syncPermalink();
           });
+        }
+
+        // ---------- per-map copy controls (maplibre ctrl buttons) ----------
+        // A ctrl-group with two buttons per map: link icon copies THAT
+        // map's style URL, code icon copies a JSON blob with the view
+        // context (name, slug, url, zoom, center, mode, …) — for issue
+        // reports and pasting map state into chats/tickets.
+        var ICON_COPY =
+          '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"/></svg>';
+        var ICON_CODE =
+          '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M9.4 16.6 4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0 4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>';
+
+        function styleInfoJson(slug, map) {
+          var c = map.getCenter();
+          return JSON.stringify(
+            {
+              name: (styleNames[slug] || slug).replace(/^\u2605 /, ""),
+              slug: slug,
+              url: styleUrl(slug),
+              mode: state.mode,
+              zoom: Math.round(map.getZoom() * 100) / 100,
+              center: {
+                lat: Math.round(c.lat * 100000) / 100000,
+                lng: Math.round(c.lng * 100000) / 100000,
+              },
+              bearing: Math.round(map.getBearing() * 10) / 10,
+              pitch: Math.round(map.getPitch() * 10) / 10,
+              catalog: CATALOG_URL,
+              captured_at: new Date().toISOString(),
+            },
+            null,
+            2,
+          );
+        }
+
+        function CopyStyleControl(getSlug, getMap) {
+          this._getSlug = getSlug;
+          this._getMap = getMap;
+        }
+        CopyStyleControl.prototype.onAdd = function () {
+          var self = this;
+          this._container = document.createElement("div");
+          this._container.className = "maplibregl-ctrl maplibregl-ctrl-group";
+
+          function mkBtn(icon, title, build) {
+            var b = document.createElement("button");
+            b.type = "button";
+            b.className = "wd-copy-btn";
+            b.title = title;
+            b.setAttribute("aria-label", title);
+            b.innerHTML = icon;
+            b.addEventListener("click", function () {
+              copyText(build()).then(
+                function () {
+                  b.classList.add("wd-copied");
+                  setTimeout(function () {
+                    b.classList.remove("wd-copied");
+                  }, 900);
+                },
+                function () {
+                  b.title = "copy failed — see header button";
+                },
+              );
+            });
+            return b;
+          }
+
+          this._container.appendChild(
+            mkBtn(ICON_COPY, "Copy this style's URL", function () {
+              return styleUrl(self._getSlug());
+            }),
+          );
+          this._container.appendChild(
+            mkBtn(ICON_CODE, "Copy map info as JSON", function () {
+              return styleInfoJson(self._getSlug(), self._getMap());
+            }),
+          );
+          return this._container;
+        };
+        CopyStyleControl.prototype.onRemove = function () {
+          this._container?.remove();
+          this._container = null;
+        };
+
+        function addCopyControls(map, which) {
+          // which: "A" (normal + compare A) or "B". Slug is read live so the
+          // buttons stay correct after a style switch.
+          map.addControl(
+            new CopyStyleControl(
+              function () {
+                return which === "B" ? state.styleB : state.style;
+              },
+              function () {
+                return map;
+              },
+            ),
+            which === "B" ? "top-right" : "top-left",
+          );
         }
 
         // ---------- position readout ----------
@@ -636,26 +770,40 @@
           if (container) {
             container.addEventListener("click", function (e) {
               if (!container.querySelector(".style-switcher-list")) {
+                // collapsed: tap opens
                 e.stopPropagation();
                 e.preventDefault();
                 ctrl._setExpanded(true);
+              } else if (e.target.closest(".style-switcher-item")) {
+                // open + tap on an item: let the vendored item handler
+                // select first, then collapse — on touch there is no
+                // hover-out to close the list.
+                setTimeout(function () {
+                  ctrl._setExpanded(false);
+                }, 0);
               }
             });
-          }
-          // two-line items (name + slug), re-applied on every re-render
-          if (container) {
             var reformat = function () {
+              // NOTE: list items are matched to switcherStyles() by index —
+              // the vendored control renders styles in array order.
               twoLineSwitcherItems(container, switcherStyles());
             };
-            new MutationObserver(reformat).observe(container, {
-              childList: true,
-              subtree: true,
-            });
+            var obs = new MutationObserver(reformat);
+            obs.observe(container, { childList: true, subtree: true });
+            switcherObservers.push(obs);
             reformat();
           }
         }
 
         // ---------- FPS (stats.js, rAF driven) ----------
+        function pinFpsPanel() {
+          // Header height varies when it wraps — pin the panel below it.
+          var panel = document.getElementById("fps-panel");
+          if (!panel) return;
+          panel.style.top = document.getElementById("bar").offsetHeight + 6 + "px";
+        }
+        window.addEventListener("resize", pinFpsPanel);
+
         function startFps() {
           if (fpsStats) return;
           fpsStats = new Stats();
@@ -665,6 +813,7 @@
           wrap.id = "fps-panel";
           wrap.appendChild(fpsStats.dom);
           document.body.appendChild(wrap);
+          pinFpsPanel();
           var tick = function () {
             fpsStats.begin();
             fpsStats.end();
@@ -705,29 +854,37 @@
               return;
             }
             var f = feats[0];
-            var props = Object.keys(f.properties || {})
-              .slice(0, 8)
-              .map(function (k) {
-                return k + ": " + JSON.stringify(f.properties[k]);
-              })
-              .join("\n");
-            var html =
-              '<div class="inspect-popup">' +
-              '<span class="layer-id">' +
-              f.layer.id +
-              "</span>" +
-              ' <span class="source-layer">(' +
-              (f.sourceLayer || f.source || "?") +
-              ")</span>" +
-              (props ? '<div class="props">' + props + "</div>" : "") +
-              "</div>";
+            // Build the popup with DOM APIs (textContent) — layer ids and
+            // feature properties come from whatever tileserver the catalog
+            // points at, so string-built HTML would be an injection surface.
+            var box = document.createElement("div");
+            box.className = "inspect-popup";
+            var layerId = document.createElement("span");
+            layerId.className = "layer-id";
+            layerId.textContent = f.layer.id;
+            var sourceLayer = document.createElement("span");
+            sourceLayer.className = "source-layer";
+            sourceLayer.textContent = "(" + (f.sourceLayer || f.source || "?") + ")";
+            box.appendChild(layerId);
+            box.appendChild(sourceLayer);
+            var propKeys = Object.keys(f.properties || {}).slice(0, 8);
+            if (propKeys.length) {
+              var props = document.createElement("div");
+              props.className = "props";
+              props.textContent = propKeys
+                .map(function (k) {
+                  return k + ": " + JSON.stringify(f.properties[k]);
+                })
+                .join("\n");
+              box.appendChild(props);
+            }
             if (inspectPopup) inspectPopup.remove();
             inspectPopup = new maplibregl.Popup({
               closeButton: false,
               closeOnClick: false,
             })
               .setLngLat(e.lngLat)
-              .setHTML(html)
+              .setDOMContent(box)
               .addTo(normalMap);
           };
           normalMap.on("click", inspectHandler);
@@ -754,6 +911,7 @@
           els.inspectToggle.hidden = false;
           normalMap = makeMap("map", state.style);
           addSwitcher(normalMap, "A");
+          addCopyControls(normalMap, "A");
           trackView(normalMap);
           bindPosReadout(normalMap);
           startFps();
@@ -776,6 +934,8 @@
           var b = makeMap("compare-b", state.styleB);
           addSwitcher(a, "A");
           addSwitcher(b, "B");
+          addCopyControls(a, "A");
+          addCopyControls(b, "B");
           trackView(a);
           bindPosReadout(a);
           compareMaps = {
@@ -790,6 +950,7 @@
           // mode so it doubles as the state display.
           els.modeToggle.textContent =
             kind === "swipe" ? "Compare 1:1" : "Normal mode";
+          startFps();
         }
 
         // ---------- camera sync (shared by swipe and 1:1) ----------
@@ -913,6 +1074,13 @@
         function teardown() {
           stopFps();
           disableInspect();
+          while (switcherObservers.length) {
+            try {
+              switcherObservers.pop().disconnect();
+            } catch (err) {
+              void err;
+            }
+          }
           document
             .getElementById("compare-wrap")
             .classList.remove("grid11", "compare-vertical");
@@ -989,6 +1157,7 @@
                       roles[ld.data[i].slug] = ld.data[i].role;
                       if (ld.data[i].is_default) defaultSlug = ld.data[i].slug;
                     }
+                    if (defaultSlug) catalogDefaultSlug = defaultSlug;
                     ids = ids.filter(function (slug) {
                       return !roles[slug] || roles[slug] === "basemap";
                     });
