@@ -330,6 +330,43 @@
         display: none;
       }
 
+      /* A/B style pickers in the header — the in-map switcher menus do not
+         fit inside compare halves on phones (names cut mid-word at the
+         seam, scrollbars over items, ambiguous which side changes). Native
+         selects get a proper scrollable list for free. Compare modes +
+         narrow screens only; desktop keeps the in-map switchers. */
+      .ab-select {
+        font: inherit;
+        font-size: 12px;
+        padding: 3px 4px;
+        border: 1px solid #9aa8a0;
+        border-radius: 4px;
+        background: #fff;
+        max-width: 42vw;
+      }
+
+      .ab-select[hidden] {
+        display: none;
+      }
+
+      @media (min-width: 641px) {
+        .ab-select {
+          display: none !important;
+        }
+      }
+
+      @media (max-width: 640px) {
+        body.compare-mode #compare-wrap .style-switcher {
+          display: none !important;
+        }
+      }
+
+      /* Desktop list polish: reserve a scrollbar gutter instead of the
+         overlay scrollbar running over the item text (mobile WebKit). */
+      .maplibregl-ctrl.style-switcher .style-switcher-list {
+        scrollbar-gutter: stable;
+      }
+
       /* Per-map copy controls (maplibre ctrl-group buttons) */
       .maplibregl-ctrl-group button.wd-copy-btn {
         display: flex;
@@ -376,6 +413,8 @@
       <button id="mode-toggle" type="button">Compare mode</button>
       <button id="inspect-toggle" type="button" hidden>Inspect: off</button>
       <button id="catalog-toggle" type="button" title="Show/hide the catalog URL row">Catalog ▾</button>
+      <select id="style-a-select" class="ab-select" hidden aria-label="Style for side A"></select>
+      <select id="style-b-select" class="ab-select" hidden aria-label="Style for side B"></select>
       <span id="permalink" title="current view, copy me"></span>
       <div id="catalog-row">
         <label for="tileserver-input">Catalog:</label>
@@ -729,6 +768,51 @@
           fmtViewChip(normalMap || (compareMaps && compareMaps.a));
         }
 
+        // ---------- A/B style selects (mobile compare) ----------
+        // The in-map switcher menus do not fit compare halves on phones;
+        // native selects in the header replace them there (CSS hides the
+        // in-map switchers under 640px in compare mode).
+        var abSelects = {
+          A: document.getElementById("style-a-select"),
+          B: document.getElementById("style-b-select"),
+        };
+
+        function refreshABSelects() {
+          for (var side in abSelects) {
+            if (!Object.prototype.hasOwnProperty.call(abSelects, side))
+              continue;
+            var sel = abSelects[side];
+            var current = side === "B" ? state.styleB : state.style;
+            sel.innerHTML = "";
+            for (var i = 0; i < styleIds.length; i++) {
+              var id = styleIds[i];
+              var opt = document.createElement("option");
+              opt.value = id;
+              opt.textContent =
+                (side === "A" ? "A: " : "B: ") + styleDisplayName(id);
+              if (id === current) opt.selected = true;
+              sel.appendChild(opt);
+            }
+            sel.hidden = state.mode === "normal";
+          }
+        }
+
+        function applyABSelect(side, slug) {
+          if (side === "B") state.styleB = slug;
+          else state.style = slug;
+          var map = side === "B" ? compareMaps?.b : compareMaps?.a;
+          if (map) map.setStyle(styleUrl(slug));
+          syncPermalink();
+          refreshViewChip();
+        }
+
+        abSelects.A.addEventListener("change", function () {
+          applyABSelect("A", abSelects.A.value);
+        });
+        abSelects.B.addEventListener("change", function () {
+          applyABSelect("B", abSelects.B.value);
+        });
+
         // ---------- load timing (normal mode) ----------
         function trackLoadTiming(map) {
           loadTiming = { start: performance.now(), tilesMs: null, idleMs: null, map: map };
@@ -811,6 +895,7 @@
               // refresh the view chip (slug part) everywhere.
               if (which === "A" && normalMap) trackLoadTiming(normalMap);
               refreshViewChip();
+              refreshABSelects(); // keep the mobile A/B selects in sync
             },
           });
           // Side B's switcher goes top-right: the compare slider's clip-path
@@ -991,6 +1076,7 @@
         // ---------- modes ----------
         function enterNormal() {
           teardown();
+          document.body.classList.remove("compare-mode");
           els.normal.hidden = false;
           els.compare.hidden = true;
           els.inspectToggle.hidden = false;
@@ -1008,6 +1094,7 @@
         function enterCompare(kind) {
           // kind: "swipe" (slider over one map) or "11" (two halves)
           teardown();
+          document.body.classList.add("compare-mode");
           els.normal.hidden = true;
           els.compare.hidden = false;
           els.inspectToggle.hidden = true;
@@ -1036,6 +1123,7 @@
           // mode so it doubles as the state display.
           els.modeToggle.textContent =
             kind === "swipe" ? "Compare 1:1" : "Normal mode";
+          refreshABSelects();
           // FPS panel is normal-mode only — in compare modes it fought
           // with the switcher menus for space.
         }
