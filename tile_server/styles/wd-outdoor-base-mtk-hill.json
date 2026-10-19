@@ -2145,10 +2145,8 @@
     },
     "contours": {
       "type": "vector",
-      "tiles": ["/contours/{z}/{x}/{y}"],
-      "minzoom": 11,
-      "maxzoom": 15,
-      "attribution": "<a href='https://registry.opendata.aws/terrain-tiles/'>AWS Terrain Tiles</a>"
+      "url": "https://tiles.maptoolkit.org/contours.json",
+      "maxzoom": 14
     },
     "naturalearth": {
       "type": "raster",
@@ -2179,16 +2177,23 @@
       "encoding": "terrarium"
     },
     "rgb-tiles": {
-      "type": "raster-dem",
       "url": "https://tiles.maptoolkit.org/terrainrgb.json",
+      "type": "raster-dem",
       "encoding": "terrarium"
     },
-    "hillshade-server": {
-      "type": "raster",
-      "tiles": ["/hillshade/{z}/{x}/{y}"],
-      "tileSize": 512,
+    "rgb-tiles-blur-min": {
+      "type": "raster-dem",
+      "url": "https://tiles.maptoolkit.org/terrainrgb.json",
       "maxzoom": 15,
-      "attribution": "<a href='https://registry.opendata.aws/terrain-tiles/'>AWS Terrain Tiles</a>"
+      "encoding": "terrarium",
+      "tileSize": 2048
+    },
+    "rgb-tiles-blur-med": {
+      "type": "raster-dem",
+      "url": "https://tiles.maptoolkit.org/terrainrgb.json",
+      "maxzoom": 15,
+      "encoding": "terrarium",
+      "tileSize": 4096
     }
   },
   "layers": [
@@ -2245,27 +2250,6 @@
         "maptoolkit:legend": {
           "hidden": true
         }
-      }
-    },
-    {
-      "id": "relief_hillshade_server",
-      "type": "raster",
-      "source": "hillshade-server",
-      "minzoom": 12.8,
-      "paint": {
-        "raster-opacity": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          12.8,
-          0.55,
-          14,
-          0.62,
-          15,
-          0.7
-        ],
-        "raster-brightness-min": 0.4,
-        "raster-resampling": "linear"
       }
     },
     {
@@ -2351,13 +2335,13 @@
           ["linear"],
           ["zoom"],
           4,
-          "hsla(81, 30%, 96%, 0)",
+          "hsla(0, 0%, 98%, 0)",
           5,
-          "hsla(81, 30%, 96%, 0.45)",
-          10,
-          "hsla(81, 30%, 96%, 0.5)",
+          "hsla(0, 0%, 98%, 1)",
+          11,
+          "hsla(0, 0%, 98%, 1)",
           14,
-          "hsla(81, 30%, 96%, 0.55)"
+          "hsla(0, 0%, 98%, 1)"
         ]
       },
       "metadata": {
@@ -2542,144 +2526,96 @@
             "match",
             ["get", "type"],
             "wood",
-            "hsla(92, 42%, 83%, 0)",
+            "hsla(138, 20%, 87%, 0)",
             "farmland",
-            "hsla(58, 45%, 89%, 0)",
+            "hsla(55, 13%, 92%, 0)",
             ["wetland", "tidalflat"],
-            "hsla(103, 35%, 88%, 0)",
+            "hsla(100, 10%, 91%, 0)",
             "rock",
-            "hsla(70, 8%, 91%, 0)",
+            "hsla(70, 6%, 93%, 0)",
             "sand",
-            "hsla(36, 55%, 89%, 0)",
+            "hsla(45, 15%, 92%, 0)",
             "scrub",
-            "hsla(86, 35%, 84%, 0)",
+            "hsla(85, 12%, 89%, 0)",
             "fell",
-            "hsla(70, 40%, 86%, 0)",
+            "hsla(70, 10%, 90%, 0)",
             "ice",
-            "hsla(182, 60%, 96%, 0)",
+            "hsla(193, 42%, 91%, 0)",
             "salt_desert",
-            "hsla(182, 45%, 95%, 0)",
-            "hsla(81, 35%, 89%, 0)"
+            "hsla(193, 38%, 93%, 0)",
+            "hsla(75, 8%, 93%, 0)"
           ],
-          5,
+          9,
           [
             "match",
             ["get", "type"],
             "wood",
-            "hsla(92, 42%, 83%, 0.8)",
+            "hsla(138, 20%, 87%, 0.3)",
             "farmland",
-            "hsla(58, 45%, 89%, 0.8)",
+            "hsla(55, 13%, 92%, 0.3)",
             ["wetland", "tidalflat"],
-            "hsla(103, 35%, 88%, 0.8)",
+            "hsla(100, 10%, 91%, 0.3)",
             "rock",
-            "hsla(70, 8%, 91%, 0.8)",
+            "hsla(70, 6%, 93%, 0.3)",
             "sand",
-            "hsla(36, 55%, 89%, 0.8)",
+            "hsla(45, 15%, 92%, 0.3)",
             "scrub",
-            "hsla(86, 35%, 84%, 0.8)",
+            "hsla(85, 12%, 89%, 0.3)",
             "fell",
-            "hsla(70, 40%, 86%, 0.8)",
+            "hsla(70, 10%, 90%, 0.3)",
             "ice",
-            "hsla(182, 60%, 96%, 0.8)",
+            "hsla(193, 42%, 91%, 0.3)",
             "salt_desert",
-            "hsla(182, 45%, 95%, 0.8)",
-            "hsla(81, 35%, 89%, 0.8)"
+            "hsla(193, 38%, 93%, 0.3)",
+            "hsla(75, 8%, 93%, 0.3)"
           ],
-          7,
+          11,
           [
             "match",
             ["get", "type"],
             "wood",
-            "hsla(92, 42%, 83%, 0.9)",
+            "hsla(138, 20%, 87%, 0.7)",
             "farmland",
-            "hsla(58, 45%, 89%, 0.9)",
+            "hsla(55, 13%, 92%, 0.7)",
             ["wetland", "tidalflat"],
-            "hsla(103, 35%, 88%, 0.9)",
+            "hsla(100, 10%, 91%, 0.7)",
             "rock",
-            "hsla(70, 8%, 91%, 0.9)",
+            "hsla(70, 6%, 93%, 0.7)",
             "sand",
-            "hsla(36, 55%, 89%, 0.9)",
+            "hsla(45, 15%, 92%, 0.7)",
             "scrub",
-            "hsla(86, 35%, 84%, 0.9)",
+            "hsla(85, 12%, 89%, 0.7)",
             "fell",
-            "hsla(70, 40%, 86%, 0.9)",
+            "hsla(70, 10%, 90%, 0.7)",
             "ice",
-            "hsla(182, 60%, 96%, 0.9)",
+            "hsla(193, 42%, 91%, 0.7)",
             "salt_desert",
-            "hsla(182, 45%, 95%, 0.9)",
-            "hsla(81, 35%, 89%, 0.9)"
+            "hsla(193, 38%, 93%, 0.7)",
+            "hsla(75, 8%, 93%, 0.7)"
           ],
-          10,
+          13,
           [
             "match",
             ["get", "type"],
             "wood",
-            "hsla(92, 43%, 82%, 0.9)",
+            "hsla(138, 20%, 87%, 0.88)",
             "farmland",
-            "hsla(58, 46%, 88%, 0.9)",
+            "hsla(55, 13%, 92%, 0.22)",
             ["wetland", "tidalflat"],
-            "hsla(103, 36%, 87%, 0.9)",
+            "hsla(100, 10%, 91%, 0.88)",
             "rock",
-            "hsla(70, 8%, 91%, 0.9)",
+            "hsla(70, 6%, 93%, 0.88)",
             "sand",
-            "hsla(36, 55%, 88%, 0.9)",
+            "hsla(45, 15%, 92%, 0.88)",
             "scrub",
-            "hsla(86, 36%, 83%, 0.9)",
+            "hsla(85, 12%, 89%, 0.45)",
             "fell",
-            "hsla(70, 40%, 85%, 0.9)",
+            "hsla(70, 10%, 90%, 0.45)",
             "ice",
-            "hsla(182, 61%, 96%, 0.9)",
+            "hsla(193, 42%, 91%, 0.88)",
             "salt_desert",
-            "hsla(182, 46%, 95%, 0.9)",
-            "hsla(81, 35%, 89%, 0.9)"
-          ],
-          12,
-          [
-            "match",
-            ["get", "type"],
-            "wood",
-            "hsla(92, 44%, 82%, 0.85)",
-            "farmland",
-            "hsla(58, 46%, 88%, 0.85)",
-            ["wetland", "tidalflat"],
-            "hsla(103, 36%, 87%, 0.85)",
-            "rock",
-            "hsla(70, 8%, 91%, 0.85)",
-            "sand",
-            "hsla(36, 55%, 88%, 0.85)",
-            "scrub",
-            "hsla(86, 36%, 83%, 0.85)",
-            "fell",
-            "hsla(70, 40%, 85%, 0.85)",
-            "ice",
-            "hsla(182, 62%, 96%, 0.85)",
-            "salt_desert",
-            "hsla(182, 46%, 95%, 0.85)",
-            "hsla(81, 35%, 89%, 0.85)"
-          ],
-          14,
-          [
-            "match",
-            ["get", "type"],
-            "wood",
-            "hsla(92, 46%, 80%, 0.85)",
-            "farmland",
-            "hsla(58, 48%, 87%, 0.85)",
-            ["wetland", "tidalflat"],
-            "hsla(103, 38%, 86%, 0.85)",
-            "rock",
-            "hsla(70, 8%, 91%, 0.85)",
-            "sand",
-            "hsla(36, 56%, 87%, 0.85)",
-            "scrub",
-            "hsla(86, 38%, 82%, 0.85)",
-            "fell",
-            "hsla(70, 42%, 84%, 0.85)",
-            "ice",
-            "hsla(182, 64%, 96%, 0.85)",
-            "salt_desert",
-            "hsla(182, 48%, 95%, 0.85)",
-            "hsla(81, 35%, 89%, 0.85)"
+            "hsla(193, 38%, 93%, 0.88)",
+            "hsla(75, 8%, 93%, 0.88)"
           ]
         ],
         "fill-outline-color": [
@@ -2985,7 +2921,7 @@
       "id": "swiss-relief",
       "type": "raster",
       "source": "swiss-relief",
-      "minzoom": 10.5,
+      "minzoom": 11,
       "paint": {
         "raster-opacity": [
           "interpolate",
@@ -3012,7 +2948,7 @@
     {
       "id": "relief_contour_shadow",
       "source": "contours",
-      "source-layer": "contour",
+      "source-layer": "contours",
       "type": "line",
       "filter": ["!=", ["get", "ele"], 0],
       "minzoom": 13,
@@ -3028,10 +2964,28 @@
           "interpolate",
           ["exponential", 1.2],
           ["zoom"],
-          13,
-          ["case", ["get", "major"], 0.55, 0.2],
+          11,
+          [
+            "case",
+            ["in", ["get", "divisor"], ["literal", [500, 1000]]],
+            0.51,
+            ["in", ["get", "divisor"], ["literal", [100, 200]]],
+            0.31,
+            ["in", ["get", "divisor"], ["literal", [0, 10, 20, 50]]],
+            0.16,
+            0
+          ],
           16,
-          ["case", ["get", "major"], 1.7, 0.65]
+          [
+            "case",
+            ["in", ["get", "divisor"], ["literal", [500, 1000]]],
+            2.54,
+            ["in", ["get", "divisor"], ["literal", [100, 200]]],
+            1.53,
+            ["in", ["get", "divisor"], ["literal", [0, 10, 20, 50]]],
+            0.78,
+            0
+          ]
         ],
         "line-offset": [
           "interpolate",
@@ -3073,7 +3027,7 @@
     {
       "id": "relief_contour_multicolored",
       "source": "contours",
-      "source-layer": "contour",
+      "source-layer": "contours",
       "type": "line",
       "filter": ["!=", ["get", "ele"], 0],
       "minzoom": 13,
@@ -3086,18 +3040,38 @@
       "paint": {
         "line-color": [
           "case",
-          ["get", "major"],
-          "hsla(30, 45%, 42%, 0.9)",
-          "hsla(30, 38%, 58%, 0.7)"
+          ["==", ["get", "terrain_type"], "normal"],
+          "hsla(30, 49%, 50%, 0.85)",
+          ["==", ["get", "terrain_type"], "glacier"],
+          "hsla(182.25, 60%, 45%, 0.7)",
+          "hsla(69.75, 0%, 45%, 0.7)"
         ],
         "line-width": [
           "interpolate",
           ["exponential", 1.2],
           ["zoom"],
-          13,
-          ["case", ["get", "major"], 0.55, 0.2],
+          11,
+          [
+            "case",
+            ["in", ["get", "divisor"], ["literal", [500, 1000]]],
+            0.51,
+            ["in", ["get", "divisor"], ["literal", [100, 200]]],
+            0.31,
+            ["in", ["get", "divisor"], ["literal", [0, 10, 20, 50]]],
+            0.16,
+            0
+          ],
           16,
-          ["case", ["get", "major"], 1.7, 0.65]
+          [
+            "case",
+            ["in", ["get", "divisor"], ["literal", [500, 1000]]],
+            2.54,
+            ["in", ["get", "divisor"], ["literal", [100, 200]]],
+            1.53,
+            ["in", ["get", "divisor"], ["literal", [0, 10, 20, 50]]],
+            0.78,
+            0
+          ]
         ],
         "line-blur": 0.4
       },
@@ -3110,30 +3084,104 @@
       }
     },
     {
-      "id": "relief_hillshade_lowzoom",
+      "id": "relief_hillshade_ao_min",
       "type": "hillshade",
-      "source": "rgb-tiles",
-      "minzoom": 2,
-      "maxzoom": 13.2,
+      "paint": {
+        "hillshade-exaggeration": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          4,
+          0.26,
+          6.5,
+          0.36,
+          8.5,
+          0.4,
+          12,
+          0.54,
+          16,
+          0.5
+        ],
+        "hillshade-shadow-color": "hsla(205, 10%, 55%, 0.22)",
+        "hillshade-accent-color": "hsla(-9, 0%, 0%, 0)",
+        "hillshade-highlight-color": "hsla(192, 100%, 85%, 0)"
+      },
+      "layout": {
+        "visibility": "visible"
+      },
+      "source": "rgb-tiles-blur-min",
+      "maxzoom": 23,
+      "minzoom": 0,
+      "metadata": {
+        "maptoolkit:legend": {
+          "hidden": true
+        }
+      }
+    },
+    {
+      "id": "relief_hillshade_ao_med",
+      "type": "hillshade",
+      "paint": {
+        "hillshade-exaggeration": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          4,
+          0.26,
+          6.5,
+          0.36,
+          8.5,
+          0.4,
+          12,
+          0.54,
+          16,
+          0.5
+        ],
+        "hillshade-shadow-color": "hsla(-9, 0%, 30%, 0.22)",
+        "hillshade-accent-color": "hsla(-9, 0%, 0%, 0)",
+        "hillshade-highlight-color": "hsla(192, 100%, 85%, 0)"
+      },
+      "layout": {
+        "visibility": "visible"
+      },
+      "source": "rgb-tiles-blur-med",
+      "maxzoom": 23,
+      "minzoom": 0,
+      "metadata": {
+        "maptoolkit:legend": {
+          "hidden": true
+        }
+      }
+    },
+    {
+      "id": "relief_hillshade_dramatic",
+      "type": "hillshade",
       "paint": {
         "hillshade-illumination-anchor": "viewport",
+        "hillshade-accent-color": "hsla(0, 0%, 0%, 0)",
+        "hillshade-shadow-color": "hsla(210, 14%, 38%, 0.46)",
+        "hillshade-highlight-color": "hsla(45, 60%, 96%, 0.55)",
         "hillshade-illumination-direction": 315,
         "hillshade-exaggeration": [
           "interpolate",
           ["linear"],
           ["zoom"],
-          2,
-          0.7,
-          6,
-          0.55,
-          10,
-          0.45,
-          13.2,
-          0.35
-        ],
-        "hillshade-shadow-color": "hsla(210, 18%, 32%, 0.55)",
-        "hillshade-highlight-color": "hsla(45, 60%, 97%, 0.4)",
-        "hillshade-accent-color": "hsla(0, 0%, 0%, 0)"
+          4,
+          0.24,
+          9.5,
+          0.36
+        ]
+      },
+      "layout": {
+        "visibility": "visible"
+      },
+      "source": "rgb-tiles",
+      "maxzoom": 14,
+      "minzoom": 0,
+      "metadata": {
+        "maptoolkit:legend": {
+          "hidden": true
+        }
       }
     },
     {
@@ -4905,26 +4953,30 @@
           5,
           "hsla(0, 0%, 60%, 0)",
           6.5,
-          ["match", ["get", "type"], "motorway", "#A05A28", "#8C8C8C"],
+          "#8C8C8C",
+          12,
+          "#B5B5B0",
           14.5,
-          ["match", ["get", "type"], "motorway", "#8A4A20", "#3C3C3C"]
+          "#3C3C3C"
         ],
         "line-width": [
           "interpolate",
-          ["linear"],
+          ["exponential", 2],
           ["zoom"],
           6,
           0.5,
           9,
           1.2,
-          13,
+          12,
           1.8,
+          13,
+          2.2,
           15,
-          3,
-          16,
           4.5,
+          16,
+          7.5,
           20,
-          11
+          95
         ]
       }
     },
@@ -4948,18 +5000,28 @@
         "visibility": "visible"
       },
       "paint": {
-        "line-color": "hsl(35, 15%, 45%)",
-        "line-gap-width": 0,
-        "line-width": [
+        "line-color": [
           "interpolate",
           ["linear"],
           ["zoom"],
-          12,
-          1.4,
           13,
-          2.2,
+          "hsla(0, 0%, 60%, 0)",
+          14.5,
+          "#DCD9D2"
+        ],
+        "line-gap-width": 0,
+        "line-width": [
+          "interpolate",
+          ["exponential", 2],
+          ["zoom"],
+          14.5,
+          0,
+          15,
+          2.8,
           16,
-          6
+          6,
+          20,
+          80
         ]
       },
       "metadata": {
@@ -5798,32 +5860,26 @@
           9,
           "hsla(45, 100%, 82%, 0)",
           10,
-          ["match", ["get", "type"], "motorway", "#F4B27A", "#FFFFFF"],
+          "#FFFFFF",
           14,
-          [
-            "match",
-            ["get", "type"],
-            "motorway",
-            "#F4B27A",
-            "tertiary",
-            "#F2EDE0",
-            "#FFFFFF"
-          ]
+          ["match", ["get", "type"], "tertiary", "#F2EDE0", "#FFFFFF"]
         ],
         "line-width": [
           "interpolate",
-          ["linear"],
+          ["exponential", 2],
           ["zoom"],
           10,
-          0.9,
+          1.2,
+          12,
+          1.5,
           13,
-          1.4,
+          1.8,
           15,
-          2.2,
+          3.4,
           16,
-          3,
+          6,
           20,
-          8
+          90
         ]
       }
     },
@@ -5842,7 +5898,7 @@
         ],
         ["!", ["has", "crossing"]]
       ],
-      "minzoom": 11,
+      "minzoom": 12,
       "maxzoom": 23,
       "layout": {
         "line-cap": "round",
@@ -5861,14 +5917,20 @@
         ],
         "line-width": [
           "interpolate",
-          ["linear"],
+          ["exponential", 2],
           ["zoom"],
-          11,
-          0.4,
+          10,
+          ["match", ["get", "type"], ["minor", "service"], 1.2, 0.9],
+          12,
+          ["match", ["get", "type"], ["minor", "service"], 2.25, 1.4],
           13,
-          1.2,
+          ["match", ["get", "type"], ["minor", "service"], 2.5, 1.6],
+          15,
+          ["match", ["get", "type"], ["minor", "service"], 2.8, 2],
           16,
-          4.5
+          ["match", ["get", "type"], ["minor", "service"], 5.6, 3.5],
+          20,
+          ["match", ["get", "type"], ["minor", "service"], 89, 50]
         ],
         "line-blur": ["interpolate", ["linear"], ["zoom"], 8, 0.4, 14, 0.1]
       },
@@ -8245,9 +8307,31 @@
     {
       "id": "relief_contour_multicolored_label",
       "source": "contours",
-      "source-layer": "contour",
+      "source-layer": "contours",
       "type": "symbol",
-      "filter": ["all", ["get", "major"], ["!=", ["get", "ele"], 0]],
+      "filter": [
+        "step",
+        ["zoom"],
+        ["all", ["==", ["get", "divisor"], 1000], ["!=", ["get", "ele"], 0]],
+        12,
+        [
+          "all",
+          ["in", ["get", "divisor"], ["literal", [500, 1000]]],
+          ["!=", ["get", "ele"], 0]
+        ],
+        13,
+        [
+          "all",
+          ["in", ["get", "divisor"], ["literal", [200, 500, 1000]]],
+          ["!=", ["get", "ele"], 0]
+        ],
+        14,
+        [
+          "all",
+          ["in", ["get", "divisor"], ["literal", [100, 200, 500, 1000]]],
+          ["!=", ["get", "ele"], 0]
+        ]
+      ],
       "minzoom": 14,
       "maxzoom": 23,
       "layout": {
@@ -8273,9 +8357,9 @@
           9,
           6.0536,
           14,
-          ["*", 0.92, ["case", ["get", "major"], 11.14, 10.02]],
+          ["*", 0.92, ["case", [">", ["get", "divisor"], 100], 11.14, 10.02]],
           16,
-          ["*", 0.92, ["case", ["get", "major"], 13.75, 12.38]]
+          ["*", 0.92, ["case", [">", ["get", "divisor"], 100], 13.75, 12.38]]
         ],
         "text-padding": ["interpolate", ["linear"], ["zoom"], 6, 9, 16, 8],
         "visibility": "visible"
@@ -8793,7 +8877,7 @@
         ["get", "type"],
         ["literal", ["minor", "raceway", "track"]]
       ],
-      "minzoom": 13,
+      "minzoom": 14,
       "maxzoom": 23,
       "layout": {
         "symbol-placement": "line",
@@ -8922,10 +9006,10 @@
         "visibility": "visible"
       },
       "paint": {
-        "text-color": "hsla(205, 55%, 44%, 1)",
-        "text-halo-color": "hsla(0, 0%, 100%, 0.8)",
-        "text-halo-width": 1.25,
-        "text-halo-blur": 0.3
+        "text-color": "#29626B",
+        "text-halo-color": "hsla(204.5, 65%, 100%, 1)",
+        "text-halo-width": 1,
+        "text-halo-blur": 1
       },
       "metadata": {
         "maptoolkit:legend": {
@@ -9012,14 +9096,13 @@
           ]
         ],
         "text-padding": ["interpolate", ["linear"], ["zoom"], 1, 10, 18, 9],
-        "visibility": "visible",
-        "text-max-width": 8
+        "visibility": "visible"
       },
       "paint": {
-        "text-color": "hsla(205, 60%, 38%, 1)",
-        "text-halo-color": "hsla(0, 0%, 100%, 0.8)",
-        "text-halo-width": 1.25,
-        "text-halo-blur": 0.3
+        "text-color": "#29626B",
+        "text-halo-color": "hsla(204.5, 65%, 100%, 1)",
+        "text-halo-width": 1.5,
+        "text-halo-blur": 1.5
       },
       "metadata": {
         "maptoolkit:legend": {
@@ -9297,13 +9380,7 @@
             ["<=", ["get", "rank"], 10]
           ],
           "wd-maps:ring",
-          [
-            "all",
-            ["==", ["get", "category"], "small_place"],
-            ["<=", ["get", "rank"], 16]
-          ],
-          "wd-maps:ring",
-          ""
+          "wd-maps:ring"
         ],
         "icon-optional": true,
         "text-optional": false,
@@ -9429,26 +9506,13 @@
         "icon-opacity": [
           "step",
           ["zoom"],
-          [
-            "case",
-            [
-              "all",
-              ["==", ["get", "category"], "small_place"],
-              ["<=", ["get", "rank"], 10]
-            ],
-            1,
-            [
-              "all",
-              ["==", ["get", "category"], "small_place"],
-              ["<=", ["get", "rank"], 16]
-            ],
-            0,
-            1
-          ],
-          8,
           1,
+          11,
+          ["match", ["get", "category"], ["capital"], 0, ["big_place"], 1, 1],
+          12,
+          ["match", ["get", "category"], ["capital"], 0, ["big_place"], 0, 1],
           13,
-          0
+          ["match", ["get", "category"], ["capital"], 0, ["big_place"], 0, 0]
         ]
       },
       "metadata": {
@@ -9893,10 +9957,10 @@
         "visibility": "visible"
       },
       "paint": {
-        "text-color": "hsla(205, 55%, 44%, 1)",
-        "text-halo-color": "hsla(0, 0%, 100%, 0.8)",
-        "text-halo-width": 1.25,
-        "text-halo-blur": 0.3
+        "text-color": "#29626B",
+        "text-halo-color": "hsla(204.5, 65%, 100%, 1)",
+        "text-halo-width": 1,
+        "text-halo-blur": 1
       },
       "metadata": {
         "maptoolkit:legend": {
@@ -9920,7 +9984,7 @@
         [">", ["get", "rank"], 17],
         ["<=", ["get", "rank"], 21]
       ],
-      "minzoom": 13,
+      "minzoom": 11,
       "maxzoom": 23,
       "layout": {
         "symbol-sort-key": ["get", "rank"],
@@ -9984,14 +10048,13 @@
           ]
         ],
         "text-padding": ["interpolate", ["linear"], ["zoom"], 1, 10, 18, 9],
-        "visibility": "visible",
-        "text-max-width": 8
+        "visibility": "visible"
       },
       "paint": {
-        "text-color": "hsla(205, 60%, 38%, 1)",
-        "text-halo-color": "hsla(0, 0%, 100%, 0.8)",
-        "text-halo-width": 1.25,
-        "text-halo-blur": 0.3
+        "text-color": "#29626B",
+        "text-halo-color": "hsla(204.5, 65%, 100%, 1)",
+        "text-halo-width": 1.5,
+        "text-halo-blur": 1.5
       },
       "metadata": {
         "maptoolkit:legend": {
@@ -10251,13 +10314,7 @@
             ["<=", ["get", "rank"], 10]
           ],
           "wd-maps:ring",
-          [
-            "all",
-            ["==", ["get", "category"], "small_place"],
-            ["<=", ["get", "rank"], 16]
-          ],
-          "wd-maps:ring",
-          ""
+          "wd-maps:ring"
         ],
         "icon-optional": true,
         "text-optional": false,
@@ -10383,26 +10440,13 @@
         "icon-opacity": [
           "step",
           ["zoom"],
-          [
-            "case",
-            [
-              "all",
-              ["==", ["get", "category"], "small_place"],
-              ["<=", ["get", "rank"], 10]
-            ],
-            1,
-            [
-              "all",
-              ["==", ["get", "category"], "small_place"],
-              ["<=", ["get", "rank"], 16]
-            ],
-            0,
-            1
-          ],
-          8,
           1,
+          11,
+          ["match", ["get", "category"], ["capital"], 0, ["big_place"], 1, 1],
+          12,
+          ["match", ["get", "category"], ["capital"], 0, ["big_place"], 0, 1],
           13,
-          0
+          ["match", ["get", "category"], ["capital"], 0, ["big_place"], 0, 0]
         ]
       },
       "metadata": {
@@ -10876,10 +10920,10 @@
         "visibility": "visible"
       },
       "paint": {
-        "text-color": "hsla(205, 55%, 44%, 1)",
-        "text-halo-color": "hsla(0, 0%, 100%, 0.8)",
-        "text-halo-width": 1.25,
-        "text-halo-blur": 0.3
+        "text-color": "#29626B",
+        "text-halo-color": "hsla(204.5, 65%, 100%, 1)",
+        "text-halo-width": 1,
+        "text-halo-blur": 1
       },
       "metadata": {
         "maptoolkit:legend": {
@@ -10967,14 +11011,13 @@
           ]
         ],
         "text-padding": ["interpolate", ["linear"], ["zoom"], 1, 10, 18, 9],
-        "visibility": "visible",
-        "text-max-width": 8
+        "visibility": "visible"
       },
       "paint": {
-        "text-color": "hsla(205, 60%, 38%, 1)",
-        "text-halo-color": "hsla(0, 0%, 100%, 0.8)",
-        "text-halo-width": 1.25,
-        "text-halo-blur": 0.3
+        "text-color": "#29626B",
+        "text-halo-color": "hsla(204.5, 65%, 100%, 1)",
+        "text-halo-width": 1.5,
+        "text-halo-blur": 1.5
       },
       "metadata": {
         "maptoolkit:legend": {
@@ -11000,13 +11043,9 @@
       "maxzoom": 23,
       "filter": [
         "all",
-        [
-          "all",
-          ["in", ["get", "type"], ["literal", ["peak", "mountain_pass"]]],
-          [">", ["get", "rank_new"], 13],
-          ["<=", ["get", "rank_new"], 17]
-        ],
-        ["has", "ele"]
+        ["in", ["get", "type"], ["literal", ["peak", "mountain_pass"]]],
+        [">", ["get", "rank_new"], 13],
+        ["<=", ["get", "rank_new"], 17]
       ],
       "layout": {
         "symbol-sort-key": ["get", "rank_new"],
@@ -11017,18 +11056,11 @@
           ["!", ["has", "is_nonlatin"]],
           [
             "format",
-            ["concat", ["get", "name"], "\n"],
+            ["get", "name"],
             {},
-            ["image", "wd-maps:peak"],
-            {
-              "font-scale": 0.58
-            },
-            [
-              "case",
-              ["has", "ele"],
-              ["concat", "\n​", ["to-string", ["get", "ele"]]],
-              ""
-            ],
+            "\n",
+            {},
+            ["to-string", ["get", "ele"]],
             {
               "font-scale": 0.76,
               "text-color": "hsla(28, 10%, 48%, 1)"
@@ -11037,28 +11069,17 @@
           [
             "format",
             [
-              "concat",
-              [
-                "coalesce",
-                ["get", "name_en"],
-                ["get", "name_fr"],
-                ["get", "name_es"],
-                ["get", "name_de"],
-                ["get", "name"]
-              ],
-              "\n"
+              "coalesce",
+              ["get", "name_en"],
+              ["get", "name_fr"],
+              ["get", "name_es"],
+              ["get", "name_de"],
+              ["get", "name"]
             ],
             {},
-            ["image", "wd-maps:peak"],
-            {
-              "font-scale": 0.58
-            },
-            [
-              "case",
-              ["has", "ele"],
-              ["concat", "\n​", ["to-string", ["get", "ele"]]],
-              ""
-            ],
+            "\n",
+            {},
+            ["to-string", ["get", "ele"]],
             {
               "font-scale": 0.76,
               "text-color": "hsla(28, 10%, 48%, 1)"
@@ -11114,21 +11135,13 @@
             ]
           ]
         ],
-        "visibility": "visible",
-        "text-line-height": 0.95
+        "visibility": "visible"
       },
       "paint": {
         "text-color": "hsla(28, 14%, 42%, 1)",
-        "text-halo-color": "hsla(0, 0%, 100%, 0.85)",
-        "text-halo-width": 1.25,
-        "text-halo-blur": 0.3,
-        "text-opacity": [
-          "step",
-          ["zoom"],
-          ["case", ["has", "name"], 1, 0],
-          13,
-          1
-        ]
+        "text-halo-color": "rgba(242, 247, 244, 0.9)",
+        "text-halo-width": 1.2,
+        "text-halo-blur": 1
       },
       "metadata": {
         "maptoolkit:legend": {
@@ -11383,13 +11396,7 @@
             ["<=", ["get", "rank"], 10]
           ],
           "wd-maps:ring",
-          [
-            "all",
-            ["==", ["get", "category"], "small_place"],
-            ["<=", ["get", "rank"], 16]
-          ],
-          "wd-maps:ring",
-          ""
+          "wd-maps:ring"
         ],
         "icon-optional": true,
         "text-optional": false,
@@ -11515,26 +11522,13 @@
         "icon-opacity": [
           "step",
           ["zoom"],
-          [
-            "case",
-            [
-              "all",
-              ["==", ["get", "category"], "small_place"],
-              ["<=", ["get", "rank"], 10]
-            ],
-            1,
-            [
-              "all",
-              ["==", ["get", "category"], "small_place"],
-              ["<=", ["get", "rank"], 16]
-            ],
-            0,
-            1
-          ],
-          8,
           1,
+          11,
+          ["match", ["get", "category"], ["capital"], 0, ["big_place"], 1, 1],
+          12,
+          ["match", ["get", "category"], ["capital"], 0, ["big_place"], 0, 1],
           13,
-          0
+          ["match", ["get", "category"], ["capital"], 0, ["big_place"], 0, 0]
         ]
       },
       "metadata": {
@@ -11879,10 +11873,10 @@
         "visibility": "visible"
       },
       "paint": {
-        "text-color": "hsla(205, 55%, 44%, 1)",
-        "text-halo-color": "hsla(0, 0%, 100%, 0.8)",
-        "text-halo-width": 1.25,
-        "text-halo-blur": 0.3
+        "text-color": "#29626B",
+        "text-halo-color": "hsla(204.5, 65%, 100%, 1)",
+        "text-halo-width": 1,
+        "text-halo-blur": 1
       },
       "metadata": {
         "maptoolkit:legend": {
@@ -11970,14 +11964,13 @@
           ]
         ],
         "text-padding": ["interpolate", ["linear"], ["zoom"], 1, 10, 18, 9],
-        "visibility": "visible",
-        "text-max-width": 8
+        "visibility": "visible"
       },
       "paint": {
-        "text-color": "hsla(205, 60%, 38%, 1)",
-        "text-halo-color": "hsla(0, 0%, 100%, 0.8)",
-        "text-halo-width": 1.25,
-        "text-halo-blur": 0.3
+        "text-color": "#29626B",
+        "text-halo-color": "hsla(204.5, 65%, 100%, 1)",
+        "text-halo-width": 1.5,
+        "text-halo-blur": 1.5
       },
       "metadata": {
         "maptoolkit:legend": {
@@ -12003,13 +11996,9 @@
       "maxzoom": 23,
       "filter": [
         "all",
-        [
-          "all",
-          ["in", ["get", "type"], ["literal", ["peak", "mountain_pass"]]],
-          [">", ["get", "rank_new"], 10],
-          ["<=", ["get", "rank_new"], 13]
-        ],
-        ["has", "ele"]
+        ["in", ["get", "type"], ["literal", ["peak", "mountain_pass"]]],
+        [">", ["get", "rank_new"], 10],
+        ["<=", ["get", "rank_new"], 13]
       ],
       "layout": {
         "symbol-sort-key": ["get", "rank_new"],
@@ -12020,18 +12009,11 @@
           ["!", ["has", "is_nonlatin"]],
           [
             "format",
-            ["concat", ["get", "name"], "\n"],
+            ["get", "name"],
             {},
-            ["image", "wd-maps:peak"],
-            {
-              "font-scale": 0.58
-            },
-            [
-              "case",
-              ["has", "ele"],
-              ["concat", "\n​", ["to-string", ["get", "ele"]]],
-              ""
-            ],
+            "\n",
+            {},
+            ["to-string", ["get", "ele"]],
             {
               "font-scale": 0.76,
               "text-color": "hsla(28, 10%, 48%, 1)"
@@ -12040,28 +12022,17 @@
           [
             "format",
             [
-              "concat",
-              [
-                "coalesce",
-                ["get", "name_en"],
-                ["get", "name_fr"],
-                ["get", "name_es"],
-                ["get", "name_de"],
-                ["get", "name"]
-              ],
-              "\n"
+              "coalesce",
+              ["get", "name_en"],
+              ["get", "name_fr"],
+              ["get", "name_es"],
+              ["get", "name_de"],
+              ["get", "name"]
             ],
             {},
-            ["image", "wd-maps:peak"],
-            {
-              "font-scale": 0.58
-            },
-            [
-              "case",
-              ["has", "ele"],
-              ["concat", "\n​", ["to-string", ["get", "ele"]]],
-              ""
-            ],
+            "\n",
+            {},
+            ["to-string", ["get", "ele"]],
             {
               "font-scale": 0.76,
               "text-color": "hsla(28, 10%, 48%, 1)"
@@ -12118,20 +12089,27 @@
           ]
         ],
         "visibility": "visible",
-        "text-line-height": 0.95
+        "icon-image": "wd-maps:peak",
+        "icon-optional": true,
+        "text-optional": true,
+        "icon-size": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          8,
+          0.7,
+          12,
+          0.9,
+          14,
+          1.2
+        ],
+        "text-offset": [0, 1.1]
       },
       "paint": {
         "text-color": "hsla(28, 14%, 42%, 1)",
-        "text-halo-color": "hsla(0, 0%, 100%, 0.85)",
-        "text-halo-width": 1.25,
-        "text-halo-blur": 0.3,
-        "text-opacity": [
-          "step",
-          ["zoom"],
-          ["case", ["has", "name"], 1, 0],
-          13,
-          1
-        ]
+        "text-halo-color": "rgba(242, 247, 244, 0.9)",
+        "text-halo-width": 1.2,
+        "text-halo-blur": 1
       },
       "metadata": {
         "maptoolkit:legend": {
@@ -12386,13 +12364,7 @@
             ["<=", ["get", "rank"], 10]
           ],
           "wd-maps:ring",
-          [
-            "all",
-            ["==", ["get", "category"], "small_place"],
-            ["<=", ["get", "rank"], 16]
-          ],
-          "wd-maps:ring",
-          ""
+          "wd-maps:ring"
         ],
         "icon-optional": true,
         "text-optional": false,
@@ -12518,26 +12490,13 @@
         "icon-opacity": [
           "step",
           ["zoom"],
-          [
-            "case",
-            [
-              "all",
-              ["==", ["get", "category"], "small_place"],
-              ["<=", ["get", "rank"], 10]
-            ],
-            1,
-            [
-              "all",
-              ["==", ["get", "category"], "small_place"],
-              ["<=", ["get", "rank"], 16]
-            ],
-            0,
-            1
-          ],
-          8,
           1,
+          11,
+          ["match", ["get", "category"], ["capital"], 0, ["big_place"], 1, 1],
+          12,
+          ["match", ["get", "category"], ["capital"], 0, ["big_place"], 0, 1],
           13,
-          0
+          ["match", ["get", "category"], ["capital"], 0, ["big_place"], 0, 0]
         ]
       },
       "metadata": {
@@ -12637,10 +12596,10 @@
         "visibility": "visible"
       },
       "paint": {
-        "text-color": "hsla(205, 55%, 44%, 1)",
-        "text-halo-color": "hsla(0, 0%, 100%, 0.8)",
-        "text-halo-width": 1.25,
-        "text-halo-blur": 0.3
+        "text-color": "#29626B",
+        "text-halo-color": "hsla(204.5, 65%, 100%, 1)",
+        "text-halo-width": 1,
+        "text-halo-blur": 1
       },
       "metadata": {
         "maptoolkit:legend": {
@@ -12727,14 +12686,13 @@
           ]
         ],
         "text-padding": ["interpolate", ["linear"], ["zoom"], 1, 10, 18, 9],
-        "visibility": "visible",
-        "text-max-width": 8
+        "visibility": "visible"
       },
       "paint": {
-        "text-color": "hsla(205, 60%, 38%, 1)",
-        "text-halo-color": "hsla(0, 0%, 100%, 0.8)",
-        "text-halo-width": 1.25,
-        "text-halo-blur": 0.3
+        "text-color": "#29626B",
+        "text-halo-color": "hsla(204.5, 65%, 100%, 1)",
+        "text-halo-width": 1.5,
+        "text-halo-blur": 1.5
       },
       "metadata": {
         "maptoolkit:legend": {
@@ -12760,12 +12718,8 @@
       "maxzoom": 23,
       "filter": [
         "all",
-        [
-          "all",
-          ["in", ["get", "type"], ["literal", ["peak", "mountain_pass"]]],
-          ["<=", ["get", "rank_new"], 10]
-        ],
-        ["has", "ele"]
+        ["in", ["get", "type"], ["literal", ["peak", "mountain_pass"]]],
+        ["<=", ["get", "rank_new"], 10]
       ],
       "layout": {
         "symbol-sort-key": ["get", "rank_new"],
@@ -12776,18 +12730,11 @@
           ["!", ["has", "is_nonlatin"]],
           [
             "format",
-            ["concat", ["get", "name"], "\n"],
+            ["get", "name"],
             {},
-            ["image", "wd-maps:peak"],
-            {
-              "font-scale": 0.58
-            },
-            [
-              "case",
-              ["has", "ele"],
-              ["concat", "\n​", ["to-string", ["get", "ele"]]],
-              ""
-            ],
+            "\n",
+            {},
+            ["to-string", ["get", "ele"]],
             {
               "font-scale": 0.76,
               "text-color": "hsla(28, 10%, 48%, 1)"
@@ -12796,28 +12743,17 @@
           [
             "format",
             [
-              "concat",
-              [
-                "coalesce",
-                ["get", "name_en"],
-                ["get", "name_fr"],
-                ["get", "name_es"],
-                ["get", "name_de"],
-                ["get", "name"]
-              ],
-              "\n"
+              "coalesce",
+              ["get", "name_en"],
+              ["get", "name_fr"],
+              ["get", "name_es"],
+              ["get", "name_de"],
+              ["get", "name"]
             ],
             {},
-            ["image", "wd-maps:peak"],
-            {
-              "font-scale": 0.58
-            },
-            [
-              "case",
-              ["has", "ele"],
-              ["concat", "\n​", ["to-string", ["get", "ele"]]],
-              ""
-            ],
+            "\n",
+            {},
+            ["to-string", ["get", "ele"]],
             {
               "font-scale": 0.76,
               "text-color": "hsla(28, 10%, 48%, 1)"
@@ -12874,20 +12810,27 @@
           ]
         ],
         "visibility": "visible",
-        "text-line-height": 0.95
+        "icon-image": "wd-maps:peak",
+        "icon-optional": true,
+        "text-optional": true,
+        "icon-size": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          7,
+          0.7,
+          12,
+          0.9,
+          14,
+          1.2
+        ],
+        "text-offset": [0, 1.1]
       },
       "paint": {
         "text-color": "hsla(28, 14%, 42%, 1)",
-        "text-halo-color": "hsla(0, 0%, 100%, 0.85)",
-        "text-halo-width": 1.25,
-        "text-halo-blur": 0.3,
-        "text-opacity": [
-          "step",
-          ["zoom"],
-          ["case", ["has", "name"], 1, 0],
-          13,
-          1
-        ]
+        "text-halo-color": "rgba(242, 247, 244, 0.9)",
+        "text-halo-width": 1.2,
+        "text-halo-blur": 1
       },
       "metadata": {
         "maptoolkit:legend": {
@@ -13184,13 +13127,7 @@
             ["<=", ["get", "rank"], 10]
           ],
           "wd-maps:ring",
-          [
-            "all",
-            ["==", ["get", "category"], "small_place"],
-            ["<=", ["get", "rank"], 16]
-          ],
-          "wd-maps:ring",
-          ""
+          "wd-maps:ring"
         ],
         "icon-optional": true,
         "text-optional": false,
@@ -13316,26 +13253,13 @@
         "icon-opacity": [
           "step",
           ["zoom"],
-          [
-            "case",
-            [
-              "all",
-              ["==", ["get", "category"], "small_place"],
-              ["<=", ["get", "rank"], 10]
-            ],
-            1,
-            [
-              "all",
-              ["==", ["get", "category"], "small_place"],
-              ["<=", ["get", "rank"], 16]
-            ],
-            0,
-            1
-          ],
-          8,
           1,
+          11,
+          ["match", ["get", "category"], ["capital"], 0, ["big_place"], 1, 1],
+          12,
+          ["match", ["get", "category"], ["capital"], 0, ["big_place"], 0, 1],
           13,
-          0
+          ["match", ["get", "category"], ["capital"], 0, ["big_place"], 0, 0]
         ]
       },
       "metadata": {

@@ -114,16 +114,24 @@
       /* View row: one header line with the A/B style buttons and the live
          view chip (z / coords / slug, + load timing). The chip flexes and
          is the only element allowed to ellipsize. */
+      /* Three-line mobile header (two lines on desktop):
+         1: mode buttons | 2: A/B pickers (FULL slugs) | 3: coords chip.
+         Each line is flex-basis:100% so nothing ever shares/truncates. */
       #view-row {
         flex-basis: 100%;
         display: flex;
+        flex-wrap: wrap; /* A / B / coords each take their line on phones */
         gap: 6px;
-        align-items: center;
+        align-items: stretch;
         min-width: 0;
       }
 
+      #view-row #permalink {
+        order: 10; /* coords line after the A/B line */
+      }
+
       #permalink {
-        flex: 1 1 auto;
+        flex-basis: 100%;
         min-width: 0;
         color: #1c1c1c;
         background: rgba(255, 255, 255, 0.82);
@@ -340,19 +348,27 @@
          switcher menus do not fit half-width compare maps on phones; the
          header buttons open one shared dialog listing styles with the
          familiar two-line layout (name over slug). */
-      .ab-btn {
-        font: inherit;
-        font-size: 11px;
-        padding: 3px 6px;
+      #bar .ab-btn { /* specificity beats the #bar button font: inherit */
+        font: 9.5px/1.3 ui-monospace, monospace;
+        padding: 4px 5px;
         border: 1px solid #9aa8a0;
         border-radius: 4px;
         background: #fff;
         cursor: pointer;
         white-space: nowrap;
-        max-width: 38%;
         overflow: hidden;
         text-overflow: ellipsis;
-        flex: 0 0 auto;
+        flex: 1 1 0;
+        min-width: 0;
+        text-align: left;
+      }
+
+      /* Phones: each picker gets a full line (3-line header, per owner),
+         desktop keeps A/B side by side on one line. */
+      @media (max-width: 640px) {
+        .ab-btn {
+          flex-basis: 100%;
+        }
       }
 
       .ab-btn[hidden] {
@@ -884,11 +900,8 @@
         var sdSide = "A";
 
         function shortLabel(slug) {
-          return slug
-            .replace("wd-outdoor-base-", "")
-            .replace("ch-swisstopo-", "")
-            .replace("world-", "")
-            .slice(0, 16);
+          // full slug — the owner wants the exact id visible on the button
+          return slug;
         }
 
         function refreshABButtons() {
