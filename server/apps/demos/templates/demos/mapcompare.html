@@ -111,14 +111,20 @@
       }
 
 
-      /* Merged view chip: z / coords / style slug (+ load timing), live.
-         Always on its own header line — sharing the button line trimmed
-         the slug on phones. */
-      #permalink {
+      /* View row: one header line with the A/B style buttons and the live
+         view chip (z / coords / slug, + load timing). The chip flexes and
+         is the only element allowed to ellipsize. */
+      #view-row {
         flex-basis: 100%;
-        max-width: none;
-        margin-left: 0;
-        text-align: left;
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        min-width: 0;
+      }
+
+      #permalink {
+        flex: 1 1 auto;
+        min-width: 0;
         color: #1c1c1c;
         background: rgba(255, 255, 255, 0.82);
         border: 1px solid #c5cfc8;
@@ -330,35 +336,114 @@
         display: none;
       }
 
-      /* A/B style pickers in the header — the in-map switcher menus do not
-         fit inside compare halves on phones (names cut mid-word at the
-         seam, scrollbars over items, ambiguous which side changes). Native
-         selects get a proper scrollable list for free. Compare modes +
-         narrow screens only; desktop keeps the in-map switchers. */
-      .ab-select {
+      /* A/B style picker buttons + shared dialog (mobile). The in-map
+         switcher menus do not fit half-width compare maps on phones; the
+         header buttons open one shared dialog listing styles with the
+         familiar two-line layout (name over slug). */
+      .ab-btn {
         font: inherit;
-        font-size: 12px;
-        padding: 3px 4px;
+        font-size: 11px;
+        padding: 3px 6px;
         border: 1px solid #9aa8a0;
         border-radius: 4px;
         background: #fff;
-        max-width: 42vw;
+        cursor: pointer;
+        white-space: nowrap;
+        max-width: 38%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        flex: 0 0 auto;
       }
 
-      .ab-select[hidden] {
+      .ab-btn[hidden] {
         display: none;
       }
 
       @media (min-width: 641px) {
-        .ab-select {
+        .ab-btn {
           display: none !important;
         }
       }
 
+      /* In-map switchers: desktop only (mobile uses the header buttons in
+         every mode). */
       @media (max-width: 640px) {
-        body.compare-mode #compare-wrap .style-switcher {
+        .style-switcher {
           display: none !important;
         }
+      }
+
+      #style-dialog-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 2000;
+        background: rgba(0, 0, 0, 0.35);
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+      }
+
+      #style-dialog {
+        background: #fff;
+        border: 1px solid #4d6b58;
+        border-radius: 10px 10px 0 0;
+        width: 100%;
+        max-width: 480px;
+        max-height: 70vh;
+        display: flex;
+        flex-direction: column;
+        padding: 6px 0 10px;
+        box-shadow: 0 -4px 18px rgba(0, 0, 0, 0.25);
+      }
+
+      #style-dialog h3 {
+        margin: 4px 12px 8px;
+        font-size: 13px;
+        color: #4d6b58;
+      }
+
+      #style-dialog-list {
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-gutter: stable;
+        padding: 0 6px;
+      }
+
+      .sd-item {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0;
+        padding: 6px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+        min-height: 44px;
+      }
+
+      .sd-item:hover,
+      .sd-item:active {
+        background: #eef5f0;
+      }
+
+      .sd-item.selected {
+        background: #e4f0e8;
+        outline: 1px solid #4d6b58;
+      }
+
+      .sd-item .ss-name {
+        line-height: 1.25;
+      }
+
+      .sd-item .ss-slug {
+        font:
+          10px/1.3 ui-monospace,
+          monospace;
+        color: #68766e;
+      }
+
+      .sd-item .ss-star {
+        color: #d59b13;
+        margin-right: 3px;
       }
 
       /* Desktop list polish: reserve a scrollbar gutter instead of the
@@ -413,9 +498,11 @@
       <button id="mode-toggle" type="button">Compare mode</button>
       <button id="inspect-toggle" type="button" hidden>Inspect: off</button>
       <button id="catalog-toggle" type="button" title="Show/hide the catalog URL row">Catalog ▾</button>
-      <select id="style-a-select" class="ab-select" hidden aria-label="Style for side A"></select>
-      <select id="style-b-select" class="ab-select" hidden aria-label="Style for side B"></select>
-      <span id="permalink" title="current view, copy me"></span>
+      <div id="view-row">
+        <button id="style-a-btn" class="ab-btn" type="button" hidden>A ▾</button>
+        <button id="style-b-btn" class="ab-btn" type="button" hidden>B ▾</button>
+        <span id="permalink" title="current view, copy me"></span>
+      </div>
       <div id="catalog-row">
         <label for="tileserver-input">Catalog:</label>
         <input
@@ -445,6 +532,14 @@
         <div id="compare-b" class="compare-side"></div>
       </div>
     </main>
+
+    <!-- shared basemap picker dialog (mobile header A/B buttons) -->
+    <div id="style-dialog-backdrop" hidden>
+      <div id="style-dialog" role="dialog" aria-label="Choose basemap">
+        <h3 id="style-dialog-title">Style</h3>
+        <div id="style-dialog-list"></div>
+      </div>
+    </div>
 
     <script src="{% static 'demos/vendor/maplibre-gl.js' %}"></script>
     <script src="{% static 'demos/vendor/map-gl-style-switcher.js' %}"></script>
@@ -768,50 +863,110 @@
           fmtViewChip(normalMap || (compareMaps && compareMaps.a));
         }
 
-        // ---------- A/B style selects (mobile compare) ----------
-        // The in-map switcher menus do not fit compare halves on phones;
-        // native selects in the header replace them there (CSS hides the
-        // in-map switchers under 640px in compare mode).
-        var abSelects = {
-          A: document.getElementById("style-a-select"),
-          B: document.getElementById("style-b-select"),
+        // ---------- A/B style picker dialog (mobile, all modes) ----------
+        // The in-map switcher menus do not fit half-width compare maps on
+        // phones; compact header buttons open ONE shared dialog listing the
+        // styles with the two-line layout (name over slug). Side B's button
+        // is hidden in normal mode (nothing to compare against).
+        var abBtns = {
+          A: document.getElementById("style-a-btn"),
+          B: document.getElementById("style-b-btn"),
         };
+        var sdBackdrop = document.getElementById("style-dialog-backdrop");
+        var sdList = document.getElementById("style-dialog-list");
+        var sdTitle = document.getElementById("style-dialog-title");
+        var sdSide = "A";
+
+        function shortLabel(slug) {
+          return slug
+            .replace("wd-outdoor-base-", "")
+            .replace("ch-swisstopo-", "")
+            .replace("world-", "")
+            .slice(0, 16);
+        }
+
+        function refreshABButtons() {
+          abBtns.A.textContent = "A: " + shortLabel(state.style) + " \u25be";
+          abBtns.B.textContent = "B: " + shortLabel(state.styleB) + " \u25be";
+          abBtns.A.hidden = false;
+          abBtns.B.hidden = state.mode === "normal";
+        }
+
+        function openStyleDialog(side) {
+          sdSide = side;
+          var current = side === "B" ? state.styleB : state.style;
+          sdTitle.textContent =
+            "Basemap for " + (side === "B" ? "side B" : "the map (A)");
+          sdList.innerHTML = "";
+          for (var i = 0; i < styleIds.length; i++) {
+            var id = styleIds[i];
+            var item = document.createElement("div");
+            item.className = "sd-item" + (id === current ? " selected" : "");
+            var nameLine = document.createElement("span");
+            nameLine.className = "ss-name";
+            var name = styleDisplayName(id).replace(/^\u2605 /, "");
+            if (id === catalogDefaultSlug) {
+              var star = document.createElement("span");
+              star.className = "ss-star";
+              star.textContent = "\u2605";
+              nameLine.appendChild(star);
+            }
+            nameLine.appendChild(document.createTextNode(name));
+            var slugLine = document.createElement("span");
+            slugLine.className = "ss-slug";
+            slugLine.textContent = id;
+            item.appendChild(nameLine);
+            item.appendChild(slugLine);
+            item.addEventListener(
+              "click",
+              (function (chosen) {
+                return function () {
+                  applyABSelect(sdSide, chosen);
+                  closeStyleDialog();
+                };
+              })(id),
+            );
+            sdList.appendChild(item);
+          }
+          sdBackdrop.hidden = false;
+        }
+
+        function closeStyleDialog() {
+          sdBackdrop.hidden = true;
+        }
+
+        abBtns.A.addEventListener("click", function () {
+          openStyleDialog("A");
+        });
+        abBtns.B.addEventListener("click", function () {
+          openStyleDialog("B");
+        });
+        sdBackdrop.addEventListener("click", function (e) {
+          if (e.target === sdBackdrop) closeStyleDialog();
+        });
 
         function refreshABSelects() {
-          for (var side in abSelects) {
-            if (!Object.prototype.hasOwnProperty.call(abSelects, side))
-              continue;
-            var sel = abSelects[side];
-            var current = side === "B" ? state.styleB : state.style;
-            sel.innerHTML = "";
-            for (var i = 0; i < styleIds.length; i++) {
-              var id = styleIds[i];
-              var opt = document.createElement("option");
-              opt.value = id;
-              opt.textContent =
-                (side === "A" ? "A: " : "B: ") + styleDisplayName(id);
-              if (id === current) opt.selected = true;
-              sel.appendChild(opt);
-            }
-            sel.hidden = state.mode === "normal";
-          }
+          // kept name (callers exist): refresh the header buttons
+          refreshABButtons();
         }
 
         function applyABSelect(side, slug) {
           if (side === "B") state.styleB = slug;
           else state.style = slug;
-          var map = side === "B" ? compareMaps?.b : compareMaps?.a;
-          if (map) map.setStyle(styleUrl(slug));
+          var map =
+            side === "B"
+              ? compareMaps && compareMaps.b
+              : compareMaps
+                ? compareMaps.a
+                : normalMap;
+          if (map) {
+            prefetchStyleAssets(styleUrl(slug));
+            map.setStyle(styleUrl(slug));
+          }
           syncPermalink();
           refreshViewChip();
+          refreshABButtons();
         }
-
-        abSelects.A.addEventListener("change", function () {
-          applyABSelect("A", abSelects.A.value);
-        });
-        abSelects.B.addEventListener("change", function () {
-          applyABSelect("B", abSelects.B.value);
-        });
 
         // ---------- load timing (normal mode) ----------
         function trackLoadTiming(map) {
@@ -1086,6 +1241,7 @@
           trackView(normalMap);
           bindPosReadout(normalMap);
           trackLoadTiming(normalMap);
+          refreshABSelects(); // header A button (B hidden in normal mode)
           startFps();
           if (state.inspect) enableInspect();
           els.modeToggle.textContent = "Compare mode";
@@ -1300,9 +1456,14 @@
                 // Backend: entry.path is a relative URL like /v1/map/styles/slug.json
                 // Martin: entry.path is a filesystem path — construct /style/slug.json
                 var url;
-                if (entry.path && entry.path.startsWith("/")) {
+                if (/^https?:/i.test(entry.path || "")) {
+                  // externally authored style (e.g. swisstopo light
+                  // basemap): absolute URL, used verbatim
+                  url = entry.path;
+                } else if (entry.path && entry.path.startsWith("/")) {
                   url = origin + entry.path;
                 } else {
+                  // Martin catalog: filesystem paths
                   url = origin + "/style/" + slug + ".json";
                 }
                 backendStyles[slug] = url;
@@ -1350,6 +1511,9 @@
               /* catalog unavailable: keep fallback list */
             })
             .finally(function () {
+              prefetchStyleAssets(styleUrl(state.style));
+              if (state.mode !== "normal")
+                prefetchStyleAssets(styleUrl(state.styleB));
               if (state.mode === "11") {
                 enterCompare("11");
               } else if (state.mode === "swipe") {
@@ -1360,6 +1524,60 @@
               syncPermalink();
             });
         }
+
+        // ---------- preloading ----------
+        // Two cheap wins on top of HTTP caching:
+        // - maplibregl.prewarm(): start the WebGL worker pools before the
+        //   first map exists (built-in).
+        // - prefetchStyleAssets(): fetch the style document + sprites +
+        //   glyph ranges into the HTTP cache, fire-and-forget. Style
+        //   switches and the compare side-B map then hit warm cache.
+        //   (Tile prefetch for targeted moves exists as the community
+        //   plugin maplibre-preload — not vendored here; our styles are
+        //   already server-cacheable.)
+        function prefetchQuietly(url) {
+          fetch(url).catch(function () {
+            /* warm-attempt only */
+          });
+        }
+
+        function prefetchStyleAssets(url) {
+          fetch(url)
+            .then(function (r) {
+              return r.ok ? r.json() : null;
+            })
+            .then(function (style) {
+              if (!style) return;
+              var sprites = style.sprite || [];
+              if (!Array.isArray(sprites)) sprites = [sprites];
+              sprites.forEach(function (sp) {
+                if (!sp || !sp.url) return;
+                prefetchQuietly(sp.url + ".json");
+                prefetchQuietly(sp.url + ".png");
+                prefetchQuietly(sp.url + "@2x.json");
+              });
+              if (typeof style.glyphs === "string") {
+                var seen = {};
+                style.layers.forEach(function (l) {
+                  var f = l.layout && l.layout["text-font"];
+                  if (Array.isArray(f)) {
+                    f.forEach(function (name) {
+                      if (typeof name !== "string" || seen[name]) return;
+                      seen[name] = true;
+                      prefetchQuietly(
+                        style.glyphs
+                          .replace("{fontstack}", encodeURIComponent(name))
+                          .replace("{range}", "0-255"),
+                      );
+                    });
+                  }
+                });
+              }
+            })
+            .catch(function () {});
+        }
+
+        if (maplibregl.prewarm) maplibregl.prewarm();
 
         // ---------- boot ----------
         // Catalog row: collapsed by default on narrow screens (the input
