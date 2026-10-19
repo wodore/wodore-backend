@@ -540,7 +540,6 @@ LAYERS: list[dict[str, Any]] = [
         "name": "Wodore Outdoor",
         "description": "Outdoor basemap (Maptoolkit-based fork).",
         "spec": MapLayer.Spec.high,
-        "is_default": True,
         "order": 0,
         "fallback": "wd-outdoor-base-ofm",
         "anchors": {"ways": {"before": None}, "background": {"before": None}},
@@ -567,6 +566,7 @@ LAYERS: list[dict[str, Any]] = [
             "(higher-res in CH; heavier on the GPU)."
         ),
         "spec": MapLayer.Spec.high,
+        "is_default": True,  # the frontend's default basemap (PR #292 seed)
         "order": 6,
         "show": False,  # A/B variant, not a product entry
         "style": _fixture_style("wd-outdoor-base-mtk-hill"),

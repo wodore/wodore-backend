@@ -259,6 +259,20 @@
         }
       }
 
+      /* Compare mode shows two maps — two attribution "i" buttons stack
+         up at the seam and read as clutter. Keep the collapsed attribution
+         bar, hide the expand buttons (dev tool; the style URL / catalog
+         carry full attribution). */
+      #compare-wrap .maplibregl-ctrl-attrib-button {
+        display: none;
+      }
+
+      #copy-style-btn.copied {
+        background: #e4f4e4;
+        border-color: #2a6;
+        color: #1c5c1c;
+      }
+
       /* built-in inspect popup */
       .inspect-popup {
         font:
@@ -292,6 +306,9 @@
     <header id="bar">
       <button id="mode-toggle" type="button">Compare mode</button>
       <button id="inspect-toggle" type="button" hidden>Inspect: off</button>
+      <button id="copy-style-btn" type="button" title="Copy the current style's JSON URL">
+        Copy style URL
+      </button>
       <label for="tileserver-input">Catalog:</label>
       <input
         id="tileserver-input"
@@ -339,13 +356,13 @@
           DEFAULT_CATALOG;
 
         var FALLBACK_STYLES = [
+          "wd-outdoor-base-mtk-hill", // the product default (frontend PR #292)
           "wd-outdoor-base-mtk",
-          "wd-outdoor-base-mtk-hill",
           "wd-outdoor-base-ofm",
           "wd-outdoor-base-ofm-hill",
         ];
         var state = {
-          style: q.get("style") || "wd-outdoor-base-mtk",
+          style: q.get("style") || "wd-outdoor-base-mtk-hill",
           styleB: q.get("styleB") || "wd-outdoor-base-ofm",
           zoom: parseFloat(q.get("z") || "12"),
           center: [
@@ -360,6 +377,7 @@
         var els = {
           modeToggle: document.getElementById("mode-toggle"),
           inspectToggle: document.getElementById("inspect-toggle"),
+          copyStyleBtn: document.getElementById("copy-style-btn"),
           tileserverInput: document.getElementById("tileserver-input"),
           catalogLink: document.querySelector("#catalog-link a"),
           permalink: document.getElementById("permalink"),
@@ -840,12 +858,20 @@
                 .then(function (ld) {
                   if (ld && ld.data) {
                     var roles = {};
+                    var defaultSlug = null;
                     for (var i = 0; i < ld.data.length; i++) {
                       roles[ld.data[i].slug] = ld.data[i].role;
+                      if (ld.data[i].is_default) defaultSlug = ld.data[i].slug;
                     }
                     ids = ids.filter(function (slug) {
                       return !roles[slug] || roles[slug] === "basemap";
                     });
+                    // Adopt the catalog's default basemap when the URL
+                    // pinned no explicit style — the first list entry is
+                    // just an ordering, not the default.
+                    if (defaultSlug && !q.get("style")) {
+                      state.style = defaultSlug;
+                    }
                   }
                   if (ids.length) styleIds = ids;
                 });
@@ -875,6 +901,53 @@
           syncPermalink();
         });
         els.inspectToggle.addEventListener("click", toggleInspect);
+
+        // ---------- copy style URL ----------
+        // Clipboard API needs a secure context (https or localhost) — the
+        // demo is often opened over plain http on the tailnet, so fall back
+        // to the execCommand path.
+        function copyText(text) {
+          if (navigator.clipboard && window.isSecureContext) {
+            return navigator.clipboard.writeText(text);
+          }
+          return new Promise(function (resolve, reject) {
+            var ta = document.createElement("textarea");
+            ta.value = text;
+            ta.style.cssText = "position:fixed;top:-100vh;opacity:0";
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            try {
+              document.execCommand("copy") ? resolve() : reject();
+            } catch (err) {
+              reject(err);
+            } finally {
+              ta.remove();
+            }
+          });
+        }
+
+        els.copyStyleBtn.addEventListener("click", function () {
+          var url = styleUrl(state.style);
+          copyText(url).then(
+            function () {
+              els.copyStyleBtn.classList.add("copied");
+              var prev = els.copyStyleBtn.textContent;
+              els.copyStyleBtn.textContent = "\u2713 copied";
+              setTimeout(function () {
+                els.copyStyleBtn.classList.remove("copied");
+                els.copyStyleBtn.textContent = prev;
+              }, 1200);
+            },
+            function () {
+              var prev = els.copyStyleBtn.textContent;
+              els.copyStyleBtn.textContent = url;
+              setTimeout(function () {
+                els.copyStyleBtn.textContent = prev;
+              }, 2500);
+            },
+          );
+        });
 
         bootCatalog();
       })();
