@@ -37,16 +37,33 @@
         border-bottom: 1px solid #d0d8d2;
       }
 
-      /* Mobile: shrink the catalog input so the bar wraps instead of
-         overflowing; permalink gives up its reserved width. */
+      /* Mobile: the permalink gives up its reserved width; the catalog
+         input lives on its own collapsible row (see #catalog-row) so the
+         primary buttons never wrap off-screen. */
       @media (max-width: 640px) {
-        #tileserver-input {
-          width: min(240px, 58vw);
-        }
         #permalink {
-          max-width: 100%;
-          flex-basis: 100%;
+          max-width: 40vw;
         }
+      }
+
+      /* Collapsible catalog row: second header line with the input,
+         toggled by #catalog-toggle. Collapsed by default on narrow
+         screens (JS), always open-able. */
+      #catalog-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-basis: 100%;
+        min-width: 0;
+      }
+
+      #catalog-row[hidden] {
+        display: none;
+      }
+
+      #catalog-row #tileserver-input {
+        flex: 1 1 160px;
+        min-width: 0;
       }
 
       #bar button {
@@ -309,16 +326,19 @@
       <button id="copy-style-btn" type="button" title="Copy the current style's JSON URL">
         Copy style URL
       </button>
-      <label for="tileserver-input">Catalog:</label>
-      <input
-        id="tileserver-input"
-        type="text"
-        title="Catalog URL (persisted; ?catalog= overrides on load; e.g. http://localhost:3745/v1/map/catalog or http://localhost:3739/catalog for Martin)"
-      />
-      <span id="catalog-link"
-        ><a target="_blank" rel="noopener">Catalog ↗</a></span
-      >
+      <button id="catalog-toggle" type="button" title="Show/hide the catalog URL row">Catalog ▾</button>
       <span id="permalink" title="current view, copy me"></span>
+      <div id="catalog-row">
+        <label for="tileserver-input">Catalog:</label>
+        <input
+          id="tileserver-input"
+          type="text"
+          title="Catalog URL (persisted; ?catalog= overrides on load; e.g. http://localhost:3745/v1/map/catalog or http://localhost:3739/catalog for Martin)"
+        />
+        <span id="catalog-link"
+          ><a target="_blank" rel="noopener">Catalog ↗</a></span
+        >
+      </div>
     </header>
 
     <!-- normal mode -->
@@ -378,6 +398,8 @@
           modeToggle: document.getElementById("mode-toggle"),
           inspectToggle: document.getElementById("inspect-toggle"),
           copyStyleBtn: document.getElementById("copy-style-btn"),
+          catalogToggle: document.getElementById("catalog-toggle"),
+          catalogRow: document.getElementById("catalog-row"),
           tileserverInput: document.getElementById("tileserver-input"),
           catalogLink: document.querySelector("#catalog-link a"),
           permalink: document.getElementById("permalink"),
@@ -890,6 +912,21 @@
         }
 
         // ---------- boot ----------
+        // Catalog row: collapsed by default on narrow screens (the input
+        // pushed the primary buttons off-screen on phones), open on
+        // desktop. The toggle flips it either way.
+        els.catalogRow.hidden = window.matchMedia(
+          "(max-width: 640px)",
+        ).matches;
+        els.catalogToggle.addEventListener("click", function () {
+          els.catalogRow.hidden = !els.catalogRow.hidden;
+          els.catalogToggle.textContent = els.catalogRow.hidden
+            ? "Catalog \u25be"
+            : "Catalog \u25b4";
+          if (!els.catalogRow.hidden) els.tileserverInput.focus();
+        });
+        if (els.catalogRow.hidden) els.catalogToggle.textContent = "Catalog \u25be";
+
         updateTileserverUI();
         els.modeToggle.addEventListener("click", function () {
           state.mode = state.mode === "compare" ? "normal" : "compare";
