@@ -2145,10 +2145,8 @@
     },
     "contours": {
       "type": "vector",
-      "tiles": ["/contours/{z}/{x}/{y}"],
-      "minzoom": 11,
-      "maxzoom": 15,
-      "attribution": "<a href='https://registry.opendata.aws/terrain-tiles/'>AWS Terrain Tiles</a>"
+      "url": "https://tiles.maptoolkit.org/contours.json",
+      "maxzoom": 14
     },
     "naturalearth": {
       "type": "raster",
@@ -2257,14 +2255,12 @@
           "interpolate",
           ["linear"],
           ["zoom"],
-          7.4,
-          0.58,
-          9,
+          12.8,
+          0.55,
+          14,
           0.62,
-          13,
-          0.68,
-          16,
-          0.75
+          15,
+          0.7
         ],
         "raster-brightness-min": 0.4,
         "raster-resampling": "linear"
@@ -3014,7 +3010,7 @@
     {
       "id": "relief_contour_shadow",
       "source": "contours",
-      "source-layer": "contour",
+      "source-layer": "contours",
       "type": "line",
       "filter": ["!=", ["get", "ele"], 0],
       "minzoom": 13,
@@ -3025,15 +3021,33 @@
         "visibility": "visible"
       },
       "paint": {
-        "line-color": "hsla(24.75, 40%, 100%, 0.4)",
+        "line-color": "hsla(24.75, 40%, 100%, 0.45)",
         "line-width": [
           "interpolate",
           ["exponential", 1.2],
           ["zoom"],
-          13,
-          ["case", ["get", "major"], 0.55, 0.2],
+          11,
+          [
+            "case",
+            ["in", ["get", "divisor"], ["literal", [500, 1000]]],
+            0.51,
+            ["in", ["get", "divisor"], ["literal", [100, 200]]],
+            0.31,
+            ["in", ["get", "divisor"], ["literal", [0, 10, 20, 50]]],
+            0.16,
+            0
+          ],
           16,
-          ["case", ["get", "major"], 1.7, 0.65]
+          [
+            "case",
+            ["in", ["get", "divisor"], ["literal", [500, 1000]]],
+            2.54,
+            ["in", ["get", "divisor"], ["literal", [100, 200]]],
+            1.53,
+            ["in", ["get", "divisor"], ["literal", [0, 10, 20, 50]]],
+            0.78,
+            0
+          ]
         ],
         "line-offset": [
           "interpolate",
@@ -3075,7 +3089,7 @@
     {
       "id": "relief_contour_multicolored",
       "source": "contours",
-      "source-layer": "contour",
+      "source-layer": "contours",
       "type": "line",
       "filter": ["!=", ["get", "ele"], 0],
       "minzoom": 13,
@@ -3088,18 +3102,38 @@
       "paint": {
         "line-color": [
           "case",
-          ["get", "major"],
-          "hsla(30, 45%, 42%, 0.9)",
-          "hsla(30, 38%, 58%, 0.7)"
+          ["==", ["get", "terrain_type"], "normal"],
+          "hsla(30, 49%, 50%, 0.85)",
+          ["==", ["get", "terrain_type"], "glacier"],
+          "hsla(182.25, 60%, 45%, 0.7)",
+          "hsla(69.75, 0%, 45%, 0.7)"
         ],
         "line-width": [
           "interpolate",
           ["exponential", 1.2],
           ["zoom"],
-          13,
-          ["case", ["get", "major"], 0.55, 0.2],
-          16,
-          ["case", ["get", "major"], 1.7, 0.65]
+          11,
+          [
+            "case",
+            ["in", ["get", "divisor"], ["literal", [500, 1000]]],
+            0.51,
+            ["in", ["get", "divisor"], ["literal", [100, 200]]],
+            0.31,
+            ["in", ["get", "divisor"], ["literal", [0, 10, 20, 50]]],
+            0.16,
+            0
+          ],
+          20,
+          [
+            "case",
+            ["in", ["get", "divisor"], ["literal", [500, 1000]]],
+            2.54,
+            ["in", ["get", "divisor"], ["literal", [100, 200]]],
+            1.53,
+            ["in", ["get", "divisor"], ["literal", [0, 10, 20, 50]]],
+            0.78,
+            0
+          ]
         ],
         "line-blur": 0.4
       },
@@ -3129,11 +3163,11 @@
           6,
           0.55,
           10,
-          0.45,
+          0.5,
           13.2,
-          0.35,
+          0.48,
           16,
-          0.3
+          0.45
         ],
         "hillshade-shadow-color": [
           "interpolate",
@@ -3144,7 +3178,7 @@
           12.8,
           "hsla(210, 18%, 32%, 0.55)",
           14,
-          "hsla(210, 18%, 32%, 0.30)"
+          "hsla(210, 18%, 32%, 0.38)"
         ],
         "hillshade-highlight-color": "hsla(45, 60%, 97%, 0.4)",
         "hillshade-accent-color": "hsla(0, 0%, 0%, 0)"
@@ -3829,13 +3863,16 @@
         "line-color": "hsla(350, 25%, 58%, 1)",
         "line-width": [
           "interpolate",
-          ["exponential", 0.9],
+          ["linear"],
           ["zoom"],
-          3,
-          0.4,
-          19,
-          2.6
-        ]
+          4,
+          1.1,
+          7,
+          1.5,
+          10,
+          1.8
+        ],
+        "line-opacity": ["interpolate", ["linear"], ["zoom"], 4, 0.9, 8, 0.85]
       },
       "metadata": {
         "maptoolkit:legend": {
@@ -8285,10 +8322,32 @@
     {
       "id": "relief_contour_multicolored_label",
       "source": "contours",
-      "source-layer": "contour",
+      "source-layer": "contours",
       "type": "symbol",
-      "filter": ["all", ["get", "major"], ["!=", ["get", "ele"], 0]],
-      "minzoom": 14,
+      "filter": [
+        "step",
+        ["zoom"],
+        ["all", ["==", ["get", "divisor"], 1000], ["!=", ["get", "ele"], 0]],
+        12,
+        [
+          "all",
+          ["in", ["get", "divisor"], ["literal", [500, 1000]]],
+          ["!=", ["get", "ele"], 0]
+        ],
+        13,
+        [
+          "all",
+          ["in", ["get", "divisor"], ["literal", [200, 500, 1000]]],
+          ["!=", ["get", "ele"], 0]
+        ],
+        14,
+        [
+          "all",
+          ["in", ["get", "divisor"], ["literal", [100, 200, 500, 1000]]],
+          ["!=", ["get", "ele"], 0]
+        ]
+      ],
+      "minzoom": 13.5,
       "maxzoom": 23,
       "layout": {
         "symbol-placement": "line",
@@ -8313,9 +8372,9 @@
           9,
           6.0536,
           14,
-          ["*", 0.92, ["case", ["get", "major"], 11.14, 10.02]],
+          ["*", 0.92, ["case", [">", ["get", "divisor"], 100], 11.14, 10.02]],
           16,
-          ["*", 0.92, ["case", ["get", "major"], 13.75, 12.38]]
+          ["*", 0.92, ["case", [">", ["get", "divisor"], 100], 13.75, 12.38]]
         ],
         "text-padding": ["interpolate", ["linear"], ["zoom"], 6, 9, 16, 8],
         "visibility": "visible"
@@ -9129,7 +9188,9 @@
         "symbol-placement": "line-center",
         "symbol-sort-key": [
           "case",
-          ["==", ["get", "category"], "country"],
+          ["==", ["get", "type"], "country"],
+          -2,
+          ["==", ["get", "category"], "capital"],
           -1,
           ["get", "rank"]
         ],
@@ -9144,18 +9205,42 @@
         ],
         "text-field": [
           "case",
-          ["==", ["get", "category"], "country"],
+          [
+            "all",
+            ["==", ["get", "category"], "country"],
+            ["==", ["get", "type"], "country"]
+          ],
           [
             "format",
             [
               "upcase",
               [
-                "coalesce",
-                ["get", "name"],
-                ["get", "name_en"],
-                ["get", "name_de"],
-                ["get", "name_fr"],
-                ["get", "name_es"]
+                "let",
+                "n",
+                [
+                  "coalesce",
+                  ["get", "name"],
+                  ["get", "name_en"],
+                  ["get", "name_de"],
+                  ["get", "name_fr"],
+                  ["get", "name_es"]
+                ],
+                [
+                  "let",
+                  "sep",
+                  ["slice", "a/b", 1, 2],
+                  [
+                    "case",
+                    [">=", ["index-of", ["var", "sep"], ["var", "n"]], 0],
+                    [
+                      "slice",
+                      ["var", "n"],
+                      0,
+                      ["index-of", ["var", "sep"], ["var", "n"]]
+                    ],
+                    ["var", "n"]
+                  ]
+                ]
               ]
             ],
             {}
@@ -9192,13 +9277,31 @@
           1,
           [
             "*",
-            ["case", ["==", ["get", "category"], "country"], 1.35, 0.92],
+            [
+              "case",
+              [
+                "all",
+                ["==", ["get", "category"], "country"],
+                ["==", ["get", "type"], "country"]
+              ],
+              1.35,
+              0.92
+            ],
             29.0996
           ],
           17,
           [
             "*",
-            ["case", ["==", ["get", "category"], "country"], 1.35, 0.92],
+            [
+              "case",
+              [
+                "all",
+                ["==", ["get", "category"], "country"],
+                ["==", ["get", "type"], "country"]
+              ],
+              1.35,
+              0.92
+            ],
             14.545200000000001
           ]
         ],
@@ -9207,7 +9310,11 @@
       "paint": {
         "text-color": [
           "case",
-          ["==", ["get", "category"], "country"],
+          [
+            "all",
+            ["==", ["get", "category"], "country"],
+            ["==", ["get", "type"], "country"]
+          ],
           "hsla(-9, 0%, 38%, 1)",
           ["match", ["get", "type"], ["glacier"], "#29626B", "#3E6A66"]
         ],
@@ -9249,24 +9356,50 @@
         "visibility": "visible",
         "symbol-sort-key": [
           "case",
-          ["==", ["get", "category"], "country"],
+          ["==", ["get", "type"], "country"],
+          -2,
+          ["==", ["get", "category"], "capital"],
           -1,
           ["get", "rank"]
         ],
         "text-field": [
           "case",
-          ["==", ["get", "category"], "country"],
+          [
+            "all",
+            ["==", ["get", "category"], "country"],
+            ["==", ["get", "type"], "country"]
+          ],
           [
             "format",
             [
               "upcase",
               [
-                "coalesce",
-                ["get", "name"],
-                ["get", "name_en"],
-                ["get", "name_de"],
-                ["get", "name_fr"],
-                ["get", "name_es"]
+                "let",
+                "n",
+                [
+                  "coalesce",
+                  ["get", "name"],
+                  ["get", "name_en"],
+                  ["get", "name_de"],
+                  ["get", "name_fr"],
+                  ["get", "name_es"]
+                ],
+                [
+                  "let",
+                  "sep",
+                  ["slice", "a/b", 1, 2],
+                  [
+                    "case",
+                    [">=", ["index-of", ["var", "sep"], ["var", "n"]], 0],
+                    [
+                      "slice",
+                      ["var", "n"],
+                      0,
+                      ["index-of", ["var", "sep"], ["var", "n"]]
+                    ],
+                    ["var", "n"]
+                  ]
+                ]
               ]
             ],
             {}
@@ -9335,7 +9468,16 @@
           1,
           [
             "*",
-            ["case", ["==", ["get", "category"], "country"], 1.35, 0.92],
+            [
+              "case",
+              [
+                "all",
+                ["==", ["get", "category"], "country"],
+                ["==", ["get", "type"], "country"]
+              ],
+              1.35,
+              0.92
+            ],
             [
               "*",
               0.92,
@@ -9345,7 +9487,16 @@
           18,
           [
             "*",
-            ["case", ["==", ["get", "category"], "country"], 1.35, 0.92],
+            [
+              "case",
+              [
+                "all",
+                ["==", ["get", "category"], "country"],
+                ["==", ["get", "type"], "country"]
+              ],
+              1.35,
+              0.92
+            ],
             [
               "*",
               0.92,
@@ -9521,7 +9672,11 @@
       "paint": {
         "text-color": [
           "case",
-          ["==", ["get", "category"], "country"],
+          [
+            "all",
+            ["==", ["get", "category"], "country"],
+            ["==", ["get", "type"], "country"]
+          ],
           "hsla(-9, 0%, 38%, 1)",
           ["match", ["get", "type"], ["glacier"], "#29626B", "#1C1C1C"]
         ],
@@ -9536,19 +9691,15 @@
           [
             "case",
             ["==", ["get", "category"], "capital"],
-            0,
-            [
-              "all",
-              ["==", ["get", "category"], "big_place"],
-              ["<=", ["get", "rank"], 8]
-            ],
+            1,
+            ["==", ["get", "category"], "big_place"],
             1,
             [
               "all",
               ["==", ["get", "category"], "small_place"],
               ["<=", ["get", "rank"], 10]
             ],
-            0,
+            1,
             [
               "all",
               ["==", ["get", "category"], "small_place"],
@@ -10208,7 +10359,9 @@
         "symbol-placement": "line-center",
         "symbol-sort-key": [
           "case",
-          ["==", ["get", "category"], "country"],
+          ["==", ["get", "type"], "country"],
+          -2,
+          ["==", ["get", "category"], "capital"],
           -1,
           ["get", "rank"]
         ],
@@ -10223,18 +10376,42 @@
         ],
         "text-field": [
           "case",
-          ["==", ["get", "category"], "country"],
+          [
+            "all",
+            ["==", ["get", "category"], "country"],
+            ["==", ["get", "type"], "country"]
+          ],
           [
             "format",
             [
               "upcase",
               [
-                "coalesce",
-                ["get", "name"],
-                ["get", "name_en"],
-                ["get", "name_de"],
-                ["get", "name_fr"],
-                ["get", "name_es"]
+                "let",
+                "n",
+                [
+                  "coalesce",
+                  ["get", "name"],
+                  ["get", "name_en"],
+                  ["get", "name_de"],
+                  ["get", "name_fr"],
+                  ["get", "name_es"]
+                ],
+                [
+                  "let",
+                  "sep",
+                  ["slice", "a/b", 1, 2],
+                  [
+                    "case",
+                    [">=", ["index-of", ["var", "sep"], ["var", "n"]], 0],
+                    [
+                      "slice",
+                      ["var", "n"],
+                      0,
+                      ["index-of", ["var", "sep"], ["var", "n"]]
+                    ],
+                    ["var", "n"]
+                  ]
+                ]
               ]
             ],
             {}
@@ -10271,7 +10448,16 @@
           1,
           [
             "*",
-            ["case", ["==", ["get", "category"], "country"], 1.35, 0.92],
+            [
+              "case",
+              [
+                "all",
+                ["==", ["get", "category"], "country"],
+                ["==", ["get", "type"], "country"]
+              ],
+              1.35,
+              0.92
+            ],
             [
               "*",
               0.92,
@@ -10281,7 +10467,16 @@
           14,
           [
             "*",
-            ["case", ["==", ["get", "category"], "country"], 1.35, 0.92],
+            [
+              "case",
+              [
+                "all",
+                ["==", ["get", "category"], "country"],
+                ["==", ["get", "type"], "country"]
+              ],
+              1.35,
+              0.92
+            ],
             [
               "*",
               0.92,
@@ -10294,7 +10489,11 @@
       "paint": {
         "text-color": [
           "case",
-          ["==", ["get", "category"], "country"],
+          [
+            "all",
+            ["==", ["get", "category"], "country"],
+            ["==", ["get", "type"], "country"]
+          ],
           "hsla(-9, 0%, 38%, 1)",
           ["match", ["get", "type"], ["glacier"], "#29626B", "#3E6A66"]
         ],
@@ -10337,24 +10536,50 @@
         "visibility": "visible",
         "symbol-sort-key": [
           "case",
-          ["==", ["get", "category"], "country"],
+          ["==", ["get", "type"], "country"],
+          -2,
+          ["==", ["get", "category"], "capital"],
           -1,
           ["get", "rank"]
         ],
         "text-field": [
           "case",
-          ["==", ["get", "category"], "country"],
+          [
+            "all",
+            ["==", ["get", "category"], "country"],
+            ["==", ["get", "type"], "country"]
+          ],
           [
             "format",
             [
               "upcase",
               [
-                "coalesce",
-                ["get", "name"],
-                ["get", "name_en"],
-                ["get", "name_de"],
-                ["get", "name_fr"],
-                ["get", "name_es"]
+                "let",
+                "n",
+                [
+                  "coalesce",
+                  ["get", "name"],
+                  ["get", "name_en"],
+                  ["get", "name_de"],
+                  ["get", "name_fr"],
+                  ["get", "name_es"]
+                ],
+                [
+                  "let",
+                  "sep",
+                  ["slice", "a/b", 1, 2],
+                  [
+                    "case",
+                    [">=", ["index-of", ["var", "sep"], ["var", "n"]], 0],
+                    [
+                      "slice",
+                      ["var", "n"],
+                      0,
+                      ["index-of", ["var", "sep"], ["var", "n"]]
+                    ],
+                    ["var", "n"]
+                  ]
+                ]
               ]
             ],
             {}
@@ -10423,7 +10648,16 @@
           1,
           [
             "*",
-            ["case", ["==", ["get", "category"], "country"], 1.35, 0.92],
+            [
+              "case",
+              [
+                "all",
+                ["==", ["get", "category"], "country"],
+                ["==", ["get", "type"], "country"]
+              ],
+              1.35,
+              0.92
+            ],
             [
               "*",
               0.92,
@@ -10433,7 +10667,16 @@
           18,
           [
             "*",
-            ["case", ["==", ["get", "category"], "country"], 1.35, 0.92],
+            [
+              "case",
+              [
+                "all",
+                ["==", ["get", "category"], "country"],
+                ["==", ["get", "type"], "country"]
+              ],
+              1.35,
+              0.92
+            ],
             [
               "*",
               0.92,
@@ -10609,7 +10852,11 @@
       "paint": {
         "text-color": [
           "case",
-          ["==", ["get", "category"], "country"],
+          [
+            "all",
+            ["==", ["get", "category"], "country"],
+            ["==", ["get", "type"], "country"]
+          ],
           "hsla(-9, 0%, 38%, 1)",
           ["match", ["get", "type"], ["glacier"], "#29626B", "#1C1C1C"]
         ],
@@ -10624,19 +10871,15 @@
           [
             "case",
             ["==", ["get", "category"], "capital"],
-            0,
-            [
-              "all",
-              ["==", ["get", "category"], "big_place"],
-              ["<=", ["get", "rank"], 8]
-            ],
+            1,
+            ["==", ["get", "category"], "big_place"],
             1,
             [
               "all",
               ["==", ["get", "category"], "small_place"],
               ["<=", ["get", "rank"], 10]
             ],
-            0,
+            1,
             [
               "all",
               ["==", ["get", "category"], "small_place"],
@@ -11474,7 +11717,9 @@
         "symbol-placement": "line-center",
         "symbol-sort-key": [
           "case",
-          ["==", ["get", "category"], "country"],
+          ["==", ["get", "type"], "country"],
+          -2,
+          ["==", ["get", "category"], "capital"],
           -1,
           ["get", "rank"]
         ],
@@ -11489,18 +11734,42 @@
         ],
         "text-field": [
           "case",
-          ["==", ["get", "category"], "country"],
+          [
+            "all",
+            ["==", ["get", "category"], "country"],
+            ["==", ["get", "type"], "country"]
+          ],
           [
             "format",
             [
               "upcase",
               [
-                "coalesce",
-                ["get", "name"],
-                ["get", "name_en"],
-                ["get", "name_de"],
-                ["get", "name_fr"],
-                ["get", "name_es"]
+                "let",
+                "n",
+                [
+                  "coalesce",
+                  ["get", "name"],
+                  ["get", "name_en"],
+                  ["get", "name_de"],
+                  ["get", "name_fr"],
+                  ["get", "name_es"]
+                ],
+                [
+                  "let",
+                  "sep",
+                  ["slice", "a/b", 1, 2],
+                  [
+                    "case",
+                    [">=", ["index-of", ["var", "sep"], ["var", "n"]], 0],
+                    [
+                      "slice",
+                      ["var", "n"],
+                      0,
+                      ["index-of", ["var", "sep"], ["var", "n"]]
+                    ],
+                    ["var", "n"]
+                  ]
+                ]
               ]
             ],
             {}
@@ -11537,7 +11806,16 @@
           1,
           [
             "*",
-            ["case", ["==", ["get", "category"], "country"], 1.35, 0.92],
+            [
+              "case",
+              [
+                "all",
+                ["==", ["get", "category"], "country"],
+                ["==", ["get", "type"], "country"]
+              ],
+              1.35,
+              0.92
+            ],
             [
               "*",
               0.92,
@@ -11547,7 +11825,16 @@
           14,
           [
             "*",
-            ["case", ["==", ["get", "category"], "country"], 1.35, 0.92],
+            [
+              "case",
+              [
+                "all",
+                ["==", ["get", "category"], "country"],
+                ["==", ["get", "type"], "country"]
+              ],
+              1.35,
+              0.92
+            ],
             [
               "*",
               0.92,
@@ -11560,7 +11847,11 @@
       "paint": {
         "text-color": [
           "case",
-          ["==", ["get", "category"], "country"],
+          [
+            "all",
+            ["==", ["get", "category"], "country"],
+            ["==", ["get", "type"], "country"]
+          ],
           "hsla(-9, 0%, 38%, 1)",
           ["match", ["get", "type"], ["glacier"], "#29626B", "#3E6A66"]
         ],
@@ -11603,24 +11894,50 @@
         "visibility": "visible",
         "symbol-sort-key": [
           "case",
-          ["==", ["get", "category"], "country"],
+          ["==", ["get", "type"], "country"],
+          -2,
+          ["==", ["get", "category"], "capital"],
           -1,
           ["get", "rank"]
         ],
         "text-field": [
           "case",
-          ["==", ["get", "category"], "country"],
+          [
+            "all",
+            ["==", ["get", "category"], "country"],
+            ["==", ["get", "type"], "country"]
+          ],
           [
             "format",
             [
               "upcase",
               [
-                "coalesce",
-                ["get", "name"],
-                ["get", "name_en"],
-                ["get", "name_de"],
-                ["get", "name_fr"],
-                ["get", "name_es"]
+                "let",
+                "n",
+                [
+                  "coalesce",
+                  ["get", "name"],
+                  ["get", "name_en"],
+                  ["get", "name_de"],
+                  ["get", "name_fr"],
+                  ["get", "name_es"]
+                ],
+                [
+                  "let",
+                  "sep",
+                  ["slice", "a/b", 1, 2],
+                  [
+                    "case",
+                    [">=", ["index-of", ["var", "sep"], ["var", "n"]], 0],
+                    [
+                      "slice",
+                      ["var", "n"],
+                      0,
+                      ["index-of", ["var", "sep"], ["var", "n"]]
+                    ],
+                    ["var", "n"]
+                  ]
+                ]
               ]
             ],
             {}
@@ -11689,7 +12006,16 @@
           1,
           [
             "*",
-            ["case", ["==", ["get", "category"], "country"], 1.35, 0.92],
+            [
+              "case",
+              [
+                "all",
+                ["==", ["get", "category"], "country"],
+                ["==", ["get", "type"], "country"]
+              ],
+              1.35,
+              0.92
+            ],
             [
               "*",
               0.92,
@@ -11699,7 +12025,16 @@
           18,
           [
             "*",
-            ["case", ["==", ["get", "category"], "country"], 1.35, 0.92],
+            [
+              "case",
+              [
+                "all",
+                ["==", ["get", "category"], "country"],
+                ["==", ["get", "type"], "country"]
+              ],
+              1.35,
+              0.92
+            ],
             [
               "*",
               0.92,
@@ -11875,7 +12210,11 @@
       "paint": {
         "text-color": [
           "case",
-          ["==", ["get", "category"], "country"],
+          [
+            "all",
+            ["==", ["get", "category"], "country"],
+            ["==", ["get", "type"], "country"]
+          ],
           "hsla(-9, 0%, 38%, 1)",
           ["match", ["get", "type"], ["glacier"], "#29626B", "#1C1C1C"]
         ],
@@ -11890,19 +12229,15 @@
           [
             "case",
             ["==", ["get", "category"], "capital"],
-            0,
-            [
-              "all",
-              ["==", ["get", "category"], "big_place"],
-              ["<=", ["get", "rank"], 8]
-            ],
+            1,
+            ["==", ["get", "category"], "big_place"],
             1,
             [
               "all",
               ["==", ["get", "category"], "small_place"],
               ["<=", ["get", "rank"], 10]
             ],
-            0,
+            1,
             [
               "all",
               ["==", ["get", "category"], "small_place"],
@@ -12611,7 +12946,9 @@
         "symbol-placement": "line-center",
         "symbol-sort-key": [
           "case",
-          ["==", ["get", "category"], "country"],
+          ["==", ["get", "type"], "country"],
+          -2,
+          ["==", ["get", "category"], "capital"],
           -1,
           ["get", "rank"]
         ],
@@ -12626,18 +12963,42 @@
         ],
         "text-field": [
           "case",
-          ["==", ["get", "category"], "country"],
+          [
+            "all",
+            ["==", ["get", "category"], "country"],
+            ["==", ["get", "type"], "country"]
+          ],
           [
             "format",
             [
               "upcase",
               [
-                "coalesce",
-                ["get", "name"],
-                ["get", "name_en"],
-                ["get", "name_de"],
-                ["get", "name_fr"],
-                ["get", "name_es"]
+                "let",
+                "n",
+                [
+                  "coalesce",
+                  ["get", "name"],
+                  ["get", "name_en"],
+                  ["get", "name_de"],
+                  ["get", "name_fr"],
+                  ["get", "name_es"]
+                ],
+                [
+                  "let",
+                  "sep",
+                  ["slice", "a/b", 1, 2],
+                  [
+                    "case",
+                    [">=", ["index-of", ["var", "sep"], ["var", "n"]], 0],
+                    [
+                      "slice",
+                      ["var", "n"],
+                      0,
+                      ["index-of", ["var", "sep"], ["var", "n"]]
+                    ],
+                    ["var", "n"]
+                  ]
+                ]
               ]
             ],
             {}
@@ -12674,7 +13035,16 @@
           1,
           [
             "*",
-            ["case", ["==", ["get", "category"], "country"], 1.35, 0.92],
+            [
+              "case",
+              [
+                "all",
+                ["==", ["get", "category"], "country"],
+                ["==", ["get", "type"], "country"]
+              ],
+              1.35,
+              0.92
+            ],
             [
               "*",
               0.92,
@@ -12684,7 +13054,16 @@
           14,
           [
             "*",
-            ["case", ["==", ["get", "category"], "country"], 1.35, 0.92],
+            [
+              "case",
+              [
+                "all",
+                ["==", ["get", "category"], "country"],
+                ["==", ["get", "type"], "country"]
+              ],
+              1.35,
+              0.92
+            ],
             [
               "*",
               0.92,
@@ -12697,7 +13076,11 @@
       "paint": {
         "text-color": [
           "case",
-          ["==", ["get", "category"], "country"],
+          [
+            "all",
+            ["==", ["get", "category"], "country"],
+            ["==", ["get", "type"], "country"]
+          ],
           "hsla(-9, 0%, 38%, 1)",
           ["match", ["get", "type"], ["glacier"], "#29626B", "#3E6A66"]
         ],
@@ -12740,24 +13123,50 @@
         "visibility": "visible",
         "symbol-sort-key": [
           "case",
-          ["==", ["get", "category"], "country"],
+          ["==", ["get", "type"], "country"],
+          -2,
+          ["==", ["get", "category"], "capital"],
           -1,
           ["get", "rank"]
         ],
         "text-field": [
           "case",
-          ["==", ["get", "category"], "country"],
+          [
+            "all",
+            ["==", ["get", "category"], "country"],
+            ["==", ["get", "type"], "country"]
+          ],
           [
             "format",
             [
               "upcase",
               [
-                "coalesce",
-                ["get", "name"],
-                ["get", "name_en"],
-                ["get", "name_de"],
-                ["get", "name_fr"],
-                ["get", "name_es"]
+                "let",
+                "n",
+                [
+                  "coalesce",
+                  ["get", "name"],
+                  ["get", "name_en"],
+                  ["get", "name_de"],
+                  ["get", "name_fr"],
+                  ["get", "name_es"]
+                ],
+                [
+                  "let",
+                  "sep",
+                  ["slice", "a/b", 1, 2],
+                  [
+                    "case",
+                    [">=", ["index-of", ["var", "sep"], ["var", "n"]], 0],
+                    [
+                      "slice",
+                      ["var", "n"],
+                      0,
+                      ["index-of", ["var", "sep"], ["var", "n"]]
+                    ],
+                    ["var", "n"]
+                  ]
+                ]
               ]
             ],
             {}
@@ -12826,7 +13235,16 @@
           1,
           [
             "*",
-            ["case", ["==", ["get", "category"], "country"], 1.35, 0.92],
+            [
+              "case",
+              [
+                "all",
+                ["==", ["get", "category"], "country"],
+                ["==", ["get", "type"], "country"]
+              ],
+              1.35,
+              0.92
+            ],
             [
               "*",
               0.92,
@@ -12836,7 +13254,16 @@
           18,
           [
             "*",
-            ["case", ["==", ["get", "category"], "country"], 1.35, 0.92],
+            [
+              "case",
+              [
+                "all",
+                ["==", ["get", "category"], "country"],
+                ["==", ["get", "type"], "country"]
+              ],
+              1.35,
+              0.92
+            ],
             [
               "*",
               0.92,
@@ -13012,7 +13439,11 @@
       "paint": {
         "text-color": [
           "case",
-          ["==", ["get", "category"], "country"],
+          [
+            "all",
+            ["==", ["get", "category"], "country"],
+            ["==", ["get", "type"], "country"]
+          ],
           "hsla(-9, 0%, 38%, 1)",
           ["match", ["get", "type"], ["glacier"], "#29626B", "#1C1C1C"]
         ],
@@ -13027,19 +13458,15 @@
           [
             "case",
             ["==", ["get", "category"], "capital"],
-            0,
-            [
-              "all",
-              ["==", ["get", "category"], "big_place"],
-              ["<=", ["get", "rank"], 8]
-            ],
+            1,
+            ["==", ["get", "category"], "big_place"],
             1,
             [
               "all",
               ["==", ["get", "category"], "small_place"],
               ["<=", ["get", "rank"], 10]
             ],
-            0,
+            1,
             [
               "all",
               ["==", ["get", "category"], "small_place"],
@@ -13500,7 +13927,9 @@
         "symbol-placement": "line-center",
         "symbol-sort-key": [
           "case",
-          ["==", ["get", "category"], "country"],
+          ["==", ["get", "type"], "country"],
+          -2,
+          ["==", ["get", "category"], "capital"],
           -1,
           ["get", "rank"]
         ],
@@ -13515,18 +13944,42 @@
         ],
         "text-field": [
           "case",
-          ["==", ["get", "category"], "country"],
+          [
+            "all",
+            ["==", ["get", "category"], "country"],
+            ["==", ["get", "type"], "country"]
+          ],
           [
             "format",
             [
               "upcase",
               [
-                "coalesce",
-                ["get", "name"],
-                ["get", "name_en"],
-                ["get", "name_de"],
-                ["get", "name_fr"],
-                ["get", "name_es"]
+                "let",
+                "n",
+                [
+                  "coalesce",
+                  ["get", "name"],
+                  ["get", "name_en"],
+                  ["get", "name_de"],
+                  ["get", "name_fr"],
+                  ["get", "name_es"]
+                ],
+                [
+                  "let",
+                  "sep",
+                  ["slice", "a/b", 1, 2],
+                  [
+                    "case",
+                    [">=", ["index-of", ["var", "sep"], ["var", "n"]], 0],
+                    [
+                      "slice",
+                      ["var", "n"],
+                      0,
+                      ["index-of", ["var", "sep"], ["var", "n"]]
+                    ],
+                    ["var", "n"]
+                  ]
+                ]
               ]
             ],
             {}
@@ -13563,7 +14016,16 @@
           1,
           [
             "*",
-            ["case", ["==", ["get", "category"], "country"], 1.35, 0.92],
+            [
+              "case",
+              [
+                "all",
+                ["==", ["get", "category"], "country"],
+                ["==", ["get", "type"], "country"]
+              ],
+              1.35,
+              0.92
+            ],
             [
               "*",
               0.92,
@@ -13590,7 +14052,16 @@
           14,
           [
             "*",
-            ["case", ["==", ["get", "category"], "country"], 1.35, 0.92],
+            [
+              "case",
+              [
+                "all",
+                ["==", ["get", "category"], "country"],
+                ["==", ["get", "type"], "country"]
+              ],
+              1.35,
+              0.92
+            ],
             [
               "*",
               0.92,
@@ -13628,7 +14099,11 @@
       "paint": {
         "text-color": [
           "case",
-          ["==", ["get", "category"], "country"],
+          [
+            "all",
+            ["==", ["get", "category"], "country"],
+            ["==", ["get", "type"], "country"]
+          ],
           "hsla(-9, 0%, 38%, 1)",
           ["match", ["get", "type"], ["glacier"], "#29626B", "#3E6A66"]
         ],
@@ -13670,24 +14145,50 @@
         "visibility": "visible",
         "symbol-sort-key": [
           "case",
-          ["==", ["get", "category"], "country"],
+          ["==", ["get", "type"], "country"],
+          -2,
+          ["==", ["get", "category"], "capital"],
           -1,
           ["get", "rank"]
         ],
         "text-field": [
           "case",
-          ["==", ["get", "category"], "country"],
+          [
+            "all",
+            ["==", ["get", "category"], "country"],
+            ["==", ["get", "type"], "country"]
+          ],
           [
             "format",
             [
               "upcase",
               [
-                "coalesce",
-                ["get", "name"],
-                ["get", "name_en"],
-                ["get", "name_de"],
-                ["get", "name_fr"],
-                ["get", "name_es"]
+                "let",
+                "n",
+                [
+                  "coalesce",
+                  ["get", "name"],
+                  ["get", "name_en"],
+                  ["get", "name_de"],
+                  ["get", "name_fr"],
+                  ["get", "name_es"]
+                ],
+                [
+                  "let",
+                  "sep",
+                  ["slice", "a/b", 1, 2],
+                  [
+                    "case",
+                    [">=", ["index-of", ["var", "sep"], ["var", "n"]], 0],
+                    [
+                      "slice",
+                      ["var", "n"],
+                      0,
+                      ["index-of", ["var", "sep"], ["var", "n"]]
+                    ],
+                    ["var", "n"]
+                  ]
+                ]
               ]
             ],
             {}
@@ -13756,7 +14257,16 @@
           1,
           [
             "*",
-            ["case", ["==", ["get", "category"], "country"], 1.35, 0.92],
+            [
+              "case",
+              [
+                "all",
+                ["==", ["get", "category"], "country"],
+                ["==", ["get", "type"], "country"]
+              ],
+              1.35,
+              0.92
+            ],
             [
               "*",
               0.92,
@@ -13775,7 +14285,16 @@
           18,
           [
             "*",
-            ["case", ["==", ["get", "category"], "country"], 1.35, 0.92],
+            [
+              "case",
+              [
+                "all",
+                ["==", ["get", "category"], "country"],
+                ["==", ["get", "type"], "country"]
+              ],
+              1.35,
+              0.92
+            ],
             [
               "*",
               0.92,
@@ -13968,7 +14487,11 @@
       "paint": {
         "text-color": [
           "case",
-          ["==", ["get", "category"], "country"],
+          [
+            "all",
+            ["==", ["get", "category"], "country"],
+            ["==", ["get", "type"], "country"]
+          ],
           "hsla(-9, 0%, 38%, 1)",
           ["match", ["get", "type"], ["glacier"], "#29626B", "#1C1C1C"]
         ],
@@ -13983,19 +14506,15 @@
           [
             "case",
             ["==", ["get", "category"], "capital"],
-            0,
-            [
-              "all",
-              ["==", ["get", "category"], "big_place"],
-              ["<=", ["get", "rank"], 8]
-            ],
+            1,
+            ["==", ["get", "category"], "big_place"],
             1,
             [
               "all",
               ["==", ["get", "category"], "small_place"],
               ["<=", ["get", "rank"], 10]
             ],
-            0,
+            1,
             [
               "all",
               ["==", ["get", "category"], "small_place"],
