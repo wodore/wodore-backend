@@ -2145,8 +2145,10 @@
     },
     "contours": {
       "type": "vector",
-      "url": "https://tiles.maptoolkit.org/contours.json",
-      "maxzoom": 14
+      "tiles": ["/contours/{z}/{x}/{y}"],
+      "minzoom": 11,
+      "maxzoom": 15,
+      "attribution": "<a href='https://registry.opendata.aws/terrain-tiles/'>AWS Terrain Tiles</a>"
     },
     "naturalearth": {
       "type": "raster",
@@ -2177,23 +2179,16 @@
       "encoding": "terrarium"
     },
     "rgb-tiles": {
-      "url": "https://tiles.maptoolkit.org/terrainrgb.json",
       "type": "raster-dem",
+      "url": "https://tiles.maptoolkit.org/terrainrgb.json",
       "encoding": "terrarium"
     },
-    "rgb-tiles-blur-min": {
-      "type": "raster-dem",
-      "url": "https://tiles.maptoolkit.org/terrainrgb.json",
+    "hillshade-server": {
+      "type": "raster",
+      "tiles": ["/hillshade/{z}/{x}/{y}"],
+      "tileSize": 512,
       "maxzoom": 15,
-      "encoding": "terrarium",
-      "tileSize": 2048
-    },
-    "rgb-tiles-blur-med": {
-      "type": "raster-dem",
-      "url": "https://tiles.maptoolkit.org/terrainrgb.json",
-      "maxzoom": 15,
-      "encoding": "terrarium",
-      "tileSize": 4096
+      "attribution": "<a href='https://registry.opendata.aws/terrain-tiles/'>AWS Terrain Tiles</a>"
     }
   },
   "layers": [
@@ -2250,6 +2245,29 @@
         "maptoolkit:legend": {
           "hidden": true
         }
+      }
+    },
+    {
+      "id": "relief_hillshade_server",
+      "type": "raster",
+      "source": "hillshade-server",
+      "minzoom": 7.4,
+      "paint": {
+        "raster-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          7.4,
+          0.55,
+          9,
+          0.6,
+          12,
+          0.62,
+          15,
+          0.65
+        ],
+        "raster-brightness-min": 0.4,
+        "raster-resampling": "linear"
       }
     },
     {
@@ -2335,13 +2353,13 @@
           ["linear"],
           ["zoom"],
           4,
-          "hsla(0, 0%, 98%, 0)",
+          "hsla(81, 30%, 96%, 0)",
           5,
-          "hsla(0, 0%, 98%, 1)",
-          11,
-          "hsla(0, 0%, 98%, 1)",
+          "hsla(81, 30%, 96%, 0.55)",
+          10,
+          "hsla(81, 30%, 96%, 0.8)",
           14,
-          "hsla(0, 0%, 98%, 1)"
+          "hsla(81, 30%, 96%, 0.92)"
         ]
       },
       "metadata": {
@@ -2526,96 +2544,144 @@
             "match",
             ["get", "type"],
             "wood",
-            "hsla(138, 20%, 87%, 0)",
+            "hsla(92, 42%, 83%, 0)",
             "farmland",
-            "hsla(55, 13%, 92%, 0)",
+            "hsla(58, 45%, 89%, 0)",
             ["wetland", "tidalflat"],
-            "hsla(100, 10%, 91%, 0)",
+            "hsla(103, 35%, 88%, 0)",
             "rock",
-            "hsla(70, 6%, 93%, 0)",
+            "hsla(70, 8%, 91%, 0)",
             "sand",
-            "hsla(45, 15%, 92%, 0)",
+            "hsla(36, 55%, 89%, 0)",
             "scrub",
-            "hsla(85, 12%, 89%, 0)",
+            "hsla(86, 35%, 84%, 0)",
             "fell",
-            "hsla(70, 10%, 90%, 0)",
+            "hsla(70, 40%, 86%, 0)",
             "ice",
-            "hsla(193, 42%, 91%, 0)",
+            "hsla(182, 60%, 96%, 0)",
             "salt_desert",
-            "hsla(193, 38%, 93%, 0)",
-            "hsla(75, 8%, 93%, 0)"
+            "hsla(182, 45%, 95%, 0)",
+            "hsla(81, 35%, 89%, 0)"
           ],
-          9,
+          5,
           [
             "match",
             ["get", "type"],
             "wood",
-            "hsla(138, 20%, 87%, 0.3)",
+            "hsla(92, 42%, 83%, 0.6)",
             "farmland",
-            "hsla(55, 13%, 92%, 0.3)",
+            "hsla(58, 45%, 89%, 0.6)",
             ["wetland", "tidalflat"],
-            "hsla(100, 10%, 91%, 0.3)",
+            "hsla(103, 35%, 88%, 0.6)",
             "rock",
-            "hsla(70, 6%, 93%, 0.3)",
+            "hsla(70, 8%, 91%, 0.6)",
             "sand",
-            "hsla(45, 15%, 92%, 0.3)",
+            "hsla(36, 55%, 89%, 0.6)",
             "scrub",
-            "hsla(85, 12%, 89%, 0.3)",
+            "hsla(86, 35%, 84%, 0.6)",
             "fell",
-            "hsla(70, 10%, 90%, 0.3)",
+            "hsla(70, 40%, 86%, 0.6)",
             "ice",
-            "hsla(193, 42%, 91%, 0.3)",
+            "hsla(182, 60%, 96%, 0.6)",
             "salt_desert",
-            "hsla(193, 38%, 93%, 0.3)",
-            "hsla(75, 8%, 93%, 0.3)"
+            "hsla(182, 45%, 95%, 0.6)",
+            "hsla(81, 35%, 89%, 0.6)"
           ],
-          11,
+          7,
           [
             "match",
             ["get", "type"],
             "wood",
-            "hsla(138, 20%, 87%, 0.7)",
+            "hsla(92, 42%, 83%, 0.72)",
             "farmland",
-            "hsla(55, 13%, 92%, 0.7)",
+            "hsla(58, 45%, 89%, 0.72)",
             ["wetland", "tidalflat"],
-            "hsla(100, 10%, 91%, 0.7)",
+            "hsla(103, 35%, 88%, 0.72)",
             "rock",
-            "hsla(70, 6%, 93%, 0.7)",
+            "hsla(70, 8%, 91%, 0.72)",
             "sand",
-            "hsla(45, 15%, 92%, 0.7)",
+            "hsla(36, 55%, 89%, 0.72)",
             "scrub",
-            "hsla(85, 12%, 89%, 0.7)",
+            "hsla(86, 35%, 84%, 0.72)",
             "fell",
-            "hsla(70, 10%, 90%, 0.7)",
+            "hsla(70, 40%, 86%, 0.72)",
             "ice",
-            "hsla(193, 42%, 91%, 0.7)",
+            "hsla(182, 60%, 96%, 0.72)",
             "salt_desert",
-            "hsla(193, 38%, 93%, 0.7)",
-            "hsla(75, 8%, 93%, 0.7)"
+            "hsla(182, 45%, 95%, 0.72)",
+            "hsla(81, 35%, 89%, 0.72)"
           ],
-          13,
+          10,
           [
             "match",
             ["get", "type"],
             "wood",
-            "hsla(138, 20%, 87%, 0.88)",
+            "hsla(92, 43%, 82%, 0.85)",
             "farmland",
-            "hsla(55, 13%, 92%, 0.22)",
+            "hsla(58, 46%, 88%, 0.85)",
             ["wetland", "tidalflat"],
-            "hsla(100, 10%, 91%, 0.88)",
+            "hsla(103, 36%, 87%, 0.85)",
             "rock",
-            "hsla(70, 6%, 93%, 0.88)",
+            "hsla(70, 8%, 91%, 0.85)",
             "sand",
-            "hsla(45, 15%, 92%, 0.88)",
+            "hsla(36, 55%, 88%, 0.85)",
             "scrub",
-            "hsla(85, 12%, 89%, 0.45)",
+            "hsla(86, 36%, 83%, 0.85)",
             "fell",
-            "hsla(70, 10%, 90%, 0.45)",
+            "hsla(70, 40%, 85%, 0.85)",
             "ice",
-            "hsla(193, 42%, 91%, 0.88)",
+            "hsla(182, 61%, 96%, 0.85)",
             "salt_desert",
-            "hsla(193, 38%, 93%, 0.88)",
-            "hsla(75, 8%, 93%, 0.88)"
+            "hsla(182, 46%, 95%, 0.85)",
+            "hsla(81, 35%, 89%, 0.85)"
+          ],
+          12,
+          [
+            "match",
+            ["get", "type"],
+            "wood",
+            "hsla(92, 44%, 82%, 1)",
+            "farmland",
+            "hsla(58, 46%, 88%, 1)",
+            ["wetland", "tidalflat"],
+            "hsla(103, 36%, 87%, 1)",
+            "rock",
+            "hsla(70, 8%, 91%, 1)",
+            "sand",
+            "hsla(36, 55%, 88%, 1)",
+            "scrub",
+            "hsla(86, 36%, 83%, 1)",
+            "fell",
+            "hsla(70, 40%, 85%, 1)",
+            "ice",
+            "hsla(182, 62%, 96%, 1)",
+            "salt_desert",
+            "hsla(182, 46%, 95%, 1)",
+            "hsla(81, 35%, 89%, 1)"
+          ],
+          14,
+          [
+            "match",
+            ["get", "type"],
+            "wood",
+            "hsla(92, 46%, 80%, 1)",
+            "farmland",
+            "hsla(58, 48%, 87%, 1)",
+            ["wetland", "tidalflat"],
+            "hsla(103, 38%, 86%, 1)",
+            "rock",
+            "hsla(70, 8%, 91%, 1)",
+            "sand",
+            "hsla(36, 56%, 87%, 1)",
+            "scrub",
+            "hsla(86, 38%, 82%, 1)",
+            "fell",
+            "hsla(70, 42%, 84%, 1)",
+            "ice",
+            "hsla(182, 64%, 96%, 1)",
+            "salt_desert",
+            "hsla(182, 48%, 95%, 1)",
+            "hsla(81, 35%, 89%, 1)"
           ]
         ],
         "fill-outline-color": [
@@ -2948,7 +3014,7 @@
     {
       "id": "relief_contour_shadow",
       "source": "contours",
-      "source-layer": "contours",
+      "source-layer": "contour",
       "type": "line",
       "filter": ["!=", ["get", "ele"], 0],
       "minzoom": 13,
@@ -2964,28 +3030,10 @@
           "interpolate",
           ["exponential", 1.2],
           ["zoom"],
-          11,
-          [
-            "case",
-            ["in", ["get", "divisor"], ["literal", [500, 1000]]],
-            0.51,
-            ["in", ["get", "divisor"], ["literal", [100, 200]]],
-            0.31,
-            ["in", ["get", "divisor"], ["literal", [0, 10, 20, 50]]],
-            0.16,
-            0
-          ],
+          13,
+          ["case", ["get", "major"], 0.55, 0.2],
           16,
-          [
-            "case",
-            ["in", ["get", "divisor"], ["literal", [500, 1000]]],
-            2.54,
-            ["in", ["get", "divisor"], ["literal", [100, 200]]],
-            1.53,
-            ["in", ["get", "divisor"], ["literal", [0, 10, 20, 50]]],
-            0.78,
-            0
-          ]
+          ["case", ["get", "major"], 1.7, 0.65]
         ],
         "line-offset": [
           "interpolate",
@@ -3027,7 +3075,7 @@
     {
       "id": "relief_contour_multicolored",
       "source": "contours",
-      "source-layer": "contours",
+      "source-layer": "contour",
       "type": "line",
       "filter": ["!=", ["get", "ele"], 0],
       "minzoom": 13,
@@ -3040,38 +3088,18 @@
       "paint": {
         "line-color": [
           "case",
-          ["==", ["get", "terrain_type"], "normal"],
-          "hsla(30, 49%, 50%, 0.85)",
-          ["==", ["get", "terrain_type"], "glacier"],
-          "hsla(182.25, 60%, 45%, 0.7)",
-          "hsla(69.75, 0%, 45%, 0.7)"
+          ["get", "major"],
+          "hsla(30, 45%, 42%, 0.9)",
+          "hsla(30, 38%, 58%, 0.7)"
         ],
         "line-width": [
           "interpolate",
           ["exponential", 1.2],
           ["zoom"],
-          11,
-          [
-            "case",
-            ["in", ["get", "divisor"], ["literal", [500, 1000]]],
-            0.51,
-            ["in", ["get", "divisor"], ["literal", [100, 200]]],
-            0.31,
-            ["in", ["get", "divisor"], ["literal", [0, 10, 20, 50]]],
-            0.16,
-            0
-          ],
+          13,
+          ["case", ["get", "major"], 0.55, 0.2],
           16,
-          [
-            "case",
-            ["in", ["get", "divisor"], ["literal", [500, 1000]]],
-            2.54,
-            ["in", ["get", "divisor"], ["literal", [100, 200]]],
-            1.53,
-            ["in", ["get", "divisor"], ["literal", [0, 10, 20, 50]]],
-            0.78,
-            0
-          ]
+          ["case", ["get", "major"], 1.7, 0.65]
         ],
         "line-blur": 0.4
       },
@@ -3084,104 +3112,28 @@
       }
     },
     {
-      "id": "relief_hillshade_ao_min",
+      "id": "relief_hillshade_lowzoom",
       "type": "hillshade",
-      "paint": {
-        "hillshade-exaggeration": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          4,
-          0.26,
-          6.5,
-          0.36,
-          8.5,
-          0.4,
-          12,
-          0.54,
-          16,
-          0.5
-        ],
-        "hillshade-shadow-color": "hsla(205, 10%, 55%, 0.22)",
-        "hillshade-accent-color": "hsla(-9, 0%, 0%, 0)",
-        "hillshade-highlight-color": "hsla(192, 100%, 85%, 0)"
-      },
-      "layout": {
-        "visibility": "visible"
-      },
-      "source": "rgb-tiles-blur-min",
-      "maxzoom": 23,
-      "minzoom": 0,
-      "metadata": {
-        "maptoolkit:legend": {
-          "hidden": true
-        }
-      }
-    },
-    {
-      "id": "relief_hillshade_ao_med",
-      "type": "hillshade",
-      "paint": {
-        "hillshade-exaggeration": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          4,
-          0.26,
-          6.5,
-          0.36,
-          8.5,
-          0.4,
-          12,
-          0.54,
-          16,
-          0.5
-        ],
-        "hillshade-shadow-color": "hsla(-9, 0%, 30%, 0.22)",
-        "hillshade-accent-color": "hsla(-9, 0%, 0%, 0)",
-        "hillshade-highlight-color": "hsla(192, 100%, 85%, 0)"
-      },
-      "layout": {
-        "visibility": "visible"
-      },
-      "source": "rgb-tiles-blur-med",
-      "maxzoom": 23,
-      "minzoom": 0,
-      "metadata": {
-        "maptoolkit:legend": {
-          "hidden": true
-        }
-      }
-    },
-    {
-      "id": "relief_hillshade_dramatic",
-      "type": "hillshade",
+      "source": "rgb-tiles",
+      "minzoom": 2,
+      "maxzoom": 7.5,
       "paint": {
         "hillshade-illumination-anchor": "viewport",
-        "hillshade-accent-color": "hsla(0, 0%, 0%, 0)",
-        "hillshade-shadow-color": "hsla(210, 14%, 38%, 0.46)",
-        "hillshade-highlight-color": "hsla(45, 60%, 96%, 0.55)",
         "hillshade-illumination-direction": 315,
         "hillshade-exaggeration": [
           "interpolate",
           ["linear"],
           ["zoom"],
-          4,
-          0.24,
-          9.5,
-          0.36
-        ]
-      },
-      "layout": {
-        "visibility": "visible"
-      },
-      "source": "rgb-tiles",
-      "maxzoom": 14,
-      "minzoom": 0,
-      "metadata": {
-        "maptoolkit:legend": {
-          "hidden": true
-        }
+          2,
+          0.7,
+          6,
+          0.55,
+          7.5,
+          0.45
+        ],
+        "hillshade-shadow-color": "hsla(210, 18%, 32%, 0.55)",
+        "hillshade-highlight-color": "hsla(45, 60%, 97%, 0.4)",
+        "hillshade-accent-color": "hsla(0, 0%, 0%, 0)"
       }
     },
     {
@@ -8307,31 +8259,9 @@
     {
       "id": "relief_contour_multicolored_label",
       "source": "contours",
-      "source-layer": "contours",
+      "source-layer": "contour",
       "type": "symbol",
-      "filter": [
-        "step",
-        ["zoom"],
-        ["all", ["==", ["get", "divisor"], 1000], ["!=", ["get", "ele"], 0]],
-        12,
-        [
-          "all",
-          ["in", ["get", "divisor"], ["literal", [500, 1000]]],
-          ["!=", ["get", "ele"], 0]
-        ],
-        13,
-        [
-          "all",
-          ["in", ["get", "divisor"], ["literal", [200, 500, 1000]]],
-          ["!=", ["get", "ele"], 0]
-        ],
-        14,
-        [
-          "all",
-          ["in", ["get", "divisor"], ["literal", [100, 200, 500, 1000]]],
-          ["!=", ["get", "ele"], 0]
-        ]
-      ],
+      "filter": ["all", ["get", "major"], ["!=", ["get", "ele"], 0]],
       "minzoom": 14,
       "maxzoom": 23,
       "layout": {
@@ -8357,9 +8287,9 @@
           9,
           6.0536,
           14,
-          ["*", 0.92, ["case", [">", ["get", "divisor"], 100], 11.14, 10.02]],
+          ["*", 0.92, ["case", ["get", "major"], 11.14, 10.02]],
           16,
-          ["*", 0.92, ["case", [">", ["get", "divisor"], 100], 13.75, 12.38]]
+          ["*", 0.92, ["case", ["get", "major"], 13.75, 12.38]]
         ],
         "text-padding": ["interpolate", ["linear"], ["zoom"], 6, 9, 16, 8],
         "visibility": "visible"
@@ -9380,7 +9310,7 @@
             ["<=", ["get", "rank"], 10]
           ],
           "wd-maps:ring",
-          "wd-maps:ring"
+          ""
         ],
         "icon-optional": true,
         "text-optional": false,
@@ -10314,7 +10244,7 @@
             ["<=", ["get", "rank"], 10]
           ],
           "wd-maps:ring",
-          "wd-maps:ring"
+          ""
         ],
         "icon-optional": true,
         "text-optional": false,
@@ -11056,11 +10986,18 @@
           ["!", ["has", "is_nonlatin"]],
           [
             "format",
-            ["get", "name"],
+            ["concat", ["get", "name"], "\n"],
             {},
-            "\n",
-            {},
-            ["to-string", ["get", "ele"]],
+            ["image", "wd-maps:peak"],
+            {
+              "font-scale": 0.9
+            },
+            [
+              "case",
+              ["has", "ele"],
+              ["concat", "\n\n", ["to-string", ["get", "ele"]]],
+              ""
+            ],
             {
               "font-scale": 0.76,
               "text-color": "hsla(28, 10%, 48%, 1)"
@@ -11069,17 +11006,28 @@
           [
             "format",
             [
-              "coalesce",
-              ["get", "name_en"],
-              ["get", "name_fr"],
-              ["get", "name_es"],
-              ["get", "name_de"],
-              ["get", "name"]
+              "concat",
+              [
+                "coalesce",
+                ["get", "name_en"],
+                ["get", "name_fr"],
+                ["get", "name_es"],
+                ["get", "name_de"],
+                ["get", "name"]
+              ],
+              "\n"
             ],
             {},
-            "\n",
-            {},
-            ["to-string", ["get", "ele"]],
+            ["image", "wd-maps:peak"],
+            {
+              "font-scale": 0.9
+            },
+            [
+              "case",
+              ["has", "ele"],
+              ["concat", "\n\n", ["to-string", ["get", "ele"]]],
+              ""
+            ],
             {
               "font-scale": 0.76,
               "text-color": "hsla(28, 10%, 48%, 1)"
@@ -11396,7 +11344,7 @@
             ["<=", ["get", "rank"], 10]
           ],
           "wd-maps:ring",
-          "wd-maps:ring"
+          ""
         ],
         "icon-optional": true,
         "text-optional": false,
@@ -12009,11 +11957,18 @@
           ["!", ["has", "is_nonlatin"]],
           [
             "format",
-            ["get", "name"],
+            ["concat", ["get", "name"], "\n"],
             {},
-            "\n",
-            {},
-            ["to-string", ["get", "ele"]],
+            ["image", "wd-maps:peak"],
+            {
+              "font-scale": 0.9
+            },
+            [
+              "case",
+              ["has", "ele"],
+              ["concat", "\n\n", ["to-string", ["get", "ele"]]],
+              ""
+            ],
             {
               "font-scale": 0.76,
               "text-color": "hsla(28, 10%, 48%, 1)"
@@ -12022,17 +11977,28 @@
           [
             "format",
             [
-              "coalesce",
-              ["get", "name_en"],
-              ["get", "name_fr"],
-              ["get", "name_es"],
-              ["get", "name_de"],
-              ["get", "name"]
+              "concat",
+              [
+                "coalesce",
+                ["get", "name_en"],
+                ["get", "name_fr"],
+                ["get", "name_es"],
+                ["get", "name_de"],
+                ["get", "name"]
+              ],
+              "\n"
             ],
             {},
-            "\n",
-            {},
-            ["to-string", ["get", "ele"]],
+            ["image", "wd-maps:peak"],
+            {
+              "font-scale": 0.9
+            },
+            [
+              "case",
+              ["has", "ele"],
+              ["concat", "\n\n", ["to-string", ["get", "ele"]]],
+              ""
+            ],
             {
               "font-scale": 0.76,
               "text-color": "hsla(28, 10%, 48%, 1)"
@@ -12088,22 +12054,7 @@
             ]
           ]
         ],
-        "visibility": "visible",
-        "icon-image": "wd-maps:peak",
-        "icon-optional": true,
-        "text-optional": true,
-        "icon-size": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          8,
-          0.7,
-          12,
-          0.9,
-          14,
-          1.2
-        ],
-        "text-offset": [0, 1.1]
+        "visibility": "visible"
       },
       "paint": {
         "text-color": "hsla(28, 14%, 42%, 1)",
@@ -12364,7 +12315,7 @@
             ["<=", ["get", "rank"], 10]
           ],
           "wd-maps:ring",
-          "wd-maps:ring"
+          ""
         ],
         "icon-optional": true,
         "text-optional": false,
@@ -12730,11 +12681,18 @@
           ["!", ["has", "is_nonlatin"]],
           [
             "format",
-            ["get", "name"],
+            ["concat", ["get", "name"], "\n"],
             {},
-            "\n",
-            {},
-            ["to-string", ["get", "ele"]],
+            ["image", "wd-maps:peak"],
+            {
+              "font-scale": 0.9
+            },
+            [
+              "case",
+              ["has", "ele"],
+              ["concat", "\n\n", ["to-string", ["get", "ele"]]],
+              ""
+            ],
             {
               "font-scale": 0.76,
               "text-color": "hsla(28, 10%, 48%, 1)"
@@ -12743,17 +12701,28 @@
           [
             "format",
             [
-              "coalesce",
-              ["get", "name_en"],
-              ["get", "name_fr"],
-              ["get", "name_es"],
-              ["get", "name_de"],
-              ["get", "name"]
+              "concat",
+              [
+                "coalesce",
+                ["get", "name_en"],
+                ["get", "name_fr"],
+                ["get", "name_es"],
+                ["get", "name_de"],
+                ["get", "name"]
+              ],
+              "\n"
             ],
             {},
-            "\n",
-            {},
-            ["to-string", ["get", "ele"]],
+            ["image", "wd-maps:peak"],
+            {
+              "font-scale": 0.9
+            },
+            [
+              "case",
+              ["has", "ele"],
+              ["concat", "\n\n", ["to-string", ["get", "ele"]]],
+              ""
+            ],
             {
               "font-scale": 0.76,
               "text-color": "hsla(28, 10%, 48%, 1)"
@@ -12809,22 +12778,7 @@
             ]
           ]
         ],
-        "visibility": "visible",
-        "icon-image": "wd-maps:peak",
-        "icon-optional": true,
-        "text-optional": true,
-        "icon-size": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          7,
-          0.7,
-          12,
-          0.9,
-          14,
-          1.2
-        ],
-        "text-offset": [0, 1.1]
+        "visibility": "visible"
       },
       "paint": {
         "text-color": "hsla(28, 14%, 42%, 1)",
@@ -13127,7 +13081,7 @@
             ["<=", ["get", "rank"], 10]
           ],
           "wd-maps:ring",
-          "wd-maps:ring"
+          ""
         ],
         "icon-optional": true,
         "text-optional": false,
