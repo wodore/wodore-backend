@@ -1,0 +1,22 @@
+{
+  "version": 8,
+  "name": "mapy-outdoor",
+  "sources": {
+    "mapy-outdoor": {
+      "type": "raster",
+      "tiles": [
+        "https://api.mapy.com/v1/maptiles/outdoor/{z}/{x}/{y}?apikey={{env:MAPY_COM_API_KEY}}"
+      ],
+      "tileSize": 256,
+      "maxzoom": 19,
+      "attribution": "<a href='https://mapy.com'>© Seznam.cz, a.s.</a>"
+    }
+  },
+  "layers": [
+    {
+      "id": "mapy-outdoor",
+      "type": "raster",
+      "source": "mapy-outdoor"
+    }
+  ]
+}
