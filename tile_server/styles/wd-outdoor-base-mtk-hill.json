@@ -5006,15 +5006,15 @@
           ["linear"],
           ["zoom"],
           12.5,
-          0.9,
-          14,
           1.6,
+          14,
+          2.8,
           15,
-          2.6,
+          4.6,
           16,
-          3.4,
+          7,
           19,
-          7
+          13
         ],
         "line-opacity": [
           "interpolate",
@@ -9190,6 +9190,8 @@
           "case",
           ["==", ["get", "type"], "country"],
           -2,
+          ["==", ["get", "type"], "state"],
+          -1.5,
           ["==", ["get", "category"], "capital"],
           -1,
           ["get", "rank"]
@@ -9284,7 +9286,17 @@
                 ["==", ["get", "category"], "country"],
                 ["==", ["get", "type"], "country"]
               ],
-              1.35,
+              [
+                "interpolate",
+                ["linear"],
+                ["get", "rank"],
+                1,
+                1.6,
+                3,
+                1.35,
+                6,
+                1.15
+              ],
               0.92
             ],
             29.0996
@@ -9299,13 +9311,35 @@
                 ["==", ["get", "category"], "country"],
                 ["==", ["get", "type"], "country"]
               ],
-              1.35,
+              [
+                "interpolate",
+                ["linear"],
+                ["get", "rank"],
+                1,
+                1.6,
+                3,
+                1.35,
+                6,
+                1.15
+              ],
               0.92
             ],
             14.545200000000001
           ]
         ],
-        "text-letter-spacing": 0.12
+        "text-letter-spacing": 0.12,
+        "text-anchor": [
+          "case",
+          ["==", ["get", "type"], "country"],
+          "center",
+          "left"
+        ],
+        "text-offset": [
+          "case",
+          ["==", ["get", "type"], "country"],
+          ["literal", [0, 0]],
+          ["literal", [0.6, 0.05]]
+        ]
       },
       "paint": {
         "text-color": [
@@ -9320,7 +9354,64 @@
         ],
         "text-halo-color": "rgba(242, 247, 244, 0.9)",
         "text-halo-width": 1,
-        "text-halo-blur": 1
+        "text-halo-blur": 1,
+        "text-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          0.9,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            1,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          1.5,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          2.9,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          3,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            1,
+            1
+          ]
+        ]
       },
       "metadata": {
         "maptoolkit:legend": {
@@ -9358,6 +9449,8 @@
           "case",
           ["==", ["get", "type"], "country"],
           -2,
+          ["==", ["get", "type"], "state"],
+          -1.5,
           ["==", ["get", "category"], "capital"],
           -1,
           ["get", "rank"]
@@ -9475,7 +9568,17 @@
                 ["==", ["get", "category"], "country"],
                 ["==", ["get", "type"], "country"]
               ],
-              1.35,
+              [
+                "interpolate",
+                ["linear"],
+                ["get", "rank"],
+                1,
+                1.6,
+                3,
+                1.35,
+                6,
+                1.15
+              ],
               0.92
             ],
             [
@@ -9494,7 +9597,17 @@
                 ["==", ["get", "category"], "country"],
                 ["==", ["get", "type"], "country"]
               ],
-              1.35,
+              [
+                "interpolate",
+                ["linear"],
+                ["get", "rank"],
+                1,
+                1.6,
+                3,
+                1.35,
+                6,
+                1.15
+              ],
               0.92
             ],
             [
@@ -9528,7 +9641,12 @@
             0
           ]
         ],
-        "text-offset": [0.6, 0.05],
+        "text-offset": [
+          "case",
+          ["==", ["get", "type"], "country"],
+          ["literal", [0, 0]],
+          ["literal", [0.6, 0.05]]
+        ],
         "icon-image": [
           "case",
           ["==", ["get", "category"], "capital"],
@@ -9667,7 +9785,12 @@
             0.45
           ]
         ],
-        "text-anchor": "left"
+        "text-anchor": [
+          "case",
+          ["==", ["get", "type"], "country"],
+          "center",
+          "left"
+        ]
       },
       "paint": {
         "text-color": [
@@ -9774,6 +9897,63 @@
           ],
           13,
           0
+        ],
+        "text-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          0.9,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            1,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          1.5,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          2.9,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          3,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            1,
+            1
+          ]
         ]
       },
       "metadata": {
@@ -10361,6 +10541,8 @@
           "case",
           ["==", ["get", "type"], "country"],
           -2,
+          ["==", ["get", "type"], "state"],
+          -1.5,
           ["==", ["get", "category"], "capital"],
           -1,
           ["get", "rank"]
@@ -10455,7 +10637,17 @@
                 ["==", ["get", "category"], "country"],
                 ["==", ["get", "type"], "country"]
               ],
-              1.35,
+              [
+                "interpolate",
+                ["linear"],
+                ["get", "rank"],
+                1,
+                1.6,
+                3,
+                1.35,
+                6,
+                1.15
+              ],
               0.92
             ],
             [
@@ -10474,7 +10666,17 @@
                 ["==", ["get", "category"], "country"],
                 ["==", ["get", "type"], "country"]
               ],
-              1.35,
+              [
+                "interpolate",
+                ["linear"],
+                ["get", "rank"],
+                1,
+                1.6,
+                3,
+                1.35,
+                6,
+                1.15
+              ],
               0.92
             ],
             [
@@ -10484,7 +10686,19 @@
             ]
           ]
         ],
-        "text-letter-spacing": 0.12
+        "text-letter-spacing": 0.12,
+        "text-anchor": [
+          "case",
+          ["==", ["get", "type"], "country"],
+          "center",
+          "left"
+        ],
+        "text-offset": [
+          "case",
+          ["==", ["get", "type"], "country"],
+          ["literal", [0, 0]],
+          ["literal", [0.6, 0.05]]
+        ]
       },
       "paint": {
         "text-color": [
@@ -10499,7 +10713,64 @@
         ],
         "text-halo-color": "rgba(242, 247, 244, 0.9)",
         "text-halo-width": 1,
-        "text-halo-blur": 1
+        "text-halo-blur": 1,
+        "text-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          0.9,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            1,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          1.5,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          2.9,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          3,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            1,
+            1
+          ]
+        ]
       },
       "metadata": {
         "maptoolkit:legend": {
@@ -10538,6 +10809,8 @@
           "case",
           ["==", ["get", "type"], "country"],
           -2,
+          ["==", ["get", "type"], "state"],
+          -1.5,
           ["==", ["get", "category"], "capital"],
           -1,
           ["get", "rank"]
@@ -10655,7 +10928,17 @@
                 ["==", ["get", "category"], "country"],
                 ["==", ["get", "type"], "country"]
               ],
-              1.35,
+              [
+                "interpolate",
+                ["linear"],
+                ["get", "rank"],
+                1,
+                1.6,
+                3,
+                1.35,
+                6,
+                1.15
+              ],
               0.92
             ],
             [
@@ -10674,7 +10957,17 @@
                 ["==", ["get", "category"], "country"],
                 ["==", ["get", "type"], "country"]
               ],
-              1.35,
+              [
+                "interpolate",
+                ["linear"],
+                ["get", "rank"],
+                1,
+                1.6,
+                3,
+                1.35,
+                6,
+                1.15
+              ],
               0.92
             ],
             [
@@ -10708,7 +11001,12 @@
             0
           ]
         ],
-        "text-offset": [0.6, 0.05],
+        "text-offset": [
+          "case",
+          ["==", ["get", "type"], "country"],
+          ["literal", [0, 0]],
+          ["literal", [0.6, 0.05]]
+        ],
         "icon-image": [
           "case",
           ["==", ["get", "category"], "capital"],
@@ -10847,7 +11145,12 @@
             0.45
           ]
         ],
-        "text-anchor": "left"
+        "text-anchor": [
+          "case",
+          ["==", ["get", "type"], "country"],
+          "center",
+          "left"
+        ]
       },
       "paint": {
         "text-color": [
@@ -10954,6 +11257,63 @@
           ],
           13,
           0
+        ],
+        "text-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          0.9,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            1,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          1.5,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          2.9,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          3,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            1,
+            1
+          ]
         ]
       },
       "metadata": {
@@ -11719,6 +12079,8 @@
           "case",
           ["==", ["get", "type"], "country"],
           -2,
+          ["==", ["get", "type"], "state"],
+          -1.5,
           ["==", ["get", "category"], "capital"],
           -1,
           ["get", "rank"]
@@ -11813,7 +12175,17 @@
                 ["==", ["get", "category"], "country"],
                 ["==", ["get", "type"], "country"]
               ],
-              1.35,
+              [
+                "interpolate",
+                ["linear"],
+                ["get", "rank"],
+                1,
+                1.6,
+                3,
+                1.35,
+                6,
+                1.15
+              ],
               0.92
             ],
             [
@@ -11832,7 +12204,17 @@
                 ["==", ["get", "category"], "country"],
                 ["==", ["get", "type"], "country"]
               ],
-              1.35,
+              [
+                "interpolate",
+                ["linear"],
+                ["get", "rank"],
+                1,
+                1.6,
+                3,
+                1.35,
+                6,
+                1.15
+              ],
               0.92
             ],
             [
@@ -11842,7 +12224,19 @@
             ]
           ]
         ],
-        "text-letter-spacing": 0.12
+        "text-letter-spacing": 0.12,
+        "text-anchor": [
+          "case",
+          ["==", ["get", "type"], "country"],
+          "center",
+          "left"
+        ],
+        "text-offset": [
+          "case",
+          ["==", ["get", "type"], "country"],
+          ["literal", [0, 0]],
+          ["literal", [0.6, 0.05]]
+        ]
       },
       "paint": {
         "text-color": [
@@ -11857,7 +12251,64 @@
         ],
         "text-halo-color": "rgba(242, 247, 244, 0.9)",
         "text-halo-width": 1,
-        "text-halo-blur": 1
+        "text-halo-blur": 1,
+        "text-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          0.9,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            1,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          1.5,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          2.9,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          3,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            1,
+            1
+          ]
+        ]
       },
       "metadata": {
         "maptoolkit:legend": {
@@ -11896,6 +12347,8 @@
           "case",
           ["==", ["get", "type"], "country"],
           -2,
+          ["==", ["get", "type"], "state"],
+          -1.5,
           ["==", ["get", "category"], "capital"],
           -1,
           ["get", "rank"]
@@ -12013,7 +12466,17 @@
                 ["==", ["get", "category"], "country"],
                 ["==", ["get", "type"], "country"]
               ],
-              1.35,
+              [
+                "interpolate",
+                ["linear"],
+                ["get", "rank"],
+                1,
+                1.6,
+                3,
+                1.35,
+                6,
+                1.15
+              ],
               0.92
             ],
             [
@@ -12032,7 +12495,17 @@
                 ["==", ["get", "category"], "country"],
                 ["==", ["get", "type"], "country"]
               ],
-              1.35,
+              [
+                "interpolate",
+                ["linear"],
+                ["get", "rank"],
+                1,
+                1.6,
+                3,
+                1.35,
+                6,
+                1.15
+              ],
               0.92
             ],
             [
@@ -12066,7 +12539,12 @@
             0
           ]
         ],
-        "text-offset": [0.6, 0.05],
+        "text-offset": [
+          "case",
+          ["==", ["get", "type"], "country"],
+          ["literal", [0, 0]],
+          ["literal", [0.6, 0.05]]
+        ],
         "icon-image": [
           "case",
           ["==", ["get", "category"], "capital"],
@@ -12205,7 +12683,12 @@
             0.45
           ]
         ],
-        "text-anchor": "left"
+        "text-anchor": [
+          "case",
+          ["==", ["get", "type"], "country"],
+          "center",
+          "left"
+        ]
       },
       "paint": {
         "text-color": [
@@ -12312,6 +12795,63 @@
           ],
           13,
           0
+        ],
+        "text-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          0.9,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            1,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          1.5,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          2.9,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          3,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            1,
+            1
+          ]
         ]
       },
       "metadata": {
@@ -12948,6 +13488,8 @@
           "case",
           ["==", ["get", "type"], "country"],
           -2,
+          ["==", ["get", "type"], "state"],
+          -1.5,
           ["==", ["get", "category"], "capital"],
           -1,
           ["get", "rank"]
@@ -13042,7 +13584,17 @@
                 ["==", ["get", "category"], "country"],
                 ["==", ["get", "type"], "country"]
               ],
-              1.35,
+              [
+                "interpolate",
+                ["linear"],
+                ["get", "rank"],
+                1,
+                1.6,
+                3,
+                1.35,
+                6,
+                1.15
+              ],
               0.92
             ],
             [
@@ -13061,7 +13613,17 @@
                 ["==", ["get", "category"], "country"],
                 ["==", ["get", "type"], "country"]
               ],
-              1.35,
+              [
+                "interpolate",
+                ["linear"],
+                ["get", "rank"],
+                1,
+                1.6,
+                3,
+                1.35,
+                6,
+                1.15
+              ],
               0.92
             ],
             [
@@ -13071,7 +13633,19 @@
             ]
           ]
         ],
-        "text-letter-spacing": 0.12
+        "text-letter-spacing": 0.12,
+        "text-anchor": [
+          "case",
+          ["==", ["get", "type"], "country"],
+          "center",
+          "left"
+        ],
+        "text-offset": [
+          "case",
+          ["==", ["get", "type"], "country"],
+          ["literal", [0, 0]],
+          ["literal", [0.6, 0.05]]
+        ]
       },
       "paint": {
         "text-color": [
@@ -13086,7 +13660,64 @@
         ],
         "text-halo-color": "rgba(242, 247, 244, 0.9)",
         "text-halo-width": 1,
-        "text-halo-blur": 1
+        "text-halo-blur": 1,
+        "text-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          0.9,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            1,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          1.5,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          2.9,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          3,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            1,
+            1
+          ]
+        ]
       },
       "metadata": {
         "maptoolkit:legend": {
@@ -13125,6 +13756,8 @@
           "case",
           ["==", ["get", "type"], "country"],
           -2,
+          ["==", ["get", "type"], "state"],
+          -1.5,
           ["==", ["get", "category"], "capital"],
           -1,
           ["get", "rank"]
@@ -13242,7 +13875,17 @@
                 ["==", ["get", "category"], "country"],
                 ["==", ["get", "type"], "country"]
               ],
-              1.35,
+              [
+                "interpolate",
+                ["linear"],
+                ["get", "rank"],
+                1,
+                1.6,
+                3,
+                1.35,
+                6,
+                1.15
+              ],
               0.92
             ],
             [
@@ -13261,7 +13904,17 @@
                 ["==", ["get", "category"], "country"],
                 ["==", ["get", "type"], "country"]
               ],
-              1.35,
+              [
+                "interpolate",
+                ["linear"],
+                ["get", "rank"],
+                1,
+                1.6,
+                3,
+                1.35,
+                6,
+                1.15
+              ],
               0.92
             ],
             [
@@ -13295,7 +13948,12 @@
             0
           ]
         ],
-        "text-offset": [0.6, 0.05],
+        "text-offset": [
+          "case",
+          ["==", ["get", "type"], "country"],
+          ["literal", [0, 0]],
+          ["literal", [0.6, 0.05]]
+        ],
         "icon-image": [
           "case",
           ["==", ["get", "category"], "capital"],
@@ -13434,7 +14092,12 @@
             0.45
           ]
         ],
-        "text-anchor": "left"
+        "text-anchor": [
+          "case",
+          ["==", ["get", "type"], "country"],
+          "center",
+          "left"
+        ]
       },
       "paint": {
         "text-color": [
@@ -13541,6 +14204,63 @@
           ],
           13,
           0
+        ],
+        "text-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          0.9,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            1,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          1.5,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          2.9,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          3,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            1,
+            1
+          ]
         ]
       },
       "metadata": {
@@ -13929,6 +14649,8 @@
           "case",
           ["==", ["get", "type"], "country"],
           -2,
+          ["==", ["get", "type"], "state"],
+          -1.5,
           ["==", ["get", "category"], "capital"],
           -1,
           ["get", "rank"]
@@ -14023,7 +14745,17 @@
                 ["==", ["get", "category"], "country"],
                 ["==", ["get", "type"], "country"]
               ],
-              1.35,
+              [
+                "interpolate",
+                ["linear"],
+                ["get", "rank"],
+                1,
+                1.6,
+                3,
+                1.35,
+                6,
+                1.15
+              ],
               0.92
             ],
             [
@@ -14059,7 +14791,17 @@
                 ["==", ["get", "category"], "country"],
                 ["==", ["get", "type"], "country"]
               ],
-              1.35,
+              [
+                "interpolate",
+                ["linear"],
+                ["get", "rank"],
+                1,
+                1.6,
+                3,
+                1.35,
+                6,
+                1.15
+              ],
               0.92
             ],
             [
@@ -14094,7 +14836,19 @@
             ]
           ]
         ],
-        "text-letter-spacing": 0.12
+        "text-letter-spacing": 0.12,
+        "text-anchor": [
+          "case",
+          ["==", ["get", "type"], "country"],
+          "center",
+          "left"
+        ],
+        "text-offset": [
+          "case",
+          ["==", ["get", "type"], "country"],
+          ["literal", [0, 0]],
+          ["literal", [0.6, 0.05]]
+        ]
       },
       "paint": {
         "text-color": [
@@ -14109,7 +14863,64 @@
         ],
         "text-halo-color": "rgba(242, 247, 244, 0.9)",
         "text-halo-width": 1,
-        "text-halo-blur": 1
+        "text-halo-blur": 1,
+        "text-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          0.9,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            1,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          1.5,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          2.9,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          3,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            1,
+            1
+          ]
+        ]
       },
       "metadata": {
         "maptoolkit:legend": {
@@ -14147,6 +14958,8 @@
           "case",
           ["==", ["get", "type"], "country"],
           -2,
+          ["==", ["get", "type"], "state"],
+          -1.5,
           ["==", ["get", "category"], "capital"],
           -1,
           ["get", "rank"]
@@ -14264,7 +15077,17 @@
                 ["==", ["get", "category"], "country"],
                 ["==", ["get", "type"], "country"]
               ],
-              1.35,
+              [
+                "interpolate",
+                ["linear"],
+                ["get", "rank"],
+                1,
+                1.6,
+                3,
+                1.35,
+                6,
+                1.15
+              ],
               0.92
             ],
             [
@@ -14292,7 +15115,17 @@
                 ["==", ["get", "category"], "country"],
                 ["==", ["get", "type"], "country"]
               ],
-              1.35,
+              [
+                "interpolate",
+                ["linear"],
+                ["get", "rank"],
+                1,
+                1.6,
+                3,
+                1.35,
+                6,
+                1.15
+              ],
               0.92
             ],
             [
@@ -14343,7 +15176,12 @@
             0
           ]
         ],
-        "text-offset": [0.6, 0.05],
+        "text-offset": [
+          "case",
+          ["==", ["get", "type"], "country"],
+          ["literal", [0, 0]],
+          ["literal", [0.6, 0.05]]
+        ],
         "icon-image": [
           "case",
           ["==", ["get", "category"], "capital"],
@@ -14482,7 +15320,12 @@
             0.45
           ]
         ],
-        "text-anchor": "left"
+        "text-anchor": [
+          "case",
+          ["==", ["get", "type"], "country"],
+          "center",
+          "left"
+        ]
       },
       "paint": {
         "text-color": [
@@ -14589,6 +15432,63 @@
           ],
           13,
           0
+        ],
+        "text-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          0.9,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            1,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          1.5,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          2.9,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            0,
+            1
+          ],
+          3,
+          [
+            "case",
+            ["==", ["get", "type"], "continent"],
+            0,
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["big_place", "small_place"]]
+            ],
+            1,
+            1
+          ]
         ]
       },
       "metadata": {
