@@ -276,29 +276,55 @@
         }
       }
 
-      /* Compare mode shows two maps — two attribution "i" buttons stack
-         up at the seam and read as clutter. Keep the collapsed attribution
-         bar, hide the expand buttons (dev tool; the style URL / catalog
-         carry full attribution). */
-      #compare-wrap .maplibregl-ctrl-attrib-button {
+      /* 1:1 compare: two independent halves, no clip, no slider. Side by
+         side in landscape, stacked in portrait. */
+      #compare-wrap.grid11 {
+        display: flex;
+        flex-direction: row;
+      }
+
+      @media (orientation: portrait) {
+        #compare-wrap.grid11 {
+          flex-direction: column;
+        }
+      }
+
+      #compare-wrap.grid11 .compare-side {
+        position: relative;
+        inset: auto;
+        flex: 1 1 50%;
+        min-width: 0;
+        min-height: 0;
+      }
+
+      #compare-wrap.grid11 #compare-a {
+        border-right: 1px solid #4d6b58;
+      }
+
+      @media (orientation: portrait) {
+        #compare-wrap.grid11 #compare-a {
+          border-right: none;
+          border-bottom: 1px solid #4d6b58;
+        }
+      }
+
+      /* Compare modes (swipe + 1:1) hide the attribution expand buttons
+         (both class spellings across maplibre versions). */
+      #compare-wrap .maplibregl-ctrl-attrib-button,
+      #compare-wrap .maplibre-ctrl-attrib-button {
         display: none;
       }
 
-      /* Position readout (zoom/lat/lon) pinned bottom-left over the map —
-         so screenshots carry their own coordinates. Fixed to the viewport
-         so it works in normal AND compare mode. */
+      /* Position readout (zoom/lat/lon) in the header — so screenshots
+         carry their own coordinates. Updates live while moving. */
       #pos-readout {
-        position: fixed;
-        bottom: 6px;
-        left: 10px;
-        z-index: 500;
         font: 11px/1.4 ui-monospace, monospace;
         color: #1c1c1c;
         background: rgba(255, 255, 255, 0.82);
         border: 1px solid #c5cfc8;
         border-radius: 4px;
         padding: 2px 6px;
-        pointer-events: none;
+        white-space: nowrap;
       }
 
       #copy-style-btn.copied {
@@ -344,6 +370,7 @@
         Copy style URL
       </button>
       <button id="catalog-toggle" type="button" title="Show/hide the catalog URL row">Catalog ▾</button>
+      <span id="pos-readout" hidden></span>
       <span id="permalink" title="current view, copy me"></span>
       <div id="catalog-row">
         <label for="tileserver-input">Catalog:</label>
@@ -370,7 +397,6 @@
         <div id="compare-b" class="compare-side"></div>
       </div>
     </main>
-    <div id="pos-readout" hidden></div>
 
     <script src="{% static 'demos/vendor/maplibre-gl.js' %}"></script>
     <script src="{% static 'demos/vendor/map-gl-style-switcher.js' %}"></script>
@@ -407,7 +433,12 @@
             parseFloat(q.get("lon") || "11.4041"),
             parseFloat(q.get("lat") || "47.2692"),
           ],
-          mode: q.get("mode") === "compare" ? "compare" : "normal",
+          mode: (function () {
+            var m = q.get("mode");
+            if (m === "11" || m === "1:1") return "11";
+            if (m === "compare" || m === "swipe") return "swipe";
+            return "normal";
+          })(),
           inspect: false,
         };
         var styleIds = FALLBACK_STYLES.slice();
@@ -499,11 +530,12 @@
           var p = new URLSearchParams();
           p.set("catalog", CATALOG_URL);
           p.set("style", state.style);
-          if (state.mode === "compare") p.set("styleB", state.styleB);
+          if (state.mode !== "normal") p.set("styleB", state.styleB);
           p.set("z", state.zoom.toFixed(2));
           p.set("lon", state.center[0].toFixed(5));
           p.set("lat", state.center[1].toFixed(5));
-          if (state.mode === "compare") p.set("mode", "compare");
+          if (state.mode === "swipe") p.set("mode", "swipe");
+          if (state.mode === "11") p.set("mode", "11");
           history.replaceState(null, "", location.pathname + "?" + p);
           els.permalink.textContent =
             "z" + state.zoom.toFixed(1) + " " + state.style;
@@ -729,12 +761,16 @@
           els.modeToggle.textContent = "Compare mode";
         }
 
-        function enterCompare() {
+        function enterCompare(kind) {
+          // kind: "swipe" (slider over one map) or "11" (two halves)
           teardown();
           els.normal.hidden = true;
           els.compare.hidden = false;
           els.inspectToggle.hidden = true;
           disableInspect();
+
+          var wrap = document.getElementById("compare-wrap");
+          if (kind === "11") wrap.classList.add("grid11");
 
           var a = makeMap("compare-a", state.style);
           var b = makeMap("compare-b", state.styleB);
@@ -745,50 +781,27 @@
           compareMaps = {
             a: a,
             b: b,
-            handle: makeCompareSlider(a, b, "compare-wrap"),
+            handle:
+              kind === "swipe"
+                ? makeCompareSlider(a, b, "compare-wrap")
+                : makeCameraSync(a, b),
           };
-          els.modeToggle.textContent = "Normal mode";
+          // Button cycles to the next mode; label always names the NEXT
+          // mode so it doubles as the state display.
+          els.modeToggle.textContent =
+            kind === "swipe" ? "Compare 1:1" : "Normal mode";
         }
 
-        // ---------- compare slider (built-in) ----------
-        function makeCompareSlider(mapA, mapB, wrapId) {
-          var wrap = document.getElementById(wrapId);
-          var sideB = document.getElementById("compare-b");
-          var handle = document.createElement("div");
-          handle.id = "compare-handle";
-          wrap.appendChild(handle);
-
-          var pos = 0.5;
-          function isVertical() {
-            return wrap.clientHeight > wrap.clientWidth;
-          }
-          function apply() {
-            var vertical = isVertical();
-            handle.classList.toggle("vertical", vertical);
-            wrap.classList.toggle("compare-vertical", vertical);
-            if (vertical) {
-              var y = Math.round(pos * wrap.clientHeight);
-              sideB.style.clipPath = "inset(" + y + "px 0 0 0)";
-              handle.style.top = y + "px";
-              handle.style.left = "0";
-            } else {
-              var x = Math.round(pos * wrap.clientWidth);
-              sideB.style.clipPath = "inset(0 0 0 " + x + "px)";
-              handle.style.left = x + "px";
-              handle.style.top = "0";
-            }
-          }
-
-          // Camera sync: mirror moves one way only while a jumpTo is in
-          // flight. The previous movestart/syncA flag design ping-ponged —
-          // jumpTo fires movestart on the destination, flipping the sync
-          // direction mid-gesture, and the reverse sync cancelled touch
-          // pinch-zoom animations ("cannot zoom in compare mode"). The
-          // equality short-circuit also guards against a future maplibre
-          // emitting jumpTo's move asynchronously (the synchronous guard
-          // would already have cleared). jumpTo itself has no inertia, so
-          // skipping no-op jumps also stops redundant churn per inertial
-          // frame.
+        // ---------- camera sync (shared by swipe and 1:1) ----------
+        // Mirror moves one way only while a jumpTo is in flight. The naive
+        // movestart/syncA flag design ping-pongs — jumpTo fires movestart on
+        // the destination, flipping the sync direction mid-gesture, and the
+        // reverse sync cancels touch pinch-zoom ("cannot zoom in compare
+        // mode"). The equality short-circuit also guards against a future
+        // maplibre emitting jumpTo's move asynchronously. jumpTo has no
+        // inertia, so skipping no-op jumps stops redundant churn per
+        // inertial frame.
+        function makeCameraSync(mapA, mapB) {
           var syncing = false;
           function sameCamera(a, b) {
             var ca = a.getCenter();
@@ -821,6 +834,41 @@
           mapB.on("move", function () {
             syncCameras(mapB, mapA);
           });
+          return {
+            remove: function () {},
+          };
+        }
+
+        // ---------- compare slider (built-in, swipe mode) ----------
+        function makeCompareSlider(mapA, mapB, wrapId) {
+          var wrap = document.getElementById(wrapId);
+          var sideB = document.getElementById("compare-b");
+          var handle = document.createElement("div");
+          handle.id = "compare-handle";
+          wrap.appendChild(handle);
+
+          var pos = 0.5;
+          function isVertical() {
+            return wrap.clientHeight > wrap.clientWidth;
+          }
+          function apply() {
+            var vertical = isVertical();
+            handle.classList.toggle("vertical", vertical);
+            wrap.classList.toggle("compare-vertical", vertical);
+            if (vertical) {
+              var y = Math.round(pos * wrap.clientHeight);
+              sideB.style.clipPath = "inset(" + y + "px 0 0 0)";
+              handle.style.top = y + "px";
+              handle.style.left = "0";
+            } else {
+              var x = Math.round(pos * wrap.clientWidth);
+              sideB.style.clipPath = "inset(0 0 0 " + x + "px)";
+              handle.style.left = x + "px";
+              handle.style.top = "0";
+            }
+          }
+
+          makeCameraSync(mapA, mapB);
 
           var dragging = false;
           handle.addEventListener("pointerdown", function (e) {
@@ -865,6 +913,9 @@
         function teardown() {
           stopFps();
           disableInspect();
+          document
+            .getElementById("compare-wrap")
+            .classList.remove("grid11", "compare-vertical");
           if (compareMaps) {
             if (compareMaps.handle && compareMaps.handle.remove) {
               try {
@@ -955,8 +1006,10 @@
               /* catalog unavailable: keep fallback list */
             })
             .finally(function () {
-              if (state.mode === "compare") {
-                enterCompare();
+              if (state.mode === "11") {
+                enterCompare("11");
+              } else if (state.mode === "swipe") {
+                enterCompare("swipe");
               } else {
                 enterNormal();
               }
@@ -981,12 +1034,20 @@
         if (els.catalogRow.hidden) els.catalogToggle.textContent = "Catalog \u25be";
 
         updateTileserverUI();
+        // Mode cycles normal -> swipe -> 1:1 -> normal; the button label
+        // always names the NEXT mode (and doubles as the state display).
         els.modeToggle.addEventListener("click", function () {
-          state.mode = state.mode === "compare" ? "normal" : "compare";
-          if (state.mode === "compare") {
-            enterCompare();
-          } else {
+          var next =
+            state.mode === "normal"
+              ? "swipe"
+              : state.mode === "swipe"
+                ? "11"
+                : "normal";
+          state.mode = next;
+          if (next === "normal") {
             enterNormal();
+          } else {
+            enterCompare(next);
           }
           syncPermalink();
         });
