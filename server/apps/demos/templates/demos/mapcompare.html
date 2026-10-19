@@ -284,6 +284,23 @@
         display: none;
       }
 
+      /* Position readout (zoom/lat/lon) pinned bottom-left over the map —
+         so screenshots carry their own coordinates. Fixed to the viewport
+         so it works in normal AND compare mode. */
+      #pos-readout {
+        position: fixed;
+        bottom: 6px;
+        left: 10px;
+        z-index: 500;
+        font: 11px/1.4 ui-monospace, monospace;
+        color: #1c1c1c;
+        background: rgba(255, 255, 255, 0.82);
+        border: 1px solid #c5cfc8;
+        border-radius: 4px;
+        padding: 2px 6px;
+        pointer-events: none;
+      }
+
       #copy-style-btn.copied {
         background: #e4f4e4;
         border-color: #2a6;
@@ -353,6 +370,7 @@
         <div id="compare-b" class="compare-side"></div>
       </div>
     </main>
+    <div id="pos-readout" hidden></div>
 
     <script src="{% static 'demos/vendor/maplibre-gl.js' %}"></script>
     <script src="{% static 'demos/vendor/map-gl-style-switcher.js' %}"></script>
@@ -499,6 +517,25 @@
           });
         }
 
+        // ---------- position readout ----------
+        // Shows z / lat / lon live on the map (bottom-left) so screenshots
+        // carry their coordinates. Attached to whichever map currently
+        // drives the view: normal map, or side A in compare (cameras sync).
+        var posReadout = document.getElementById("pos-readout");
+        function bindPosReadout(map) {
+          var fmt = function () {
+            var c = map.getCenter();
+            var lat = c.lat.toFixed(4) + "\u00b0" + (c.lat >= 0 ? "N" : "S");
+            var lon =
+              c.lng.toFixed(4) + "\u00b0" + (c.lng >= 0 ? "E" : "W");
+            posReadout.textContent =
+              "z" + map.getZoom().toFixed(2) + " \u00b7 " + lat + " " + lon;
+          };
+          map.on("move", fmt);
+          fmt();
+          posReadout.hidden = false;
+        }
+
         function makeMap(container, styleId) {
           return new maplibregl.Map({
             container: container,
@@ -558,8 +595,22 @@
           // Side B's switcher goes top-right: the compare slider's clip-path
           // on compare-b hides top-left controls
           map.addControl(ctrl, which === "B" ? "top-right" : "top-left");
-          // two-line items (name + slug), re-applied on every re-render
+          // Touch: the vendored control expands on hover/focus only — no
+          // hover on phones, and focus alone is unreliable. Tap-to-toggle:
+          // a tap on the collapsed chip expands it; taps on list items keep
+          // the vendored item handlers (the list is only rendered when
+          // expanded, so the intercept only fires when collapsed).
           var container = ctrl._container;
+          if (container) {
+            container.addEventListener("click", function (e) {
+              if (!container.querySelector(".style-switcher-list")) {
+                e.stopPropagation();
+                e.preventDefault();
+                ctrl._setExpanded(true);
+              }
+            });
+          }
+          // two-line items (name + slug), re-applied on every re-render
           if (container) {
             var reformat = function () {
               twoLineSwitcherItems(container, switcherStyles());
@@ -672,6 +723,7 @@
           normalMap = makeMap("map", state.style);
           addSwitcher(normalMap, "A");
           trackView(normalMap);
+          bindPosReadout(normalMap);
           startFps();
           if (state.inspect) enableInspect();
           els.modeToggle.textContent = "Compare mode";
@@ -689,6 +741,7 @@
           addSwitcher(a, "A");
           addSwitcher(b, "B");
           trackView(a);
+          bindPosReadout(a);
           compareMaps = {
             a: a,
             b: b,
