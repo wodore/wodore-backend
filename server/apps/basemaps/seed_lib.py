@@ -700,10 +700,14 @@ def osm_raster_style() -> dict[str, Any]:
 
 
 def swisstopo_pixelkarte_style() -> dict[str, Any]:
-    """CH pixelkarte raster (country-only basemap, frontend parity)."""
+    """CH pixelkarte raster (country-only basemap, frontend parity).
+
+    The pixelkarte WMTS serves JPEG — the default PNG template 400s and
+    the basemap shows nothing (verified against wmts.geo.admin.ch).
+    """
     return raster_style(
         "ch-swisstopo-raster",
-        swisstopo_wmts_urls("ch.swisstopo.pixelkarte-farbe"),
+        swisstopo_wmts_urls("ch.swisstopo.pixelkarte-farbe", fmt="jpeg"),
         attribution="swisstopo",
     )
 

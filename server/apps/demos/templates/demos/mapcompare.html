@@ -53,12 +53,6 @@
       /* Mobile: the permalink gives up its reserved width; the catalog
          input lives on its own collapsible row (see #catalog-row) so the
          primary buttons never wrap off-screen. */
-      @media (max-width: 640px) {
-        #permalink {
-          max-width: 40vw;
-        }
-      }
-
       /* Collapsible catalog row: second header line with the input,
          toggled by #catalog-toggle. Collapsed by default on narrow
          screens (JS), always open-able. */
@@ -77,6 +71,15 @@
       #catalog-row #tileserver-input {
         flex: 1 1 160px;
         min-width: 0;
+      }
+
+      #bust-cache-label {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+        white-space: nowrap;
+        color: #4d6b58;
+        cursor: pointer;
       }
 
       #bar button {
@@ -108,14 +111,26 @@
       }
 
 
+      /* Merged view chip: z / coords / current style slug, live. Wraps to
+         its own line on phones instead of being trimmed. */
       #permalink {
         margin-left: auto;
-        color: #4d6b58;
-        font-family: ui-monospace, monospace;
+        color: #1c1c1c;
+        background: rgba(255, 255, 255, 0.82);
+        border: 1px solid #c5cfc8;
+        border-radius: 4px;
+        padding: 2px 6px;
+        font: 11px/1.4 ui-monospace, monospace;
         white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 30%;
+      }
+
+      @media (max-width: 640px) {
+        #permalink {
+          flex-basis: 100%;
+          max-width: none;
+          margin-left: 0;
+          text-align: left;
+        }
       }
 
       #map {
@@ -269,6 +284,13 @@
         }
       }
 
+      /* While side B's style menu is open in swipe mode, lift B's seam
+         clip so the full menu is visible (B overlays A momentarily). */
+      #compare-wrap.bmenu #compare-b {
+        clip-path: none !important;
+        z-index: 30;
+      }
+
       /* 1:1 compare: two independent halves, no clip, no slider. Side by
          side in landscape, stacked in portrait. */
       #compare-wrap.grid11 {
@@ -323,24 +345,6 @@
         color: #1c5c1c;
       }
 
-      /* Position readout (zoom/lat/lon) in the header — so screenshots
-         carry their own coordinates. Updates live while moving. */
-      #pos-readout {
-        font: 11px/1.4 ui-monospace, monospace;
-        color: #1c1c1c;
-        background: rgba(255, 255, 255, 0.82);
-        border: 1px solid #c5cfc8;
-        border-radius: 4px;
-        padding: 2px 6px;
-        white-space: nowrap;
-      }
-
-      #copy-style-btn.copied {
-        background: #e4f4e4;
-        border-color: #2a6;
-        color: #1c5c1c;
-      }
-
       /* built-in inspect popup */
       .inspect-popup {
         font:
@@ -374,11 +378,7 @@
     <header id="bar">
       <button id="mode-toggle" type="button">Compare mode</button>
       <button id="inspect-toggle" type="button" hidden>Inspect: off</button>
-      <button id="copy-style-btn" type="button" title="Copy the current style's JSON URL">
-        Copy style URL
-      </button>
       <button id="catalog-toggle" type="button" title="Show/hide the catalog URL row">Catalog ▾</button>
-      <span id="pos-readout" hidden></span>
       <span id="permalink" title="current view, copy me"></span>
       <div id="catalog-row">
         <label for="tileserver-input">Catalog:</label>
@@ -390,6 +390,10 @@
         <span id="catalog-link"
           ><a target="_blank" rel="noopener">Catalog ↗</a></span
         >
+        <label id="bust-cache-label" title="Reload styles with a cache-busting parameter (cold style loads). Tiles keep their long-lived cache — for fully cold tiles use the browser devtools.">
+          <input id="bust-cache" type="checkbox" />
+          bust cache
+        </label>
       </div>
     </header>
 
@@ -467,7 +471,6 @@
         var els = {
           modeToggle: document.getElementById("mode-toggle"),
           inspectToggle: document.getElementById("inspect-toggle"),
-          copyStyleBtn: document.getElementById("copy-style-btn"),
           catalogToggle: document.getElementById("catalog-toggle"),
           catalogRow: document.getElementById("catalog-row"),
           tileserverInput: document.getElementById("tileserver-input"),
@@ -530,11 +533,22 @@
         });
 
         // ---------- helpers ----------
+        // Cache busting: appends a fresh query param to every style URL so
+        // style documents load cold (tiles keep their long-lived caches —
+        // see the checkbox tooltip).
+        var bustCache = false;
+        try {
+          bustCache = localStorage.getItem("mapcompare:bust") === "1";
+        } catch (err) {
+          void err;
+        }
+
         function styleUrl(id) {
           // Backend catalog entries have explicit paths; Martin entries need
           // /style/{id}.json constructed from the catalog origin
-          if (backendStyles[id]) return backendStyles[id];
-          return catalogOrigin() + "/style/" + id + ".json";
+          var base = backendStyles[id] || catalogOrigin() + "/style/" + id + ".json";
+          if (!bustCache) return base;
+          return base + (base.indexOf("?") >= 0 ? "&" : "?") + "_=" + Date.now();
         }
 
         // Style slugs -> backend style URLs (filled by fetchBackendCatalog)
@@ -573,8 +587,6 @@
           if (state.mode === "swipe") p.set("mode", "swipe");
           if (state.mode === "11") p.set("mode", "11");
           history.replaceState(null, "", location.pathname + "?" + p);
-          els.permalink.textContent =
-            "z" + state.zoom.toFixed(1) + " " + state.style;
         }
 
         function trackView(map) {
@@ -683,23 +695,54 @@
           );
         }
 
-        // ---------- position readout ----------
-        // Shows z / lat / lon live on the map (bottom-left) so screenshots
-        // carry their coordinates. Attached to whichever map currently
-        // drives the view: normal map, or side A in compare (cameras sync).
-        var posReadout = document.getElementById("pos-readout");
+        // ---------- live view chip (z / coords / style slug / load) ----------
+        // Bound to whichever map drives the view (normal map, compare side
+        // A \u2014 cameras sync). Carries its own coordinates in screenshots;
+        // in normal mode it also reports load timing: "load" = until no
+        // open tile requests (areTilesLoaded), "idle" = fully rendered.
+        var viewChip = document.getElementById("permalink");
+        var loadTiming = null; // {start, tilesMs, idleMs, map}
+        function fmtViewChip(map) {
+          var c = map.getCenter();
+          var lat = c.lat.toFixed(4) + "\u00b0" + (c.lat >= 0 ? "N" : "S");
+          var lon = c.lng.toFixed(4) + "\u00b0" + (c.lng >= 0 ? "E" : "W");
+          var slug = state.style;
+          var parts = ["z" + map.getZoom().toFixed(2), lat + " " + lon, slug];
+          if (loadTiming && loadTiming.map === map) {
+            if (loadTiming.tilesMs != null)
+              parts.push("load " + (loadTiming.tilesMs / 1000).toFixed(1) + "s");
+            if (loadTiming.idleMs != null)
+              parts.push("idle " + (loadTiming.idleMs / 1000).toFixed(1) + "s");
+          }
+          viewChip.textContent = parts.join(" \u00b7 ");
+        }
         function bindPosReadout(map) {
-          var fmt = function () {
-            var c = map.getCenter();
-            var lat = c.lat.toFixed(4) + "\u00b0" + (c.lat >= 0 ? "N" : "S");
-            var lon =
-              c.lng.toFixed(4) + "\u00b0" + (c.lng >= 0 ? "E" : "W");
-            posReadout.textContent =
-              "z" + map.getZoom().toFixed(2) + " \u00b7 " + lat + " " + lon;
-          };
-          map.on("move", fmt);
-          fmt();
-          posReadout.hidden = false;
+          map.on("move", function () {
+            fmtViewChip(map);
+          });
+          fmtViewChip(map);
+        }
+        function refreshViewChip() {
+          fmtViewChip(normalMap || (compareMaps && compareMaps.a));
+        }
+
+        // ---------- load timing (normal mode) ----------
+        function trackLoadTiming(map) {
+          loadTiming = { start: performance.now(), tilesMs: null, idleMs: null, map: map };
+          var poll = setInterval(function () {
+            if (!loadTiming || loadTiming.map !== map) return clearInterval(poll);
+            if (loadTiming.tilesMs == null && map.areTilesLoaded()) {
+              loadTiming.tilesMs = performance.now() - loadTiming.start;
+              refreshViewChip();
+            }
+            if (loadTiming.tilesMs != null && loadTiming.idleMs != null)
+              clearInterval(poll);
+          }, 150);
+          map.once("idle", function () {
+            if (!loadTiming || loadTiming.map !== map) return;
+            loadTiming.idleMs = performance.now() - loadTiming.start;
+            refreshViewChip();
+          });
         }
 
         function makeMap(container, styleId) {
@@ -746,16 +789,25 @@
         }
 
         function addSwitcher(map, which) {
+          // Cap the list to the map's own height — compare halves are
+          // half as tall, an uncapped list gets cut by the screen edge.
+          var avail =
+            (map.getContainer().clientHeight || 400) - 90;
           var ctrl = new mapglstyleswitcher.StyleSwitcherControl({
             styles: switcherStyles(),
             activeStyleId: which === "B" ? state.styleB : state.style,
             showImages: false,
+            maxHeight: Math.max(160, Math.min(420, avail)),
             onAfterStyleChange: function (prev, next) {
               if (!next) return;
               map.setStyle(next.uri);
               if (which === "B") state.styleB = next.id;
               else state.style = next.id;
               syncPermalink();
+              // Normal mode: restart load timing for the new style and
+              // refresh the view chip (slug part) everywhere.
+              if (which === "A" && normalMap) trackLoadTiming(normalMap);
+              refreshViewChip();
             },
           });
           // Side B's switcher goes top-right: the compare slider's clip-path
@@ -768,25 +820,55 @@
           // expanded, so the intercept only fires when collapsed).
           var container = ctrl._container;
           if (container) {
-            container.addEventListener("click", function (e) {
+            // Touch open/close. The vendored control expands on hover and
+            // focus — on phones focus fires during the first tap, which
+            // re-renders the list UNDER the finger before the click event
+            // dispatches: the click then lands on the FIRST list item and
+            // silently selects it ("opens and takes the first value"). Fix:
+            // expand on pointerdown and swallow the synthetic click of that
+            // same tap (capture phase, before the item handlers).
+            var swallowNextClick = false;
+            container.addEventListener("pointerdown", function () {
               if (!container.querySelector(".style-switcher-list")) {
-                // collapsed: tap opens
-                e.stopPropagation();
-                e.preventDefault();
+                swallowNextClick = true;
                 ctrl._setExpanded(true);
-              } else if (e.target.closest(".style-switcher-item")) {
-                // open + tap on an item: let the vendored item handler
-                // select first, then collapse — on touch there is no
-                // hover-out to close the list.
-                setTimeout(function () {
-                  ctrl._setExpanded(false);
-                }, 0);
               }
             });
+            container.addEventListener(
+              "click",
+              function (e) {
+                if (swallowNextClick) {
+                  swallowNextClick = false;
+                  e.stopPropagation();
+                  e.preventDefault();
+                  return;
+                }
+                if (e.target.closest(".style-switcher-item")) {
+                  // tap on an item: let the vendored handler select first,
+                  // then collapse — no hover-out on touch to close it.
+                  setTimeout(function () {
+                    ctrl._setExpanded(false);
+                  }, 0);
+                }
+              },
+              true,
+            );
             var reformat = function () {
               // NOTE: list items are matched to switcherStyles() by index —
               // the vendored control renders styles in array order.
               twoLineSwitcherItems(container, switcherStyles());
+              // Swipe mode clips side B at the seam — its expanding list
+              // would be cut in half. While B's list is open, lift the clip
+              // so the full menu is visible (B overlays A for the moment).
+              var wrap = document.getElementById("compare-wrap");
+              if (wrap) {
+                wrap.classList.toggle(
+                  "bmenu",
+                  which === "B" &&
+                    state.mode === "swipe" &&
+                    !!container.querySelector(".style-switcher-list"),
+                );
+              }
             };
             var obs = new MutationObserver(reformat);
             obs.observe(container, { childList: true, subtree: true });
@@ -914,6 +996,7 @@
           addCopyControls(normalMap, "A");
           trackView(normalMap);
           bindPosReadout(normalMap);
+          trackLoadTiming(normalMap);
           startFps();
           if (state.inspect) enableInspect();
           els.modeToggle.textContent = "Compare mode";
@@ -1083,7 +1166,7 @@
           }
           document
             .getElementById("compare-wrap")
-            .classList.remove("grid11", "compare-vertical");
+            .classList.remove("grid11", "compare-vertical", "bmenu");
           if (compareMaps) {
             if (compareMaps.handle && compareMaps.handle.remove) {
               try {
@@ -1202,6 +1285,21 @@
         });
         if (els.catalogRow.hidden) els.catalogToggle.textContent = "Catalog \u25be";
 
+        var bustCheckbox = document.getElementById("bust-cache");
+        bustCheckbox.checked = bustCache;
+        bustCheckbox.addEventListener("change", function () {
+          bustCache = bustCheckbox.checked;
+          try {
+            localStorage.setItem("mapcompare:bust", bustCache ? "1" : "0");
+          } catch (err) {
+            void err;
+          }
+          // Rebuild with (un)busted style URLs.
+          if (state.mode === "11") enterCompare("11");
+          else if (state.mode === "swipe") enterCompare("swipe");
+          else enterNormal();
+        });
+
         updateTileserverUI();
         // Mode cycles normal -> swipe -> 1:1 -> normal; the button label
         // always names the NEXT mode (and doubles as the state display).
@@ -1222,7 +1320,7 @@
         });
         els.inspectToggle.addEventListener("click", toggleInspect);
 
-        // ---------- copy style URL ----------
+        // ---------- clipboard helper ----------
         // Clipboard API needs a secure context (https or localhost) — the
         // demo is often opened over plain http on the tailnet, so fall back
         // to the execCommand path.
@@ -1246,28 +1344,6 @@
             }
           });
         }
-
-        els.copyStyleBtn.addEventListener("click", function () {
-          var url = styleUrl(state.style);
-          copyText(url).then(
-            function () {
-              els.copyStyleBtn.classList.add("copied");
-              var prev = els.copyStyleBtn.textContent;
-              els.copyStyleBtn.textContent = "\u2713 copied";
-              setTimeout(function () {
-                els.copyStyleBtn.classList.remove("copied");
-                els.copyStyleBtn.textContent = prev;
-              }, 1200);
-            },
-            function () {
-              var prev = els.copyStyleBtn.textContent;
-              els.copyStyleBtn.textContent = url;
-              setTimeout(function () {
-                els.copyStyleBtn.textContent = prev;
-              }, 2500);
-            },
-          );
-        });
 
         bootCatalog();
       })();
