@@ -5650,12 +5650,7 @@
         "visibility": "visible"
       },
       "paint": {
-        "line-color": [
-          "case",
-          ["==", ["get", "type"], "service"],
-          "hsla(40, 12%, 88%, 1)",
-          "hsla(40, 30%, 99%, 1)"
-        ],
+        "line-color": "hsla(40, 30%, 99%, 1)",
         "line-width": [
           "interpolate",
           ["exponential", 2],
@@ -7100,12 +7095,7 @@
         "visibility": "visible"
       },
       "paint": {
-        "line-color": [
-          "case",
-          ["==", ["get", "type"], "service"],
-          "hsla(40, 12%, 88%, 1)",
-          "hsla(40, 30%, 99%, 1)"
-        ],
+        "line-color": "hsla(40, 30%, 99%, 1)",
         "line-width": [
           "interpolate",
           ["exponential", 2],
