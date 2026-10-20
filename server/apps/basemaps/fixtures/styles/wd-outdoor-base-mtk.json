@@ -5491,6 +5491,46 @@
       }
     },
     {
+      "id": "wd-parking-casing",
+      "type": "line",
+      "source": "mtk",
+      "source-layer": "landuse",
+      "minzoom": 13,
+      "filter": ["==", ["get", "type"], "parking"],
+      "paint": {
+        "line-color": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          13,
+          "hsla(30, 10%, 52%, 0)",
+          14,
+          "hsla(30, 10%, 52%, 0.7)"
+        ],
+        "line-width": ["interpolate", ["linear"], ["zoom"], 13, 0.5, 16, 1.2]
+      }
+    },
+    {
+      "id": "wd-parking",
+      "type": "fill",
+      "source": "mtk",
+      "source-layer": "landuse",
+      "minzoom": 12.5,
+      "filter": ["==", ["get", "type"], "parking"],
+      "paint": {
+        "fill-color": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          12.5,
+          "rgba(255, 255, 255, 0)",
+          13.5,
+          "rgb(255, 255, 255)"
+        ],
+        "fill-outline-color": "hsla(30, 10%, 52%, 0.6)"
+      }
+    },
+    {
       "id": "road_restriction_public",
       "source": "mtk",
       "source-layer": "road",
@@ -7684,46 +7724,6 @@
           "key": "rail",
           "crossing": "bridge"
         }
-      }
-    },
-    {
-      "id": "wd-parking-casing",
-      "type": "line",
-      "source": "mtk",
-      "source-layer": "landuse",
-      "minzoom": 13,
-      "filter": ["==", ["get", "type"], "parking"],
-      "paint": {
-        "line-color": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          13,
-          "hsla(30, 10%, 52%, 0)",
-          14,
-          "hsla(30, 10%, 52%, 0.7)"
-        ],
-        "line-width": ["interpolate", ["linear"], ["zoom"], 13, 0.5, 16, 1.2]
-      }
-    },
-    {
-      "id": "wd-parking",
-      "type": "fill",
-      "source": "mtk",
-      "source-layer": "landuse",
-      "minzoom": 12.5,
-      "filter": ["==", ["get", "type"], "parking"],
-      "paint": {
-        "fill-color": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          12.5,
-          "rgba(255, 255, 255, 0)",
-          13.5,
-          "rgb(255, 255, 255)"
-        ],
-        "fill-outline-color": "hsla(30, 10%, 52%, 0.6)"
       }
     },
     {
