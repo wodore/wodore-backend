@@ -3937,7 +3937,8 @@
           "rgba(255, 255, 255, 0)",
           13.5,
           "rgb(255, 255, 255)"
-        ]
+        ],
+        "fill-outline-color": "hsla(30, 10%, 52%, 0.6)"
       }
     },
     {
@@ -4706,7 +4707,12 @@
         "visibility": "visible"
       },
       "paint": {
-        "line-color": "hsla(30, 10%, 52%, 1)",
+        "line-color": [
+          "case",
+          ["==", ["get", "type"], "aeroway"],
+          "hsla(220, 15%, 45%, 0.8)",
+          "hsla(30, 10%, 52%, 1)"
+        ],
         "line-gap-width": 0,
         "line-width": [
           "interpolate",
@@ -4722,6 +4728,12 @@
           9,
           20,
           100
+        ],
+        "line-opacity": [
+          "case",
+          ["in", ["get", "type"], ["literal", ["service", "aeroway"]]],
+          0.5,
+          1
         ]
       },
       "metadata": {
@@ -5349,8 +5361,17 @@
               ["get", "surface"],
               ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
             ],
-            "hsla(40, 25%, 95%, 1)",
-            "rgba(60, 60, 60, 0)"
+            "hsla(40, 8%, 82%, 1)",
+            [
+              "case",
+              [
+                "in",
+                ["get", "surface"],
+                ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
+              ],
+              "hsla(40, 25%, 95%, 1)",
+              "rgba(60, 60, 60, 0)"
+            ]
           ],
           13,
           [
@@ -5360,8 +5381,17 @@
               ["get", "surface"],
               ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
             ],
-            "hsla(40, 25%, 95%, 1)",
-            "rgb(60, 60, 60)"
+            "hsla(40, 8%, 82%, 1)",
+            [
+              "case",
+              [
+                "in",
+                ["get", "surface"],
+                ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
+              ],
+              "hsla(40, 25%, 95%, 1)",
+              "rgb(60, 60, 60)"
+            ]
           ]
         ],
         "line-width": [
@@ -5433,8 +5463,17 @@
               ["get", "surface"],
               ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
             ],
-            "hsla(40, 25%, 95%, 1)",
-            "rgba(60, 60, 60, 0)"
+            "hsla(40, 8%, 82%, 1)",
+            [
+              "case",
+              [
+                "in",
+                ["get", "surface"],
+                ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
+              ],
+              "hsla(40, 25%, 95%, 1)",
+              "rgba(60, 60, 60, 0)"
+            ]
           ],
           14,
           [
@@ -5444,8 +5483,17 @@
               ["get", "surface"],
               ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
             ],
-            "hsla(40, 25%, 95%, 1)",
-            "rgb(60, 60, 60)"
+            "hsla(40, 8%, 82%, 1)",
+            [
+              "case",
+              [
+                "in",
+                ["get", "surface"],
+                ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
+              ],
+              "hsla(40, 25%, 95%, 1)",
+              "rgb(60, 60, 60)"
+            ]
           ]
         ],
         "line-width": [
@@ -5650,7 +5698,14 @@
         "visibility": "visible"
       },
       "paint": {
-        "line-color": "hsla(40, 30%, 99%, 1)",
+        "line-color": [
+          "case",
+          ["==", ["get", "type"], "service"],
+          "hsla(40, 8%, 82%, 1)",
+          ["==", ["get", "type"], "aeroway"],
+          "hsla(40, 8%, 82%, 1)",
+          "hsla(40, 30%, 99%, 1)"
+        ],
         "line-width": [
           "interpolate",
           ["exponential", 2],
@@ -5722,7 +5777,7 @@
           10,
           "#FFFFFF",
           14,
-          ["match", ["get", "type"], "tertiary", "#F2EDE0", "#FFFFFF"]
+          ["match", ["get", "type"], "tertiary", "#FFFFFF", "#FFFFFF"]
         ],
         "line-width": [
           "interpolate",
@@ -6624,7 +6679,12 @@
         "visibility": "visible"
       },
       "paint": {
-        "line-color": "hsla(30, 10%, 52%, 1)",
+        "line-color": [
+          "case",
+          ["==", ["get", "type"], "aeroway"],
+          "hsla(220, 15%, 45%, 0.8)",
+          "hsla(30, 10%, 52%, 1)"
+        ],
         "line-gap-width": 0,
         "line-width": [
           "interpolate",
@@ -6949,8 +7009,17 @@
               ["get", "surface"],
               ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
             ],
-            "hsla(40, 25%, 95%, 1)",
-            "hsla(225, 15%, 40%, 0)"
+            "hsla(40, 8%, 82%, 1)",
+            [
+              "case",
+              [
+                "in",
+                ["get", "surface"],
+                ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
+              ],
+              "hsla(40, 25%, 95%, 1)",
+              "hsla(225, 15%, 40%, 0)"
+            ]
           ],
           13,
           [
@@ -6960,8 +7029,17 @@
               ["get", "surface"],
               ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
             ],
-            "hsla(40, 25%, 95%, 1)",
-            "hsla(225, 15%, 40%, 1)"
+            "hsla(40, 8%, 82%, 1)",
+            [
+              "case",
+              [
+                "in",
+                ["get", "surface"],
+                ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
+              ],
+              "hsla(40, 25%, 95%, 1)",
+              "hsla(225, 15%, 40%, 1)"
+            ]
           ],
           14,
           [
@@ -6971,8 +7049,17 @@
               ["get", "surface"],
               ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
             ],
-            "hsla(40, 25%, 95%, 1)",
-            "hsla(225, 5%, 30%, 1)"
+            "hsla(40, 8%, 82%, 1)",
+            [
+              "case",
+              [
+                "in",
+                ["get", "surface"],
+                ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
+              ],
+              "hsla(40, 25%, 95%, 1)",
+              "hsla(225, 5%, 30%, 1)"
+            ]
           ]
         ],
         "line-width": [
@@ -7038,8 +7125,17 @@
               ["get", "surface"],
               ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
             ],
-            "hsla(40, 25%, 95%, 1)",
-            "hsla(216, 15%, 70%, 0)"
+            "hsla(40, 8%, 82%, 1)",
+            [
+              "case",
+              [
+                "in",
+                ["get", "surface"],
+                ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
+              ],
+              "hsla(40, 25%, 95%, 1)",
+              "hsla(216, 15%, 70%, 0)"
+            ]
           ],
           14,
           [
@@ -7049,8 +7145,17 @@
               ["get", "surface"],
               ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
             ],
-            "hsla(40, 25%, 95%, 1)",
-            "hsla(216, 15%, 70%, 1)"
+            "hsla(40, 8%, 82%, 1)",
+            [
+              "case",
+              [
+                "in",
+                ["get", "surface"],
+                ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
+              ],
+              "hsla(40, 25%, 95%, 1)",
+              "hsla(216, 15%, 70%, 1)"
+            ]
           ]
         ],
         "line-width": [
@@ -7095,7 +7200,14 @@
         "visibility": "visible"
       },
       "paint": {
-        "line-color": "hsla(40, 30%, 99%, 1)",
+        "line-color": [
+          "case",
+          ["==", ["get", "type"], "service"],
+          "hsla(40, 8%, 82%, 1)",
+          ["==", ["get", "type"], "aeroway"],
+          "hsla(40, 8%, 82%, 1)",
+          "hsla(40, 30%, 99%, 1)"
+        ],
         "line-width": [
           "interpolate",
           ["exponential", 2],
@@ -7171,7 +7283,7 @@
           10,
           "#FFFFFF",
           14,
-          ["match", ["get", "type"], "tertiary", "#F2EDE0", "#FFFFFF"]
+          ["match", ["get", "type"], "tertiary", "#FFFFFF", "#FFFFFF"]
         ],
         "line-width": [
           "interpolate",
