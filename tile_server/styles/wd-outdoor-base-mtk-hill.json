@@ -5342,9 +5342,27 @@
           ["linear"],
           ["zoom"],
           12,
-          "rgba(60, 60, 60, 0)",
+          [
+            "case",
+            [
+              "in",
+              ["get", "surface"],
+              ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
+            ],
+            "hsla(40, 25%, 95%, 1)",
+            "rgba(60, 60, 60, 0)"
+          ],
           13,
-          "rgb(60, 60, 60)"
+          [
+            "case",
+            [
+              "in",
+              ["get", "surface"],
+              ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
+            ],
+            "hsla(40, 25%, 95%, 1)",
+            "rgb(60, 60, 60)"
+          ]
         ],
         "line-width": [
           "interpolate",
@@ -5408,9 +5426,27 @@
           ["linear"],
           ["zoom"],
           13,
-          "rgba(60, 60, 60, 0)",
+          [
+            "case",
+            [
+              "in",
+              ["get", "surface"],
+              ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
+            ],
+            "hsla(40, 25%, 95%, 1)",
+            "rgba(60, 60, 60, 0)"
+          ],
           14,
-          "rgb(60, 60, 60)"
+          [
+            "case",
+            [
+              "in",
+              ["get", "surface"],
+              ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
+            ],
+            "hsla(40, 25%, 95%, 1)",
+            "rgb(60, 60, 60)"
+          ]
         ],
         "line-width": [
           "interpolate",
@@ -6911,11 +6947,38 @@
           ["linear"],
           ["zoom"],
           12,
-          "hsla(225, 15%, 40%, 0)",
+          [
+            "case",
+            [
+              "in",
+              ["get", "surface"],
+              ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
+            ],
+            "hsla(40, 25%, 95%, 1)",
+            "hsla(225, 15%, 40%, 0)"
+          ],
           13,
-          "hsla(225, 15%, 40%, 1)",
+          [
+            "case",
+            [
+              "in",
+              ["get", "surface"],
+              ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
+            ],
+            "hsla(40, 25%, 95%, 1)",
+            "hsla(225, 15%, 40%, 1)"
+          ],
           14,
-          "hsla(225, 5%, 30%, 1)"
+          [
+            "case",
+            [
+              "in",
+              ["get", "surface"],
+              ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
+            ],
+            "hsla(40, 25%, 95%, 1)",
+            "hsla(225, 5%, 30%, 1)"
+          ]
         ],
         "line-width": [
           "interpolate",
@@ -6973,9 +7036,27 @@
           ["linear"],
           ["zoom"],
           13,
-          "hsla(216, 15%, 70%, 0)",
+          [
+            "case",
+            [
+              "in",
+              ["get", "surface"],
+              ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
+            ],
+            "hsla(40, 25%, 95%, 1)",
+            "hsla(216, 15%, 70%, 0)"
+          ],
           14,
-          "hsla(216, 15%, 70%, 1)"
+          [
+            "case",
+            [
+              "in",
+              ["get", "surface"],
+              ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
+            ],
+            "hsla(40, 25%, 95%, 1)",
+            "hsla(216, 15%, 70%, 1)"
+          ]
         ],
         "line-width": [
           "interpolate",
@@ -7990,9 +8071,9 @@
         "visibility": "visible"
       },
       "paint": {
-        "text-color": "hsla(306, 0%, 70%, 1)",
-        "text-halo-color": "hsla(306, 0%, 100%, 0.8)",
-        "text-halo-width": 0.5
+        "text-color": "hsla(0, 0%, 25%, 0.85)",
+        "text-halo-color": "hsla(0, 0%, 100%, 0.9)",
+        "text-halo-width": 1.2
       },
       "metadata": {
         "maptoolkit:legend": {
