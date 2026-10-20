@@ -1223,6 +1223,54 @@
               box.appendChild(props);
             }
             if (inspectPopup) inspectPopup.remove();
+            // Pixel readout: sample the ACTUAL rendered color under the
+            // tap. Vision-model screenshot checks miss subtle hue shifts
+            // between adjacent thin lines (#E27E3E vs #F4B27A); this makes
+            // color verification deterministic on any device. WebGL
+            // buffers are cleared after compositing, so force a repaint
+            // and readPixels in the render callback (same frame).
+            var pixelLine = document.createElement("div");
+            pixelLine.className = "props";
+            pixelLine.textContent = "pixel: …";
+            box.appendChild(pixelLine);
+            var canvas = normalMap.getCanvas();
+            var gl =
+              canvas.getContext("webgl2") || canvas.getContext("webgl");
+            var sx = Math.round(
+              e.point.x * (canvas.width / canvas.clientWidth)
+            );
+            var sy = Math.round(
+              e.point.y * (canvas.height / canvas.clientHeight)
+            );
+            var finishPixel = function () {
+              try {
+                var buf = new Uint8Array(4);
+                gl.readPixels(
+                  sx,
+                  gl.drawingBufferHeight - sy,
+                  1,
+                  1,
+                  gl.RGBA,
+                  gl.UNSIGNED_BYTE,
+                  buf
+                );
+                if (buf[3] === 0 && !buf[0] && !buf[1] && !buf[2]) {
+                  pixelLine.textContent = "pixel: (unreadable)";
+                } else {
+                  pixelLine.textContent =
+                    "pixel: rgb(" +
+                    buf[0] + "," + buf[1] + "," + buf[2] +
+                    ") #" +
+                    [buf[0], buf[1], buf[2]]
+                      .map(function (v) {
+                        return v.toString(16).padStart(2, "0");
+                      })
+                      .join("");
+                }
+              } catch (err) {
+                pixelLine.textContent = "pixel: (error)";
+              }
+            };
             inspectPopup = new maplibregl.Popup({
               closeButton: false,
               closeOnClick: false,
@@ -1230,6 +1278,9 @@
               .setLngLat(e.lngLat)
               .setDOMContent(box)
               .addTo(normalMap);
+            // the popup is now in the DOM; render next frame and sample
+            normalMap.triggerRepaint();
+            normalMap.once("render", finishPixel);
           };
           normalMap.on("click", inspectHandler);
           normalMap.getCanvas().style.cursor = "crosshair";

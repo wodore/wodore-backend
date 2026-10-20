@@ -4536,9 +4536,21 @@
           5,
           "hsla(0, 0%, 60%, 0)",
           6.5,
-          ["match", ["get", "type"], "motorway", "#A05A28", "#8C8C8C"],
+          [
+            "match",
+            ["get", "type"],
+            ["motorway", "trunk"],
+            "#A05A28",
+            "#8C8C8C"
+          ],
           14.5,
-          ["match", ["get", "type"], "motorway", "#8A4A20", "#3C3C3C"]
+          [
+            "match",
+            ["get", "type"],
+            ["motorway", "trunk"],
+            "#8A4A20",
+            "#3C3C3C"
+          ]
         ],
         "line-width": [
           "interpolate",
@@ -5515,12 +5527,32 @@
           "interpolate",
           ["linear"],
           ["zoom"],
-          9,
+          4,
           "hsla(45, 100%, 82%, 0)",
-          10,
-          ["match", ["get", "type"], "motorway", "#F4B27A", "#FFFFFF"],
+          6,
+          [
+            "match",
+            ["get", "type"],
+            ["motorway", "trunk"],
+            "#EE9A5F",
+            "#FFFFFF"
+          ],
+          11,
+          [
+            "match",
+            ["get", "type"],
+            ["motorway", "trunk"],
+            "#E8894C",
+            "#FFFFFF"
+          ],
           14,
-          ["match", ["get", "type"], "motorway", "#F4B27A", "#FFFFFF"]
+          [
+            "match",
+            ["get", "type"],
+            ["motorway", "trunk"],
+            "#E27E3E",
+            "#FFFFFF"
+          ]
         ],
         "line-width": [
           "interpolate",
@@ -6594,7 +6626,7 @@
       "minzoom": 5,
       "maxzoom": 23,
       "layout": {
-        "line-cap": "round",
+        "line-cap": "butt",
         "line-join": "round",
         "visibility": "visible"
       },
@@ -7309,7 +7341,7 @@
       "minzoom": 4,
       "maxzoom": 23,
       "layout": {
-        "line-cap": "round",
+        "line-cap": "butt",
         "line-join": "round",
         "visibility": "visible"
       },
