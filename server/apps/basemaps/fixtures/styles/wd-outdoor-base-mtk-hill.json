@@ -4962,20 +4962,22 @@
         ],
         "line-width": [
           "interpolate",
-          ["linear"],
+          ["exponential", 2],
           ["zoom"],
           6,
-          0.6,
+          0.5,
           9,
-          1.4,
+          1.2,
+          12,
+          1.8,
           13,
-          3.2,
+          2.2,
           15,
-          6,
+          4.5,
           16,
-          9,
+          7.5,
           20,
-          30
+          95
         ]
       }
     },
@@ -4991,7 +4993,7 @@
         ["in", ["get", "type"], ["literal", ["service", "raceway", "minor"]]],
         ["!", ["has", "crossing"]]
       ],
-      "minzoom": 12.5,
+      "minzoom": 13,
       "maxzoom": 23,
       "layout": {
         "line-cap": "round",
@@ -5003,29 +5005,16 @@
         "line-gap-width": 0,
         "line-width": [
           "interpolate",
-          ["linear"],
+          ["exponential", 2],
           ["zoom"],
-          12.5,
-          1.6,
-          14,
-          2.8,
-          15,
-          4.6,
-          16,
-          7,
-          19,
-          13
-        ],
-        "line-opacity": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          12.5,
+          14.5,
           0,
-          14,
-          0.6,
-          15.5,
-          1
+          15,
+          2.8,
+          16,
+          6,
+          20,
+          80
         ]
       },
       "metadata": {
@@ -5878,18 +5867,20 @@
         ],
         "line-width": [
           "interpolate",
-          ["linear"],
+          ["exponential", 2],
           ["zoom"],
           10,
           1.2,
+          12,
+          1.5,
           13,
-          2.5,
+          1.8,
           15,
-          5,
+          3.4,
           16,
-          7,
+          6,
           20,
-          24
+          90
         ]
       }
     },
@@ -5908,7 +5899,7 @@
         ],
         ["!", ["has", "crossing"]]
       ],
-      "minzoom": 11,
+      "minzoom": 12,
       "maxzoom": 23,
       "layout": {
         "line-cap": "round",
@@ -5924,21 +5915,22 @@
         ],
         "line-width": [
           "interpolate",
-          ["linear"],
+          ["exponential", 2],
           ["zoom"],
-          11,
-          ["case", ["==", ["get", "type"], "service"], 0.35, 0.5],
+          10,
+          ["match", ["get", "type"], ["minor", "service"], 1.2, 0.9],
+          12,
+          ["match", ["get", "type"], ["minor", "service"], 2.25, 1.4],
           13,
-          ["case", ["==", ["get", "type"], "service"], 1, 1.6],
+          ["match", ["get", "type"], ["minor", "service"], 2.5, 1.6],
           15,
-          ["case", ["==", ["get", "type"], "service"], 2, 3.2],
+          ["match", ["get", "type"], ["minor", "service"], 2.8, 2],
           16,
-          ["case", ["==", ["get", "type"], "service"], 3.4, 5.5],
-          19,
-          ["case", ["==", ["get", "type"], "service"], 6.5, 10]
+          ["match", ["get", "type"], ["minor", "service"], 5.6, 3.5],
+          20,
+          ["match", ["get", "type"], ["minor", "service"], 89, 50]
         ],
-        "line-blur": ["interpolate", ["linear"], ["zoom"], 8, 0.4, 14, 0.1],
-        "line-opacity": 1
+        "line-blur": ["interpolate", ["linear"], ["zoom"], 8, 0.4, 14, 0.1]
       },
       "metadata": {
         "maptoolkit:legend": {
@@ -6016,7 +6008,7 @@
             0,
             0
           ],
-          13.8,
+          11.5,
           [
             "match",
             ["get", "type"],
@@ -6034,7 +6026,7 @@
             0,
             0
           ],
-          14.4,
+          12,
           [
             "match",
             ["get", "type"],
@@ -6052,7 +6044,7 @@
             0,
             0
           ],
-          15.6,
+          13,
           [
             "match",
             ["get", "type"],
@@ -6070,7 +6062,7 @@
             0,
             0
           ],
-          18,
+          15,
           [
             "match",
             ["get", "type"],
@@ -6088,7 +6080,7 @@
             0,
             0
           ],
-          19.2,
+          16,
           [
             "match",
             ["get", "type"],
@@ -6106,7 +6098,7 @@
             0,
             0
           ],
-          24,
+          20,
           [
             "match",
             ["get", "type"],
@@ -6123,15 +6115,6 @@
             ["minor", "service"],
             0,
             0
-          ],
-          26.4,
-          [
-            "case",
-            ["==", ["get", "type"], "tertiary"],
-            8.2,
-            ["==", ["get", "type"], "secondary"],
-            9.4,
-            7.6
           ]
         ]
       },
@@ -6246,7 +6229,7 @@
             0,
             0
           ],
-          10,
+          8,
           [
             "match",
             ["get", "type"],
@@ -6264,7 +6247,7 @@
             0,
             0
           ],
-          11.25,
+          9,
           [
             "match",
             ["get", "type"],
@@ -6282,7 +6265,7 @@
             0,
             0
           ],
-          12.5,
+          10,
           [
             "match",
             ["get", "type"],
@@ -6300,7 +6283,7 @@
             0,
             0
           ],
-          15,
+          12,
           [
             "match",
             ["get", "type"],
@@ -6318,7 +6301,7 @@
             0,
             0
           ],
-          16.25,
+          13,
           [
             "match",
             ["get", "type"],
@@ -6336,7 +6319,7 @@
             0,
             0
           ],
-          18.75,
+          15,
           [
             "match",
             ["get", "type"],
@@ -6354,7 +6337,7 @@
             0,
             0
           ],
-          20,
+          16,
           [
             "match",
             ["get", "type"],
@@ -6372,7 +6355,7 @@
             0,
             0
           ],
-          25,
+          20,
           [
             "match",
             ["get", "type"],
@@ -6907,29 +6890,16 @@
         "line-gap-width": 0,
         "line-width": [
           "interpolate",
-          ["linear"],
+          ["exponential", 2],
           ["zoom"],
-          12.5,
-          1.6,
-          14,
-          2.8,
-          15,
-          4.6,
-          16,
-          7,
-          19,
-          13
-        ],
-        "line-opacity": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          12.5,
+          14.5,
           0,
-          14,
-          0.6,
-          15.5,
-          1
+          15,
+          2.8,
+          16,
+          6,
+          20,
+          80
         ]
       },
       "metadata": {
@@ -7348,20 +7318,22 @@
         ],
         "line-width": [
           "interpolate",
-          ["linear"],
+          ["exponential", 2],
           ["zoom"],
-          11,
-          ["case", ["==", ["get", "type"], "service"], 0.35, 0.5],
+          10,
+          ["match", ["get", "type"], ["minor", "service"], 1.2, 0.9],
+          12,
+          ["match", ["get", "type"], ["minor", "service"], 2.25, 1.4],
           13,
-          ["case", ["==", ["get", "type"], "service"], 1, 1.6],
+          ["match", ["get", "type"], ["minor", "service"], 2.5, 1.6],
           15,
-          ["case", ["==", ["get", "type"], "service"], 2, 3.2],
+          ["match", ["get", "type"], ["minor", "service"], 2.8, 2],
           16,
-          ["case", ["==", ["get", "type"], "service"], 3.4, 5.5],
-          19,
-          ["case", ["==", ["get", "type"], "service"], 6.5, 10]
+          ["match", ["get", "type"], ["minor", "service"], 5.6, 3.5],
+          20,
+          ["match", ["get", "type"], ["minor", "service"], 89, 50]
         ],
-        "line-opacity": 1
+        "line-blur": ["interpolate", ["linear"], ["zoom"], 8, 0.4, 14, 0.1]
       },
       "metadata": {
         "maptoolkit:legend": {
@@ -8892,7 +8864,7 @@
         ["get", "type"],
         ["literal", ["minor", "raceway", "track"]]
       ],
-      "minzoom": 13,
+      "minzoom": 14,
       "maxzoom": 23,
       "layout": {
         "symbol-placement": "line",
