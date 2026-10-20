@@ -6348,7 +6348,7 @@
       "minzoom": 10,
       "filter": ["all", ["==", ["get", "ramp"], 1], ["!", ["has", "crossing"]]],
       "layout": {
-        "line-cap": "round",
+        "line-cap": "butt",
         "line-join": "round"
       },
       "paint": {
@@ -6940,7 +6940,7 @@
       "minzoom": 5,
       "maxzoom": 23,
       "layout": {
-        "line-cap": "round",
+        "line-cap": "butt",
         "line-join": "round",
         "visibility": "visible"
       },
