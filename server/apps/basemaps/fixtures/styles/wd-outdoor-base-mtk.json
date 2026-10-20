@@ -3868,9 +3868,9 @@
           ["linear"],
           ["zoom"],
           13,
-          "rgba(60, 60, 60, 0)",
+          "hsla(30, 10%, 52%, 0)",
           14,
-          "rgb(60, 60, 60)"
+          "hsla(30, 10%, 52%, 0.7)"
         ],
         "line-width": ["interpolate", ["linear"], ["zoom"], 13, 0.5, 16, 1.2]
       }
@@ -4645,7 +4645,7 @@
         ],
         "line-opacity": [
           "case",
-          ["in", ["get", "type"], ["literal", ["service", "aeroway"]]],
+          ["in", ["get", "access"], ["literal", ["no", "private"]]],
           0.5,
           1
         ]
@@ -5614,9 +5614,9 @@
       "paint": {
         "line-color": [
           "case",
-          ["==", ["get", "type"], "service"],
+          ["==", ["get", "access"], "no"],
           "hsla(40, 8%, 82%, 1)",
-          ["==", ["get", "type"], "aeroway"],
+          ["==", ["get", "access"], "private"],
           "hsla(40, 8%, 82%, 1)",
           "hsla(40, 30%, 99%, 1)"
         ],
@@ -7116,9 +7116,9 @@
       "paint": {
         "line-color": [
           "case",
-          ["==", ["get", "type"], "service"],
+          ["==", ["get", "access"], "no"],
           "hsla(40, 8%, 82%, 1)",
-          ["==", ["get", "type"], "aeroway"],
+          ["==", ["get", "access"], "private"],
           "hsla(40, 8%, 82%, 1)",
           "hsla(40, 30%, 99%, 1)"
         ],
