@@ -3013,7 +3013,7 @@
       "source-layer": "contours",
       "type": "line",
       "filter": ["!=", ["get", "ele"], 0],
-      "minzoom": 13,
+      "minzoom": 12,
       "maxzoom": 23,
       "layout": {
         "line-cap": "round",
@@ -3092,7 +3092,7 @@
       "source-layer": "contours",
       "type": "line",
       "filter": ["!=", ["get", "ele"], 0],
-      "minzoom": 13,
+      "minzoom": 11,
       "maxzoom": 23,
       "layout": {
         "line-cap": "round",
@@ -3663,20 +3663,22 @@
           "interpolate",
           ["exponential", 0.9],
           ["zoom"],
-          10,
-          0.6,
+          4,
+          0.8,
           13,
-          0.5
+          0.45
         ],
-        "line-color": "hsla(306, 25%, 93%, 1)",
+        "line-color": "hsla(306, 35%, 88%, 0.55)",
         "line-width": [
           "interpolate",
           ["exponential", 0.9],
           ["zoom"],
           4,
-          2.1,
+          5,
+          8,
+          7,
           19,
-          8.4
+          14
         ],
         "line-blur": [
           "interpolate",
@@ -9344,17 +9346,22 @@
       "paint": {
         "text-color": [
           "case",
+          ["==", ["get", "type"], "glacier"],
+          "hsla(205, 55%, 44%, 1)",
           [
-            "all",
-            ["==", ["get", "category"], "country"],
-            ["==", ["get", "type"], "country"]
-          ],
-          "hsla(-9, 0%, 38%, 1)",
-          ["match", ["get", "type"], ["glacier"], "#29626B", "#3E6A66"]
+            "case",
+            [
+              "all",
+              ["==", ["get", "category"], "country"],
+              ["==", ["get", "type"], "country"]
+            ],
+            "hsla(-9, 0%, 38%, 1)",
+            ["match", ["get", "type"], ["glacier"], "#29626B", "#3E6A66"]
+          ]
         ],
-        "text-halo-color": "rgba(242, 247, 244, 0.9)",
-        "text-halo-width": 1,
-        "text-halo-blur": 1,
+        "text-halo-color": "hsla(0, 0%, 100%, 0.8)",
+        "text-halo-width": 1.25,
+        "text-halo-blur": 0.3,
         "text-opacity": [
           "interpolate",
           ["linear"],
@@ -9432,16 +9439,20 @@
       "maxzoom": 22,
       "filter": [
         "all",
-        ["==", ["geometry-type"], "Point"],
-        [">", ["get", "rank"], 21],
         [
-          "!",
+          "all",
+          ["==", ["geometry-type"], "Point"],
+          [">", ["get", "rank"], 21],
           [
-            "in",
-            ["get", "category"],
-            ["literal", ["winter_sports", "national_park", "protected_area"]]
+            "!",
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["winter_sports", "national_park", "protected_area"]]
+            ]
           ]
-        ]
+        ],
+        ["!=", ["get", "type"], "glacier"]
       ],
       "layout": {
         "visibility": "visible",
@@ -10703,17 +10714,22 @@
       "paint": {
         "text-color": [
           "case",
+          ["==", ["get", "type"], "glacier"],
+          "hsla(205, 55%, 44%, 1)",
           [
-            "all",
-            ["==", ["get", "category"], "country"],
-            ["==", ["get", "type"], "country"]
-          ],
-          "hsla(-9, 0%, 38%, 1)",
-          ["match", ["get", "type"], ["glacier"], "#29626B", "#3E6A66"]
+            "case",
+            [
+              "all",
+              ["==", ["get", "category"], "country"],
+              ["==", ["get", "type"], "country"]
+            ],
+            "hsla(-9, 0%, 38%, 1)",
+            ["match", ["get", "type"], ["glacier"], "#29626B", "#3E6A66"]
+          ]
         ],
-        "text-halo-color": "rgba(242, 247, 244, 0.9)",
-        "text-halo-width": 1,
-        "text-halo-blur": 1,
+        "text-halo-color": "hsla(0, 0%, 100%, 0.8)",
+        "text-halo-width": 1.25,
+        "text-halo-blur": 0.3,
         "text-opacity": [
           "interpolate",
           ["linear"],
@@ -10791,17 +10807,21 @@
       "maxzoom": 22,
       "filter": [
         "all",
-        ["==", ["geometry-type"], "Point"],
-        [">", ["get", "rank"], 17],
-        ["<=", ["get", "rank"], 21],
         [
-          "!",
+          "all",
+          ["==", ["geometry-type"], "Point"],
+          [">", ["get", "rank"], 17],
+          ["<=", ["get", "rank"], 21],
           [
-            "in",
-            ["get", "category"],
-            ["literal", ["winter_sports", "national_park", "protected_area"]]
+            "!",
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["winter_sports", "national_park", "protected_area"]]
+            ]
           ]
-        ]
+        ],
+        ["!=", ["get", "type"], "glacier"]
       ],
       "layout": {
         "visibility": "visible",
@@ -12241,17 +12261,22 @@
       "paint": {
         "text-color": [
           "case",
+          ["==", ["get", "type"], "glacier"],
+          "hsla(205, 55%, 44%, 1)",
           [
-            "all",
-            ["==", ["get", "category"], "country"],
-            ["==", ["get", "type"], "country"]
-          ],
-          "hsla(-9, 0%, 38%, 1)",
-          ["match", ["get", "type"], ["glacier"], "#29626B", "#3E6A66"]
+            "case",
+            [
+              "all",
+              ["==", ["get", "category"], "country"],
+              ["==", ["get", "type"], "country"]
+            ],
+            "hsla(-9, 0%, 38%, 1)",
+            ["match", ["get", "type"], ["glacier"], "#29626B", "#3E6A66"]
+          ]
         ],
-        "text-halo-color": "rgba(242, 247, 244, 0.9)",
-        "text-halo-width": 1,
-        "text-halo-blur": 1,
+        "text-halo-color": "hsla(0, 0%, 100%, 0.8)",
+        "text-halo-width": 1.25,
+        "text-halo-blur": 0.3,
         "text-opacity": [
           "interpolate",
           ["linear"],
@@ -12329,17 +12354,21 @@
       "maxzoom": 22,
       "filter": [
         "all",
-        ["==", ["geometry-type"], "Point"],
-        [">", ["get", "rank"], 13],
-        ["<=", ["get", "rank"], 17],
         [
-          "!",
+          "all",
+          ["==", ["geometry-type"], "Point"],
+          [">", ["get", "rank"], 13],
+          ["<=", ["get", "rank"], 17],
           [
-            "in",
-            ["get", "category"],
-            ["literal", ["winter_sports", "national_park", "protected_area"]]
+            "!",
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["winter_sports", "national_park", "protected_area"]]
+            ]
           ]
-        ]
+        ],
+        ["!=", ["get", "type"], "glacier"]
       ],
       "layout": {
         "visibility": "visible",
@@ -13650,17 +13679,22 @@
       "paint": {
         "text-color": [
           "case",
+          ["==", ["get", "type"], "glacier"],
+          "hsla(205, 55%, 44%, 1)",
           [
-            "all",
-            ["==", ["get", "category"], "country"],
-            ["==", ["get", "type"], "country"]
-          ],
-          "hsla(-9, 0%, 38%, 1)",
-          ["match", ["get", "type"], ["glacier"], "#29626B", "#3E6A66"]
+            "case",
+            [
+              "all",
+              ["==", ["get", "category"], "country"],
+              ["==", ["get", "type"], "country"]
+            ],
+            "hsla(-9, 0%, 38%, 1)",
+            ["match", ["get", "type"], ["glacier"], "#29626B", "#3E6A66"]
+          ]
         ],
-        "text-halo-color": "rgba(242, 247, 244, 0.9)",
-        "text-halo-width": 1,
-        "text-halo-blur": 1,
+        "text-halo-color": "hsla(0, 0%, 100%, 0.8)",
+        "text-halo-width": 1.25,
+        "text-halo-blur": 0.3,
         "text-opacity": [
           "interpolate",
           ["linear"],
@@ -13738,17 +13772,21 @@
       "maxzoom": 22,
       "filter": [
         "all",
-        ["==", ["geometry-type"], "Point"],
-        [">", ["get", "rank"], 10],
-        ["<=", ["get", "rank"], 13],
         [
-          "!",
+          "all",
+          ["==", ["geometry-type"], "Point"],
+          [">", ["get", "rank"], 10],
+          ["<=", ["get", "rank"], 13],
           [
-            "in",
-            ["get", "category"],
-            ["literal", ["winter_sports", "national_park", "protected_area"]]
+            "!",
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["winter_sports", "national_park", "protected_area"]]
+            ]
           ]
-        ]
+        ],
+        ["!=", ["get", "type"], "glacier"]
       ],
       "layout": {
         "visibility": "visible",
@@ -14853,17 +14891,22 @@
       "paint": {
         "text-color": [
           "case",
+          ["==", ["get", "type"], "glacier"],
+          "hsla(205, 55%, 44%, 1)",
           [
-            "all",
-            ["==", ["get", "category"], "country"],
-            ["==", ["get", "type"], "country"]
-          ],
-          "hsla(-9, 0%, 38%, 1)",
-          ["match", ["get", "type"], ["glacier"], "#29626B", "#3E6A66"]
+            "case",
+            [
+              "all",
+              ["==", ["get", "category"], "country"],
+              ["==", ["get", "type"], "country"]
+            ],
+            "hsla(-9, 0%, 38%, 1)",
+            ["match", ["get", "type"], ["glacier"], "#29626B", "#3E6A66"]
+          ]
         ],
-        "text-halo-color": "rgba(242, 247, 244, 0.9)",
-        "text-halo-width": 1,
-        "text-halo-blur": 1,
+        "text-halo-color": "hsla(0, 0%, 100%, 0.8)",
+        "text-halo-width": 1.25,
+        "text-halo-blur": 0.3,
         "text-opacity": [
           "interpolate",
           ["linear"],
@@ -14941,16 +14984,20 @@
       "maxzoom": 22,
       "filter": [
         "all",
-        ["==", ["geometry-type"], "Point"],
-        ["<=", ["get", "rank"], 10],
         [
-          "!",
+          "all",
+          ["==", ["geometry-type"], "Point"],
+          ["<=", ["get", "rank"], 10],
           [
-            "in",
-            ["get", "category"],
-            ["literal", ["winter_sports", "national_park", "protected_area"]]
+            "!",
+            [
+              "in",
+              ["get", "category"],
+              ["literal", ["winter_sports", "national_park", "protected_area"]]
+            ]
           ]
-        ]
+        ],
+        ["!=", ["get", "type"], "glacier"]
       ],
       "layout": {
         "visibility": "visible",
