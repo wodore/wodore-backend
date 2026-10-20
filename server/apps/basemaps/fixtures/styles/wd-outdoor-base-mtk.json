@@ -3836,46 +3836,6 @@
       }
     },
     {
-      "id": "wd-parking",
-      "type": "fill",
-      "source": "mtk",
-      "source-layer": "landuse",
-      "minzoom": 12.5,
-      "filter": ["==", ["get", "type"], "parking"],
-      "paint": {
-        "fill-color": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          12.5,
-          "rgba(255, 255, 255, 0)",
-          13.5,
-          "rgb(255, 255, 255)"
-        ],
-        "fill-outline-color": "hsla(30, 10%, 52%, 0.6)"
-      }
-    },
-    {
-      "id": "wd-parking-casing",
-      "type": "line",
-      "source": "mtk",
-      "source-layer": "landuse",
-      "minzoom": 13,
-      "filter": ["==", ["get", "type"], "parking"],
-      "paint": {
-        "line-color": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          13,
-          "hsla(30, 10%, 52%, 0)",
-          14,
-          "hsla(30, 10%, 52%, 0.7)"
-        ],
-        "line-width": ["interpolate", ["linear"], ["zoom"], 13, 0.5, 16, 1.2]
-      }
-    },
-    {
       "id": "road_walls_area_shadow",
       "source": "mtk",
       "source-layer": "road",
@@ -5415,13 +5375,13 @@
           ["exponential", 2],
           ["zoom"],
           13,
-          0.9,
+          ["case", ["==", ["get", "bicycle"], "designated"], 1.26, 0.9],
           15,
-          1.25,
+          ["case", ["==", ["get", "bicycle"], "designated"], 1.75, 1.25],
           16,
-          1.75,
+          ["case", ["==", ["get", "bicycle"], "designated"], 2.45, 1.75],
           20,
-          4.5
+          ["case", ["==", ["get", "bicycle"], "designated"], 6.3, 4.5]
         ]
       },
       "metadata": {
@@ -5453,9 +5413,9 @@
           ["linear"],
           ["zoom"],
           12,
-          "rgba(75, 75, 75, 0)",
+          "hsla(40, 8%, 82%, 0)",
           13,
-          "rgb(75, 75, 75)"
+          "hsla(40, 8%, 78%, 1)"
         ],
         "line-width": [
           "interpolate",
@@ -7715,6 +7675,46 @@
           "attachesTo": ["road_rail_tunnel", "road_rail", "road_rail_bridge"],
           "crossing": "bridge"
         }
+      }
+    },
+    {
+      "id": "wd-parking-casing",
+      "type": "line",
+      "source": "mtk",
+      "source-layer": "landuse",
+      "minzoom": 13,
+      "filter": ["==", ["get", "type"], "parking"],
+      "paint": {
+        "line-color": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          13,
+          "hsla(30, 10%, 52%, 0)",
+          14,
+          "hsla(30, 10%, 52%, 0.7)"
+        ],
+        "line-width": ["interpolate", ["linear"], ["zoom"], 13, 0.5, 16, 1.2]
+      }
+    },
+    {
+      "id": "wd-parking",
+      "type": "fill",
+      "source": "mtk",
+      "source-layer": "landuse",
+      "minzoom": 12.5,
+      "filter": ["==", ["get", "type"], "parking"],
+      "paint": {
+        "fill-color": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          12.5,
+          "rgba(255, 255, 255, 0)",
+          13.5,
+          "rgb(255, 255, 255)"
+        ],
+        "fill-outline-color": "hsla(30, 10%, 52%, 0.6)"
       }
     },
     {
