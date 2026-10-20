@@ -4188,63 +4188,6 @@
       }
     },
     {
-      "id": "road_path_blur",
-      "source": "mtk",
-      "source-layer": "road",
-      "type": "line",
-      "filter": [
-        "all",
-        ["in", ["get", "type"], ["literal", ["path", "via_ferrata", "steps"]]],
-        ["!", ["has", "crossing"]],
-        ["!", ["has", "indoor"]]
-      ],
-      "minzoom": 12,
-      "maxzoom": 23,
-      "layout": {
-        "line-cap": "round",
-        "line-join": "round",
-        "visibility": "none"
-      },
-      "paint": {
-        "line-blur": [
-          "interpolate",
-          ["exponential", 1.6],
-          ["zoom"],
-          6,
-          0.09,
-          19,
-          5.88
-        ],
-        "line-opacity": 0.5,
-        "line-color": "hsla(216, 25%, 100%, 1)",
-        "line-width": [
-          "interpolate",
-          ["exponential", 1.6],
-          ["zoom"],
-          6,
-          0.18,
-          19,
-          26.77
-        ]
-      },
-      "metadata": {
-        "maptoolkit:legend": {
-          "role": "blur",
-          "group": "road",
-          "attachesTo": [
-            "road_path_urban_tunnel",
-            "road_path_steps",
-            "road_path_mountain",
-            "road_path_alpine",
-            "road_path",
-            "road_path_urban",
-            "road_path_bridge",
-            "road_path_urban_bridge"
-          ]
-        }
-      }
-    },
-    {
       "id": "road_minor_blur",
       "source": "mtk",
       "source-layer": "road",
@@ -4439,244 +4382,6 @@
             "road_major_medium_bridge",
             "road_major_dark_bridge"
           ]
-        }
-      }
-    },
-    {
-      "id": "road_path_urban_tunnel",
-      "source": "mtk",
-      "source-layer": "road",
-      "type": "line",
-      "filter": [
-        "any",
-        [
-          "all",
-          ["==", ["get", "type"], "path"],
-          ["has", "urban"],
-          ["!", ["any", ["has", "sac_scale"], ["has", "indoor"]]],
-          ["==", ["get", "crossing"], "tunnel"]
-        ],
-        [
-          "all",
-          [
-            "in",
-            ["get", "subtype"],
-            ["literal", ["footway", "cycleway", "corridor", "platform"]]
-          ],
-          ["!", ["any", ["has", "sac_scale"], ["has", "indoor"]]],
-          ["==", ["get", "crossing"], "tunnel"]
-        ]
-      ],
-      "minzoom": 13,
-      "maxzoom": 23,
-      "layout": {
-        "line-join": "round",
-        "visibility": "none"
-      },
-      "paint": {
-        "line-color": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          13,
-          "hsla(216, 15%, 70%, 0)",
-          14,
-          "hsla(216, 15%, 70%, 1)"
-        ],
-        "line-width": [
-          "interpolate",
-          ["exponential", 1.4],
-          ["zoom"],
-          6,
-          0.1,
-          19,
-          2.46
-        ]
-      },
-      "metadata": {
-        "maptoolkit:legend": {
-          "role": "main",
-          "group": "road",
-          "key": "path_urban",
-          "crossing": "tunnel"
-        }
-      }
-    },
-    {
-      "id": "road_minor_blur_tunnel",
-      "source": "mtk",
-      "source-layer": "road",
-      "type": "line",
-      "filter": [
-        "all",
-        ["==", ["geometry-type"], "LineString"],
-        [
-          "in",
-          ["get", "type"],
-          ["literal", ["raceway", "minor", "service", "track"]]
-        ],
-        ["==", ["get", "crossing"], "tunnel"]
-      ],
-      "minzoom": 11,
-      "maxzoom": 23,
-      "layout": {
-        "line-cap": "round",
-        "line-join": "round",
-        "visibility": "none"
-      },
-      "paint": {
-        "line-blur": [
-          "interpolate",
-          ["exponential", 1.6],
-          ["zoom"],
-          6,
-          ["match", ["get", "type"], "minor", 0.23, 0.13],
-          19,
-          ["match", ["get", "type"], "minor", 14.84, 8.4]
-        ],
-        "line-opacity": 0.5,
-        "line-color": "hsla(216, 25%, 100%, 1)",
-        "line-width": [
-          "interpolate",
-          ["exponential", 1.6],
-          ["zoom"],
-          6,
-          ["match", ["get", "type"], "minor", 0.76, 0.43],
-          19,
-          ["match", ["get", "type"], "minor", 49.46, 27.99]
-        ]
-      },
-      "metadata": {
-        "maptoolkit:legend": {
-          "role": "blur",
-          "group": "road",
-          "attachesTo": ["road_minor", "road_minor_bridge"],
-          "crossing": "tunnel"
-        }
-      }
-    },
-    {
-      "id": "road_major_blur_tunnel",
-      "source": "mtk",
-      "source-layer": "road",
-      "type": "line",
-      "filter": [
-        "all",
-        [
-          "in",
-          ["get", "type"],
-          ["literal", ["tertiary", "secondary", "primary", "trunk", "motorway"]]
-        ],
-        ["==", ["get", "crossing"], "tunnel"]
-      ],
-      "minzoom": 4,
-      "maxzoom": 23,
-      "layout": {
-        "line-cap": "round",
-        "line-join": "round",
-        "visibility": "none"
-      },
-      "paint": {
-        "line-blur": [
-          "interpolate",
-          ["exponential", 1.6],
-          ["zoom"],
-          6,
-          [
-            "case",
-            ["==", ["get", "ramp"], 1],
-            0.23,
-            [
-              "match",
-              ["get", "type"],
-              "tertiary",
-              0.29,
-              "secondary",
-              0.32,
-              "primary",
-              0.34,
-              "trunk",
-              0.38,
-              0.43
-            ]
-          ],
-          19,
-          [
-            "case",
-            ["==", ["get", "ramp"], 1],
-            14.84,
-            [
-              "match",
-              ["get", "type"],
-              "tertiary",
-              19.04,
-              "secondary",
-              20.72,
-              "primary",
-              22.11,
-              "trunk",
-              24.91,
-              27.99
-            ]
-          ]
-        ],
-        "line-opacity": 0.5,
-        "line-color": "hsla(216, 25%, 100%, 1)",
-        "line-width": [
-          "interpolate",
-          ["exponential", 1.6],
-          ["zoom"],
-          6,
-          [
-            "case",
-            ["==", ["get", "ramp"], 1],
-            0.76,
-            [
-              "match",
-              ["get", "type"],
-              "tertiary",
-              0.98,
-              "secondary",
-              1.06,
-              "primary",
-              1.13,
-              "trunk",
-              1.28,
-              1.43
-            ]
-          ],
-          19,
-          [
-            "case",
-            ["==", ["get", "ramp"], 1],
-            49.46,
-            [
-              "match",
-              ["get", "type"],
-              "tertiary",
-              63.45,
-              "secondary",
-              69.05,
-              "primary",
-              73.72,
-              "trunk",
-              83.05,
-              93.31
-            ]
-          ]
-        ]
-      },
-      "metadata": {
-        "maptoolkit:legend": {
-          "role": "blur",
-          "group": "road",
-          "attachesTo": [
-            "road_major_medium",
-            "road_major_dark",
-            "road_major_medium_bridge",
-            "road_major_dark_bridge"
-          ],
-          "crossing": "tunnel"
         }
       }
     },
@@ -5063,14 +4768,14 @@
             ["trunk"],
             "#A05A28",
             ["primary"],
-            "#8C8C8C",
+            "hsl(30, 8%, 40%)",
             ["secondary"],
-            "#8C8C8C",
+            "hsl(30, 8%, 40%)",
             ["tertiary"],
-            "#8C8C8C",
+            "hsl(30, 8%, 40%)",
             ["minor", "service"],
-            "#8C8C8C",
-            "#8C8C8C"
+            "hsl(30, 8%, 40%)",
+            "hsl(30, 8%, 40%)"
           ],
           12,
           [
@@ -5081,14 +4786,14 @@
             ["trunk"],
             "#9A6A30",
             ["primary"],
-            "#B5B5B0",
+            "hsl(30, 6%, 60%)",
             ["secondary"],
-            "#B5B5B0",
+            "hsl(30, 6%, 60%)",
             ["tertiary"],
-            "#B5B5B0",
+            "hsl(30, 6%, 60%)",
             ["minor", "service"],
-            "#B5B5B0",
-            "#B5B5B0"
+            "hsl(30, 6%, 60%)",
+            "hsl(30, 6%, 60%)"
           ],
           14.5,
           [
@@ -5099,14 +4804,14 @@
             ["trunk"],
             "#7A451E",
             ["primary"],
-            "#3C3C3C",
+            "hsl(30, 8%, 24%)",
             ["secondary"],
-            "#3C3C3C",
+            "hsl(30, 8%, 24%)",
             ["tertiary"],
-            "#3C3C3C",
+            "hsl(30, 8%, 24%)",
             ["minor", "service"],
-            "#3C3C3C",
-            "#3C3C3C"
+            "hsl(30, 8%, 24%)",
+            "hsl(30, 8%, 24%)"
           ]
         ],
         "line-gap-width": 0,
@@ -6948,14 +6653,14 @@
             ["trunk"],
             "#A05A28",
             ["primary"],
-            "#8C8C8C",
+            "hsl(30, 8%, 40%)",
             ["secondary"],
-            "#8C8C8C",
+            "hsl(30, 8%, 40%)",
             ["tertiary"],
-            "#8C8C8C",
+            "hsl(30, 8%, 40%)",
             ["minor", "service"],
-            "#8C8C8C",
-            "#8C8C8C"
+            "hsl(30, 8%, 40%)",
+            "hsl(30, 8%, 40%)"
           ],
           12,
           [
@@ -6966,14 +6671,14 @@
             ["trunk"],
             "#9A6A30",
             ["primary"],
-            "#B5B5B0",
+            "hsl(30, 6%, 60%)",
             ["secondary"],
-            "#B5B5B0",
+            "hsl(30, 6%, 60%)",
             ["tertiary"],
-            "#B5B5B0",
+            "hsl(30, 6%, 60%)",
             ["minor", "service"],
-            "#B5B5B0",
-            "#B5B5B0"
+            "hsl(30, 6%, 60%)",
+            "hsl(30, 6%, 60%)"
           ],
           14.5,
           [
@@ -6984,14 +6689,14 @@
             ["trunk"],
             "#7A451E",
             ["primary"],
-            "#3C3C3C",
+            "hsl(30, 8%, 24%)",
             ["secondary"],
-            "#3C3C3C",
+            "hsl(30, 8%, 24%)",
             ["tertiary"],
-            "#3C3C3C",
+            "hsl(30, 8%, 24%)",
             ["minor", "service"],
-            "#3C3C3C",
-            "#3C3C3C"
+            "hsl(30, 8%, 24%)",
+            "hsl(30, 8%, 24%)"
           ]
         ],
         "line-gap-width": 0,
