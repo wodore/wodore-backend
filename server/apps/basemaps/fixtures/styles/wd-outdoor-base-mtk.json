@@ -4652,9 +4652,9 @@
             "match",
             ["get", "type"],
             ["motorway"],
-            "#A05A28",
+            "#6B3A10",
             ["trunk"],
-            "#A05A28",
+            "#6B3A10",
             ["primary"],
             "hsl(30, 8%, 40%)",
             ["secondary"],
@@ -4670,9 +4670,9 @@
             "match",
             ["get", "type"],
             ["motorway"],
-            "#9A6A30",
+            "#6B3A10",
             ["trunk"],
-            "#9A6A30",
+            "#6B3A10",
             ["primary"],
             "hsl(30, 6%, 60%)",
             ["secondary"],
@@ -4688,9 +4688,9 @@
             "match",
             ["get", "type"],
             ["motorway"],
-            "#7A451E",
+            "#5A3010",
             ["trunk"],
-            "#7A451E",
+            "#5A3010",
             ["primary"],
             "hsl(30, 8%, 24%)",
             ["secondary"],
@@ -4990,9 +4990,9 @@
           ["linear"],
           ["zoom"],
           12,
-          "rgba(60, 60, 60, 0)",
+          "hsla(0, 0%, 22%, 0)",
           13,
-          "rgb(60, 60, 60)"
+          "hsla(0, 0%, 22%, 0.9)"
         ],
         "line-width": [
           "interpolate",
@@ -5041,9 +5041,9 @@
           ["linear"],
           ["zoom"],
           12,
-          "rgba(60, 60, 60, 0)",
+          "hsla(0, 0%, 22%, 0)",
           13,
-          "rgb(60, 60, 60)"
+          "hsla(0, 0%, 22%, 0.9)"
         ],
         "line-dasharray": [1.5, 3],
         "line-width": [
@@ -5092,9 +5092,9 @@
           ["linear"],
           ["zoom"],
           12,
-          "rgba(60, 60, 60, 0)",
+          "hsla(0, 0%, 22%, 0)",
           13,
-          "rgb(60, 60, 60)"
+          "hsla(0, 0%, 22%, 0.9)"
         ],
         "line-width": [
           "interpolate",
@@ -5136,9 +5136,9 @@
           ["linear"],
           ["zoom"],
           12,
-          "rgba(60, 60, 60, 0)",
+          "hsla(0, 0%, 22%, 0)",
           13,
-          "rgb(60, 60, 60)"
+          "hsla(0, 0%, 22%, 0.9)"
         ],
         "line-width": [
           "interpolate",
@@ -5180,9 +5180,9 @@
           ["linear"],
           ["zoom"],
           12,
-          "rgba(60, 60, 60, 0)",
+          "hsla(0, 0%, 22%, 0)",
           13,
-          "rgb(60, 60, 60)"
+          "hsla(0, 0%, 22%, 0.9)"
         ],
         "line-width": [
           "interpolate",
@@ -5244,7 +5244,7 @@
                 ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
               ],
               "hsla(40, 25%, 95%, 1)",
-              "rgba(60, 60, 60, 0)"
+              "hsla(0, 0%, 22%, 0)"
             ]
           ],
           13,
@@ -5264,7 +5264,7 @@
                 ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
               ],
               "hsla(40, 25%, 95%, 1)",
-              "rgb(60, 60, 60)"
+              "hsla(0, 0%, 22%, 0.9)"
             ]
           ]
         ],
@@ -5346,7 +5346,7 @@
                 ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
               ],
               "hsla(40, 25%, 95%, 1)",
-              "rgba(60, 60, 60, 0)"
+              "hsla(0, 0%, 22%, 0)"
             ]
           ],
           14,
@@ -5366,7 +5366,7 @@
                 ["literal", ["paved", "asphalt", "concrete", "paving_stones"]]
               ],
               "hsla(40, 25%, 95%, 1)",
-              "rgb(60, 60, 60)"
+              "hsla(0, 0%, 22%, 0.9)"
             ]
           ]
         ],
@@ -5413,9 +5413,9 @@
           ["linear"],
           ["zoom"],
           12,
-          "hsla(40, 8%, 82%, 0)",
+          "hsla(0, 0%, 22%, 0)",
           13,
-          "hsla(40, 8%, 78%, 1)"
+          "hsla(0, 0%, 22%, 0.9)"
         ],
         "line-width": [
           "interpolate",
@@ -5824,9 +5824,9 @@
             "match",
             ["get", "type"],
             ["motorway"],
-            "#EE9A5F",
+            "#F5A623",
             ["trunk"],
-            "#EE9A5F",
+            "#F5A623",
             ["primary"],
             "#FFFFFF",
             ["secondary"],
@@ -5842,9 +5842,9 @@
             "match",
             ["get", "type"],
             ["motorway"],
-            "#E8894C",
+            "#E8940F",
             ["trunk"],
-            "#E8894C",
+            "#E8940F",
             ["primary"],
             "#FFFFFF",
             ["secondary"],
@@ -6618,9 +6618,9 @@
             "match",
             ["get", "type"],
             ["motorway"],
-            "#A05A28",
+            "#6B3A10",
             ["trunk"],
-            "#A05A28",
+            "#6B3A10",
             ["primary"],
             "hsl(30, 8%, 40%)",
             ["secondary"],
@@ -6636,9 +6636,9 @@
             "match",
             ["get", "type"],
             ["motorway"],
-            "#9A6A30",
+            "#6B3A10",
             ["trunk"],
-            "#9A6A30",
+            "#6B3A10",
             ["primary"],
             "hsl(30, 6%, 60%)",
             ["secondary"],
@@ -6654,9 +6654,9 @@
             "match",
             ["get", "type"],
             ["motorway"],
-            "#7A451E",
+            "#5A3010",
             ["trunk"],
-            "#7A451E",
+            "#5A3010",
             ["primary"],
             "hsl(30, 8%, 24%)",
             ["secondary"],
@@ -7331,9 +7331,9 @@
             "match",
             ["get", "type"],
             ["motorway"],
-            "#EE9A5F",
+            "#F5A623",
             ["trunk"],
-            "#EE9A5F",
+            "#F5A623",
             ["primary"],
             "#FFFFFF",
             ["secondary"],
@@ -7349,9 +7349,9 @@
             "match",
             ["get", "type"],
             ["motorway"],
-            "#E8894C",
+            "#E8940F",
             ["trunk"],
-            "#E8894C",
+            "#E8940F",
             ["primary"],
             "#FFFFFF",
             ["secondary"],
