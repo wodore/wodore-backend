@@ -2974,7 +2974,7 @@
         "visibility": "visible"
       },
       "paint": {
-        "line-color": "hsla(24.75, 40%, 100%, 0.45)",
+        "line-color": "hsla(24.75, 40%, 100%, 0.5)",
         "line-width": [
           "interpolate",
           ["exponential", 1.2],
@@ -3028,8 +3028,7 @@
             0.43,
             0
           ]
-        ],
-        "line-blur": 0.4
+        ]
       },
       "metadata": {
         "maptoolkit:legend": {
@@ -3056,7 +3055,7 @@
         "line-color": [
           "case",
           ["==", ["get", "terrain_type"], "normal"],
-          "hsla(30, 49%, 50%, 0.85)",
+          "hsla(24.75, 40%, 45%, 0.7)",
           ["==", ["get", "terrain_type"], "glacier"],
           "hsla(182.25, 60%, 45%, 0.7)",
           "hsla(69.75, 0%, 45%, 0.7)"
@@ -3076,7 +3075,7 @@
             0.16,
             0
           ],
-          20,
+          16,
           [
             "case",
             ["in", ["get", "divisor"], ["literal", [500, 1000]]],
@@ -3087,8 +3086,7 @@
             0.78,
             0
           ]
-        ],
-        "line-blur": 0.4
+        ]
       },
       "metadata": {
         "maptoolkit:legend": {
@@ -4881,17 +4879,17 @@
           ["linear"],
           ["zoom"],
           6,
-          0.5,
+          0.6,
           9,
-          1.2,
+          1.4,
           13,
-          1.8,
+          3.2,
           15,
-          3,
+          6,
           16,
-          4.5,
+          9,
           20,
-          11
+          30
         ]
       }
     },
@@ -5797,15 +5795,15 @@
           ["linear"],
           ["zoom"],
           10,
-          0.9,
+          1.2,
           13,
-          1.4,
+          2.5,
           15,
-          2.2,
+          5,
           16,
-          3,
+          7,
           20,
-          8
+          24
         ]
       }
     },
@@ -5932,7 +5930,7 @@
             0,
             0
           ],
-          11.5,
+          13.8,
           [
             "match",
             ["get", "type"],
@@ -5950,7 +5948,7 @@
             0,
             0
           ],
-          12,
+          14.4,
           [
             "match",
             ["get", "type"],
@@ -5968,7 +5966,7 @@
             0,
             0
           ],
-          13,
+          15.6,
           [
             "match",
             ["get", "type"],
@@ -5986,7 +5984,7 @@
             0,
             0
           ],
-          15,
+          18,
           [
             "match",
             ["get", "type"],
@@ -6004,7 +6002,7 @@
             0,
             0
           ],
-          16,
+          19.2,
           [
             "match",
             ["get", "type"],
@@ -6022,7 +6020,7 @@
             0,
             0
           ],
-          20,
+          24,
           [
             "match",
             ["get", "type"],
@@ -6040,7 +6038,7 @@
             0,
             0
           ],
-          22,
+          26.4,
           [
             "case",
             ["==", ["get", "type"], "tertiary"],
@@ -6162,7 +6160,7 @@
             0,
             0
           ],
-          8,
+          10,
           [
             "match",
             ["get", "type"],
@@ -6180,7 +6178,7 @@
             0,
             0
           ],
-          9,
+          11.25,
           [
             "match",
             ["get", "type"],
@@ -6198,7 +6196,7 @@
             0,
             0
           ],
-          10,
+          12.5,
           [
             "match",
             ["get", "type"],
@@ -6216,7 +6214,7 @@
             0,
             0
           ],
-          12,
+          15,
           [
             "match",
             ["get", "type"],
@@ -6234,7 +6232,7 @@
             0,
             0
           ],
-          13,
+          16.25,
           [
             "match",
             ["get", "type"],
@@ -6252,7 +6250,7 @@
             0,
             0
           ],
-          15,
+          18.75,
           [
             "match",
             ["get", "type"],
@@ -6270,7 +6268,7 @@
             0,
             0
           ],
-          16,
+          20,
           [
             "match",
             ["get", "type"],
@@ -6288,7 +6286,7 @@
             0,
             0
           ],
-          20,
+          25,
           [
             "match",
             ["get", "type"],
@@ -6819,28 +6817,33 @@
         "visibility": "visible"
       },
       "paint": {
-        "line-color": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          13,
-          "hsla(0, 0%, 60%, 0)",
-          14.5,
-          "#DCD9D2"
-        ],
+        "line-color": "hsla(30, 10%, 52%, 1)",
         "line-gap-width": 0,
         "line-width": [
           "interpolate",
-          ["exponential", 2],
+          ["linear"],
           ["zoom"],
-          14.5,
-          0,
-          15,
+          12.5,
+          1.6,
+          14,
           2.8,
+          15,
+          4.6,
           16,
-          6,
-          20,
-          80
+          7,
+          19,
+          13
+        ],
+        "line-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          12.5,
+          0,
+          14,
+          0.6,
+          15.5,
+          1
         ]
       },
       "metadata": {
@@ -7252,32 +7255,27 @@
       },
       "paint": {
         "line-color": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          9,
-          "hsla(45, 100%, 82%, 0)",
-          10.5,
-          "#F2EDE0"
+          "case",
+          ["==", ["get", "type"], "service"],
+          "hsla(40, 12%, 88%, 1)",
+          "hsla(40, 30%, 99%, 1)"
         ],
         "line-width": [
           "interpolate",
-          ["exponential", 2],
+          ["linear"],
           ["zoom"],
-          10,
-          ["match", ["get", "type"], ["minor", "service"], 1.2, 0.9],
-          12,
-          ["match", ["get", "type"], ["minor", "service"], 2.25, 1.4],
+          11,
+          ["case", ["==", ["get", "type"], "service"], 0.35, 0.5],
           13,
-          ["match", ["get", "type"], ["minor", "service"], 2.5, 1.6],
+          ["case", ["==", ["get", "type"], "service"], 1, 1.6],
           15,
-          ["match", ["get", "type"], ["minor", "service"], 2.8, 2],
+          ["case", ["==", ["get", "type"], "service"], 2, 3.2],
           16,
-          ["match", ["get", "type"], ["minor", "service"], 5.6, 3.5],
-          20,
-          ["match", ["get", "type"], ["minor", "service"], 89, 50]
+          ["case", ["==", ["get", "type"], "service"], 3.4, 5.5],
+          19,
+          ["case", ["==", ["get", "type"], "service"], 6.5, 10]
         ],
-        "line-blur": ["interpolate", ["linear"], ["zoom"], 8, 0.4, 14, 0.1]
+        "line-opacity": 1
       },
       "metadata": {
         "maptoolkit:legend": {
@@ -8263,7 +8261,7 @@
           ["!=", ["get", "ele"], 0]
         ]
       ],
-      "minzoom": 13.5,
+      "minzoom": 12,
       "maxzoom": 23,
       "layout": {
         "symbol-placement": "line",
