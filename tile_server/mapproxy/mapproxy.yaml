@@ -1,0 +1,109 @@
+# Wodore "world" tile facades — the two raster services the basemap
+# fixtures reference:
+#
+#   world_topo      OpenTopoMap (worldwide) merged with basemap.at (AT)
+#                   and swisstopo pixelkarte (CH), pixel-perfect country
+#                   clips.
+#                   the name the wd styles expect.
+#   world_satellite ESRI World Imagery, cached, WebP.
+#
+#   docker compose up -d
+#   tiles: http://localhost:8091/mapproxy/tiles/world_topo/webmercator/{z}/{x}/{y}.webp
+#          http://localhost:8091/mapproxy/tiles/world_satellite/webmercator/{z}/{x}/{y}.webp
+#
+# MapProxy 7.0.0 gotchas (same as mapproxy-eu-topo): single-cache layers,
+# no num_levels overrides, file cache (not mbtiles), nw origin for XYZ.
+services:
+  demo:
+  tms:
+    use_grid_names: true
+    origin: "nw"
+
+grids:
+  webmercator:
+    base: GLOBAL_WEBMERCATOR
+
+sources:
+  opentopo:
+    type: tile
+    url: https://b.tile.opentopomap.org/%(z)s/%(x)s/%(y)s.png
+    grid: webmercator
+
+  at_geolandbasemap:
+    type: tile
+    url: https://mapsneu.wien.gv.at/basemap/geolandbasemap/normal/google3857/%(z)s/%(y)s/%(x)s.png
+    grid: webmercator
+    coverage:
+      datasource: /mapproxy/config/at-boundary.geojson
+      srs: "EPSG:4326"
+      clip: true
+
+  ch_pixelkarte:
+    type: tile
+    url: https://wmts0.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/%(z)s/%(x)s/%(y)s.jpeg
+    grid: webmercator
+    coverage:
+      datasource: /mapproxy/config/ch-boundary.geojson
+      srs: "EPSG:4326"
+      clip: true
+
+  esri_world_imagery:
+    type: tile
+    url: https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/%(z)s/%(y)s/%(x)s
+    grid: webmercator
+    transparent: false
+    # world-wide CLIPPED coverage forces mapproxy's merge path: the
+    # single-source shortcut would store the raw jpeg bytes undetected
+    # (extensionless url) instead of re-encoding to webp. The clip is a
+    # visual no-op (covers the whole world) but guarantees real webp.
+    coverage:
+      bbox: [-180, -85.05, 180, 85.05]
+      srs: "EPSG:4326"
+      clip: true
+
+caches:
+  world_topo_cache:
+    grids: [webmercator]
+    # Serve WebP (recipe from the burginfra mapproxy deployment):
+    # merge internally with alpha (request_format png), store + serve
+    # webp. The raster URL template must end in .webp.
+    format: image/webp
+    request_format: image/png
+    image:
+      transparent: false
+    sources: [ch_pixelkarte, at_geolandbasemap, opentopo]
+    cache:
+      type: file
+      directory: /mapproxy/config/cache_data/world_topo
+
+  world_satellite_cache:
+    grids: [webmercator]
+    format: image/webp
+    request_format: image/png
+    image:
+      transparent: false
+    sources: [esri_world_imagery]
+    cache:
+      type: file
+      directory: /mapproxy/config/cache_data/world_satellite
+      # meta tiling: single-source tiles with an undetectable source
+      # format (the extensionless esri url) would pass through as raw
+      # jpeg bytes — the meta canvas forces decode -> re-encode so
+      # every served tile is real webp
+      meta_size: [2, 2]
+      meta_buffer: 0
+
+layers:
+  - name: world_topo
+    title: World Topo (OTM + basemap.at + CH pixelkarte)
+    sources: [world_topo_cache]
+  - name: world_satellite
+    title: World Satellite (ESRI World Imagery)
+    sources: [world_satellite_cache]
+
+globals:
+  cache:
+    # lock files must live in the writable cache_data volume
+    lock_dir: /mapproxy/config/cache_data/lock
+  image:
+    resampling_method: bilinear
