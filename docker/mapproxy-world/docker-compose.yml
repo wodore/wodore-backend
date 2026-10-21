@@ -1,0 +1,12 @@
+services:
+  mapproxy:
+    image: ghcr.io/mapproxy/mapproxy/mapproxy:7.0.0-nginx
+    container_name: wd-mapproxy-world
+    restart: unless-stopped
+    ports:
+      - "8091:80"
+    volumes:
+      - ./config/mapproxy.yaml:/mapproxy/config/mapproxy.yaml:ro
+      - ./config/ch-boundary.geojson:/mapproxy/config/ch-boundary.geojson:ro
+      - ./config/at-boundary.geojson:/mapproxy/config/at-boundary.geojson:ro
+      - ./cache_data:/mapproxy/config/cache_data
