@@ -5447,6 +5447,92 @@
       }
     },
     {
+      "id": "road_path_oneway_symbol",
+      "source": "mtk",
+      "source-layer": "road",
+      "type": "symbol",
+      "filter": [
+        "all",
+        ["==", ["get", "oneway"], 1],
+        ["in", ["get", "type"], ["literal", ["path", "via_ferrata"]]]
+      ],
+      "minzoom": 16,
+      "maxzoom": 23,
+      "layout": {
+        "icon-image": "sdf:oneway",
+        "icon-padding": 8,
+        "icon-rotation-alignment": "map",
+        "icon-size": ["interpolate", ["linear"], ["zoom"], 15, 0.49, 18, 0.65],
+        "symbol-placement": "line",
+        "symbol-spacing": 250,
+        "visibility": "visible"
+      },
+      "paint": {
+        "icon-color": "hsla(216, 30%, 60%, 1)",
+        "icon-halo-color": "hsla(216, 30%, 100%, 1)",
+        "icon-halo-width": 2
+      },
+      "metadata": {
+        "maptoolkit:legend": {
+          "role": "symbol",
+          "group": "road",
+          "instance": true,
+          "key": "path_oneway_symbol",
+          "anchors": [
+            "road_path_urban_tunnel",
+            "road_path_steps",
+            "road_path_mountain",
+            "road_path_alpine",
+            "road_path",
+            "road_path_urban",
+            "road_path_bridge",
+            "road_path_urban_bridge"
+          ],
+          "keyByValue": [
+            {
+              "property": "oneway_bicycle",
+              "values": {
+                "0": "oneway_bicycle_symbol"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "road_path_alpine_via_ferrata_symbol",
+      "source": "mtk",
+      "source-layer": "road_label",
+      "type": "symbol",
+      "filter": ["==", ["get", "type"], "via_ferrata"],
+      "minzoom": 13,
+      "maxzoom": 23,
+      "layout": {
+        "icon-image": "sdf:via_ferrata",
+        "icon-rotation-alignment": "viewport",
+        "symbol-placement": "line",
+        "symbol-spacing": 250,
+        "icon-padding": ["interpolate", ["linear"], ["zoom"], 6, 9, 16, 8],
+        "icon-size": ["interpolate", ["linear"], ["zoom"], 11, 0.58, 16, 0.99],
+        "visibility": "visible"
+      },
+      "paint": {
+        "icon-color": "hsla(0, 55%, 60%, 1)",
+        "icon-halo-color": "hsla(0, 55%, 100%, 1)",
+        "icon-halo-width": 1.5,
+        "icon-halo-blur": 1.5
+      },
+      "metadata": {
+        "maptoolkit:legend": {
+          "role": "symbol",
+          "group": "road",
+          "instance": true,
+          "key": "path_alpine_via_ferrata_symbol",
+          "anchors": ["road_path_alpine"]
+        }
+      }
+    },
+    {
       "id": "road_minor_casing",
       "source": "mtk",
       "source-layer": "road",
@@ -5577,43 +5663,57 @@
       }
     },
     {
-      "id": "wd-parking-casing",
-      "type": "line",
+      "id": "road_minor_oneway_symbol",
       "source": "mtk",
-      "source-layer": "landuse",
-      "minzoom": 13,
-      "filter": ["==", ["get", "type"], "parking"],
+      "source-layer": "road",
+      "type": "symbol",
+      "filter": [
+        "step",
+        ["zoom"],
+        ["all", ["==", ["get", "oneway"], 1], ["==", ["get", "type"], "minor"]],
+        16,
+        [
+          "all",
+          ["==", ["get", "oneway"], 1],
+          [
+            "in",
+            ["get", "type"],
+            ["literal", ["minor", "raceway", "service", "track"]]
+          ]
+        ]
+      ],
+      "minzoom": 15,
+      "maxzoom": 23,
+      "layout": {
+        "icon-image": "sdf:oneway",
+        "icon-padding": 8,
+        "icon-rotation-alignment": "map",
+        "icon-size": ["interpolate", ["linear"], ["zoom"], 15, 0.49, 18, 0.65],
+        "symbol-placement": "line",
+        "symbol-spacing": 250,
+        "visibility": "visible"
+      },
       "paint": {
-        "line-color": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          13,
-          "hsla(30, 10%, 52%, 0)",
-          14,
-          "hsla(30, 10%, 52%, 0.7)"
-        ],
-        "line-width": ["interpolate", ["linear"], ["zoom"], 13, 0.5, 16, 1.2]
-      }
-    },
-    {
-      "id": "wd-parking",
-      "type": "fill",
-      "source": "mtk",
-      "source-layer": "landuse",
-      "minzoom": 12.5,
-      "filter": ["==", ["get", "type"], "parking"],
-      "paint": {
-        "fill-color": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          12.5,
-          "rgba(255, 255, 255, 0)",
-          13.5,
-          "rgb(255, 255, 255)"
-        ],
-        "fill-outline-color": "hsla(30, 10%, 52%, 0.6)"
+        "icon-color": "hsla(216, 30%, 60%, 1)",
+        "icon-halo-color": "hsla(216, 30%, 100%, 1)",
+        "icon-halo-width": 2
+      },
+      "metadata": {
+        "maptoolkit:legend": {
+          "role": "symbol",
+          "group": "road",
+          "instance": true,
+          "key": "minor_oneway_symbol",
+          "anchors": ["road_minor", "road_minor_bridge"],
+          "keyByValue": [
+            {
+              "property": "oneway_bicycle",
+              "values": {
+                "0": "oneway_bicycle_symbol"
+              }
+            }
+          ]
+        }
       }
     },
     {
@@ -5656,6 +5756,46 @@
           "group": "road",
           "key": "restriction_public"
         }
+      }
+    },
+    {
+      "id": "wd-parking-casing",
+      "type": "line",
+      "source": "mtk",
+      "source-layer": "landuse",
+      "minzoom": 13,
+      "filter": ["==", ["get", "type"], "parking"],
+      "paint": {
+        "line-color": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          13,
+          "hsla(30, 10%, 52%, 0)",
+          14,
+          "hsla(30, 10%, 52%, 0.7)"
+        ],
+        "line-width": ["interpolate", ["linear"], ["zoom"], 13, 0.5, 16, 1.2]
+      }
+    },
+    {
+      "id": "wd-parking",
+      "type": "fill",
+      "source": "mtk",
+      "source-layer": "landuse",
+      "minzoom": 12.5,
+      "filter": ["==", ["get", "type"], "parking"],
+      "paint": {
+        "fill-color": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          12.5,
+          "rgba(255, 255, 255, 0)",
+          13.5,
+          "rgb(255, 255, 255)"
+        ],
+        "fill-outline-color": "hsla(30, 10%, 52%, 0.6)"
       }
     },
     {
@@ -8021,113 +8161,6 @@
           "role": "main",
           "group": "road",
           "key": "aerialway_gondola"
-        }
-      }
-    },
-    {
-      "id": "road_path_oneway_symbol",
-      "source": "mtk",
-      "source-layer": "road",
-      "type": "symbol",
-      "filter": [
-        "all",
-        ["==", ["get", "oneway"], 1],
-        ["in", ["get", "type"], ["literal", ["path", "via_ferrata"]]]
-      ],
-      "minzoom": 16,
-      "maxzoom": 23,
-      "layout": {
-        "icon-image": "sdf:oneway",
-        "icon-padding": 8,
-        "icon-rotation-alignment": "map",
-        "icon-size": ["interpolate", ["linear"], ["zoom"], 15, 0.49, 18, 0.65],
-        "symbol-placement": "line",
-        "symbol-spacing": 250,
-        "visibility": "visible"
-      },
-      "paint": {
-        "icon-color": "hsla(216, 30%, 60%, 1)",
-        "icon-halo-color": "hsla(216, 30%, 100%, 1)",
-        "icon-halo-width": 2
-      },
-      "metadata": {
-        "maptoolkit:legend": {
-          "role": "symbol",
-          "group": "road",
-          "instance": true,
-          "key": "path_oneway_symbol",
-          "anchors": [
-            "road_path_urban_tunnel",
-            "road_path_steps",
-            "road_path_mountain",
-            "road_path_alpine",
-            "road_path",
-            "road_path_urban",
-            "road_path_bridge",
-            "road_path_urban_bridge"
-          ],
-          "keyByValue": [
-            {
-              "property": "oneway_bicycle",
-              "values": {
-                "0": "oneway_bicycle_symbol"
-              }
-            }
-          ]
-        }
-      }
-    },
-    {
-      "id": "road_minor_oneway_symbol",
-      "source": "mtk",
-      "source-layer": "road",
-      "type": "symbol",
-      "filter": [
-        "step",
-        ["zoom"],
-        ["all", ["==", ["get", "oneway"], 1], ["==", ["get", "type"], "minor"]],
-        16,
-        [
-          "all",
-          ["==", ["get", "oneway"], 1],
-          [
-            "in",
-            ["get", "type"],
-            ["literal", ["minor", "raceway", "service", "track"]]
-          ]
-        ]
-      ],
-      "minzoom": 15,
-      "maxzoom": 23,
-      "layout": {
-        "icon-image": "sdf:oneway",
-        "icon-padding": 8,
-        "icon-rotation-alignment": "map",
-        "icon-size": ["interpolate", ["linear"], ["zoom"], 15, 0.49, 18, 0.65],
-        "symbol-placement": "line",
-        "symbol-spacing": 250,
-        "visibility": "visible"
-      },
-      "paint": {
-        "icon-color": "hsla(216, 30%, 60%, 1)",
-        "icon-halo-color": "hsla(216, 30%, 100%, 1)",
-        "icon-halo-width": 2
-      },
-      "metadata": {
-        "maptoolkit:legend": {
-          "role": "symbol",
-          "group": "road",
-          "instance": true,
-          "key": "minor_oneway_symbol",
-          "anchors": ["road_minor", "road_minor_bridge"],
-          "keyByValue": [
-            {
-              "property": "oneway_bicycle",
-              "values": {
-                "0": "oneway_bicycle_symbol"
-              }
-            }
-          ]
         }
       }
     },
@@ -11232,39 +11265,6 @@
           "instance": true,
           "keyProperty": "type",
           "rankProperty": "rank"
-        }
-      }
-    },
-    {
-      "id": "road_path_alpine_via_ferrata_symbol",
-      "source": "mtk",
-      "source-layer": "road_label",
-      "type": "symbol",
-      "filter": ["==", ["get", "type"], "via_ferrata"],
-      "minzoom": 13,
-      "maxzoom": 23,
-      "layout": {
-        "icon-image": "sdf:via_ferrata",
-        "icon-rotation-alignment": "viewport",
-        "symbol-placement": "line",
-        "symbol-spacing": 250,
-        "icon-padding": ["interpolate", ["linear"], ["zoom"], 6, 9, 16, 8],
-        "icon-size": ["interpolate", ["linear"], ["zoom"], 11, 0.58, 16, 0.99],
-        "visibility": "visible"
-      },
-      "paint": {
-        "icon-color": "hsla(0, 55%, 60%, 1)",
-        "icon-halo-color": "hsla(0, 55%, 100%, 1)",
-        "icon-halo-width": 1.5,
-        "icon-halo-blur": 1.5
-      },
-      "metadata": {
-        "maptoolkit:legend": {
-          "role": "symbol",
-          "group": "road",
-          "instance": true,
-          "key": "path_alpine_via_ferrata_symbol",
-          "anchors": ["road_path_alpine"]
         }
       }
     },
