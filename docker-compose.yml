@@ -83,6 +83,17 @@ services:
       MARTIN_SYNC_MOUNT: /martin_sync
       RUST_LOG: debug
     command: --config /martin_sync/config/martin.yaml --webui enable-for-all
+  mapproxy:
+    image: ghcr.io/mapproxy/mapproxy/mapproxy:7.0.0-nginx
+    container_name: django-local-mapproxy
+    restart: unless-stopped
+    ports:
+      - "8091:80"
+    volumes:
+      - ./tile_server/mapproxy/mapproxy.yaml:/mapproxy/config/mapproxy.yaml:ro
+      - ./tile_server/mapproxy/ch-boundary.geojson:/mapproxy/config/ch-boundary.geojson:ro
+      - ./tile_server/mapproxy/at-boundary.geojson:/mapproxy/config/at-boundary.geojson:ro
+      - ./tile_server/mapproxy/cache_data:/mapproxy/config/cache_data
     depends_on:
       - db
 

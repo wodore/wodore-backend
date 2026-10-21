@@ -114,19 +114,19 @@ Services are defined in `docker-compose.yml`:
   - Endpoint: `http://localhost:8075/huts/{z}/{x}/{y}.pbf`
   - Catalog: `http://localhost:8075/catalog`
   - DB sources: `huts` (public+active huts), `geoplaces_view`, `geoplaces` (function)
-- **MapProxy raster facades** (standalone stacks, not part of the main
-  compose — run them where the tiles host lives):
-  - `docker/mapproxy-world/` — port 8091: `world_topo` (OpenTopoMap +
-    basemap.at + swisstopo pixelkarte, border-merged) and
-    `world_satellite` (ESRI World Imagery), both served as **WebP**
-    (`/mapproxy/tiles/<layer>/webmercator/{z}/{x}/{y}.webp`). See its
-    README for the single-source passthrough gotcha (clipped coverage
-    forces real WebP encoding).
-  - `docker/mapproxy-eu-topo/` — port 8090: the europe-topo facade
-    (same merge recipe under the frontend's style name).
+- **MapProxy raster facades** (`tile_server/mapproxy/`, part of the dev
+  compose like martin — port 8091, `django-local-mapproxy`):
+  - `world_topo` — OpenTopoMap + basemap.at + swisstopo pixelkarte,
+    border-merged, served as **WebP**
+  - `world_satellite` — ESRI World Imagery, **WebP**
+  - `europe_topo` — legacy PNG alias of the same merge (frontend demo
+    basemap name)
   - The wodore styles reference them via implementation-agnostic
     `/raster/tiles/...` paths — an edge route (nginx) rewrites them to
     the facade in staging/prod; the lane dev tile router does it in dev.
+  - See `tile_server/mapproxy/README.md` for the WebP recipe and the
+    single-source passthrough gotcha (clipped coverage forces real
+    WebP encoding).
   - Terrain postprocessing (Martin ≥ 1.16): `contours` — server-traced MVT
     contour lines from Mapterhorn (Terrarium webp, layer `contour`, tags
     `ele`+`major`, `/contours/{z}/{x}/{y}`); `hillshade` — baked raster PNG
