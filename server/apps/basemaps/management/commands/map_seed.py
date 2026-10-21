@@ -107,6 +107,12 @@ ORGS = [
         "url": "https://www.maptiler.com",
     },
     {
+        "slug": "mapy",
+        "name": "mapy.com",
+        "attribution": "© Seznam.cz, a.s.",
+        "url": "https://mapy.com",
+    },
+    {
         "slug": "bav",
         "name": "BAV",
         "attribution": "Bundesamt für Verkehr (BAV)",
@@ -540,7 +546,6 @@ LAYERS: list[dict[str, Any]] = [
         "name": "Wodore Outdoor",
         "description": "Outdoor basemap (Maptoolkit-based fork).",
         "spec": MapLayer.Spec.high,
-        "is_default": True,
         "order": 0,
         "fallback": "wd-outdoor-base-ofm",
         "anchors": {"ways": {"before": None}, "background": {"before": None}},
@@ -567,6 +572,7 @@ LAYERS: list[dict[str, Any]] = [
             "(higher-res in CH; heavier on the GPU)."
         ),
         "spec": MapLayer.Spec.high,
+        "is_default": True,  # the frontend's default basemap (PR #292 seed)
         "order": 6,
         "show": False,  # A/B variant, not a product entry
         "style": _fixture_style("wd-outdoor-base-mtk-hill"),
@@ -685,6 +691,20 @@ LAYERS: list[dict[str, Any]] = [
         "show": False,  # automatic keyless fallback, not a product entry
         "style_url": "https://tiles.openfreemap.org/styles/liberty",
         "attributions": ["openfreemap"],
+    },
+    {
+        "slug": "mapy-outdoor",
+        "role": MapLayer.Role.basemap,
+        "name": "Mapy.com outdoor (reference)",
+        "description": (
+            "Seznam tourist map — keyless compare reference for the outdoor "
+            "cartography; needs MAPY_COM_API_KEY (free tier: 250k tiles/month)."
+        ),
+        "spec": MapLayer.Spec.high,
+        "order": 11,
+        "show": False,  # reference/compare entry, not a product basemap
+        "style": _fixture_style("mapy-outdoor"),
+        "attributions": ["mapy"],
     },
 ]
 
