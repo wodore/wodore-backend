@@ -252,6 +252,9 @@ class TestAvailabilityTiles:
         assert props["d1_free"] == 0
         assert props["days"] == 4  # requested days, not the hut's data length
         assert props["capacity"] == 20
+        # hut-level open-type identifier — the accommodation filter's
+        # mapProperty (parity with the wd-huts layer features)
+        assert props["type_standard_identifier"] == "accommodation.alpinehut-open"
         # hut type enrichment (sprite-ready identifier + color)
         assert props["d0_type"] == "standard"
         assert props["d0_type_identifier"] == "accommodation.alpinehut-open"
