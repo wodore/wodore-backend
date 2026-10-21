@@ -228,6 +228,42 @@ postgres:
       minzoom: 3
       maxzoom: 16
 
+    # Hut availability vector tiles (function source).
+    # One feature per hut; the per-day series is flattened into scalar
+    # properties d0..dN_{status,free,total,type,type_identifier,type_color}
+    # (MVT cannot carry nested arrays). URL query params reach the function
+    # as `query_params` jsonb:
+    #   /availability/{z}/{x}/{y}?date=2026-02-14&days=4
+    #     date=YYYY-MM-DD  REQUIRED start date (frontend-computed — "now"
+    #                      logic belongs to the client so every (date, days)
+    #                      URL is edge-cacheable; missing/invalid date
+    #                      yields an empty tile, not a default)
+    #     days=N           1..8, default 4 (four day-column layers)
+    #     days_max_zoom=Z  below zoom Z serve only day 0 (default 7, 0=off)
+    #                      — low-zoom tiles stay small, URL stays zoom-
+    #                      independent; the feature property `days` reports
+    #                      how many day columns the tile carries
+    #     cache_ttl=S     DB tile cache TTL seconds (default 900 = 15 min,
+    #                      0 = always regenerate)
+    # Served from huts with availability rows in the window; empty window ->
+    # empty tile. Deeper zooms overzoom the z9 tiles (no extra requests).
+    # See: server/apps/availability/tiles.py + migration
+    #      0016_add_availability_tile_function for the full contract.
+    availability:
+      schema: public
+      function: get_availability_for_tiles
+
+      # Cache-Control: 15 min — matches the DB tile cache TTL; the date-keyed
+      # URLs mean "today" never invalidates anything (a new date is a new
+      # URL; old dates stay warm and correct).
+      cache_control: public, max-age=900
+
+      # minzoom 5 like the huts layer; maxzoom 9 — the flattened series at
+      # z9 already carries everything the overlay needs, deeper zooms
+      # overzoom client-side, which also bounds the tile cache universe.
+      minzoom: 5
+      maxzoom: 9
+
 # Server-side terrain postprocessing (Martin >= 1.16):
 #   contours - Mapterhorn Terrarium tiles -> traced vector MVT (PRIORITY:
 #     offloads the client-side maplibre-contour plugin; layer `contour`,
