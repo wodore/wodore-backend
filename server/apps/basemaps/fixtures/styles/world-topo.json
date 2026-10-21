@@ -5,7 +5,7 @@
   "sources": {
     "wd-world-topo": {
       "type": "raster",
-      "tiles": ["/raster/tiles/world_topo/webmercator/{z}/{x}/{y}.png?v=2"],
+      "tiles": ["/raster/tiles/world_topo/webmercator/{z}/{x}/{y}.webp?v=3"],
       "tileSize": 256,
       "maxzoom": 16
     }
