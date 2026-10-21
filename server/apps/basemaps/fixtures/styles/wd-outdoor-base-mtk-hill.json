@@ -6567,9 +6567,9 @@
             "match",
             ["get", "type"],
             ["motorway"],
-            "#E8940F",
+            "#FFFFFF",
             ["trunk"],
-            "#E8940F",
+            "#FFFFFF",
             ["primary"],
             "#FFFFFF",
             ["secondary"],
@@ -6581,24 +6581,6 @@
             "#FFFFFF"
           ],
           11,
-          [
-            "match",
-            ["get", "type"],
-            ["motorway"],
-            "#E8940F",
-            ["trunk"],
-            "#E8940F",
-            ["primary"],
-            "#FFFFFF",
-            ["secondary"],
-            "#FFFFFF",
-            ["tertiary"],
-            "#FFFFFF",
-            ["minor", "service"],
-            "#FFFFFF",
-            "#FFFFFF"
-          ],
-          12.5,
           [
             "match",
             ["get", "type"],
@@ -6898,29 +6880,7 @@
           4,
           "hsla(45, 100%, 82%, 0)",
           6,
-          [
-            "match",
-            ["get", "type"],
-            ["motorway", "trunk"],
-            "#E8940F",
-            "#FFFFFF"
-          ],
-          11,
-          [
-            "match",
-            ["get", "type"],
-            ["motorway", "trunk"],
-            "#E8940F",
-            "#FFFFFF"
-          ],
-          12.5,
-          [
-            "match",
-            ["get", "type"],
-            ["motorway", "trunk"],
-            "#FFFFFF",
-            "#FFFFFF"
-          ]
+          "#FFFFFF"
         ],
         "line-width": [
           "interpolate",
@@ -7880,9 +7840,9 @@
             "match",
             ["get", "type"],
             ["motorway"],
-            "#E8940F",
+            "#FFFFFF",
             ["trunk"],
-            "#E8940F",
+            "#FFFFFF",
             ["primary"],
             "#FFFFFF",
             ["secondary"],
@@ -7894,24 +7854,6 @@
             "#FFFFFF"
           ],
           11,
-          [
-            "match",
-            ["get", "type"],
-            ["motorway"],
-            "#E8940F",
-            ["trunk"],
-            "#E8940F",
-            ["primary"],
-            "#FFFFFF",
-            ["secondary"],
-            "#FFFFFF",
-            ["tertiary"],
-            "#FFFFFF",
-            ["minor", "service"],
-            "#FFFFFF",
-            "#FFFFFF"
-          ],
-          12.5,
           [
             "match",
             ["get", "type"],
