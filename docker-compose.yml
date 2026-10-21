@@ -65,8 +65,8 @@ services:
     container_name: django-local-martin
     restart: unless-stopped
     pull_policy: always
-    ports:
-      - "8075:3000"
+    # no host port — the tile-router publishes :8075 and proxies to
+    # martin; every documented martin URL keeps working through it
     networks:
       - postgresnet
     volumes:
@@ -83,6 +83,23 @@ services:
       MARTIN_SYNC_MOUNT: /martin_sync
       RUST_LOG: debug
     command: --config /martin_sync/config/martin.yaml --webui enable-for-all
+  tile-router:
+    image: nginx:1.27-alpine
+    container_name: django-local-tile-router
+    restart: unless-stopped
+    depends_on:
+      - martin
+      - mapproxy
+    ports:
+      - "8075:80"
+    environment:
+      MARTIN_UPSTREAM: django-local-martin:3000
+      MAPPROXY_UPSTREAM: django-local-mapproxy:80
+    networks:
+      - postgresnet
+      - default
+    volumes:
+      - ./tile_server/tile-router.conf.template:/etc/nginx/templates/default.conf.template:ro
   mapproxy:
     image: ghcr.io/mapproxy/mapproxy/mapproxy:7.0.0-nginx
     container_name: django-local-mapproxy

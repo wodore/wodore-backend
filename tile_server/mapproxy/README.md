@@ -8,12 +8,10 @@ port **8091**:
 |---|---|---|
 | `world_topo` | OpenTopoMap (worldwide) merged with basemap.at (AT) and swisstopo pixelkarte (CH+LI), pixel-perfect country clips | **WebP** |
 | `world_satellite` | ESRI World Imagery | **WebP** |
-| `europe_topo` | legacy PNG alias of the same merge (frontend demo basemap name) | PNG |
 
 ```
 tiles: http://localhost:8091/mapproxy/tiles/world_topo/webmercator/{z}/{x}/{y}.webp
        http://localhost:8091/mapproxy/tiles/world_satellite/webmercator/{z}/{x}/{y}.webp
-       http://localhost:8091/mapproxy/tiles/europe_topo/webmercator/{z}/{x}/{y}.png
 ```
 
 The wodore styles reference the facades via implementation-agnostic
@@ -61,17 +59,7 @@ martin-lane, with the same 7d immutable browser caching.
 * MapProxy 7.0.0 gotchas: single-cache layers, no num_levels
   overrides, file cache (not mbtiles), nw origin for XYZ.
 
-## Pre-seeding (optional)
-
-`seed.yaml` pre-warms the `europe_topo` cache z0–12 (~5 GB):
-
-```
-docker compose exec mapproxy mapproxy-seed -f /mapproxy/config/mapproxy.yaml /mapproxy/config/seed.yaml
-```
-
-(The mount in docker-compose.yml only exposes `mapproxy.yaml`,
-the boundary geojsons and `cache_data/`; add a seed mount when
-needed.)
+## Caching
 
 The cache directory (`cache_data/`) is a bind volume — after a
 `format:` change, wipe it so old tiles do not linger in the previous

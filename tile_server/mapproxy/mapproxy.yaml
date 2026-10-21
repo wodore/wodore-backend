@@ -3,7 +3,7 @@
 #
 #   world_topo      OpenTopoMap (worldwide) merged with basemap.at (AT)
 #                   and swisstopo pixelkarte (CH), pixel-perfect country
-#                   clips — same recipe as the europe_topo facade, under
+#                   clips.
 #                   the name the wd styles expect.
 #   world_satellite ESRI World Imagery, cached, WebP.
 #
@@ -93,18 +93,6 @@ caches:
       meta_size: [2, 2]
       meta_buffer: 0
 
-  europe_topo_cache:
-    grids: [webmercator]
-    # legacy PNG alias of the same merge (frontend demo basemap name);
-    # world_topo above is the WebP twin — new consumers should use it.
-    # cache-level merge: sources listed bottom-to-top — OpenTopoMap
-    # everywhere, basemap.at on top inside Austria, swisstopo on top
-    # inside the Switzerland polygon.
-    sources: [opentopo, at_geolandbasemap, ch_pixelkarte]
-    cache:
-      type: file
-      directory: /mapproxy/config/cache_data/europe_topo
-
 layers:
   - name: world_topo
     title: World Topo (OTM + basemap.at + CH pixelkarte)
@@ -112,9 +100,6 @@ layers:
   - name: world_satellite
     title: World Satellite (ESRI World Imagery)
     sources: [world_satellite_cache]
-  - name: europe_topo
-    title: Europe Topo (legacy PNG alias of world_topo)
-    sources: [europe_topo_cache]
 
 globals:
   cache:
