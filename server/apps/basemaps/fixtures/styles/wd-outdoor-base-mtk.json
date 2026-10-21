@@ -5713,6 +5713,215 @@
       }
     },
     {
+      "id": "wd-parking-label",
+      "source": "mtk",
+      "source-layer": "poi_label",
+      "type": "symbol",
+      "filter": ["==", ["get", "type"], "parking"],
+      "minzoom": 15.5,
+      "maxzoom": 23,
+      "layout": {
+        "symbol-sort-key": ["get", "rank_new"],
+        "text-anchor": "top",
+        "text-justify": "center",
+        "text-field": [
+          "case",
+          ["in", ["get", "type"], ["literal", ["alpine_hut", "shelter"]]],
+          "",
+          [
+            "case",
+            ["!", ["has", "is_nonlatin"]],
+            ["get", "name"],
+            [
+              "concat",
+              ["get", "name"],
+              "\n",
+              [
+                "coalesce",
+                ["get", "name_en"],
+                ["get", "name_fr"],
+                ["get", "name_es"],
+                ["get", "name_de"]
+              ]
+            ]
+          ]
+        ],
+        "text-font": [
+          "case",
+          ["!", ["has", "is_nonlatin"]],
+          ["literal", ["Barlow Semi Condensed SemiBold"]],
+          ["literal", ["Noto Sans Regular"]]
+        ],
+        "text-offset": ["literal", [0, 0.8]],
+        "text-padding": ["interpolate", ["linear"], ["zoom"], 1, 10, 18, 9],
+        "text-pitch-alignment": "viewport",
+        "text-size": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          1,
+          [
+            "*",
+            0.92,
+            ["interpolate", ["linear"], ["get", "rank_new"], 1, 5.92, 25, 2.6]
+          ],
+          18,
+          [
+            "*",
+            0.92,
+            [
+              "interpolate",
+              ["linear"],
+              ["get", "rank_new"],
+              1,
+              28.75,
+              25,
+              12.65
+            ]
+          ]
+        ],
+        "icon-image": ["concat", "sdf:", ["get", "type"]],
+        "icon-padding": ["interpolate", ["linear"], ["zoom"], 1, 10, 18, 9],
+        "icon-size": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          7,
+          ["interpolate", ["linear"], ["get", "rank_new"], 1, 0.42, 25, 0.28],
+          18,
+          ["interpolate", ["linear"], ["get", "rank_new"], 1, 1.31, 25, 0.87]
+        ],
+        "visibility": "visible"
+      },
+      "paint": {
+        "text-color": [
+          "match",
+          ["get", "category"],
+          "religion",
+          "hsla(261, 30%, 60%, 1)",
+          "food",
+          "hsla(36, 50%, 45%, 1)",
+          "shop",
+          "hsla(14, 30%, 50%, 1)",
+          "education",
+          "hsla(283, 30%, 60%, 1)",
+          "sport",
+          "hsla(136, 40%, 40%, 1)",
+          "traffic",
+          "hsla(216, 40%, 60%, 1)",
+          "attraction",
+          "hsla(306, 40%, 50%, 1)",
+          "health",
+          "hsla(-9, 50%, 60%, 1)",
+          "public",
+          "hsla(329, 40%, 60%, 1)",
+          "water",
+          "hsla(182, 50%, 50%, 1)",
+          "hsla(306, 0%, 50%, 1)"
+        ],
+        "text-halo-color": [
+          "match",
+          ["get", "category"],
+          "religion",
+          "hsla(261, 30%, 100%, 0.8)",
+          "food",
+          "hsla(36, 50%, 100%, 0.8)",
+          "shop",
+          "hsla(14, 30%, 100%, 0.8)",
+          "education",
+          "hsla(283, 30%, 100%, 0.8)",
+          "sport",
+          "hsla(136, 40%, 100%, 0.8)",
+          "traffic",
+          "hsla(216, 40%, 100%, 0.8)",
+          "attraction",
+          "hsla(306, 40%, 100%, 0.8)",
+          "health",
+          "hsla(-9, 50%, 100%, 0.8)",
+          "public",
+          "hsla(329, 40%, 100%, 0.8)",
+          "water",
+          "hsla(182, 50%, 100%, 0.8)",
+          "hsla(306, 0%, 100%, 0.8)"
+        ],
+        "text-halo-width": 0.5,
+        "text-halo-blur": 0.5,
+        "icon-color": [
+          "match",
+          ["get", "category"],
+          "religion",
+          "hsla(261, 30%, 60%, 1)",
+          "food",
+          "hsla(36, 50%, 45%, 1)",
+          "shop",
+          "hsla(14, 30%, 50%, 1)",
+          "education",
+          "hsla(283, 30%, 60%, 1)",
+          "sport",
+          "hsla(136, 40%, 40%, 1)",
+          "traffic",
+          "hsla(216, 40%, 60%, 1)",
+          "attraction",
+          "hsla(306, 40%, 50%, 1)",
+          "health",
+          "hsla(-9, 50%, 60%, 1)",
+          "public",
+          "hsla(329, 40%, 60%, 1)",
+          "water",
+          "hsla(182, 50%, 50%, 1)",
+          "hsla(306, 0%, 50%, 1)"
+        ],
+        "icon-halo-color": [
+          "match",
+          ["get", "category"],
+          "religion",
+          "hsla(261, 30%, 100%, 1)",
+          "food",
+          "hsla(36, 50%, 100%, 1)",
+          "shop",
+          "hsla(14, 30%, 100%, 1)",
+          "education",
+          "hsla(283, 30%, 100%, 1)",
+          "sport",
+          "hsla(136, 40%, 100%, 1)",
+          "traffic",
+          "hsla(216, 40%, 100%, 1)",
+          "attraction",
+          "hsla(306, 40%, 100%, 1)",
+          "health",
+          "hsla(-9, 50%, 100%, 1)",
+          "public",
+          "hsla(329, 40%, 100%, 1)",
+          "water",
+          "hsla(182, 50%, 100%, 1)",
+          "hsla(306, 0%, 100%, 1)"
+        ],
+        "icon-halo-width": 1.5,
+        "icon-halo-blur": 1.5,
+        "icon-opacity": [
+          "step",
+          ["zoom"],
+          [
+            "case",
+            ["in", ["get", "type"], ["literal", ["alpine_hut", "shelter"]]],
+            0,
+            1
+          ],
+          16,
+          1
+        ]
+      },
+      "metadata": {
+        "maptoolkit:legend": {
+          "role": "label",
+          "group": "poi",
+          "instance": true,
+          "keyProperty": "type",
+          "rankProperty": "rank_new"
+        }
+      }
+    },
+    {
       "id": "road_major_casing_tunnel",
       "source": "mtk",
       "source-layer": "road",
@@ -6272,9 +6481,9 @@
             "match",
             ["get", "type"],
             ["motorway"],
-            "#EE9A5F",
+            "#F0DFA0",
             ["trunk"],
-            "#EE9A5F",
+            "#F0DFA0",
             ["primary"],
             "#FFFFFF",
             ["secondary"],
@@ -6290,9 +6499,9 @@
             "match",
             ["get", "type"],
             ["motorway"],
-            "#E8894C",
+            "#F6EAB6",
             ["trunk"],
-            "#E8894C",
+            "#F6EAB6",
             ["primary"],
             "#FFFFFF",
             ["secondary"],
@@ -6308,9 +6517,9 @@
             "match",
             ["get", "type"],
             ["motorway"],
-            "#E27E3E",
+            "#FAF2C8",
             ["trunk"],
-            "#E27E3E",
+            "#FAF2C8",
             ["primary"],
             "#FFF7EA",
             ["secondary"],
@@ -6599,7 +6808,7 @@
             "match",
             ["get", "type"],
             ["motorway", "trunk"],
-            "#EE9A5F",
+            "#F0DFA0",
             "#FFFFFF"
           ],
           11,
@@ -6607,7 +6816,7 @@
             "match",
             ["get", "type"],
             ["motorway", "trunk"],
-            "#E8894C",
+            "#F6EAB6",
             "#FFFFFF"
           ],
           14,
@@ -6615,7 +6824,7 @@
             "match",
             ["get", "type"],
             ["motorway", "trunk"],
-            "#E27E3E",
+            "#FAF2C8",
             "#FFFFFF"
           ]
         ],
@@ -7580,9 +7789,9 @@
             "match",
             ["get", "type"],
             ["motorway"],
-            "#EE9A5F",
+            "#F0DFA0",
             ["trunk"],
-            "#EE9A5F",
+            "#F0DFA0",
             ["primary"],
             "#FFFFFF",
             ["secondary"],
@@ -7598,9 +7807,9 @@
             "match",
             ["get", "type"],
             ["motorway"],
-            "#E8894C",
+            "#F6EAB6",
             ["trunk"],
-            "#E8894C",
+            "#F6EAB6",
             ["primary"],
             "#FFFFFF",
             ["secondary"],
@@ -7616,9 +7825,9 @@
             "match",
             ["get", "type"],
             ["motorway"],
-            "#E27E3E",
+            "#FAF2C8",
             ["trunk"],
-            "#E27E3E",
+            "#FAF2C8",
             ["primary"],
             "#FFF7EA",
             ["secondary"],
@@ -8263,7 +8472,8 @@
                 "drag_lift",
                 "tree",
                 "lodging",
-                "rail"
+                "rail",
+                "parking"
               ]
             ]
           ]
@@ -9873,7 +10083,8 @@
                 "drag_lift",
                 "tree",
                 "lodging",
-                "rail"
+                "rail",
+                "parking"
               ]
             ]
           ]
@@ -11302,7 +11513,8 @@
                 "drag_lift",
                 "tree",
                 "lodging",
-                "rail"
+                "rail",
+                "parking"
               ]
             ]
           ]
@@ -12720,7 +12932,8 @@
                 "drag_lift",
                 "tree",
                 "lodging",
-                "rail"
+                "rail",
+                "parking"
               ]
             ]
           ]
