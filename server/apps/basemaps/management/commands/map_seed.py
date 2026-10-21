@@ -341,7 +341,15 @@ LAYERS: list[dict[str, Any]] = [
                     "type": "multi-select",
                     "category": "accommodation",
                     "defaultValue": [],
-                    "mapLayers": ["wd-huts", "wd-huts-selected"],
+                    "mapLayers": [
+                        "wd-huts",
+                        "wd-huts-selected",
+                        "wd-huts-occupation",
+                        "wd-huts-occupation-day0",
+                        "wd-huts-occupation-day1",
+                        "wd-huts-occupation-day2",
+                        "wd-huts-occupation-day3",
+                    ],
                     "mapProperty": "type_standard_identifier",
                     "filterExpression": "in",
                 }

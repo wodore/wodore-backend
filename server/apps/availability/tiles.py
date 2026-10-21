@@ -41,8 +41,11 @@ Feature properties (per day ``N`` in ``0..days-1``):
                      sprite-capable category identifier, and
 ``dN_type_color``     category color (SDF tinting)
 
-plus feature-level ``slug``, ``capacity`` and ``days`` (how many day
-columns this tile carries — style guard: ``["<", day, ["get", "days"]]``).
+plus feature-level ``slug``, ``capacity``, ``days`` (how many day
+columns this tile carries — style guard: ``["<", day, ["get", "days"]]``)
+and ``type_standard_identifier`` (the hut's open-type identifier — the
+accommodation-type filter's ``mapProperty``, so the filter applies to the
+availability strip layers exactly like it does to the hut pins).
 
 Properties outside the requested window are absent (NULLs are dropped by
 ``ST_AsMVT``), which distinguishes a server-side clamp (all features
