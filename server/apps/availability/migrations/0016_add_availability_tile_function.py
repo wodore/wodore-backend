@@ -11,7 +11,9 @@ from django.db import migrations
 # arrays/objects, and the map style reads them with literal day keys.
 #
 # Query parameters (URL query string arrives as ``query_params`` jsonb):
-#   date=YYYY-MM-DD   start date; frontend-computed. Default: today (UTC).
+#   date=YYYY-MM-DD   REQUIRED start date; frontend-computed ("now" logic
+#                     stays client-side so every URL is edge-cacheable).
+#                     Missing/invalid → empty tile, no default.
 #   days=N            1..8 (default 4) — days of the flattened series.
 #   days_max_zoom=Z   below zoom Z serve only day 0 (default 7; 0 disables
 #                     the clamp) — low-zoom tiles stay small + cheap.
@@ -79,6 +81,8 @@ CREATE OR REPLACE FUNCTION get_availability_for_tiles(
 RETURNS bytea AS $fn$
 DECLARE
   mvt bytea;
+  date_text text;
+  date_valid boolean;
   start_date date;
   req_days int;
   days_max_zoom int;
@@ -88,12 +92,23 @@ DECLARE
   cached_tile bytea;
   tile_bbox geometry;
 BEGIN
-  -- ── Parameters (regex-guarded: bad input falls back to defaults, never 500)
-  start_date := CASE
-    WHEN query_params->>'date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
-      THEN (query_params->>'date')::date
-    ELSE (now() AT TIME ZONE 'utc')::date
-  END;
+  -- ── Parameters (regex-guarded: bad input never 500s)
+  -- date is REQUIRED: "now" logic belongs to the client so every tile
+  -- URL is cacheable. Missing/invalid date → empty tile, not a default.
+  date_text := query_params->>'date';
+  date_valid := FALSE;
+  IF date_text ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN
+    BEGIN
+      start_date := date_text::date;
+      date_valid := TRUE;
+    EXCEPTION WHEN invalid_text_representation OR datetime_field_overflow THEN
+      date_valid := FALSE;  -- e.g. 2026-02-30 passes the regex, not the cast
+    END;
+  END IF;
+
+  IF NOT date_valid THEN
+    RETURN ''::bytea;
+  END IF;
 
   req_days := CASE
     WHEN (query_params->>'days') ~ '^[0-9]+$'
@@ -268,7 +283,6 @@ DROP TABLE IF EXISTS availability_tile_cache;
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("availability", "0015_hutavailability_free_tolerance_and_more"),
     ]

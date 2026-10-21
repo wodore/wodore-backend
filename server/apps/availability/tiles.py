@@ -15,10 +15,11 @@ URL → function mapping (Martin passes every URL query param as a string in
 ==================  =========================================================
 Parameter           Meaning
 ==================  =========================================================
-``date``            Start date ``YYYY-MM-DD`` — always sent explicitly by
-                    the frontend (stable, edge-cacheable URLs; "today" is
-                    frontend logic, never server-side). Default: today
-                    (UTC). Invalid input falls back to the default.
+``date``            REQUIRED start date ``YYYY-MM-DD`` — always sent
+                    explicitly by the frontend ("now" logic stays
+                    client-side so every URL is edge-cacheable).
+                    Missing/invalid input yields an **empty tile**, not a
+                    default.
 ``days``            Flattened series length, 1..8. Default 4 (matches the
                     four day-columns the hut overlay renders).
 ``days_max_zoom``   Below this zoom only day 0 is served. Default 7;

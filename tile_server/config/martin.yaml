@@ -234,9 +234,10 @@ postgres:
     # (MVT cannot carry nested arrays). URL query params reach the function
     # as `query_params` jsonb:
     #   /availability/{z}/{x}/{y}?date=2026-02-14&days=4
-    #     date=YYYY-MM-DD  explicit start date (frontend-computed; default
-    #                      today UTC — "now" logic belongs to the client so
-    #                      every (date, days) URL is edge-cacheable)
+    #     date=YYYY-MM-DD  REQUIRED start date (frontend-computed — "now"
+    #                      logic belongs to the client so every (date, days)
+    #                      URL is edge-cacheable; missing/invalid date
+    #                      yields an empty tile, not a default)
     #     days=N           1..8, default 4 (four day-column layers)
     #     days_max_zoom=Z  below zoom Z serve only day 0 (default 7, 0=off)
     #                      — low-zoom tiles stay small, URL stays zoom-

@@ -346,18 +346,38 @@ class TestAvailabilityTiles:
         assert props["d3_free"] == 7
         assert "d0_free" not in props
 
-    def test_invalid_params_fall_back_to_defaults(self, hut, hut_types):
-        """Garbage input never raises (a Martin 500) — defaults apply."""
+    def test_missing_or_invalid_date_returns_empty_tile(self, hut, hut_types):
+        """date is required: missing/garbage dates yield empty tiles, not
+        a "today" default ("now" logic belongs to the client)."""
         open_type, _ = hut_types
         _add_availability(hut, 0, free=1, total=4, hut_type=open_type)
 
         x, y = _tile_for(HUT_LON, HUT_LAT, 9)
-        tile = fetch_tile(9, x, y, {"date": "garbage", "days": "99", "cache_ttl": 0})
+        for params in (
+            {},  # no date at all
+            {"date": ""},  # empty
+            {"date": "garbage"},  # not a date
+            {"date": "21.10.2026"},  # wrong format (European style)
+            {"date": "2026-02-30"},  # passes the regex, fails the cast
+        ):
+            tile = fetch_tile(9, x, y, {**params, "cache_ttl": 0})
+            assert tile == b"", f"expected empty tile for {params}"
+
+    def test_days_param_clamped_to_range(self, hut, hut_types):
+        """days=99 clamps to 8 — valid date still serves data."""
+        open_type, _ = hut_types
+        for day in range(8):
+            _add_availability(hut, day, free=day, total=10, hut_type=open_type)
+
+        x, y = _tile_for(HUT_LON, HUT_LAT, 9)
+        tile = fetch_tile(
+            9, x, y, {"date": TODAY.isoformat(), "days": 99, "cache_ttl": 0}
+        )
 
         props = feature_by_slug(tile, "test-hut")
-        assert props is not None  # default date window (today) matched
-        assert props["days"] == 8  # 99 clamped to the 1..8 range
-        assert props["d0_free"] == 1
+        assert props is not None
+        assert props["days"] == 8
+        assert "d7_status" in props
 
     def test_inactive_or_private_huts_excluded(self, hut, hut_types):
         open_type, _ = hut_types
