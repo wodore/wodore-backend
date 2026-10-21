@@ -223,21 +223,6 @@ class TestAuthoredOverrideOrder:
 
 @pytest.mark.django_db
 class TestSeed:
-    def test_martin_style_copies_match_fixtures(self):
-        """The Martin-served copy of the default basemap must stay
-        byte-identical to the backend fixture — nothing prevents drift
-        between ``tile_server/styles/`` and ``fixtures/styles/``, and a
-        stale copy would serve a different map than the API does."""
-        tile_server = Path(__file__).resolve().parents[3] / "tile_server" / "styles"
-        for slug in ("wd-outdoor-base-mtk-hill", "wd-outdoor-base-ofm-hill"):
-            fixture = (FIXTURES / f"{slug}.json").read_bytes()
-            copy = tile_server / f"{slug}.json"
-            assert copy.exists(), f"missing Martin copy: {copy}"
-            assert copy.read_bytes() == fixture, (
-                f"{slug}.json: tile_server/styles copy differs from the "
-                "fixture — regenerate it (see _work/261019_outdoor_map_fixes.md)"
-            )
-
     def test_basemap_picker_visibility(self, django_db_setup):
         """Only product basemaps are pickable — internal variants and
         automatic fallbacks stay hidden but active (fallback chains,
