@@ -78,6 +78,11 @@ CATALOG_VERSION_TTL = 10
 #: Cache key of the memoized catalog version (tests clear it after edits).
 CATALOG_VERSION_CACHE_KEY = "basemaps:catalog-version"
 
+#: Rendered-style body retention. Keys are version-keyed (modified +
+#: asset-version digest) so entries fall out of reach on every edit; the
+#: TTL merely bounds stranded entries from version churn.
+STYLE_CACHE_TTL = 7 * 24 * 3600
+
 
 def revalidate_headers() -> dict[str, NewHeader]:
     """``Cache-Control`` header spec for ``@modify(headers=...)``."""
@@ -225,7 +230,10 @@ def catalog_version() -> str:
     ``max(modified)`` catches edits, the row count catches deletes —
     one aggregate per table, memoized for ``CATALOG_VERSION_TTL``
     seconds (a freshness bound, not a staleness window: the memo only
-    delays an edit's visibility by at most the TTL).
+    delays an edit's visibility by at most the TTL). Every versioned
+    model here is TimeStamped (``Category`` included since its
+    timestamps landed); non-TimeStamped in-place edits are no longer a
+    documented limitation.
     """
     from django.core.cache import cache
     from django.db.models import Max
@@ -234,9 +242,10 @@ def catalog_version() -> str:
         parts = []
         for model in _catalog_version_models():
             agg: dict[str, Any] = {"c": model.objects.count()}
-            # Not every versioned model is TimeStamped (e.g. Category):
-            # count-only there — in-place edits on such models don't
-            # bump the version (documented limitation).
+            # Every serialized model is TimeStamped now (Category gained
+            # created/modified with the tile-asset-versioning change); the
+            # field check stays as a guard for future non-versioned
+            # additions (count-only there).
             if "modified" in {f.name for f in model._meta.get_fields()}:
                 agg["m"] = model.objects.aggregate(m=Max("modified"))["m"]
             stamp = agg["m"].isoformat() if agg.get("m") else "-"
@@ -668,7 +677,21 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
         response.headers["Cache-Control"] = REVALIDATE_CACHE_CONTROL
         return response
 
-    cached = _style_cache_get(layer, tokenized)
+    from .tile_assets import (
+        asset_versions,
+        consumed_versions,
+        inject_asset_versions,
+        version_digest,
+    )
+
+    versions = asset_versions()
+    # Per-style digest: only the version groups this style's asset URLs
+    # consume — a hut-data edit re-keys the huts overlay, not the
+    # basemaps. Placeholder-aware, so it runs on the authored style
+    # before resolution (absolutization preserves paths).
+    digest = version_digest(consumed_versions(layer.style, versions))
+
+    cached = _style_cache_get(layer, tokenized, digest)
     if cached is not None:
         body, etag = cached
         if request.headers.get("If-None-Match") == etag:
@@ -700,6 +723,12 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
         tokenized=tokenized,
         api_url=api_url,
     )
+    # Serve-time asset versioning: ``?v=`` on Martin sprite/glyph/tile
+    # URLs (and registry-listed external URLs) — the version digest is
+    # folded into the cache key and the body content into the ETag, so
+    # a published version change re-renders and busts on the next
+    # conditional request.
+    payload = inject_asset_versions(payload, versions)
     if not tokenized:
         payload = _inject_serving_metadata(payload, layer)
 
@@ -710,7 +739,8 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
             layer.spec,
             "tokenized" if tokenized else "resolved",
             str(layer.modified),
-            str(len(body)),
+            digest,
+            hashlib.sha256(body.encode()).hexdigest(),
         )
     )
     etag = f'"{hashlib.sha256(etag_source.encode()).hexdigest()}"'
@@ -719,7 +749,7 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
         response = HttpResponse(status=HTTPStatus.NOT_MODIFIED)
     else:
         response = HttpResponse(body, content_type="application/json")
-        _style_cache_set(layer, tokenized, body, etag)
+        _style_cache_set(layer, tokenized, body, etag, digest)
     response.headers["ETag"] = etag
     response.headers["Cache-Control"] = REVALIDATE_CACHE_CONTROL
     response.headers["X-Map-Spec"] = layer.spec
@@ -738,27 +768,43 @@ def _inject_serving_metadata(
     return payload
 
 
-def _style_cache_key(layer: MapLayer, tokenized: bool) -> str:
-    """Render cache key — version-bumped by ``modified`` automatically."""
+def _style_cache_key(layer: MapLayer, tokenized: bool, digest: str = "") -> str:
+    """Render cache key — version-bumped by ``modified`` and the
+    asset-version digest (a published sprite/font/tile version change
+    re-renders even when the layer row is untouched)."""
     return (
         f"basemaps:style:{layer.pk}:{layer.spec}:"
         f"{'tokenized' if tokenized else 'resolved'}:"
-        f"{layer.modified.isoformat()}"
+        f"{layer.modified.isoformat()}:{digest}"
     )
 
 
-def _style_cache_get(layer: MapLayer, tokenized: bool) -> tuple[str, str] | None:
+def _style_cache_get(
+    layer: MapLayer, tokenized: bool, digest: str = ""
+) -> tuple[str, str] | None:
     from django.core.cache import cache
 
-    return cache.get(_style_cache_key(layer, tokenized))
+    return cache.get(_style_cache_key(layer, tokenized, digest))
 
 
-def _style_cache_set(layer: MapLayer, tokenized: bool, body: str, etag: str) -> None:
+def _style_cache_set(
+    layer: MapLayer,
+    tokenized: bool,
+    body: str,
+    etag: str,
+    digest: str = "",
+) -> None:
     from django.core.cache import cache
 
-    # No TTL: the key embeds ``modified`` — any style/parameter edit
-    # changes the key and the old entry falls out naturally.
-    cache.set(_style_cache_key(layer, tokenized), (body, etag), timeout=None)
+    # No unbounded retention: the key embeds ``modified`` + the per-style
+    # asset-version digest — any style/parameter/asset-version edit
+    # changes the key — and a generous TTL bounds stranded entries from
+    # version churn.
+    cache.set(
+        _style_cache_key(layer, tokenized, digest),
+        (body, etag),
+        timeout=STYLE_CACHE_TTL,
+    )
 
 
 def _style_error(detail: str, status: HTTPStatus) -> HttpResponse:

@@ -14,11 +14,13 @@ from django.db import models
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 
+from server.core.models import TimeStampedModel
+
 from .managers import CategoryManager
 
 
 @cleanup.ignore
-class Category(ComputedFieldsModel, models.Model):
+class Category(ComputedFieldsModel, TimeStampedModel):
     class SeoSitemapChoices(models.TextChoices):
         """Tri-state sitemap policy: empty (None) = inherit from parent."""
 
