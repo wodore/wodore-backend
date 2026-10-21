@@ -17,8 +17,30 @@ tiles: http://localhost:8091/mapproxy/tiles/world_topo/webmercator/{z}/{x}/{y}.w
 ```
 
 The wodore styles reference the facades via implementation-agnostic
-`/raster/tiles/...` paths — an edge route (nginx) rewrites them in
-staging/prod; the lane dev tile router does it in development.
+`/raster/tiles/...` paths — an edge route rewrites them to mapproxy in
+staging/prod; the lane dev tile router does it in development. The
+prod reference is the burginfra martin nginx-cache tier
+(`k8s/apps/wodore/apps/martin/base/nginx-cache-config.conf`):
+
+```nginx
+# Stable raster facade: /raster/* -> the mapproxy backend
+# (served under its internal /mapproxy/ prefix). Swap the
+# upstream here to replace the implementation without changing
+# any client URL.
+location /raster/ {
+    rewrite ^/raster/(.*)$ /mapproxy/$1 break;
+    proxy_pass http://wd-mapproxy:80;
+    expires 7d;
+    add_header Cache-Control "public, immutable";
+    # + the shared proxy_cache tiles tier; the cache key includes
+    # the query string, so the styles' ?v=N param busts every layer
+    # (edge tier + browser immutable caches) at once.
+}
+```
+
+Dev (lane tile router, `/tmp/lane-tile-router/router.conf`) mirrors
+this: `/raster/*` → `django-local-mapproxy`, everything else →
+martin-lane, with the same 7d immutable browser caching.
 
 ## WebP serving (recipe from the burginfra kapproxy deployment)
 
