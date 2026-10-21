@@ -310,7 +310,12 @@ class TestSeed:
         values["date"] = timezone.localdate().isoformat()
         resolved = resolve_style(layer.style, values)
         assert "{{date}}" not in json.dumps(resolved)
-        assert str(resolved["sources"]["wd-bookings"]["data"]).endswith(".geojson")
+        # wd-bookings is the Martin `availability` vector source: the
+        # {{date}} token substitutes inside the tile URL templates.
+        tiles = resolved["sources"]["wd-bookings"]["tiles"]
+        assert len(tiles) == 1
+        assert f"date={values['date']}" in tiles[0]
+        assert "/availability/{z}/{x}/{y}" in tiles[0]
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────

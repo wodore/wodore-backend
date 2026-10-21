@@ -147,19 +147,23 @@ def swisstopo_overlay_style(
     }
 
 
-# ── Huts + availability overlay (vector + geojson, frontend parity) ──
+# ── Huts + availability overlay (vector + vector, frontend parity) ──
 #
 # Mirrors the CURRENT frontend ``hutsStyle`` (overlay-huts.ts): one style,
-# both sources. Sprites match what Martin serves from the database
-# category sync (``color/``, ``mono/``, ``primitive/`` variants — there
-# is no ``simple/``/``detailed/`` variant) plus the SDF sprite for
-# runtime-tinted mono glyphs.
+# both sources. Availability rides the Martin ``availability`` function
+# source (backend #341): one MVT feature per hut with the per-day series
+# flattened into scalar props — expressions read them with literal day
+# keys (``d{day}_status`` …), the feature-level ``days`` prop replaces the
+# old ``["length", ["get", "data"]]`` guard. Sprites match what Martin
+# serves from the database category sync (``color/``, ``mono/``,
+# ``primitive/`` variants — there is no ``simple/``/``detailed/``
+# variant) plus the SDF sprite for runtime-tinted mono glyphs.
 
 
 def _avail_colors(day: int) -> list[Any]:
     return [
         "match",
-        ["get", "occupancy_status", ["at", day, ["get", "data"]]],
+        ["get", f"d{day}_status"],
         "empty",
         "#25BF5E",
         "low",
@@ -200,53 +204,36 @@ def _occupation_day_layer(day: int) -> dict[str, Any]:
         "id": f"wd-huts-occupation-day{day}",
         "type": "symbol",
         "source": "wd-bookings",
+        "source-layer": "availability",
         "minzoom": 6,
         "layout": {
             "visibility": "visible",
             "text-field": [
                 "case",
-                ["<", day, ["length", ["get", "data"]]],
+                ["<", day, ["get", "days"]],
                 [
                     "case",
                     # Unknown day: a single "?" — the source reports
                     # free=0/total=0 with no real counts, so "0\n0"
                     # would be misleading.
-                    [
-                        "==",
-                        ["get", "occupancy_status", ["at", day, ["get", "data"]]],
-                        "unknown",
-                    ],
+                    ["==", ["get", f"d{day}_status"], "unknown"],
                     "?",
                     [
                         "concat",
-                        # free is null if the source does not publish the
-                        # count (free_unknown)
+                        # the free/total props are absent if the source
+                        # does not publish the count (free_unknown)
                         [
                             "case",
-                            [
-                                "==",
-                                ["get", "free", ["at", day, ["get", "data"]]],
-                                None,
-                            ],
+                            ["==", ["get", f"d{day}_free"], None],
                             "?",
-                            [
-                                "to-string",
-                                ["get", "free", ["at", day, ["get", "data"]]],
-                            ],
+                            ["to-string", ["get", f"d{day}_free"]],
                         ],
                         "\n",
                         [
                             "case",
-                            [
-                                "==",
-                                ["get", "total", ["at", day, ["get", "data"]]],
-                                None,
-                            ],
+                            ["==", ["get", f"d{day}_total"], None],
                             "?",
-                            [
-                                "to-string",
-                                ["get", "total", ["at", day, ["get", "data"]]],
-                            ],
+                            ["to-string", ["get", f"d{day}_total"]],
                         ],
                     ],
                 ],
@@ -267,12 +254,8 @@ def _occupation_day_layer(day: int) -> dict[str, Any]:
                         "wd:color/availability.",
                         [
                             "case",
-                            ["<", day, ["length", ["get", "data"]]],
-                            [
-                                "get",
-                                "occupancy_status",
-                                ["at", day, ["get", "data"]],
-                            ],
+                            ["<", day, ["get", "days"]],
+                            ["get", f"d{day}_status"],
                             "unknown",
                         ],
                     ],
@@ -338,9 +321,21 @@ HUTS_STYLE: dict[str, Any] = {
             "promoteId": "slug",
         },
         "wd-bookings": {
-            "type": "geojson",
-            "data": "{API_URL}/v1/huts/availability/{{date}}.geojson",
-            "promoteId": "hut_id",
+            # Martin ``availability`` function source (backend #341):
+            # get_availability_for_tiles — one MVT feature per hut, the
+            # per-day series flattened into dN_* scalar props. ``{{date}}``
+            # is the runtime date token (frontend resolves it and pushes
+            # tile-URL updates on date changes via setTiles); days=4
+            # matches the four day-column layers; below zoom 7 the server
+            # serves only day 0. maxzoom 9: deeper zooms overzoom the z9
+            # tiles client-side (no further requests).
+            "type": "vector",
+            "tiles": [
+                "{TILE_SERVER_URL}/availability/{z}/{x}/{y}?date={{date}}&days=4"
+            ],
+            "promoteId": "slug",
+            "minzoom": 5,
+            "maxzoom": 9,
         },
     },
     "sprite": [
@@ -360,6 +355,7 @@ HUTS_STYLE: dict[str, Any] = {
             "id": "wd-huts-occupation",
             "type": "circle",
             "source": "wd-bookings",
+            "source-layer": "availability",
             "maxzoom": 13,
             "layout": {"visibility": "visible"},
             "paint": {
