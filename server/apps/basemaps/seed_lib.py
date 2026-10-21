@@ -204,6 +204,7 @@ def _occupation_day_layer(day: int) -> dict[str, Any]:
         "id": f"wd-huts-occupation-day{day}",
         "type": "symbol",
         "source": "wd-bookings",
+        "source-layer": "availability",
         "minzoom": 6,
         "layout": {
             "visibility": "visible",
@@ -354,6 +355,7 @@ HUTS_STYLE: dict[str, Any] = {
             "id": "wd-huts-occupation",
             "type": "circle",
             "source": "wd-bookings",
+            "source-layer": "availability",
             "maxzoom": 13,
             "layout": {"visibility": "visible"},
             "paint": {
