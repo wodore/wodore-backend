@@ -2,7 +2,7 @@
 
 ## 1. Preconditions and verification
 
-- [ ] 1.1 Verify the production Martin image pin is ≥ 1.9.0 (pin lives outside this repo — locate, bump if needed, coordinate deploy)
+- [x] 1.1 Prod Martin pin verified — burginfra `k8s/apps/wodore/apps/martin/base/deployment.yaml` pins `ghcr.io/maplibre/martin:1.16.1` (matches dev, no bump; conversion implicit)
 - [x] 1.2 Confirm `martin_sync` round-trips the `convert_to_mlt` key: add the key to a scratch config and assert it survives `yaml.safe_load`/`dump` regeneration (unit test against the real template)
 
 ## 2. Router `.mlt` route (generic; land before any style references it)
