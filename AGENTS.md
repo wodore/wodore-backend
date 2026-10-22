@@ -117,9 +117,22 @@ Services are defined in `docker-compose.yml`:
   - DB sources: `huts` (public+active huts), `geoplaces_view`, `geoplaces` (function),
     `availability` (function; params `date`/`days`/`days_max_zoom`/`cache_ttl`, see
     `server/apps/availability/tiles.py`)
+  - **MLT (MapLibre Tile) v1**: any source is also served as MLT on an explicit
+    `.mlt` URL space (`/huts/{z}/{x}/{y}.mlt`) — the tile-router strips the
+    suffix and asks Martin to convert at serve time (implicit on
+    Martin ≥ 1.16; `convert_to_mlt` in martin.yaml covers older). Only the
+    literal `.mlt` suffix selects MLT — extension-less/`.pbf`/`.mvt` stay MVT.
+    Opt-in is style-side (`encoding: mlt` + `.mlt` tiles template; phase 1:
+    huts overlay). nginx (tile-router/edge) is required for `.mlt` URLs — it
+    already is the single tile origin in dev and prod; lane Martin
+    (`scripts/lane-martin.sh`) has no router in front, so `.mlt` works there
+    only via extension-less URL + explicit `Accept: application/vnd.maplibre-tile`
+    header. Adding a source = style opt-in (+ martin.yaml entry for
+    Martin < 1.16) — no router change.
 - **Tile-router** (`tile_server/tile-router.conf.template`, nginx) - Port 8075
   - Single-origin tile routing: `/raster/*` → the mapproxy facades
-    (rewritten to mapproxy's internal `/mapproxy/` prefix), everything
+    (rewritten to mapproxy's internal `/mapproxy/` prefix), `*.mlt` →
+    martin with the MLT accept header (extension stripped), everything
     else → martin. `MARTIN_TILE_URL` (default `http://localhost:8075`)
     points here, so the style fixtures' `/raster/tiles/...` URLs work
     with plain `docker compose up`. 7d immutable browser caching; the
@@ -330,13 +343,17 @@ activates repo-wide once this file is merged to main (before that, a
 temporary untracked copy in the main checkout bootstraps it).
 
 **Martin in a worktree:** tile work *can* happen in a worktree — start a
-lane-scoped Martin with `scripts/lane-martin.sh start` (docker, same image
-and config as the compose instance, serving the **lane database** on the
-workz port `PORT_END`; `lane-run.sh` points `MARTIN_TILE_URL` there
-automatically). Refill the lane `martin_sync` when you need current tiles
+lane-scoped **tile stack** with `scripts/lane-martin.sh start` (docker: the
+same martin image/config as the compose instance serving the **lane
+database**, plus an nginx **tile-router** built from the repo template —
+martin is network-internal only, the router is the published origin on
+the workz port `PORT_END`, identical topology to the dev compose
+including the `.mlt` URL space; `lane-run.sh` points `MARTIN_TILE_URL`
+there automatically; falls back to compose-default credentials when
+infisical is unavailable). Refill the lane `martin_sync` when you need current tiles
 (`scripts/lane-run.sh .venv/bin/python manage.py martin_sync`) — martin
 loads its config at startup, so `stop` + `start` afterwards to pick the
-refill up. Teardown stops the container automatically (`pre_done`);
+refill up. Teardown stops the containers automatically (`pre_done`);
 `scripts/lane-martin.sh stop` also works ad hoc (workz `reap` cannot
 remove containers). Work on the **shared** martin instance —
 version/image updates (the `martin` service in `docker-compose.yml`) and
