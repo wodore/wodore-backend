@@ -196,13 +196,25 @@ async def get_static_map(request: HttpRequest) -> HttpResponse:
         raise Http404("marker_scale must be a number.") from None
     attribution = request.GET.get("attribution", "true").lower() != "false"
 
+    # Basemap content version: OTM tiles are fetched live and baked
+    # into the card, so a tile update must rotate the cache key (the
+    # external verifier refreshes this version daily). Without it a
+    # cached card serves the old basemap forever.
+    from server.apps.basemaps.tile_assets import asset_versions
+
+    versions = await sync_to_async(asset_versions)()
+    basemap_version = ""
+    for key, version in versions.get("external", {}).items():
+        if key.startswith("https://tile.opentopomap.org/"):
+            basemap_version = version
+            break
     name = static_map_cache_key(
         {
             "lat": f"{lat:.6f}",
             "lon": f"{lon:.6f}",
             "zoom": zoom,
             "size": f"{width}x{height}",
-            "basemap": basemap,
+            "basemap": f"{basemap}@{basemap_version}" if basemap_version else basemap,
             "marker": marker_mode,
             "marker_scale": f"{marker_scale:g}",
             "effect": effect,
