@@ -37,7 +37,7 @@ import secrets
 import urllib.error
 import urllib.request
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 import structlog
 
@@ -473,7 +473,14 @@ def collect_martin_probes() -> tuple[list[str], list[str]]:
     font_urls: set[str] = set()
     for template in glyphs_templates:
         for stack in collect_font_stacks(styles):
-            url = template.replace("{fontstack}", stack).replace(
+            # Percent-encode the stack for the probe request — font
+            # names contain spaces ("Noto Sans Regular") and urllib
+            # rejects raw spaces in URLs; browsers/MapLibre encode them.
+            # ``text-font`` may be a data-driven EXPRESSION whose
+            # non-font strings ("case", "literal", …) land in the
+            # scraped set — they 404 on Martin and the watcher skips
+            # them (fonts group is 404-tolerant).
+            url = template.replace("{fontstack}", quote(stack, safe="")).replace(
                 "{range}", FONT_PROBE_RANGE
             )
             if "{" not in url:
@@ -563,11 +570,19 @@ def run_martin_watcher() -> dict[str, Any]:
         if not urls:
             stats["kept"].append(key)
             continue
+        # Font stacks are scraped from ``text-font`` arrays, which may
+        # be data-driven expressions carrying non-font strings
+        # ("case", "literal") — those 404 on Martin and are skipped
+        # instead of failing the group. Sprites stay strict: their URLs
+        # come from sprite entries directly, a 404 is real breakage.
+        tolerate_404 = key == "fonts"
         results: list[tuple[str, bytes]] = []
         failed = False
         for url in urls:
             try:
                 status, body, _headers = _fetch(url, nonce)
+                if status == 404 and tolerate_404:
+                    continue
                 if status != 200:
                     raise urllib.error.URLError(f"HTTP {status}")
                 results.append((url, body))
