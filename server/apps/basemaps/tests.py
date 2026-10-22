@@ -1594,6 +1594,59 @@ class TestExternalVerifier:
                 "https://tiles.maptoolkit.org/terrainrgb.json",
                 "https://tiles.maptoolkit.org/naturalearth.json",
                 "https://tiles.maptoolkit.org/rocks.json",
+                "https://tile.opentopomap.org/10/540/357.png",
             ]
         )
         assert stats["skipped"] == seeded_unreferenced
+
+
+@pytest.mark.django_db
+class TestOgMapMaintenance:
+    """OG static cards: basemap content rotates the cache key; old
+    cards are cleaned up daily."""
+
+    def test_cache_key_includes_otm_version(self, db):
+        from server.apps.api.ogmap import static_map_cache_key
+
+        base = {
+            "lat": "46.500000",
+            "lon": "7.700000",
+            "zoom": 15,
+            "size": "1200x630",
+            "basemap": "opentopomap@aaa",
+            "marker": "symbol",
+            "marker_scale": "1",
+            "effect": "card",
+            "attribution": "true",
+            "symbol": "https://hub.example.org/media/symbols/x_hash1.svg",
+        }
+        rotated = {**base, "basemap": "opentopomap@bbb"}
+        moved_symbol = {
+            **base,
+            "symbol": "https://hub.example.org/media/symbols/x_hash2.svg",
+        }
+        assert static_map_cache_key(rotated) != static_map_cache_key(base)
+        assert static_map_cache_key(moved_symbol) != static_map_cache_key(base)
+
+    def test_cleanup_deletes_only_old_cards(self):
+        import os
+        import time
+
+        from django.core.files.base import ContentFile
+        from django.core.files.storage import default_storage
+
+        from server.apps.basemaps.tile_assets import cleanup_og_maps
+
+        default_storage.save("ogmaps/static-fresh.png", ContentFile(b"new"))
+        old = "ogmaps/static-old.png"
+        default_storage.save(old, ContentFile(b"old"))
+        # backdate via os.utimes through the storage path
+        stale = time.time() - 40 * 24 * 3600
+        os.utime(default_storage.path(old), (stale, stale))
+        stats = cleanup_og_maps()
+        assert stats["deleted"] == 1
+        assert default_storage.exists("ogmaps/static-fresh.png")
+        assert not default_storage.exists(old)
+        # Idempotent
+        stats2 = cleanup_og_maps()
+        assert stats2["deleted"] == 0

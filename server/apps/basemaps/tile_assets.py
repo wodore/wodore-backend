@@ -42,6 +42,7 @@ from urllib.parse import quote, urlsplit
 import structlog
 
 from django.conf import settings
+from django.core.files.storage import default_storage
 from django.db.models import Count, Max
 from django.utils.timezone import now
 
@@ -824,6 +825,7 @@ __all__ = [
     "VERSIONED_TILE_SOURCES",
     "asset_versions",
     "collect_font_stacks",
+    "cleanup_og_maps",
     "collect_martin_probes",
     "consumed_versions",
     "inject_asset_versions",
@@ -831,3 +833,41 @@ __all__ = [
     "run_martin_watcher",
     "version_digest",
 ]
+
+
+# ── OG static-map maintenance ────────────────────────────────────────
+
+#: OG cards (server.apps.api.ogmap) are immutable JPEGs keyed by
+#: parameter digest; key rotations orphan old files. Cards older than
+#: this many days are deleted daily — the next request re-renders
+#: on demand (~0.5-2 s).
+OG_MAP_MAX_AGE_DAYS = 30
+
+
+def cleanup_og_maps() -> dict[str, int]:
+    """Delete OG static-map cards older than :data:`OG_MAP_MAX_AGE_DAYS`.
+
+    django-q2 entry point; safe to run concurrently with renders (a
+    deleted card simply re-renders on its next request).
+    """
+    import time
+
+    directory = "ogmaps"
+    try:
+        _dirs, files = default_storage.listdir(directory)
+    except (FileNotFoundError, NotADirectoryError, OSError):
+        return {"deleted": 0, "kept": 0}
+    cutoff = time.time() - OG_MAP_MAX_AGE_DAYS * 24 * 3600
+    deleted = kept = 0
+    for filename in files:
+        name = f"{directory}/{filename}"
+        try:
+            if default_storage.get_modified_time(name).timestamp() < cutoff:
+                default_storage.delete(name)
+                deleted += 1
+            else:
+                kept += 1
+        except (FileNotFoundError, OSError):
+            continue
+    logger.info("og-map-cleanup-done", deleted=deleted, kept=kept)
+    return {"deleted": deleted, "kept": kept}
