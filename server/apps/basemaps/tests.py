@@ -1163,6 +1163,44 @@ class TestExternalVerifierHttpShapes:
         stats2 = run_external_verifier()
         assert stats2["unchanged"] == ["https://icons.example.org/sprite"]
 
+    def test_mixed_304_and_changed_png_is_detected(self, monkeypatch):
+        """M1 regression: a .json 304 must not mask a changed .png."""
+        from django.core.cache import cache
+
+        from server.apps.basemaps.models import TileAssetVersion
+
+        TileAssetVersion.objects.create(
+            key="https://icons.example.org/sprite",
+            origin=TileAssetVersion.Origin.external,
+            version="old",
+            etag='"j"',
+        )
+        MapLayer.objects.create(
+            slug="ext-layer",
+            spec=MapLayer.Spec.medium,
+            role=MapLayer.Role.overlay,
+            name="Ext",
+            style={
+                "version": 8,
+                "sprite": [{"id": "mtk", "url": "https://icons.example.org/sprite"}],
+                "layers": [],
+            },
+        )
+        cache.clear()
+
+        def fetch(url, nonce, headers=None):
+            if url.endswith(".json"):
+                # Unchanged index: honors the stored validator.
+                assert headers and headers.get("If-None-Match") == '"j"'
+                return 304, b"", {}
+            if url.endswith(".png"):
+                return 200, b"recolored-png", {"ETag": '"p2"'}
+            return 404, b"", {}
+
+        monkeypatch.setattr("server.apps.basemaps.tile_assets._fetch", fetch)
+        stats = run_external_verifier()
+        assert stats["changed"] == ["https://icons.example.org/sprite"]
+
 
 @pytest.mark.django_db
 class TestPerStyleDigest:
@@ -1238,6 +1276,59 @@ class TestPerStyleDigest:
             "tiles": {"huts": "hutv"},
             "external": {"https://icons.example.org/sprite": "extv"},
         }
+
+
+@pytest.mark.django_db
+class TestProbeShapes:
+    """C1 regression: Martin has no handler for extension-less sprite
+    base URLs — probes must target the served .json/.png variants."""
+
+    def test_sprite_probes_carry_json_png_suffixes(self):
+        from django.core.management import call_command
+
+        from server.apps.basemaps.tile_assets import collect_martin_probes
+
+        call_command("map_seed", verbosity=0)
+        sprite_urls, font_urls = collect_martin_probes()
+        assert sprite_urls, "seeded styles reference Martin sprites"
+        for url in sprite_urls:
+            assert url.endswith((".json", ".png")), url
+            assert "/sprite/" in url or "/sdf_sprite/" in url
+        bare = [
+            u for u in sprite_urls if not (u.endswith(".json") or u.endswith(".png"))
+        ]
+        assert not bare
+        # Fonts keep the template's .pbf (no double suffix)
+        for url in font_urls:
+            assert url.endswith("/0-255.pbf"), url
+
+
+@pytest.mark.django_db
+class TestDateRotation:
+    """M2 regression: resolved styles with date params re-key at
+    midnight; styles without them keep their ETag."""
+
+    def test_date_change_rotates_huts_but_not_basemap(self, monkeypatch):
+        from django.core.cache import cache
+        from django.core.management import call_command
+        from django.utils import timezone
+
+        call_command("map_seed", verbosity=0)
+        cache.clear()
+        client = Client()
+        huts_before = client.get("/v1/map/styles/huts.json")
+        base_before = client.get("/v1/map/styles/world-topo.json")
+
+        import datetime as dt
+
+        tomorrow = timezone.localdate() + dt.timedelta(days=1)
+        monkeypatch.setattr(timezone, "localdate", lambda: tomorrow)
+        cache.clear()  # asset-version memo only; style keys embed the date
+
+        huts_after = client.get("/v1/map/styles/huts.json")
+        base_after = client.get("/v1/map/styles/world-topo.json")
+        assert huts_after.headers["ETag"] != huts_before.headers["ETag"]
+        assert base_after.headers["ETag"] == base_before.headers["ETag"]
 
 
 @pytest.mark.django_db

@@ -138,7 +138,10 @@ def asset_versions(force: bool = False) -> dict[str, Any]:
 
     if force:
         return compute()
-    return dict(cache.get_or_set(ASSET_VERSIONS_CACHE_KEY, compute, ASSET_VERSIONS_TTL))
+    cached = cache.get_or_set(ASSET_VERSIONS_CACHE_KEY, compute, ASSET_VERSIONS_TTL)
+    # ``compute`` always yields a dict; the isinstance guard only
+    # satisfies the type checker's ``Any | None`` on get_or_set.
+    return dict(cached) if isinstance(cached, dict) else compute()
 
 
 def version_digest(versions: dict[str, Any]) -> str:
@@ -411,16 +414,30 @@ def collect_font_stacks(styles: list[dict[str, Any]]) -> list[str]:
     return sorted(stacks)
 
 
+def _sprite_probe_variants(url: str) -> list[str]:
+    """The URLs Martin actually serves for one authored sprite base URL.
+
+    MapLibre appends ``.json``/``.png`` (and ``@2x``) client-side — the
+    extension-less base has no Martin handler (404). Probing the
+    suffixed pair observes every spritesheet change (they regenerate
+    together from the same SVGs).
+    """
+    if "." in url.rsplit("/", 1)[-1]:
+        return [url]  # already concrete (never true for authored sprites)
+    return [f"{url}.json", f"{url}.png"]
+
+
 def collect_martin_probes() -> tuple[list[str], list[str]]:
     """Concrete sprite URLs and glyph-range URLs to hash, from live styles.
 
     Martin-origin URLs only (root-relative refs are absolutized to the
     tile origin; other origins — maptoolkit, openfreemap — belong to the
-    external registry, not the Martin watcher). Sprite entries are used
-    verbatim (Martin appends nothing); the glyphs template is
-    instantiated once per referenced font stack — font stacks come from
-    the styles' ``text-font`` arrays because Martin serves glyphs under
-    the fonts' internal names, not file names.
+    external registry, not the Martin watcher). Sprite entries expand to
+    their served ``.json``/``.png`` variants — Martin has no handler for
+    the extension-less base (404); the glyphs template is instantiated
+    once per referenced font stack — font stacks come from the styles'
+    ``text-font`` arrays because Martin serves glyphs under the fonts'
+    internal names, not file names.
     """
     styles = _active_authored_styles()
     origin = _tile_origin()
@@ -447,7 +464,7 @@ def collect_martin_probes() -> tuple[list[str], list[str]]:
             if isinstance(entry, dict) and isinstance(entry.get("url"), str):
                 resolved = to_martin_url(entry["url"])
                 if resolved:
-                    sprite_urls.add(resolved)
+                    sprite_urls.update(_sprite_probe_variants(resolved))
         if isinstance(style.get("glyphs"), str):
             resolved = to_martin_url(style["glyphs"])
             if resolved:
@@ -647,15 +664,18 @@ def run_external_verifier() -> dict[str, Any]:
         }
         validators = {k: v for k, v in validators.items() if v}
         bodies: list[tuple[str, bytes]] = []
+        any_304 = False
         new_etag = ""
         new_last_modified = ""
         try:
             for url in variants:
                 status, body, response_headers = _fetch(url, nonce, headers=validators)
                 if status == 304:
-                    bodies = []  # unchanged — short-circuit
-                    break
-                if status == 200:
+                    any_304 = True
+                    # keep probing: a later variant may have changed even
+                    # when an earlier one 304s (a recolor alters the .png
+                    # while the .json index stays byte-identical)
+                elif status == 200:
                     bodies.append((url, body))
                     new_etag = new_etag or response_headers.get("ETag", "")[:256]
                     new_last_modified = (
@@ -668,16 +688,15 @@ def run_external_verifier() -> dict[str, Any]:
             logger.warning("external-asset-probe-failed", key=entry.key, error=str(exc))
             continue
         if not bodies:
-            if not validators:
-                # Nothing fetched, nothing cached — a dead entry, not an
-                # unchanged one (an unchanged entry breaks out above with
-                # validators present; without validators a 304 cannot
-                # happen, so no 200s means the asset is unreachable).
-                stats["failed"].append(entry.key)
-            else:
+            if any_304:
+                # Every variant answered 304 — nothing changed.
                 stats["unchanged"].append(entry.key)
-            entry.last_checked = now()
-            entry.save(update_fields=["last_checked"])
+                entry.last_checked = now()
+                entry.save(update_fields=["last_checked"])
+            else:
+                # No 200 and no 304 — the asset is unreachable (without
+                # validators a 304 cannot happen, so no 200s means dead).
+                stats["failed"].append(entry.key)
             continue
         version = _group_hash(bodies)
         entry.last_checked = now()

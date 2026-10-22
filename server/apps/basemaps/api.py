@@ -689,7 +689,20 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
     # consume — a hut-data edit re-keys the huts overlay, not the
     # basemaps. Placeholder-aware, so it runs on the authored style
     # before resolution (absolutization preserves paths).
-    digest = version_digest(consumed_versions(layer.style, versions))
+    consumed = consumed_versions(layer.style, versions)
+    if not tokenized:
+        # Resolved mode bakes a serve-time default into runtime date
+        # params — the cache key and ETag must rotate with the date, or
+        # a cached body would serve yesterday's date until any other
+        # key input changes (bounded now by STYLE_CACHE_TTL, but a day
+        # of stale dates is still wrong).
+        from django.utils import timezone as _tz
+
+        if layer.layer_parameters.filter(
+            parameter__kind=MapParameter.Kind.date
+        ).exists():
+            consumed = {**consumed, "date": _tz.localdate().isoformat()}
+    digest = version_digest(consumed)
 
     cached = _style_cache_get(layer, tokenized, digest)
     if cached is not None:
