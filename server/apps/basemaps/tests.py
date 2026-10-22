@@ -247,14 +247,14 @@ class TestSeed:
             .distinct()
         )
         assert visible == [
-            "wd-outdoor-base-mtk",  # default outdoor
+            "wd-outdoor-base-mtk-hill",  # default outdoor
             "world-topo",
             "world-satellite-hybrid",
         ]
         hidden = {
-            "wd-outdoor-base-ofm",  # hidden fallback (mtk chains to it)
-            "wd-outdoor-base-mtk-hill",  # A/B variant
-            "wd-outdoor-base-ofm-hill",  # A/B variant
+            # plain non-hill pair retired (migration 0007); mtk-hill is
+            # the visible product now, ofm-hill the hidden fallback
+            "wd-outdoor-base-ofm-hill",
             "mtk-outdoor",  # upstream reference
             "ch-swisstopo-light",  # replaced by wd-outdoor-base-mtk
             "openfreemap-liberty",  # automatic keyless fallback
@@ -286,8 +286,10 @@ class TestSeed:
         from django.core.management import call_command
 
         call_command("map_seed", verbosity=0)
-        mtk = MapLayer.objects.get(slug="wd-outdoor-base-mtk", spec=MapLayer.Spec.high)
-        fixture = json.loads((FIXTURES / "wd-outdoor-base-mtk.json").read_text())
+        mtk = MapLayer.objects.get(
+            slug="wd-outdoor-base-mtk-hill", spec=MapLayer.Spec.high
+        )
+        fixture = json.loads((FIXTURES / "wd-outdoor-base-mtk-hill.json").read_text())
         assert mtk.style == fixture
 
     def test_resolved_style_no_root_relative_no_tokens(self):
@@ -295,7 +297,7 @@ class TestSeed:
 
         call_command("map_seed", verbosity=0)
         layer = MapLayer.objects.get(
-            slug="wd-outdoor-base-mtk", spec=MapLayer.Spec.high
+            slug="wd-outdoor-base-mtk-hill", spec=MapLayer.Spec.high
         )
         resolved = resolve_style(layer.style, layer.authored_parameter_values())
         body = json.dumps(resolved)
@@ -347,15 +349,17 @@ class TestLayersEndpoint:
         assert payload["count"] == len(payload["data"])
         entries = {layer["slug"]: layer for layer in payload["data"]}
         assert "huts" in entries
-        assert "wd-outdoor-base-mtk" in entries
+        assert "wd-outdoor-base-mtk-hill" in entries
         for entry in entries.values():
             # No variant arrays, no inline styles — one resolved layer
             assert "variants" not in entry
             assert entry["spec"] in ("low", "medium", "high")
             assert entry["style_url"]
             assert entry["modified"]  # ISO timestamp — client cache key
-        mtk = entries["wd-outdoor-base-mtk"]
-        assert mtk["style_url"] == "/v1/map/styles/wd-outdoor-base-mtk.json?spec=high"
+        mtk = entries["wd-outdoor-base-mtk-hill"]
+        assert (
+            mtk["style_url"] == "/v1/map/styles/wd-outdoor-base-mtk-hill.json?spec=high"
+        )
 
     def test_role_and_show_filters(self):
         self._seed()
@@ -367,7 +371,7 @@ class TestLayersEndpoint:
         # chains are resolved client-side)
         everything = client.get("/v1/map/layers", {"lang": "en"}).json()
         assert any(
-            layer["slug"] == "wd-outdoor-base-ofm" and layer["show"] is False
+            layer["slug"] == "wd-outdoor-base-ofm-hill" and layer["show"] is False
             for layer in everything["data"]
         )
         visible = client.get("/v1/map/layers", {"lang": "en", "show": "true"}).json()
@@ -418,8 +422,8 @@ class TestLayersEndpoint:
             # Internal styles → style endpoint path; external styles →
             # their (env-resolved server-side) absolute URL
             assert entry["path"].startswith(("/v1/map/styles/", "http"))
-        mtk = payload["styles"]["wd-outdoor-base-mtk"]
-        assert mtk["path"].startswith("/v1/map/styles/wd-outdoor-base-mtk.json")
+        mtk = payload["styles"]["wd-outdoor-base-mtk-hill"]
+        assert mtk["path"].startswith("/v1/map/styles/wd-outdoor-base-mtk-hill.json")
 
     def test_catalog_spec_resolution(self):
         """`?spec=` resolves into the path — exact tier when it exists,
@@ -430,7 +434,9 @@ class TestLayersEndpoint:
         assert payload["styles"]["ch-swisstopo-light"]["path"].endswith("?spec=low")
         # wd-outdoor-base-mtk only exists at high → low falls through the
         # chain to the single variant, whose spec is reported
-        assert payload["styles"]["wd-outdoor-base-mtk"]["path"].endswith("?spec=high")
+        assert payload["styles"]["wd-outdoor-base-mtk-hill"]["path"].endswith(
+            "?spec=high"
+        )
 
     def test_slots_endpoint(self):
         self._seed()
@@ -540,7 +546,7 @@ class TestStyleEndpoint:
         self._seed()
         client = Client()
         response = client.get(
-            "/v1/map/styles/wd-outdoor-base-mtk.json", {"spec": "low"}
+            "/v1/map/styles/wd-outdoor-base-mtk-hill.json", {"spec": "low"}
         )
         assert response.status_code == 200
         # only the high variant exists → served with reporting
@@ -918,6 +924,46 @@ class TestAssetVersionInjection:
         out = inject_asset_versions(style, self._versions())
         assert out["sprite"][0]["url"] == "https://icons.example.org/sprite?v=extv"
 
+    def test_static_terrain_routes_and_tilejson_urls_versioned(self, settings):
+        settings.MARTIN_TILE_URL = "https://tiles.example.org"
+        style = {
+            "sources": {
+                "hillshade-server": {
+                    "type": "raster",
+                    "tiles": ["https://tiles.example.org/hillshade/{z}/{x}/{y}"],
+                },
+                "contours": {
+                    "type": "vector",
+                    "tiles": ["{TILE_SERVER_URL}/contours/{z}/{x}/{y}"],
+                },
+                "mtk": {
+                    "type": "vector",
+                    "url": "https://tiles.maptoolkit.org/mtk.json",
+                },
+            },
+        }
+        versions = {
+            "sprites": None,
+            "fonts": None,
+            "tiles": {"hillshade": "hillv", "contours": "contv"},
+            "external": {"https://tiles.maptoolkit.org/mtk.json": "mtkv"},
+        }
+        out = inject_asset_versions(style, versions)
+        assert out["sources"]["hillshade-server"]["tiles"][0] == (
+            "https://tiles.example.org/hillshade/{z}/{x}/{y}?v=hillv"
+        )
+        assert out["sources"]["contours"]["tiles"][0] == (
+            "{TILE_SERVER_URL}/contours/{z}/{x}/{y}?v=contv"
+        )
+        assert out["sources"]["mtk"]["url"] == (
+            "https://tiles.maptoolkit.org/mtk.json?v=mtkv"
+        )
+        from server.apps.basemaps.tile_assets import consumed_versions
+
+        used = consumed_versions(style, versions)
+        assert used["tiles"] == {"hillshade": "hillv", "contours": "contv"}
+        assert used["external"] == {"https://tiles.maptoolkit.org/mtk.json": "mtkv"}
+
     def test_urls_with_query_or_param_tokens_untouched(self, settings):
         settings.MARTIN_TILE_URL = "https://tiles.example.org"
         style = {
@@ -1051,6 +1097,21 @@ class TestAssetVersionServing:
         cache.delete(ASSET_VERSIONS_CACHE_KEY)
         rotated = asset_versions(force=True)
         assert rotated["tiles"]["huts"] != versions["tiles"]["huts"]
+
+    def test_stored_terrain_rows_merge_into_tiles_versions(self):
+        from django.core.cache import cache
+
+        from server.apps.basemaps.models import TileAssetVersion
+
+        TileAssetVersion.objects.create(
+            key="tiles:hillshade",
+            origin=TileAssetVersion.Origin.martin_sync,
+            version="hashv",
+        )
+        cache.delete(ASSET_VERSIONS_CACHE_KEY)
+        versions = asset_versions(force=True)
+        assert versions["tiles"].get("huts")  # computed still present
+        assert versions["tiles"]["hillshade"] == "hashv"
 
     def test_deps_cover_every_table_joined_by_the_huts_view(self):
         """H1/H3 regression guard: the deps list must cover the view SQL."""
@@ -1285,13 +1346,29 @@ class TestProbeShapes:
     """C1 regression: Martin has no handler for extension-less sprite
     base URLs — probes must target the served .json/.png variants."""
 
+    def test_terrain_probes_absolutized_and_concrete(self):
+        """Staging round 2: root-relative tile templates must become
+        absolute probe URLs (raw '/hillshade/…' breaks urllib) — found
+        live when tiles:hillshade/contours failed on staging."""
+        from django.core.management import call_command
+
+        from server.apps.basemaps.tile_assets import collect_martin_probes
+
+        call_command("map_seed", verbosity=0)
+        _sprites, _fonts, terrain = collect_martin_probes()
+        assert "hillshade" in terrain and "contours" in terrain
+        for route, urls in terrain.items():
+            for url in urls:
+                assert url.startswith(("http://", "https://")), (route, url)
+                assert "{z}" not in url and "{x}" not in url and "{y}" not in url
+
     def test_sprite_probes_carry_json_png_suffixes(self):
         from django.core.management import call_command
 
         from server.apps.basemaps.tile_assets import collect_martin_probes
 
         call_command("map_seed", verbosity=0)
-        sprite_urls, font_urls = collect_martin_probes()
+        sprite_urls, font_urls, _terrain = collect_martin_probes()
         assert sprite_urls, "seeded styles reference Martin sprites"
         for url in sprite_urls:
             assert url.endswith((".json", ".png")), url
@@ -1356,11 +1433,13 @@ class TestMartinWatcher:
         monkeypatch.setattr("server.apps.basemaps.tile_assets._fetch", fake_fetch)
         cache.clear()
         stats = run_martin_watcher()
-        assert stats["published"] == ["sprites", "fonts"]
+        assert "sprites" in stats["published"]
+        assert "fonts" in stats["published"]
         v1 = TileAssetVersion.objects.get(key="sprites").version
         # Unchanged served bytes → no republication
         stats2 = run_martin_watcher()
-        assert stats2["kept"] == ["sprites", "fonts"]
+        assert "sprites" in stats2["kept"]
+        assert "fonts" in stats2["kept"]
         assert TileAssetVersion.objects.get(key="sprites").version == v1
         # New served bytes → new version
         monkeypatch.setattr(
@@ -1368,7 +1447,8 @@ class TestMartinWatcher:
             lambda url, nonce, headers=None: (200, b"bytes-v2", {}),
         )
         stats3 = run_martin_watcher()
-        assert stats3["published"] == ["sprites", "fonts"]
+        assert "sprites" in stats3["published"]
+        assert "fonts" in stats3["published"]
         assert TileAssetVersion.objects.get(key="sprites").version != v1
 
     def test_font_probes_encode_spaces_and_skip_unknown_stacks(self, monkeypatch):
@@ -1384,7 +1464,7 @@ class TestMartinWatcher:
 
         call_command("map_seed", verbosity=0)
         cache.clear()
-        _sprites, fonts = collect_martin_probes()
+        _sprites, fonts, _terrain = collect_martin_probes()
         assert fonts, "seeded styles reference Martin fonts"
         for url in fonts:
             assert " " not in url, url  # percent-encoded
@@ -1399,8 +1479,11 @@ class TestMartinWatcher:
         unknown = next(u for u in fonts if u.endswith("/0-255.pbf"))
         statuses[unknown] = 404
         stats = run_martin_watcher()
-        assert stats["published"] == ["sprites", "fonts"]
+        assert "sprites" in stats["published"]
+        assert "fonts" in stats["published"]
+        assert "tiles:hillshade" in stats["published"]  # seeded -hill style
         assert TileAssetVersion.objects.get(key="fonts").version
+        assert TileAssetVersion.objects.get(key="tiles:hillshade").version
         # …but a 404 sprite is real breakage: sprites group fails.
         cache.clear()
         TileAssetVersion.objects.update(version="")
@@ -1408,7 +1491,8 @@ class TestMartinWatcher:
         statuses[_sprites[0]] = 404
         stats2 = run_martin_watcher()
         assert stats2["failed"] == ["sprites"]
-        assert stats2["published"] == ["fonts"]
+        assert "fonts" in stats2["published"]
+        assert "tiles:hillshade" in stats2["published"]
 
     def test_probe_failure_keeps_stored_version(self, monkeypatch):
         from django.core.cache import cache
@@ -1426,7 +1510,8 @@ class TestMartinWatcher:
 
         monkeypatch.setattr("server.apps.basemaps.tile_assets._fetch", failing_fetch)
         stats = run_martin_watcher()
-        assert stats["failed"] == ["sprites", "fonts"]
+        assert "sprites" in stats["failed"]
+        assert "fonts" in stats["failed"]
         assert TileAssetVersion.objects.get(key="sprites").version == "stored"
 
 
@@ -1491,11 +1576,24 @@ class TestExternalVerifier:
         )
         cache.clear()
         stats = run_external_verifier()
-        assert stats["skipped"] == sorted(
+        assert stats["changed"] == []
+        assert stats["unchanged"] == []
+        assert stats["failed"] == []
+        # Everything seeded by migrations 0005/0006 is unreferenced in
+        # this test's DB (no active layer references them here) plus the
+        # test's own dead entry.
+        seeded_unreferenced = sorted(
             [
                 "https://unreferenced.example.org/sprite",
                 "https://icons.maptoolkit.org/sprite",
                 "https://icons.maptoolkit.org/nature~hsl_81_60_80",
                 "https://icons.maptoolkit.org/water~hsl_182_65_80",
+                "https://tiles.maptoolkit.org/mtk.json",
+                "https://tiles.maptoolkit.org/contours.json",
+                "https://tiles.maptoolkit.org/raster_bathymetry.json",
+                "https://tiles.maptoolkit.org/terrainrgb.json",
+                "https://tiles.maptoolkit.org/naturalearth.json",
+                "https://tiles.maptoolkit.org/rocks.json",
             ]
         )
+        assert stats["skipped"] == seeded_unreferenced
