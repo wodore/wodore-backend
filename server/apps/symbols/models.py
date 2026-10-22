@@ -12,6 +12,7 @@ from django.utils.translation import gettext_lazy as _
 from server.apps.categories.models import Category
 from server.apps.licenses.models import License
 from server.apps.organizations.models import Organization
+from server.apps.symbols.storage import hashed_symbol_storage
 from server.core.managers import BaseMutlilingualManager
 from server.core.models import TimeStampedModel
 
@@ -63,8 +64,15 @@ class Symbol(TimeStampedModel):
     )
 
     # File
+    # Content-hashed storage: the stored filename derives from the file
+    # bytes (see storage.py) — media is served immutable+30d, so a name
+    # must never change content. Changed icons get a fresh URL for free;
+    # identical content deduplicates onto one canonical file.
     svg_file = models.FileField(
         upload_to="symbols/",
+        # pyright: ignore[reportArgumentType]  # delegating Storage
+        # subclass — runtime-validated (system checks, migrations)
+        storage=hashed_symbol_storage,
         verbose_name=_("SVG File"),
         help_text=_("SVG file for this symbol"),
     )
