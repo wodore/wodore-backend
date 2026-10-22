@@ -118,3 +118,41 @@ class TestContentHashedStorage:
         stats2 = canonicalize_symbol_storage(Symbol)
         assert stats2["renamed"] == 0
         assert stats2["skipped"] >= 1
+
+
+@pytest.mark.django_db
+class TestCoreStorageHelpers:
+    """The shared server.core.storage helpers used by all media writers."""
+
+    def test_save_content_hashed_helper(self):
+        from django.core.files.storage import default_storage
+
+        from server.core.storage import hashed_name, save_content_hashed
+
+        name = save_content_hashed("og/maps/test-map.jpg", b"\xff\xd8fakejpeg")
+        assert name == hashed_name(
+            "og/maps/test-map.jpg", ContentFile(b"\xff\xd8fakejpeg")
+        )
+        assert default_storage.exists(name)
+        # Idempotent for identical content
+        again = save_content_hashed("og/maps/test-map.jpg", b"\xff\xd8fakejpeg")
+        assert again == name
+
+    def test_shared_hashed_media_storage_instance(self):
+        from django.core.files.storage import default_storage
+
+        from server.core.storage import hashed_media_storage, hashed_name
+
+        # The shared instance used by Organization.logo, ContactFunction
+        # .symbol and Image.image (field wiring via AlterField
+        # migrations; model-level saves covered by the class tests).
+        name = hashed_media_storage.save(
+            "organizations/logos/logo.png", ContentFile(b"\x89PNG fake")
+        )
+        expected = hashed_name(
+            "organizations/logos/logo.png", ContentFile(b"\x89PNG fake")
+        )
+        assert name == expected
+        assert default_storage.exists(name)
+        stem = name.rsplit("/", 1)[-1]
+        assert stem.startswith("logo_") and stem.endswith(".png")
