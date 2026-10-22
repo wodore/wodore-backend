@@ -101,8 +101,10 @@ def build_env(
     from ..envvars.registry import resolve
     from ..envvars.registry import rows as registry_rows
 
-    snap = registry_rows() if registry is None else registry
     env = dict(extra or {})
+    if not names:
+        return env  # no env tokens — skip the registry lookup entirely
+    snap = registry_rows() if registry is None else registry
     for name in names:
         if name in env:
             continue
