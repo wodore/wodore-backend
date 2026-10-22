@@ -34,3 +34,4 @@
 - [ ] 6.2 Full suite green locally and in CI with the guardrail active
 - [ ] 6.3 Staging: feedback mail reaches rewritten admin addresses; `manage.py check --deploy` clean
 - [ ] 6.4 Production rollout notes: confirm PostgreSQL ≥ 15 / PostGIS ≥ 3.2 (Django 6.1 requirement, ops-owned)
+- [ ] 6.5 On the Django ≥ 6.2 bump (dependabot opens it; the core.E001 startup check fails CI until this is done): delete `server/core/cache_backends.py` (the SampledCullDatabaseCache backport of ticket #32785, Sentry 155299999), revert the `persistent`/`hut_services`/`shared` BACKENDs to `django.core.cache.backends.db.DatabaseCache` (OPTIONS stay identical — upstream CULL_PROBABILITY default is also 0.1), remove its tests and the `core.E001` check
