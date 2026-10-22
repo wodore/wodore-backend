@@ -124,7 +124,13 @@ class CategoryAdmin(ModelAdmin):
         "symbol_mono",
     )
 
-    readonly_fields = ("identifier", "name_i18n", "description_i18n")
+    readonly_fields = (
+        "identifier",
+        "name_i18n",
+        "description_i18n",
+        "created",
+        "modified",
+    )
 
     fieldsets = (  # pyright: ignore[reportAssignmentType]  # unfold _FieldsetSpec gap
         (

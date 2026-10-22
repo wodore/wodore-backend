@@ -922,3 +922,66 @@ class MapLayerAttribution(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.layer} ← {self.organization}"
+
+
+class TileAssetVersion(TimeStampedModel):
+    """Content version of a tile-server asset group — the `?v=` source.
+
+    Keys are stable slugs; the canonical ones written by the Martin
+    watcher are ``sprites`` (hash over every probed sprite sheet's served
+    bytes) and ``fonts`` (hash over one glyph range per referenced font
+    stack). ``external`` entries are keyed by URL and are bumped by the
+    daily verifier (or manually from the admin — the only origin where
+    ``version`` is editable).
+
+    Tile-source versions (e.g. the huts aggregate) are NOT stored here —
+    they are computed at serve time (``basemaps.tile_assets``).
+    """
+
+    class Origin(models.TextChoices):
+        martin_sync = "martin_sync", _("martin sync (observed bytes)")
+        external = "external", _("external asset (verified / manual)")
+
+    # CharField, not SlugField: external keys are URLs (colons, dots,
+    # slashes — validate_slug would reject them).
+    key = models.CharField(
+        unique=True,
+        max_length=200,
+        help_text=_("Stable key: 'sprites', 'fonts', or the external URL"),
+    )
+    version = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text=_("Short content hash; empty = not yet published"),
+    )
+    origin = models.CharField(
+        max_length=20,
+        choices=Origin.choices,
+        default=Origin.martin_sync,
+    )
+    etag = models.CharField(
+        max_length=256,
+        blank=True,
+        default="",
+        help_text=_("External verifier: last observed ETag validator"),
+    )
+    last_modified = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text=_("External verifier: last observed Last-Modified validator"),
+    )
+    last_checked = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=_("External verifier: last successful probe"),
+    )
+
+    class Meta:
+        verbose_name = _("Tile asset version")
+        verbose_name_plural = _("Tile asset versions")
+        ordering = ("origin", "key")
+
+    def __str__(self) -> str:
+        return f"{self.key} @ {self.version or '∅'}"
