@@ -20,6 +20,13 @@
   ``?mode=tokenized`` keeps parameter tokens for customizing clients,
   ``?spec=`` selects the device-tier variant. ETag + 304.
 
+Layers referencing ``{{env:…}}`` tokens the env registry
+(``server.apps.envvars``) cannot resolve are gated out everywhere
+(layers, detail, catalog, style endpoint — 404; the detail names the
+unresolved variables): a style URL with a literal token would be
+unusable upstream, so the layer is simply not part of this
+deployment's catalog. Registry edits flip availability at runtime.
+
 All evolving documents share one caching contract: a strong ETag and
 ``Cache-Control: public, max-age=0, must-revalidate, stale-if-error``
 — one online reload is guaranteed fresh, offline serves the stored
@@ -201,9 +208,13 @@ class LayerPath(pydantic.BaseModel):
 def _catalog_version_models() -> tuple[type, ...]:
     """Every model the layers/slots/catalog payloads serialize.
 
-    Imports live in the function to keep the app-import graph lean.
+    Including the env registry (``envvars.EnvVar``): registry edits
+    change resolved ``style_url``s and layer availability, so they must
+    rotate the catalog version. Imports live in the function to keep
+    the app-import graph lean.
     """
     from server.apps.categories.models import Category
+    from server.apps.envvars.models import EnvVar
     from server.apps.licenses.models import License
     from server.apps.organizations.models import Organization
 
@@ -219,6 +230,7 @@ def _catalog_version_models() -> tuple[type, ...]:
         MapLayerParameter,
         MapLayerAttribution,
         Category,
+        EnvVar,
         Organization,
         License,
     )
@@ -491,8 +503,54 @@ def _category_projection(category: Any, use: str, order: int) -> dict[str, Any]:
     return projection
 
 
+#: (slug, missing names) pairs already warned about in this process —
+#: registry edits reset the memo (see ``_registry_changed``).
+_env_gated_warned: set[tuple[str, tuple[str, ...]]] = set()
+
+
+def _env_servable(layers: list[MapLayer]) -> list[MapLayer]:
+    """Drop layers whose ``{{env:…}}`` tokens the env registry cannot resolve.
+
+    A layer referencing an unresolved environment variable would ship
+    a style URL (or style document) with the literal token — unusable
+    upstream. Such layers are treated as not present in this
+    deployment: hidden from every catalog view, 404 on the style
+    endpoint. Availability follows the env registry (``envvars``) and
+    flips at runtime when an operator edits it.
+    """
+    servable: list[MapLayer] = []
+    for layer in layers:
+        missing = layer.missing_env()
+        if not missing:
+            servable.append(layer)
+            continue
+        key = (layer.slug, tuple(sorted(missing)))
+        if key not in _env_gated_warned:
+            _env_gated_warned.add(key)
+            logger.warning(
+                "Map layer %r not servable — unresolved environment variable(s): %s",
+                layer.slug,
+                ", ".join(sorted(missing)),
+            )
+    return servable
+
+
+def _registry_changed(*_: object, **_kwargs: object) -> None:
+    """Env registry edit: availability and catalog payloads may change.
+
+    Signal receiver wired in ``BasemapsConfig.ready()`` (post_save /
+    post_delete on ``envvars.EnvVar``); the registry row snapshot is
+    invalidated by ``envvars.registry`` itself.
+    """
+    from django.core.cache import cache
+
+    global _env_gated_warned
+    _env_gated_warned = set()
+    cache.delete(CATALOG_VERSION_CACHE_KEY)
+
+
 def _prefetched_layers(**filters: Any) -> list[MapLayer]:
-    """Active layers with everything ``_resolved_entry`` serializes.
+    """Active, servable layers with everything ``_resolved_entry`` serializes.
 
     One query for the rows + select_related FKs, one per prefetch path —
     ``_resolved_entry``/``_legend_payload``/``_category_projection``
@@ -502,7 +560,7 @@ def _prefetched_layers(**filters: Any) -> list[MapLayer]:
 
     from server.apps.categories.models import Category
 
-    return list(
+    layers = list(
         MapLayer.objects.filter(is_active=True, **filters)
         .select_related("slot", "coverage", "license", "fallback")
         .prefetch_related(
@@ -523,6 +581,7 @@ def _prefetched_layers(**filters: Any) -> list[MapLayer]:
         )
         .order_by("role", "order", "slug", "spec")
     )
+    return _env_servable(layers)
 
 
 def _resolved_layers(layers: list[MapLayer], spec: str | None) -> list[dict[str, Any]]:
@@ -661,6 +720,17 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
     if layer is None:
         return _style_error(
             f"No active map layer with slug {slug!r}.", HTTPStatus.NOT_FOUND
+        )
+
+    # Env-gated layer (unresolved ``{{env:…}}`` token in the registry):
+    # never serve the broken pointer — report the layer as absent,
+    # like the catalog.
+    missing = layer.missing_env()
+    if missing:
+        return _style_error(
+            f"Layer {slug!r} is not available in this deployment: unresolved "
+            f"environment variable(s): {', '.join(sorted(missing))}.",
+            HTTPStatus.NOT_FOUND,
         )
 
     tokenized = request.GET.get("mode") == "tokenized"

@@ -35,7 +35,7 @@ from django.contrib.gis.geos import Polygon
 
 from server.apps.api.error_codes import ErrorCode
 
-_M = TypeVar("_M", bound=type[pydantic.BaseModel])
+_M = TypeVar("_M", bound=pydantic.BaseModel)
 
 
 def _parse(raw: str | None, available: list[str]) -> list[str]:
@@ -75,7 +75,7 @@ def _i18n_companions(model: type[pydantic.BaseModel], names: set[str]) -> set[st
 
 def _top_names(
     model: type[pydantic.BaseModel],
-    spec: str,
+    spec: str | None = None,
     default_include: Sequence[str] | str | None = None,
 ) -> set[str]:
     """Effective top-level field set for one TYPE selection.

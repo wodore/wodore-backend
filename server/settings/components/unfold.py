@@ -639,6 +639,20 @@ UNFOLD = {
                 },
             ],
         },
+        {
+            "models": [
+                "envvars.envvar",
+            ],
+            "items": [
+                {
+                    "title": _("Environment Variables"),
+                    "link": reverse_lazy("admin:envvars_envvar_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "envvars.view_envvar"
+                    ),
+                },
+            ],
+        },
     ],
 }
 

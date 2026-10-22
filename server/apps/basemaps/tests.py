@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from django.conf import settings
 from django.db import IntegrityError
 from django.test import Client
 from django.utils import timezone
@@ -21,6 +22,7 @@ from server.apps.basemaps.models import (
 )
 from server.apps.basemaps.resolution import (
     absolutize_urls,
+    missing_env_names,
     resolve_style,
     resolve_tokens,
     substitute_env,
@@ -56,6 +58,15 @@ def _raster_layer(**overrides: Any) -> MapLayer:
     }
     defaults.update(overrides)
     return MapLayer(**defaults)
+
+
+def _env_row(name: str = "WODORE_TEST_KEY", **overrides: Any) -> Any:
+    """Create/update one env-registry row (signals drop the snapshot)."""
+    from server.apps.envvars.models import EnvVar
+
+    defaults: dict[str, Any] = {"value": "", "is_active": True, "env_fallback": True}
+    defaults.update(overrides)
+    return EnvVar.objects.update_or_create(name=name, defaults=defaults)[0]
 
 
 # ── Models ─────────────────────────────────────────────────────────────
@@ -120,6 +131,7 @@ class TestParameterValidation:
 # ── Resolution ─────────────────────────────────────────────────────────
 
 
+@pytest.mark.django_db
 class TestResolution:
     def test_whole_node_token_becomes_subtree(self):
         curve = ["interpolate", ["linear"], ["zoom"], 8, 0, 16, 0.8]
@@ -137,11 +149,48 @@ class TestResolution:
         assert resolved["data"] == "{{date}}"
 
     def test_env_substitution(self, monkeypatch):
+        _env_row()  # registered, empty value → env fallback
         monkeypatch.setenv("WODORE_TEST_KEY", "abc123")
         assert (
             substitute_env("https://x/?key={{env:WODORE_TEST_KEY}}")
             == "https://x/?key=abc123"
         )
+
+    def test_env_registry_strict_allowlist(self, monkeypatch):
+        """Unregistered names never resolve — the process environment is
+        never consulted for names outside the admin registry."""
+        monkeypatch.setenv("WODORE_TEST_KEY", "from-env")
+        assert (
+            substitute_env("https://x/?key={{env:WODORE_TEST_KEY}}")
+            == "https://x/?key={{env:WODORE_TEST_KEY}}"
+        )
+
+    def test_missing_env_names(self, monkeypatch):
+        monkeypatch.delenv("WODORE_TEST_KEY", raising=False)
+        monkeypatch.setattr(settings, "WODORE_TEST_KEY", "", raising=False)
+        _env_row()
+        document = {
+            "sources": {"x": {"tiles": ["https://x/?key={{env:WODORE_TEST_KEY}}"]}}
+        }
+        assert missing_env_names(document) == {"WODORE_TEST_KEY"}
+
+    def test_missing_env_names_resolvable_and_absent(self, monkeypatch):
+        _env_row()
+        monkeypatch.setenv("WODORE_TEST_KEY", "k")
+        url = "https://x/?key={{env:WODORE_TEST_KEY}}"
+        assert missing_env_names(url) == set()
+        assert missing_env_names("https://x/tiles/{z}/{x}/{y}.png") == set()
+        # An empty environment value is an accident, not intent — the
+        # layer stays gated (pin an empty value to make it deliberate).
+        monkeypatch.setenv("WODORE_TEST_KEY", "")
+        assert missing_env_names(url) == {"WODORE_TEST_KEY"}
+
+    def test_missing_env_names_pinned_empty(self, monkeypatch):
+        _env_row(env_fallback=False)
+        monkeypatch.setenv("WODORE_TEST_KEY", "from-env")
+        url = "https://x/?key={{env:WODORE_TEST_KEY}}"
+        assert missing_env_names(url) == set()
+        assert substitute_env(url) == "https://x/?key="
 
     def test_absolutize_root_relative_glyphs_and_sprite(self):
         style = {
@@ -576,6 +625,129 @@ class TestStyleEndpoint:
         assert response.json()["code"] == "not_found"
 
 
+# ── Env-gated layers ─────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestEnvGatedLayers:
+    """Layers with unresolvable ``{{env:…}}`` secrets are not servable.
+
+    The catalog must never ship a style URL with a literal token —
+    deployments without the key hide the layer entirely instead.
+    """
+
+    def _seed(self):
+        from django.core.management import call_command
+
+        call_command("map_seed", verbosity=0)
+
+    @staticmethod
+    def _make_unavailable(monkeypatch):
+        """Deterministically unset the MapTiler key (env ∪ settings)."""
+        monkeypatch.delenv("WODORE_MAPTILER_API_KEY", raising=False)
+        monkeypatch.setattr(settings, "WODORE_MAPTILER_API_KEY", "", raising=False)
+
+    def test_hidden_from_layers_catalog_and_detail(self, monkeypatch):
+        from django.core.cache import cache
+
+        self._seed()
+        self._make_unavailable(monkeypatch)
+        cache.clear()  # version memo + rendered page cache
+        client = Client()
+        layers = client.get("/v1/map/layers", {"lang": "en"}).json()
+        assert not any(l["slug"] == "maptiler-hybrid" for l in layers["data"])
+        catalog = client.get("/v1/map/catalog", {"lang": "en"}).json()
+        assert "maptiler-hybrid" not in catalog["styles"]
+        detail = client.get("/v1/map/layers/maptiler-hybrid", {"lang": "en"})
+        assert detail.status_code == 404
+
+    def test_style_endpoint_names_the_unset_variable(self, monkeypatch):
+        self._seed()
+        self._make_unavailable(monkeypatch)
+        response = Client().get("/v1/map/styles/maptiler-hybrid.json")
+        assert response.status_code == 404
+        payload = response.json()
+        assert payload["code"] == "not_found"
+        assert "WODORE_MAPTILER_API_KEY" in payload["detail"]
+
+    def test_served_when_env_set(self, monkeypatch):
+        from django.core.cache import cache
+
+        self._seed()
+        monkeypatch.setenv("WODORE_MAPTILER_API_KEY", "k1")
+        cache.clear()
+        client = Client()
+        layers = client.get("/v1/map/layers", {"lang": "en"}).json()
+        entry = next(l for l in layers["data"] if l["slug"] == "maptiler-hybrid")
+        assert entry["style_url"].endswith("key=k1")
+        catalog = client.get("/v1/map/catalog", {"lang": "en"}).json()
+        assert catalog["styles"]["maptiler-hybrid"]["path"].endswith("key=k1")
+
+    def test_inactive_registry_row_forbids_even_with_env(self, monkeypatch):
+        """is_active=False is the operator kill switch — the layer is
+        gated even when the process environment still has the key."""
+        from django.core.cache import cache
+
+        from server.apps.envvars.models import EnvVar
+
+        self._seed()
+        monkeypatch.setenv("WODORE_MAPTILER_API_KEY", "k1")
+        # .update() fires no signals — clear the caches manually
+        EnvVar.objects.filter(name="WODORE_MAPTILER_API_KEY").update(is_active=False)
+        cache.clear()
+        client = Client()
+        layers = client.get("/v1/map/layers", {"lang": "en"}).json()
+        assert not any(l["slug"] == "maptiler-hybrid" for l in layers["data"])
+        assert client.get("/v1/map/styles/maptiler-hybrid.json").status_code == 404
+
+    def test_admin_value_wins_over_env(self, monkeypatch):
+        from django.core.cache import cache
+
+        from server.apps.envvars.models import EnvVar
+
+        self._seed()
+        monkeypatch.setenv("WODORE_MAPTILER_API_KEY", "from-env")
+        EnvVar.objects.filter(name="WODORE_MAPTILER_API_KEY").update(value="from-admin")
+        cache.clear()
+        client = Client()
+        layers = client.get("/v1/map/layers", {"lang": "en"}).json()
+        entry = next(l for l in layers["data"] if l["slug"] == "maptiler-hybrid")
+        assert entry["style_url"].endswith("key=from-admin")
+        redirect = client.get("/v1/map/styles/maptiler-hybrid.json")
+        assert redirect.status_code == 302
+        assert redirect["Location"].endswith("key=from-admin")
+
+    def test_pinned_empty_value_serves_empty_key(self, monkeypatch):
+        """env_fallback=False + empty value = deliberately empty — the
+        layer serves with the empty substitution (operator intent)."""
+        from django.core.cache import cache
+
+        from server.apps.envvars.models import EnvVar
+
+        self._seed()
+        monkeypatch.setenv("WODORE_MAPTILER_API_KEY", "ignored")
+        EnvVar.objects.filter(name="WODORE_MAPTILER_API_KEY").update(env_fallback=False)
+        cache.clear()
+        redirect = Client().get("/v1/map/styles/maptiler-hybrid.json")
+        assert redirect.status_code == 302
+        assert redirect["Location"].endswith("key=")
+
+    def test_catalog_etag_rotates_on_registry_edit(self, monkeypatch):
+        from django.core.cache import cache
+
+        from server.apps.envvars.models import EnvVar
+
+        self._seed()
+        self._make_unavailable(monkeypatch)
+        cache.clear()
+        client = Client()
+        first = client.get("/v1/map/layers", {"lang": "en"})
+        # Signals fire (post_save) → availability memo + version cache reset
+        EnvVar.objects.create(name="WODORE_ETAG_PROBE", value="x")
+        second = client.get("/v1/map/layers", {"lang": "en"})
+        assert second.headers["ETag"] != first.headers["ETag"]
+
+
 # ── Legends ────────────────────────────────────────────────────────────
 
 
@@ -770,6 +942,7 @@ class TestLegends:
 # ── Style serving performance & version sync ───────────────────────────
 
 
+@pytest.mark.django_db
 class TestEnvResolutionScoping:
     def test_collect_env_names(self):
         tree = {
@@ -783,6 +956,7 @@ class TestEnvResolutionScoping:
     def test_build_env_resolves_only_requested_names(self, monkeypatch):
         from server.apps.basemaps.resolution import build_env
 
+        _env_row()  # registered, empty value → env fallback
         monkeypatch.setenv("WODORE_TEST_KEY", "v1")
         env = build_env({"WODORE_TEST_KEY"})
         assert env == {"WODORE_TEST_KEY": "v1"}
@@ -790,6 +964,7 @@ class TestEnvResolutionScoping:
     def test_tree_substitution_single_pass(self, monkeypatch):
         from server.apps.basemaps.resolution import substitute_env_tree
 
+        _env_row()
         monkeypatch.setenv("WODORE_TEST_KEY", "k")
         tree = {
             "a": "{{env:WODORE_TEST_KEY}}",
