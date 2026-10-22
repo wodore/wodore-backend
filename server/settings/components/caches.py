@@ -15,8 +15,18 @@ CACHES = {
     },
     "persistent": {
         # Database cache for long-term data (images, metadata, providers, licenses)
-        # Data persists across restarts and deployments
-        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        # Data persists across restarts and deployments.
+        #
+        # SampledCullDatabaseCache: Django's DatabaseCache (<= 6.1) runs
+        # SELECT COUNT(*) on EVERY write to check MAX_ENTRIES — a 15-20 ms
+        # full scan per write on this TOAST-heavy table (Sentry 155299999,
+        # /v1/geo/images/hut/{slug}: repeated per provider/response cache
+        # write, grouped as N+1). The sampled cull check is upstream's own
+        # fix (ticket #32785, Django 6.2's CULL_PROBABILITY, default 0.1).
+        # On Django >= 6.2 revert BACKEND to
+        # django.core.cache.backends.db.DatabaseCache and delete
+        # server/core/cache_backends.py — OPTIONS stay identical.
+        "BACKEND": "server.core.cache_backends.SampledCullDatabaseCache",
         "LOCATION": "django_cache_persistent",
         "TIMEOUT": None,  # No default expiration (indefinite)
         "OPTIONS": {
@@ -31,8 +41,9 @@ CACHES = {
     # <tempdir>/py_file_cache. Dedicated alias/table so the lib's clear_cache()
     # cannot evict other apps' entries. The table is created by the no-args
     # `manage.py createcachetable` (and automatically on test databases).
+    # Same SampledCullDatabaseCache rationale as "persistent" above.
     "hut_services": {
-        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "BACKEND": "server.core.cache_backends.SampledCullDatabaseCache",
         "LOCATION": "django_cache_hut_services",
         "TIMEOUT": 172800,  # 2 days - mirrors the lib's HUT_SERVICE_EXPIRE_SECONDS default
         "OPTIONS": {
@@ -52,7 +63,8 @@ CACHES = {
         # the web/admin process can never see the running qcluster.
         # The table is created by `manage.py createcachetable` (the no-args
         # form creates a table for every DatabaseCache alias).
-        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        # Same SampledCullDatabaseCache rationale as "persistent" above.
+        "BACKEND": "server.core.cache_backends.SampledCullDatabaseCache",
         "LOCATION": "django_cache_shared",
         "TIMEOUT": 3600,
         "OPTIONS": {
