@@ -32,6 +32,7 @@ from .models import (
     MapLegendSection,
     MapParameter,
     MapSlot,
+    TileAssetVersion,
 )
 from .resolution import style_endpoint_url
 
@@ -269,3 +270,28 @@ class MapLayerAdmin(ModelAdmin):
         return obj.style_url or "—"
 
     style_serving_url.short_description = _("Served at")  # type: ignore[attr-defined]
+
+
+@admin.register(TileAssetVersion)
+class TileAssetVersionAdmin(ModelAdmin):
+    """Asset version registry — read-only for machine-written rows.
+
+    ``martin_sync`` entries are published by the watcher (observed
+    bytes); only ``external`` entries are editable, and only their
+    ``version`` (manual bump when a provider changes without validators).
+    """
+
+    list_display = ("key", "origin", "version", "last_checked", "modified")
+    list_filter = ("origin",)
+    search_fields = ("key", "version")
+    ordering = ("origin", "key")
+
+    def get_readonly_fields(self, request, obj=None):
+        base = ("created", "modified", "last_checked")
+        if obj is None:
+            # Add form: key/origin/version editable (manual external
+            # registration); validators stay machine-managed.
+            return base + ("etag", "last_modified")
+        if obj.origin == TileAssetVersion.Origin.external:
+            return base + ("origin", "key", "etag", "last_modified")
+        return base + ("origin", "key", "version", "etag", "last_modified")

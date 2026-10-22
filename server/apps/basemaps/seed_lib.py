@@ -317,7 +317,15 @@ HUTS_STYLE: dict[str, Any] = {
     "sources": {
         "wd-huts": {
             "type": "vector",
-            "url": "{TILE_SERVER_URL}/huts",
+            # Inline tiles (not the TileJSON link) so the served style
+            # can carry the serve-time ``?v=`` asset version on every
+            # tile URL — Martin's TileJSON builds its own tiles list and
+            # a version on the link would never reach it. minzoom 5 /
+            # maxzoom 16 mirror the Martin table config (z5 = the
+            # full-country overlay floor, OVERLAY_MIN_ZOOM).
+            "tiles": ["{TILE_SERVER_URL}/huts/{z}/{x}/{y}"],
+            "minzoom": 5,
+            "maxzoom": 16,
             "promoteId": "slug",
         },
         "wd-bookings": {
