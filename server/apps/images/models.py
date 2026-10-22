@@ -32,6 +32,7 @@ from server.apps.organizations.models import Organization
 from server.apps.utils.fields import MonitorFields
 from server.core.managers import BaseMutlilingualManager
 from server.core.models import TimeStampedModel
+from server.core.storage import hashed_media_storage
 
 # from .forms import CustomImageField
 User = get_user_model()
@@ -81,6 +82,11 @@ class Image(TimeStampedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     image = MetaImageField(
+        # Content-hashed storage: media is immutable-cached, a URL must
+        # never change content (server.core.storage) — covers admin
+        # re-downloads under upstream filenames; the uuid4 upload path
+        # is already unique-per-upload and merely dedupes now.
+        storage=hashed_media_storage,
         upload_to="images/",
         meta_field="image_meta",
         blank=True,

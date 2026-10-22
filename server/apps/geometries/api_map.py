@@ -33,7 +33,6 @@ import re
 from asgiref.sync import sync_to_async
 from dmr.routing import external_path
 
-from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.http import Http404, HttpRequest, HttpResponse
 
@@ -109,6 +108,26 @@ def _read_stored(name: str) -> bytes:
     """Read a rendered card from storage (sync; bridged by the view)."""
     with default_storage.open(name) as stored:
         return stored.read()
+
+
+def _find_stored_hashed(name: str) -> str | None:
+    """The stored content-hashed variant of a cache key, if any.
+
+    Rendered cards live under content-hashed names (``server.core.
+    storage``), so the cache lookup matches any hash suffix of the key.
+    """
+    import os
+
+    directory, base = os.path.split(name)
+    stem, ext = os.path.splitext(base)
+    try:
+        _dirs, files = default_storage.listdir(directory)
+    except (FileNotFoundError, NotADirectoryError, OSError):
+        return None
+    for candidate in files:
+        if candidate.startswith(f"{stem}_") and os.path.splitext(candidate)[1] == ext:
+            return os.path.join(directory, candidate)
+    return None
 
 
 def _get_float(request: HttpRequest, name: str) -> float | None:
@@ -193,7 +212,10 @@ async def get_static_map(request: HttpRequest) -> HttpResponse:
             "symbol": symbol_url,
         }
     )
-    if not await sync_to_async(default_storage.exists)(name):
+    # Content-hashed caching: the stored filename carries a content
+    # suffix, so the cache lookup finds any hash variant of this key.
+    existing = await sync_to_async(_find_stored_hashed)(name)
+    if existing is None:
         marker_url = symbol_url if marker_mode == "symbol" and symbol_url else None
         data = await render_static_map_async(
             lat,
@@ -208,8 +230,10 @@ async def get_static_map(request: HttpRequest) -> HttpResponse:
             offset_x=offset_x,
             offset_y=offset_y,
         )
-        await sync_to_async(default_storage.save)(name, ContentFile(data))
-    data = await sync_to_async(_read_stored)(name)
+        from server.core.storage import save_content_hashed
+
+        existing = await sync_to_async(save_content_hashed)(name, data)
+    data = await sync_to_async(_read_stored)(existing)
 
     response = HttpResponse(data, content_type="image/jpeg")
     response["Cache-Control"] = f"public, max-age={CACHE_SECONDS}"

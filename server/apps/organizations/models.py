@@ -14,6 +14,7 @@ from django.utils.translation import gettext_lazy as _
 # from modeltrans.manager import MultilingualManager
 from server.core.managers import BaseMutlilingualManager
 from server.core.models import TimeStampedModel
+from server.core.storage import hashed_media_storage
 
 
 @cleanup.ignore
@@ -62,6 +63,9 @@ class Organization(TimeStampedModel):
         ),
     )
     logo = models.ImageField(
+        # Content-hashed storage: media is immutable-cached, a URL must
+        # never change content (server.core.storage).
+        storage=hashed_media_storage,
         max_length=300,
         upload_to="organizations/logos",
         default="organizations/logos/missing.png",
