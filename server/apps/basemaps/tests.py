@@ -1346,6 +1346,22 @@ class TestProbeShapes:
     """C1 regression: Martin has no handler for extension-less sprite
     base URLs — probes must target the served .json/.png variants."""
 
+    def test_terrain_probes_absolutized_and_concrete(self):
+        """Staging round 2: root-relative tile templates must become
+        absolute probe URLs (raw '/hillshade/…' breaks urllib) — found
+        live when tiles:hillshade/contours failed on staging."""
+        from django.core.management import call_command
+
+        from server.apps.basemaps.tile_assets import collect_martin_probes
+
+        call_command("map_seed", verbosity=0)
+        _sprites, _fonts, terrain = collect_martin_probes()
+        assert "hillshade" in terrain and "contours" in terrain
+        for route, urls in terrain.items():
+            for url in urls:
+                assert url.startswith(("http://", "https://")), (route, url)
+                assert "{z}" not in url and "{x}" not in url and "{y}" not in url
+
     def test_sprite_probes_carry_json_png_suffixes(self):
         from django.core.management import call_command
 

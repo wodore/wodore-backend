@@ -59,6 +59,10 @@ ASSET_VERSIONS_CACHE_KEY = "basemaps:asset-versions"
 #: Probe timeout (seconds) for watcher/verifier fetches.
 PROBE_TIMEOUT = 10
 
+#: Several CDNs (maptoolkit fronts Cloudflare) reject the default
+#: ``Python-urllib`` User-Agent with 403 — send a neutral custom one.
+PROBE_USER_AGENT = "wodore-tile-asset-watcher/1.0 (+https://wodore.com)"
+
 #: Glyph range probed per font stack (the first PBF range every
 #: MapLibre text render requests; the style template carries the
 #: ``.pbf`` extension itself).
@@ -550,14 +554,15 @@ def collect_martin_probes() -> tuple[list[str], list[str], dict[str, list[str]]]
                 route = segments[0]
                 if route not in STATIC_TERRAIN_TILE_ROUTES:
                     continue
-                concrete = tile
+                base = to_martin_url(tile) or tile.replace("{TILE_SERVER_URL}", origin)
+                concrete = base
                 for token, value in (
                     ("{z}", str(z)),
                     ("{x}", str(x)),
                     ("{y}", str(y)),
                 ):
                     concrete = concrete.replace(token, value)
-                if "{" not in concrete:
+                if "{" not in concrete and concrete.startswith(("http://", "https://")):
                     terrain_urls.setdefault(route, set()).add(concrete)
 
     return (
@@ -587,9 +592,10 @@ def _fetch(
     normalized back into the (status, body, headers) shape. Only actual
     network failures (DNS, timeout, refused) propagate.
     """
+    headers = {"User-Agent": PROBE_USER_AGENT, **(headers or {})}
     request = urllib.request.Request(
         _nonce_url(url, nonce),
-        headers=headers or {},
+        headers=headers,
     )
     try:
         with urllib.request.urlopen(request, timeout=PROBE_TIMEOUT) as response:
