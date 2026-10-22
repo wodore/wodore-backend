@@ -537,9 +537,10 @@ class Command(BaseCommand):
     ) -> Symbol | None:
         """Create/reuse one pack-prefixed ``Symbol`` row (design D1).
 
-        Existing files are kept when their size matches the incoming
-        content — re-runs stay idempotent on disk and asset URLs stay
-        stable; a genuinely changed upstream SVG is re-written in place.
+        Files live in content-hashed storage (``symbols/storage.py``):
+        identical content keeps one canonical name (idempotent re-runs),
+        a changed upstream SVG lands on a NEW canonical URL — media is
+        served immutable, so a URL must never change content.
         """
         symbol_slug = f"{pack.slug}-{slug}"
         name = f"{symbol_slug}_{style}.svg"
@@ -574,11 +575,13 @@ class Command(BaseCommand):
 
     @staticmethod
     def _storage_file_current(storage_name: str, content: bytes) -> bool:
-        """True when the stored file exists with the expected size."""
+        """True when the canonical content-hashed file already exists."""
+        from server.apps.symbols.storage import hashed_name
+
         try:
-            return default_storage.exists(storage_name) and default_storage.size(
-                storage_name
-            ) == len(content)
+            return default_storage.exists(
+                hashed_name(storage_name, ContentFile(content))
+            )
         except (FileNotFoundError, NotADirectoryError, OSError):
             return False
 
