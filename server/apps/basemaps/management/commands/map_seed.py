@@ -549,40 +549,17 @@ LAYERS: list[dict[str, Any]] = [
     # automatic fallbacks stay hidden but active (fallback chains and
     # saved selections keep resolving). Order drives the picker sort.
     {
-        "slug": "wd-outdoor-base-mtk",
-        "role": MapLayer.Role.basemap,
-        "name": "Wodore Outdoor",
-        "description": "Outdoor basemap (Maptoolkit-based fork).",
-        "spec": MapLayer.Spec.high,
-        "order": 0,
-        "fallback": "wd-outdoor-base-ofm",
-        "anchors": {"ways": {"before": None}, "background": {"before": None}},
-        "style": _fixture_style("wd-outdoor-base-mtk"),
-        "attributions": ["maptoolkit"],
-    },
-    {
-        "slug": "wd-outdoor-base-ofm",
-        "role": MapLayer.Role.basemap,
-        "name": "Wodore Outdoor (OpenFreeMap)",
-        "description": "Keyless outdoor basemap fallback (OpenFreeMap).",
-        "spec": MapLayer.Spec.high,
-        "order": 5,
-        "show": False,  # hidden fallback (wd-outdoor-base-mtk chains to it)
-        "style": _fixture_style("wd-outdoor-base-ofm"),
-        "attributions": ["openfreemap"],
-    },
-    {
         "slug": "wd-outdoor-base-mtk-hill",
         "role": MapLayer.Role.basemap,
-        "name": "Wodore Outdoor (client relief)",
+        "name": "Wodore Outdoor",
         "description": (
-            "Outdoor basemap with the original client-side raster-dem relief "
+            "Outdoor basemap with client-side raster-dem relief "
             "(higher-res in CH; heavier on the GPU)."
         ),
         "spec": MapLayer.Spec.high,
         "is_default": True,  # the frontend's default basemap (PR #292 seed)
-        "order": 6,
-        "show": False,  # A/B variant, not a product entry
+        "order": 0,  # the product slot (plain non-hill pair retired)
+        "show": True,
         "style": _fixture_style("wd-outdoor-base-mtk-hill"),
         "attributions": ["maptoolkit"],
     },
