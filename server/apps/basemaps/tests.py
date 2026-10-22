@@ -1073,9 +1073,14 @@ class TestAssetVersionServing:
         cache.clear()
         client = Client()
         body = client.get("/v1/map/styles/huts.json").json()
-        tiles = body["sources"]["wd-huts"]["tiles"][0]
+        huts = body["sources"]["wd-huts"]
+        tiles = huts["tiles"][0]
         assert tiles.startswith("http")
-        assert "/huts/{z}/{x}/{y}?v=" in tiles
+        # The huts overlay opts into the MLT URL space (tile-router →
+        # Martin serve-time conversion); the `?v=` asset version is
+        # appended after the .mlt suffix.
+        assert "/huts/{z}/{x}/{y}.mlt?v=" in tiles
+        assert huts["encoding"] == "mlt"
 
     def test_category_edit_rotates_computed_huts_version(self):
         from django.core.cache import cache

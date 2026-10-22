@@ -34,6 +34,37 @@ server {
         proxy_set_header Host $http_host;
     }
 
+    # Explicit MLT (MapLibre Tile) URLs: any Martin source (table,
+    # view, function, composite "a,b") is additionally available as
+    # MLT v1 by appending .mlt to the canonical tile path. The
+    # extension is stripped and Martin is asked — via Accept header —
+    # to convert at serve time (`convert_to_mlt` per source in
+    # martin.yaml; a non-opted source gets Martin's explicit 406, never
+    # silently-wrong bytes). Only the literal .mlt suffix selects MLT:
+    # extension-less, .pbf and .mvt are format-neutral (Martin 301s
+    # any extension to the canonical path).
+    # Cache: Martin's per-source Cache-Control passes through; MVT and
+    # MLT are distinct URLs, so every URL-keyed cache (browser,
+    # proxy_cache, edge) isolates the variants with default keys — no
+    # Vary, no Accept-in-key machinery.
+    # Accept-Encoding is pinned to identity: MLT embeds lightweight
+    # compression (FastPFOR/FSST); gzip/brotli on top would negate the
+    # decode-speed win.
+    location ~ ^/(?<mlt_src>[A-Za-z0-9_,]+)/(?<mlt_z>\d+)/(?<mlt_x>\d+)/(?<mlt_y>\d+)\.mlt$ {
+        # set BEFORE the rewrite (see /raster/ above): `break` ends the
+        # rewrite phase and set would never run after it
+        set $martin_upstream http://${MARTIN_UPSTREAM};
+        # Strip the .mlt suffix; rewrite keeps the query string
+        # (?v= asset version, availability date/days params).
+        rewrite ^ /$mlt_src/$mlt_z/$mlt_x/$mlt_y break;
+        proxy_pass $martin_upstream;
+        proxy_set_header Accept application/vnd.maplibre-tile;
+        proxy_set_header Accept-Encoding identity;
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Host $http_host;
+    }
+
     location / {
         set $martin_upstream http://${MARTIN_UPSTREAM};
         proxy_pass $martin_upstream;

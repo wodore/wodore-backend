@@ -323,7 +323,12 @@ HUTS_STYLE: dict[str, Any] = {
             # a version on the link would never reach it. minzoom 5 /
             # maxzoom 16 mirror the Martin table config (z5 = the
             # full-country overlay floor, OVERLAY_MIN_ZOOM).
-            "tiles": ["{TILE_SERVER_URL}/huts/{z}/{x}/{y}"],
+            # MLT v1: the .mlt URL space (tile-router → Martin serve-time
+            # conversion, `convert_to_mlt` in martin.yaml) plus the
+            # MapLibre decoder marker. Pairing contract (tested): a
+            # .mlt tiles template always ships with ``encoding: mlt``.
+            "tiles": ["{TILE_SERVER_URL}/huts/{z}/{x}/{y}.mlt"],
+            "encoding": "mlt",
             "minzoom": 5,
             "maxzoom": 16,
             "promoteId": "slug",

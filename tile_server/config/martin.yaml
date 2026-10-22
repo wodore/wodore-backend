@@ -43,6 +43,16 @@ postgres:
       # exists before any long-cached response could be stale.
       cache_control: public, max-age=604800
 
+      # MLT (MapLibre Tile) v1: serve-time MVT→MLT conversion, served on
+      # the explicit .mlt URL space (the tile-router strips the suffix
+      # and sends `Accept: application/vnd.maplibre-tile`). Kept for
+      # Martin < 1.16 where conversion is config-gated (≥ 1.9 required);
+      # on Martin ≥ 1.16 conversion is implicit and this is a no-op.
+      # Client-visible scoping lives in the served styles (.mlt
+      # templates + `encoding: mlt`) — phase 1: the huts overlay only.
+      # `auto` uses mlt-core's compatibility-safe encoder defaults.
+      convert_to_mlt: auto
+
       # Schema and table/view name
       schema: public
       table: huts_for_tiles
