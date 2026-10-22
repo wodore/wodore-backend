@@ -463,6 +463,74 @@ class TestBeforeSend:
         }
         assert before_send(event, {}) is None
 
+    def test_current_thread_executor_without_stacktrace_kept(
+        self, monkeypatch, recorded_init
+    ):
+        # Matching message but no stacktrace/frames: the filter fails
+        # safe toward visibility — kept. Pins the default so a future
+        # refactor that inverts it trips here.
+        monkeypatch.setenv("SENTRY_DSN", "https://key@localhost/1")
+
+        _reload()
+
+        before_send = recorded_init[0]["before_send"]
+        event = {
+            "exception": {
+                "values": [
+                    {
+                        "type": "RuntimeError",
+                        "value": "CurrentThreadExecutor already quit or is broken",
+                        "mechanism": {"type": "asgi", "handled": False},
+                    }
+                ]
+            }
+        }
+        assert "tags" in before_send(event, {})
+
+    def test_current_thread_executor_wrapped_in_chain_dropped(
+        self, monkeypatch, recorded_init
+    ):
+        # The RuntimeError may sit anywhere in the exception chain (here
+        # values[0], with an outer wrapper at values[-1]) — the filter
+        # checks every value's own stacktrace, unlike the sibling shield
+        # filter which only inspects values[-1].
+        monkeypatch.setenv("SENTRY_DSN", "https://key@localhost/1")
+
+        _reload()
+
+        before_send = recorded_init[0]["before_send"]
+        event = {
+            "exception": {
+                "values": [
+                    {
+                        "type": "RuntimeError",
+                        "value": "CurrentThreadExecutor already quit or is broken",
+                        "mechanism": {"type": "asgi", "handled": False},
+                        "stacktrace": {
+                            "frames": [
+                                {
+                                    "function": "handle",
+                                    "module": "django.core.handlers.asgi",
+                                    "filename": "django/core/handlers/asgi.py",
+                                },
+                                {
+                                    "function": "asend",
+                                    "module": "django.dispatch.dispatcher",
+                                    "filename": "django/dispatch/dispatcher.py",
+                                },
+                            ]
+                        },
+                    },
+                    {
+                        "type": "ExceptionGroup",
+                        "value": "unhandled errors in a TaskGroup",
+                        "mechanism": {"type": "asgi", "handled": False},
+                    },
+                ]
+            }
+        }
+        assert before_send(event, {}) is None
+
     def test_app_version_tag_attached_to_transactions(self, monkeypatch, recorded_init):
         from importlib.metadata import version
 
