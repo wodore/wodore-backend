@@ -25,7 +25,8 @@ CACHES = {
         # fix (ticket #32785, Django 6.2's CULL_PROBABILITY, default 0.1).
         # On Django >= 6.2 revert BACKEND to
         # django.core.cache.backends.db.DatabaseCache and delete
-        # server/core/cache_backends.py — OPTIONS stay identical.
+        # server/core/cache_backends.py — OPTIONS stay identical. Removal
+        # is enforced by the core.E001 startup check (server/core/checks.py).
         "BACKEND": "server.core.cache_backends.SampledCullDatabaseCache",
         "LOCATION": "django_cache_persistent",
         "TIMEOUT": None,  # No default expiration (indefinite)

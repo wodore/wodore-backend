@@ -19,7 +19,10 @@ backports that gate verbatim onto the 6.1 implementation this project runs.
 the ``BACKEND`` of the affected aliases back to
 ``django.core.cache.backends.db.DatabaseCache`` and keep the identical
 ``OPTIONS`` (the upstream default probability is also 0.1, so no other
-change is needed).
+change is needed). This is **enforced, not just documented**: the
+``core.E001`` system check (``server/core/checks.py``) fails startup —
+and CI — on Django >= 6.2 while any alias still points at this module,
+so the 6.2 dependency bump cannot ship without the removal.
 """
 
 import base64

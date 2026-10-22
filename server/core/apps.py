@@ -26,6 +26,12 @@ class CoreConfig(AppConfig):
         """
         global _triggers_registered
 
+        # Register startup checks (checks run on every management command,
+        # including CI's makemigrations --check; importing registers the
+        # hook) — e.g. core.E001 forces removal of the vendored cache
+        # backport once Django >= 6.2 ships the fix natively.
+        from server.core import checks  # noqa: F401
+
         # Guard against multiple calls to ready()
         if _triggers_registered:
             return

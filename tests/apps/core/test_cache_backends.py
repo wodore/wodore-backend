@@ -14,6 +14,7 @@ from uuid import uuid4
 
 import pytest
 
+from django.core import checks
 from django.core.cache import caches
 from django.core.cache.backends.db import DatabaseCache
 from django.core.management import call_command
@@ -21,6 +22,13 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
 from server.core.cache_backends import SampledCullDatabaseCache
+from server.core.checks import (
+    E001,
+    UPSTREAM_FIXED_IN,
+    VENDORED_BACKEND_PREFIX,
+    _validate,
+    check_vendored_cache_backend_removed_on_django_62,
+)
 
 #: Private table so row-count assertions never race with other tests'
 #: entries in the shared alias tables (the suite runs with --reuse-db).
@@ -114,3 +122,51 @@ def test_culling_still_enforced_when_sampled():
     # culls 6 // CULL_FREQUENCY = 3 oldest (k0-k2), then inserts k6:
     # 6 - 3 + 1 = 4 rows remain.
     assert count == 4
+
+
+# --- Removal enforcement (core.E001) --------------------------------------
+#
+# The backport must not outlive Django 6.1: once Django ships
+# CULL_PROBABILITY natively, a startup check blocks the wired aliases
+# until the module is deleted (see server/core/checks.py).
+
+
+def _current_aliases_config() -> dict:
+    from django.conf import settings
+
+    return {a: dict(c) for a, c in settings.CACHES.items()}
+
+
+def test_check_silent_before_django_62():
+    """Pre-6.2 (today) the vendored wiring is the intended state."""
+    assert UPSTREAM_FIXED_IN > (6, 1), (
+        "project is on Django 6.1.x — adjust this test with the removal"
+    )
+    errors = _validate(_current_aliases_config(), (6, 1, 5, "final", 0))
+    assert errors == []
+
+
+def test_check_blocks_vendored_backend_on_django_62():
+    """On >= 6.2 the wired backport fails startup with removal steps."""
+    errors = _validate(_current_aliases_config(), (6, 2, 0, "final", 0))
+    assert len(errors) == 1
+    error = errors[0]
+    assert error.id == E001
+    assert isinstance(error, checks.Error)
+    assert "persistent" in error.msg and "hut_services" in error.msg
+    assert VENDORED_BACKEND_PREFIX in (error.hint or "")
+
+
+def test_check_passes_on_django_62_after_removal():
+    """Post-removal state (plain DatabaseCache) is clean on >= 6.2."""
+    config = _current_aliases_config()
+    for alias in ("persistent", "hut_services", "shared"):
+        config[alias]["BACKEND"] = "django.core.cache.backends.db.DatabaseCache"
+    assert _validate(config, (6, 2, 0, "final", 0)) == []
+    assert _validate(config, (7, 0, 0, "final", 0)) == []
+
+
+def test_registered_check_quiet_under_current_django():
+    """The registered system check is silent on the installed 6.1.x."""
+    errors = check_vendored_cache_backend_removed_on_django_62()
+    assert errors == []
