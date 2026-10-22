@@ -2183,7 +2183,7 @@
     },
     "hillshade-server": {
       "type": "raster",
-      "tiles": ["/hillshade/{z}/{x}/{y}?v=1"],
+      "tiles": ["/hillshade/{z}/{x}/{y}"],
       "tileSize": 512,
       "maxzoom": 15,
       "attribution": "<a href='https://registry.opendata.aws/terrain-tiles/'>AWS Terrain Tiles</a>"

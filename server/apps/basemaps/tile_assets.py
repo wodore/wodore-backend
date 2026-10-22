@@ -64,12 +64,24 @@ PROBE_TIMEOUT = 10
 #: ``.pbf`` extension itself).
 FONT_PROBE_RANGE = "0-255"
 
+#: Martin's static terrain postprocessing routes served as tiles —
+#: watched like sprites/fonts (sample tile observed, hash published as a
+#: stored ``tiles:<route>`` entry) so style references to them are
+#: content-keyed without hand-bumped ``?v=N`` suffixes.
+STATIC_TERRAIN_TILE_ROUTES = ("hillshade", "contours")
+
+#: A representative Alpine tile used to probe the terrain routes
+#: (coverage edge cases would 404 and keep the group unpublished —
+#: safe, just unversioned).
+TERRAIN_PROBE_TILE = (10, 540, 357)
+
 #: Registered versioned Martin tile sources — opt-in, the single place
 #: of policy. ``deps`` must cover every table the tile view/function
 #: joins (unit-tested against ``HutsForTilesView.ViewMeta.query()``);
 #: an edit to any dep rotates the version. Availability is deliberately
 #: absent (self-rotating via ``?date=``); geoplaces is deferred until a
-#: served style references it.
+#: served style references it. Static terrain routes (hillshade,
+#: contours) are versioned via watcher-observed stored entries instead.
 VERSIONED_TILE_SOURCES: dict[str, dict[str, Any]] = {
     "huts": {
         "deps": (
@@ -120,13 +132,19 @@ def asset_versions(force: bool = False) -> dict[str, Any]:
 
     def compute() -> dict[str, Any]:
         stored = {row.key: row for row in TileAssetVersion.objects.all()}
-        computed_tiles = _computed_tile_versions()
+        tiles = _computed_tile_versions()
+        # Stored static-route entries (``tiles:hillshade``, …) merge into
+        # the same dict the injector reads — content-keyed terrain routes
+        # without hand-bumped ``?v=N`` suffixes.
+        for key, row in stored.items():
+            if key.startswith("tiles:") and row.version:
+                tiles[key.removeprefix("tiles:")] = row.version
         return {
             "sprites": stored["sprites"].version or None
             if "sprites" in stored
             else None,
             "fonts": stored["fonts"].version or None if "fonts" in stored else None,
-            "tiles": computed_tiles,
+            "tiles": tiles,
             "external": {
                 row.key: row.version
                 for row in TileAssetVersion.objects.filter(
@@ -229,7 +247,12 @@ def _inject_one(url: str, versions: dict[str, Any], origin: str) -> str:
 
 
 def _tile_source_version(url: str, versions: dict[str, Any], origin: str) -> str | None:
-    """The registered-source version for a Martin tile URL template."""
+    """The registered version for a Martin tile URL template.
+
+    First path segment is the key — either a computed DB-backed source
+    (``VERSIONED_TILE_SOURCES``) or a stored static-route entry
+    (``tiles:hillshade`` / ``tiles:contours``, watcher-observed).
+    """
     if not _versionable(url):
         return None
     path, is_martin = _normalize_probe_url(url, origin)
@@ -238,21 +261,16 @@ def _tile_source_version(url: str, versions: dict[str, Any], origin: str) -> str
     segments = [s for s in path.split("/") if s]
     if not segments:
         return None
-    source = segments[0]
-    if source in VERSIONED_TILE_SOURCES:
-        return versions.get("tiles", {}).get(source)
-    return None
+    return versions.get("tiles", {}).get(segments[0])
 
 
 def _tile_source_name(url: str, origin: str) -> str | None:
-    """Registered source name for a tile URL template, if any."""
+    """Tile-route name for a tile URL template, if any."""
     path, is_martin = _normalize_probe_url(url, origin)
     if not is_martin:
         return None
     segments = [s for s in path.split("/") if s]
-    if segments and segments[0] in VERSIONED_TILE_SOURCES:
-        return segments[0]
-    return None
+    return segments[0] if segments else None
 
 
 def inject_asset_versions(
@@ -294,18 +312,33 @@ def inject_asset_versions(
         for name, source in sources.items():
             if not isinstance(source, dict):
                 continue
+            changed = False
+            # TileJSON links (``url``) — external registry match (e.g. the
+            # maptoolkit TileJSON endpoints): versioning the link busts
+            # clients' cached TileJSON when the provider changes it.
+            source_url = source.get("url")
+            if isinstance(source_url, str) and source_url:
+                injected = _inject_one(source_url, versions, origin)
+                if injected != source_url:
+                    source = {**source, "url": injected}
+                    changed = True
             tiles = source.get("tiles")
             if isinstance(tiles, list):
                 new_tiles = []
                 for tile in tiles:
                     if isinstance(tile, str):
                         version = _tile_source_version(tile, versions, origin)
-                        new_tiles.append(
-                            _append_param(tile, version) if version else tile
-                        )
+                        if version:
+                            new_tiles.append(_append_param(tile, version))
+                            changed = True
+                        else:
+                            new_tiles.append(tile)
                     else:
                         new_tiles.append(tile)
-                new_sources[name] = {**source, "tiles": new_tiles}
+                if changed:
+                    source = {**source, "tiles": new_tiles}
+            if changed:
+                new_sources[name] = source
         out["sources"] = new_sources
 
     return out
@@ -359,6 +392,12 @@ def consumed_versions(
         for source in sources.values():
             if not isinstance(source, dict):
                 continue
+            # TileJSON links mirror the injector's source-``url`` pass
+            source_url = source.get("url")
+            if isinstance(source_url, str) and source_url:
+                match = _match_asset(source_url, versions, origin)
+                if match and match[0] == "external":
+                    used["external"][match[1]] = match[2]
             tiles = source.get("tiles")
             if not isinstance(tiles, list):
                 continue
@@ -427,7 +466,7 @@ def _sprite_probe_variants(url: str) -> list[str]:
     return [f"{url}.json", f"{url}.png"]
 
 
-def collect_martin_probes() -> tuple[list[str], list[str]]:
+def collect_martin_probes() -> tuple[list[str], list[str], dict[str, list[str]]]:
     """Concrete sprite URLs and glyph-range URLs to hash, from live styles.
 
     Martin-origin URLs only (root-relative refs are absolutized to the
@@ -485,7 +524,47 @@ def collect_martin_probes() -> tuple[list[str], list[str]]:
             )
             if "{" not in url:
                 font_urls.add(url)
-    return sorted(sprite_urls), sorted(font_urls)
+
+    # Static terrain routes (hillshade/contours): probe a representative
+    # Alpine tile per referenced route — the published hash content-keys
+    # the style's tile URLs (replaces hand-bumped ``?v=N``).
+    z, x, y = TERRAIN_PROBE_TILE
+    terrain_urls: dict[str, set[str]] = {}
+    for style in styles:
+        sources = style.get("sources")
+        if not isinstance(sources, dict):
+            continue
+        for source in sources.values():
+            if not isinstance(source, dict):
+                continue
+            tiles = source.get("tiles")
+            if not isinstance(tiles, list):
+                continue
+            for tile in tiles:
+                if not isinstance(tile, str):
+                    continue
+                path, is_martin = _normalize_probe_url(tile, origin)
+                segments = [s for s in path.split("/") if s]
+                if not is_martin or not segments:
+                    continue
+                route = segments[0]
+                if route not in STATIC_TERRAIN_TILE_ROUTES:
+                    continue
+                concrete = tile
+                for token, value in (
+                    ("{z}", str(z)),
+                    ("{x}", str(x)),
+                    ("{y}", str(y)),
+                ):
+                    concrete = concrete.replace(token, value)
+                if "{" not in concrete:
+                    terrain_urls.setdefault(route, set()).add(concrete)
+
+    return (
+        sorted(sprite_urls),
+        sorted(font_urls),
+        {route: sorted(urls) for route, urls in terrain_urls.items()},
+    )
 
 
 # ── Martin asset watcher ──────────────────────────────────────────────
@@ -561,10 +640,11 @@ def run_martin_watcher() -> dict[str, Any]:
     nonce = secrets.token_hex(8)
     stats: dict[str, Any] = {"published": [], "kept": [], "failed": []}
 
-    sprite_urls, font_urls = collect_martin_probes()
+    sprite_urls, font_urls, terrain_urls = collect_martin_probes()
     groups: list[tuple[str, list[str]]] = [
         ("sprites", sprite_urls),
         ("fonts", font_urls),
+        *[(f"tiles:{route}", urls) for route, urls in sorted(terrain_urls.items())],
     ]
     for key, urls in groups:
         if not urls:
@@ -573,8 +653,9 @@ def run_martin_watcher() -> dict[str, Any]:
         # Font stacks are scraped from ``text-font`` arrays, which may
         # be data-driven expressions carrying non-font strings
         # ("case", "literal") — those 404 on Martin and are skipped
-        # instead of failing the group. Sprites stay strict: their URLs
-        # come from sprite entries directly, a 404 is real breakage.
+        # instead of failing the group. Sprites and terrain sample
+        # tiles stay strict: their URLs come from the style directly,
+        # a 404 is real breakage.
         tolerate_404 = key == "fonts"
         results: list[tuple[str, bytes]] = []
         failed = False
