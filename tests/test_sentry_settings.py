@@ -293,6 +293,244 @@ class TestBeforeSend:
         }
         assert "tags" in before_send(event, {})
 
+    def test_current_thread_executor_disconnect_noise_dropped(
+        self, monkeypatch, recorded_init
+    ):
+        # Issue 155259431: Django 6.1 races disconnect-listening against
+        # response processing in a TaskGroup; on a mid-request client
+        # abort the response task is cancelled and the subsequent
+        # request_finished dispatch (thread-sensitive sync_to_async)
+        # hits the request's already-broken CurrentThreadExecutor.
+        # Frames mirror the real staging event (ASGIHandler → dispatcher
+        # asend → run_in_executor → CurrentThreadExecutor.submit). Not
+        # actionable — dropped.
+        monkeypatch.setenv("SENTRY_DSN", "https://key@localhost/1")
+
+        _reload()
+
+        before_send = recorded_init[0]["before_send"]
+        event = {
+            "exception": {
+                "values": [
+                    {
+                        "type": "RuntimeError",
+                        "value": "CurrentThreadExecutor already quit or is broken",
+                        "mechanism": {"type": "asgi", "handled": False},
+                        "stacktrace": {
+                            "frames": [
+                                {
+                                    "function": "__call__",
+                                    "module": "django.core.handlers.asgi",
+                                    "filename": "django/core/handlers/asgi.py",
+                                },
+                                {
+                                    "function": "handle",
+                                    "module": "django.core.handlers.asgi",
+                                    "filename": "django/core/handlers/asgi.py",
+                                },
+                                {
+                                    "function": "asend",
+                                    "module": "django.dispatch.dispatcher",
+                                    "filename": "django/dispatch/dispatcher.py",
+                                },
+                                {
+                                    "function": "run_in_executor",
+                                    "module": "uvloop.loop",
+                                    "filename": "uvloop/loop.pyx",
+                                },
+                                {
+                                    "function": "submit",
+                                    "module": "asgiref.current_thread_executor",
+                                    "filename": "asgiref/current_thread_executor.py",
+                                },
+                            ]
+                        },
+                    }
+                ]
+            }
+        }
+        assert before_send(event, {}) is None
+
+    def test_current_thread_executor_without_request_frames_kept(
+        self, monkeypatch, recorded_init
+    ):
+        # Same RuntimeError from application code (e.g. sync_to_async in
+        # a fire-and-forget task outliving its request context —
+        # asgiref#526's original report): no dispatcher/ASGIHandler
+        # frames, so it is a genuine bug and must stay visible.
+        monkeypatch.setenv("SENTRY_DSN", "https://key@localhost/1")
+
+        _reload()
+
+        before_send = recorded_init[0]["before_send"]
+        event = {
+            "exception": {
+                "values": [
+                    {
+                        "type": "RuntimeError",
+                        "value": "CurrentThreadExecutor already quit or is broken",
+                        "mechanism": {"type": "generic", "handled": False},
+                        "stacktrace": {
+                            "frames": [
+                                {
+                                    "function": "submit",
+                                    "module": "asgiref.current_thread_executor",
+                                    "filename": "asgiref/current_thread_executor.py",
+                                },
+                                {
+                                    "function": "run_background_job",
+                                    "module": "server.apps.core.jobs",
+                                    "filename": "server/apps/core/jobs.py",
+                                },
+                            ]
+                        },
+                    }
+                ]
+            }
+        }
+        assert "tags" in before_send(event, {})
+
+    def test_other_runtimeerror_with_signal_frames_kept(
+        self, monkeypatch, recorded_init
+    ):
+        # The frame shape alone must not drop unrelated RuntimeErrors —
+        # the message check is part of the filter.
+        monkeypatch.setenv("SENTRY_DSN", "https://key@localhost/1")
+
+        _reload()
+
+        before_send = recorded_init[0]["before_send"]
+        event = {
+            "exception": {
+                "values": [
+                    {
+                        "type": "RuntimeError",
+                        "value": "You cannot submit onto CurrentThreadExecutor from its own thread",
+                        "mechanism": {"type": "asgi", "handled": False},
+                        "stacktrace": {
+                            "frames": [
+                                {
+                                    "function": "handle",
+                                    "module": "django.core.handlers.asgi",
+                                    "filename": "django/core/handlers/asgi.py",
+                                },
+                                {
+                                    "function": "asend",
+                                    "module": "django.dispatch.dispatcher",
+                                    "filename": "django/dispatch/dispatcher.py",
+                                },
+                            ]
+                        },
+                    }
+                ]
+            }
+        }
+        assert "tags" in before_send(event, {})
+
+    def test_current_thread_executor_filename_only_frames_dropped(
+        self, monkeypatch, recorded_init
+    ):
+        # Some capture paths omit frame modules — the filename-suffix
+        # fallback must still recognize the teardown path (absolute
+        # paths as sentry-sdk reports them).
+        monkeypatch.setenv("SENTRY_DSN", "https://key@localhost/1")
+
+        _reload()
+
+        before_send = recorded_init[0]["before_send"]
+        event = {
+            "exception": {
+                "values": [
+                    {
+                        "type": "RuntimeError",
+                        "value": "RuntimeError: CurrentThreadExecutor already quit or is broken",
+                        "mechanism": {"type": "asgi", "handled": False},
+                        "stacktrace": {
+                            "frames": [
+                                {
+                                    "function": "asend",
+                                    "filename": "/usr/local/lib/python3.14/site-packages/django/dispatch/dispatcher.py",
+                                },
+                                {
+                                    "function": "__call__",
+                                    "filename": "/usr/local/lib/python3.14/site-packages/django/core/handlers/asgi.py",
+                                },
+                            ]
+                        },
+                    }
+                ]
+            }
+        }
+        assert before_send(event, {}) is None
+
+    def test_current_thread_executor_without_stacktrace_kept(
+        self, monkeypatch, recorded_init
+    ):
+        # Matching message but no stacktrace/frames: the filter fails
+        # safe toward visibility — kept. Pins the default so a future
+        # refactor that inverts it trips here.
+        monkeypatch.setenv("SENTRY_DSN", "https://key@localhost/1")
+
+        _reload()
+
+        before_send = recorded_init[0]["before_send"]
+        event = {
+            "exception": {
+                "values": [
+                    {
+                        "type": "RuntimeError",
+                        "value": "CurrentThreadExecutor already quit or is broken",
+                        "mechanism": {"type": "asgi", "handled": False},
+                    }
+                ]
+            }
+        }
+        assert "tags" in before_send(event, {})
+
+    def test_current_thread_executor_wrapped_in_chain_dropped(
+        self, monkeypatch, recorded_init
+    ):
+        # The RuntimeError may sit anywhere in the exception chain (here
+        # values[0], with an outer wrapper at values[-1]) — the filter
+        # checks every value's own stacktrace, unlike the sibling shield
+        # filter which only inspects values[-1].
+        monkeypatch.setenv("SENTRY_DSN", "https://key@localhost/1")
+
+        _reload()
+
+        before_send = recorded_init[0]["before_send"]
+        event = {
+            "exception": {
+                "values": [
+                    {
+                        "type": "RuntimeError",
+                        "value": "CurrentThreadExecutor already quit or is broken",
+                        "mechanism": {"type": "asgi", "handled": False},
+                        "stacktrace": {
+                            "frames": [
+                                {
+                                    "function": "handle",
+                                    "module": "django.core.handlers.asgi",
+                                    "filename": "django/core/handlers/asgi.py",
+                                },
+                                {
+                                    "function": "asend",
+                                    "module": "django.dispatch.dispatcher",
+                                    "filename": "django/dispatch/dispatcher.py",
+                                },
+                            ]
+                        },
+                    },
+                    {
+                        "type": "ExceptionGroup",
+                        "value": "unhandled errors in a TaskGroup",
+                        "mechanism": {"type": "asgi", "handled": False},
+                    },
+                ]
+            }
+        }
+        assert before_send(event, {}) is None
+
     def test_app_version_tag_attached_to_transactions(self, monkeypatch, recorded_init):
         from importlib.metadata import version
 

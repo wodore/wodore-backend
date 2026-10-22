@@ -117,10 +117,85 @@ def _is_shielded_cancel_noise(event: dict) -> bool:
     return bool(values) and values[-1].get("type") == "CancelledError"
 
 
-def _before_send(event: dict, hint: dict) -> dict:
+# --- Django 6.1 post-disconnect request_finished noise ----------------------
+#
+# Django 6.1 revamped ASGI disconnect handling: ASGIHandler.handle()
+# races listen_for_disconnect() against response processing inside a
+# TaskGroup. On a mid-request client abort (uvicorn surfaces
+# http.disconnect; browsers drop in-flight admin-autocomplete XHRs as
+# the user keeps typing) the response task is cancelled — and Django
+# then still fires request_finished (by design since #35059) so the
+# cleanup receivers (close_old_connections, close_caches,
+# reset_urlconf) run. That dispatch adapts the sync receivers with a
+# thread-sensitive sync_to_async whose CurrentThreadExecutor has
+# already been marked broken by the cancellation cascade
+# (run_until_future's done-callback breaks the executor on ANY
+# completion, cancellation included), so asgiref raises "already quit
+# or is broken" (the asgiref#491/#526 failure family). It escapes the
+# ASGI app unhandled (issue 155259431) but is benign — the client is
+# gone. Verified unfixed upstream: Django 6.1.2, asgiref 3.12.1 and
+# django/main (as of 2026-10) all still contain this exact path.
+#
+# The frame checks keep real misuse visible: the same RuntimeError from
+# application code (e.g. sync_to_async in a fire-and-forget task that
+# outlives its request context — asgiref#526's original report) carries
+# no dispatcher.asend + ASGIHandler frames and still reports.
+
+
+def _in_frame(frame: dict, function: str, module: str, path: str) -> bool:
+    """True when a Sentry stacktrace frame is the given function of the
+    given module (module preferred; filename suffix as fallback — the
+    SDK's frame shape varies between capture paths)."""
+    if frame.get("function") != function:
+        return False
+    return frame.get("module") == module or str(frame.get("filename") or "").endswith(
+        path
+    )
+
+
+def _is_current_thread_executor_noise(event: dict) -> bool:
+    """True for the RuntimeError asgiref raises when Django's
+    post-disconnect request_finished dispatch hits the request's
+    already-broken CurrentThreadExecutor — client-abort teardown noise,
+    not an application error."""
+    for value in (event.get("exception") or {}).get("values") or []:
+        if value.get("type") != "RuntimeError":
+            continue
+        if "CurrentThreadExecutor already quit or is broken" not in str(
+            value.get("value") or ""
+        ):
+            continue
+        frames = (value.get("stacktrace") or {}).get("frames") or []
+        signal_dispatch = any(
+            _in_frame(
+                frame,
+                function="asend",
+                module="django.dispatch.dispatcher",
+                path="django/dispatch/dispatcher.py",
+            )
+            for frame in frames
+        )
+        asgi_handler = any(
+            _in_frame(
+                frame,
+                function=function,
+                module="django.core.handlers.asgi",
+                path="django/core/handlers/asgi.py",
+            )
+            for frame in frames
+            for function in ("handle", "__call__")
+        )
+        if signal_dispatch and asgi_handler:
+            return True
+    return False
+
+
+def _before_send(event: dict, hint: dict) -> dict | None:
     """Sentry init hook: error events."""
     if _is_shielded_cancel_noise(event):
         return None  # client aborted the request; not actionable
+    if _is_current_thread_executor_noise(event):
+        return None  # ditto: post-disconnect request_finished teardown
     return _stamp_app_version(event)
 
 
