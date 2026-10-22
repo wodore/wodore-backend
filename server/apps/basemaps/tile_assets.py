@@ -695,9 +695,18 @@ def run_martin_watcher() -> dict[str, Any]:
 # ── External asset verifier ───────────────────────────────────────────
 
 
+#: External keys verified unconditionally — consumed by the OG
+#: static-map renderer rather than by style documents (which is what
+#: the referenced-check below walks).
+ALWAYS_VERIFIED_EXTERNAL_PREFIXES = ("https://tile.opentopomap.org/",)
+
+
 def _external_referenced(keys: set[str]) -> set[str]:
     """Registry external keys actually referenced by active layers."""
     referenced: set[str] = set()
+    referenced.update(
+        key for key in keys if key.startswith(ALWAYS_VERIFIED_EXTERNAL_PREFIXES)
+    )
     layers = MapLayer.objects.filter(is_active=True)
     urls: set[str] = set()
     for layer in layers:

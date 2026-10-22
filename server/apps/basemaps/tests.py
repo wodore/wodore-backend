@@ -1218,13 +1218,13 @@ class TestExternalVerifierHttpShapes:
 
         monkeypatch.setattr("server.apps.basemaps.tile_assets._fetch", fetch)
         stats = run_external_verifier()
-        assert stats["changed"] == ["https://icons.example.org/sprite"]
+        assert _no_otm(stats["changed"]) == ["https://icons.example.org/sprite"]
         row = TileAssetVersion.objects.get(key="https://icons.example.org/sprite")
         assert row.version
         assert row.etag == '"j"'
         # Identical served bytes on the next run: unchanged, no rewrite
         stats2 = run_external_verifier()
-        assert stats2["unchanged"] == ["https://icons.example.org/sprite"]
+        assert _no_otm(stats2["unchanged"]) == ["https://icons.example.org/sprite"]
 
     def test_mixed_304_and_changed_png_is_detected(self, monkeypatch):
         """M1 regression: a .json 304 must not mask a changed .png."""
@@ -1262,7 +1262,7 @@ class TestExternalVerifierHttpShapes:
 
         monkeypatch.setattr("server.apps.basemaps.tile_assets._fetch", fetch)
         stats = run_external_verifier()
-        assert stats["changed"] == ["https://icons.example.org/sprite"]
+        assert _no_otm(stats["changed"]) == ["https://icons.example.org/sprite"]
 
 
 @pytest.mark.django_db
@@ -1515,6 +1515,14 @@ class TestMartinWatcher:
         assert TileAssetVersion.objects.get(key="sprites").version == "stored"
 
 
+OTM_KEY = "https://tile.opentopomap.org/10/540/357.png"
+
+
+def _no_otm(items: list) -> list:
+    """Filter the always-verified OTM entry out of verifier stats lists."""
+    return [i for i in items if i != OTM_KEY]
+
+
 @pytest.mark.django_db
 class TestExternalVerifier:
     def test_304_keeps_version_200_bumps(self, monkeypatch):
@@ -1548,7 +1556,7 @@ class TestExternalVerifier:
 
         monkeypatch.setattr("server.apps.basemaps.tile_assets._fetch", fetch_304)
         stats = run_external_verifier()
-        assert stats["unchanged"] == ["https://icons.example.org/sprite"]
+        assert _no_otm(stats["unchanged"]) == ["https://icons.example.org/sprite"]
         assert (
             TileAssetVersion.objects.get(key="https://icons.example.org/sprite").version
             == "old"
@@ -1559,7 +1567,7 @@ class TestExternalVerifier:
 
         monkeypatch.setattr("server.apps.basemaps.tile_assets._fetch", fetch_200)
         stats2 = run_external_verifier()
-        assert stats2["changed"] == ["https://icons.example.org/sprite"]
+        assert _no_otm(stats2["changed"]) == ["https://icons.example.org/sprite"]
         row = TileAssetVersion.objects.get(key="https://icons.example.org/sprite")
         assert row.version != "old"
         assert row.etag == '"def"'
@@ -1576,8 +1584,8 @@ class TestExternalVerifier:
         )
         cache.clear()
         stats = run_external_verifier()
-        assert stats["changed"] == []
-        assert stats["unchanged"] == []
+        assert _no_otm(stats["changed"]) == []
+        assert _no_otm(stats["unchanged"]) == []
         assert stats["failed"] == []
         # Everything seeded by migrations 0005/0006 is unreferenced in
         # this test's DB (no active layer references them here) plus the
@@ -1594,10 +1602,12 @@ class TestExternalVerifier:
                 "https://tiles.maptoolkit.org/terrainrgb.json",
                 "https://tiles.maptoolkit.org/naturalearth.json",
                 "https://tiles.maptoolkit.org/rocks.json",
-                "https://tile.opentopomap.org/10/540/357.png",
             ]
         )
-        assert stats["skipped"] == seeded_unreferenced
+        assert _no_otm(stats["skipped"]) == seeded_unreferenced
+        # Always-verified (OG renderer input): must never be skipped.
+        assert OTM_KEY not in stats["skipped"]
+        assert OTM_KEY in stats["changed"] + stats["unchanged"] + stats["failed"]
 
 
 @pytest.mark.django_db
