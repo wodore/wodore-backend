@@ -1043,8 +1043,10 @@ class TestAssetVersionServing:
         assert root is not None, "map_seed must provision root categories"
         root.name = {"en": "renamed"}  # type: ignore[assignment]
         root.save()
+        import datetime as dt
+
         Category.objects.filter(pk=root.pk).update(
-            modified=timezone.now() + timezone.timedelta(seconds=5)
+            modified=timezone.now() + dt.timedelta(seconds=5)
         )
         cache.delete(ASSET_VERSIONS_CACHE_KEY)
         rotated = asset_versions(force=True)
@@ -1100,7 +1102,7 @@ class TestFetchSemantics:
                     self.end_headers()
                     self.wfile.write(body)
 
-            def log_message(self, *args):
+            def log_message(self, format, *args):
                 pass
 
         server = HTTPServer(("127.0.0.1", 0), Handler)
@@ -1368,6 +1370,45 @@ class TestMartinWatcher:
         stats3 = run_martin_watcher()
         assert stats3["published"] == ["sprites", "fonts"]
         assert TileAssetVersion.objects.get(key="sprites").version != v1
+
+    def test_font_probes_encode_spaces_and_skip_unknown_stacks(self, monkeypatch):
+        """Staging round 1: font names contain spaces (raw URLs are
+        invalid for urllib) and expression keywords scraped from
+        data-driven text-font arrays 404 — those are skipped, real
+        fonts still publish."""
+        from django.core.cache import cache
+        from django.core.management import call_command
+
+        from server.apps.basemaps.models import TileAssetVersion
+        from server.apps.basemaps.tile_assets import collect_martin_probes
+
+        call_command("map_seed", verbosity=0)
+        cache.clear()
+        _sprites, fonts = collect_martin_probes()
+        assert fonts, "seeded styles reference Martin fonts"
+        for url in fonts:
+            assert " " not in url, url  # percent-encoded
+        statuses: dict[str, int] = {}
+
+        def fetch(url, nonce, headers=None):
+            status = statuses.get(url, 200)
+            return status, b"x" if status == 200 else b"", {}
+
+        monkeypatch.setattr("server.apps.basemaps.tile_assets._fetch", fetch)
+        # One unknown (404) stack must not block the fonts group…
+        unknown = next(u for u in fonts if u.endswith("/0-255.pbf"))
+        statuses[unknown] = 404
+        stats = run_martin_watcher()
+        assert stats["published"] == ["sprites", "fonts"]
+        assert TileAssetVersion.objects.get(key="fonts").version
+        # …but a 404 sprite is real breakage: sprites group fails.
+        cache.clear()
+        TileAssetVersion.objects.update(version="")
+        statuses.clear()
+        statuses[_sprites[0]] = 404
+        stats2 = run_martin_watcher()
+        assert stats2["failed"] == ["sprites"]
+        assert stats2["published"] == ["fonts"]
 
     def test_probe_failure_keeps_stored_version(self, monkeypatch):
         from django.core.cache import cache
