@@ -22,17 +22,41 @@ logger = structlog.get_logger()
 def _assessment_extra(img) -> dict | None:
     """Result ``extra`` for internal (DB-backed) images.
 
-    Thumbhashes for the serving pipeline (quality stays backend-only) plus
-    the ``internal_pin`` marker: ``pin_place_images`` must never re-pin these
+    Thumbhashes for the serving pipeline (quality stays backend-only), the
+    ``internal_pin`` marker (``pin_place_images`` must never re-pin these
     passthrough results — the provider reports existing pins/uploads with
     provider = source_org slug and source_id = source_ident, so a re-pin
-    would mint a prefix-stacked duplicate row ("org:org:...").
+    would mint a prefix-stacked duplicate row "org:org:..."), and the
+    ``duplicate_of`` marker consumed by :func:`_drop_duplicate_pins`.
     """
     meta = img.image_meta or {}
     extra: dict = {"internal_pin": True}
     if meta.get("thumbhashes"):
         extra["thumbhashes"] = meta["thumbhashes"]
+    if meta.get("duplicate_of"):
+        extra["duplicate_of"] = meta["duplicate_of"]
     return extra
+
+
+def _drop_duplicate_pins(results: list[ImageResult]) -> list[ImageResult]:
+    """Serve-time phash dedup: drop marked near-duplicate pins.
+
+    ``assess_place_pins`` marks the weaker twin of a near-duplicate
+    cluster with ``image_meta.duplicate_of`` (its primary's
+    source_ident). A marked pin is dropped only while its primary is part
+    of the served set — a marker whose primary is gone (unpinned, hidden)
+    must not lose the place its only copy of that motif. Live provider
+    results never carry the marker; it only exists on our own pins.
+    """
+    served = {result.source_id for result in results}
+    kept = [
+        result
+        for result in results
+        if (result.extra or {}).get("duplicate_of") not in served
+    ]
+    if len(kept) != len(results):
+        logger.info("duplicate_pins_dropped", dropped=len(results) - len(kept))
+    return kept
 
 
 class WodoreProvider(ImageProvider):
@@ -223,17 +247,19 @@ class WodoreProvider(ImageProvider):
                         author_url=None,
                         url_large=img.source_url_raw or str(img.image),
                         url_medium=None,
-                        place={
-                            "id": place.id,
-                            "slug": place.slug,
-                            "name": place.name_i18n,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                            "location": {
-                                "lat": place.location.y,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                                "lon": place.location.x,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                            },
-                        }
-                        if place
-                        else None,
+                        place=(
+                            {
+                                "id": place.id,
+                                "slug": place.slug,
+                                "name": place.name_i18n,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                                "location": {
+                                    "lat": place.location.y,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                                    "lon": place.location.x,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                                },
+                            }
+                            if place
+                            else None
+                        ),
                         score=result_score,  # association score; 50 fallback for uncurated
                         width=width,
                         height=height,
@@ -250,7 +276,7 @@ class WodoreProvider(ImageProvider):
                 num_places=len(places),
                 provider="WodoreProvider",
             )
-            return results
+            return _drop_duplicate_pins(results)
 
         elif self.place_type == "hut":
             from server.apps.huts.models import Hut, HutImageAssociation
@@ -418,17 +444,19 @@ class WodoreProvider(ImageProvider):
                         author_url=None,
                         url_large=img.source_url_raw or str(img.image),
                         url_medium=None,
-                        place={
-                            "id": hut.id,
-                            "slug": hut.slug,
-                            "name": hut.name_i18n,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                            "location": {
-                                "lat": hut.location.y,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                                "lon": hut.location.x,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                            },
-                        }
-                        if hut
-                        else None,
+                        place=(
+                            {
+                                "id": hut.id,
+                                "slug": hut.slug,
+                                "name": hut.name_i18n,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                                "location": {
+                                    "lat": hut.location.y,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                                    "lon": hut.location.x,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                                },
+                            }
+                            if hut
+                            else None
+                        ),
                         score=result_score,  # association score; 50 fallback for uncurated
                         width=width,
                         height=height,
@@ -445,7 +473,7 @@ class WodoreProvider(ImageProvider):
                 num_huts=len(huts),
                 provider="WodoreProvider",
             )
-            return results
+            return _drop_duplicate_pins(results)
 
         # Unknown place type: no results rather than implicit None
         return []

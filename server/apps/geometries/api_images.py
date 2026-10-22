@@ -14,6 +14,7 @@ from django.http import HttpRequest
 
 from server.apps.api.controller import ApiController, cache_headers, raise_not_found
 from server.apps.api.ogmap import RENDER_VERSION
+from server.apps.images.assessment import maybe_enqueue_place_assessment
 from server.apps.images.og import OG_MAP_EFFECT, OG_MAP_MARKER_SCALE, OG_MAP_ZOOM
 from server.apps.translations import LanguageQuery, activate
 
@@ -679,6 +680,14 @@ class PlaceImagesController(ApiController):
                 except Exception as e:
                     logger.error(f"Error pinning images for place '{place_slug}': {e}")
 
+        # Background assessment: serve-time duplicate filtering needs
+        # phashes — pins without them enqueue the q2 assessment task here
+        # (debounced). This visitor gets the current set; once the task
+        # has assessed + marked + invalidated the cache, the next visitor
+        # sees the deduplicated gallery.
+        if place is not None:
+            maybe_enqueue_place_assessment(place)
+
         results.sort(key=lambda r: (-r.score, r.distance_m))
         results = results[: query.limit]
 
@@ -858,6 +867,10 @@ class HutImagesController(ApiController):
                     )
                 except Exception as e:
                     logger.error(f"Error pinning images for hut '{hut_slug}': {e}")
+
+        # Background assessment (see the place controller above).
+        if hut is not None:
+            maybe_enqueue_place_assessment(hut)
 
         results.sort(key=lambda r: (-r.score, r.distance_m))
         results = results[: query.limit]

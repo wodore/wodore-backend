@@ -391,6 +391,82 @@ class TestPlaceEndpointPins:
         assert fetch.calls == 2
 
 
+class TestServeTimeDedup:
+    """Phash-marked near-duplicates (``image_meta.duplicate_of``) are
+    dropped at serve time — but only while their primary is served too."""
+
+    @pytest.fixture
+    def client(self):
+        return TestClient("/v1/geo/images")
+
+    @pytest.fixture(autouse=True)
+    def _no_q2(self, monkeypatch):
+        """The visit path enqueues background tasks; keep tests deterministic."""
+        monkeypatch.setattr("django_q.tasks.async_task", lambda *a, **k: None)
+
+    def _marked_twin(self, place, primary_ident="wikicommons:File:Test.jpg"):
+        """Pin a primary + weaker twin, mark the twin like assess_place_pins."""
+        twin_ident = "wikicommons:File:Duplicate.jpg"
+        pin_place_images(
+            place,
+            [
+                _result(score=80),
+                _result(source_id="File:Duplicate.jpg", score=70),
+            ],
+        )
+        twin = Image.objects.get(source_ident=twin_ident)
+        meta = dict(twin.image_meta)
+        meta["duplicate_of"] = primary_ident
+        twin.image_meta = meta
+        twin.save(update_fields=["image_meta"])
+        return twin
+
+    def test_hut_marked_duplicate_filtered(self, client, hut):
+        self._marked_twin(hut)
+        response = client.get(f"/hut/{hut.slug}?radius=50&lang=en&limit=10")
+        assert response.status_code == 200
+        source_ids = [f["properties"]["source_id"] for f in response.json()["features"]]
+        assert "wikicommons:File:Test.jpg" in source_ids
+        assert "wikicommons:File:Duplicate.jpg" not in source_ids
+
+    def test_place_marked_duplicate_filtered(self, client, seed_data):
+        from server.apps.geometries.models import (
+            GeoPlace,
+            GeoPlaceImageAssociation,
+        )
+
+        place = GeoPlace.objects.filter(is_active=True, is_public=True).first()
+        assert place is not None
+        GeoPlaceImageAssociation.objects.filter(geo_place=place).delete()
+        self._marked_twin(place)
+        response = client.get(f"/place/{place.slug}?radius=50&lang=en&limit=10")
+        assert response.status_code == 200
+        source_ids = [f["properties"]["source_id"] for f in response.json()["features"]]
+        assert "wikicommons:File:Duplicate.jpg" not in source_ids
+        assert "wikicommons:File:Test.jpg" in source_ids
+
+    def test_orphaned_marker_keeps_image(self, client, hut):
+        """Primary gone (curator unpinned it) → the twin must stay visible."""
+        self._marked_twin(hut)
+        HutImageAssociation.objects.filter(
+            hut=hut, image__source_ident="wikicommons:File:Test.jpg"
+        ).delete()
+        response = client.get(f"/hut/{hut.slug}?radius=50&lang=en&limit=10")
+        assert response.status_code == 200
+        source_ids = [f["properties"]["source_id"] for f in response.json()["features"]]
+        assert "wikicommons:File:Duplicate.jpg" in source_ids
+
+    def test_unmarked_pins_untouched(self, client, hut):
+        """Without the assessment marker both pins serve (status quo)."""
+        pin_place_images(
+            hut, [_result(score=80), _result(source_id="File:Other.jpg", score=70)]
+        )
+        response = client.get(f"/hut/{hut.slug}?radius=50&lang=en&limit=10")
+        assert response.status_code == 200
+        source_ids = [f["properties"]["source_id"] for f in response.json()["features"]]
+        assert len(source_ids) == 2
+
+
 class TestCaptureDateAwareness:
     """Providers may hand through naive capture times (EXIF carries no
     zone) — the pin boundary must store timezone-aware values, else Django

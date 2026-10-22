@@ -22,6 +22,7 @@ from server.apps.images.assessment import (
     assess_place_pins,
     dhash64,
     hamming_distance,
+    maybe_enqueue_place_assessment,
     quality_metrics,
     technical_score,
 )
@@ -375,6 +376,114 @@ class TestAssessPlace:
         assert marked[0].image_meta["duplicate_of"] == unmarked[0].source_ident
         distinct = Image.objects.get(source_ident="wikicommons:File:Distinct.jpg")
         assert not distinct.image_meta.get("duplicate_of")
+
+    def test_assessment_invalidates_response_cache(self, hut, monkeypatch):
+        """Serving depends on assessment output — the place's cached
+        response must not outlive a run that changed anything."""
+        from uuid import uuid4
+
+        from django.core.cache.backends.locmem import LocMemCache
+
+        # One stable cache instance for the whole test (the autouse fixture
+        # mints a fresh store per call — fine for isolation, useless for
+        # asserting version bumps).
+        cache = LocMemCache(f"test-{uuid4().hex}", {})
+        monkeypatch.setattr(irc, "_cache", lambda: cache)
+
+        pin_place_images(hut, [_result(score=80)])
+        before = irc.get_version("hut", hut.slug)
+        stats = assess_place_pins(hut)
+        assert stats["assessed"] == 1
+        assert irc.get_version("hut", hut.slug) != before
+
+    def test_unchanged_reassessment_keeps_cache(self, hut, monkeypatch):
+        """A re-run that assesses nothing and moves no markers must not
+        churn the response-cache version (fresh entries stay reachable)."""
+        from uuid import uuid4
+
+        from django.core.cache.backends.locmem import LocMemCache
+
+        cache = LocMemCache(f"test-{uuid4().hex}", {})
+        monkeypatch.setattr(irc, "_cache", lambda: cache)
+
+        pin_place_images(hut, [_result(score=80)])
+        assess_place_pins(hut)
+        after_first = irc.get_version("hut", hut.slug)
+        assess_place_pins(hut)  # already assessed, no marker changes
+        assert irc.get_version("hut", hut.slug) == after_first
+
+
+class TestAssessmentEnqueue:
+    """maybe_enqueue_place_assessment: visit-triggered background phash
+    assessment (serve-time dedup needs hashes; the endpoint wires this
+    into the pins fast path)."""
+
+    @pytest.fixture(autouse=True)
+    def _pin_cache(self, monkeypatch):
+        """One stable debounce cache per test (a fresh store per call would
+        never see the debounce marker)."""
+        from uuid import uuid4
+
+        from django.core.cache.backends.locmem import LocMemCache
+
+        cache = LocMemCache(f"test-{uuid4().hex}", {})
+
+        from server.apps.geometries import pinning
+
+        monkeypatch.setattr(pinning, "_pin_cache", lambda: cache)
+
+    def _spy(self, monkeypatch):
+        calls = []
+
+        def _fake_async_task(func, *args, **kwargs):
+            calls.append((func, args))
+
+        monkeypatch.setattr("django_q.tasks.async_task", _fake_async_task)
+        return calls
+
+    def test_unassessed_pins_enqueue_once_then_debounce(self, hut, monkeypatch):
+        calls = self._spy(monkeypatch)
+        pin_place_images(hut, [_result(score=80)])
+        assert maybe_enqueue_place_assessment(hut) is True
+        assert maybe_enqueue_place_assessment(hut) is False  # debounced
+        assert calls == [
+            (
+                "server.apps.images.assessment.assess_place_task",
+                ("hut", hut.slug),
+            )
+        ]
+
+    def test_assessed_pins_do_not_enqueue(self, hut, monkeypatch):
+        calls = self._spy(monkeypatch)
+        pin_place_images(hut, [_result(score=80)])
+        Image.objects.filter(source_ident="wikicommons:File:Test.jpg").update(
+            phash="0123456789abcdef", quality_score=50
+        )
+        assert maybe_enqueue_place_assessment(hut) is False
+        assert calls == []
+
+    def test_half_assessed_pin_enqueues(self, hut, monkeypatch):
+        """phash without quality_score is still an unassessed pin."""
+        calls = self._spy(monkeypatch)
+        pin_place_images(hut, [_result(score=80)])
+        Image.objects.filter(source_ident="wikicommons:File:Test.jpg").update(
+            phash="0123456789abcdef"
+        )
+        assert maybe_enqueue_place_assessment(hut) is True
+        assert len(calls) == 1
+
+    def test_no_pins_no_enqueue(self, hut, monkeypatch):
+        calls = self._spy(monkeypatch)
+        assert maybe_enqueue_place_assessment(hut) is False
+        assert calls == []
+
+    def test_enqueue_failure_never_raises(self, hut, monkeypatch):
+        def _boom(*args, **kwargs):
+            raise RuntimeError("q2 down")
+
+        monkeypatch.setattr("django_q.tasks.async_task", _boom)
+        pin_place_images(hut, [_result(score=80)])
+        assert maybe_enqueue_place_assessment(hut) is False
 
 
 class TestResponsePassthrough:

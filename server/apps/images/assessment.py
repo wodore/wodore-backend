@@ -7,8 +7,12 @@ columns plus a per-signal breakdown in ``image_meta.quality``.
 
 Near-duplicates are detected within a place by Hamming distance of the
 hashes (≤ ``DUPLICATE_HAMMING_DISTANCE``); the weaker twin(s) get a
-``duplicate_of`` marker in ``image_meta`` — never hidden or deleted
-automatically. The ThumbHash placeholder is computed by imagor itself
+``duplicate_of`` marker in ``image_meta`` — never deleted, and reversible
+by curation. At serve time the Wodore provider drops marked twins while
+their primary is served (``_drop_duplicate_pins``); pins without a phash
+trigger a background assessment on visit
+(``maybe_enqueue_place_assessment``) so the next visitor sees the
+deduplicated gallery. The ThumbHash placeholder is computed by imagor itself
 (``/meta/filters:thumbhash()``) — the image pipeline already decodes
 the pixels there.
 """
@@ -219,7 +223,7 @@ def assess_place_pins(place, *, force: bool = False) -> dict:
 
     from server.apps.geometries.pinning import _association_for, place_type_of
 
-    assoc_model, place_field, _inv = _association_for(place)
+    assoc_model, place_field, invalidate = _association_for(place)
     assocs = assoc_model.objects.filter(
         **{place_field: place}, image__is_active=True
     ).select_related("image")
@@ -239,6 +243,7 @@ def assess_place_pins(place, *, force: bool = False) -> dict:
         ),
     )
     primaries = []
+    markers_changed = False
     for image in by_quality:
         primary = None
         for candidate in primaries:
@@ -255,6 +260,7 @@ def assess_place_pins(place, *, force: bool = False) -> dict:
                 meta["assessed_at"] = timezone.now().isoformat()
                 image.image_meta = meta
                 image.save(update_fields=["image_meta"])
+                markers_changed = True
             duplicates += 1
         else:
             primaries.append(image)
@@ -262,6 +268,14 @@ def assess_place_pins(place, *, force: bool = False) -> dict:
                 del meta["duplicate_of"]
                 image.image_meta = meta
                 image.save(update_fields=["image_meta"])
+                markers_changed = True
+
+    # Serving depends on the assessment outcome (thumbhashes, duplicate
+    # filtering) — bump the place's response-cache version whenever the
+    # served set could differ, so the next visitor recomputes instead of
+    # hitting the pre-assessment cache entry.
+    if assessed or markers_changed:
+        invalidate(place.slug)
 
     stats = {"assessed": assessed, "duplicates": duplicates, "pins": len(hashed)}
     logger.info(
@@ -285,6 +299,64 @@ def assess_place_task(place_type: str, slug: str):
         assess_place_pins(place)
     except Exception:
         logger.exception("assess_place_failed", place_type=place_type, place=slug)
+
+
+#: One assessment task per place per window, regardless of visitor bursts
+#: (mirrors the pin-refresh debounce, ``PIN_REFRESH_DEBOUNCE_S``).
+PLACE_ASSESS_DEBOUNCE_S = 15 * 60
+
+
+def maybe_enqueue_place_assessment(place) -> bool:
+    """Enqueue a background phash/quality assessment if pins lack one.
+
+    Serve-time duplicate filtering (the Wodore provider's
+    ``_drop_duplicate_pins``) only works on assessed images; pins without
+    a phash (fresh pins, first visit after pinning) trigger this. Never
+    blocks or raises: the visitor is served immediately, the q2 task
+    assesses + marks duplicates + invalidates the response cache, and the
+    *next* visitor sees the deduplicated gallery. Returns True when a
+    task was enqueued.
+    """
+    from django.db.models import Q
+
+    from server.apps.geometries.pinning import (
+        _association_for,
+        _pin_cache,
+        place_type_of,
+    )
+
+    place_type = place_type_of(place)
+    assoc_model, place_field, _inv = _association_for(place)
+    unassessed = assoc_model.objects.filter(
+        Q(image__phash__isnull=True) | Q(image__quality_score__isnull=True),
+        image__is_active=True,
+        **{place_field: place},
+    ).exists()
+    if not unassessed:
+        return False
+
+    debounce_key = f"geoimages:pinassess:{place_type}:{place.slug}"
+    if _pin_cache().get(debounce_key):
+        return False
+    try:
+        from django_q.tasks import async_task
+
+        async_task(
+            "server.apps.images.assessment.assess_place_task",
+            place_type,
+            place.slug,
+            task_name=f"pin-assess {place_type}:{place.slug}",
+        )
+    except Exception:
+        logger.exception(
+            "place_assessment_enqueue_failed",
+            place_type=place_type,
+            place=place.slug,
+        )
+        return False
+    _pin_cache().set(debounce_key, 1, timeout=PLACE_ASSESS_DEBOUNCE_S)
+    logger.info("place_assessment_enqueued", place_type=place_type, place=place.slug)
+    return True
 
 
 # ---------------------------------------------------------------------------
