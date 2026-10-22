@@ -230,7 +230,7 @@ class TestEndpointEnqueue:
         calls = []
 
         def _fake_async_task(func, *args, **kwargs):
-            calls.append(args)
+            calls.append((func, args))
 
         monkeypatch.setattr("django_q.tasks.async_task", _fake_async_task)
         pin_place_images(hut, [_result(score=80)])
@@ -240,13 +240,24 @@ class TestEndpointEnqueue:
         client = TestClient("/v1/geo/images")
         response = client.get(f"/hut/{hut.slug}?radius=50&lang=en&limit=10")
         assert response.status_code == 200
-        # Only the pin-refresh enqueues matter here (the visit counter may
-        # also enqueue its flush task on the same request).
-        pin_calls = [c for c in calls if len(c) == 2 and c[0] == "hut"]
-        assert pin_calls == [("hut", hut.slug)]
-        # Second hit within the debounce window: no new task.
+        # The fast path may enqueue several tasks (visit counter, pin
+        # refresh, phash assessment) — each exactly once, identified by
+        # its task function.
+        funcs = [func for func, _args in calls]
+        assert funcs.count("server.apps.geometries.pinning.sync_place_images_task") == 1
+        assert (
+            funcs.count("server.apps.images.assessment.assess_place_task") == 1
+        )  # unassessed pins enqueue the background assessment
+        refresh_calls = [
+            args
+            for func, args in calls
+            if func == "server.apps.geometries.pinning.sync_place_images_task"
+        ]
+        assert refresh_calls == [("hut", hut.slug)]
+        # Second hit within the debounce window: no new tasks of either kind.
         client.get(f"/hut/{hut.slug}?radius=50&lang=en&limit=11")
-        assert len(pin_calls) == 1
+        assert funcs.count("server.apps.geometries.pinning.sync_place_images_task") == 1
+        assert funcs.count("server.apps.images.assessment.assess_place_task") == 1
 
 
 class TestDeadOriginFlagging:
