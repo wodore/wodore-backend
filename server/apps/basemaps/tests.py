@@ -25,6 +25,14 @@ from server.apps.basemaps.resolution import (
     resolve_tokens,
     substitute_env,
 )
+from server.apps.basemaps.tile_assets import (
+    ASSET_VERSIONS_CACHE_KEY,
+    VERSIONED_TILE_SOURCES,
+    asset_versions,
+    inject_asset_versions,
+    run_external_verifier,
+    run_martin_watcher,
+)
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "styles"
 
@@ -858,3 +866,636 @@ class TestSeedStyleSpecConformance:
             {"data": "{API_URL}/v1/x.geojson"}, "http://m", api_url="https://api"
         )
         assert out["data"] == "https://api/v1/x.geojson"
+
+
+# ── Tile asset versioning ─────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestAssetVersionInjection:
+    """Pure injection rules — no I/O, registry-shaped inputs."""
+
+    def _versions(self, **overrides: Any) -> dict[str, Any]:
+        versions: dict[str, Any] = {
+            "sprites": "sprv",
+            "fonts": "fntv",
+            "tiles": {"huts": "hutv"},
+            "external": {"https://icons.example.org/sprite": "extv"},
+        }
+        versions.update(overrides)
+        return versions
+
+    def test_sprite_glyphs_and_huts_tiles_get_versions(self, settings):
+        settings.MARTIN_TILE_URL = "https://tiles.example.org"
+        style = {
+            "sprite": [
+                {"id": "wd", "url": "https://tiles.example.org/sprite/accommodation"},
+                {"id": "wd-sdf", "url": "https://tiles.example.org/sdf_sprite/acco"},
+            ],
+            "glyphs": "https://tiles.example.org/font/{fontstack}/{range}.pbf",
+            "sources": {
+                "wd-huts": {
+                    "type": "vector",
+                    "tiles": ["https://tiles.example.org/huts/{z}/{x}/{y}"],
+                },
+            },
+        }
+        out = inject_asset_versions(style, self._versions())
+        assert out["sprite"][0]["url"].endswith("?v=sprv")
+        assert out["sprite"][1]["url"].endswith("?v=sprv")
+        assert out["glyphs"] == (
+            "https://tiles.example.org/font/{fontstack}/{range}.pbf?v=fntv"
+        )
+        assert out["sources"]["wd-huts"]["tiles"][0] == (
+            "https://tiles.example.org/huts/{z}/{x}/{y}?v=hutv"
+        )
+
+    def test_external_registry_urls_versioned(self, settings):
+        settings.MARTIN_TILE_URL = "https://tiles.example.org"
+        style = {
+            "sprite": [{"id": "mtk", "url": "https://icons.example.org/sprite"}],
+        }
+        out = inject_asset_versions(style, self._versions())
+        assert out["sprite"][0]["url"] == "https://icons.example.org/sprite?v=extv"
+
+    def test_urls_with_query_or_param_tokens_untouched(self, settings):
+        settings.MARTIN_TILE_URL = "https://tiles.example.org"
+        style = {
+            "sources": {
+                "wd-bookings": {
+                    "type": "vector",
+                    "tiles": [
+                        (
+                            "https://tiles.example.org/availability/{z}/{x}/{y}"
+                            "?date={{date}}&days=4"
+                        )
+                    ],
+                },
+                "raster-manual": {
+                    "type": "raster",
+                    "tiles": ["https://tiles.example.org/raster/{z}/{x}/{y}.webp?v=2"],
+                },
+            },
+        }
+        out = inject_asset_versions(style, self._versions())
+        assert out["sources"]["wd-bookings"]["tiles"][0] == (
+            "https://tiles.example.org/availability/{z}/{x}/{y}?date={{date}}&days=4"
+        )
+        assert out["sources"]["raster-manual"]["tiles"][0] == (
+            "https://tiles.example.org/raster/{z}/{x}/{y}.webp?v=2"
+        )
+
+    def test_unregistered_sources_and_empty_registry_untouched(self, settings):
+        settings.MARTIN_TILE_URL = "https://tiles.example.org"
+        style = {
+            "sprite": [
+                {"id": "wd", "url": "https://tiles.example.org/sprite/accommodation"}
+            ],
+            "sources": {
+                "geo": {
+                    "type": "vector",
+                    "tiles": ["https://tiles.example.org/geoplaces/{z}/{x}/{y}"],
+                },
+            },
+        }
+        empty = {"sprites": None, "fonts": None, "tiles": {}, "external": {}}
+        assert inject_asset_versions(style, empty) == style
+        out = inject_asset_versions(style, self._versions())
+        # geoplaces is not registered → no version
+        assert out["sources"]["geo"]["tiles"][0] == (
+            "https://tiles.example.org/geoplaces/{z}/{x}/{y}"
+        )
+
+
+@pytest.mark.django_db
+class TestAssetVersionServing:
+    """Endpoint behavior: ETag body hash, cache-key digest rotation."""
+
+    def _seed(self):
+        from django.core.management import call_command
+
+        call_command("map_seed", verbosity=0)
+
+    def _publish(self, key: str, version: str):
+        from django.core.cache import cache
+
+        from server.apps.basemaps.models import TileAssetVersion
+
+        TileAssetVersion.objects.update_or_create(
+            key=key,
+            defaults={
+                "version": version,
+                "origin": TileAssetVersion.Origin.martin_sync,
+            },
+        )
+        cache.delete(ASSET_VERSIONS_CACHE_KEY)
+
+    def test_version_change_busts_etag_and_cache_without_layer_edit(self):
+        from django.core.cache import cache
+
+        self._seed()
+        cache.clear()
+        client = Client()
+        first = client.get("/v1/map/styles/huts.json")
+        assert "sprite/accommodation,availability?v=" not in first.content.decode()
+        self._publish("sprites", "aaaaaaaa")
+        second = client.get("/v1/map/styles/huts.json")
+        assert second.headers["ETag"] != first.headers["ETag"]
+        assert "sprite/accommodation,availability?v=aaaaaaaa" in second.content.decode()
+        # Same body again from the render cache (key now embeds digest)
+        third = client.get("/v1/map/styles/huts.json")
+        assert third.headers["ETag"] == second.headers["ETag"]
+        assert third.content == second.content
+
+    def test_equal_length_version_change_busts_etag(self):
+        from django.core.cache import cache
+
+        self._seed()
+        cache.clear()
+        client = Client()
+        self._publish("sprites", "aaaaaaaa")
+        first = client.get("/v1/map/styles/huts.json")
+        self._publish("sprites", "bbbbbbbb")  # same length, different content
+        second = client.get("/v1/map/styles/huts.json")
+        assert second.headers["ETag"] != first.headers["ETag"]
+        assert "v=bbbbbbbb" in second.content.decode()
+
+    def test_huts_tile_urls_versioned_from_computed_aggregate(self):
+        from django.core.cache import cache
+
+        self._seed()
+        cache.clear()
+        client = Client()
+        body = client.get("/v1/map/styles/huts.json").json()
+        tiles = body["sources"]["wd-huts"]["tiles"][0]
+        assert tiles.startswith("http")
+        assert "/huts/{z}/{x}/{y}?v=" in tiles
+
+    def test_category_edit_rotates_computed_huts_version(self):
+        from django.core.cache import cache
+
+        from server.apps.basemaps.models import TileAssetVersion  # noqa: F401
+        from server.apps.categories.models import Category
+
+        cache.clear()
+        versions = asset_versions(force=True)
+        root = Category.objects.filter(parent=None).first()
+        assert root is not None, "map_seed must provision root categories"
+        root.name = {"en": "renamed"}  # type: ignore[assignment]
+        root.save()
+        import datetime as dt
+
+        Category.objects.filter(pk=root.pk).update(
+            modified=timezone.now() + dt.timedelta(seconds=5)
+        )
+        cache.delete(ASSET_VERSIONS_CACHE_KEY)
+        rotated = asset_versions(force=True)
+        assert rotated["tiles"]["huts"] != versions["tiles"]["huts"]
+
+    def test_deps_cover_every_table_joined_by_the_huts_view(self):
+        """H1/H3 regression guard: the deps list must cover the view SQL."""
+        import re
+
+        from django.apps import apps
+
+        from server.apps.huts.models.tiles_view import HutsForTilesView
+
+        sql = HutsForTilesView.ViewMeta.query()[0]
+        referenced = set(re.findall(r"(?:FROM|JOIN)\s+([a-z_][a-z0-9_]*)", sql))
+        dep_tables = {
+            apps.get_model(label)._meta.db_table
+            for label in VERSIONED_TILE_SOURCES["huts"]["deps"]
+        }
+        # No exclusions: a future view JOIN on an uncovered table (the
+        # exact scenario this guard exists for) must fail this test.
+        assert referenced == dep_tables, (
+            f"view tables vs deps drift: missing={referenced - dep_tables} "
+            f"extra={dep_tables - referenced}"
+        )
+
+
+class TestFetchSemantics:
+    """_fetch against a REAL socket — urllib raises HTTPError for every
+    non-2xx (including 304), which _fetch must normalize back into
+    (status, body, headers); only network failures propagate."""
+
+    def test_non2xx_returned_not_raised(self):
+        import threading
+        import urllib.error
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+
+        from server.apps.basemaps.tile_assets import _fetch
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                if self.path.startswith("/notmodified"):
+                    self.send_response(304)
+                    self.send_header("ETag", '"x"')
+                    self.end_headers()
+                elif self.path.startswith("/missing"):
+                    self.send_response(404)
+                    self.end_headers()
+                else:
+                    body = b"hello"
+                    self.send_response(200)
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+
+            def log_message(self, format, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            base = f"http://127.0.0.1:{server.server_port}"
+            status, body, headers = _fetch(f"{base}/notmodified", "n")
+            assert (status, body, headers.get("ETag")) == (304, b"", '"x"')
+            status, _body, _headers = _fetch(f"{base}/missing", "n")
+            assert status == 404
+            status, body, _headers = _fetch(f"{base}/ok", "n")
+            assert (status, body) == (200, b"hello")
+            with pytest.raises(urllib.error.URLError):
+                _fetch("http://127.0.0.1:1/unreachable", "n")
+        finally:
+            server.shutdown()
+
+
+@pytest.mark.django_db
+class TestExternalVerifierHttpShapes:
+    """Verifier behavior when the bare key 404s (the maptoolkit shape)."""
+
+    def test_404_variant_skipped_and_json_png_publish(self, monkeypatch):
+        from django.core.cache import cache
+
+        from server.apps.basemaps.models import TileAssetVersion
+
+        TileAssetVersion.objects.create(
+            key="https://icons.example.org/sprite",
+            origin=TileAssetVersion.Origin.external,
+        )
+        MapLayer.objects.create(
+            slug="ext-layer",
+            spec=MapLayer.Spec.medium,
+            role=MapLayer.Role.overlay,
+            name="Ext",
+            style={
+                "version": 8,
+                "sprite": [{"id": "mtk", "url": "https://icons.example.org/sprite"}],
+                "layers": [],
+            },
+        )
+        cache.clear()
+
+        def fetch(url, nonce, headers=None):
+            if url.endswith(".json"):
+                return 200, b"index", {"ETag": '"j"'}
+            if url.endswith(".png"):
+                return 200, b"pngbytes", {}
+            return 404, b"", {}  # the bare extension-less key
+
+        monkeypatch.setattr("server.apps.basemaps.tile_assets._fetch", fetch)
+        stats = run_external_verifier()
+        assert stats["changed"] == ["https://icons.example.org/sprite"]
+        row = TileAssetVersion.objects.get(key="https://icons.example.org/sprite")
+        assert row.version
+        assert row.etag == '"j"'
+        # Identical served bytes on the next run: unchanged, no rewrite
+        stats2 = run_external_verifier()
+        assert stats2["unchanged"] == ["https://icons.example.org/sprite"]
+
+    def test_mixed_304_and_changed_png_is_detected(self, monkeypatch):
+        """M1 regression: a .json 304 must not mask a changed .png."""
+        from django.core.cache import cache
+
+        from server.apps.basemaps.models import TileAssetVersion
+
+        TileAssetVersion.objects.create(
+            key="https://icons.example.org/sprite",
+            origin=TileAssetVersion.Origin.external,
+            version="old",
+            etag='"j"',
+        )
+        MapLayer.objects.create(
+            slug="ext-layer",
+            spec=MapLayer.Spec.medium,
+            role=MapLayer.Role.overlay,
+            name="Ext",
+            style={
+                "version": 8,
+                "sprite": [{"id": "mtk", "url": "https://icons.example.org/sprite"}],
+                "layers": [],
+            },
+        )
+        cache.clear()
+
+        def fetch(url, nonce, headers=None):
+            if url.endswith(".json"):
+                # Unchanged index: honors the stored validator.
+                assert headers and headers.get("If-None-Match") == '"j"'
+                return 304, b"", {}
+            if url.endswith(".png"):
+                return 200, b"recolored-png", {"ETag": '"p2"'}
+            return 404, b"", {}
+
+        monkeypatch.setattr("server.apps.basemaps.tile_assets._fetch", fetch)
+        stats = run_external_verifier()
+        assert stats["changed"] == ["https://icons.example.org/sprite"]
+
+
+@pytest.mark.django_db
+class TestPerStyleDigest:
+    def test_huts_version_change_leaves_basemap_etags_alone(self):
+        from django.core.cache import cache
+
+        client = Client()
+        self_layer = MapLayer.objects.filter(
+            slug="world-topo", spec=MapLayer.Spec.medium
+        ).first()
+        if self_layer is None:
+            from django.core.management import call_command
+
+            call_command("map_seed", verbosity=0)
+        cache.clear()
+        basemap_before = client.get("/v1/map/styles/world-topo.json")
+        huts_before = client.get("/v1/map/styles/huts.json")
+        # Simulate a huts-data edit rotating the computed tile version
+        from server.apps.basemaps import tile_assets
+
+        original = tile_assets._computed_tile_versions
+
+        def bumped():
+            return {"huts": "rotated"}
+
+        tile_assets._computed_tile_versions = bumped
+        try:
+            cache.delete(tile_assets.ASSET_VERSIONS_CACHE_KEY)
+            basemap_after = client.get("/v1/map/styles/world-topo.json")
+            huts_after = client.get("/v1/map/styles/huts.json")
+        finally:
+            tile_assets._computed_tile_versions = original
+            cache.delete(tile_assets.ASSET_VERSIONS_CACHE_KEY)
+        assert basemap_after.headers["ETag"] == basemap_before.headers["ETag"]
+        assert huts_after.headers["ETag"] != huts_before.headers["ETag"]
+
+    def test_consumed_versions_mirror_injection(self, settings):
+        settings.MARTIN_TILE_URL = "https://tiles.example.org"
+        from server.apps.basemaps.tile_assets import consumed_versions
+
+        style = {
+            "sprite": [
+                {"id": "wd", "url": "{TILE_SERVER_URL}/sprite/accommodation"},
+                {"id": "mtk", "url": "https://icons.example.org/sprite"},
+            ],
+            "glyphs": "{TILE_SERVER_URL}/font/{fontstack}/{range}.pbf",
+            "sources": {
+                "wd-huts": {
+                    "type": "vector",
+                    "tiles": ["{TILE_SERVER_URL}/huts/{z}/{x}/{y}"],
+                },
+            },
+        }
+        versions = {
+            "sprites": "sprv",
+            "fonts": "fntv",
+            "tiles": {"huts": "hutv"},
+            "external": {"https://icons.example.org/sprite": "extv"},
+        }
+        out = inject_asset_versions(
+            {**style, "sprite": [dict(e) for e in style["sprite"]]}, versions
+        )
+        used = consumed_versions(style, versions)
+        # Every injected ?v= corresponds to a consumed version, and every
+        # consumed version appears on some URL in the injected tree.
+        assert "?v=sprv" in out["sprite"][0]["url"]
+        assert "?v=extv" in out["sprite"][1]["url"]
+        assert out["glyphs"].endswith("?v=fntv")
+        assert out["sources"]["wd-huts"]["tiles"][0].endswith("?v=hutv")
+        assert used == {
+            "sprites": "sprv",
+            "fonts": "fntv",
+            "tiles": {"huts": "hutv"},
+            "external": {"https://icons.example.org/sprite": "extv"},
+        }
+
+
+@pytest.mark.django_db
+class TestProbeShapes:
+    """C1 regression: Martin has no handler for extension-less sprite
+    base URLs — probes must target the served .json/.png variants."""
+
+    def test_sprite_probes_carry_json_png_suffixes(self):
+        from django.core.management import call_command
+
+        from server.apps.basemaps.tile_assets import collect_martin_probes
+
+        call_command("map_seed", verbosity=0)
+        sprite_urls, font_urls = collect_martin_probes()
+        assert sprite_urls, "seeded styles reference Martin sprites"
+        for url in sprite_urls:
+            assert url.endswith((".json", ".png")), url
+            assert "/sprite/" in url or "/sdf_sprite/" in url
+        bare = [
+            u for u in sprite_urls if not (u.endswith(".json") or u.endswith(".png"))
+        ]
+        assert not bare
+        # Fonts keep the template's .pbf (no double suffix)
+        for url in font_urls:
+            assert url.endswith("/0-255.pbf"), url
+
+
+@pytest.mark.django_db
+class TestDateRotation:
+    """M2 regression: resolved styles with date params re-key at
+    midnight; styles without them keep their ETag."""
+
+    def test_date_change_rotates_huts_but_not_basemap(self, monkeypatch):
+        from django.core.cache import cache
+        from django.core.management import call_command
+        from django.utils import timezone
+
+        call_command("map_seed", verbosity=0)
+        cache.clear()
+        client = Client()
+        huts_before = client.get("/v1/map/styles/huts.json")
+        base_before = client.get("/v1/map/styles/world-topo.json")
+
+        import datetime as dt
+
+        tomorrow = timezone.localdate() + dt.timedelta(days=1)
+        monkeypatch.setattr(timezone, "localdate", lambda: tomorrow)
+        cache.clear()  # asset-version memo only; style keys embed the date
+
+        huts_after = client.get("/v1/map/styles/huts.json")
+        base_after = client.get("/v1/map/styles/world-topo.json")
+        assert huts_after.headers["ETag"] != huts_before.headers["ETag"]
+        assert base_after.headers["ETag"] == base_before.headers["ETag"]
+
+
+@pytest.mark.django_db
+class TestMartinWatcher:
+    def _seed(self):
+        from django.core.management import call_command
+
+        call_command("map_seed", verbosity=0)
+
+    def test_publishes_observed_hash_and_is_content_gated(self, monkeypatch):
+        from django.core.cache import cache
+
+        from server.apps.basemaps.models import TileAssetVersion
+
+        self._seed()
+        calls: list[str] = []
+
+        def fake_fetch(url, nonce, headers=None):
+            calls.append(url)
+            assert nonce  # _fetch appends it as ?_wd_watch=…
+            return 200, b"bytes-v1", {}
+
+        monkeypatch.setattr("server.apps.basemaps.tile_assets._fetch", fake_fetch)
+        cache.clear()
+        stats = run_martin_watcher()
+        assert stats["published"] == ["sprites", "fonts"]
+        v1 = TileAssetVersion.objects.get(key="sprites").version
+        # Unchanged served bytes → no republication
+        stats2 = run_martin_watcher()
+        assert stats2["kept"] == ["sprites", "fonts"]
+        assert TileAssetVersion.objects.get(key="sprites").version == v1
+        # New served bytes → new version
+        monkeypatch.setattr(
+            "server.apps.basemaps.tile_assets._fetch",
+            lambda url, nonce, headers=None: (200, b"bytes-v2", {}),
+        )
+        stats3 = run_martin_watcher()
+        assert stats3["published"] == ["sprites", "fonts"]
+        assert TileAssetVersion.objects.get(key="sprites").version != v1
+
+    def test_font_probes_encode_spaces_and_skip_unknown_stacks(self, monkeypatch):
+        """Staging round 1: font names contain spaces (raw URLs are
+        invalid for urllib) and expression keywords scraped from
+        data-driven text-font arrays 404 — those are skipped, real
+        fonts still publish."""
+        from django.core.cache import cache
+        from django.core.management import call_command
+
+        from server.apps.basemaps.models import TileAssetVersion
+        from server.apps.basemaps.tile_assets import collect_martin_probes
+
+        call_command("map_seed", verbosity=0)
+        cache.clear()
+        _sprites, fonts = collect_martin_probes()
+        assert fonts, "seeded styles reference Martin fonts"
+        for url in fonts:
+            assert " " not in url, url  # percent-encoded
+        statuses: dict[str, int] = {}
+
+        def fetch(url, nonce, headers=None):
+            status = statuses.get(url, 200)
+            return status, b"x" if status == 200 else b"", {}
+
+        monkeypatch.setattr("server.apps.basemaps.tile_assets._fetch", fetch)
+        # One unknown (404) stack must not block the fonts group…
+        unknown = next(u for u in fonts if u.endswith("/0-255.pbf"))
+        statuses[unknown] = 404
+        stats = run_martin_watcher()
+        assert stats["published"] == ["sprites", "fonts"]
+        assert TileAssetVersion.objects.get(key="fonts").version
+        # …but a 404 sprite is real breakage: sprites group fails.
+        cache.clear()
+        TileAssetVersion.objects.update(version="")
+        statuses.clear()
+        statuses[_sprites[0]] = 404
+        stats2 = run_martin_watcher()
+        assert stats2["failed"] == ["sprites"]
+        assert stats2["published"] == ["fonts"]
+
+    def test_probe_failure_keeps_stored_version(self, monkeypatch):
+        from django.core.cache import cache
+
+        from server.apps.basemaps.models import TileAssetVersion
+
+        self._seed()
+        TileAssetVersion.objects.update_or_create(
+            key="sprites", defaults={"version": "stored"}
+        )
+        cache.clear()
+
+        def failing_fetch(url, nonce, headers=None):
+            raise OSError("martin down")
+
+        monkeypatch.setattr("server.apps.basemaps.tile_assets._fetch", failing_fetch)
+        stats = run_martin_watcher()
+        assert stats["failed"] == ["sprites", "fonts"]
+        assert TileAssetVersion.objects.get(key="sprites").version == "stored"
+
+
+@pytest.mark.django_db
+class TestExternalVerifier:
+    def test_304_keeps_version_200_bumps(self, monkeypatch):
+        from django.core.cache import cache
+
+        from server.apps.basemaps.models import TileAssetVersion
+
+        TileAssetVersion.objects.create(
+            key="https://icons.example.org/sprite",
+            origin=TileAssetVersion.Origin.external,
+            version="old",
+            etag='"abc"',
+        )
+        # Referenced by an active layer
+        MapLayer.objects.create(
+            slug="ext-layer",
+            spec=MapLayer.Spec.medium,
+            role=MapLayer.Role.overlay,
+            name="Ext",
+            style={
+                "version": 8,
+                "sprite": [{"id": "mtk", "url": "https://icons.example.org/sprite"}],
+                "layers": [],
+            },
+        )
+        cache.clear()
+
+        def fetch_304(url, nonce, headers=None):
+            assert headers and headers.get("If-None-Match") == '"abc"'
+            return 304, b"", {}
+
+        monkeypatch.setattr("server.apps.basemaps.tile_assets._fetch", fetch_304)
+        stats = run_external_verifier()
+        assert stats["unchanged"] == ["https://icons.example.org/sprite"]
+        assert (
+            TileAssetVersion.objects.get(key="https://icons.example.org/sprite").version
+            == "old"
+        )
+
+        def fetch_200(url, nonce, headers=None):
+            return 200, b"new-bytes", {"ETag": '"def"'}
+
+        monkeypatch.setattr("server.apps.basemaps.tile_assets._fetch", fetch_200)
+        stats2 = run_external_verifier()
+        assert stats2["changed"] == ["https://icons.example.org/sprite"]
+        row = TileAssetVersion.objects.get(key="https://icons.example.org/sprite")
+        assert row.version != "old"
+        assert row.etag == '"def"'
+
+    def test_unreferenced_entries_skipped(self, monkeypatch):
+        from django.core.cache import cache
+
+        from server.apps.basemaps.models import TileAssetVersion
+
+        TileAssetVersion.objects.create(
+            key="https://unreferenced.example.org/sprite",
+            origin=TileAssetVersion.Origin.external,
+            version="x",
+        )
+        cache.clear()
+        stats = run_external_verifier()
+        assert stats["skipped"] == sorted(
+            [
+                "https://unreferenced.example.org/sprite",
+                "https://icons.maptoolkit.org/sprite",
+                "https://icons.maptoolkit.org/nature~hsl_81_60_80",
+                "https://icons.maptoolkit.org/water~hsl_182_65_80",
+            ]
+        )

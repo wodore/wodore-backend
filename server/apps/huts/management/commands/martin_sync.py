@@ -897,9 +897,27 @@ class Command(BaseCommand):
                         "Next steps:\n"
                         "  Local: docker-compose restart martin\n"
                         "  Kubernetes: kubectl rollout restart deployment martin\n"
-                        "  Verify: curl http://martin-service:3000/catalog"
+                        "  Verify: curl http://martin-service:3000/catalog\n\n"
+                        "  Asset versions: an immediate martin_asset_watch\n"
+                        "  observation was enqueued — it publishes the new\n"
+                        "  sprite/font hashes once Martin serves the new\n"
+                        "  bytes (after the restart); the recurring q2\n"
+                        "  schedule is the backstop."
                     )
                 )
+                # Content-gated publication: enqueue an observation now;
+                # it only publishes when Martin's served bytes actually
+                # changed (i.e. after the restart above).
+                try:
+                    from django_q.tasks import async_task
+
+                    async_task("server.apps.basemaps.tile_assets.run_martin_watcher")
+                except Exception as exc:  # enqueue is best-effort
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f"  ⚠ Could not enqueue martin_asset_watch: {exc}"
+                        )
+                    )
             else:
                 self.stdout.write(
                     self.style.SUCCESS(

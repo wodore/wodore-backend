@@ -37,8 +37,11 @@ postgres:
       # Layer ID (used in vector tiles)
       layer_id: huts
 
-      # Cache-Control: short — carries has_availability state
-      cache_control: public, max-age=3600
+      # Cache-Control: long — tile URLs are content-keyed via the
+      # serve-time `?v=` asset version (basemaps tile_assets): a hut edit
+      # rotates the version in the served style, so a fresh cache key
+      # exists before any long-cached response could be stale.
+      cache_control: public, max-age=604800
 
       # Schema and table/view name
       schema: public
