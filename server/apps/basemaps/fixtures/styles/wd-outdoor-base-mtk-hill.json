@@ -2157,17 +2157,6 @@
       "type": "raster",
       "tileSize": 360
     },
-    "swiss-relief": {
-      "type": "raster",
-      "tiles": [
-        "https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swisssurface3d-reliefschattierung_monodirektional/default/current/3857/{z}/{x}/{y}.png"
-      ],
-      "tileSize": 256,
-      "minzoom": 8,
-      "maxzoom": 16,
-      "bounds": [5.140242, 45.398181, 11.47757, 48.230651],
-      "attribution": "© <a href='https://www.swisstopo.admin.ch'>swisstopo</a>"
-    },
     "bathymetry": {
       "url": "https://tiles.maptoolkit.org/raster_bathymetry.json",
       "type": "raster-dem",
@@ -2977,34 +2966,6 @@
         "maptoolkit:legend": {
           "hidden": true
         }
-      }
-    },
-    {
-      "id": "swiss-relief",
-      "type": "raster",
-      "source": "swiss-relief",
-      "minzoom": 10.5,
-      "paint": {
-        "raster-opacity": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          11,
-          0.1,
-          12,
-          0.16,
-          13,
-          0.19,
-          14,
-          0.22,
-          15,
-          0.19,
-          16,
-          0.14,
-          17,
-          0.1
-        ],
-        "raster-resampling": "linear"
       }
     },
     {
