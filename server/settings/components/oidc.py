@@ -237,10 +237,19 @@ ZITADEL_API_PRIVATE_KEY = _load_zitadel_private_key()
 OIDC_RENEW_ID_TOKEN_EXPIRY_SECONDS = 60 * 60 * 24  # 24 hours
 OIDC_STORE_ACCESS_TOKEN = True
 OIDC_STORE_ID_TOKEN = True
+# SessionRefresh scope: ONLY the Django-session admin surface. Everything
+# else on the API host is public or bearer-token authenticated (API /v1,
+# health, index/robots/llms, static/media), so a stale admin session (live
+# Django session, expired id_token) must never be dragged through the IdP
+# there. The original narrow list (/v1, /static/, /media - and the string
+# entries are exact-match only upstream, not prefixes!) left every other
+# path refreshable: GET / with an expired id_token silently redirected
+# into a Zitadel ``prompt=none`` renewal that dies on the provider's
+# "No active session found" error page (zitadel/zitadel#12165) - seen as
+# https://hub.stg.wodore.com/ forwarding to auth.burgdev.ch. Inverted
+# default: exempt everything that is NOT under /admin.
 OIDC_EXEMPT_URLS = [
-    re.compile(r"^/v\d+/.*"),  # Exempt all API routes (any version)
-    "/static/",
-    "/media/",
+    re.compile(r"^/(?!admin(?:/|$))"),
 ]
 
 discovery_info = None
