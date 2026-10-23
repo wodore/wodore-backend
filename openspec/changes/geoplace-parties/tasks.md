@@ -1,0 +1,59 @@
+# Tasks: geoplace-parties
+
+## 1. Party model, links & role vocabulary
+
+- [ ] 1.1 Data migration creating the `role` parent category with
+      children `operator`, `brand`, `owner` (active, ordered,
+      slug-stable; idempotent rerun)
+- [ ] 1.2 Create `parties` app: `Party` (slug unique, `name` i18n via
+      modeltrans, `note` i18n optional, `is_active`, `is_public`,
+      `review_status`) + `PartyLink` through model (order) to
+      `ExternalLink`; migrations, admin (Unfold, TABS entry), `__str__`,
+      factories
+- [ ] 1.3 `GeoPlaceParty` in geometries: role FK → Category, unique
+      `(geo_place, party, role)`, RESTRICT on party and role FKs,
+      `order`, indexes; `clean()` role-subtree validation mirrored in
+      the schema write path; unit tests for constraints and validation
+
+## 2. Brand replacement
+
+- [ ] 2.1 Data migration: for every `AmenityDetail` with `brand`,
+      get_or_create Party (slug from category slug, name from category
+      i18n) + association role `role.brand`; idempotent
+- [ ] 2.2 Remove `AmenityDetail.brand` FK (+ `amenity_brands`
+      related_name), the admin autocomplete scoping, and `BrandInput`;
+      replace with `PartyInput` (slug, name, role identifier) in the
+      input schema; update `AmenityDetail.update_or_create` to write
+      the association instead of the FK
+- [ ] 2.3 OSM import: `brand` tag → Party(role `role.brand`,
+      get_or_create by slug); `operator` tag → Party(role
+      `role.operator`, review status `review`, single values only);
+      drop `_get_or_create_brand_category`; import tests
+
+## 3. Owner merge & hut import
+
+- [ ] 3.1 `import_parties` management command: Owner → Party by slug
+      (name/note i18n, url → ExternalLink), `--dry-run`, idempotent
+      re-runs; tests
+- [ ] 3.2 Extend the wodore hut import (schema-path rewrite from the
+      capacity change) to write party associations from `hut_owner`
+      (role `role.owner`); import test
+
+## 4. API & admin
+
+- [ ] 4.1 Add `parties` (`[{role, slug, name, links}]`) to GeoPlace
+      responses under `fields[places]`, nested `fields[parties]`
+      narrowing; changelog entry per `api-conventions`; schema +
+      response tests
+- [ ] 4.2 Party admin + GeoPlace party inline (party autocomplete, role
+      autocomplete scoped to `role.*`); inline save marks
+      `is_modified`/`protected_fields`; amenity admin brand-free; admin
+      tests
+
+## 5. Verification
+
+- [ ] 5.1 Lane-DB dry-runs: data migrations (role vocabulary, brand
+      counts before/after), `import_parties --dry-run`, OSM sample
+      import, wodore hut import
+- [ ] 5.2 Full test suite (`scripts/lane-run.sh .venv/bin/pytest`) and
+      work doc under `_work/`
