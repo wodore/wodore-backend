@@ -22,9 +22,9 @@ GeoPlace through a **role category** (`role.*`), mirroring the
   (modeltrans, like `Owner`), optional localized note,
   `is_active`/`is_public`, review flag; **links via M2M to the existing
   `ExternalLink`** (i18n labels, link types, health checks) with
-  explicit ordering; **optional symbol** — three nullable Symbol FKs
-  (color/primitive/mono, same pattern as Category, resolved by the
-  shared `resolve_symbol_urls` helper).
+  explicit ordering; **optional symbol** — two nullable Symbol FKs
+  (color and mono; parties are not map features, so the map-styling
+  primitive variant is omitted).
 - New `role` category vocabulary (parent + children `operator`, `brand`,
   `owner`, `authority`) created by data migration, extensible in the
   category admin — same shape as the `season` vocabulary.

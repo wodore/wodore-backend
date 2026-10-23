@@ -7,10 +7,9 @@
       slug-stable; idempotent rerun)
 - [ ] 1.2 Create `parties` app: `Party` (slug unique, `name` i18n via
       modeltrans, `note` i18n optional, `is_active`, `is_public`,
-      `review_status`, optional `symbol_color`/`symbol_primitive`/
-      `symbol_mono` FKs mirroring Category) + `PartyLink` through model
-      (order) to `ExternalLink`; migrations, admin (Unfold, TABS entry,
-      symbol pickers), `__str__`, factories
+      `review_status`, optional `symbol_color`/`symbol_mono` FKs) +
+      `PartyLink` through model (order) to `ExternalLink`; migrations,
+      admin (Unfold, TABS entry, symbol pickers), `__str__`, factories
 - [ ] 1.3 `GeoPlaceParty` in geometries: role FK → Category, unique
       `(geo_place, party, role)`, RESTRICT on party and role FKs,
       `order`, indexes; `clean()` role-subtree validation mirrored in
@@ -43,9 +42,10 @@
 ## 4. API & admin
 
 - [ ] 4.1 Add `parties` (`[{role, slug, name, links, symbol}]`, symbol
-      via the shared `resolve_symbol_urls` helper) to GeoPlace responses
-      under `fields[places]`, nested `fields[parties]` narrowing;
-      changelog entry per `api-conventions`; schema + response tests
+      as resolved color/mono URLs, same helper pattern as category
+      symbols) to GeoPlace responses under `fields[places]`, nested
+      `fields[parties]` narrowing; changelog entry per `api-conventions`;
+      schema + response tests
 - [ ] 4.2 Party admin + GeoPlace party inline (party autocomplete, role
       autocomplete scoped to `role.*`); inline save marks
       `is_modified`/`protected_fields`; amenity admin brand-free; admin

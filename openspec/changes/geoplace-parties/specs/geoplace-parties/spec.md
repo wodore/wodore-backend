@@ -8,8 +8,8 @@ The system SHALL provide a `Party` entity with a unique slug, a
 localized name, an optional localized note, active/public flags, a
 review status, any number of ordered `ExternalLink` associations
 (shared link entities with i18n labels, link types, and health
-checks), and an optional symbol (three nullable Symbol FKs —
-color/primitive/mono — resolved through the shared symbol helper).
+checks), and an optional symbol (two nullable Symbol FKs — color and
+mono; the map-styling primitive variant is not used for parties).
 
 #### Scenario: Party with multiple links
 - **WHEN** a party "SAC Bern" is created with a website link and a
@@ -19,8 +19,8 @@ color/primitive/mono — resolved through the shared symbol helper).
 
 #### Scenario: Optional symbol resolves
 - **WHEN** a party has symbol FKs set and its symbol URLs are resolved
-- **THEN** the color/primitive/mono URLs are returned in the same
-  shape as category symbols; a party without symbols resolves to no
+- **THEN** the color and mono URLs are returned (same helper pattern
+  as category symbols); a party without symbols resolves to no
   symbol data
 
 #### Scenario: Slug uniqueness

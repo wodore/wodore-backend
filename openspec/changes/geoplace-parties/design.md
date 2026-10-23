@@ -42,7 +42,7 @@ entity is neutral, the *relation* carries the semantics. "Relation"/
 **Goals:**
 - One neutral `Party` entity for brand, owner, and operator semantics.
 - Localized name + multiple, ordered, health-checked external links.
-- Optional curated symbol (color/primitive/mono) per party.
+- Optional curated symbol (color and mono) per party.
 - **Place-level scope**: parties attach to every geoplace (any
   `detail_type`), not only amenity details — cable-car operators
   (transport), protected-area authorities (natural), municipalities
@@ -66,15 +66,20 @@ entity is neutral, the *relation* carries the semantics. "Relation"/
 
 1. **New `Party` model in a new `parties` app** (slug, `name` i18n via
    modeltrans, `note` i18n optional, `is_active`, `is_public`,
-   `review_status`, plus **optional symbol**: three nullable Symbol
-   FKs mirroring Category). Symbols reuse the generic
-   `resolve_symbol_urls` helper and the curated SVG pipeline
-   (color/primitive/mono variants) — deliberately *not* an uploaded
-   logo (`Organization`-style `ImageField`): curated iconography is
+   `review_status`, plus **optional symbol**: two nullable Symbol FKs,
+   `symbol_color` and `symbol_mono`). Parties are not map features —
+   the primitive variant that serves map zoom styling on categories
+   has no consumer here — so exactly the two variants a detail UI
+   needs: full color and monochrome. Symbols reuse the curated SVG
+   pipeline — deliberately *not* an uploaded logo
+   (`Organization`-style `ImageField`): curated iconography is
    licensing-clean and UI-themeable, logos are a convergence question
    for when `Organization` migrates. Alternatives rejected:
    generalizing `owners.Owner` in place (breaks `Hut.hut_owner`
-   mid-migration); reusing `Organization` (see Context).
+   mid-migration); reusing `Organization` (see Context); a generic
+   through model (FK → Symbol + FK → Category, many symbols per
+   party) — over-general with no consumer needing more than one mark
+   per variant; direct FKs keep resolution, admin, and API trivial.
 
 2. **Links: M2M to `ExternalLink` through `PartyLink` (order field)**,
    mirroring `GeoPlaceExternalLink`. One link entity can serve a place
@@ -125,9 +130,10 @@ entity is neutral, the *relation* carries the semantics. "Relation"/
    `fields[parties]` → slug-only, following the sparse-fieldsets
    conventions): `[{role, slug, name, links, symbol}]` with `role` as
    the category identifier (e.g. `role.operator`) and `symbol` the
-   resolved color/primitive/mono URLs when set (same shape as the
-   category symbol). `brand` was never in public responses, so no
-   version bump; changelog entry per `api-conventions`.
+   resolved color and mono URLs when set (same helper pattern as the
+   category symbol, minus the unused primitive variant). `brand` was
+   never in public responses, so no version bump; changelog entry per
+   `api-conventions`.
 
 7. **Admin tracking mirrors the capacity change's decision**: the party
    inline formset save marks the place `is_modified` and records the
