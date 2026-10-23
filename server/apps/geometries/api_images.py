@@ -14,6 +14,9 @@ from django.http import HttpRequest
 
 from server.apps.api.controller import ApiController, cache_headers, raise_not_found
 from server.apps.api.ogmap import RENDER_VERSION
+from server.apps.geometries.api_map import (
+    _entity_symbol,
+)
 from server.apps.images.assessment import maybe_enqueue_place_assessment
 from server.apps.images.og import OG_MAP_EFFECT, OG_MAP_MARKER_SCALE, OG_MAP_ZOOM
 from server.apps.translations import LanguageQuery, activate
@@ -380,6 +383,7 @@ def _map_fallback_feature(
     lon: float,
     modified,
     place_type: str,
+    symbol_url: str | None = None,
 ) -> dict:
     """Static-map fallback feature for entities without any images.
 
@@ -389,6 +393,25 @@ def _map_fallback_feature(
     from urllib.parse import urlencode
 
     def map_url(size: str) -> str:
+        # v busts BOTH caches: the raw render storage and the imagor
+        # composites built on this URL (imagor result-cache keys on the
+        # full source URL). It folds every input that rotates the
+        # render: entity modified, renderer version, the content-hashed
+        # symbol URL (changes when the SVG changes) and the OpenTopoMap
+        # basemap content version (external verifier, daily).
+        from server.apps.basemaps.tile_assets import asset_versions
+
+        basemap_version = ""
+        for key, version in asset_versions().get("external", {}).items():
+            if key.startswith("https://tile.opentopomap.org/"):
+                basemap_version = version
+                break
+        import hashlib
+
+        fingerprint = hashlib.sha256(
+            f"{modified:%Y%m%dT%H%M%S}|r{RENDER_VERSION}"
+            f"|{symbol_url or '-'}|{basemap_version}".encode()
+        ).hexdigest()[:12]
         query = urlencode(
             {
                 "place": slug,
@@ -402,10 +425,7 @@ def _map_fallback_feature(
                 # metadata instead (the gallery renders them like for
                 # provider photos).
                 "attribution": "false",
-                # v busts BOTH caches: the raw render storage and the
-                # imagor composites built on this URL (renderer changes
-                # propagate via RENDER_VERSION).
-                "v": f"{modified:%Y%m%dT%H%M%S}r{RENDER_VERSION}",
+                "v": fingerprint,
             }
         )
         return request.build_absolute_uri(f"/v1/geo/map/static?{query}")
@@ -709,6 +729,7 @@ class PlaceImagesController(ApiController):
                     lon=place.location.x,
                     modified=place.modified,
                     place_type="geoplace",
+                    symbol_url=_entity_symbol(place, request),
                 )
             ]
 
@@ -893,6 +914,7 @@ class HutImagesController(ApiController):
                     lon=hut.location.x,
                     modified=hut.modified,
                     place_type="hut",
+                    symbol_url=_entity_symbol(hut, request),
                 )
             ]
 
@@ -955,6 +977,7 @@ def cached_only_response(
                 lon=location.x,
                 modified=entity.modified,
                 place_type=place_type,
+                symbol_url=_entity_symbol(entity, request),
             )
         ]
     return _empty_images_response(
