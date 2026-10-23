@@ -21,6 +21,7 @@ secretive names are refused outright (``EnvVar.clean``).
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -46,7 +47,10 @@ class EnvVar(TimeStampedModel):
         max_length=100,
         unique=True,
         db_index=True,
-        help_text=_("Variable name, UPPER_SNAKE_CASE (e.g. WODORE_MAPTILER_API_KEY)"),
+        help_text=_(
+            "Variable name, UPPER_SNAKE_CASE, stored uppercase "
+            "(e.g. WODORE_MAPTILER_API_KEY)"
+        ),
     )
     value = models.TextField(
         _("Value"),
@@ -80,7 +84,7 @@ class EnvVar(TimeStampedModel):
         help_text=_("What this variable is used for (admin hint)"),
     )
 
-    class Meta:
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = _("Environment variable")
         verbose_name_plural = _("Environment variables")
         ordering = ("name",)
@@ -88,9 +92,15 @@ class EnvVar(TimeStampedModel):
     def __str__(self) -> str:
         return self.name
 
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Normalize the name to uppercase — registry lookups are exact."""
+        self.name = self.name.upper()
+        super().save(*args, **kwargs)
+
     def clean(self) -> None:
-        """Reject non-variable names and server-secret names."""
-        if not NAME_RE.match(self.name or ""):
+        """Normalize case, then reject bad shapes and server-secret names."""
+        self.name = (self.name or "").upper()
+        if not NAME_RE.match(self.name):
             raise ValidationError(
                 {"name": "Name must be UPPER_SNAKE_CASE ([A-Z][A-Z0-9_]*)"}
             )

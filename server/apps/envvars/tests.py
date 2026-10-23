@@ -42,10 +42,22 @@ def _fresh_snapshot():
 @pytest.mark.django_db
 class TestModelValidation:
     def test_rejects_bad_names(self):
-        for name in ("lower_case", "WITH-DASH", "1STARTS_WITH_DIGIT", "", "HAS SPACE"):
+        for name in ("WITH-DASH", "1STARTS_WITH_DIGIT", "", "HAS SPACE"):
             row = EnvVar(name=name)
             with pytest.raises(ValidationError):
                 row.full_clean()
+
+    def test_names_are_uppercased_on_save(self):
+        """Lower/mixed case input is normalized, not rejected."""
+        row = EnvVar.objects.create(name="wodore_test_key", description="x")
+        assert row.name == "WODORE_TEST_KEY"
+        row.refresh_from_db()
+        assert row.name == "WODORE_TEST_KEY"
+
+    def test_full_clean_normalizes_case(self):
+        row = EnvVar(name="mapy_com_api_key")
+        row.full_clean()
+        assert row.name == "MAPY_COM_API_KEY"
 
     def test_rejects_server_secret_names(self):
         for name in (
