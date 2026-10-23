@@ -34,8 +34,9 @@ extensible for any source.
   plus the already-mapped base fields (name, location, elevation, country,
   flags, description).
 - Expose `classifier` and `extra` in the GeoPlace API category payloads
-  (search/nearby/detail). Tiles already pass `gpc.extra` through
-  `geoplaces_tiles` — no tile change needed beyond verifying the view.
+  (search/nearby/amenity detail — selected via the `fields[places]` sparse
+  fieldset). Tiles already pass `gpc.extra` through `geoplaces_for_tiles`;
+  the view additionally gains the `classifier` identifier.
 - Make `classifier` and `extra` editable in `GeoPlaceCategoryInline`
   (admin), with `extra` rendered as a per-key labeled field for the known
   capacity keys.
@@ -61,7 +62,9 @@ policy.
 ### Modified Capabilities
 
 (none — no existing spec in `openspec/specs/` covers category associations
-or the geoplace API surface this touches.)
+or the geoplace API surface this touches. The API addition is additive and
+follows `api-conventions`: it is registered as an entry in the API
+changelog during implementation, per the `api-changelog` capability.)
 
 ## Impact
 
@@ -72,11 +75,22 @@ or the geoplace API surface this touches.)
 - **Import**: `server/apps/geometries/management/commands/import_geoplaces.py`
   (wodore handler rewrite onto `update_or_create`).
 - **API**: `server/apps/geometries/schemas/_output.py`,
-  `server/apps/geometries/api.py` (category payload extension).
+  `server/apps/geometries/api.py` (category payload extension under the
+  `fields[places]` sparse-fieldset selection); API changelog entry per
+  `api-conventions`.
 - **Admin**: `server/apps/geometries/admin/_geoplace.py`
-  (GeoPlaceCategoryInline).
-- **Tiles**: `server/apps/geometries/models/tiles_view.py` (verify `extra`
-  and classifier surface; expected: no change).
+  (`GeoPlaceCategoryInline` — already renders `classifier`; gains
+  season-scoped autocomplete, `extra` capacity fields, and modification
+  tracking).
+- **Tiles**: `server/apps/geometries/models/tiles_view.py`
+  (`geoplaces_for_tiles` view — add `classifier` next to the existing
+  `extra`).
 - **Tests**: factories + import/API/admin tests for the new attributes.
-- **Non-goals**: migrating availability/booking off `Hut` (separate
-  change); `Note` model (WEP008, deferred); OSM accommodation imports.
+- **Non-goals**: migrating availability/booking off `Hut` (separate change;
+  a follow-up proposal `geoplace-availability` will cover re-anchoring
+  availability — including how `HutAvailability`/`HutAvailabilityHistory`
+  are preserved — and the eventual `Hut` removal); populating
+  `AmenityDetail` for huts (phones, `open_monthly` → `opening_months`,
+  `url`/contact URLs → external links, `hut_owner` → owner/brand mapping —
+  separate change); `Note` model (WEP008, deferred); OSM accommodation
+  imports.

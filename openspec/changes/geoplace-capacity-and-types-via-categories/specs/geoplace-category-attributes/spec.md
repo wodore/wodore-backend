@@ -40,6 +40,14 @@ the source does not publish SHALL be omitted, not stored as `null`.
   `capacity_open: -1` or a non-integer value
 - **THEN** the save is rejected with a validation error
 
+#### Scenario: Import path validates too
+- **WHEN** `GeoPlace.update_or_create` is called with a schema whose
+  category `extra` contains an invalid capacity or a classifier outside
+  the `season` subtree
+- **THEN** the association is not written and the validation error is
+  raised (Django does not call `clean()` implicitly — the schema path
+  invokes the same checks)
+
 ### Requirement: Season category vocabulary
 
 The system SHALL provide a `season` parent category with children
@@ -72,9 +80,11 @@ the protected-fields policy.
 
 ### Requirement: API exposes association classifier and extra
 
-The GeoPlace search, nearby, and detail responses SHALL include, for
-every category entry, the optional `classifier` (category identifier or
-null) and the association `extra` dict.
+The GeoPlace search, nearby, and amenity detail responses SHALL include,
+for every category entry, the optional `classifier` (category identifier or
+null) and the association `extra` dict, under the `fields[places]`
+sparse-fieldset selection. The additive response change SHALL be registered
+in the API changelog per `api-conventions`.
 
 #### Scenario: Search result carries attributes
 - **WHEN** a client searches for a place whose accommodation association
@@ -93,12 +103,15 @@ capacity keys rendered as labeled numeric fields).
 - **WHEN** an editor sets `capacity_closed=8` on a place's accommodation
   association in the admin and saves
 - **THEN** the association's `extra` contains `capacity_closed: 8` and
-  the place's protected-fields tracking records the manual edit
+  the admin formset save marks the place `is_modified` with the
+  association attributes recorded in `protected_fields` (associations
+  carry no automatic tracking — the wiring is explicit)
 
 ### Requirement: Tiles carry association attributes
 
-The `geoplaces_tiles` view SHALL expose each category entry's `extra`
-and `classifier` identifier to tile consumers.
+The `geoplaces_for_tiles` view SHALL expose each category entry's `extra`
+and `classifier` identifier to tile consumers (the key lives inside the
+categories JSON; martin needs no config change).
 
 #### Scenario: Tile payload includes capacities
 - **WHEN** tiles are requested at a zoom showing a hut-derived place

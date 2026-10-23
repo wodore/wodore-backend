@@ -56,11 +56,15 @@ tile consumers get capacities for free once written.
    loses category machinery (i18n, admin, symbols, future classifiers
    like accessibility grades).
 
-3. **Validation is association-level and cheap.** A `clean()` on
-   `GeoPlaceCategory`: `classifier.parent.slug == "season"` (when set);
-   capacity keys (if present) are `null` or non-negative ints; unknown
-   keys are allowed (forward-compatible) but imports only write the two
-   defined keys. No DB constraint beyond the existing unique
+3. **Validation is association-level and cheap — and enforced on every
+   write path.** A `clean()` on `GeoPlaceCategory`:
+   `classifier.parent.slug == "season"` (when set); capacity keys (if
+   present) are `null` or non-negative ints; unknown keys are allowed
+   (forward-compatible) but imports only write the two defined keys.
+   Because Django does not call `clean()` from `save()` or the schema
+   upsert, `GeoPlace.update_or_create` and the admin form invoke the same
+   checks explicitly — the requirement applies to imports and admin
+   alike. No DB constraint beyond the existing unique
    `(geo_place, category)` — JSON flexibility is the point; guards run in
    `save()`/import and admin form, not as Postgres CHECKs.
 
@@ -76,9 +80,24 @@ tile consumers get capacities for free once written.
 5. **API: extend the existing category payload, no new endpoint.**
    `CategoryPlaceTypeSchema` gains optional `classifier: str | None`
    (identifier) and `extra: dict` on the *association* representation in
-   search/nearby/detail responses. WEP008's per-detail-type endpoints are
-   unaffected (`geo/amenity/{id}` unaffected apart from the same category
-   payload gain).
+   search/nearby/amenity-detail responses, under the `fields[places]`
+   sparse-fieldset selection (the old `include_categories` parameters no
+   longer exist). The addition is additive and is registered in the API
+   changelog per `api-conventions`. While touching the amenity payload,
+   fix the pre-existing `AttributeError` in `get_amenity` (`websites` and
+   `extra` are read from `AmenityDetail`, which has neither field — links
+   live in the external-link associations, overflow data on `GeoPlace`).
+   WEP008's per-detail-type endpoints are otherwise unaffected.
+
+6. **Admin tracking is wired explicitly, not inherited.** Association
+   models are plain `TimeStampedModel`s — unlike `GeoPlaceDetailBase`
+   subclasses they get no automatic `is_modified`/`protected_fields`
+   propagation. `GeoPlaceCategoryInline` (which already renders an
+   unscoped `classifier` autocomplete) therefore marks the parent place
+   `is_modified` and records the association attributes in
+   `protected_fields` in its formset save, so re-imports respect manual
+   edits just like detail fields. Scoped autocomplete (season subtree
+   only) and labeled capacity fields round out the inline.
 
 ## Risks / Trade-offs
 
@@ -95,6 +114,10 @@ tile consumers get capacities for free once written.
 - [Two hut types collapse into one category + qualifier] → Frontend/API
   consumers can reconstruct `hut_type_closed` semantics from
   `classifier`; document the mapping in the spec for symmetry.
+- [Association edits are invisible to import policies unless tracked] →
+  The admin formset save explicitly updates `is_modified`/
+  `protected_fields` (decision 6); without it a re-import would silently
+  overwrite manual classifier/capacity edits.
 
 ## Migration Plan
 
@@ -111,9 +134,24 @@ tile consumers get capacities for free once written.
 
 ## Open Questions
 
-- Exact `hut_type_closed` → season mapping for the two `unknown`-ish hut
-  types (`special`, `resta`) — default: no classifier (unknown) until
-  seen in real data.
-- Should the tiles view also surface the classifier identifier (today it
-  forwards `extra` but not `classifier`)? Lean: add it while we are there
-  — one line in the view's JSON build.
+- Exact `hut_type_closed` → season mapping for `special` — default: no
+  classifier (unknown) until seen in real data. (`resta` is resolved:
+  it maps to `season.summer_only` with the `camping`/`hotel` family, per
+  decision 2.)
+- Tiles: resolved — the `geoplaces_for_tiles` view gains the
+  `classifier` identifier next to `extra` (task 3.2); the key lives
+  inside the categories JSON, so martin needs no config/schema change.
+
+## Follow-ups (separate changes)
+
+- **AmenityDetail population for huts**: `open_monthly` →
+  `opening_months` (identical month-status vocabulary), contact phones →
+  `phones`, `url`/contact URLs → external-link associations; decide
+  `hut_owner` → `AmenityDetail.brand` (owner-as-category) vs. keeping
+  the owners app — `brand` currently means commercial chains (Volg,
+  Migros), owners are operating clubs (SAC Bern), so this needs a
+  vocabulary decision, not a schema one.
+- **`geoplace-availability`**: re-anchor availability on GeoPlace
+  (booking-source reference, type-on-date) including how
+  `HutAvailability`/`HutAvailabilityHistory` are migrated/preserved, and
+  the eventual removal of the `huts` app.
