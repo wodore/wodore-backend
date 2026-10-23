@@ -65,8 +65,10 @@ PROBE_TIMEOUT = 10
 PROBE_USER_AGENT = "wodore-tile-asset-watcher/1.0 (+https://wodore.com)"
 
 #: Glyph range probed per font stack (the first PBF range every
-#: MapLibre text render requests; the style template carries the
-#: ``.pbf`` extension itself).
+#: MapLibre text render requests). Authored templates target the
+#: canonical extension-less route: Martin 301s ``.pbf``-suffixed font
+#: URLs to it while dropping the query string (martin <= 1.16.1
+#: ``redirect_font_ext``), which would also strip the watcher nonce.
 FONT_PROBE_RANGE = "0-255"
 
 #: Martin's static terrain postprocessing routes served as tiles —

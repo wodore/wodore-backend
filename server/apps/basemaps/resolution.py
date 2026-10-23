@@ -164,7 +164,7 @@ def absolutize_urls(value: Any, tile_server_url: str, api_url: str = "") -> Any:
     """Absolutize root-relative sprite/glyph/tile URLs in a style tree.
 
     MapProxy/Martin-served styles use Martin-root-relative refs
-    (``/font/{fontstack}/{range}.pbf``, ``/sprite/wd-maps``) that only
+    (``/font/{fontstack}/{range}``, ``/sprite/wd-maps``) that only
     work when Martin serves the style itself. Once the API serves it,
     they must point at the tile server origin (spec requirement
     'absolutization').
