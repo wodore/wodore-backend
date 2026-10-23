@@ -140,6 +140,31 @@ class TestUsableAndGating:
 
 
 @pytest.mark.django_db
+class TestMapSeedIntegration:
+    """map_seed provisions the env-registry entries the catalog needs."""
+
+    def test_creates_missing_entries(self):
+        from django.core.management import call_command
+
+        call_command("map_seed", verbosity=0)
+        names = set(EnvVar.objects.values_list("name", flat=True))
+        assert {"WODORE_MAPTILER_API_KEY", "MAPY_COM_API_KEY"} <= names
+        maptiler = EnvVar.objects.get(name="WODORE_MAPTILER_API_KEY")
+        assert maptiler.value == ""
+        assert maptiler.env_fallback is True
+        assert maptiler.is_active is True
+
+    def test_never_overwrites_operator_values(self):
+        from django.core.management import call_command
+
+        _row("WODORE_MAPTILER_API_KEY", value="op-key", is_active=False)
+        call_command("map_seed", verbosity=0)
+        row = EnvVar.objects.get(name="WODORE_MAPTILER_API_KEY")
+        assert row.value == "op-key"
+        assert row.is_active is False
+
+
+@pytest.mark.django_db
 class TestSnapshotCache:
     def test_rows_cached_and_invalidated_on_save(self):
         from django.core.cache import cache
