@@ -22,14 +22,18 @@ GeoPlace through a **role category** (`role.*`), mirroring the
   (modeltrans, like `Owner`), optional localized note,
   `is_active`/`is_public`, review flag; **links via M2M to the existing
   `ExternalLink`** (i18n labels, link types, health checks) with
-  explicit ordering.
+  explicit ordering; **optional symbol** — three nullable Symbol FKs
+  (color/primitive/mono, same pattern as Category, resolved by the
+  shared `resolve_symbol_urls` helper).
 - New `role` category vocabulary (parent + children `operator`, `brand`,
   `owner`, `authority`) created by data migration, extensible in the
   category admin — same shape as the `season` vocabulary.
-- New `GeoPlaceParty` through model (geometries): `role` FK → Category
-  scoped to the `role` parent, unique per `(geo_place, party, role)`;
-  **multiple roles = multiple association rows** (one role classifier
-  per row).
+- New `GeoPlaceParty` through model (geometries) — **place-level:
+  applies to every geoplace regardless of `detail_type`** (amenity,
+  transport, admin, natural, none), like the category and link
+  associations: `role` FK → Category scoped to the `role` parent,
+  unique per `(geo_place, party, role)`; **multiple roles = multiple
+  association rows** (one role classifier per row).
 - **Replace `AmenityDetail.brand`** — data migration converts existing
   brand Categories to Party rows + associations with role
   `role.brand`; the FK, its admin autocomplete, and `BrandInput` are
@@ -89,6 +93,8 @@ apart from sharing the classifier-pattern vocabulary approach.)
 - **Non-goals**: removing the owners app or `Owner` (retires with
   huts); absorbing `Organization` into Party (the portals/sources may
   converge later — nothing in this design blocks it — but booking
-  integrations and source pickers stay untouched for now); party logos;
+  integrations and source pickers stay untouched for now); party
+  logos as uploaded images (Organization-style `ImageField` — symbols
+  cover curated iconography; revisit at Organization convergence);
   contacts on parties (Owner contacts die with the huts app; links
   replace them); person-type parties (org-only for now).

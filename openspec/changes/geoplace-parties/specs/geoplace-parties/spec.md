@@ -6,14 +6,22 @@
 
 The system SHALL provide a `Party` entity with a unique slug, a
 localized name, an optional localized note, active/public flags, a
-review status, and any number of ordered `ExternalLink` associations
-(shared link entities with i18n labels, link types, and health checks).
+review status, any number of ordered `ExternalLink` associations
+(shared link entities with i18n labels, link types, and health
+checks), and an optional symbol (three nullable Symbol FKs —
+color/primitive/mono — resolved through the shared symbol helper).
 
 #### Scenario: Party with multiple links
 - **WHEN** a party "SAC Bern" is created with a website link and a
   booking link
 - **THEN** both links are associated with the party in the given order
   and each carries its own i18n label
+
+#### Scenario: Optional symbol resolves
+- **WHEN** a party has symbol FKs set and its symbol URLs are resolved
+- **THEN** the color/primitive/mono URLs are returned in the same
+  shape as category symbols; a party without symbols resolves to no
+  symbol data
 
 #### Scenario: Slug uniqueness
 - **WHEN** a party is saved with a slug that already exists
@@ -34,16 +42,24 @@ later via migration and spec delta.
 
 The system SHALL associate parties with geoplaces through
 `GeoPlaceParty` whose role references exactly one category whose parent
-is `role`, unique per `(geo_place, party, role)`. Multiple roles for
-the same place–party pair SHALL be expressed as multiple association
-rows. Role and party references SHALL NOT be deletable while in use
-(RESTRICT).
+is `role`, unique per `(geo_place, party, role)`. The association SHALL
+be place-level: available for every geoplace regardless of
+`detail_type` (amenity, transport, admin, natural, none). Multiple
+roles for the same place–party pair SHALL be expressed as multiple
+association rows. Role and party references SHALL NOT be deletable
+while in use (RESTRICT).
 
 #### Scenario: Hut owned by a club
 - **WHEN** a hut-derived geoplace is linked to party "sac-bern" with
   role `role.owner`
 - **THEN** the association exists exactly once and API/admin consumers
   see role `role.owner`
+
+#### Scenario: Party on a non-amenity place
+- **WHEN** a transport geoplace (e.g. a cable car) is linked to its
+  operating company with role `role.operator`
+- **THEN** the association works identically to amenity places —
+  parties are not gated on `detail_type`
 
 #### Scenario: Same party, two roles
 - **WHEN** a place is linked to "migros" with role `role.brand` and
@@ -112,17 +128,18 @@ huts app is removed.
 ### Requirement: API exposes place parties
 
 GeoPlace responses SHALL include a `parties` list
-(`[{role, slug, name, links}]`, `role` as category identifier) under
-the `fields[places]` sparse-fieldset selection, with nested narrowing
-via `fields[parties]` per the sparse-fieldsets conventions. The
-additive change SHALL be registered in the API changelog per
+(`[{role, slug, name, links, symbol}]`, `role` as category identifier)
+under the `fields[places]` sparse-fieldset selection, with nested
+narrowing via `fields[parties]` per the sparse-fieldsets conventions.
+The additive change SHALL be registered in the API changelog per
 `api-conventions`.
 
 #### Scenario: Detail carries parties
 - **WHEN** a client requests a place whose party association has role
   `role.operator` and two links, with parties selected
 - **THEN** the response contains
-  `parties: [{role: "role.operator", slug, name, links: [...]}]`
+  `parties: [{role: "role.operator", slug, name, links: [...], symbol}]`
+  with `symbol` present when the party has symbols set
 
 ### Requirement: Admin management of parties
 

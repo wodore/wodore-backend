@@ -42,6 +42,11 @@ entity is neutral, the *relation* carries the semantics. "Relation"/
 **Goals:**
 - One neutral `Party` entity for brand, owner, and operator semantics.
 - Localized name + multiple, ordered, health-checked external links.
+- Optional curated symbol (color/primitive/mono) per party.
+- **Place-level scope**: parties attach to every geoplace (any
+  `detail_type`), not only amenity details — cable-car operators
+  (transport), protected-area authorities (natural), municipalities
+  (admin) work out of the box.
 - Open, localized, admin-manageable role vocabulary (`role.*`
   categories) as the association classifier; multiple roles per
   place–party pair via multiple rows.
@@ -61,9 +66,15 @@ entity is neutral, the *relation* carries the semantics. "Relation"/
 
 1. **New `Party` model in a new `parties` app** (slug, `name` i18n via
    modeltrans, `note` i18n optional, `is_active`, `is_public`,
-   `review_status`). Alternatives rejected: generalizing `owners.Owner`
-   in place (breaks `Hut.hut_owner` mid-migration); reusing
-   `Organization` (see Context).
+   `review_status`, plus **optional symbol**: three nullable Symbol
+   FKs mirroring Category). Symbols reuse the generic
+   `resolve_symbol_urls` helper and the curated SVG pipeline
+   (color/primitive/mono variants) — deliberately *not* an uploaded
+   logo (`Organization`-style `ImageField`): curated iconography is
+   licensing-clean and UI-themeable, logos are a convergence question
+   for when `Organization` migrates. Alternatives rejected:
+   generalizing `owners.Owner` in place (breaks `Hut.hut_owner`
+   mid-migration); reusing `Organization` (see Context).
 
 2. **Links: M2M to `ExternalLink` through `PartyLink` (order field)**,
    mirroring `GeoPlaceExternalLink`. One link entity can serve a place
@@ -72,19 +83,22 @@ entity is neutral, the *relation* carries the semantics. "Relation"/
    richer mechanism.
 
 3. **Role is a Category classifier scoped to the `role` parent, not an
-   enum.** `GeoPlaceParty` (geometries; CASCADE on place, RESTRICT on
-   party and role) carries `role` FK → Category under parent `role`
-   (children seeded: `operator`, `brand`, `owner`, `authority`), unique
-   per `(geo_place, party, role)`; multiple roles = multiple rows, one
-   classifier per row — mirroring how `season` classifiers work on
-   category associations. Validation (`role.parent.slug == "role"`)
-   runs in `clean()` and explicitly in the schema import path, like the
-   capacity change's decision 3. Alternatives rejected: a `role`
-   TextChoices enum — closed vocabulary, no i18n/admin extensibility,
-   and "Operator" as the model name would be a misnomer once brand and
-   owner roles exist; M2M roles on a single association row — breaks
-   the one-classifier-per-row pattern and complicates uniqueness/
-   ordering for no gain.
+   enum — and the association is place-level.** `GeoPlaceParty`
+   (geometries; CASCADE on place, RESTRICT on party and role) attaches
+   to `GeoPlace` itself, a sibling of `GeoPlaceCategory` and
+   `GeoPlaceExternalLink` — every geoplace regardless of `detail_type`,
+   replacing the amenity-scoped `brand` FK. It carries `role` FK →
+   Category under parent `role` (children seeded: `operator`, `brand`,
+   `owner`, `authority`), unique per `(geo_place, party, role)`;
+   multiple roles = multiple rows, one classifier per row — mirroring
+   how `season` classifiers work on category associations. Validation
+   (`role.parent.slug == "role"`) runs in `clean()` and explicitly in
+   the schema import path, like the capacity change's decision 3.
+   Alternatives rejected: a `role` TextChoices enum — closed vocabulary,
+   no i18n/admin extensibility, and "Operator" as the model name would
+   be a misnomer once brand and owner roles exist; M2M roles on a
+   single association row — breaks the one-classifier-per-row pattern
+   and complicates uniqueness/ordering for no gain.
 
 4. **Brand replacement is a migration, not a sync.** Data migration:
    for each `AmenityDetail` with `brand`, get_or_create Party (slug
@@ -109,10 +123,11 @@ entity is neutral, the *relation* carries the semantics. "Relation"/
 6. **API: additive `parties` on place responses** under the
    `fields[places]` sparse-fieldset selection (nested narrowing via
    `fields[parties]` → slug-only, following the sparse-fieldsets
-   conventions): `[{role, slug, name, links}]` with `role` as the
-   category identifier (e.g. `role.operator`). `brand` was never in
-   public responses, so no version bump; changelog entry per
-   `api-conventions`.
+   conventions): `[{role, slug, name, links, symbol}]` with `role` as
+   the category identifier (e.g. `role.operator`) and `symbol` the
+   resolved color/primitive/mono URLs when set (same shape as the
+   category symbol). `brand` was never in public responses, so no
+   version bump; changelog entry per `api-conventions`.
 
 7. **Admin tracking mirrors the capacity change's decision**: the party
    inline formset save marks the place `is_modified` and records the
