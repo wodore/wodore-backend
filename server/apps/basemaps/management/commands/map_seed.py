@@ -694,6 +694,23 @@ LAYERS: list[dict[str, Any]] = [
 ]
 
 
+#: Env-registry entries the map catalog references (``envvars.EnvVar``).
+#: Seeded only when missing — re-runs never touch values an operator set
+#: in the admin (get_or_create semantics).
+ENV_REGISTRY_ENTRIES: list[dict[str, str]] = [
+    {
+        "name": "WODORE_MAPTILER_API_KEY",
+        "description": (
+            "MapTiler hybrid satellite basemap (maptiler-hybrid layer style URL)"
+        ),
+    },
+    {
+        "name": "MAPY_COM_API_KEY",
+        "description": "Mapy.com outdoor reference basemap (mapy-outdoor layer)",
+    },
+]
+
+
 class Command(BaseCommand):
     """Provision the map layer catalog (idempotent)."""
 
@@ -706,6 +723,7 @@ class Command(BaseCommand):
         params = self._seed_parameters()
         orgs = self._seed_orgs()
         coverage = self._seed_coverage()
+        self._seed_env_registry()
 
         self._retire_merged_layers()
 
@@ -726,6 +744,27 @@ class Command(BaseCommand):
         )
 
     # ── Steps ──────────────────────────────────────────────────────────
+
+    def _seed_env_registry(self) -> None:
+        """Ensure the env-registry rows the catalog references exist.
+
+        ``get_or_create`` only — an operator's value / is_active /
+        env_fallback settings are never overwritten on re-runs.
+        """
+        from server.apps.envvars.models import EnvVar
+
+        for entry in ENV_REGISTRY_ENTRIES:
+            _, was_created = EnvVar.objects.get_or_create(
+                name=entry["name"],
+                defaults={
+                    "value": "",
+                    "env_fallback": True,
+                    "is_active": True,
+                    "description": entry["description"],
+                },
+            )
+            if was_created:
+                self.stdout.write(f"Env registry entry created: {entry['name']}")
 
     def _retire_merged_layers(self) -> None:
         """Drop layers merged into another seed definition.

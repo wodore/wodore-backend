@@ -10,13 +10,17 @@ One resolver for both serving modes:
   (server-side in both modes — API keys live in backend config, never
   as user parameters).
 
+Env tokens (``{{env:NAME}}``) resolve through the admin env registry
+(``server.apps.envvars`` — strict allowlist): a stored admin value wins
+over the process environment; unregistered names never resolve, so
+admin-editable styles cannot read arbitrary server configuration.
+
 The client re-runs the same token walk with user overrides layered on
 top of the authored values (most-specific-wins, see models.MapParameter).
 """
 
 from __future__ import annotations
 
-import os
 import re
 from copy import deepcopy
 from typing import Any
@@ -80,17 +84,54 @@ def collect_env_names(value: Any) -> set[str]:
     return names
 
 
-def build_env(names: set[str], extra: dict[str, str] | None = None) -> dict[str, str]:
-    """Resolve the given env names once (OS env ∪ Django settings)."""
+def build_env(
+    names: set[str],
+    extra: dict[str, str] | None = None,
+    registry: dict[str, tuple[str, bool, bool]] | None = None,
+) -> dict[str, str]:
+    """Resolve the given env names once through the env registry.
+
+    Strict allowlist (``envvars.EnvVar`` — the precedence matrix lives
+    in ``envvars.registry``): stored values win, empty values fall back
+    to the process environment (∪ Django settings) unless pinned empty,
+    and unregistered names never resolve. ``extra`` stays
+    caller-authoritative; ``registry`` injects rows for tests
+    (``{name: (value, is_active, env_fallback)}``).
+    """
+    from ..envvars.registry import resolve
+    from ..envvars.registry import rows as registry_rows
+
     env = dict(extra or {})
+    if not names:
+        return env  # no env tokens — skip the registry lookup entirely
+    snap = registry_rows() if registry is None else registry
     for name in names:
         if name in env:
             continue
-        if name in os.environ:
-            env[name] = os.environ[name]
-        elif hasattr(settings, name):
-            env[name] = str(getattr(settings, name))
+        resolved = resolve(name, snap)
+        if resolved is not None:
+            env[name] = resolved
     return env
+
+
+def missing_env_names(value: Any) -> set[str]:
+    """Env names a document needs but this deployment cannot supply.
+
+    Names resolve through the env registry (strict allowlist); a name
+    is usable when it resolves to a non-empty value or an explicitly
+    pinned empty one (``env_fallback=False`` — operator intent). A
+    blank environment value counts as missing — blank keys in URLs
+    are accidents, not intent. A non-empty result marks the document
+    (an owned style tree or an external ``style_url``) unserveable
+    here: the ``{{env:…}}`` tokens would pass through verbatim into
+    the payload.
+    """
+    names = collect_env_names(value)
+    if not names:
+        return set()
+    from ..envvars.registry import usable
+
+    return {name for name in names if not usable(name)}
 
 
 def substitute_env(value: str, extra: dict[str, str] | None = None) -> str:
@@ -206,6 +247,7 @@ def style_endpoint_url(slug: str, spec: str | None = None) -> str:
 
 __all__ = [
     "absolutize_urls",
+    "missing_env_names",
     "resolve_style",
     "resolve_tokens",
     "style_endpoint_url",

@@ -760,6 +760,19 @@ class MapLayer(TimeStampedModel):
 
     # ── Serving helpers ───────────────────────────────────────────────────
 
+    def missing_env(self) -> set[str]:
+        """Env names this layer needs that the deployment cannot resolve.
+
+        Empty for layers without ``{{env:…}}`` tokens. A non-empty
+        result means the layer cannot be served — its style or external
+        ``style_url`` would leak literal tokens — so the API gates it
+        out of the catalog and the style endpoint (see api.py).
+        """
+        from .resolution import missing_env_names
+
+        document = self.style if self.style is not None else (self.style_url or "")
+        return missing_env_names(document)
+
     def authored_parameter_values(self) -> dict[str, object]:
         """Authored resolution level: registry defaults + layer overrides."""
         values: dict[str, object] = {}
