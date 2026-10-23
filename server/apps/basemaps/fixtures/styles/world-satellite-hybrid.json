@@ -1,7 +1,7 @@
 {
   "version": 8,
   "name": "world-satellite-hybrid",
-  "glyphs": "{TILE_SERVER_URL}/font/{fontstack}/{range}.pbf",
+  "glyphs": "{TILE_SERVER_URL}/font/{fontstack}/{range}",
   "sprite": [
     {
       "id": "ofm-satellite",
