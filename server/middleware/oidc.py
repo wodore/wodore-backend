@@ -9,6 +9,7 @@ from urllib.parse import urlencode
 
 from mozilla_django_oidc.middleware import SessionRefresh
 
+from django.contrib.auth.mixins import AccessMixin
 from django.http import HttpResponseRedirect, JsonResponse
 from django.urls import reverse
 
@@ -38,11 +39,53 @@ class AsyncSafeSessionRefresh(SessionRefresh):
     with a live IdP session Zitadel completes it without any interaction
     (seamless, like ``prompt=none``), without one the user gets the real
     login page - and the original target survives via ``?next=``.
+
+    The SCOPE is decided per resolved view, not by URL path: upstream
+    checks paths in ``process_request`` (before routing), which forces a
+    maintained exemption list and gets stale whenever a new surface is
+    added (the hub.stg root bug: everything outside /v1, /static/ and
+    /media/ silently became "refreshable"). Instead we decide in
+    ``process_view`` from what Django already knows about the view:
+
+    - admin views: ``AdminSite.admin_view()`` tags every wrapped view
+      with its ``admin_site`` instance
+    - CBVs using Django's access mixins (``LoginRequiredMixin``,
+      ``PermissionRequiredMixin``, ``UserPassesTestMixin`` - all
+      ``AccessMixin`` subclasses) expose ``view_class``
+
+    Everything else - public pages, bearer-token API routes, and
+    self-gated views that redirect to the login themselves (e.g. the
+    staging demos) - is out of scope. Function decorators
+    (``login_required``/``staff_member_required``) leave no standard
+    marker and are not detected; such views run their own interactive
+    redirect-to-login, which does not need the silent renewal.
+    ``OIDC_EXEMPT_URLS`` stays available as an explicit escape hatch.
     """
 
     async_capable = False
 
     def process_request(self, request):
+        # Neutralized: upstream decides by PATH here, before routing. We
+        # decide by VIEW in process_view instead (see class docstring).
+        return None
+
+    @staticmethod
+    def _view_uses_login_session(view_func) -> bool:
+        """Whether the resolved view renders for an authenticated
+        Django session (the only surface an id_token renewal serves)."""
+        # AdminSite.admin_view() tags every admin view:
+        if hasattr(view_func, "admin_site"):
+            return True
+        # Access-mixin CBVs (LoginRequired/PermissionRequired/UserPassesTest):
+        view_class = getattr(view_func, "view_class", None)
+        return isinstance(view_class, type) and issubclass(view_class, AccessMixin)
+
+    def process_view(self, request, view_func, view_args, view_kwargs):
+        if request.method != "GET" or not self._view_uses_login_session(view_func):
+            return None
+        # Authenticated OIDC session + not an explicitly exempt path
+        # (the mozilla authenticate/callback/logout routes are always
+        # exempt here - that is also our redirect-loop protection).
         if not self.is_refreshable_url(request):
             return None
 

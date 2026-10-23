@@ -23,7 +23,6 @@ rehearsed in staging; the later flip is an env change
 
 import json
 import logging
-import re
 from urllib.parse import urlparse
 
 import requests
@@ -237,20 +236,16 @@ ZITADEL_API_PRIVATE_KEY = _load_zitadel_private_key()
 OIDC_RENEW_ID_TOKEN_EXPIRY_SECONDS = 60 * 60 * 24  # 24 hours
 OIDC_STORE_ACCESS_TOKEN = True
 OIDC_STORE_ID_TOKEN = True
-# SessionRefresh scope: ONLY the Django-session admin surface. Everything
-# else on the API host is public or bearer-token authenticated (API /v1,
-# health, index/robots/llms, static/media), so a stale admin session (live
-# Django session, expired id_token) must never be dragged through the IdP
-# there. The original narrow list (/v1, /static/, /media - and the string
-# entries are exact-match only upstream, not prefixes!) left every other
-# path refreshable: GET / with an expired id_token silently redirected
-# into a Zitadel ``prompt=none`` renewal that dies on the provider's
-# "No active session found" error page (zitadel/zitadel#12165) - seen as
-# https://hub.stg.wodore.com/ forwarding to auth.burgdev.ch. Inverted
-# default: exempt everything that is NOT under /admin.
-OIDC_EXEMPT_URLS = [
-    re.compile(r"^/(?!admin(?:/|$))"),
-]
+# SessionRefresh scope is decided per resolved VIEW by the middleware
+# itself (see server/middleware/oidc.py): admin views (AdminSite tags)
+# and access-mixin CBVs (LoginRequiredMixin & friends) are renewed;
+# everything else - public pages, bearer-token API routes, self-gated
+# views that redirect to the login themselves (staging demos) - is out
+# of scope. This list is only an explicit escape hatch to suppress the
+# renewal on particular paths (regexes); the mozilla
+# authenticate/callback/logout routes are always exempt upstream
+# (that is also the redirect-loop protection).
+OIDC_EXEMPT_URLS = []
 
 discovery_info = None
 if ZITADEL_RP_ENABLED:
