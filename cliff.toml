@@ -16,6 +16,9 @@ filter_unconventional = false
 commit_parsers = [
   { field = "github.pr_labels", pattern = "INTERNAL", skip = true },
   { field = "github.pr_labels", pattern = "BREAKING", group = "<!-- 00 -->🏗️ Breaking changes" },
+  # API-labeled breaking changes also surface as breaking here (see
+  # CHANGELOG_API.md / cliff-api.toml for the API-side changelog).
+  { field = "github.pr_labels", pattern = "api:breaking", group = "<!-- 00 -->🏗️ Breaking changes" },
   { field = "github.pr_labels", pattern = "type:feature", group = "<!-- 10 -->🚀 Features" },
   { field = "github.pr_labels", pattern = "type:bug", group = "<!-- 20 -->🐛 Fixes" },
   { field = "github.pr_labels", pattern = "type:refactor", group = "<!-- 30 -->🏭 Refactor" },
@@ -23,6 +26,11 @@ commit_parsers = [
   { field = "github.pr_labels", pattern = "type:deps", group = "<!-- 50 -->🧪 Dependencies" },
   { field = "github.pr_labels", pattern = "type:others", group = "<!-- 60 -->🌀 Others" },
   { field = "github.pr_labels", pattern = "type:tooling", group = "<!-- 60 -->🌀 Others" },
+  # Safety net: PRs labeled only api:* (no type:*) still appear here —
+  # API changes are backend changes too.
+  { field = "github.pr_labels", pattern = "api:added", group = "<!-- 10 -->🚀 Features" },
+  { field = "github.pr_labels", pattern = "api:deprecated", group = "<!-- 15 -->⏳ Deprecations" },
+  { field = "github.pr_labels", pattern = "api:fixed", group = "<!-- 20 -->🐛 Fixes" },
   { field = "github.pr_labels", pattern = ".*", skip = true },
 ]
 

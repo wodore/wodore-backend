@@ -37,3 +37,12 @@ MIDDLEWARE = list(MIDDLEWARE)  # pyright: ignore[reportUndefinedVariable]
 # Add robots tag to prevent indexing (environment header is already in common.py)
 MIDDLEWARE.insert(0, "server.middleware.headers.RobotsTagMiddleware")
 MIDDLEWARE = tuple(MIDDLEWARE)  # pyright: ignore[reportUndefinedVariable]
+
+# Note: the Zitadel SessionRefresh middleware is appended by
+# production.py (inherited above via `from ... import *`); do not add it
+# again here or it runs twice.
+
+# Dev demo pages (mapcompare etc.) — available on staging for superusers
+# only (the view checks is_superuser when DEBUG is off):
+INSTALLED_APPS += ("server.apps.demos",)  # pyright: ignore[reportUndefinedVariable]
+DEMOS_ENABLED = True

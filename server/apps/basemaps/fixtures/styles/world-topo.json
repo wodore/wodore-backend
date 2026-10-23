@@ -1,0 +1,21 @@
+{
+  "version": 8,
+  "name": "world-topo",
+  "glyphs": "{TILE_SERVER_URL}/font/{fontstack}/{range}.pbf",
+  "sources": {
+    "wd-world-topo": {
+      "type": "raster",
+      "tiles": ["/raster/tiles/world_topo/webmercator/{z}/{x}/{y}.webp?v=3"],
+      "tileSize": 256,
+      "maxzoom": 16
+    }
+  },
+  "layers": [
+    {
+      "id": "wd-world-topo",
+      "type": "raster",
+      "source": "wd-world-topo",
+      "maxzoom": 22
+    }
+  ]
+}

@@ -1,6 +1,5 @@
 import io
 import logging
-import mimetypes
 import os
 import time
 import uuid
@@ -33,6 +32,7 @@ from server.apps.organizations.models import Organization
 from server.apps.utils.fields import MonitorFields
 from server.core.managers import BaseMutlilingualManager
 from server.core.models import TimeStampedModel
+from server.core.storage import hashed_media_storage
 
 # from .forms import CustomImageField
 User = get_user_model()
@@ -81,7 +81,21 @@ class Image(TimeStampedModel):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
-    image = MetaImageField(upload_to="images/", meta_field="image_meta", blank=False)
+    image = MetaImageField(
+        # Content-hashed storage: media is immutable-cached, a URL must
+        # never change content (server.core.storage) — covers admin
+        # re-downloads under upstream filenames; the uuid4 upload path
+        # is already unique-per-upload and merely dedupes now.
+        storage=hashed_media_storage,
+        upload_to="images/",
+        meta_field="image_meta",
+        blank=True,
+        help_text=_(
+            "Local image file. Pinned external images have no local file — "
+            "they are served from the source URL through imagor and can be "
+            "localized later via 'Download raw'."
+        ),
+    )
     image_meta = models.JSONField(
         blank=True, null=True, verbose_name=_("Image Metadata")
     )
@@ -96,9 +110,17 @@ class Image(TimeStampedModel):
         max_length=255, default="", blank=True, null=True, verbose_name=_("Author")
     )
     author_url = models.URLField(
-        blank=True, max_length=500, null=True, default="", verbose_name=_("Author URL")
+        blank=True, max_length=1000, null=True, default="", verbose_name=_("Author URL")
     )
-    caption = models.TextField(max_length=400, verbose_name=_("Caption"), blank=False)
+    caption = models.TextField(
+        max_length=400,
+        verbose_name=_("Caption"),
+        blank=True,
+        default="",
+        help_text=_(
+            "Optional. Pinned external images default to a cleaned-up file name."
+        ),
+    )
     tags = models.ManyToManyField(
         ImageTag, related_name="images", verbose_name=_("Tags"), blank=True
     )
@@ -147,11 +169,11 @@ class Image(TimeStampedModel):
         related_name="image_uploaded_set",
     )
     source_url = models.URLField(
-        blank=True, max_length=500, null=True, default="", verbose_name=_("Source URL")
+        blank=True, max_length=1000, null=True, default="", verbose_name=_("Source URL")
     )
     source_url_raw = models.URLField(
         blank=True,
-        max_length=500,
+        max_length=1000,
         null=True,
         default="",
         verbose_name=_("Source URL to raw image"),
@@ -176,6 +198,43 @@ class Image(TimeStampedModel):
         choices=ReviewStatusChoices.choices,
         default=ReviewStatusChoices.approved,
         verbose_name=_("Review status"),
+    )
+    provider_synced_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        verbose_name=_("Provider Synced At"),
+        help_text=_("Last refresh from the external provider."),
+    )
+    phash = models.CharField(
+        max_length=16,
+        blank=True,
+        null=True,
+        db_index=True,
+        verbose_name=_("Perceptual Hash"),
+        help_text=_(
+            "64-bit dHash (hex) of the cached thumbnail — near-duplicates "
+            "sit within a small Hamming distance."
+        ),
+    )
+    thumbhash = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        verbose_name=_("ThumbHash"),
+        help_text=_(
+            "Compact placeholder encoding (~30 chars, computed by imagor) served "
+            "response so clients can render instant placeholders."
+        ),
+    )
+    quality_score = models.PositiveSmallIntegerField(
+        blank=True,
+        null=True,
+        db_index=True,
+        verbose_name=_("Quality Score"),
+        help_text=_(
+            "Technical image quality 0–100 (blur, exposure, contrast, "
+            "resolution) — computed, not curated."
+        ),
     )
 
     class Meta:
@@ -205,8 +264,11 @@ class Image(TimeStampedModel):
                 focal_str = None
                 crop_start = None
                 crop_stop = None
+            # Pinned external images have no local file — fall back to the raw
+            # source URL so admin thumbnails work for pins too.
+            source = self.image if self.image else self.source_url_raw
             img = (
-                ImagorImage(self.image)
+                ImagorImage(source)
                 .transform(
                     size=f"{width}x{height}",
                     focal=focal_str,
@@ -324,27 +386,46 @@ class Image(TimeStampedModel):
         except:
             raise  # Re-raise the exception if it's not a 404 error
         image_content = response.content
-        mime_type = mimetypes.guess_type(photo_schema.raw_url)[0]
 
-        if mime_type == "image/jpeg":
+        # Determine the image type from the CONTENT, not the URL: photo URLs
+        # are not always file-like (e.g. FFCAM minisite photos are
+        # ".../resizer.php?filename=...jpg" — the URL suffix is .php while
+        # the response body is a real image). Pillow reads the format and
+        # the dimensions from the image header in one lazy open.
+        try:
+            pil_image = PILImage.open(io.BytesIO(image_content))
+            image_format = (pil_image.format or "").upper()
+            width, height = pil_image.size
+        except Exception:
+            logging.warning(
+                "Unidentified image content from %s. Skipping this one.",
+                photo_schema.raw_url,
+            )
+            return None
+
+        if image_format == "JPEG":
             extension = ".jpg"
-        elif mime_type == "image/png":
+        elif image_format == "MPO":
+            # Multi Picture Object: a JPEG variant (stereo/sequential capture)
+            # some cameras emit — PIL serves it as JPEG; store as .jpg.
+            extension = ".jpg"
+        elif image_format == "PNG":
             extension = ".png"
-        elif mime_type is None:
+        elif image_format == "WEBP":
+            # WordPress-served photos (e.g. Prenota Rifugi) come as webp;
+            # PIL and Imagor both handle it.
+            extension = ".webp"
+        elif not image_format:
             # could not get image type
             return None
         else:
-            msg = f"Unsupported image type: {mime_type}"
+            msg = f"Unsupported image type: {image_format}"
             raise ValueError(msg)
 
         image_uuid = uuid.uuid4()
         image_file = ContentFile(
             image_content, name=os.path.join(path, f"{image_uuid}{extension}")
         )
-
-        # Get the image dimensions using Pillow
-        pil_image = PILImage.open(io.BytesIO(image_content))
-        width, height = pil_image.size
 
         img_review_status = Image.ReviewStatusChoices.approved
         # Create a new Image instance

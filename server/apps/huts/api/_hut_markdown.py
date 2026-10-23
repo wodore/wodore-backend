@@ -1,0 +1,284 @@
+"""Markdown rendering of a single hut for LLM agents (and humans).
+
+``/v1/huts/{slug}.md`` returns the same public data as the JSON detail
+endpoint, but as a small, self-contained Markdown document that LLMs can
+ingest and cite directly (linked from ``/llms.txt``). Localized via the
+same ``lang`` parameter as the JSON API, with the same fallback behavior
+(modeltrans resolves the active language and falls back to the hut's
+main language).
+
+Plain Django view (non-JSON), wired via ``external_path`` with
+``openapi=None`` — hidden from the schema like before.
+"""
+
+from __future__ import annotations
+
+import re
+from html import unescape
+from urllib.parse import quote
+
+from django.conf import settings
+from django.contrib.gis.db.models.functions import Distance
+from django.contrib.gis.measure import D
+from django.http import Http404, HttpRequest, HttpResponse
+from django.utils.html import strip_tags
+
+from server.apps.translations import activate
+
+from ..models import Hut
+
+# Endonym labels for the language variant links in the Markdown footer.
+_LANGUAGE_LABELS = {
+    "de": "Deutsch",
+    "en": "English",
+    "fr": "Français",
+    "it": "Italiano",
+}
+
+
+def _languages_line(slug: str) -> str:
+    """Footer links to this document in every supported language."""
+    base = f"{settings.FRONTEND_DOMAIN.rstrip('/')}/hut/{quote(slug)}.md"
+    links = [
+        f"[{label}]({base}?lang={code})" for code, label in _LANGUAGE_LABELS.items()
+    ]
+    return " · ".join(links)
+
+
+_ANCHOR_RE = re.compile(
+    r'<a\s[^>]*href=["\']([^"\']*)["\'][^>]*>(.*?)</a>', re.IGNORECASE | re.DOTALL
+)
+
+# Cacheable like the JSON surface: hut data changes, but slowly.
+CACHE_TTL = 60 * 60
+
+
+def _attribution_as_markdown(value: str) -> str:
+    """Convert the stored HTML attribution to a Markdown string.
+
+    ``&copy; <a href="...">SAC-CAS</a>`` becomes ``© [SAC-CAS](...)`` —
+    the legal attribution (link + name) is preserved verbatim in meaning.
+    """
+
+    def to_link(match: re.Match[str]) -> str:
+        href = match.group(1).strip()
+        label = strip_tags(match.group(2)).strip() or href
+        return f"[{label}]({href})"
+
+    text = strip_tags(_ANCHOR_RE.sub(to_link, value))
+    return unescape(text).strip()
+
+
+def _fmt_elevation(elevation) -> str | None:
+    if elevation is None:
+        return None
+    return f"{int(elevation)} m"
+
+
+def _fmt_coordinates(point) -> str | None:
+    if point is None:
+        return None
+    return f"{point.y:.6f}, {point.x:.6f}"
+
+
+_MONTH_LEGEND = (
+    "Legend: yes = open · yesish = likely open · maybe = uncertain · "
+    "no = closed · noish = likely closed · unknown = no data."
+)
+
+
+def _months_row(open_monthly: dict | None) -> str:
+    values = []
+    for month in range(1, 13):
+        value = (open_monthly or {}).get(f"month_{month:02d}", "unknown")
+        values.append(str(value))
+    return "| " + " | ".join(values) + " |"
+
+
+def _reduced_months_row(open_monthly: dict | None) -> str:
+    """Months of the reduced (winter) operation, derived from the
+    standard-operation series: when the staffed operation is closed the
+    reduced service (e.g. the unstaffed winter room) is typically
+    self-accessible — per-month tracking does not exist in the data,
+    which the section explanation states explicitly."""
+    values = []
+    for month in range(1, 13):
+        value = str((open_monthly or {}).get(f"month_{month:02d}", "unknown"))
+        if value in ("no", "noish"):
+            values.append(r"yes\*")
+        elif value == "unknown":
+            values.append("unknown")
+        else:
+            values.append("-")
+    return "| " + " | ".join(values) + " |"
+
+
+def _nearby_huts(
+    hut: Hut, max_km: float = 15.0, limit: int = 5
+) -> list[tuple[Hut, float]]:
+    """Nearest other public huts within ``max_km`` (straight-line)."""
+    if hut.location is None:
+        return []
+    nearby = (
+        Hut.objects.filter(is_active=True, is_public=True)
+        .exclude(pk=hut.pk)
+        .filter(location__distance_lte=(hut.location, D(km=max_km)))
+        .annotate(distance=Distance("location", hut.location))
+        .select_related("hut_type_open")
+        .order_by("distance")[:limit]
+    )
+    return [(h, h.distance.km) for h in nearby]
+
+
+def _hut_markdown(request: HttpRequest, hut: Hut) -> str:
+    app_url = f"{settings.FRONTEND_DOMAIN.rstrip('/')}/hut/{hut.slug}"
+    json_url = request.build_absolute_uri(f"/v1/huts/{quote(hut.slug)}")
+
+    subtitle = " · ".join(
+        part
+        for part in (
+            hut.hut_type_open.name if hut.hut_type_open else None,
+            _fmt_elevation(hut.elevation),
+            hut.hut_owner.name if hut.hut_owner else None,
+            hut.country_field.name if hut.country_field else None,
+        )
+        if part
+    )
+
+    overview: list[tuple[str, str]] = [
+        (
+            "Type (standard operation)",
+            hut.hut_type_open.name if hut.hut_type_open else None,
+        ),
+        (
+            "Type (reduced operation)",
+            hut.hut_type_closed.name if hut.hut_type_closed else None,
+        ),
+        ("Elevation", _fmt_elevation(hut.elevation)),
+        ("Coordinates", _fmt_coordinates(hut.location)),
+        (
+            "Capacity (standard operation)",
+            f"{hut.capacity_open}" if hut.capacity_open else None,
+        ),
+        (
+            "Capacity (reduced operation)",
+            f"{hut.capacity_closed}" if hut.capacity_closed else None,
+        ),
+        ("Owner", hut.hut_owner.name if hut.hut_owner else None),
+        ("Website", hut.url or None),
+    ]
+    overview_rows = "\n".join(
+        f"| {label} | {value} |" for label, value in overview if value
+    )
+
+    open_info_url = (hut.open_monthly or {}).get("url")
+    # Live bed availability only exists for huts with a booking source;
+    # link the per-hut endpoint (static URL, safe for the 1 h cache).
+    availability_url = (
+        request.build_absolute_uri(
+            f"/v1/huts/{quote(hut.slug)}/availability/today?days=7"
+        )
+        if hut.availability_source_ref_id
+        else None
+    )
+    attribution = _attribution_as_markdown(hut.description_attribution)
+
+    if hut.hut_type_closed and hut.hut_type_closed.name:
+        reduced_type = hut.hut_type_closed.name
+        reduced_months_line = (
+            f"| Reduced ({reduced_type}) |{_reduced_months_row(hut.open_monthly)[1:]}"
+        )
+        derivation_note = (
+            rf"\* Reduced-operation months are derived: the {reduced_type} is "
+            "typically self-accessible when the staffed operation is closed; "
+            "the data does not track it per month — verify with the hut's "
+            "sources."
+        )
+    else:
+        reduced_months_line = ""
+        derivation_note = (
+            "No reduced operation (e.g. winter room) is recorded for this hut."
+        )
+
+    nearby = _nearby_huts(hut)
+    if nearby:
+        nearby_lines = "\n".join(
+            f"- [{n.name}]({settings.FRONTEND_DOMAIN.rstrip('/')}/hut/{n.slug}) "
+            f"— {dist:.1f} km"
+            + (f" · {n.hut_type_open.name}" if n.hut_type_open else "")
+            for n, dist in nearby
+        )
+        nearby_section = f"## Nearby huts\n\nOther public huts within 15 km (straight-line):\n\n{nearby_lines}"
+    else:
+        nearby_section = ""
+    attribution_line = f"\n*Description: {attribution}*\n" if attribution else ""
+
+    sources = []
+    for association in hut.orgs_source.select_related("organization").order_by(
+        "organization__order", "organization__slug"
+    ):
+        organization = association.organization
+        label = organization.name or organization.fullname or organization.slug
+        link = association.link
+        sources.append(f"- [{label}]({link})" if link else f"- {label}")
+    sources_block = "\n".join(sources)
+
+    return f"""# {hut.name}
+
+> {subtitle}
+
+Interactive map: {app_url}
+{f"Live bed availability (JSON): {availability_url}" if availability_url else ""}
+
+## Overview
+
+| | |
+| --- | --- |
+{overview_rows}
+
+## Open months
+
+{_MONTH_LEGEND}
+
+| Mode | Jan | Feb | Mar | Apr | May | Jun | Jul | Aug | Sep | Oct | Nov | Dec |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Standard ({hut.hut_type_open.name if hut.hut_type_open else "unknown type"}) |{_months_row(hut.open_monthly)[1:]}
+{reduced_months_line}
+{derivation_note}
+{f"Opening information: {open_info_url}" if open_info_url else ""}
+
+## Description
+
+{hut.description}
+{attribution_line}
+{nearby_section}
+
+Languages: {_languages_line(hut.slug)}
+
+## Sources
+
+{sources_block}
+
+---
+
+Data: [Wodore]({settings.FRONTEND_DOMAIN.rstrip("/")}) · JSON: {json_url} · Last updated: {hut.modified:%Y-%m-%d}
+"""
+
+
+def get_hut_markdown(request: HttpRequest, slug: str, lang: str = "de") -> HttpResponse:
+    """Get a hut by its slug, rendered as Markdown for LLM agents."""
+    activate(lang)
+    hut = (
+        Hut.objects.select_related("hut_owner", "hut_type_open", "hut_type_closed")
+        .filter(is_active=True, is_public=True, slug=slug)
+        .first()
+    )
+    if hut is None:
+        msg = f"Could not find '{slug}'."
+        raise Http404(msg)
+
+    response = HttpResponse(
+        _hut_markdown(request, hut), content_type="text/markdown; charset=utf-8"
+    )
+    response["Cache-Control"] = f"public, max-age={CACHE_TTL}"
+    return response

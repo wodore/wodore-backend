@@ -19,6 +19,8 @@ ns = Collection(
     project.install,
     project.update,
     project.release,
+    project.api_release,
+    project.api_freeze,
     project.version,
     project.update_venv,
     project.docker_compose,

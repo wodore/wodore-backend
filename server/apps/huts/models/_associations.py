@@ -38,20 +38,49 @@ class HutContactAssociation(TimeStampedModel):
 
 
 class HutImageAssociation(TimeStampedModel):
+    # Display-order bands inside the API contract's 0–100 (the image endpoints
+    # validate properties.score against that): curated uploads/imports live in
+    # 90–99 (deliberate content outranks pins), pinned external images are
+    # clamped to 0–89 by pin_place_images (their provider score).
+    UPLOAD_DEFAULT_SCORE = 90
+    #: Highest score a pinned external image association may carry.
+    PROVIDER_SCORE_MAX = 89
+    #: Hard display-order ceiling (imports stack upward from UPLOAD_DEFAULT_SCORE
+    #: and stop here — >10 imports share the top slot, ordering falls back to id).
+    SCORE_MAX = 99
+
+    @classmethod
+    def import_score(cls, previous: int | None) -> int:
+        """Score for the next import photo: stacks upward from
+        ``UPLOAD_DEFAULT_SCORE`` (newest import first) and stops at
+        ``SCORE_MAX`` — the image endpoints validate scores against 0–100,
+        so an uncapped ``+= 1`` loop would re-mint >100 scores (and 500s)
+        on large or repeated imports."""
+        if previous is None:
+            return cls.UPLOAD_DEFAULT_SCORE
+        return min(max(previous, cls.UPLOAD_DEFAULT_SCORE - 1) + 1, cls.SCORE_MAX)
+
     image = models.ForeignKey(
         Image, on_delete=models.CASCADE, db_index=True, related_name="details"
     )
     hut = models.ForeignKey(
         "Hut", on_delete=models.CASCADE, db_index=True, related_name="huts"
     )
-    order = models.PositiveSmallIntegerField(blank=True, null=True)
+    score = models.PositiveSmallIntegerField(
+        blank=True,
+        null=True,
+        help_text=_(
+            "Display score — higher is shown first; curated uploads live in 90–99, "
+            "pinned external images in 0–89."
+        ),
+    )
 
     def __str__(self) -> str:
         return f"{self.hut} <> {self.image}"
 
     class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         verbose_name = _("Image and Hut Association")
-        ordering = ("hut__name", "order")
+        ordering = ("hut__name", "-score", "id")
         app_label = "huts"
         constraints = (
             models.UniqueConstraint(

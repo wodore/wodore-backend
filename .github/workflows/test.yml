@@ -5,7 +5,7 @@ on:
     branches:
       - main
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, closed]
 
 env:
   DJANGO_ENV: test
@@ -19,16 +19,26 @@ env:
   OIDC_OP_BASE_URL: "https://notset"
 
 permissions:
-  pull-requests: write
+  contents: read
+  # JUnit check-run annotations (mikepenz/action-junit-report)
   checks: write
 
 jobs:
   tests:
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.action != 'closed'
 
     steps:
       - name: Check out
         uses: actions/checkout@v6
+
+      - name: API registry release-state check
+        # At most one unreleased API version (the current one) — rejects
+        # stacking a new version on an unreleased one. Needs full tag
+        # history, hence the separate job (the tests checkout is shallow).
+        run: |
+          git fetch --tags --force
+          python3 -m server.apps.apiversions.registry_check
 
       - name: Compute cache keys
         id: cache-keys
@@ -47,13 +57,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: /tmp/pgdata
-          key: testdb-postgis16-v${{ steps.cache-keys.outputs.version }}-${{ steps.cache-keys.outputs.migration-hash }}
-
-      - name: Cache Allure (npm)
-        uses: actions/cache@v5
-        with:
-          path: ~/.npm
-          key: allure-${{ runner.os }}
+          key: >-
+            testdb-postgis16-v${{ steps.cache-keys.outputs.version }}-${{
+            steps.cache-keys.outputs.migration-hash }}
 
       # ── Start PostgreSQL + Install GDAL in parallel ─────────────────────
       # Both run as background processes within this step, wait blocks until
@@ -90,8 +96,11 @@ jobs:
 
           # --- Install GDAL in background ---
           (
-            sudo apt-get install -y --no-install-recommends gdal-bin 2>/tmp/gdal-err.log || \
-              (sudo apt-get update && sudo apt-get install -y --no-install-recommends gdal-bin)
+            sudo apt-get install -y --no-install-recommends \
+              gdal-bin 2>/tmp/gdal-err.log || \
+              (sudo apt-get update && \
+                sudo apt-get install -y --no-install-recommends \
+                gdal-bin)
             echo "GDAL install complete"
           ) &
 
@@ -101,38 +110,168 @@ jobs:
       # ── Setup Python environment (runs while PG + GDAL install) ─────────
 
       - name: Setup token for Python installation
-        run: git config --global url."https://${{ secrets.MY_USERNAME }}:${{ secrets.MY_TOKEN }}@github.com".insteadOf ssh://git@github.com
+        run: |
+          AUTH="${{ secrets.MY_USERNAME }}:${{ secrets.MY_TOKEN }}"
+          git config --global \
+            "url.https://${AUTH}@github.com".insteadOf ssh://git@github.com
 
       - name: Set up the environment
         uses: ./.github/actions/setup-venv
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # ── Guard: no un-migrated model changes ────────────────────────────
+
+      - name: Check for un-migrated model changes
+        # Fails the PR if first-party models changed without a matching
+        # migration (e.g. #205 moved ObjectVisitDay to the visits app but
+        # left it in geometries). Scoped to server.apps.*: third-party
+        # apps can drift from their own shipped migrations (currently
+        # django_admin_runner 0.2.0) — not ours to fix here.
+        run: |
+          APPS=$(uv run python -c "
+            import os, django
+            os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'server.settings')
+            django.setup()
+            from django.conf import settings
+            print(' '.join(
+              a.rsplit('.', 1)[-1]
+              for a in settings.INSTALLED_APPS
+              if a.startswith('server.apps.')))
+          ")
+          uv run python manage.py makemigrations --check --dry-run $APPS
+
       # ── Run tests ───────────────────────────────────────────────────────
 
       - name: Run tests
         run: |
+          mkdir -p junit-results
           if [[ "${{ steps.cache-db.outputs.cache-hit }}" != "true" ]]; then
-            uv run pytest --no-header -q --create-db -v --alluredir allure-results --clean-alluredir
+            uv run pytest --no-header -q --create-db -v \
+              --alluredir allure-results --clean-alluredir \
+              --junitxml=junit-results/tests.xml
           else
-            uv run pytest --no-header -q -v --alluredir allure-results --clean-alluredir
+            uv run pytest --no-header -q -v \
+              --alluredir allure-results --clean-alluredir \
+              --junitxml=junit-results/tests.xml
           fi
 
       # ── Report ──────────────────────────────────────────────────────────
+      # Regular runs no longer touch gh-pages (publishing raced between
+      # concurrent PRs and failed the whole job). Failed tests surface as
+      # inline JUnit check-run annotations; the full Allure report is
+      # generated on demand from the uploaded results artifact via
+      # .github/workflows/allure-report.yml (manual dispatch).
 
-      - name: Generate Allure report
+      - name: JUnit report (annotations)
         if: always()
-        run: npx -y allure generate
-
-      - name: Post Allure summary
-        if: always()
-        uses: allure-framework/allure-action@v0.6.6
+        uses: mikepenz/action-junit-report@v6
         with:
-          report-directory: "./allure-report"
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          report_paths: "junit-results/*.xml"
+
+      # Raw Allure results for the MANUAL report workflow — cheap to
+      # upload, no gh-pages publishing on regular runs.
+      - name: Upload Allure results (for the manual report workflow)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results
+          path: allure-results/
+          retention-days: 14
+          if-no-files-found: ignore
 
       - name: Fix PG data dir permissions for caching
         if: always() && steps.cache-db.outputs.cache-hit != 'true'
         run: |
           docker exec postgis sh -c "chmod -R 0777 /var/lib/postgresql/data"
           docker stop postgis || true
+
+  # Remove the PR's whole report directory (all runs + history) when it
+  # closes, so gh-pages does not accumulate stale reports.
+  cleanup:
+    name: Remove PR reports
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    permissions:
+      contents: write # pushing report removals to gh-pages
+    concurrency:
+      # Serialize with the manual Allure publish (allure-report.yml) —
+      # every gh-pages push joins this group or the two race.
+      group: gh-pages-push
+      cancel-in-progress: false
+
+    steps:
+      - name: Check out gh-pages
+        uses: actions/checkout@v6
+        with:
+          ref: gh-pages
+          path: gh-pages
+
+      - name: Remove PR report directory
+        run: |
+          cd gh-pages
+          DIR="allure/pr-${{ github.event.pull_request.number }}"
+          if [ -d "$DIR" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email \
+              "github-actions[bot]@users.noreply.github.com"
+            git rm -rq "$DIR"
+            git commit -qm "Remove Allure reports $DIR (PR closed)"
+            git push origin gh-pages
+          else
+            echo "Nothing to remove ($DIR absent)"
+          fi
+
+  # ── API typegen gate ─────────────────────────────────────────────────
+  # The committed OpenAPI snapshot must stay consumable by the frontend
+  # toolchain: regenerate the TypeScript types with openapi-typescript
+  # (the same generator `yarn gen:api` uses) and typecheck a smoke
+  # consumer. Catches schema shapes that break the wodore_v1.d.ts build
+  # before the frontend repo notices.
+  api-types:
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - name: Check out
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Generate TypeScript types from the committed snapshot
+        run: |
+          SNAPSHOT=$(ls server/apps/apiversions/openapi/*.json | sort | tail -1)
+          npx -y openapi-typescript@7 "$SNAPSHOT" -o /tmp/wodore_v1.d.ts
+
+      - name: Typecheck a smoke consumer
+        run: |
+          cat > /tmp/smoke.ts <<'TS'
+          import type { paths, components } from './wodore_v1.d.ts';
+          type Schemas = components['schemas'];
+          type Resp = paths['/v1/huts/huts']['get']['responses']['200'];
+          type Huts = Resp['content']['application/json'];
+          const check: (h: Huts) => Huts = h => h;
+          const schema: Schemas['HutSchemaList'] | undefined = undefined;
+          console.log(check, schema);
+          TS
+          cat > /tmp/tsconfig.smoke.json <<'JSON'
+          {
+            "compilerOptions": {
+              "strict": true,
+              "noEmit": true,
+              "skipLibCheck": true,
+              "module": "esnext",
+              "moduleResolution": "bundler",
+              "types": []
+            },
+            "files": ["smoke.ts", "wodore_v1.d.ts"]
+          }
+          JSON
+          # `npx -y typescript@5 tsc` treats the package spec as the
+          # binary name ("could not determine executable to run"); pair
+          # it with -p. tsc has no --paths CLI flag either — hence the
+          # tsconfig file (verified locally: typegen + strict typecheck
+          # against the committed snapshot pass).
+          npx -y -p typescript@5 tsc -p /tmp/tsconfig.smoke.json

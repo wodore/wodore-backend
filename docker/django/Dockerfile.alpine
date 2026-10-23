@@ -174,6 +174,11 @@ WORKDIR /code
 COPY --from=builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
 # This is a special case. We need to run this script as an entry point:
 COPY ./docker/django/entrypoint.sh /docker-entrypoint.sh
+# Server start chain (#263): start.sh is exec'd by the default CMD (and
+# by k8s args); gunicorn_config.py is imported as
+# python:docker.django.gunicorn_config (implicit namespace package).
+COPY --chown=web:web ./docker/django/start.sh /code/docker/django/start.sh
+COPY --chown=web:web ./docker/django/gunicorn_config.py /code/docker/django/gunicorn_config.py
 COPY --chown=web:web ./pyproject.toml /code/
 COPY --chown=web:web ./manage.py /code/
 COPY --chown=web:web server /code/server
@@ -183,19 +188,39 @@ COPY --chown=web:web ${CONFIG_DIR} /code/config
 # Martin tile server config (needed for martin_sync command)
 COPY --chown=web:web tile_server/config /code/tile_server/config
 COPY --chown=web:web tile_server/styles /code/tile_server/styles
+COPY --chown=web:web tile_server/sprites /code/tile_server/sprites
+COPY --chown=web:web tile_server/fonts /code/tile_server/fonts
 
 # Setting up proper permissions:
 #RUN --mount=type=secret,id=env,target=/code/config/.env \
 #  chmod +x '/docker-entrypoint.sh' \
 #  && python manage.py collectstatic --noinput
 RUN <<EOF
+set -e
 mkdir -p /tmp/py_file_cache
 touch /tmp/py_file_cache/.gitignore
 chown -R web:web /tmp/py_file_cache
+mkdir -p /code/static
+chown web:web /code/static
 chmod +x '/docker-entrypoint.sh'
-python manage.py collectstatic --noinput
-# Generate build timestamp automatically during build
-printf 'export BUILD_TIMESTAMP=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%S.%6NZ)" > /code/.build_timestamp
+# collectstatic must work without runtime env or network access:
+# DJANGO_ENV=test loads offline-safe settings: AUTH_PROVIDER defaults to
+# builtin (no Zitadel discovery fetch) and the committed dev signing key
+# is allowed (required when AUTH_PROVIDER=builtin).
+# (Was OIDC_ENABLED=false before the auth modernization, #183.)
+DJANGO_ENV=test python manage.py collectstatic --noinput
+# Regression guard (staging /demos/mapcompare/ vendor 404s, 2025-10):
+# apps conditionally registered in a runtime environment but missing
+# from DJANGO_ENV=test silently lose their static files here — sentinel
+# checks fail the build loudly instead of 404ing at runtime.
+test -f /code/static/demos/vendor/maplibre-gl.js
+test -f /code/static/local_auth/css/account.css
+# Generate build timestamp automatically during build. Use python
+# (not date +%N): busybox date on alpine does not support %N and emits
+# literal garbage, which crashed /v1/version (fromisoformat ValueError
+# on the entrypoint-exported BUILD_TIMESTAMP). isoformat() is RFC3339
+# and parseable on every supported Python.
+printf 'export BUILD_TIMESTAMP=%s\n' "$(python -c 'from datetime import datetime, timezone; print(datetime.now(timezone.utc).isoformat())')" > /code/.build_timestamp
 chmod 644 /code/.build_timestamp
 EOF
 
@@ -207,3 +232,8 @@ USER web
 
 # We customize how our app is loaded with the custom entrypoint:
 ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
+
+# Default command: the generic server start script. Overriders append
+# flags (k8s passes args only: ["bash", "./docker/django/start.sh",
+# "--no-migrate", "--port", "8008"], keeping the entrypoint chain intact).
+CMD ["bash", "./docker/django/start.sh"]

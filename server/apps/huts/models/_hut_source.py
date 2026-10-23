@@ -50,7 +50,9 @@ class HutSource(TimeStampedModel):
         help_text=_("Name of the object"),
     )
     organization = models.ForeignKey(Organization, on_delete=models.RESTRICT)
-    location = models.PointField(blank=True, default=None, verbose_name=_("Location"))
+    location = models.PointField(
+        blank=True, default=None, null=True, verbose_name=_("Location")
+    )
     is_active = models.BooleanField(
         default=True,
         db_index=True,

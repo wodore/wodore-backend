@@ -4,7 +4,6 @@ This file contains all the settings that defines the development server.
 SECURITY WARNING: don't run with debug turned on in production!
 """
 
-import logging
 import re
 import socket
 import subprocess
@@ -17,7 +16,9 @@ from server.settings.components.common import (
     MIDDLEWARE,
 )
 from server.settings.components.csp import CONTENT_SECURITY_POLICY
-from server.settings.components.oidc import discovery_info
+from server.settings.components.oidc import (
+    ZITADEL_RP_ENABLED,
+)
 
 # Setting the development status:
 
@@ -70,6 +71,7 @@ ALLOWED_HOSTS = [
     "0.0.0.0",
     "127.0.0.1",
     "[::1]",
+    "home",  # tailscale hostname
 ]
 
 # Add local IP dynamically if available
@@ -106,7 +108,8 @@ if WITH_DEV:
     INSTALLED_APPS += (
         # Better debug:
         "debug_toolbar",
-        "nplusone.ext.django",
+        # Dev demo pages (mapcompare etc.), open when DEBUG:
+        "server.apps.demos",
         # Linting migrations:
         "django_migration_linter",
         # django-test-migrations:
@@ -120,6 +123,7 @@ if WITH_DEV:
         # django-extra-checks:
         "extra_checks",
     )
+    DEMOS_ENABLED = True
 
 
 # Django debug toolbar:
@@ -133,8 +137,6 @@ if WITH_DEV:
         "querycount.middleware.QueryCountMiddleware",
     )
 
-if discovery_info:  # use only if setup correct
-    MIDDLEWARE += ("mozilla_django_oidc.middleware.SessionRefresh",)
 
 # https://django-debug-toolbar.readthedocs.io/en/stable/installation.html#configure-internal-ips
 try:  # This might fail on some OS
@@ -162,21 +164,15 @@ CONTENT_SECURITY_POLICY["DIRECTIVES"]["script-src"] += ("ajax.googleapis.com",)
 CONTENT_SECURITY_POLICY["DIRECTIVES"]["connect-src"] += ("'self'",)
 CONTENT_SECURITY_POLICY["DIRECTIVES"]["img-src"] += ("http:",)
 
-
-# nplusone
-# https://github.com/jmcarp/nplusone
-
-# Should be the first in line:
-if WITH_DEV:
-    MIDDLEWARE = ("nplusone.ext.django.NPlusOneMiddleware", *MIDDLEWARE)
-
-# Logging N+1 requests:
-# NPLUSONE_RAISE = True  # comment out if you want to allow N+1 requests
-NPLUSONE_LOGGER = logging.getLogger("django")
-NPLUSONE_LOG_LEVEL = logging.WARNING
-NPLUSONE_WHITELIST = [
-    {"model": "admin.*"},
-]
+# Demo page (demos/mapcompare) + basemap styles fetch external tiles:
+CONTENT_SECURITY_POLICY["DIRECTIVES"]["connect-src"] += (
+    "http://localhost:3739",  # lane Martin (demos page tile server)
+    "https://wmts.geo.admin.ch",  # swisstopo relief + pixelkarte WMTS
+    "https://tiles.maptoolkit.org",  # MTK vector/raster tiles
+    "https://icons.maptoolkit.org",  # MTK sprites
+    "https://tiles.mapterhorn.com",  # Mapterhorn DEM (client relief variants)
+    "https://elevation-tiles-prod.s3.amazonaws.com",  # AWS Terrain Tiles (hillshade)
+)
 
 
 # django-test-migrations
@@ -220,3 +216,15 @@ EXTRA_CHECKS = {
 # Disable persistent DB connections
 # https://docs.djangoproject.com/en/4.2/ref/databases/#caveats
 DATABASES["default"]["CONN_MAX_AGE"] = 0
+
+# Development convenience: disable the django-axes login lockout (default:
+# 3 failures, permanent until `manage.py axes_reset`). Production keeps the
+# defaults; allauth's own rate limits still apply everywhere.
+AXES_ENABLED = False
+
+# Zitadel RP mode only (AUTH_PROVIDER=zitadel): refresh OIDC sessions.
+
+if ZITADEL_RP_ENABLED:
+    MIDDLEWARE += (
+        "server.middleware.oidc.AsyncSafeSessionRefresh",  # pyright: ignore[reportUndefinedVariable]
+    )

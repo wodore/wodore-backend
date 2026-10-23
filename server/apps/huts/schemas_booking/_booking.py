@@ -21,6 +21,7 @@ class HutBookingSchema(BaseModel):
     reservation_status: ReservationStatusEnum
     free: int | None = None
     total: int | None = None
+    free_tolerance: int = 0
     occupancy_percent: float | None = None
     occupancy_steps: int | None = None
     occupancy_status: OccupancyStatusEnum

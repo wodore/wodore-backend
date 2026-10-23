@@ -19,8 +19,11 @@ if [ -z "$DB_NAME" ] || [ -z "$ACTION" ]; then
 fi
 
 # `drop` refuses anything that is not lane-named: only workz-allocated lane
-# databases (pi_* / *lane*) may be dropped — never the live dev DB, the
-# template snapshot or system databases.
+# databases may be dropped — never the live dev DB, the template snapshot
+# or system databases. Lane-named means: pi_* / *lane* patterns, or any
+# name the workz-managed `.env.local` in THIS worktree declares as its own
+# (workz derives branch-based names like `feat_tmb_huts` that match no
+# pattern — the .env.local entry is the authoritative allocation record).
 if [ "$ACTION" = "drop" ]; then
     case "$DB_NAME" in
         wodore|wodore_template|postgres|template0|template1)
@@ -28,8 +31,9 @@ if [ "$ACTION" = "drop" ]; then
             exit 1
             ;;
     esac
-    if ! printf '%s' "$DB_NAME" | grep -Eq '^pi_|lane'; then
-        echo "lane-db: refusing to drop '$DB_NAME' (not a lane database; expected pi_* or *lane*)" >&2
+    managed_db="$(sed -n 's/^DB_NAME=//p' .env.local 2>/dev/null || true)"
+    if ! printf '%s' "$DB_NAME" | grep -Eq '^pi_|lane' && [ "$DB_NAME" != "$managed_db" ]; then
+        echo "lane-db: refusing to drop '$DB_NAME' (not a lane database; expected pi_*, *lane* or this worktree's .env.local DB_NAME)" >&2
         exit 1
     fi
 fi

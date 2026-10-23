@@ -23,7 +23,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--styles",
             type=str,
-            default="detailed,simple,mono",
+            default="color,primitive,mono",
             help="Comma-separated list of styles to sync (default: all styles)",
         )
         parser.add_argument(
@@ -54,7 +54,7 @@ class Command(BaseCommand):
         symbol_prefix = options.get("symbol_prefix", "auto")
 
         # Validate styles
-        valid_styles = ["detailed", "simple", "mono"]
+        valid_styles = ["color", "primitive", "mono"]
         invalid_styles = [s for s in styles if s not in valid_styles]
         if invalid_styles:
             self.stderr.write(
@@ -334,13 +334,18 @@ class Command(BaseCommand):
 
         if existing:
             if force and not dry_run:
-                # Update existing symbol's SVG file
+                # Update existing symbol's SVG file.
+                # NOTE: stored filenames are namespaced by style
+                # (``{style}__{slug}.svg``) — Symbol files live flat under
+                # ``symbols/`` and the same slug exists in several styles,
+                # so unnamespaced names clobber each other's files.
+                stored_name = f"{style}__{svg_path.name}"
                 try:
                     # Delete old file
                     existing.svg_file.delete(save=False)
                     # Save new file
                     with open(svg_path, "rb") as f:
-                        existing.svg_file.save(svg_path.name, File(f), save=True)
+                        existing.svg_file.save(stored_name, File(f), save=True)
                     self.stdout.write(f"    Updated symbol: {slug} ({style})")
                     return existing, False
                 except Exception as e:
@@ -365,9 +370,10 @@ class Command(BaseCommand):
 
         if not dry_run:
             try:
-                # Save SVG file
+                # Save SVG file (style-namespaced, see force-branch note)
+                stored_name = f"{style}__{svg_path.name}"
                 with open(svg_path, "rb") as f:
-                    new_symbol.svg_file.save(svg_path.name, File(f), save=True)
+                    new_symbol.svg_file.save(stored_name, File(f), save=True)
 
                 self.stdout.write(f"    Created symbol: {slug} ({style})")
                 return new_symbol, True

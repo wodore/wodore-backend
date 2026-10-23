@@ -8,8 +8,9 @@ from ._hut import (
     HutSearchResultSchema,
     ImageInfoSchema,
     LicenseInfoSchema,
+    OrganizationBaseSchema,
 )
-from ._hut_type import HutTypeDetailSchema, HutTypeSchema
+from ._hut_type import HutTypeSchema
 
 
 # from ..ref import RefDatabase, RefCreate, HutRefLink, HutRefLinkBase

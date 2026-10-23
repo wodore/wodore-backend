@@ -1,4 +1,5 @@
 """
+
 Base classes and utilities for image providers.
 """
 
@@ -9,10 +10,12 @@ from datetime import datetime
 from typing import Any, Literal
 
 import structlog
-from asgiref.sync import sync_to_async
+from asgiref.sync import async_to_sync, sync_to_async
 
 from django.contrib.gis.geos import Point
 from django.core.cache import cache
+
+from server.apps.api.error_codes import ErrorCode
 
 from .schemas import GeoPlaceSchema
 
@@ -29,6 +32,104 @@ CACHE_VERY_SHORT = 3600  # 1 hours
 
 # Cache key prefix for all geoimages caching
 CACHE_KEY_PREFIX = "geoimages"
+
+
+def run_async(async_fn, /, *args, release_db: bool = True, **kwargs):
+    """Run an async callable (e.g. ``fetch_images_from_providers``) from
+    sync code under any server topology.
+
+    ``asyncio.run`` is wrong once requests are served over ASGI: the sync
+    controllers then execute inside asgiref's sync/async bridging
+    machinery, and any nested ``sync_to_async`` in the awaited stack (place
+    schema conversion, cache backends) fails with asgiref's
+    ``CurrentThreadExecutor`` self-submit guard (or deadlocks its executor)
+    — the provider fetch dies before any external call and the endpoint
+    answers an empty collection. ``async_to_sync`` bridges both worlds:
+    correct under ASGI, and under WSGI it degrades to the previously
+    working nested-event-loop path.
+
+    Connection hygiene: every exit from the bridge — success, provider
+    error, or ``asyncio.CancelledError`` from an upstream client abort —
+    closes this thread's DB connections. Under ASGI a cancelled request
+    never reaches Django's request-finished cleanup for the detached sync
+    view thread; without this, each abort stranded a checked-out psycopg
+    pool connection until the pool starved (P0 2026-10-05).
+
+    Pass ``release_db=False`` when the calling thread holds a long-lived
+    server-side cursor (``queryset.iterator()``) across the bridge: the
+    exit-path cleanup would close the connection out from under the open
+    cursor and the next fetch dies with ``OperationalError: the
+    connection is closed`` (staging 2026-10-07: ``geoimages_pin --all``
+    lost a >1 h sweep this way). The background/command pipeline
+    (``pinning.sync_place_images``) must pass ``False``; request-side
+    callers keep the default.
+    """
+    try:
+        return async_to_sync(async_fn)(*args, **kwargs)
+    finally:
+        if release_db:
+            _release_thread_db_connections()
+
+
+def _release_thread_db_connections() -> None:
+    """Deterministically release this thread's DB connections.
+
+    Runs on the sync side of the bridge, i.e. on the view thread that
+    checked the connections out (thread-sensitive ``sync_to_async`` funnels
+    the provider stack's DB access onto that same thread). With the native
+    psycopg pool and ``CONN_MAX_AGE=0`` (the ASGI staging setup), closing
+    here checks the connection back into the pool on every exit path —
+    including the cancellation path that used to leak it.
+
+    Connections inside an open transaction are left alone: they belong to
+    an outer ``atomic`` block whose owner still expects to commit (a
+    mid-transaction close would abort it — and breaks transactional test
+    wrappers), and their release follows the normal transaction lifecycle.
+    The provider phase itself runs in autocommit, so the incident's leak
+    path is fully covered.
+
+    Never run this on a thread holding a long-lived server-side cursor
+    (``queryset.iterator()``): the cursor's connection would be closed
+    out from under it — see ``run_async(release_db=False)``.
+    """
+    from django.db import connections
+
+    try:
+        for conn in connections.all(initialized_only=True):
+            if conn.in_atomic_block:
+                continue
+            conn.close_if_unusable_or_obsolete()
+    except Exception:
+        logger.warning(
+            "Failed to close DB connections after provider bridge",
+            exc_info=True,
+        )
+
+
+def provider_http_timeout() -> float:
+    """Outbound HTTP timeout (seconds) for image provider API calls.
+
+    ``IMAGES_PROVIDER_HTTP_TIMEOUT_SECONDS`` setting, default 10s — a cold
+    fan-out queries several external providers and Wikimedia runs multiple
+    sequential strategies, so each single HTTP call must fit comfortably
+    inside the overall fan-out budget.
+    """
+    from django.conf import settings
+
+    return float(getattr(settings, "IMAGES_PROVIDER_HTTP_TIMEOUT_SECONDS", 10.0))
+
+
+def fanout_budget_seconds() -> float:
+    """Overall wall-clock budget (seconds) for one provider fan-out.
+
+    ``IMAGES_FANOUT_BUDGET_SECONDS`` setting; values <= 0 disable the
+    budget. Providers still running at the deadline are cancelled and
+    their results skipped — partial results serve the request instead of
+    a 30s+ straggler holding it (and its pooled DB connections) open.
+    """
+    from django.conf import settings
+
+    return float(getattr(settings, "IMAGES_FANOUT_BUDGET_SECONDS", 10.0))
 
 
 def get_persistent_cache():
@@ -218,7 +319,17 @@ class ImageProvider(ABC):
             lat_rounded = lat
             lon_rounded = lon
 
-        return f"{CACHE_KEY_PREFIX}:{self.source}:images:{lat_rounded}:{lon_rounded}:{radius}:{precision}"
+        # Radius normalized to int: the endpoints take a pydantic float
+        # (``300.0``), and float keys fork the cache from the int keys other
+        # callers produce — historically the float half even got poisoned
+        # with empty "badinteger" responses (ggsradius=300.0). Int keys
+        # fork away from old poisoned entries; they simply expire by TTL.
+        radius_int = int(radius)
+
+        return (
+            f"{CACHE_KEY_PREFIX}:{self.source}:images:"
+            f"{lat_rounded}:{lon_rounded}:{radius_int}:{precision}"
+        )
 
     def _get_metadata_cache_key(self, identifier: str) -> str:
         """
@@ -334,7 +445,9 @@ def _invalidate_provider_metadata_cache(provider_name: str) -> None:
     )
 
 
-def _get_provider_info(provider_name: str, force_refresh: bool = False) -> dict:
+def _get_provider_info(
+    provider_name: str, force_refresh: bool = False
+) -> dict[str, Any]:
     """
     Get provider information from database.
 
@@ -558,7 +671,7 @@ def _generate_license_slug(input_string: str) -> str:
     return slug if slug else "unknown"
 
 
-def _get_license_info(slug: str | None) -> dict[str, str | None]:
+def _get_license_info(slug: str | None) -> dict[str, Any]:
     """
     Get license information from database, creating if necessary.
 
@@ -633,14 +746,14 @@ def _get_license_info(slug: str | None) -> dict[str, str | None]:
         icons = {}
         if license_obj.category:
             try:
-                # Category has symbol_detailed, symbol_simple, symbol_mono fields
+                # Category has symbol_color, symbol_primitive, symbol_mono fields
                 category = license_obj.category
 
                 # Map Category symbol fields to icon style names
                 # Use svg_file.url which returns full URL from FileField
                 symbol_fields = {
-                    "detailed": category.symbol_detailed,
-                    "simple": category.symbol_simple,
+                    "color": category.symbol_color,
+                    "primitive": category.symbol_primitive,
                     "mono": category.symbol_mono,
                 }
 
@@ -657,7 +770,7 @@ def _get_license_info(slug: str | None) -> dict[str, str | None]:
             "name": license_obj.name,
             "fullname": license_obj.fullname,
             "url": license_obj.url,
-            "category": license_obj.category_id,
+            "category": license_obj.category_id,  # type: ignore[attr-defined]
             "icons": icons if icons else None,
             "description": license_obj.description,
         }
@@ -687,7 +800,7 @@ def _build_attribution(
     license_slug: str,
     license_name: str,
     license_url: str | None,
-    provider_name: str,
+    provider_name: str | None,
     provider_url: str | None,
     source_url: str | None = None,
     provider_icon: str | None = None,
@@ -767,8 +880,8 @@ def _build_attribution(
     if license_icons:
         license_icon_url = (
             license_icons.get("mono")
-            or license_icons.get("simple")
-            or license_icons.get("detailed")
+            or license_icons.get("primitive")
+            or license_icons.get("color")
         )
 
     # License icon as img tag
@@ -804,10 +917,18 @@ def _build_attribution(
         "license_icons": license_icons,
         "license_short": license_short_html,
         "license_full": license_full_html,
-        "author": f"{author_html} on {provider_html}"
-        if author_html and provider_html
-        else (author_html or provider_html or "Unknown"),
+        "author": (
+            f"{author_html} on {provider_html}"
+            if author_html and provider_html
+            else (author_html or provider_html or "Unknown")
+        ),
     }
+
+
+# Display variants whose constrained target size does not exceed this
+# dimension can be served from the medium source (Wikimedia 500px thumb
+# bucket); anything larger uses the large source.
+MEDIUM_SOURCE_MAX_DIMENSION = 500
 
 
 def _calculate_constrained_size(
@@ -867,6 +988,7 @@ async def fetch_images_for_place(
     sources: list[str] | None,
     limit: int,
     update_cache: bool = False,
+    budget: float | None = None,
 ) -> tuple[list[ImageResult], dict[str, Any]]:
     """
     Fetch images for a specific place (GeoPlace or Hut).
@@ -881,15 +1003,19 @@ async def fetch_images_for_place(
         sources: Optional list of providers to query
         limit: Max number of images to return
         update_cache: If True, bypass cache and refresh cached data
+        budget: Optional fan-out budget override (seconds) passed through
+            to ``fetch_images_from_providers``
 
     Returns:
         Tuple of (list of ImageResult objects, place info dict)
 
     Raises:
-        HttpError: If place is not found (404)
+        APIError: If place is not found (404)
     """
+    from http import HTTPStatus
+
     from asgiref.sync import sync_to_async
-    from ninja.errors import HttpError
+    from dmr import APIError
 
     # Fetch the place based on type (must be done in sync context)
     @sync_to_async
@@ -909,12 +1035,18 @@ async def fetch_images_for_place(
             )
 
             if place is None:
-                raise HttpError(404, f"GeoPlace '{place_slug}' not found")
+                raise APIError(
+                    {
+                        "code": ErrorCode.not_found,
+                        "detail": f"GeoPlace '{place_slug}' not found",
+                    },
+                    status_code=HTTPStatus.NOT_FOUND,
+                )
 
             return {
                 "place": place,
                 "place_info": {
-                    "id": place.id,
+                    "id": place.id,  # type: ignore[attr-defined]
                     "slug": place.slug,
                     "name": place.name_i18n,
                     "location": {"lat": place.location.y, "lon": place.location.x},
@@ -935,12 +1067,18 @@ async def fetch_images_for_place(
             )
 
             if place is None:
-                raise HttpError(404, f"Hut '{place_slug}' not found")
+                raise APIError(
+                    {
+                        "code": ErrorCode.not_found,
+                        "detail": f"Hut '{place_slug}' not found",
+                    },
+                    status_code=HTTPStatus.NOT_FOUND,
+                )
 
             return {
                 "place": place,
                 "place_info": {
-                    "id": place.id,
+                    "id": place.id,  # type: ignore[attr-defined]
                     "slug": place.slug,
                     "name": place.name_i18n,
                     "location": {"lat": place.location.y, "lon": place.location.x},
@@ -962,9 +1100,31 @@ async def fetch_images_for_place(
         precision="precise",  # Always use high precision
         limit=limit,
         update_cache=update_cache,
+        budget=budget,
     )
 
     return results, place_info
+
+
+def _build_sizes(result, get_size_fn) -> dict:
+    """Per-variant pixel dimensions for the image's own orientation."""
+    if not result.width or not result.height:
+        return {"raw": {"width": 0, "height": 0}}
+    portrait = result.height > result.width
+    targets = {
+        "xs": (133, 200) if portrait else (200, 133),
+        "sm": (267, 400) if portrait else (400, 267),
+        "md": (900, 1350) if portrait else (1200, 800),
+        "lg": (1500, 2250) if portrait else (2000, 1333),
+        "xl": (3000, 4500) if portrait else (4000, 2666),
+    }
+    sizes = {
+        "raw": {"width": result.width, "height": result.height},
+    }
+    for key, (tw, th) in targets.items():
+        cw, ch = _calculate_constrained_size(tw, th, result.width, result.height)
+        sizes[key] = {"width": cw, "height": ch}
+    return sizes
 
 
 def post_process_images(
@@ -975,7 +1135,8 @@ def post_process_images(
     Post-process image results to generate final output format.
 
     This function:
-    1. Generates all image URLs (portrait/landscape) from url_large
+    1. Generates all image URLs (portrait/landscape) from the smallest
+       suitable source URL (url_medium / url_large)
     2. Determines orientation from dimensions
     3. Creates final GeoJSON Feature format
     4. Adds license information from slug
@@ -987,7 +1148,7 @@ def post_process_images(
     Returns:
         List of GeoJSON Feature dictionaries
     """
-    from server.apps.images.transfomer import ImagorImage
+    from server.apps.images.transfomer import ImagorImage, TransformedImage
 
     final_results = []
 
@@ -1026,28 +1187,41 @@ def post_process_images(
             if result.width and result.height:
                 is_portrait = result.height > result.width
 
-            # Always use url_large for generating proxy URLs (not url_medium/thumb_url)
-            # This ensures we use the original high-quality image, not thumbnails
-            original_url = result.url_large
-            imagor_img = ImagorImage(original_url)
+            # Source selection: build each display variant from the smallest
+            # source URL that satisfies its constrained target size. Providers
+            # can supply a medium source via ImageResult.url_medium (Wikimedia:
+            # 500px thumb bucket); url_large is the high-quality source — for
+            # Wikimedia a bounded thumb (3000px, 1920px for TIFF), never the
+            # original file, whose bursts through imagor trip Wikimedia 429s.
+            large_img = ImagorImage(result.url_large)
+            medium_img = ImagorImage(result.url_medium) if result.url_medium else None
+
+            def get_source(target_w: int, target_h: int) -> ImagorImage:
+                """Pick the smallest source satisfying the target size."""
+                cw, ch = _calculate_constrained_size(
+                    target_w, target_h, result.width, result.height
+                )
+                if medium_img and max(cw, ch) <= MEDIUM_SOURCE_MAX_DIMENSION:
+                    return medium_img
+                return large_img
 
             # Determine focal point for transforms
             # Use focal area if available, otherwise default to smart detection
             focal_point = result.focal.to_imagor_area() if result.focal else "smart"
 
-            # Determine crop parameters
-            # If result.crop is defined, use it for all crops
-            # Otherwise, use result.focal for avatar/thumb if focal_point is not smart
+            # Determine crop parameters. Serving semantics: thumbs crop to
+            # the focal area when defined (else the curated crop, else nothing);
+            # preview/medium/large only apply the curated crop, with the focal
+            # filter (or smart) guiding imagor's aspect crop.
             crop_start = None
             crop_stop = None
             focal_start = None
             focal_stop = None
             if result.crop:
-                # Parse crop string "x1,y1:x2,y2" into start and stop
-                crop_start, crop_stop = result.crop.to_imagor_area()
-            elif focal_point != "smart" and result.focal:
-                # If no explicit crop but focal exists, use focal area for avatar/thumb only
-                focal_start, focal_stop = result.focal.to_imagor_area()
+                # "x1,y1:x2,y2" area string → start and stop segments
+                crop_start, crop_stop = result.crop.to_imagor_area().split(":")
+            if result.focal:
+                focal_start, focal_stop = result.focal.to_imagor_area().split(":")
 
             # Generate URLs with @2x variants
             quality = 85
@@ -1057,96 +1231,60 @@ def post_process_images(
                 cw, ch = _calculate_constrained_size(w, h, result.width, result.height)
                 return f"{cw}x{ch}"
 
+            def transform_for(
+                target_w: int, target_h: int, **kwargs
+            ) -> TransformedImage:
+                """Transform from the smallest suitable source URL."""
+                return get_source(target_w, target_h).transform(
+                    size=get_size(target_w, target_h), **kwargs
+                )
+
             urls = {
                 "original": {
+                    # The true original is never fed to imagor: url_large is a
+                    # bounded thumb for Wikimedia (JPEG even for TIFF sources,
+                    # browsers cannot render TIFF).
                     "raw": result.url_large,
-                    "proxy": imagor_img.transform().get_full_url(),
+                    "proxy": large_img.transform().get_full_url(),
                 },
                 "square": {
-                    "avatar": imagor_img.transform(
-                        size=get_size(96, 96),
+                    "xs": transform_for(
+                        200,
+                        200,
                         quality=quality,
                         focal=focal_point,
-                        crop_start=focal_start,
-                        crop_stop=focal_stop,
+                        crop_start=focal_start or crop_start,
+                        crop_stop=focal_stop or crop_stop,
                     ).get_full_url(),
-                    "avatar@2x": imagor_img.transform(
-                        size=get_size(192, 192),
+                    "sm": transform_for(
+                        400,
+                        400,
                         quality=quality,
                         focal=focal_point,
-                        crop_start=focal_start,
-                        crop_stop=focal_stop,
+                        crop_start=focal_start or crop_start,
+                        crop_stop=focal_stop or crop_stop,
                     ).get_full_url(),
-                    "thumb": imagor_img.transform(
-                        size=get_size(200, 200),
-                        quality=quality,
-                        focal=focal_point,
-                        crop_start=focal_start,
-                        crop_stop=focal_stop,
-                    ).get_full_url(),
-                    "thumb@2x": imagor_img.transform(
-                        size=get_size(400, 400),
-                        quality=quality,
-                        focal=focal_point,
-                        crop_start=focal_start,
-                        crop_stop=focal_stop,
-                    ).get_full_url(),
-                    "preview": imagor_img.transform(
-                        size=get_size(400, 400),
-                        quality=quality,
-                        focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
-                    ).get_full_url(),
-                    "preview@2x": imagor_img.transform(
-                        size=get_size(800, 800),
-                        quality=quality,
-                        focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
-                    ).get_full_url(),
-                    "placeholder": imagor_img.transform(
-                        size=get_size(400, 400),
-                        quality=5,
-                        blur=20,
-                        focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
-                    ).get_full_url(),
-                    "placeholder@2x": imagor_img.transform(
-                        size=get_size(800, 800),
-                        quality=5,
-                        blur=20,
-                        focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
-                    ).get_full_url(),
-                    "medium": imagor_img.transform(
-                        size=get_size(1000, 1000),
+                    "md": transform_for(
+                        1200,
+                        1200,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                         no_upscale=True,
                     ).get_full_url(),
-                    "medium@2x": imagor_img.transform(
-                        size=get_size(2000, 2000),
+                    "lg": transform_for(
+                        2000,
+                        2000,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                         no_upscale=True,
                     ).get_full_url(),
-                    "large": imagor_img.transform(
-                        size=get_size(2000, 2000),
-                        quality=quality,
-                        focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
-                        no_upscale=True,
-                    ).get_full_url(),
-                    "large@2x": imagor_img.transform(
-                        size=get_size(4000, 4000),
+                    "xl": transform_for(
+                        4000,
+                        4000,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
@@ -1155,159 +1293,87 @@ def post_process_images(
                     ).get_full_url(),
                 },
                 "landscape": {
-                    "thumb": imagor_img.transform(
-                        size=get_size(200, 133),
+                    "xs": transform_for(
+                        200,
+                        133,
                         quality=quality,
                         focal=focal_point,
-                        crop_start=focal_start,
-                        crop_stop=focal_stop,
+                        crop_start=focal_start or crop_start,
+                        crop_stop=focal_stop or crop_stop,
                     ).get_full_url(),
-                    "thumb@2x": imagor_img.transform(
-                        size=get_size(400, 266),
+                    "sm": transform_for(
+                        400,
+                        267,
                         quality=quality,
                         focal=focal_point,
-                        crop_start=focal_start,
-                        crop_stop=focal_stop,
+                        crop_start=focal_start or crop_start,
+                        crop_stop=focal_stop or crop_stop,
                     ).get_full_url(),
-                    "preview": imagor_img.transform(
-                        size=get_size(400, 267),
-                        quality=quality,
-                        focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
-                    ).get_full_url(),
-                    "preview@2x": imagor_img.transform(
-                        size=get_size(800, 534),
+                    "md": transform_for(
+                        1200,
+                        800,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
-                    "placeholder": imagor_img.transform(
-                        size=get_size(400, 267),
-                        quality=5,
-                        blur=20,
-                        focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
-                    ).get_full_url(),
-                    "placeholder@2x": imagor_img.transform(
-                        size=get_size(800, 534),
-                        quality=5,
-                        blur=20,
-                        focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
-                    ).get_full_url(),
-                    "medium": imagor_img.transform(
-                        size=get_size(1200, 800),
+                    "lg": transform_for(
+                        2000,
+                        1333,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
-                        no_upscale=False,
                     ).get_full_url(),
-                    "medium@2x": imagor_img.transform(
-                        size=get_size(2400, 1600),
+                    "xl": transform_for(
+                        4000,
+                        2666,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
-                        no_upscale=False,
-                    ).get_full_url(),
-                    "large": imagor_img.transform(
-                        size=get_size(2000, 1333),
-                        quality=quality,
-                        focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
-                        no_upscale=False,
-                    ).get_full_url(),
-                    "large@2x": imagor_img.transform(
-                        size=get_size(4000, 2666),
-                        quality=quality,
-                        focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
-                        no_upscale=False,
                     ).get_full_url(),
                 },
                 "portrait": {
-                    "thumb": imagor_img.transform(
-                        size=get_size(133, 200),
+                    "xs": transform_for(
+                        133,
+                        200,
                         quality=quality,
                         focal=focal_point,
-                        crop_start=focal_start,
-                        crop_stop=crop_stop,
+                        crop_start=focal_start or crop_start,
+                        crop_stop=focal_stop or crop_stop,
                     ).get_full_url(),
-                    "thumb@2x": imagor_img.transform(
-                        size=get_size(266, 400),
+                    "sm": transform_for(
+                        267,
+                        400,
                         quality=quality,
                         focal=focal_point,
-                        crop_start=focal_start,
-                        crop_stop=crop_stop,
+                        crop_start=focal_start or crop_start,
+                        crop_stop=focal_stop or crop_stop,
                     ).get_full_url(),
-                    "preview": imagor_img.transform(
-                        size=get_size(300, 450),
-                        quality=quality,
-                        focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
-                    ).get_full_url(),
-                    "preview@2x": imagor_img.transform(
-                        size=get_size(600, 900),
+                    "md": transform_for(
+                        900,
+                        1350,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
                     ).get_full_url(),
-                    "placeholder": imagor_img.transform(
-                        size=get_size(300, 450),
-                        quality=5,
-                        blur=20,
-                        focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
-                    ).get_full_url(),
-                    "placeholder@2x": imagor_img.transform(
-                        size=get_size(600, 900),
-                        quality=5,
-                        blur=20,
-                        focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
-                    ).get_full_url(),
-                    "medium": imagor_img.transform(
-                        size=get_size(900, 1350),
+                    "lg": transform_for(
+                        1500,
+                        2250,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
-                        no_upscale=False,
                     ).get_full_url(),
-                    "medium@2x": imagor_img.transform(
-                        size=get_size(1800, 2700),
+                    "xl": transform_for(
+                        3000,
+                        4500,
                         quality=quality,
                         focal=focal_point,
                         crop_start=crop_start,
                         crop_stop=crop_stop,
-                        no_upscale=False,
-                    ).get_full_url(),
-                    "large": imagor_img.transform(
-                        size=get_size(1500, 2250),
-                        quality=quality,
-                        focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
-                        no_upscale=False,
-                    ).get_full_url(),
-                    "large@2x": imagor_img.transform(
-                        size=get_size(3000, 4500),
-                        quality=quality,
-                        focal=focal_point,
-                        crop_start=crop_start,
-                        crop_stop=crop_stop,
-                        no_upscale=False,
                     ).get_full_url(),
                 },
             }
@@ -1319,25 +1385,6 @@ def post_process_images(
             license_info = _get_license_info(result.license_slug)
 
             # Build focal and crop metadata
-            focal_metadata = None
-            crop_metadata = None
-
-            if result.focal:
-                focal_metadata = {
-                    "x1": result.focal.x1,
-                    "y1": result.focal.y1,
-                    "x2": result.focal.x2,
-                    "y2": result.focal.y2,
-                }
-
-            if result.crop:
-                crop_metadata = {
-                    "x1": result.crop.x1,
-                    "y1": result.crop.y1,
-                    "x2": result.crop.x2,
-                    "y2": result.crop.y2,
-                }
-
             # Build GeoJSON Feature
             feature = {
                 "type": "Feature",
@@ -1381,19 +1428,22 @@ def post_process_images(
                         "raw": result.author_raw if result.author_raw else None,
                     },
                     "urls": urls,
-                    "width": result.width,
-                    "height": result.height,
+                    "sizes": _build_sizes(result, get_size),
                     "is_portrait": is_portrait,
                     "score": result.score,
-                    "focal": focal_metadata,
-                    "crop": crop_metadata,
                     "place": result.place,
                 },
             }
 
-            # Add extra data if present
-            if result.extra:
-                feature["properties"]["extra"] = result.extra
+            # Thumbhashes: always fully populated — unassessed slots get a
+            # gray-gradient placeholder with the correct aspect ratio.
+            from ..schemas._images import DEFAULT_THUMBHASHES
+
+            raw_hashes = (result.extra or {}).get("thumbhashes") or {}
+            feature["properties"]["thumbhashes"] = {
+                key: raw_hashes.get(key) or getattr(DEFAULT_THUMBHASHES, key)
+                for key in DEFAULT_THUMBHASHES.model_fields
+            }
 
             final_results.append(feature)
 
@@ -1470,6 +1520,7 @@ async def fetch_images_from_providers(
     limit: int = 100,
     huts: list[Any] | None = None,
     update_cache: bool = False,
+    budget: float | None = None,
 ) -> list[ImageResult]:
     """
     Fetch images from all enabled providers in parallel.
@@ -1484,6 +1535,12 @@ async def fetch_images_from_providers(
         limit: Maximum number of results to fetch per provider
         huts: Optional list of Hut objects (if querying for huts)
         update_cache: If True, bypass cache and refresh cached data
+        budget: Overall wall-clock budget (seconds) for the provider
+            fan-out. ``None`` (default) uses the
+            ``IMAGES_FANOUT_BUDGET_SECONDS`` setting; an explicit value
+            (including <= 0, which disables the budget) wins — background
+            callers like the geoimages_pin command use this to run longer
+            than the latency-driven request default.
 
     Returns:
         List of ImageResult objects from all providers
@@ -1514,26 +1571,53 @@ async def fetch_images_from_providers(
     if update_cache:
         logger.debug("Cache update mode enabled", action="bypassing_cache")
 
-    # Run all providers in parallel
+    # Run all providers in parallel under an overall wall-clock budget:
+    # stragglers are cancelled at the deadline and their results skipped,
+    # so one slow upstream cannot hold the request (and its pooled DB
+    # connections) open until upstream clients cancel it. Partial results
+    # still flow through dedupe/scoring and are cached by the response
+    # cache — completeness is traded for bounded latency.
+    budget = fanout_budget_seconds() if budget is None else budget
     tasks = [
-        provider.fetch(
-            place_schemas, lat, lon, radius, limit, update_cache=update_cache
+        asyncio.ensure_future(
+            provider.fetch(
+                place_schemas, lat, lon, radius, limit, update_cache=update_cache
+            )
         )
         for provider in providers
     ]
-    results_lists = await asyncio.gather(*tasks, return_exceptions=True)
+    try:
+        await asyncio.wait(tasks, timeout=budget or None)
+    finally:
+        # Also when this coroutine itself is cancelled (client abort):
+        # never leave provider tasks running detached.
+        for task in tasks:
+            if not task.done():
+                task.cancel()
 
-    # Flatten results and handle exceptions
+    # Let cancelled stragglers unwind; their CancelledErrors are expected
+    # and must not escape the fan-out.
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Flatten results, handle per-provider exceptions and budget stragglers
     all_results = []
-    for i, result_list in enumerate(results_lists):
-        provider = providers[i]
-        if isinstance(result_list, Exception):
+    for task, provider in zip(tasks, providers):
+        if task.cancelled():
+            logger.warning(
+                "Provider exceeded fan-out budget, results skipped",
+                provider=provider.source,
+                budget_s=budget,
+            )
+            continue
+        exc = task.exception()
+        if exc is not None:
             logger.error(
                 "Provider fetch failed",
                 provider=provider.source,
-                error=str(result_list),
+                error=str(exc),
             )
             continue
+        result_list = task.result()
         if result_list:
             all_results.extend(result_list)
             logger.debug(
@@ -1842,7 +1926,8 @@ def _hash_url(url: str) -> str:
     """Create a hash from URL for cache key."""
     import hashlib
 
-    return hashlib.md5(url.encode()).hexdigest()[:16]
+    # Non-security cache key; sha256 kept over md5 per lint policy.
+    return hashlib.sha256(url.encode()).hexdigest()[:16]
 
 
 async def _get_image_dimensions_from_headers(url: str) -> tuple[int, int] | None:
@@ -1888,7 +1973,7 @@ async def _get_image_dimensions_from_headers(url: str) -> tuple[int, int] | None
             )
         }
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=provider_http_timeout()) as client:
             # Use streaming to handle large EXIF headers
             async with client.stream("GET", url, headers=headers) as response:
                 if response.status_code not in [200, 206]:

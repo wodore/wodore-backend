@@ -8,6 +8,7 @@ from django.utils.translation import gettext_lazy as _
 
 from unfold.contrib.filters.admin import (
     AutocompleteSelectMultipleFilter,
+    BooleanRadioFilter,
     ChoicesCheckboxFilter,
 )
 from unfold.decorators import display
@@ -51,12 +52,25 @@ class LicenseAdmin(ModelAdmin):
         "order_small",
     )
     list_display_links = ("slug", "name_i18n")
+    list_editable = (
+        "is_active",
+        "attribution_required",
+        "no_commercial",
+        "no_modifying",
+        "share_alike",
+        "no_publication",
+    )
     list_filter = (
         (
             "review_status",
             ChoicesCheckboxFilter,
         ),  # Filter by review status with checkboxes
-        "is_active",
+        ("is_active", BooleanRadioFilter),
+        ("attribution_required", BooleanRadioFilter),
+        ("no_commercial", BooleanRadioFilter),
+        ("no_modifying", BooleanRadioFilter),
+        ("share_alike", BooleanRadioFilter),
+        ("no_publication", BooleanRadioFilter),
         ("category", AutocompleteSelectMultipleFilter),
     )
     search_fields = ("slug", "name_i18n", "fullname_i18n", "review_comment")

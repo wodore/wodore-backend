@@ -1,9 +1,8 @@
 from copy import deepcopy
-from typing import Annotated, Any
+from typing import Any
 
 # from django.db.models import JSONField
 from django_jsonform.models.fields import JSONField
-from ninja import Query
 from pydantic import Field, create_model
 
 from django.conf import settings
@@ -158,14 +157,3 @@ class TranslationJSONRawFieldDescriptor:
 
     def __set__(self, instance, value):
         setattr(instance, self.field_name, value)
-
-
-LanguageParam = Annotated[
-    str | None,
-    Query(
-        None,
-        description=f"Select language code: {', '.join(LANGUAGE_CODES)} or _empty_ for all.",
-        # example=settings.LANGUAGE_CODE,
-        pattern=f"({'|'.join(LANGUAGE_CODES)})",
-    ),
-]

@@ -1,0 +1,37 @@
+# Replace Zitadel with django-allauth + django-oauth-toolkit
+
+## 1. Modernize: allauth + DOT replace local_auth internals (dev/test, same issuer URL)
+
+- [x] 1.1 Add `django-allauth` (account, mfa, sessions apps), `django-oauth-toolkit`, and `argon2-cffi` to `pyproject.toml` via uv; run `uv sync`
+- [x] 1.2 Mount DOT at the existing `/oauth/local` issuer path so discovery URL and SPA client config stay unchanged; seed the SPA public PKCE client via the fixture command (Android client row deferred - open question, addable anytime); thin compatibility views where DOT lacks an endpoint (`end_session`)
+- [x] 1.3 Configure DOT hardening: JWT access tokens (RS256), `PKCE_REQUIRED`, `ROTATE_REFRESH_TOKEN` + `REFRESH_TOKEN_REUSE_PROTECTION`, BCP-essential hardening (RFC 9700 compliance gates stay default-off: the dev/test password grant needs them off until DOT 4.0), `ALLOWED_REDIRECT_URI_SCHEMES` (https + app scheme), authorization-code expiry ≤ 60 s; signing key from Infisical with JWKS rotation support; fail-fast when missing outside dev/test
+- [x] 1.4 Create `server/settings/components/auth_local.py` (allauth rate limits, `ACCOUNT_PREVENT_ENUMERATION`, email verification, Argon2 as first hasher) and wire it into the settings registry
+- [x] 1.5 Enable MFA (TOTP + recovery codes), session view/revoke, and password-reset flows; decide and record staff-MFA policy; redirect `/admin/` login to the unified account login preserving the continuation target; style allauth templates (popup-sized, mobile-first) — they become the production login surface at the flip
+- [x] 1.6 Claims bridge: DOT emits both the legacy Zitadel-shaped roles claim (frontend continuity) and the plain `roles` claim from Django groups; retire `server/core/oidc_permission.py` Zitadel sync
+- [x] 1.7 Token renewal: DOT refresh tokens replace the session/`prompt=none` silent renew (small dev/test frontend change); popup session re-login stays as convenience
+- [x] 1.8 Port fixture users to the successor idempotent dev command; keep dev/test token convenience (password-grant client dev-only, or `api_test_token` mints DOT tokens)
+- [x] 1.10 Add the custom user model (email as USERNAME_FIELD, unique email, no username) with a data migration preserving pks from auth.User, an FK-retarget migration for pre-switch databases, and a `bootstrap_user_model` surgery command for existing DBs (dev main, template, lanes)
+- [x] 1.11 Enable allauth session management (`allauth.usersessions` + middleware; nav link at /accounts/sessions/)
+- [x] 1.9 Port provider tests to DOT (authorize + PKCE, token, userinfo, JWKS, roles, refresh rotation); delete the `local_auth` views/tokens/urls behind the same paths; system checks report no `oauth2_provider` error findings in production settings
+- [x] 1.12 Switch the user PK to UUID v4 (`accounts.0003_uuid_pk` converts every user FK in place — model-derived ON DELETE actions, original constraint names, deferrable state preserved); dev/test fixture users are re-created with `local_auth_users` after migrating, and the tuned Argon2id hasher (64 MiB / t=3 / p=4) replaces Django's weak stock defaults
+
+## 2. Promote: flip the production default to the built-in provider (Zitadel stays rollback)
+
+- [x] 2.1 Flags: single `AUTH_PROVIDER` switch (`zitadel` production default pre-flip, `builtin` in dev/test and post-flip); `OIDC_ENABLED` derives from it; `ZITADEL_ROLLBACK_ENABLED` covers the post-flip window; tests that want "no auth" set the flags off (clean-401 path)
+- [ ] 2.2 Issuer-routed dual token validation in `server/apps/api/auth.py`: built-in JWTs verify locally (JWKS-cached, `iss`/`aud`, clock skew) while Zitadel introspection tokens stay accepted as long as Zitadel is enabled; unknown issuer → 401; tests for both issuers
+- [ ] 2.3 Bootstrap initial production accounts directly (admin/editor via the fixture command) — no user migration needed (no production user base yet)
+- [ ] 2.4 Audit logging on auth signals (login, logout, MFA changes, token failures); add `cleartokens` cron
+- [ ] 2.5 Staging rehearsal with `AUTH_PROVIDER=builtin`, then flip production the same way and point the frontend default issuer (`WODORE_OICD_ISSUER_URL`) at the backend `/oauth/local` path — configuration only; verify popup + redirect login, refresh rotation, roles on protected endpoints; rollback = `AUTH_PROVIDER=zitadel` again
+- [x] 2.6 Document the backup/staging data contract: what every backup excludes (ephemeral auth tables), encryption at rest, and the no-user-data-on-staging policy with UUID placeholder users (`docs/backups.md`)
+
+## 3. Decommission: remove Zitadel
+
+- [ ] 3.1 Monitor until token metrics show zero Zitadel usage, then remove the introspection validator and the Zitadel RP surface: `mozilla_django_oidc`, `SessionRefresh`, `/oidc/` routes, `ZITADEL_*` settings (incl. private-key loading and `oidc_permission.py` remnants)
+- [ ] 3.2 Decommission the Zitadel instance and remove its Infisical secrets; document rollback (re-provision Zitadel, bootstrap accounts) in ops notes
+- [ ] 3.3 Update `AGENTS.md` auth-mode section and `_work` notes; archive the change via openspec when verified
+- [ ] 3.4 Add a regression test for `PermissionBackend.create_user` (Zitadel rollback path: seeds the email identity, handles a missing email claim) before deleting the RP surface
+
+## 4. Verification gates (run throughout)
+
+- [ ] 4.1 After each phase: `scripts/lane-run.sh .venv/bin/pytest` (lane DB — run `scripts/lane-db.sh create && scripts/sync-martin.sh` first if not yet provisioned)
+- [ ] 4.2 OpenAPI schema unchanged for protected endpoints (`/v1/openapi.json`); frontend contract review signed off per phase

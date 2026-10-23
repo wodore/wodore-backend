@@ -83,15 +83,9 @@ UNFOLD = {
             "900": "#133426",
         },
     },
-    "EXTENSIONS": {
-        "modeltranslation": {
-            "flags": {
-                "en": "🇬🇧",
-                "fr": "🇫🇷",
-                "nl": "🇧🇪",
-            },
-        },
-    },
+    # NOTE: EXTENSIONS (modeltranslation flags) was removed in django-unfold
+    # 0.102 (PR #2181): the setting is silently ignored since then and
+    # translated field labels render their default "[en]"-style suffixes.
     "SIDEBAR": {
         "show_search": False,  # Search in applications and models names
         "show_all_applications": True,  # Dropdown with all applications and models
@@ -156,6 +150,14 @@ UNFOLD = {
                         "link": reverse_lazy("admin:categories_category_changelist"),
                         "permission": lambda request: request.user.has_perm(
                             "categories.view_category"
+                        ),
+                    },
+                    {
+                        "title": _("Icons"),
+                        "icon": "interests",
+                        "link": reverse_lazy("admin:symbols_icon_changelist"),
+                        "permission": lambda request: request.user.has_perm(
+                            "symbols.view_icon"
                         ),
                     },
                     {
@@ -274,7 +276,7 @@ UNFOLD = {
                     {
                         "title": _("Users"),
                         "icon": "person",
-                        "link": reverse_lazy("admin:auth_user_changelist"),
+                        "link": reverse_lazy("admin:accounts_user_changelist"),
                         "permission": lambda request: request.user.is_superuser,
                     },
                 ],
@@ -356,6 +358,45 @@ UNFOLD = {
         ],
     },
     "TABS": [
+        {
+            "models": [
+                "basemaps.maplayer",
+                "basemaps.mapparameter",
+                "basemaps.mapcoverage",
+                "basemaps.mapslot",
+                "basemaps.maplegend",
+            ],
+            "items": [
+                {
+                    "title": _("Map layers"),
+                    "link": reverse_lazy("admin:basemaps_maplayer_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "basemaps.view_maplayer"
+                    ),
+                },
+                {
+                    "title": _("Parameters"),
+                    "link": reverse_lazy("admin:basemaps_mapparameter_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "basemaps.view_mapparameter"
+                    ),
+                },
+                {
+                    "title": _("Coverages"),
+                    "link": reverse_lazy("admin:basemaps_mapcoverage_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "basemaps.view_mapcoverage"
+                    ),
+                },
+                {
+                    "title": _("Legends"),
+                    "link": reverse_lazy("admin:basemaps_maplegend_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "basemaps.view_maplegend"
+                    ),
+                },
+            ],
+        },
         {
             "models": [
                 "huts.hut",
@@ -594,6 +635,20 @@ UNFOLD = {
                     "link": reverse_lazy("admin:meteo_weathercodesymbol_changelist"),
                     "permission": lambda request: request.user.has_perm(
                         "meteo.view_weathercodesymbol"
+                    ),
+                },
+            ],
+        },
+        {
+            "models": [
+                "envvars.envvar",
+            ],
+            "items": [
+                {
+                    "title": _("Environment Variables"),
+                    "link": reverse_lazy("admin:envvars_envvar_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "envvars.view_envvar"
                     ),
                 },
             ],

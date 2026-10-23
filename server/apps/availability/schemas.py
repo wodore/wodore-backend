@@ -26,6 +26,11 @@ class AvailabilityDaySchema(BaseModel):
         description="Total number of places (null = not published by source)",
         ge=0,
     )
+    free_tolerance: int | None = Field(
+        None,
+        description="Plus/minus uncertainty on free places (0 = exact, null = unknown)",
+        ge=0,
+    )
     occupancy_percent: float | None = Field(
         None,
         description="Occupancy percentage (0-100), null if not computable",
@@ -69,8 +74,11 @@ class HutAvailabilityPropertiesSchema(BaseModel):
     source: str = Field(
         ..., description="Source organization slug (e.g., 'hrs', 'sac')"
     )
-    source_link: str = Field(
-        ..., description="External link to the hut page on the source website"
+    # NOTE: the GeoJSON aggregate never included source_link (the former
+    # ninja direct-write path skipped response validation, so the required
+    # marker went unnoticed). Optional = matches the actual wire format.
+    source_link: str | None = Field(
+        None, description="External link to the hut page on the source website"
     )
     days: int = Field(..., description="Number of days of availability data", ge=1)
     start_date: datetime.date = Field(
@@ -128,6 +136,11 @@ class CurrentAvailabilityDaySchema(BaseModel):
     total: int | None = Field(
         None,
         description="Total number of places (null = not published by source)",
+        ge=0,
+    )
+    free_tolerance: int | None = Field(
+        None,
+        description="Plus/minus uncertainty on free places (0 = exact, null = unknown)",
         ge=0,
     )
     occupancy_percent: float | None = Field(
@@ -229,6 +242,11 @@ class AvailabilityTrendDaySchema(BaseModel):
     total: int | None = Field(
         None,
         description="Total number of places (null = not published by source)",
+        ge=0,
+    )
+    free_tolerance: int | None = Field(
+        None,
+        description="Plus/minus uncertainty on free places (0 = exact, null = unknown)",
         ge=0,
     )
     occupancy_percent: float | None = Field(

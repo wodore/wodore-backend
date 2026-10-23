@@ -19,7 +19,7 @@ import structlog
 from django.conf import settings
 from django.contrib.gis.geos import Point
 
-from .base import ImageProvider, ImageResult
+from .base import ImageProvider, ImageResult, provider_http_timeout
 from .schemas import GeoPlaceSchema
 from .scoring import (
     calculate_age_penalty,
@@ -29,6 +29,79 @@ from .scoring import (
 )
 
 logger = structlog.get_logger()
+
+# Width of the thumb bucket requested from the Commons API (iiurlwidth).
+# Serves as the medium source for small display variants (gallery thumbs).
+WIKIMEDIA_MEDIUM_THUMB_WIDTH = 500
+# Thumb buckets for the large source. Wikimedia serves thumbs only at the
+# $wgThumbnailSteps widths (20, 40, 60, 120, 250, 330, 500, 960, 1280,
+# 1920, 3840): any other width answers 400 ("Use thumbnail sizes listed on
+# https://w.wiki/GHai"), and a step larger than the original falls back to
+# the original file URL. Large sources therefore come from dedicated API
+# passes: the API snaps to a servable step (TIFF pre-rendered as JPEG) and
+# returns the original URL when the original is not larger than the step.
+WIKIMEDIA_LARGE_THUMB_WIDTH = 1920
+WIKIMEDIA_LARGEST_THUMB_WIDTH = 3840
+# Commons category members are human-curated as hut-related but their geotags
+# can sit well off the hut (camera GPS, motive vs. position). Distance sanity
+# limit for category images — far looser than the strict geosearch radius.
+WIKIMEDIA_CATEGORY_DISTANCE_LIMIT_M = 500
+
+
+def _haversine_distance_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Distance between two points in meters."""
+    from math import asin, cos, radians, sin, sqrt
+
+    radius = 6371000
+    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
+    return radius * 2 * asin(sqrt(a))
+
+
+def _select_large_source(
+    original_url: str,
+    thumb_url: str,
+    thumb_url_large: str,
+    thumb_url_largest: str,
+    mime: str,
+) -> str:
+    """Pick the large imagor source from the bucket-pass results.
+
+    A bucket pass returns the ORIGINAL file URL when the original is not
+    larger than the step — for rasters that original is a reasonably sized
+    file and the best quality, but for TIFF it must not win over a smaller
+    servable thumb (heavy decode, browsers cannot render it).
+    """
+
+    def is_thumb(url: str) -> bool:
+        return bool(url) and "/thumb/" in url
+
+    if is_thumb(thumb_url_largest):
+        return thumb_url_largest
+    if is_thumb(thumb_url_large):
+        return thumb_url_large
+    if str(mime).lower() == "image/tiff":
+        return thumb_url if is_thumb(thumb_url) else original_url
+    return original_url or thumb_url_large or thumb_url or thumb_url
+
+
+def _raise_on_mediawiki_error(data: dict, context: str) -> None:
+    """Raise when a MediaWiki API response carries an ``error`` document.
+
+    The MediaWiki Action API reports bad parameters (e.g. non-integer
+    values for integer params like ``ggsradius``) as HTTP 200 with
+    ``{"error": {"code": "badinteger"}}`` — raise_for_status does not
+    catch that, and the strategy would silently contribute zero results.
+    Raising here lets the per-strategy handlers in :meth:`fetch` log it.
+    """
+    error = data.get("error")
+    if error:
+        raise RuntimeError(
+            f"MediaWiki API error in {context}: {error.get('code')}: "
+            f"{error.get('info', '')}".strip()
+        )
 
 
 class WikimediaCommonsProvider(ImageProvider):
@@ -127,7 +200,7 @@ class WikimediaCommonsProvider(ImageProvider):
             if place_qids:
                 try:
                     qid_results = await self._fetch_wikidata_by_qids(
-                        place_qids, limit, httpx
+                        place_qids, lat, lon, limit, httpx
                     )
                     for result in qid_results:
                         if result.source_id not in seen_titles:
@@ -227,7 +300,12 @@ class WikimediaCommonsProvider(ImageProvider):
         Returns:
             List of ImageResult objects
         """
-        radius_km = max(1, radius / 1000)  # At least 1km
+        # The hut's own images arrive via the direct-QID path (Strategy 1,
+        # radius-independent); this spatial fallback must not sweep
+        # NEIGHBORING huts — honor the requested radius with a 50 m floor
+        # for coordinate/rounding safety only (empirically 50 m still matches
+        # the co-located hut item; the old 1 km floor pulled in neighbors).
+        radius_km = max(50, radius) / 1000
 
         sparql = f"""
         SELECT ?item ?itemLabel ?image ?category WHERE {{
@@ -251,7 +329,9 @@ class WikimediaCommonsProvider(ImageProvider):
             "Accept": "application/json",
         }
 
-        async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+        async with httpx.AsyncClient(
+            timeout=provider_http_timeout(), headers=headers
+        ) as client:
             response = await client.get(
                 self.wikidata_endpoint, params={"query": sparql, "format": "json"}
             )
@@ -307,6 +387,8 @@ class WikimediaCommonsProvider(ImageProvider):
     async def _fetch_wikidata_by_qids(
         self,
         qids: set[str],
+        lat: float,
+        lon: float,
         limit: int,
         httpx,
     ) -> list[ImageResult]:
@@ -318,6 +400,8 @@ class WikimediaCommonsProvider(ImageProvider):
 
         Args:
             qids: Set of Wikidata QIDs to query
+            lat: Query latitude (true distances / category filter center)
+            lon: Query longitude
             limit: Maximum number of results to return
             httpx: HTTP client module
 
@@ -351,7 +435,9 @@ class WikimediaCommonsProvider(ImageProvider):
         results = []
         categories_to_fetch = set()  # Track categories we need to fetch
 
-        async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+        async with httpx.AsyncClient(
+            timeout=provider_http_timeout(), headers=headers
+        ) as client:
             response = await client.get(
                 self.wikidata_endpoint, params={"query": sparql, "format": "json"}
             )
@@ -385,15 +471,17 @@ class WikimediaCommonsProvider(ImageProvider):
                                     matches_place_qid=True,  # Direct match!
                                 )
 
-                                # Create ImageResult with distance 0 (exact match)
+                                # Create ImageResult — true distance from the
+                                # file geotag to the QUERY point (was 0.0, which
+                                # #185 turned into haversine-vs-Null-Island).
                                 result = self._create_image_result(
                                     commons_title,
                                     img_data,
                                     qid,
                                     score,
-                                    0.0,
-                                    0.0,  # Coordinates don't matter for exact match
-                                    distance_m=0.0,  # Exact QID match
+                                    lat,
+                                    lon,
+                                    distance_m=None,
                                 )
                                 if result:
                                     results.append(result)
@@ -417,8 +505,8 @@ class WikimediaCommonsProvider(ImageProvider):
                     )
                     category_results = await self._fetch_commons_category_images(
                         category_name,
-                        0.0,  # lat (not used for category images)
-                        0.0,  # lon (not used)
+                        lat,
+                        lon,
                         limit,
                         httpx,
                     )
@@ -463,7 +551,14 @@ class WikimediaCommonsProvider(ImageProvider):
         Returns:
             List of ImageResult objects
         """
-        radius_km = max(0.5, radius / 1000)  # At least 500m
+        # MediaWiki GeoData expects ggsradius in METERS, bounded 10–10000;
+        # the endpoint's radius is meters — clamp to the API bounds instead
+        # of converting (the old km value was out of range for every query,
+        # so geosearch silently returned nothing). Cast to int: the endpoint
+        # radius is a pydantic float (``300.0``) and MediaWiki integer
+        # params answer HTTP 200 with ``{"error": {"code": "badinteger"}}``
+        # and zero results — silently cached as an empty provider run.
+        ggsradius_m = int(min(max(radius, 10), 10_000))
 
         params = {
             "action": "query",
@@ -471,11 +566,11 @@ class WikimediaCommonsProvider(ImageProvider):
             "ggsnamespace": 6,  # File namespace
             "ggsprimary": "all",
             "ggscoord": f"{lat}|{lon}",
-            "ggsradius": radius_km,
+            "ggsradius": ggsradius_m,
             "ggslimit": min(limit, 50),
-            "prop": "imageinfo",
+            "prop": "imageinfo|coordinates",
             "iiprop": "url|extmetadata|size",
-            "iiurlwidth": 400,
+            "iiurlwidth": 500,
             "format": "json",
             "origin": "*",
         }
@@ -484,12 +579,25 @@ class WikimediaCommonsProvider(ImageProvider):
             "User-Agent": getattr(settings, "BOT_AGENT", "WodoreBackend/1.0"),
         }
 
-        async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+        async with httpx.AsyncClient(
+            timeout=provider_http_timeout(), headers=headers
+        ) as client:
             response = await client.get(self.commons_api, params=params)
             response.raise_for_status()
 
             data = response.json()
+            _raise_on_mediawiki_error(data, "geosearch")
             pages = data.get("query", {}).get("pages", {}).values()
+
+            # Extra passes at the large thumb steps (servable sources —
+            # hand-rewritten thumb widths are not; see
+            # WIKIMEDIA_LARGE_THUMB_WIDTH).
+            thumbs_large = await self._fetch_thumb_bucket(
+                client, params, WIKIMEDIA_LARGE_THUMB_WIDTH
+            )
+            thumbs_largest = await self._fetch_thumb_bucket(
+                client, params, WIKIMEDIA_LARGEST_THUMB_WIDTH
+            )
 
             results = []
             for page in pages:
@@ -500,6 +608,10 @@ class WikimediaCommonsProvider(ImageProvider):
 
                     # Extract metadata
                     img_data = self._parse_commons_api_response(page)
+                    img_data["thumb_url_large"] = thumbs_large.get(commons_title, "")
+                    img_data["thumb_url_largest"] = thumbs_largest.get(
+                        commons_title, ""
+                    )
 
                     # Calculate score (no QID for geosearch)
                     score = self._score_commons_image(
@@ -523,6 +635,36 @@ class WikimediaCommonsProvider(ImageProvider):
             logger.debug("commons_geosearch_complete", image_count=len(results))
             return results
 
+    async def _fetch_thumb_bucket(
+        self, client, params: dict, width: int
+    ) -> dict[str, str]:
+        """Fetch servable thumburls for one bucket width, keyed by page title.
+
+        Runs the same query with ``iiurlwidth=width``. The Commons API snaps
+        the request to a $wgThumbnailSteps size (and to the original file
+        URL for originals not larger than the step), so the returned URLs
+        are always fetchable. On failure an empty map is returned and
+        callers fall back to the smaller bucket / original.
+        """
+        bucket_params = {**params, "iiurlwidth": width}
+        try:
+            response = await client.get(self.commons_api, params=bucket_params)
+            response.raise_for_status()
+            data = response.json()
+            _raise_on_mediawiki_error(data, "thumb bucket")
+        except Exception as e:
+            logger.warning(
+                "commons_thumb_bucket_fetch_failed", width=width, error=str(e)
+            )
+            return {}
+        thumbs: dict[str, str] = {}
+        for page in data.get("query", {}).get("pages", {}).values():
+            title = page.get("title", "")
+            thumburl = (page.get("imageinfo") or [{}])[0].get("thumburl")
+            if title and thumburl:
+                thumbs[title] = thumburl
+        return thumbs
+
     async def _fetch_commons_metadata(
         self, commons_title: str, client
     ) -> dict[str, Any] | None:
@@ -539,9 +681,9 @@ class WikimediaCommonsProvider(ImageProvider):
         params = {
             "action": "query",
             "titles": commons_title,
-            "prop": "imageinfo|categories",
+            "prop": "imageinfo|categories|coordinates",
             "iiprop": "url|extmetadata|size",
-            "iiurlwidth": 400,
+            "iiurlwidth": 500,
             "cllimit": 20,
             "format": "json",
             "origin": "*",
@@ -552,13 +694,25 @@ class WikimediaCommonsProvider(ImageProvider):
             response.raise_for_status()
 
             data = response.json()
+            _raise_on_mediawiki_error(data, "imageinfo")
             pages = data.get("query", {}).get("pages", {})
 
             for page_id, page_data in pages.items():
                 if page_id == "-1":  # Missing page
                     return None
 
-                return self._parse_commons_api_response(page_data)
+                metadata = self._parse_commons_api_response(page_data)
+                # Extra passes at the large thumb steps (servable sources —
+                # hand-rewritten thumb widths are not).
+                thumbs_large = await self._fetch_thumb_bucket(
+                    client, params, WIKIMEDIA_LARGE_THUMB_WIDTH
+                )
+                thumbs_largest = await self._fetch_thumb_bucket(
+                    client, params, WIKIMEDIA_LARGEST_THUMB_WIDTH
+                )
+                metadata["thumb_url_large"] = thumbs_large.get(commons_title, "")
+                metadata["thumb_url_largest"] = thumbs_largest.get(commons_title, "")
+                return metadata
 
         except Exception as e:
             logger.warning(
@@ -609,11 +763,14 @@ class WikimediaCommonsProvider(ImageProvider):
 
         results = []
 
-        async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+        async with httpx.AsyncClient(
+            timeout=provider_http_timeout(), headers=headers
+        ) as client:
             response = await client.get(self.commons_api, params=params)
             response.raise_for_status()
 
             data = response.json()
+            _raise_on_mediawiki_error(data, "categorymembers")
             members = data.get("query", {}).get("categorymembers", [])
 
             logger.debug(
@@ -633,6 +790,27 @@ class WikimediaCommonsProvider(ImageProvider):
                     if not img_data:
                         continue
 
+                    # Distance sanity filter: category membership is human
+                    # curation and can be loose — drop members geotagged far
+                    # from the hut (e.g. generic trail photos from the same
+                    # upload series). Untagged members are kept (no signal).
+                    member_dist: float | None = None
+                    if (
+                        img_data.get("lat") is not None
+                        and img_data.get("lon") is not None
+                    ):
+                        member_dist = _haversine_distance_m(
+                            lat, lon, float(img_data["lat"]), float(img_data["lon"])
+                        )
+                        if member_dist > WIKIMEDIA_CATEGORY_DISTANCE_LIMIT_M:
+                            logger.debug(
+                                "category_image_too_far",
+                                title=commons_title,
+                                distance_m=round(member_dist),
+                                limit_m=WIKIMEDIA_CATEGORY_DISTANCE_LIMIT_M,
+                            )
+                            continue
+
                     # Calculate score (lower than P18 main image)
                     score = self._score_commons_image(
                         img_data,
@@ -643,7 +821,13 @@ class WikimediaCommonsProvider(ImageProvider):
 
                     # Create ImageResult
                     result = self._create_image_result(
-                        commons_title, img_data, None, score, lat, lon
+                        commons_title,
+                        img_data,
+                        None,
+                        score,
+                        lat,
+                        lon,
+                        distance_m=member_dist,
                     )
                     if result:
                         results.append(result)
@@ -749,6 +933,10 @@ class WikimediaCommonsProvider(ImageProvider):
         metadata = {
             "url": imageinfo.get("url"),
             "thumb_url": imageinfo.get("thumburl"),
+            # File geotag (GeoData): drives true distances and the category
+            # distance sanity filter. Files without coordinates get None.
+            "lat": (page_data.get("coordinates") or [{}])[0].get("lat"),
+            "lon": (page_data.get("coordinates") or [{}])[0].get("lon"),
             "width": width,
             "height": height,
             "size": imageinfo.get("size"),
@@ -834,6 +1022,12 @@ class WikimediaCommonsProvider(ImageProvider):
                 # Try ISO 8601 format first
                 try:
                     captured_at = datetime.fromisoformat(date_taken_str)
+                    if captured_at.tzinfo is None:
+                        # EXIF times carry no zone — assume UTC (same as the
+                        # dateparser fallback below), else the aware-now
+                        # subtraction would raise and silently drop the
+                        # age penalty.
+                        captured_at = captured_at.replace(tzinfo=timezone.utc)
                 except ValueError:
                     # Try other common formats
                     import dateparser
@@ -900,25 +1094,18 @@ class WikimediaCommonsProvider(ImageProvider):
             ImageResult or None
         """
         try:
-            # Extract coordinates if available (not always in Commons)
-            # For now, use query coordinates
-            from math import asin, cos, radians, sin, sqrt
-
-            def haversine_distance(lat1, lon1, lat2, lon2):
-                """Calculate distance between two points in meters."""
-                R = 6371000
-                lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
-                dlat = lat2 - lat1
-                dlon = lon2 - lon1
-                a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
-                c = 2 * asin(sqrt(a))
-                return R * c
-
-            # Use pre-calculated distance if provided, otherwise calculate it
+            # Distance: pre-calculated if provided, otherwise from the file's
+            # own geotag when the metadata carried one (true distance for
+            # sorting/display), else 0 (treated as at-the-place).
             if distance_m is None:
-                distance_m = haversine_distance(
-                    query_lat, query_lon, query_lat, query_lon
-                )
+                geo_lat = img_data.get("lat")
+                geo_lon = img_data.get("lon")
+                if geo_lat is not None and geo_lon is not None:
+                    distance_m = _haversine_distance_m(
+                        query_lat, query_lon, float(geo_lat), float(geo_lon)
+                    )
+                else:
+                    distance_m = 0.0
 
             # Parse date - Wikimedia Commons uses various date formats
             # Common formats: "2023-08-15 12:34:56", "15 August 2023", "2023-08-15"
@@ -930,6 +1117,11 @@ class WikimediaCommonsProvider(ImageProvider):
                     # Try ISO 8601 format first
                     try:
                         captured_at = datetime.fromisoformat(date_str)
+                        if captured_at.tzinfo is None:
+                            # EXIF times carry no zone — assume UTC (same
+                            # as the dateparser fallback below) so pins get
+                            # aware capture dates.
+                            captured_at = captured_at.replace(tzinfo=timezone.utc)
                     except ValueError:
                         # Try other common formats
                         import dateparser
@@ -956,8 +1148,6 @@ class WikimediaCommonsProvider(ImageProvider):
                         date_taken=img_data.get("date_taken"),
                         error=str(e),
                     )
-                except (ValueError, TypeError):
-                    pass
 
             # Build attribution
             author = img_data.get("author", "Unknown")
@@ -988,6 +1178,36 @@ class WikimediaCommonsProvider(ImageProvider):
             width = img_data.get("width")
             height = img_data.get("height")
 
+            # Source URLs: serve thumbs instead of the original file. Fetching
+            # upload.wikimedia.org originals through imagor in bursts trips
+            # Wikimedia's per-IP rate limit, and large/slow originals (TIFF)
+            # half-decode into gray cached thumbnails browsers cannot even
+            # render. Thumb URLs are stable/immutable and TIFF thumbs come
+            # pre-converted to JPEG.
+            original_url = img_data.get("url", "")
+            thumb_url = img_data.get("thumb_url") or ""
+            thumb_url_large = img_data.get("thumb_url_large") or ""
+            thumb_url_largest = img_data.get("thumb_url_largest") or ""
+
+            # Medium source: the 500px-bucket thumburl from the metadata
+            # pass. For originals not larger than the bucket the API returns
+            # the original URL itself — a tiny file, served directly.
+            url_medium = thumb_url or original_url
+            # Large source: prefer the LARGEST servable THUMB (3840-step,
+            # only returned as a thumb when the original is larger), then
+            # the 1920-step thumb, then any thumb, then the original. A
+            # bucket pass returns the original URL when the original is not
+            # larger than the step — preferring the smaller-step thumb keeps
+            # heavy originals (TIFF!) out of imagor. Never rewrite thumb
+            # widths by hand (400, $wgThumbnailSteps policy).
+            url_large = _select_large_source(
+                original_url,
+                thumb_url,
+                thumb_url_large,
+                thumb_url_largest,
+                str(img_data.get("mime", "")),
+            )
+
             return ImageResult(
                 provider="wikicommons",
                 source_id=commons_title,
@@ -1001,8 +1221,8 @@ class WikimediaCommonsProvider(ImageProvider):
                 author=author,
                 author_url=img_data.get("author_url"),  # Use extracted author URL
                 author_raw=author_raw,  # Raw concatenated author info for deduplication
-                url_large=img_data.get("url", ""),  # Original URL only
-                # url_medium is not set - we always use the original high-quality image
+                url_large=url_large,
+                url_medium=url_medium,
                 width=width,
                 height=height,
                 place=None,  # TODO: Could look up place info from QID, but requires database query
@@ -1010,6 +1230,9 @@ class WikimediaCommonsProvider(ImageProvider):
                     "source_url": img_data.get(
                         "url"
                     ),  # Add source URL for deduplication
+                    # True original file URL, kept for provenance — never fed
+                    # to imagor.
+                    "original_url": original_url,
                 },
                 score=score,
             )

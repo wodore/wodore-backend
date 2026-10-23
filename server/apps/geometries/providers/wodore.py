@@ -11,11 +11,52 @@ from asgiref.sync import sync_to_async
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
+from django.db.models import F
 
 from .base import ImageArea, ImageProvider, ImageResult
 from .schemas import GeoPlaceSchema
 
 logger = structlog.get_logger()
+
+
+def _assessment_extra(img) -> dict | None:
+    """Result ``extra`` for internal (DB-backed) images.
+
+    Thumbhashes for the serving pipeline (quality stays backend-only), the
+    ``internal_pin`` marker (``pin_place_images`` must never re-pin these
+    passthrough results — the provider reports existing pins/uploads with
+    provider = source_org slug and source_id = source_ident, so a re-pin
+    would mint a prefix-stacked duplicate row "org:org:..."), and the
+    ``duplicate_of`` marker consumed by :func:`_drop_duplicate_pins`.
+    """
+    meta = img.image_meta or {}
+    extra: dict = {"internal_pin": True}
+    if meta.get("thumbhashes"):
+        extra["thumbhashes"] = meta["thumbhashes"]
+    if meta.get("duplicate_of"):
+        extra["duplicate_of"] = meta["duplicate_of"]
+    return extra
+
+
+def _drop_duplicate_pins(results: list[ImageResult]) -> list[ImageResult]:
+    """Serve-time phash dedup: drop marked near-duplicate pins.
+
+    ``assess_place_pins`` marks the weaker twin of a near-duplicate
+    cluster with ``image_meta.duplicate_of`` (its primary's
+    source_ident). A marked pin is dropped only while its primary is part
+    of the served set — a marker whose primary is gone (unpinned, hidden)
+    must not lose the place its only copy of that motif. Live provider
+    results never carry the marker; it only exists on our own pins.
+    """
+    served = {result.source_id for result in results}
+    kept = [
+        result
+        for result in results
+        if (result.extra or {}).get("duplicate_of") not in served
+    ]
+    if len(kept) != len(results):
+        logger.info("duplicate_pins_dropped", dropped=len(results) - len(kept))
+    return kept
 
 
 class WodoreProvider(ImageProvider):
@@ -122,6 +163,9 @@ class WodoreProvider(ImageProvider):
                 # Get images through association model
                 for assoc in place.image_associations.all():  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
                     img = assoc.image
+                    # Association score = display order (openspec pin-external-images)
+                    result_score = assoc.score if assoc.score is not None else 50
+                    extra = _assessment_extra(img)
                     # Filter: must be active, approved, and not marked for no publication
                     if not img.is_active:
                         continue
@@ -191,7 +235,7 @@ class WodoreProvider(ImageProvider):
 
                     result = ImageResult(
                         provider=provider_slug,  # Use source_org slug (e.g., "sac", "wikimedia")
-                        source_id=str(img.id),
+                        source_id=img.source_ident or str(img.id),
                         source_url=img.source_url,
                         image_type="flat",  # Default for wodore images
                         captured_at=img.capture_date,
@@ -203,20 +247,23 @@ class WodoreProvider(ImageProvider):
                         author_url=None,
                         url_large=img.source_url_raw or str(img.image),
                         url_medium=None,
-                        place={
-                            "id": place.id,
-                            "slug": place.slug,
-                            "name": place.name_i18n,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                            "location": {
-                                "lat": place.location.y,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                                "lon": place.location.x,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                            },
-                        }
-                        if place
-                        else None,
-                        score=50,  # Wodore images are high quality (internal, curated)
+                        place=(
+                            {
+                                "id": place.id,
+                                "slug": place.slug,
+                                "name": place.name_i18n,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                                "location": {
+                                    "lat": place.location.y,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                                    "lon": place.location.x,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                                },
+                            }
+                            if place
+                            else None
+                        ),
+                        score=result_score,  # association score; 50 fallback for uncurated
                         width=width,
                         height=height,
+                        extra=extra,
                         focal=focal_area,
                         crop=crop_area,
                     )
@@ -229,21 +276,17 @@ class WodoreProvider(ImageProvider):
                 num_places=len(places),
                 provider="WodoreProvider",
             )
-            return results
+            return _drop_duplicate_pins(results)
 
         elif self.place_type == "hut":
-            from server.apps.huts.models import Hut
+            from server.apps.huts.models import Hut, HutImageAssociation
 
             # Get Huts within 10m radius
-            huts = (
-                Hut.objects.filter(
-                    is_active=True,
-                    is_public=True,
-                    location__distance_lte=(query_point, D(m=10)),
-                )
-                .annotate(distance=Distance("location", query_point))
-                .prefetch_related("image_set__license")
-            )
+            huts = Hut.objects.filter(
+                is_active=True,
+                is_public=True,
+                location__distance_lte=(query_point, D(m=10)),
+            ).annotate(distance=Distance("location", query_point))
 
             results = []
             for hut in huts:
@@ -314,46 +357,22 @@ class WodoreProvider(ImageProvider):
                     qid=hut_qid,
                 )
 
-                # Get images through reverse relation
-                for img in hut.image_set.all():
-                    logger.debug(
-                        "Evaluating image",
-                        image_id=img.id,
-                        is_active=img.is_active,
-                        review_status=img.review_status,
-                        license_no_publication=img.license.no_publication
-                        if img.license
-                        else None,
-                        has_license=bool(img.license),
+                # Get images through the association (score = display order,
+                # pinned external images carry their provider score).
+                assocs = (
+                    HutImageAssociation.objects.filter(
+                        hut=hut,
+                        image__is_active=True,
+                        image__review_status="approved",
                     )
-
-                    # Filter: must be active, approved, and not marked for no publication
-                    if not img.is_active:
-                        logger.debug("Skipped image (not active)", image_id=img.id)
-                        continue
-                    if img.review_status != "approved":
-                        logger.debug(
-                            "Skipped image (not approved)",
-                            image_id=img.id,
-                            review_status=img.review_status,
-                        )
-                        continue
-                    if img.license.no_publication:
-                        logger.debug(
-                            "Skipped image (no publication)",
-                            image_id=img.id,
-                            license_slug=img.license.slug,
-                        )
-                        continue
-
-                    caption_preview = (
-                        img.caption_i18n[:50] if img.caption_i18n else None
-                    )
-                    logger.debug(
-                        "Included image",
-                        image_id=img.id,
-                        caption_preview=caption_preview,
-                    )
+                    .select_related("image__license", "image__source_org")
+                    .exclude(image__license__no_publication=True)
+                    .order_by(F("score").desc(nulls_last=True), "id")
+                )
+                for assoc in assocs:
+                    img = assoc.image
+                    result_score = assoc.score if assoc.score is not None else 50
+                    extra = _assessment_extra(img)
                     distance_m = (
                         hut.distance.m if hasattr(hut.distance, "m") else hut.distance  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
                     )
@@ -413,7 +432,7 @@ class WodoreProvider(ImageProvider):
 
                     result = ImageResult(
                         provider=provider_slug,  # Use source_org slug (e.g., "sac", "wikimedia")
-                        source_id=str(img.id),
+                        source_id=img.source_ident or str(img.id),
                         source_url=img.source_url,
                         image_type="flat",  # Default for wodore images
                         captured_at=img.capture_date,
@@ -425,20 +444,23 @@ class WodoreProvider(ImageProvider):
                         author_url=None,
                         url_large=img.source_url_raw or str(img.image),
                         url_medium=None,
-                        place={
-                            "id": hut.id,
-                            "slug": hut.slug,
-                            "name": hut.name_i18n,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                            "location": {
-                                "lat": hut.location.y,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                                "lon": hut.location.x,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                            },
-                        }
-                        if hut
-                        else None,
-                        score=50,  # Wodore images are high quality (internal, curated)
+                        place=(
+                            {
+                                "id": hut.id,
+                                "slug": hut.slug,
+                                "name": hut.name_i18n,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                                "location": {
+                                    "lat": hut.location.y,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                                    "lon": hut.location.x,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                                },
+                            }
+                            if hut
+                            else None
+                        ),
+                        score=result_score,  # association score; 50 fallback for uncurated
                         width=width,
                         height=height,
+                        extra=extra,
                         focal=focal_area,
                         crop=crop_area,
                     )
@@ -451,7 +473,7 @@ class WodoreProvider(ImageProvider):
                 num_huts=len(huts),
                 provider="WodoreProvider",
             )
-            return results
+            return _drop_duplicate_pins(results)
 
         # Unknown place type: no results rather than implicit None
         return []

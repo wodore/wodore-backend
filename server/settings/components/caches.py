@@ -1,6 +1,8 @@
 # Caching
 # https://docs.djangoproject.com/en/4.2/topics/cache/
 
+from decouple import config
+
 CACHES = {
     "default": {
         # TODO: use some other cache in production,
@@ -13,13 +15,71 @@ CACHES = {
     },
     "persistent": {
         # Database cache for long-term data (images, metadata, providers, licenses)
-        # Data persists across restarts and deployments
-        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        # Data persists across restarts and deployments.
+        #
+        # SampledCullDatabaseCache: Django's DatabaseCache (<= 6.1) runs
+        # SELECT COUNT(*) on EVERY write to check MAX_ENTRIES — a 15-20 ms
+        # full scan per write on this TOAST-heavy table (Sentry 155299999,
+        # /v1/geo/images/hut/{slug}: repeated per provider/response cache
+        # write, grouped as N+1). The sampled cull check is upstream's own
+        # fix (ticket #32785, Django 6.2's CULL_PROBABILITY, default 0.1).
+        # On Django >= 6.2 revert BACKEND to
+        # django.core.cache.backends.db.DatabaseCache and delete
+        # server/core/cache_backends.py — OPTIONS stay identical. Removal
+        # is enforced by the core.E001 startup check (server/core/checks.py).
+        "BACKEND": "server.core.cache_backends.SampledCullDatabaseCache",
         "LOCATION": "django_cache_persistent",
         "TIMEOUT": None,  # No default expiration (indefinite)
         "OPTIONS": {
             "MAX_ENTRIES": 100000,  # 100k entries - supports ~30k locations with 3 providers each
             "CULL_FREQUENCY": 4,  # Remove 25% of oldest entries when full
+        },
+    },
+    # hut-services library cache (see server/core/apps.py: ready() injects this
+    # alias as the lib's cache backend via set_default_cache_backend).
+    # Database backend so external-service responses survive restarts and are
+    # shared across workers - the lib's own default would write pickles to
+    # <tempdir>/py_file_cache. Dedicated alias/table so the lib's clear_cache()
+    # cannot evict other apps' entries. The table is created by the no-args
+    # `manage.py createcachetable` (and automatically on test databases).
+    # Same SampledCullDatabaseCache rationale as "persistent" above.
+    "hut_services": {
+        "BACKEND": "server.core.cache_backends.SampledCullDatabaseCache",
+        "LOCATION": "django_cache_hut_services",
+        "TIMEOUT": 172800,  # 2 days - mirrors the lib's HUT_SERVICE_EXPIRE_SECONDS default
+        "OPTIONS": {
+            # Measured working set is low thousands of rows (HRS universe:
+            # 518 huts; file-cache ground truth: 873 entries / 13 MB total,
+            # p95 51 KB, max 0.8 MB) - 20k is ~10x headroom while bounding
+            # table/TOAST byte growth more tightly. Culling stays at 25% per
+            # eviction round, same policy as "persistent" (which keeps its
+            # intentional 100k design ceiling).
+            "MAX_ENTRIES": 20000,
+            "CULL_FREQUENCY": 4,
+        },
+    },
+    "shared": {
+        # Cross-process cache for django-q2 cluster status (sentinel and
+        # worker stats). LocMem is per-process: without a shared backend
+        # the web/admin process can never see the running qcluster.
+        # The table is created by `manage.py createcachetable` (the no-args
+        # form creates a table for every DatabaseCache alias).
+        # Same SampledCullDatabaseCache rationale as "persistent" above.
+        "BACKEND": "server.core.cache_backends.SampledCullDatabaseCache",
+        "LOCATION": "django_cache_shared",
+        "TIMEOUT": 3600,
+        "OPTIONS": {
+            "MAX_ENTRIES": 1000,
+        },
+    },
+    # Throttle counters (openspec: api-throttling). LocMem default is
+    # correct for dev/test (single process); production.py overrides to
+    # DatabaseCache — rate limits must hold across workers.
+    "throttling": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "TIMEOUT": 3600,
+        "OPTIONS": {
+            "MAX_ENTRIES": 10000,
         },
     },
 }
@@ -29,3 +89,13 @@ CACHES = {
 # https://django-axes.readthedocs.io/en/latest/4_configuration.html#configuring-caches
 
 AXES_CACHE = "default"
+
+# Geo-images endpoint response cache (see server/apps/geometries/image_response_cache.py).
+# Fresh window = served directly; after that a stored response is only used as
+# stale fallback when recomputation fails. Storage TTL bounds the fallback.
+IMAGE_RESPONSE_CACHE_FRESH_SECONDS = config(
+    "IMAGE_RESPONSE_CACHE_FRESH_SECONDS", cast=int, default=15 * 60
+)
+IMAGE_RESPONSE_CACHE_STALE_SECONDS = config(
+    "IMAGE_RESPONSE_CACHE_STALE_SECONDS", cast=int, default=7 * 24 * 3600
+)

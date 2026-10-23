@@ -29,6 +29,14 @@ services:
       - ./media:/mnt/data/source/media
       - ./media/imagor_data/storage:/mnt/data/storage
       - ./media/imagor_data/result:/mnt/data/result
+      # Fonts for the text() filter (og:image cards, server/apps/images/og.py):
+      # without a font available imagor silently draws NO text at all.
+      # The brand font (Barlow Semi Condensed SemiBold, OFL) ships in this
+      # repo; DejaVu stays as the generic fallback family.
+      # NOTE: requires imagor >= v1.9 (new text() signature with Pango
+      # font descriptions) — the tag is :latest with pull_policy always.
+      - ./docker/imagor/fonts:/usr/share/fonts/truetype/barlow:ro
+      - /usr/share/fonts/truetype/dejavu:/usr/share/fonts/truetype/dejavu:ro
     environment:
       PORT: 8079
       DEBUG: 0
@@ -40,15 +48,15 @@ services:
         sha256
         #IMAGOR_SIGNER_TRUNCATE: 40
 
-      FILE_LOADER_BASE_DIR: /mnt/data/source # enable file loader by specifying base dir
+      FILE_LOADER_BASE_DIR: /mnt/data/source # file loader via base dir
 
-      #HTTP_LOADER_ALLOWED_SOURCES: 127.0.0.1,localhost # enable HTTP loader for local URLs
+      #HTTP_LOADER_ALLOWED_SOURCES: 127.0.0.1,localhost # local URLs
 
-      FILE_STORAGE_BASE_DIR: /mnt/data/storage # enable file storage by specifying base dir
+      FILE_STORAGE_BASE_DIR: /mnt/data/storage # file storage via base dir
       FILE_STORAGE_MKDIR_PERMISSION: 0755 # optional
       FILE_STORAGE_WRITE_PERMISSION: 0666 # optional
 
-      FILE_RESULT_STORAGE_BASE_DIR: /mnt/data/result # enable file result storage by specifying base dir
+      FILE_RESULT_STORAGE_BASE_DIR: /mnt/data/result # results via base dir
       FILE_RESULT_STORAGE_MKDIR_PERMISSION: 0755 # optional
       FILE_RESULT_STORAGE_WRITE_PERMISSION: 0666 # optional
       IMAGOR_RESULT_STORAGE_PATH_STYLE: size
@@ -57,8 +65,8 @@ services:
     container_name: django-local-martin
     restart: unless-stopped
     pull_policy: always
-    ports:
-      - "8075:3000"
+    # no host port — the tile-router publishes :8075 and proxies to
+    # martin; every documented martin URL keeps working through it
     networks:
       - postgresnet
     volumes:
@@ -70,10 +78,39 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-wodore}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wodore}
       POSTGRES_DB: ${POSTGRES_DB:-wodore}
-      DATABASE_URL: "postgresql://${POSTGRES_USER:-wodore}:${POSTGRES_PASSWORD:-wodore}@db:5432/${POSTGRES_DB:-wodore}"
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-wodore}:\
+        ${POSTGRES_PASSWORD:-wodore}@db:5432/${POSTGRES_DB:-wodore}"
       MARTIN_SYNC_MOUNT: /martin_sync
       RUST_LOG: debug
     command: --config /martin_sync/config/martin.yaml --webui enable-for-all
+  tile-router:
+    image: nginx:1.27-alpine
+    container_name: django-local-tile-router
+    restart: unless-stopped
+    depends_on:
+      - martin
+      - mapproxy
+    ports:
+      - "8075:80"
+    environment:
+      MARTIN_UPSTREAM: django-local-martin:3000
+      MAPPROXY_UPSTREAM: django-local-mapproxy:80
+    networks:
+      - postgresnet
+      - default
+    volumes:
+      - ./tile_server/tile-router.conf.template:/etc/nginx/templates/default.conf.template:ro
+  mapproxy:
+    image: ghcr.io/mapproxy/mapproxy/mapproxy:7.0.0-nginx
+    container_name: django-local-mapproxy
+    restart: unless-stopped
+    ports:
+      - "8091:80"
+    volumes:
+      - ./tile_server/mapproxy/mapproxy.yaml:/mapproxy/config/mapproxy.yaml:ro
+      - ./tile_server/mapproxy/ch-boundary.geojson:/mapproxy/config/ch-boundary.geojson:ro
+      - ./tile_server/mapproxy/at-boundary.geojson:/mapproxy/config/at-boundary.geojson:ro
+      - ./tile_server/mapproxy/cache_data:/mapproxy/config/cache_data
     depends_on:
       - db
 

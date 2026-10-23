@@ -1,89 +1,87 @@
-from ninja import Query, Router
+"""Organization endpoints (GET list + detail) on dmr."""
 
-# from ninja.errors import HttpError
-# from django.db import IntegrityError
-from django.http import HttpRequest
-from django.shortcuts import get_object_or_404
+import pydantic
+from dmr import Path, Query, modify
+from dmr.routing import path
+from pydantic import Field
 
-from server.apps.api.query import FieldsParam
-from server.apps.translations import LanguageParam, override, with_language_param
+from server.apps.api.controller import ApiController, raise_not_found
+from server.apps.api.query import dump_sparse, dump_sparse_list, sparse_fields_query
+from server.apps.translations import activate
+from server.apps.translations.schema import LanguageQuery
 
 from .models import Organization
 from .schema import OrganizationOptional
 
-router = Router()
+OrganizationFields = sparse_fields_query(organizations=OrganizationOptional)
 
 
-@router.get(
-    "/",
-    response=list[OrganizationOptional],
-    exclude_unset=True,
-    operation_id="get_organizations",
-)
-@with_language_param("lang")
-def get_organizations(
-    request: HttpRequest,
-    lang: LanguageParam,
-    fields: Query[FieldsParam[OrganizationOptional]],
-    is_public: bool | None = None,
-) -> list[OrganizationOptional]:
-    """Get a list of all organizations used for the huts."""
-    fields.update_default(include=["slug", "url", "logo", "name", "fullname"])
-    orgs = Organization.objects.all().filter(is_active=True)
-    if isinstance(is_public, bool):
-        orgs = orgs.filter(is_public=is_public)
-    with override(lang):
-        return fields.validate(list(orgs))
+class OrganizationListQuery(LanguageQuery, OrganizationFields):
+    """Query parameters for the organization list."""
+
+    is_public: bool | None = None
 
 
-@router.get(
-    "/{slug}",
-    response=OrganizationOptional,
-    exclude_unset=True,
-    operation_id="get_organization",
-)
-@with_language_param()
-def get_organization(
-    request: HttpRequest,
-    slug: str,
-    lang: LanguageParam,
-    fields: Query[FieldsParam[OrganizationOptional]],
-) -> OrganizationOptional:
-    fields.update_default("__all__")
-    with override(lang):
-        return fields.validate(
-            get_object_or_404(Organization, slug=slug, is_active=True)
+class OrganizationDetailQuery(LanguageQuery, OrganizationFields):
+    """Query parameters for the organization detail endpoint."""
+
+
+class OrgSlugPath(pydantic.BaseModel):
+    """Organization slug path parameter."""
+
+    slug: str = Field(description="Organization slug")
+
+
+class OrganizationsController(ApiController):
+    """Organizations used for the huts."""
+
+    @modify(operation_id="get_organizations")
+    def get(
+        self,
+        parsed_query: Query[OrganizationListQuery],
+    ) -> list[dict]:
+        """List organizations used for the huts."""
+        orgs = Organization.objects.all().filter(is_active=True)
+        if isinstance(parsed_query.is_public, bool):
+            orgs = orgs.filter(is_public=parsed_query.is_public)
+        activate(parsed_query.lang)
+        return dump_sparse_list(
+            OrganizationOptional,
+            list(orgs),
+            parsed_query,
+            "organizations",
+            default_include=["slug", "url", "logo", "name", "fullname"],
         )
 
 
-# @router.post("/", response=OrganizationOptional)
-# def create_organization(request, payload: OrganizationCreate):
-#    last_elem = Organization.objects.values("order").last() or {}
-#    order = last_elem.get("order", -1) + 1
-#    pay_dict = payload.model_dump()
-#    pay_dict["order"] = order
-#    try:
-#        org = Organization.objects.create(**pay_dict)
-#    except IntegrityError as e:
-#        raise HttpError(400, str(e))
-#    return org
-#
-#
+class OrganizationDetailController(ApiController):
+    """A single organization by slug."""
 
-#
-#
-# @router.put("/{slug}", response=OrganizationOptional)
-# def update_organization(request, slug: str, payload: OrganizationUpdate):
-#    org = get_object_or_404(Organization, slug=slug)
-#    for attr, value in payload.model_dump(exclude_unset=True).items():
-#        setattr(org, attr, value)
-#    org.save()
-#    return org
-#
-#
-# @router.delete("/{slug}")
-# def delete_organization(request, slug: str):
-#    org = get_object_or_404(Organization, slug=slug)
-#    org.delete()
-#    return {"success": True}
-#
+    @modify(operation_id="get_organization")
+    def get(
+        self,
+        parsed_path: Path[OrgSlugPath],
+        parsed_query: Query[OrganizationDetailQuery],
+    ) -> dict:
+        """Get a single organization by its slug."""
+        org = Organization.objects.filter(slug=parsed_path.slug, is_active=True).first()
+        if org is None:
+            raise_not_found(f"Organization {parsed_path.slug!r} not found.")
+        activate(parsed_query.lang)
+        return dump_sparse(
+            OrganizationOptional,
+            org,
+            parsed_query,
+            "organizations",
+            default_include="__all__",
+        )
+
+
+paths = [
+    path("", OrganizationsController.as_view(), name="get_organizations"),
+    path(
+        "<str:slug>",
+        OrganizationDetailController.as_view(),
+        name="get_organization",
+    ),
+]

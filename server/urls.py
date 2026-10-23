@@ -9,7 +9,8 @@ This examples uses Django's default media
 files serving technique in development.
 """
 
-from health_check import Cache, Database, Storage
+from dmr.routing import build_404_handler, build_500_handler
+from health_check import Cache, Storage
 from health_check.views import HealthCheckView
 
 from django.conf import settings
@@ -17,27 +18,59 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.admindocs import urls as admindocs_urls
 from django.urls import include, path
-from django.views.generic import RedirectView, TemplateView
+from django.views.generic import TemplateView
 
-from .apps.api.api_v1 import api as api_v1
+from .apps.api import api_v1 as api_v1_module
+from .apps.api import assets_view
+from .apps.api.serializer import WodoreSerializer
+from .apps.apiversions.docs import VersionedSwagger
+from .apps.local_auth import account_views
 from .apps.main import urls as django_admin_urls
+from .apps.main import views as main_views
 from .apps.main.views import index
+from .core.db_health import FastDatabaseReadinessCheck, PoolStatsDatabaseCheck
 
 admin.autodiscover()
+
+# API-style JSON errors for unknown /v1/* paths (found by the schemathesis
+# contract run: Django's default HTML 404 violated the documented schema).
+handler404 = build_404_handler("v1/", serializer=WodoreSerializer)
+handler500 = build_500_handler("v1/", serializer=WodoreSerializer)
 
 # Define base URL patterns
 urlpatterns = [
     # Apps:
     path("main/", include(django_admin_urls, namespace="main")),
     # Health checks:
+    # /health/ is the DEEP check (database + cache + storage) - use it for
+    # readiness probes: "can this pod serve traffic right now?".
     path(
         "health/",
         HealthCheckView.as_view(
             checks=[
-                (Database, {}),
+                (PoolStatsDatabaseCheck, {}),
                 (Cache, {"cache_key": None}),
                 (Storage, {}),
             ],
+        ),
+    ),
+    # /health/live/ is the SHALLOW check - no dependencies at all. Use it
+    # for k8s liveness probes: "is the process (and, under ASGI, the event
+    # loop) alive?". A dependency check there would restart perfectly
+    # healthy pods during a database hiccup (restart storm against an
+    # already-struggling dependency).
+    path("health/live/", HealthCheckView.as_view(checks=[])),
+    # /health/ready/ is the FAST readiness check: the DB touch carries a
+    # hard per-check budget (default 2s), so an exhausted pool answers a
+    # clean 503 quickly instead of hanging until the kubelet probe times
+    # out (2026-10-05 staging wedge: 15s probe < 30s pool wait meant only
+    # "context deadline exceeded", plus one zombie health check per
+    # probe). Probe with a timeout of ~3x the budget. The deep /health/
+    # above stays for humans and debugging.
+    path(
+        "health/ready/",
+        HealthCheckView.as_view(
+            checks=[(FastDatabaseReadinessCheck, {"budget_seconds": 2.0})]
         ),
     ),
     # Locale:
@@ -47,15 +80,23 @@ urlpatterns = [
     # path("", include("admin_volt.urls")), # admin-volt
     path("admin/doc/", include(admindocs_urls)),
     path("admin/", admin.site.urls),
-    # Api:
-    path("v1/", api_v1.urls),  # type: ignore
+    # Api (django-modern-rest):
+    # Version-addressable OpenAPI schema — exact path BEFORE the /v1/
+    # include (serves stored snapshots for ?api_version=, live schema
+    # otherwise).
+    path("v1/openapi.json", api_v1_module.versioned_openapi_json),
+    path("v1/docs", VersionedSwagger.as_view(api_v1_module._cached_schema())),
+    *api_v1_module.urlpatterns,
     # Text and xml static files:
+    path("robots.txt", main_views.robots_txt),
+    path("llms.txt", main_views.llms_txt),
+    # Backend-served brand assets (og/imagor pipeline references —
+    # e.g. the watermark composited onto og photos). No frontend
+    # dependency: the files are bundled in server/apps/api/assets/.
     path(
-        "robots.txt",
-        TemplateView.as_view(
-            template_name="txt/robots.txt",
-            content_type="text/plain",
-        ),
+        "assets/logo/<str:name>",
+        assets_view.serve_logo,
+        name="logo-asset",
     ),
     path(
         "humans.txt",
@@ -69,24 +110,44 @@ urlpatterns = [
     path("", index, name="index"),
 ]
 
-# Zitadel RP routes + admin login redirect (only when OIDC is enabled; when
-# disabled the admin falls back to Django's classic login form).
-if settings.OIDC_ENABLED:
-    urlpatterns += [
+# Classic Zitadel relying-party routes (AUTH_PROVIDER=zitadel, the default
+# outside dev/test): mozilla-django-oidc endpoints + the admin login
+# redirect. #183 replaced the old OIDC_ENABLED block below with the
+# allauth surface but dropped this one - without it /oidc/authenticate/
+# is 404 and neither the admin SSO nor the SPA's Zitadel flow work.
+# The admin-login bridge (in both provider blocks) preserves the
+# deep-link ?next= target through to the provider's login page.
+# Prepended, not appended: "admin/login/" must be matched BEFORE
+# path("admin/", admin.site.urls) in the base list above, otherwise the
+# admin site's own login form shadows the redirect and the admin silently
+# falls back to the classic password form (regression introduced in #150).
+if settings.ZITADEL_RP_ENABLED:
+    urlpatterns = [
         path("oidc/", include("mozilla_django_oidc.urls")),
-        # admin hack, should not be needed (https://stackoverflow.com/questions/59881651/django-mozilla-django-oidc-and-admin)
         path(
             "admin/login/",
-            RedirectView.as_view(
-                url="/oidc/authenticate?next=/admin/", permanent=False
-            ),
+            account_views.admin_login_redirect,
+            {"login_path": "/oidc/authenticate"},
         ),
+        *urlpatterns,
     ]
 
-# Local dev/test auth provider (frontend authenticates directly against
-# Django when Zitadel is not available).
-if settings.LOCAL_AUTH_ENABLED:
-    urlpatterns += [path("oauth/local/", include("server.apps.local_auth.urls"))]
+# Built-in OIDC provider (DOT) + account management (allauth): direct
+# logins without a ?next= target land in the admin (LOGIN_REDIRECT_URL).
+if settings.OIDC_ENABLED:
+    urlpatterns = [
+        path(
+            "admin/login/",
+            account_views.admin_login_redirect,
+            {"login_path": "/accounts/login/"},
+        ),
+        path("oauth/local/", include("server.apps.local_auth.urls")),
+        # Self-service account overview (exact match, before the allauth
+        # include which serves all /accounts/<sub> flows).
+        path("accounts/", account_views.account_overview),
+        path("accounts/", include("allauth.urls")),
+        *urlpatterns,
+    ]
 
 if settings.DEBUG:  # pragma: no cover
     try:
@@ -102,3 +163,11 @@ if settings.DEBUG:  # pragma: no cover
         ]
     except ModuleNotFoundError:
         pass
+
+# Demo pages (mapcompare etc.) — available in development (DEBUG, open)
+# and staging (DEMOS_ENABLED, superuser-only). Production has neither.
+if getattr(settings, "DEMOS_ENABLED", False):
+    urlpatterns = [
+        path("demos/", include("server.apps.demos.urls")),
+        *urlpatterns,
+    ]

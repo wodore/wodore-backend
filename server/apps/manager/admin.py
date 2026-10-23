@@ -7,7 +7,7 @@ from django.contrib.auth.admin import (  # shadowed below (Django admin idiom)
     GroupAdmin,  # pyright: ignore[reportAssignmentType]
     UserAdmin,  # pyright: ignore[reportAssignmentType]
 )
-from django.contrib.auth.models import Group, User
+from django.contrib.auth.models import Group
 from django.contrib.gis.admin import GISModelAdmin
 from django.db import models
 
@@ -17,6 +17,8 @@ from unfold.contrib.filters.admin.mixins import MultiValueMixin
 from unfold.contrib.filters.forms import CheckboxForm
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 from unfold.widgets import UnfoldAdminColorInputWidget
+
+from server.apps.accounts.models import User as AccountsUser
 
 from .widgets import UnfoldJSONSuit, UnfoldReadonlyJSONSuit
 
@@ -69,7 +71,7 @@ try:
     models_to_reregister += axes
 except RuntimeError:
     ...
-users = [User, Group]
+users = [AccountsUser, Group]
 models_to_reregister += users
 registry = admin.site._registry
 new_registry_items = {}
@@ -86,17 +88,47 @@ for model, admin_model in new_registry_items.items():
     admin.site.unregister(model)
     admin.site.register(model, admin_model)
 
-# Group and User
-
-admin.site.unregister(User)
+# Group and User (custom email-identity user model)
 
 
-@admin.register(User)
+@admin.register(AccountsUser)
 class UserAdmin(UserAdmin, ModelAdmin):  # pyright: ignore[reportGeneralTypeIssues]  # Django admin shadowing idiom
     form = UserChangeForm
     add_form = UserCreationForm
     change_password_form = AdminPasswordChangeForm
-    # list_filter_submit =
+
+    list_display = ("email", "is_staff", "is_superuser", "is_active")
+    ordering = ("email",)
+    search_fields = ("email", "first_name", "last_name")
+    fieldsets = (
+        (None, {"fields": ("email", "password")}),
+        (
+            "Personal info",
+            {"fields": ("first_name", "last_name")},
+        ),
+        (
+            "Permissions",
+            {
+                "fields": (
+                    "is_active",
+                    "is_staff",
+                    "is_superuser",
+                    "groups",
+                    "user_permissions",
+                ),
+            },
+        ),
+        ("Important dates", {"fields": ("last_login", "date_joined")}),
+    )
+    add_fieldsets = (
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": ("email", "password1", "password2"),
+            },
+        ),
+    )
 
 
 admin.site.unregister(Group)

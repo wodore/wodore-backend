@@ -1,0 +1,324 @@
+"""API version registry: date-based contract versioning inside /v1/.
+
+
+OpenSpec change ``add-api-date-versioning``. One codebase always runs the
+newest logic; older client versions are produced by transforms at the edge
+(see :mod:`server.apps.apiversions.transforms`). This module is the single
+source of truth for versions, their lifecycle status and the registry
+content hash that participates in ETags.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import UTC, date, datetime
+from email.utils import formatdate
+from typing import Any
+
+from server.apps.api.error_codes import ErrorCode
+
+Transform = Callable[[Any], Any]
+
+# Rollout date of the versioning system itself. Every client is effectively
+# pinned to this version until the first breaking change registers a newer
+# one. Set to the release date of this feature (see design.md D1).
+INITIAL_VERSION = "2026-10-01"
+
+# Where the API changelog lives (Link; rel="deprecation" targets).
+CHANGELOG_URL = "https://github.com/wodore/wodore-backend/blob/main/CHANGELOG_API.md"
+
+
+@dataclass(frozen=True)
+class EndpointDeprecation:
+    """Endpoint-level deprecation (independent of version-level sunset).
+
+    Deprecated operations announce ``Deprecation``/``Sunset``/``Link``
+    headers in every API version and are answered with ``410`` after
+    ``sunset`` (enforced in :func:`server.apps.apiversions.wrap.wrap_api`).
+    """
+
+    announced: date
+    sunset: date
+    detail: str = ""
+    link: str = CHANGELOG_URL
+
+    @property
+    def announced_unix(self) -> int:
+        return int(
+            datetime(
+                self.announced.year,
+                self.announced.month,
+                self.announced.day,
+                tzinfo=UTC,
+            ).timestamp()
+        )
+
+
+# /v1/huts/bookings and bookings.geojson have been OpenAPI-deprecated for a
+# while (replacement: /huts/availability.geojson). The versioning rollout
+# gives them a concrete sunset: 6 months after rollout (spec Q4 decision).
+ENDPOINT_DEPRECATIONS: dict[str, EndpointDeprecation] = {
+    "get_hut_bookings": EndpointDeprecation(
+        announced=date(2026, 10, 1),
+        sunset=date(2027, 4, 1),
+        detail="Use /v1/huts/availability.geojson instead.",
+    ),
+    "get_hut_bookings_geojson": EndpointDeprecation(
+        announced=date(2026, 10, 1),
+        sunset=date(2027, 4, 1),
+        detail="Use /v1/huts/availability.geojson instead.",
+    ),
+}
+
+
+@dataclass(frozen=True)
+class VersionChange:
+    """A breaking change that introduced a new contract version.
+
+    ``responses``/``requests`` map the Ninja operation id (explicit
+    ``operation_id`` or ninja's generated one) to a transform:
+
+    - ``responses``: downgrade — newest→oldest applied after the handler
+      produced the latest shape.
+    - ``requests``: upgrade — oldest→newest applied before the handler
+      consumes the request (machinery present; first real use deferred to
+      the first breaking change that needs one).
+
+    Transforms must be defensive: ``pop(key, None)``, only rename/convert
+    when the key is present, tolerate ``null`` and fields dropped by
+    ``include``/``exclude``/``embed_*``.
+    """
+
+    version: str  # YYYY-MM-DD, compared lexically
+    description: str = ""
+    responses: dict[str, Transform] = field(default_factory=dict)
+    requests: dict[str, Transform] = field(default_factory=dict)
+    deprecation_date: date | None = None
+    sunset_date: date | None = None
+
+
+# The placeholder for the next unreleased version. Replaced with the
+# actual release date by "inv release" (api-freeze step). Sorting:
+# "unreleased" > any date string, so versions()[-1] always returns it
+# as current while it exists.
+UNRELEASED = "unreleased"
+
+# The registry. Order is not significant (versions are sorted), but keep it
+# chronological for readability. Add a new VersionChange ONLY for breaking
+# changes (see README "Introducing a breaking change"). Use UNRELEASED as
+# the version string; the date is assigned at release time.
+
+
+def _strip_static_map_fallback(data: Any) -> Any:
+    """Downgrade for the image endpoints: drop the generated static-map
+    fallback feature (``properties.is_fallback``) so clients pinned to
+    the previous version keep receiving photo-only responses.
+    ``metadata.total`` is corrected when it still matches the old list
+    length (defensive against sparse/aliased payloads)."""
+
+    if isinstance(data, dict) and isinstance(data.get("features"), list):
+        before = len(data["features"])
+        data["features"] = [
+            feature
+            for feature in data["features"]
+            if not (
+                isinstance(feature, dict)
+                and (feature.get("properties") or {}).get("is_fallback")
+            )
+        ]
+        metadata = data.get("metadata")
+        if isinstance(metadata, dict) and metadata.get("total") == before:
+            metadata["total"] = len(data["features"])
+    return data
+
+
+REGISTRY: list[VersionChange] = [
+    VersionChange(
+        version=INITIAL_VERSION,
+        description="Initial version: rollout of the versioning system.",
+    ),
+    VersionChange(
+        version="2026-10-02",
+        description=(
+            "Replace the include/exclude query parameters with JSON:API "
+            "sparse fieldsets (fields[TYPE]=name1,name2). include/exclude "
+            "are removed (no consumer existed; sunset window 0): sending "
+            "them answers 400 invalid_parameter naming the replacement. "
+            "The 2026-10-01 snapshot still documents them as historical "
+            "record; pinned clients of that version are unaffected until "
+            "it sunsets."
+        ),
+    ),
+    VersionChange(
+        version=UNRELEASED,
+        description=(
+            "Harmonize response narrowing: replace include_X=no|slug|all "
+            "with JSON:API sparse fieldsets (fields[TYPE]) on all search "
+            "endpoints (search_huts, search/nearby_geoplaces, get_amenity, "
+            "get_weather_codes/get_weather_code). Shape change: slug "
+            "shorthand lists become objects (sources=[{slug: sac}] not "
+            "[sac]). include_X senders get 400. Also rename the image "
+            "endpoints' fallback parameter to static_map_fallback and "
+            "default it to true: /v1/geo/images/hut/{slug} and "
+            "/v1/geo/images/place/{slug} include the generated static-map "
+            "card (zoom 15, spotlight effect, type-symbol marker) as an "
+            "is_fallback feature whenever the entity has no images — "
+            "including cached_only fast calls. The old default (photo-only, "
+            "opt-in fallback) is restored for pinned clients by stripping "
+            "fallback features; clients that opted in via fallback=true "
+            "should switch to static_map_fallback=true. nearby keeps no "
+            "fallback (no entity to center). ALSO: rename the category "
+            "symbol variants detailed/simple -> color/primitive platform-wide "
+            "(design 261012): the symbol dict keys on hut/category endpoints "
+            "become {color, primitive, mono} and the flat "
+            "symbol_detailed/symbol_simple DTO keys (geometries/meteo) "
+            "become symbol_color/symbol_primitive. No downgrade: old keys are "
+            "removed outright (no consumers outside our own frontend). "
+            "ALSO: error bodies across /v1/ gain the RFC 9457 problem "
+            "members type/title/status (instance where a resource path "
+            "exists) additively — code/detail and the application/json "
+            "media type are unchanged; additive, so no downgrade and "
+            "every version (pinned included) receives the enriched bodies "
+            "(openspec: error-api-problem-details)."
+        ),
+        responses={
+            "images_for_hut": _strip_static_map_fallback,
+            "images_for_place": _strip_static_map_fallback,
+        },
+    ),
+]
+
+
+def versions() -> list[str]:
+    """All registered version identifiers, oldest first."""
+    return sorted(change.version for change in REGISTRY)
+
+
+def current_version() -> str:
+    """Newest registered version — what unpinned clients receive."""
+    return versions()[-1]
+
+
+def default_version() -> str:
+    """Version served when a client pins nothing (staged-rollout hook)."""
+    return current_version()
+
+
+def get_change(version: str) -> VersionChange | None:
+    for change in REGISTRY:
+        if change.version == version:
+            return change
+    return None
+
+
+def is_valid_version(version: str) -> bool:
+    return version in versions()
+
+
+def version_status(version: str, *, today: date | None = None) -> str:
+    """Lifecycle status: current | default | deprecated | sunset."""
+    today = today or datetime.now(tz=UTC).date()
+    change = get_change(version)
+    if change is None:
+        msg = f"Unknown API version: {version}"
+        raise ValueError(msg)
+    if version == current_version():
+        return "current"
+    if change.sunset_date and today > change.sunset_date:
+        return "sunset"
+    if change.deprecation_date is not None:
+        return "deprecated"
+    return "default"
+
+
+def is_sunset(version: str, *, today: date | None = None) -> bool:
+    return version_status(version, today=today) == "sunset"
+
+
+def deprecation_info(version: str) -> VersionChange | None:
+    """The change entry if ``version`` is deprecated (not current)."""
+    change = get_change(version)
+    if change is None or version == current_version():
+        return None
+    return change if change.deprecation_date is not None else None
+
+
+def changes_after(version: str) -> list[VersionChange]:
+    """All changes newer than ``version``, newest first (downgrade order)."""
+    return sorted(
+        (change for change in REGISTRY if change.version > version),
+        key=lambda change: change.version,
+        reverse=True,
+    )
+
+
+def content_hash() -> str:
+    """Stable hash over versions and registered transforms.
+
+    Joins the ETag key material of versioned endpoints (design.md D11):
+    registering a new transform changes the ETag even when the underlying
+    data did not change.
+    """
+    payload = [
+        {
+            "version": change.version,
+            "responses": sorted(change.responses),
+            "requests": sorted(change.requests),
+            "sunset": change.sunset_date.isoformat() if change.sunset_date else None,
+        }
+        for change in sorted(REGISTRY, key=lambda change: change.version)
+    ]
+    blob = json.dumps(payload, sort_keys=True).encode()
+    return hashlib.sha256(blob).hexdigest()[:16]
+
+
+def deprecation_unix(change: VersionChange) -> int | None:
+    """Unix timestamp for the RFC 9745 ``Deprecation`` header."""
+    if change.deprecation_date is None:
+        return None
+    return int(
+        datetime(
+            change.deprecation_date.year,
+            change.deprecation_date.month,
+            change.deprecation_date.day,
+            tzinfo=UTC,
+        ).timestamp()
+    )
+
+
+def guard_endpoint_sunset(operation_id: str) -> None:
+    """Answer 410 from a handler whose endpoint sunset has passed.
+
+    Replaces the old ``wrap_api`` monkey-wrapping: handlers of endpoints
+    listed in :data:`ENDPOINT_DEPRECATIONS` call this first — explicit
+    code instead of invisible framework patching. Before the sunset date
+    this is a no-op (the middleware announces the headers).
+    """
+    dep = ENDPOINT_DEPRECATIONS.get(operation_id)
+    if dep is None:
+        return
+    if datetime.now(tz=UTC).date() > dep.sunset:
+        from http import HTTPStatus
+
+        from dmr import APIError
+
+        sunset_ts = int(
+            datetime(
+                dep.sunset.year, dep.sunset.month, dep.sunset.day, tzinfo=UTC
+            ).timestamp()
+        )
+        raise APIError(
+            {
+                "code": ErrorCode.gone,
+                "detail": dep.detail,
+            },
+            status_code=HTTPStatus.GONE,
+            headers={
+                "Deprecation": f"@{dep.announced_unix}",
+                "Sunset": formatdate(sunset_ts, usegmt=True),
+                "Link": f'<{dep.link}>; rel="deprecation"',
+            },
+        )

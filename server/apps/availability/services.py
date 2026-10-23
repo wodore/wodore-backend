@@ -23,6 +23,37 @@ from .models import AvailabilityStatus, HutAvailability, HutAvailabilityHistory
 
 SERVICES: dict = settings.SERVICES
 
+#: Per-statement timeout (ms) for availability batch writes. The global
+#: ``statement_timeout`` (15 s) protects API traffic but is too tight for
+#: the largest single chunk of a batch write — a cancelled statement
+#: discards all of its work, so the batch loop would repeat it. ``SET
+#: LOCAL`` scopes the raised limit to the batch transaction only.
+BATCH_STATEMENT_TIMEOUT_MS = 120_000
+
+#: Max rows per INSERT/UPDATE statement for availability batch writes.
+#: An unbatched ``bulk_create``/``bulk_update`` makes Postgres materialize
+#: every row version of the whole statement in one backend (~100 MB per
+#: ~10k-row statement here) — enough to OOM-kill a small container.
+BULK_WRITE_BATCH_SIZE = 500
+
+
+def _sanitize_negative_free(bookings: dict) -> None:  # type: ignore[type-arg]
+    """Clamp negative ``places.free`` sentinels to ``None`` (in place).
+
+    Some sources report unknown free counts as negative numbers — DOC's
+    Tyler API returns ``TotalAvailable = -1`` for "count not published"
+    (Great Walk huts). The availability tables enforce ``free >= 0``, so
+    unknown counts must arrive as ``None``: without this clamp every
+    batch containing such a date dies on
+    ``availability_hutavailability_free_check`` and the affected hut's
+    whole availability update is lost.
+    """
+    for hut_booking in bookings.values():
+        for booking in hut_booking.bookings:
+            places = getattr(booking, "places", None)
+            if places is not None and places.free is not None and places.free < 0:
+                places.free = None
+
 
 class UpdateResult(NamedTuple):
     """Result of updating a single hut's availability"""
@@ -83,6 +114,9 @@ class AvailabilityService:
         from hut_services.core.schema import (
             HutBookingsSchema as HutServiceBookingSchema,
         )
+        from hut_services.core.schema import (
+            TotalFallback,
+        )
 
         from server.apps.huts.schemas_booking import HutBookingsSchema
 
@@ -94,7 +128,6 @@ class AvailabilityService:
             "hut_type_open", "hut_type_closed", "availability_source_ref"
         )
         obj = obj.filter(slug__in=hut_slugs)
-
         # TODO: Future optimization - parallel service calls
         # If we have multiple booking services (hrs, sac, etc.), we could fetch them
         # concurrently using ThreadPoolExecutor or asyncio to reduce total fetch time.
@@ -114,6 +147,24 @@ class AvailabilityService:
                 if not service_source_ids:
                     continue
 
+                # Per-hut total fallback from the hut's own capacities:
+                # lets the service overwrite scraped/stale page totals
+                # (e.g. Prenota's prober also caps its ladder at the real
+                # total). Huts without a capacity stay absent from the dict
+                # and fall back to the service's own hut-detail chain.
+                capacity_rows = obj.filter(
+                    orgs_source__organization__slug=src_name,
+                    orgs_source__source_id__in=service_source_ids,
+                ).values("orgs_source__source_id", "capacity_open", "capacity_closed")
+                total_fallbacks: dict[str, TotalFallback] = {}
+                for row in capacity_rows:
+                    sid = str(row["orgs_source__source_id"])
+                    if row["capacity_open"] is not None:
+                        total_fallbacks[sid] = TotalFallback(
+                            standard=row["capacity_open"],
+                            reduced=row["capacity_closed"] or row["capacity_open"],
+                        )
+
                 # Fetch bookings from service (service handles request_interval internally)
                 # The service's get_bookings already handles progress per hut internally
                 service_bookings = service.get_bookings(
@@ -124,6 +175,8 @@ class AvailabilityService:
                     request_interval=request_interval,
                     progress_callback=progress_callback,  # Pass through for per-hut updates
                     cached=False,  # Disable cache to enable true batched fetching
+                    total_fallback=total_fallbacks
+                    or None,  # per-hut capacities (ignored by exact sources)
                 )
                 bookings.update(service_bookings)
 
@@ -214,6 +267,8 @@ class AvailabilityService:
                 # Ensure source_id is always a string (may come as int from DB)
                 if "source_id" in h and h["source_id"] is not None:
                     h["source_id"] = str(h["source_id"])
+
+        _sanitize_negative_free(bookings)
         return [HutBookingsSchema(**h) for h in huts]
 
     @staticmethod
@@ -469,7 +524,7 @@ class AvailabilityService:
         }
 
         # Collect all dates and hut IDs for bulk queries
-        all_hut_ids = [hut.id for hut, _ in batch]
+        all_hut_ids = [hut.id for hut, _ in batch]  # pyright: ignore[reportAttributeAccessIssue]
         all_dates = []
         for _, hut_booking in batch:
             all_dates.extend([booking.date for booking in hut_booking.bookings])
@@ -488,8 +543,17 @@ class AvailabilityService:
                 # It returns Category objects (the actual FK model for HutAvailability.hut_type)
                 hut_type_cache[hut_type_slug] = HutTypeHelper.values.get(hut_type_slug)
 
-        # Use a single transaction for the entire batch
+        # Use a single transaction for the entire batch. Keep each
+        # statement's memory and runtime bounded (see BULK_WRITE_BATCH_SIZE /
+        # BATCH_STATEMENT_TIMEOUT_MS): the writes below are chunked so the
+        # backend never materializes one giant statement.
         with transaction.atomic():
+            from django.db import connection
+
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"SET LOCAL statement_timeout = {int(BATCH_STATEMENT_TIMEOUT_MS)}"
+                )
             # Bulk fetch all existing availabilities for all huts in the batch
             # CRITICAL: Use select_related to avoid N+1 queries on foreign keys
             existing_availabilities = HutAvailability.objects.filter(
@@ -508,6 +572,9 @@ class AvailabilityService:
             all_availabilities_to_update = []
             all_availabilities_unchanged = []
             all_unchanged_availability_ids = []
+            # (hut_id, date) of rows already queued for creation — see the
+            # create branch below.
+            queued_new: dict[tuple, HutAvailability] = {}
 
             # Process each hut in the batch
             for hut, hut_booking in batch:
@@ -545,33 +612,57 @@ class AvailabilityService:
                         else None
                     )
 
-                    availability = availability_index.get((hut.id, booking.date))
+                    availability = availability_index.get(
+                        (hut.id, booking.date)  # pyright: ignore[reportAttributeAccessIssue]
+                    )
 
                     if availability is None:
-                        # Create new availability record
-                        new_avail = HutAvailability(
-                            hut=hut,
-                            availability_date=booking.date,
-                            source_organization=source_org,
-                            source_id=source_hut_id,
-                            free=booking.free,
-                            total=booking.total,
-                            occupancy_percent=booking.occupancy_percent,
-                            occupancy_steps=booking.occupancy_steps,
-                            occupancy_status=occupancy_status,
-                            reservation_status=reservation_status,
-                            link=booking.link or "",
-                            hut_type=hut_type_obj,
-                            first_checked=now,
-                            last_checked=now,
+                        # Create new availability record. The same payload can
+                        # carry several bookings for one (hut, date) (e.g. one
+                        # per hut type) while the unique constraint allows only
+                        # one row — re-use the already-queued row and let the
+                        # latest values win instead of violating
+                        # ``unique_hut_date`` and rolling back the whole batch.
+                        new_avail = queued_new.get(
+                            (hut.id, booking.date)  # pyright: ignore[reportAttributeAccessIssue]
                         )
-                        all_new_availabilities.append(new_avail)
-                        created_count += 1
+                        if new_avail is None:
+                            new_avail = HutAvailability(
+                                hut=hut,
+                                availability_date=booking.date,
+                                source_organization=source_org,
+                                source_id=source_hut_id,
+                                free=booking.free,
+                                total=booking.total,
+                                free_tolerance=booking.free_tolerance,
+                                occupancy_percent=booking.occupancy_percent,
+                                occupancy_steps=booking.occupancy_steps,
+                                occupancy_status=occupancy_status,
+                                reservation_status=reservation_status,
+                                link=booking.link or "",
+                                hut_type=hut_type_obj,
+                                first_checked=now,
+                                last_checked=now,
+                            )
+                            queued_new[(hut.id, booking.date)] = new_avail  # pyright: ignore[reportAttributeAccessIssue]
+                            all_new_availabilities.append(new_avail)
+                            created_count += 1
+                        else:
+                            new_avail.free = booking.free
+                            new_avail.total = booking.total
+                            new_avail.free_tolerance = booking.free_tolerance
+                            new_avail.occupancy_percent = booking.occupancy_percent
+                            new_avail.occupancy_steps = booking.occupancy_steps
+                            new_avail.occupancy_status = occupancy_status
+                            new_avail.reservation_status = reservation_status
+                            new_avail.link = booking.link or ""
+                            new_avail.hut_type = hut_type_obj
                     else:
                         # Check if data changed
                         changed = (
                             availability.free != booking.free
                             or availability.total != booking.total
+                            or availability.free_tolerance != booking.free_tolerance
                             or availability.hut_type != hut_type_obj
                             or availability.reservation_status != reservation_status
                         )
@@ -585,6 +676,7 @@ class AvailabilityService:
                                     availability_date=availability.availability_date,
                                     free=booking.free,
                                     total=booking.total,
+                                    free_tolerance=booking.free_tolerance,
                                     occupancy_percent=booking.occupancy_percent,
                                     occupancy_status=occupancy_status,
                                     reservation_status=reservation_status,
@@ -597,6 +689,7 @@ class AvailabilityService:
                             # Update current state
                             availability.free = booking.free
                             availability.total = booking.total
+                            availability.free_tolerance = booking.free_tolerance
                             availability.occupancy_percent = booking.occupancy_percent
                             availability.occupancy_steps = booking.occupancy_steps
                             availability.occupancy_status = occupancy_status
@@ -624,10 +717,12 @@ class AvailabilityService:
                     )
                 )
 
-            # Bulk create new availability records
+            # Bulk create new availability records (batch_size bounds the
+            # per-statement memory — see BULK_WRITE_BATCH_SIZE)
             if all_new_availabilities:
                 created_availabilities = HutAvailability.objects.bulk_create(
-                    all_new_availabilities
+                    all_new_availabilities,
+                    batch_size=BULK_WRITE_BATCH_SIZE,
                 )
 
                 # Create initial history entries for new records
@@ -663,6 +758,7 @@ class AvailabilityService:
                         "hut_type",
                         "last_checked",
                     ],
+                    batch_size=BULK_WRITE_BATCH_SIZE,
                 )
 
             # Bulk update unchanged availability records
@@ -670,11 +766,15 @@ class AvailabilityService:
                 HutAvailability.objects.bulk_update(
                     all_availabilities_unchanged,
                     fields=["last_checked"],
+                    batch_size=BULK_WRITE_BATCH_SIZE,
                 )
 
             # Bulk create history entries
             if all_new_history_entries:
-                HutAvailabilityHistory.objects.bulk_create(all_new_history_entries)
+                HutAvailabilityHistory.objects.bulk_create(
+                    all_new_history_entries,
+                    batch_size=BULK_WRITE_BATCH_SIZE,
+                )
 
                 # Update history counts in results
                 history_by_hut = {}
@@ -726,7 +826,7 @@ class AvailabilityService:
 
     @staticmethod
     def _process_hut_bookings(
-        hut: Hut, hut_booking, now: timezone.datetime = None
+        hut: Hut, hut_booking, now: datetime.datetime | None = None
     ) -> UpdateResult:
         """
         Process booking data for a single hut and store in database.
@@ -806,6 +906,7 @@ class AvailabilityService:
                         source_id=source_hut_id,
                         free=booking.free,
                         total=booking.total,
+                        free_tolerance=booking.free_tolerance,
                         occupancy_percent=booking.occupancy_percent,
                         occupancy_steps=booking.occupancy_steps,
                         occupancy_status=occupancy_status,
@@ -821,6 +922,7 @@ class AvailabilityService:
                     changed = (
                         availability.free != booking.free
                         or availability.total != booking.total
+                        or availability.free_tolerance != booking.free_tolerance
                         or availability.hut_type != hut_type_obj
                         or availability.reservation_status != reservation_status
                     )
@@ -834,6 +936,7 @@ class AvailabilityService:
                                 availability_date=availability.availability_date,
                                 free=booking.free,
                                 total=booking.total,
+                                free_tolerance=booking.free_tolerance,
                                 occupancy_percent=booking.occupancy_percent,
                                 occupancy_status=occupancy_status,
                                 reservation_status=reservation_status,
@@ -846,6 +949,7 @@ class AvailabilityService:
                         # Update current state
                         availability.free = booking.free
                         availability.total = booking.total
+                        availability.free_tolerance = booking.free_tolerance
                         availability.occupancy_percent = booking.occupancy_percent
                         availability.occupancy_steps = booking.occupancy_steps
                         availability.occupancy_status = occupancy_status

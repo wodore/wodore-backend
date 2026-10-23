@@ -9,6 +9,8 @@ Image schemas (_images.py): Used for image aggregation API
 # Output schemas (for API responses)
 # Image schemas (for image aggregation API)
 from ._images import (
+    DEFAULT_THUMBHASHES,
+    ImageCenterSchema,
     ImageCollectionResponse,
     ImageFeature,
     ImageFeatureCollection,
@@ -41,7 +43,6 @@ from ._output import (
     CategoryPlaceTypeSchema,
     CategorySchema,
     GeoPlaceBaseSchema,
-    GeoPlaceDetailSchema,
     GeoPlaceNearbySchema,
     GeoPlaceSearchSchema,
     PhoneSchema,
@@ -50,6 +51,7 @@ from ._output import (
 )
 
 __all__ = [
+    "DEFAULT_THUMBHASHES",
     "# Image schemas",
     "# Input schemas",
     "# Output schemas",
@@ -65,12 +67,12 @@ __all__ = [
     "GeoPlaceAmenityInput",
     "GeoPlaceBaseInput",
     "GeoPlaceBaseSchema",
-    "GeoPlaceDetailSchema",
     "GeoPlaceNaturalInput",
     "GeoPlaceNearbySchema",
     "GeoPlaceSearchSchema",
     "GeoPlaceTransportInput",
     "ImageCollectionResponse",
+    "ImageCenterSchema",
     "ImageFeature",
     "ImageFeatureCollection",
     "ImageLicenseSchema",

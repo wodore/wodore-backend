@@ -7,7 +7,7 @@ from tests.factories.geometries import GeoPlaceFactory
 from tests.factories.huts import HutFactory
 
 from django.contrib import admin as django_admin
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.exceptions import PermissionDenied
@@ -46,12 +46,16 @@ def messages_text(request) -> list[str]:
 
 @pytest.fixture
 def superuser(db):
-    return User.objects.create_superuser(username="admin-lane", password="x")
+    return get_user_model().objects.create_superuser(
+        email="admin-lane@test.local", password="x"
+    )
 
 
 @pytest.fixture
 def staff_user(db):
-    return User.objects.create_user(username="editor-lane", is_staff=True)
+    return get_user_model().objects.create_user(
+        email="editor-lane@test.local", is_staff=True
+    )
 
 
 @pytest.fixture

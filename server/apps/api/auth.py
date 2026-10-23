@@ -1,17 +1,21 @@
 """Bearer token authentication for the Django Ninja API (spec: api-token-validation).
 
-Two validators share the scope/role/group matching logic from
+
+Validators share the scope/role/group matching logic from
 ``BaseTokenValidator``:
 
-- ``ZitadelIntrospectTokenValidator`` - OIDC mode (``OIDC_ENABLED``): verifies
-  access tokens via the Zitadel introspection endpoint using a private-key
-  JWT client assertion.
-- ``LocalJWTValidator`` - local mode (``LOCAL_AUTH_ENABLED``): verifies JWTs
-  issued by the built-in dev/test provider (``server.apps.local_auth``).
+- ``BuiltInJWTValidator`` - verifies JWT access tokens issued by the built-in
+  OIDC provider (django-oauth-toolkit) locally: RS256 signature against the
+  provider key, expiry, issuer - no network call per request.
+- ``ZitadelIntrospectTokenValidator`` - verifies Zitadel-issued tokens via
+  the introspection endpoint: the default validator while
+  ``AUTH_PROVIDER=zitadel``, and additionally available behind
+  ``ZITADEL_ROLLBACK_ENABLED`` during the rollback window after the
+  ``AUTH_PROVIDER=builtin`` flip (until the Zitadel decommission).
 
-``AuthBearer`` picks the validator from settings per instance. When neither
-mode is active, protected endpoints answer with a clean 401 instead of
-crashing on missing provider settings.
+``AuthBearer`` picks the active validators from settings per instance and
+tries them in order. When auth is disabled, protected endpoints answer with
+a clean 401 instead of crashing on missing provider settings.
 """
 
 import json
@@ -22,12 +26,16 @@ from typing import Any
 
 import requests
 from authlib.jose import jwt
-from authlib.oauth2.rfc7662 import IntrospectTokenValidator
-from ninja.errors import HttpError
-from ninja.security import HttpBearer
+from dmr import APIError
+from dmr.endpoint import Endpoint
+from dmr.security.base import SyncAuth
+from dmr.security.http import _HttpBasicAuth  # scheme-parsing mixin
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
+from django.http import HttpRequest
+
+from server.apps.api.error_codes import ErrorCode
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +50,10 @@ class ValidatorError(Exception):
 class BaseTokenValidator:
     """Shared token validation: scope/role/group matching and error semantics.
 
-    Roles and groups are read from Zitadel-shaped claims (a list where
-    ``group:``-prefixed entries are groups and the rest are roles).
-    ``_roles_claim_keys`` controls which claim names are consulted.
+    Roles and groups are read from the token's claims: the plain ``roles``
+    claim where ``group:``-prefixed entries are groups and the rest are
+    roles, with the legacy Zitadel claim keys still consulted for rollback
+    tokens. ``_roles_claim_keys`` controls which claim names are consulted.
     """
 
     def __call__(
@@ -59,18 +68,24 @@ class BaseTokenValidator:
 
     def _roles_claim_keys(self) -> tuple[str, ...]:
         project = getattr(settings, "ZITADEL_PROJECT", "")
-        return (f"urn:zitadel:iam:org:project:{project}:roles",)
+        return (
+            "roles",
+            "urn:zitadel:iam:org:project:roles",
+            f"urn:zitadel:iam:org:project:{project}:roles",
+        )
 
     def _role_entries(self, token: dict[str, Any]) -> list[str]:
         entries: list[str] = []
         for key in self._roles_claim_keys():
+            if not key:
+                continue
             value = token.get(key)
             if isinstance(value, dict):
-                # Local tokens carry roles as {role: {}} (map, like Zitadel
-                # userinfo); keys are the role names.
+                # Map-shaped claims ({role: {}}) - legacy provider/userinfo
+                # style; keys are the role names.
                 entries.extend(value.keys())
             elif value:
-                # Zitadel introspection carries roles as a flat list.
+                # List-shaped claims - the plain ``roles`` claim style.
                 entries.extend(g for g in value if isinstance(g, str))
         return entries
 
@@ -114,23 +129,32 @@ class BaseTokenValidator:
         now = floor(time.time())
         if not token:
             raise ValidatorError(
-                {"code": "invalid_token_revoked", "description": "Token was revoked."},
+                {
+                    "code": ErrorCode.not_authenticated,
+                    "description": "Token was revoked.",
+                },
                 401,
             )
         if not token.get("active"):
             raise ValidatorError(
-                {"code": "invalid_token_inactive", "description": "Token is inactive."},
+                {
+                    "code": ErrorCode.not_authenticated,
+                    "description": "Token is inactive.",
+                },
                 401,
             )
         if token["exp"] < now:
             raise ValidatorError(
-                {"code": "invalid_token_expired", "description": "Token has expired."},
+                {
+                    "code": ErrorCode.not_authenticated,
+                    "description": "Token has expired.",
+                },
                 401,
             )
         if not self.match_token_scopes(token, scopes):
             raise ValidatorError(
                 {
-                    "code": "insufficient_scope",
+                    "code": ErrorCode.insufficient_permission,
                     "description": f"Token has insufficient scope. Scopes required: {scopes}",
                 },
                 401,
@@ -140,14 +164,121 @@ class BaseTokenValidator:
         ):
             raise ValidatorError(
                 {
-                    "code": "insufficient_permission",
+                    "code": ErrorCode.insufficient_permission,
                     "description": f"Token has insufficient permission. Roles required: {roles} or group required: {groups}",
                 },
                 401,
             )
 
 
-class ZitadelIntrospectTokenValidator(BaseTokenValidator, IntrospectTokenValidator):  # type: ignore[no-any-unimported]
+class BuiltInJWTValidator(BaseTokenValidator):
+    """Verifies access tokens issued by the built-in OIDC provider (DOT).
+
+    DOT 3.x issues opaque, database-backed access tokens; validation is a
+    local primary-key lookup (no network call, instant revocation) with
+    roles taken live from the user's Django groups. JWT-shaped tokens
+    (e.g. minted by ``api_test_token``) verify locally via signature,
+    expiry and issuer instead.
+    """
+
+    def _validate_opaque(self, token_string: str) -> dict[str, Any] | None:
+        from oauth2_provider.models import get_access_token_model
+
+        from server.apps.local_auth import tokens as provider_tokens
+
+        try:
+            access_token = (
+                get_access_token_model()
+                .objects.select_related("user", "application")
+                .get(token=token_string)
+            )
+        except Exception:
+            return None
+        if access_token.expires is None or access_token.user is None:
+            return None
+        from django.utils import timezone
+
+        if access_token.expires <= timezone.now():
+            return None
+        import datetime as _dt
+
+        user = access_token.user
+        return {
+            "active": True,
+            "exp": int(
+                access_token.expires.replace(tzinfo=_dt.timezone.utc).timestamp()
+                if access_token.expires.tzinfo is None
+                else access_token.expires.timestamp()
+            ),
+            "scope": access_token.scope or "",
+            "sub": str(user.pk),
+            "claims": {"sub": str(user.pk)},
+            provider_tokens.LEGACY_ROLES_CLAIM: provider_tokens.roles_claim(user),
+            "roles": provider_tokens.plain_roles_claim(user),
+        }
+
+    def _validate_jwt(
+        self, token_string: str, request: Any = None
+    ) -> dict[str, Any] | None:
+        from server.apps.local_auth import tokens as provider_tokens
+
+        allowed = provider_tokens.default_allowed_issuers()
+        if request is not None:
+            base = getattr(settings, "OIDC_PROVIDER_BASE_PATH", "oauth/local").strip(
+                "/"
+            )
+            try:
+                allowed.append(request.build_absolute_uri(f"/{base}").rstrip("/"))
+            except Exception:
+                pass
+        try:
+            claims = provider_tokens.verify_access_token(token_string, allowed)
+        except ValueError:
+            return None
+        scope = claims.get("scope", "")
+        if isinstance(scope, (list, tuple)):
+            scope = " ".join(str(s) for s in scope)
+        token: dict[str, Any] = {
+            "active": True,
+            "exp": claims.get("exp", 0),
+            "scope": scope,
+            "sub": claims.get("sub"),
+            "claims": claims,
+        }
+        for key in self._roles_claim_keys():
+            if key in claims:
+                token[key] = claims[key]
+        return token
+
+    def __call__(
+        self,
+        token_string: str,
+        scopes: list[str] | None,
+        roles: list[str] | None,
+        groups: list[str] | None,
+        request: Any,
+    ) -> dict[str, Any] | None:
+        token = (
+            self._validate_jwt(token_string, request)
+            if token_string.count(".") == 2
+            else self._validate_opaque(token_string)
+        )
+        if token is None:
+            return None
+        try:
+            self.validate_requirements(token, scopes, roles, groups, request)
+        except ValidatorError:
+            return None
+        return token
+
+
+class ZitadelIntrospectTokenValidator(BaseTokenValidator):  # type: ignore[no-any-unimported]
+    """Legacy rollback validator: Zitadel tokens via introspection.
+
+    Active only while ``ZITADEL_ROLLBACK_ENABLED`` is true (default outside
+    development/test); removed together with the Zitadel decommission.
+    """
+
     def __init__(self, *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
         self.__api_private_key = (
@@ -186,7 +317,7 @@ class ZitadelIntrospectTokenValidator(BaseTokenValidator, IntrospectTokenValidat
         payload = {
             "iss": self.__api_private_key["client_id"],
             "sub": self.__api_private_key["client_id"],
-            "aud": settings.OIDC_OP_BASE_URL,
+            "aud": settings.ZITADEL_OP_BASE_URL,
             "exp": floor(time.time()) + 60 * 60,  # Expires in 1 hour
             "iat": floor(time.time()),
         }
@@ -208,7 +339,7 @@ class ZitadelIntrospectTokenValidator(BaseTokenValidator, IntrospectTokenValidat
             "token": token_string,
         }
         response = requests.post(
-            settings.OIDC_OP_INTROSPECTION_ENDPOINT,
+            settings.ZITADEL_INTROSPECTION_URL,
             headers=headers,
             data=data,
             timeout=10,
@@ -234,64 +365,77 @@ class ZitadelIntrospectTokenValidator(BaseTokenValidator, IntrospectTokenValidat
         return token
 
 
-class LocalJWTValidator(BaseTokenValidator):
-    """Verifies JWTs issued by the local dev/test auth provider.
+def _select_validators() -> list[BaseTokenValidator]:
+    """Pick the active token validators from settings, in try-order."""
+    validators: list[BaseTokenValidator] = []
+    if settings.OIDC_ENABLED:
+        validators.append(BuiltInJWTValidator())
+    if settings.ZITADEL_RP_ENABLED or settings.ZITADEL_ROLLBACK_ENABLED:
+        validators.append(ZitadelIntrospectTokenValidator())
+    return validators
 
-    The local tokens carry the roles claim both unqualified (as the frontend
-    reads it) and project-qualified (as Zitadel introspection returns it).
+
+class BearerSyncAuth(_HttpBasicAuth, SyncAuth):
+    """``Authorization: Bearer <token>`` auth base for dmr.
+
+    dmr 0.16 ships Basic/API-key auth but no bearer variant, so this base
+    reuses the scheme-parsing mixin (``auth_scheme='Bearer'``) and adds
+    the OpenAPI ``http/bearer`` security scheme. Subclasses implement
+    :meth:`authenticate`.
     """
 
-    def _roles_claim_keys(self) -> tuple[str, ...]:
-        keys = ("urn:zitadel:iam:org:project:roles",)
-        project = getattr(settings, "ZITADEL_PROJECT", "")
-        if project:
-            keys = keys + (f"urn:zitadel:iam:org:project:{project}:roles",)
-        return keys
-
-    def __call__(
+    def __init__(  # noqa: WPS613  # unused controller_cls is part of the mixin API
         self,
-        token_string: str,
-        scopes: list[str] | None,
-        roles: list[str] | None,
-        groups: list[str] | None,
-        request: Any,
-    ) -> dict[str, Any] | None:
-        from server.apps.local_auth import tokens as local_tokens
+        *,
+        security_scheme_name: str = "bearerAuth",
+    ) -> None:
+        super().__init__(
+            security_scheme_name=security_scheme_name,
+            auth_scheme="Bearer",
+            www_authenticate=True,
+        )
 
-        try:
-            claims = local_tokens.verify_access_token(token_string)
-        except ValueError:
-            return None
+    @property
+    def www_authenticate_challenge(self) -> str | None:
+        """RFC 9110 challenge for 401 responses."""
+        return "Bearer"
 
-        # Shape the JWT claims like an introspection response so the shared
-        # validate_token logic applies unchanged.
-        token: dict[str, Any] = {
-            "active": True,
-            "exp": claims.get("exp", 0),
-            "scope": " ".join(claims.get("scope", [])),
-            "sub": claims.get("sub"),
+    def security_schemes(self, metadata, controller_cls):
+        from dmr.openapi.objects import SecurityScheme
+
+        return {
+            self.security_scheme_name: SecurityScheme(
+                type="http",
+                scheme="bearer",
+                description="Bearer token (Wodore/Zitadel access token)",
+            ),
         }
-        for key in self._roles_claim_keys():
-            if key in claims:
-                token[key] = claims[key]
 
-        try:
-            self.validate_requirements(token, scopes, roles, groups, request)
-        except ValidatorError:
+    def __call__(  # type: ignore[override]  # sync auth contract
+        self,
+        endpoint: "Endpoint",
+        controller,  # dmr Controller, avoided for import cycle
+    ) -> "SyncAuth | None":
+        """Extract the bearer token and delegate to ``authenticate``."""
+        header = controller.request.headers.get(self.header)
+        if not header:
             return None
-        return token
+        encoded = self._split_encoded_credentials(header)
+        if encoded is None:
+            return None
+        return self.authenticate(endpoint, controller, encoded)
+
+    def authenticate(
+        self,
+        endpoint: "Endpoint",
+        controller,
+        token: str,
+    ) -> "SyncAuth | None":
+        """Validate the token; return ``self`` on success."""
+        raise NotImplementedError
 
 
-def _select_validator() -> BaseTokenValidator | None:
-    """Pick the token validator from the active auth mode (if any)."""
-    if settings.OIDC_ENABLED:
-        return ZitadelIntrospectTokenValidator()
-    if settings.LOCAL_AUTH_ENABLED:
-        return LocalJWTValidator()
-    return None
-
-
-class AuthBearer(HttpBearer):
+class AuthBearer(BearerSyncAuth):
     def __init__(
         self,
         scopes: list[str] | None = None,
@@ -303,19 +447,41 @@ class AuthBearer(HttpBearer):
         self.scopes = scopes
         self.roles = roles
         self.groups = groups
-        self.validator = _select_validator()
+        self.validators = _select_validators()
 
-    def authenticate(self, request: Any, token: str) -> dict[str, Any] | None:
-        if self.validator is None:
-            raise HttpError(
-                401,
-                "Authentication is not configured on this server "
-                "(OIDC and local auth are both disabled).",
+    def authenticate(
+        self,
+        endpoint: "Endpoint",
+        controller,
+        token: str,
+    ) -> "SyncAuth | None":
+        """Try every configured validator in order.
+
+        Kept compatible with the former ninja ``HttpBearer`` flow:
+        validators return the token payload on success, ``None`` on
+        failure; a fully unconfigured server answers a clean 401.
+        """
+        if not self.validators:
+            raise APIError(
+                {
+                    "code": ErrorCode.not_authenticated,
+                    "detail": "Authentication is not configured on this "
+                    "server (OIDC is disabled).",
+                },
+                status_code=401,
             )
-        return self.validator(
-            token_string=token,
-            scopes=self.scopes,
-            roles=self.roles,
-            groups=self.groups,
-            request=request,
-        )
+        request: HttpRequest = controller.request
+        for validator in self.validators:
+            result = validator(
+                token_string=token,
+                scopes=self.scopes,
+                roles=self.roles,
+                groups=self.groups,
+                request=request,
+            )
+            if result is not None:
+                # Auth succeeded — remember the payload for the handler
+                # (ninja stored it on request.auth).
+                request.auth = result  # type: ignore[attr-defined]
+                return self
+        return None

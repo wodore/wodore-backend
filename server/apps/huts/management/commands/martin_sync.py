@@ -54,7 +54,7 @@ class Command(BaseCommand):
             "--category-variants",
             type=str,
             default="",
-            help="Comma-separated list of category variants to sync (e.g., detailed,simple,mono). "
+            help="Comma-separated list of category variants to sync (e.g., color,primitive,mono). "
             "Default: all available variants",
         )
         parser.add_argument(
@@ -164,8 +164,16 @@ class Command(BaseCommand):
             target_path, dry_run, stats, include_list, variants, Category
         )
 
-        # 2. Copy style files
-        self._sync_styles(target_path, dry_run, stats)
+        # 1b. Copy static sprites (basemap sprites like wd-maps: peak,
+        # station markers, rings — referenced root-relative by the
+        # backend-served basemap styles, so Martin must serve them too).
+        self._sync_static_sprites(target_path, dry_run, stats)
+
+        # 2. Copy font files (TTF for Martin glyph serving)
+        # (Styles are no longer synced: the backend serves them from the
+        # basemaps registry at /v1/map/styles/<slug>.json — MapLibre styles
+        # live in the database now, Martin serves tiles/sprites/fonts only.)
+        self._sync_fonts(target_path, dry_run, stats)
 
         # 3. Generate and copy martin.yaml config with sprite paths
         self._sync_config(target_path, dry_run, stats, merge_file_path)
@@ -208,7 +216,7 @@ class Command(BaseCommand):
         # Get root categories to check (same filtering as sync)
         root_categories = Category.objects.filter(
             is_active=True, parent=None
-        ).select_related("symbol_detailed", "symbol_simple", "symbol_mono")
+        ).select_related("symbol_color", "symbol_primitive", "symbol_mono")
 
         # Filter by include_list if specified
         if include_list is not None:
@@ -235,7 +243,7 @@ class Command(BaseCommand):
             # Add child category files
             children = Category.objects.filter(
                 is_active=True, parent=root_category
-            ).select_related("symbol_detailed", "symbol_simple", "symbol_mono")
+            ).select_related("symbol_color", "symbol_primitive", "symbol_mono")
 
             for child in children:
                 for variant in variants:
@@ -293,42 +301,92 @@ class Command(BaseCommand):
         else:
             self.stdout.write("  ✓ No old files to remove")
 
-    def _sync_styles(self, target_path, dry_run, stats):
-        """Copy MapLibre style JSON files."""
-        self.stdout.write("\n[2/3] Syncing style files...")
+    def _sync_static_sprites(self, target_path, dry_run, stats):
+        """Copy static sprite SVG files (basemap sprites like wd-maps).
 
-        # Source: tile_server/styles/ in Git repo
-        source_dir = Path(settings.BASE_DIR) / "tile_server" / "styles"
+        ``tile_server/sprites/<name>/`` directories are sprite collections
+        authored in the repo (peak/station/ring markers referenced by the
+        backend-served basemap styles). They are copied verbatim into the
+        martin_sync target and registered in ``sprite_dirs`` so the
+        generated martin.yaml serves them (``/sprite/<name>``).
+
+        Their flat layout (SVGs directly in the collection dir, no variant
+        subdirectories) keeps them outside ``_cleanup_old_sprites``, which
+        only prunes files inside variant dirs.
+        """
+        self.stdout.write("\n[1b] Syncing static sprites...")
+
+        source_dir = Path(settings.BASE_DIR) / "tile_server" / "sprites"
 
         if not source_dir.exists():
             self.stdout.write(
-                self.style.WARNING(f"  ⚠ Styles directory not found: {source_dir}")
+                self.style.WARNING(
+                    f"  ⚠ Static sprites directory not found: {source_dir}"
+                )
             )
             return
 
-        # Target: <target>/styles/
-        target_dir = target_path / "styles"
+        # Ensure sprite_dirs is initialized in stats
+        if "sprite_dirs" not in stats:
+            stats["sprite_dirs"] = []
 
-        # Find all JSON style files
-        style_files = list(source_dir.glob("*.json"))
+        for sprite_category_dir in sorted(source_dir.iterdir()):
+            if not sprite_category_dir.is_dir():
+                continue
 
-        if not style_files:
+            category_name = sprite_category_dir.name
+            target_dir = target_path / "sprites" / category_name
+
+            # Register in sprite_dirs for martin.yaml config
+            if category_name not in stats["sprite_dirs"]:
+                stats["sprite_dirs"].append(category_name)
+
+            svg_files = list(sprite_category_dir.glob("*.svg"))
+            self.stdout.write(f"  {category_name}: {len(svg_files)} SVG(s)")
+
+            for svg_file in sorted(svg_files):
+                target_file = target_dir / svg_file.name
+                self._copy_file(
+                    svg_file,
+                    target_file,
+                    target_dir,
+                    dry_run,
+                    stats,
+                    label=f"static-sprite: {category_name}/{svg_file.stem}",
+                )
+
+    def _sync_fonts(self, target_path, dry_run, stats):
+        """Copy TTF font files for Martin glyph serving."""
+        self.stdout.write("\n[2b] Syncing font files...")
+
+        source_dir = Path(settings.BASE_DIR) / "tile_server" / "fonts"
+
+        if not source_dir.exists():
             self.stdout.write(
-                self.style.WARNING(f"  ⚠ No style files found in {source_dir}")
+                self.style.WARNING(f"  ⚠ Fonts directory not found: {source_dir}")
             )
             return
 
-        self.stdout.write(f"  Found {len(style_files)} style file(s)")
+        target_dir = target_path / "fonts"
+        font_files = list(source_dir.glob("*.ttf")) + list(source_dir.glob("*.otf"))
 
-        for style_file in sorted(style_files):
-            target_file = target_dir / style_file.name
+        if not font_files:
+            self.stdout.write(
+                self.style.WARNING(f"  ⚠ No font files found in {source_dir}")
+            )
+            return
+
+        self.stdout.write(f"  Found {len(font_files)} font file(s)")
+
+        for font_file in sorted(font_files):
+            target_file = target_dir / font_file.name
             self._copy_file(
-                style_file,
+                font_file,
                 target_file,
                 target_dir,
                 dry_run,
                 stats,
-                label=f"style: {style_file.stem}",
+                label=f"font: {font_file.stem}",
             )
 
     def _sync_config(self, target_path, dry_run, stats, merge_file_path=""):
@@ -421,9 +479,7 @@ class Command(BaseCommand):
                 "  No sprite directories synced, paths field removed from config"
             )
 
-        # Configure styles path
-        config["styles"] = {"paths": "${MARTIN_SYNC_MOUNT:-/martin_sync}/styles"}
-        self.stdout.write("  Configured styles path")
+        self.stdout.write("  No styles path configured (styles served by the API)")
 
         # Target: <target>/config/martin.yaml
         target_dir = target_path / "config"
@@ -476,7 +532,7 @@ class Command(BaseCommand):
         # Get root categories (no parent)
         root_categories = Category.objects.filter(
             is_active=True, parent=None
-        ).select_related("symbol_detailed", "symbol_simple", "symbol_mono")
+        ).select_related("symbol_color", "symbol_primitive", "symbol_mono")
 
         # Filter by include_list if specified
         if include_list is not None:
@@ -518,7 +574,7 @@ class Command(BaseCommand):
             # Get all children of this root category
             children = Category.objects.filter(
                 is_active=True, parent=root_category
-            ).select_related("symbol_detailed", "symbol_simple", "symbol_mono")
+            ).select_related("symbol_color", "symbol_primitive", "symbol_mono")
 
             if children.exists():
                 self.stdout.write(f"    Found {children.count()} children")
@@ -841,9 +897,27 @@ class Command(BaseCommand):
                         "Next steps:\n"
                         "  Local: docker-compose restart martin\n"
                         "  Kubernetes: kubectl rollout restart deployment martin\n"
-                        "  Verify: curl http://martin-service:3000/catalog"
+                        "  Verify: curl http://martin-service:3000/catalog\n\n"
+                        "  Asset versions: an immediate martin_asset_watch\n"
+                        "  observation was enqueued — it publishes the new\n"
+                        "  sprite/font hashes once Martin serves the new\n"
+                        "  bytes (after the restart); the recurring q2\n"
+                        "  schedule is the backstop."
                     )
                 )
+                # Content-gated publication: enqueue an observation now;
+                # it only publishes when Martin's served bytes actually
+                # changed (i.e. after the restart above).
+                try:
+                    from django_q.tasks import async_task
+
+                    async_task("server.apps.basemaps.tile_assets.run_martin_watcher")
+                except Exception as exc:  # enqueue is best-effort
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f"  ⚠ Could not enqueue martin_asset_watch: {exc}"
+                        )
+                    )
             else:
                 self.stdout.write(
                     self.style.SUCCESS(

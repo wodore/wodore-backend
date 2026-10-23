@@ -5,8 +5,24 @@ This file is required and if development.py is present these
 values are overridden.
 """
 
+from server.settings.components.caches import CACHES
 from server.settings.components.common import DJANGO_TRUSTED_DOMAINS, MIDDLEWARE
-from server.settings.components.oidc import discovery_info
+from server.settings.components.oidc import (
+    ZITADEL_RP_ENABLED,
+)
+
+# Throttle counters must be shared across workers (openspec: api-throttling):
+# LocMem would keep per-process limits (multiplied by worker count). The
+# table is created by the no-args `app createcachetable` (idempotent).
+CACHES["throttling"] = {
+    "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+    "LOCATION": "django_cache_throttling",
+    "TIMEOUT": 3600,
+    "OPTIONS": {
+        "MAX_ENTRIES": 100000,  # day-window keys expire after 24 h; steady
+        # state ~= distinct daily client IPs, well under the cap
+    },
+}
 
 # Production flags:
 # https://docs.djangoproject.com/en/4.2/howto/deployment/
@@ -23,8 +39,6 @@ ALLOWED_HOSTS = [
     "localhost",
 ]
 
-if discovery_info:  # use only if setup correct
-    MIDDLEWARE += ("mozilla_django_oidc.middleware.SessionRefresh",)
 
 # Staticfiles
 # https://docs.djangoproject.com/en/4.2/ref/contrib/staticfiles/
@@ -61,3 +75,10 @@ CSRF_COOKIE_SECURE = True
 CORS_ALLOWED_ORIGIN_REGEXES = [
     *[f"^https?://{d}" for d in DJANGO_TRUSTED_DOMAINS],
 ]
+
+# Zitadel RP mode only (AUTH_PROVIDER=zitadel): refresh OIDC sessions.
+
+if ZITADEL_RP_ENABLED:
+    MIDDLEWARE += (
+        "server.middleware.oidc.AsyncSafeSessionRefresh",  # pyright: ignore[reportUndefinedVariable]
+    )

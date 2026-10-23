@@ -31,3 +31,11 @@ class MetaImageWidget(ClearableFileInput):
             if url:
                 return url
         return upload
+
+    def get_context(self, name, value, attrs):
+        context = super().get_context(name, value, attrs)
+        # External fallback for pinned images (no local file): the admin sets
+        # `raw_url` (the instance's source_url_raw) so the template can render
+        # the raw preview — focal point selection then works like on uploads.
+        context["widget"]["raw_url"] = getattr(self, "raw_url", None)
+        return context

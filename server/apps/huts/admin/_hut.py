@@ -12,6 +12,7 @@ from django_admin_runner.admin import CommandRunnerModelAdminMixin
 from django.conf import settings
 from django.contrib import admin
 from django.contrib.postgres.aggregates import JSONBAgg
+from django.db.models import F
 from django.db.models.functions import JSONObject, Lower
 from django.http import HttpRequest
 from django.shortcuts import redirect
@@ -76,6 +77,8 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         "is_modified",
         "is_active",
         "review_tag",
+        "visits_30d",
+        "visits_365d",
         "description_quality_display",
         "view_link",
     )
@@ -153,6 +156,8 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         return super().formfield_for_dbfield(db_field, request, **kwargs)
 
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
+        from server.apps.visits.models import visit_window_annotation
+
         qs = super().get_queryset(request).prefetch_related("image_set")
         # prefetch_related("orgs_source", "orgs_source__organization").
         return qs.select_related(
@@ -165,7 +170,19 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
                     link_i18n="orgs_source__link",
                 )
             ),
+            visits_30d=visit_window_annotation(Hut, days=30),
+            visits_365d=visit_window_annotation(Hut, days=365),
         )
+
+    @display(description=_("Visits 30d"), ordering="visits_30d")  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+    def visits_30d(self, obj):
+        """Visit sum over the last 30 days (openspec: place-visit-counter)."""
+        return obj.visits_30d
+
+    @display(description=_("Visits 1y"), ordering="visits_365d")  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+    def visits_365d(self, obj):
+        """Visit sum over the last year (openspec: place-visit-counter)."""
+        return obj.visits_365d
 
     @display(
         description=_("Status"),  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
@@ -205,12 +222,9 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
 
     @display(description="")
     def symbol_img(self, obj):  # new
-        if (
-            obj.hut_type_open.symbol_detailed
-            and obj.hut_type_open.symbol_detailed.svg_file
-        ):
+        if obj.hut_type_open.symbol_color and obj.hut_type_open.symbol_color.svg_file:
             return mark_safe(
-                f'<img src="{obj.hut_type_open.symbol_detailed.svg_file.url}" width="50px"/>'
+                f'<img src="{obj.hut_type_open.symbol_color.svg_file.url}" width="50px"/>'
             )
         return "-"
 
@@ -242,11 +256,18 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
     @display(description=_("Photos"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def hut_images(self, obj):  # new
         img_html = "<div>"
+        # Bound the tab: huts with dozens of pins rendered dozens of imagor
+        # transforms (each a cold origin fetch) and made the change page crawl.
+        max_images = 30
+        images = obj.image_set.select_related("source_org", "license")
+        total = images.count()
+        shown = 0
         for i, img in enumerate(
-            obj.image_set.select_related("source_org", "license")
-            .order_by("details__order")
-            .all()
+            images.order_by(F("details__score").desc(nulls_last=True), "pk")[
+                :max_images
+            ]
         ):
+            shown += 1
             link = reverse("admin:images_image_change", args=[img.pk])
             img_tag = f"""
               <a href='{link}' target='_blank'>{img.get_image_tag(radius=10, height=120, width=200)}</a>
@@ -275,13 +296,23 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
                                       """
                 )
             # print(img.details.order)
+            # Pinned external images have no local file — link to the raw
+            # source instead of img.image.url (which raises ValueError and
+            # 500'd the whole change page for pinned huts).
+            view_url = img.source_url_raw or (img.image.url if img.image else "")
+            view_button = (
+                f"<span><a class='text-xs' href=\"{view_url}\" target='_blank'> "
+                f"<span class='material-symbols-outlined'> visibility </span> </a>"
+                if view_url
+                else ""
+            )
             img_info = f"""
               <span class="text-xs">{public_private_tag}</span>
               <h2><b>#{i + 1} - {img.caption_i18n}</b></h2>
               Status: <i>{img.review_status}</i><br/>
               {", ".join(author_source)}<br/>
               <small>{lic}</small><br/>
-            <span><a class="text-xs" href="{img.image.url}" target='_blank'> <span class="material-symbols-outlined"> visibility </span> </a>
+            {view_button}
             <span><a class="text-xs" href="{link}" target='_blank'> <span class="material-symbols-outlined"> edit </span> </a>
             """
             img_html += f"""<div style="padding:5px;">
@@ -292,6 +323,12 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
                                 {img_info}
                               </div>
                             </div>"""
+        if total > shown:
+            img_html += (
+                f"<p><small>… and {total - shown} more — "
+                f"<a href='{reverse('admin:images_image_changelist')}?details__hut={obj.pk}' target='_blank'>"
+                f"open the image list</a></small></p>"
+            )
         img_html += "</div>"
         return mark_safe(img_html)
 
@@ -304,7 +341,9 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
                 .get_html()
             )
 
-        img = obj.image_set.order_by("details__order").first()
+        img = obj.image_set.order_by(
+            F("details__score").desc(nulls_last=True), "pk"
+        ).first()
         if img:
             return img.get_image_tag(radius=15, height=50, width=50)
         return ""

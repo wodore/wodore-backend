@@ -1,6 +1,14 @@
 """
 Provider for Panoramax images.
-Uses Panoramax STAC API to find geolocated 360° images.
+
+Queries the official Panoramax STAC API and only accepts images from
+approved producers (allow-list). Rationale: Swiss coverage on the official
+instance is dominated by bulk street-side robot imports (``p4n-pics``
+"Batch …" sequences, ``Robot8A``, ``ordinatous``, …) which are unusable
+as hut/place images, while the good curated pictures (MapComplete
+uploads, producer ``mapcomplete`` — federated onto the official
+instance) are a small minority. Images from non-approved producers are
+skipped entirely.
 """
 
 from datetime import datetime, timezone
@@ -8,7 +16,7 @@ from typing import Any
 
 import structlog
 
-from .base import ImageProvider, ImageResult
+from .base import ImageProvider, ImageResult, provider_http_timeout
 from .schemas import GeoPlaceSchema
 from .scoring import (
     calculate_age_penalty,
@@ -31,12 +39,37 @@ class PanoramaxProvider(ImageProvider):
     cache_ttl = 60  #  minute
     priority = 4  # After camptocamp, before wikidata
 
+    #: Producer allow-list: images whose ``geovisio:producer`` is not in
+    #: this set are skipped entirely. ``mapcomplete`` = the curated
+    #: hut/trail pictures (federated onto the official instance); bulk
+    #: robot imports must never reach the response.
+    approved_producers: frozenset[str] = frozenset({"mapcomplete"})
+
+    #: The API ignores producer filters server-side (``producer`` param
+    #: and CQL2 ``filter`` on ``geovisio:producer`` are silently dropped),
+    #: so filtering happens client-side. Over-fetch beyond the requested
+    #: limit so a flood of newer robot pictures cannot push the (often
+    #: older) approved ones out of the result window. Capped at 500 —
+    #: the API's own maximum.
+    max_fetch_limit: int = 500
+    min_fetch_limit: int = 200
+
+    def fetch_limit_for(self, limit: int) -> int:
+        """API request limit for a caller-requested result limit.
+
+        Clamped to ``[min_fetch_limit, max_fetch_limit]``: over-fetch so
+        the client-side allow-list still sees approved images when newer
+        robot imports flood the result window; never above the API max.
+        """
+        return min(self.max_fetch_limit, max(self.min_fetch_limit, limit))
+
     def __init__(self, api_base: str = "https://api.panoramax.xyz"):
         """
         Initialize PanoramaxProvider.
 
         Args:
-            api_base: Panoramax API base URL
+            api_base: Panoramax API base URL (official instance by default;
+                also serves the web viewer used for source deep-links)
         """
         self.api_base = api_base
         logger.debug("Initialized PanoramaxProvider", api_base=api_base)
@@ -91,13 +124,18 @@ class PanoramaxProvider(ImageProvider):
                 )
             }
 
-            async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
-                # Single search request to /api/search
+            async with httpx.AsyncClient(
+                timeout=provider_http_timeout(), headers=headers
+            ) as client:
+                # Single search request to /api/search. The producer
+                # allow-list is applied client-side (server ignores
+                # producer filters), so over-fetch to keep approved images
+                # reachable behind robot-import floods.
                 url = f"{self.api_base}/api/search"
                 params = {
                     "bbox": bbox,
                     "sort": "ts",
-                    "limit": limit,  # Use requested limit
+                    "limit": self.fetch_limit_for(limit),
                 }
 
                 logger.debug("Fetching Panoramax search", url=url, params=params)
@@ -218,6 +256,17 @@ class PanoramaxProvider(ImageProvider):
 
                 return R * c
 
+            # Producer allow-list: skip everything not approved entirely
+            # (bulk robot imports must never reach the response).
+            producer = properties.get("geovisio:producer")
+            if not producer or str(producer).lower() not in self.approved_producers:
+                logger.debug(
+                    "Skipping image from non-approved producer",
+                    producer=producer,
+                    feature_id=feature.get("id"),
+                )
+                return None
+
             distance_m = haversine_distance(query_lat, query_lon, geom_lat, geom_lon)
 
             # Extract image URLs from assets (STAC standard: assets at root level)
@@ -304,17 +353,8 @@ class PanoramaxProvider(ImageProvider):
                 else:
                     license_url = license_data
 
-            # Build attribution
-            # Try to get author from geovisio:producer field first
-            author = properties.get("geovisio:producer")
-
-            # Fallback to providers array
-            if not author:
-                providers = properties.get("providers")
-                if providers and isinstance(providers, list) and len(providers) > 0:
-                    author = providers[0].get("name", "Panoramax contributors")
-                else:
-                    author = "Panoramax contributors"
+            # Build attribution — author is the allow-listed producer
+            author = producer
 
             attribution = f'{author}, <a href="{default_url}">Panoramax</a>'
 
@@ -336,10 +376,11 @@ class PanoramaxProvider(ImageProvider):
 
             from django.contrib.gis.geos import Point
 
-            # Build source URL
+            # Build source URL (canonical viewer deep-link format:
+            # hash params, as emitted by the Panoramax web UI itself)
             item_id = feature.get("id", "")
             collection_id = feature.get("collection", "")
-            source_url = f"{self.api_base}/?pic={item_id}&seq={collection_id}"
+            source_url = f"{self.api_base}/#pic={item_id}&seq={collection_id}"
 
             # Calculate score
             score = self._score_panoramax_image(feature, properties, assets)

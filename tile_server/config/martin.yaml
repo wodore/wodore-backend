@@ -17,10 +17,16 @@ postgres:
   # Default SRID for spatial queries
   default_srid: 4326
 
-  max_feature_count: 5000 # either a positive integer, or null=unlimited (default)
+  max_feature_count: 5000 # positive int, or null=unlimited (default)
 
   # Automatically compute bounds for tables
-  auto_bounds: quick
+  # No auto bounds: martin computes source bounds at startup and advertises
+  # them in the TileJSON; maplibre silently skips tile requests outside
+  # them, so huts imported after a martin restart stayed invisible until
+  # the next restart (and the quick sampler produced a wrong envelope).
+  # Without bounds maplibre fetches every requested tile - empty tiles are
+  # cheap at this table size (max_feature_count, z7-16).
+  auto_bounds: skip
 
   auto_publish: false
 
@@ -30,6 +36,22 @@ postgres:
     huts:
       # Layer ID (used in vector tiles)
       layer_id: huts
+
+      # Cache-Control: long — tile URLs are content-keyed via the
+      # serve-time `?v=` asset version (basemaps tile_assets): a hut edit
+      # rotates the version in the served style, so a fresh cache key
+      # exists before any long-cached response could be stale.
+      cache_control: public, max-age=604800
+
+      # MLT (MapLibre Tile) v1: serve-time MVT→MLT conversion, served on
+      # the explicit .mlt URL space (the tile-router strips the suffix
+      # and sends `Accept: application/vnd.maplibre-tile`). Kept for
+      # Martin < 1.16 where conversion is config-gated (≥ 1.9 required);
+      # on Martin ≥ 1.16 conversion is implicit and this is a no-op.
+      # Client-visible scoping lives in the served styles (.mlt
+      # templates + `encoding: mlt`) — phase 1: the huts overlay only.
+      # `auto` uses mlt-core's compatibility-safe encoder defaults.
+      convert_to_mlt: auto
 
       # Schema and table/view name
       schema: public
@@ -91,17 +113,26 @@ postgres:
       clip_geom: true
 
       # Points overzoom fine beyond maxzoom; no need for z17-20 tile generation
-      minzoom: 7
-      maxzoom: 16
+      # minzoom 5 (not 7): full-country views (e.g. all of New Zealand sit
+      # around z5-6) must serve hut tiles - the frontend hut overlay floor is
+      # Cap generation at z9: hut symbols overzoom cleanly from z9 tiles
+      # (same pattern as wd-bookings) — deeper zooms request zero new tiles,
+      # so hut icon updates on zoom are pure placement re-runs (instant)
+      # instead of queueing behind basemap/terrain tiles.
+      maxzoom: 9
 
     # GeoPlaces vector tiles (using view with precomputed JOINs)
     # This source serves all data without dynamic filtering
     # Recommended for: Simple use cases, backward compatibility
-    # Alternative: Use geoplaces_fn for advanced filtering (language, categories, fields)
+    # Alternative: Use geoplaces_fn for advanced filtering
+    # (language, categories, fields)
     geoplaces_view:
       # Layer ID (used in vector tiles)
       layer_id: geoplaces
       id_columns: slug
+
+      # Cache-Control: 1 day — changes with POI edits
+      cache_control: public, max-age=86400
 
       # Schema and table/view name
       schema: public
@@ -158,7 +189,7 @@ postgres:
       maxzoom: 16
 
   functions:
-    # GeoPlaces vector tiles (using function with dynamic filtering and clustering)
+    # GeoPlaces vector tiles (function source: dynamic filtering and clustering)
     # This source supports advanced filtering via URL query parameters
     # Recommended for: Production use with dynamic tile optimization
     # See: server/apps/geometries/models/tiles_view.py for documentation
@@ -170,13 +201,17 @@ postgres:
     #   cache_ttl=0        # Disable caching (generate fresh tiles)
     #
     # Usage examples (all parameters use comma-separated strings):
-    #   /geoplaces/{z}/{x}/{y}                                              # All defaults (German, clustering enabled, 1hr cache)
-    #   /geoplaces/{z}/{x}/{y}?cache_ttl=7200                                 # 2 hour cache
-    #   /geoplaces/{z}/{x}/{y}?cache_ttl=0                                    # No caching (fresh tiles)
-    #   /geoplaces/{z}/{x}/{y}?lang=en                                      # English labels
-    #   /geoplaces/{z}/{x}/{y}?cluster_max_zoom=10                         # Extend clustering to z10
-    #   /geoplaces/{z}/{x}/{y}?cluster_max_zoom=null                        # Disable clustering
-    #   /geoplaces/{z}/{x}/{y}?cluster_radius_m=10000                       # Larger clusters (10km at z8)
+    #   /geoplaces/{z}/{x}/{y}
+    #     -> all defaults (German, clustering enabled, 1hr cache)
+    #   /geoplaces/{z}/{x}/{y}?cache_ttl=7200   # 2 hour cache
+    #   /geoplaces/{z}/{x}/{y}?cache_ttl=0      # no caching (fresh tiles)
+    #   /geoplaces/{z}/{x}/{y}?lang=en          # English labels
+    #   /geoplaces/{z}/{x}/{y}?cluster_max_zoom=10
+    #     -> extend clustering to z10
+    #   /geoplaces/{z}/{x}/{y}?cluster_max_zoom=null
+    #     -> disable clustering
+    #   /geoplaces/{z}/{x}/{y}?cluster_radius_m=10000
+    #     -> larger clusters (10km at z8)
     #
     # Clustering behavior (defaults):
     #   z0-8: All POIs clustered by (category, grid_cell)
@@ -199,10 +234,120 @@ postgres:
       function: get_geoplaces_for_tiles
       id_columns: slug
 
-      # Zoom levels (function handles importance filtering and clustering automatically)
+      # Cache-Control: 1 day — changes with POI edits (the function-level
+      # tile cache in Postgres is the primary defense; this is the edge hint)
+      cache_control: public, max-age=86400
+
+      # Zoom levels (function handles importance + clustering automatically)
       # Points overzoom fine beyond maxzoom
       minzoom: 3
       maxzoom: 16
+
+    # Hut availability vector tiles (function source).
+    # One feature per hut; the per-day series is flattened into scalar
+    # properties d0..dN_{status,free,total,type,type_identifier,type_color}
+    # (MVT cannot carry nested arrays). URL query params reach the function
+    # as `query_params` jsonb:
+    #   /availability/{z}/{x}/{y}?date=2026-02-14&days=4
+    #     date=YYYY-MM-DD  REQUIRED start date (frontend-computed — "now"
+    #                      logic belongs to the client so every (date, days)
+    #                      URL is edge-cacheable; missing/invalid date
+    #                      yields an empty tile, not a default)
+    #     days=N           1..8, default 4 (four day-column layers)
+    #     days_max_zoom=Z  below zoom Z serve only day 0 (default 7, 0=off)
+    #                      — low-zoom tiles stay small, URL stays zoom-
+    #                      independent; the feature property `days` reports
+    #                      how many day columns the tile carries
+    #     cache_ttl=S     DB tile cache TTL seconds (default 900 = 15 min,
+    #                      0 = always regenerate)
+    # Served from huts with availability rows in the window; empty window ->
+    # empty tile. Deeper zooms overzoom the z9 tiles (no extra requests).
+    # See: server/apps/availability/tiles.py + migration
+    #      0016_add_availability_tile_function for the full contract.
+    availability:
+      schema: public
+      function: get_availability_for_tiles
+
+      # Cache-Control: 15 min — matches the DB tile cache TTL; the date-keyed
+      # URLs mean "today" never invalidates anything (a new date is a new
+      # URL; old dates stay warm and correct).
+      cache_control: public, max-age=900
+
+      # minzoom 5 like the huts layer; maxzoom 9 — the flattened series at
+      # z9 already carries everything the overlay needs, deeper zooms
+      # overzoom client-side, which also bounds the tile cache universe.
+      minzoom: 5
+      maxzoom: 9
+
+# Server-side terrain postprocessing (Martin >= 1.16):
+#   contours - Mapterhorn Terrarium tiles -> traced vector MVT (PRIORITY:
+#     offloads the client-side maplibre-contour plugin; layer `contour`,
+#     tags `ele` (int m) + `major` (bool))
+#   hillshade - AWS Terrain Tiles Mapzen *normal* tiles -> baked raster PNG
+# Both outputs REPLACE the source tiles, served at
+# /hillshade/{z}/{x}/{y} and /contours/{z}/{x}/{y}.
+# Free, world-wide, no API key:
+# https://registry.opendata.aws/terrain-tiles/
+#
+# Martin caches the upstream elevation/normal tiles internally (3x3
+# neighbourhood per output tile) but NOT the postprocessed output — warm
+# output tiles will be cached at the prod cluster edge (a reference nginx
+# proxy_cache config is documented in _work/261008_ofm_mtk_parity.md of
+# PR #292; deliberately NOT shipped in this repo).
+#
+# Cache-Control policy (Martin native `cache_control`, per-source values
+# override the top-level default):
+#   default        604800  (1 week)  - styles/catalog/misc tiles
+#   huts            3600   (1 hour)  - carries has_availability state
+#   geoplaces*     86400   (1 day)   - changes with POI edits
+#   contours     2592000   (30 days) - DEM changes ~never
+#   hillshade    2592000   (30 days) - DEM changes ~never
+cache_control: public, max-age=604800
+passthrough:
+  sources:
+    hillshade:
+      url: >-
+        https://elevation-tiles-prod.s3.amazonaws.com/normal/{z}/{x}/{y}.png
+      # Upstream serves no TileJSON - declare zoom bounds so Martin
+      # stops at z15 (verified: normal/15 answers 200).
+      maxzoom: 15
+      cache_control: public, max-age=2592000
+      convert_to_hillshade: auto
+    contours:
+      # Upstream: AWS Terrain Tiles terrarium PNG (global ~30m, coarser in the
+      # Alps but CLEAN tile geometry). The preferred Mapterhorn Terrarium webp
+      # source (global 30m + national DEMs: CH 2m/partial 0.5m, AT 1m,
+      # DE 0.25-1m, IT Alpine 2-5m — https://mapterhorn.com/attribution)
+      # produces straight contour artifacts along DEM inner-tile boundaries
+      # (maplibre/martin#3281, verified in the PR #292 lane): switch back once
+      # fixed upstream.
+      url: >-
+        https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png
+      maxzoom: 15
+      cache_control: public, max-age=2592000
+      attribution: >-
+        <a href='https://registry.opendata.aws/terrain-tiles/'>AWS Terrain
+        Tiles</a>
+      # zoom_intervals mirror the client-side maplibre-contour thresholds
+      # of wd-outdoor-base-ofm.json (z*interval*major):
+      # 11*200*1000 ~ 12*100*500 ~ 14*50*200 ~ 15*20*100 ->
+      # 200m@z11, 100m@z12-13, 50m@z14, 20m@z15, none below z11 (MTK parity).
+      convert_to_contour:
+        zoom_intervals:
+          0: 0 # no contours below z11
+          11: 200
+          12: 100
+          14: 50
+          15: 20
+        # every 5th line tagged major:true ->
+        # z11: 1000m index, z12: 500m, z15: 100m
+        major_interval: 5
+
+# Fonts (TTF) for MapLibre glyph serving
+# Martin generates PBF ranges on the fly from TTF files
+fonts:
+  paths:
+    - ${MARTIN_SYNC_MOUNT:-/martin_sync}/fonts
 
 sprites:
   # Size of the sprite cache (in MB).
@@ -211,10 +356,12 @@ sprites:
 
   paths:
     # - ${MARTIN_SYNC_MOUNT:-/martin_sync}/sprites/CATEGORY1
+    # Note: sprite paths are auto-generated by martin_sync from
+    # database categories + static sprite directories (tile_server/sprites/)
 
   #sources:
-  #  # SVG images in this directory will be published as a "categories" sprite source
-  #  # Default: /sprite/sprites (mounted in docker-compose from ./martin_sync/sprites)
+  #  # SVG images here will be published as a "categories" sprite source
+  #  # Default: /sprite/sprites (docker-compose mount ./martin_sync/sprites)
   #  # Production: /sprite/sprites (mounted from PVC after martin_sync command)
   #  categories: ${SPRITE_PATH:-/sprite/sprites}
 # MBTiles file sources
