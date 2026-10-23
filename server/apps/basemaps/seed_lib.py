@@ -330,7 +330,10 @@ HUTS_STYLE: dict[str, Any] = {
             "tiles": ["{TILE_SERVER_URL}/huts/{z}/{x}/{y}.mlt"],
             "encoding": "mlt",
             "minzoom": 5,
-            "maxzoom": 16,
+            # Overzoom cap (matches the Martin table): symbols re-place
+            # instantly from z9 ancestors on deeper zooms — no new tiles,
+            # so zoom icon updates never queue behind basemap/terrain loads.
+            "maxzoom": 9,
             "promoteId": "slug",
         },
         "wd-bookings": {
