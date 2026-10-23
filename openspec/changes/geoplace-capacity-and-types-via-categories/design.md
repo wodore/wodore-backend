@@ -146,11 +146,10 @@ tile consumers get capacities for free once written.
 
 - **AmenityDetail population for huts**: `open_monthly` →
   `opening_months` (identical month-status vocabulary), contact phones →
-  `phones`, `url`/contact URLs → external-link associations; decide
-  `hut_owner` → `AmenityDetail.brand` (owner-as-category) vs. keeping
-  the owners app — `brand` currently means commercial chains (Volg,
-  Migros), owners are operating clubs (SAC Bern), so this needs a
-  vocabulary decision, not a schema one.
+  `phones`, `url`/contact URLs → external-link associations. The entity
+  question is decided in `geoplace-parties`: a neutral **Party** entity
+  with `role.*` category classifiers replaces both `AmenityDetail.brand`
+  and — via the `import_parties` merge — `hut_owner` (role `role.owner`).
 - **`geoplace-availability`**: re-anchor availability on GeoPlace
   (booking-source reference, type-on-date) including how
   `HutAvailability`/`HutAvailabilityHistory` are migrated/preserved, and
