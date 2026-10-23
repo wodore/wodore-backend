@@ -14,7 +14,14 @@ from typing import Any
 
 from django.conf import settings
 
-GLYPHS = "{TILE_SERVER_URL}/font/{fontstack}/{range}.pbf"
+# Canonical Martin glyph route, extension-less ON PURPOSE: Martin 301s
+# `/font/{stack}/{range}.pbf` to this route while DROPPING the query
+# string (martin <= 1.16.1 `redirect_font_ext`), so a `.pbf` template
+# would strip the serve-time `?v=` asset version off every glyph
+# request — an extra redirect round-trip per fontstack/range and a
+# cache key that never rotates on font changes. The canonical route
+# answers 200 directly with the query intact.
+GLYPHS = "{TILE_SERVER_URL}/font/{fontstack}/{range}"
 
 SWISSTOPO_HOSTS = tuple(f"wmts{i}.geo.admin.ch" for i in range(10))
 
