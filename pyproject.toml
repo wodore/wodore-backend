@@ -362,6 +362,21 @@ missing-override-decorator = true
 bad-override = true
 method-assign = true
 
+[[tool.pyrefly.sub-config]]
+# Strict-typing ratchet: licenses app — annotation-completeness rules the
+# default preset does not enforce; only this subtree is affected.
+matches = "server/apps/licenses/**"
+
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = true
+implicit-any-type-argument = true
+implicit-any-lambda = true
+implicit-any-empty-container = true
+implicit-any-attribute = true
+missing-override-decorator = true
+bad-override = true
+method-assign = true
+
 
 [build-system]
 requires = ["hatchling"]
