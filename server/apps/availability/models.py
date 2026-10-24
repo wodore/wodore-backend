@@ -7,12 +7,16 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from server.apps.categories.models import Category
+from server.apps.geometries.models import GeoPlace
 from server.apps.huts.models import Hut
 from server.apps.organizations.models import Organization
 from server.core.models import TimeStampedModel
 
 from .managers import (
     AvailabilityStatusManager,
+    GeoPlaceAvailabilityHistoryManager,
+    GeoPlaceAvailabilityManager,
+    GeoPlaceAvailabilityStatusManager,
     HutAvailabilityHistoryManager,
     HutAvailabilityManager,
 )
@@ -457,6 +461,457 @@ class HutAvailabilityHistory(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.hut.name} - {self.availability_date} ({self.free}/{self.total}) @ {self.first_checked}"
+
+    @property
+    def duration_seconds(self) -> float:
+        """Calculate how long this state lasted in seconds"""
+        return (self.last_checked - self.first_checked).total_seconds()
+
+
+class GeoPlaceAvailabilityStatus(TimeStampedModel):
+    """
+    Fetch bookkeeping per place (port of AvailabilityStatus).
+
+    Records when availability was last fetched for a place, even if the
+    source returned no data — drives the update cadence and failure
+    back-off. OneToOne with primary_key=True, mirroring the hut-side model.
+    """
+
+    objects: GeoPlaceAvailabilityStatusManager = GeoPlaceAvailabilityStatusManager()  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    geo_place = models.OneToOneField(
+        GeoPlace,
+        on_delete=models.CASCADE,
+        related_name="availability_status",
+        verbose_name=_("Place"),
+        primary_key=True,
+    )
+    last_checked = models.DateTimeField(
+        verbose_name=_("Last Checked"),
+        help_text=_("When availability was last fetched for this place"),
+        db_index=True,
+    )
+    last_success = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_("Last Successful Fetch"),
+        help_text=_("When availability data was last successfully retrieved"),
+    )
+    has_data = models.BooleanField(
+        default=False,
+        verbose_name=_("Has Availability Data"),
+        help_text=_("Whether this place has ever returned availability data"),
+    )
+    consecutive_failures = models.PositiveSmallIntegerField(
+        default=0,
+        verbose_name=_("Consecutive Failures"),
+        help_text=_("Number of consecutive times the fetch returned no data or failed"),
+    )
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        verbose_name = _("Place Availability Status")
+        verbose_name_plural = _("Place Availability Statuses")
+        ordering = ("-last_checked",)
+
+    def __str__(self) -> str:
+        return f"{self.geo_place} - Last checked: {self.last_checked}"
+
+    def mark_success(self):
+        """Mark successful data fetch"""
+        now = timezone.now()
+        self.last_checked = now
+        self.last_success = now
+        self.has_data = True
+        self.consecutive_failures = 0
+        self.save()
+
+    def mark_failure(self):
+        """Mark failed or empty data fetch"""
+        self.last_checked = timezone.now()
+        self.consecutive_failures += 1
+        self.save()
+
+
+class GeoPlaceAvailability(TimeStampedModel):
+    """
+    Current availability state for places (port of HutAvailability).
+
+    One row per place per date, stores the latest known availability.
+    Single stream per place (``unique (geo_place, availability_date)``);
+    winter/summer is the type-of-the-day column, not a second row.
+    """
+
+    objects: GeoPlaceAvailabilityManager = GeoPlaceAvailabilityManager()  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    geo_place = models.ForeignKey(
+        GeoPlace,
+        on_delete=models.CASCADE,
+        related_name="availabilities",
+        verbose_name=_("Place"),
+        db_index=False,  # Index defined in Meta.indexes
+    )
+    source_organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="place_availabilities",
+        verbose_name=_("Source Organization"),
+        help_text=_("Organization providing the booking data"),
+        db_index=False,  # Index defined in Meta.indexes
+    )
+    source_id = models.CharField(
+        max_length=50,
+        verbose_name=_("Source ID"),
+        help_text=_("Place ID in the source organization's system"),
+    )
+    availability_date = models.DateField(
+        verbose_name=_("Availability Date"),
+        help_text=_("Date for which this availability data applies"),
+        db_index=True,
+    )
+
+    # Raw booking data from source (matching HutBookingSchema).
+    # null = source does not publish the value (e.g. FFCAM bookable days without counts).
+    free = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        verbose_name=_("Free Places"),
+        help_text=_("Number of available places (null = not published by source)"),
+    )
+    total = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        verbose_name=_("Total Places"),
+        help_text=_("Total number of places (null = not published by source)"),
+    )
+    free_tolerance = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        default=0,
+        verbose_name=_("Free Places Tolerance"),
+        help_text=_(
+            "Plus/minus uncertainty on free places (0 = exact, null = unknown); "
+            "estimated sources report free ± tolerance"
+        ),
+    )
+
+    # Computed fields from HutBookingSchema (stored for fast retrieval)
+    occupancy_percent = models.FloatField(
+        null=True,
+        blank=True,
+        verbose_name=_("Occupancy Percent"),
+        help_text=_("Occupancy percentage (0-100), null if not computable"),
+    )
+    occupancy_steps = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        verbose_name=_("Occupancy Steps"),
+        help_text=_("Occupancy in discrete steps (0-100, increments of 10)"),
+    )
+    occupancy_status = models.CharField(
+        max_length=20,
+        choices=[(e.value, e.value) for e in OccupancyStatusEnum],
+        verbose_name=_("Occupancy Status"),
+        help_text=_("Status: empty, low, medium, high, full, free_unknown, unknown"),
+    )
+    reservation_status = models.CharField(
+        max_length=20,
+        choices=[(e.value, e.value) for e in ReservationStatusEnum],
+        verbose_name=_("Reservation Status"),
+        help_text=_("Status: unknown, possible, not_possible, not_online"),
+    )
+
+    # Additional fields
+    link = models.URLField(
+        max_length=500,
+        blank=True,
+        default="",
+        verbose_name=_("Booking Link"),
+    )
+    hut_type = models.ForeignKey(
+        Category,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="place_availabilities",
+        verbose_name=_("Type of the Day"),
+        help_text=_("Hut type on this date (open/closed)"),
+        limit_choices_to=Q(parent__slug=settings.HUTS_CATEGORY_PARENT),
+    )
+
+    # Metadata - timestamps
+    first_checked = models.DateTimeField(
+        verbose_name=_("First Checked"),
+        help_text=_("When this availability was first recorded"),
+        db_index=True,
+    )
+    last_checked = models.DateTimeField(
+        verbose_name=_("Last Checked"),
+        help_text=_("When this place was last queried"),
+        db_index=True,
+    )
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        verbose_name = _("Place Availability")
+        verbose_name_plural = _("Place Availabilities")
+        ordering = ("availability_date", "geo_place__slug")
+        indexes = [
+            models.Index(fields=["geo_place", "availability_date"]),
+            models.Index(fields=["source_organization", "availability_date"]),
+            models.Index(fields=["availability_date", "last_checked"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["geo_place", "availability_date"],
+                name="unique_place_date",
+            ),
+            models.CheckConstraint(
+                name="%(app_label)s_%(class)s_occupancy_status_valid",
+                condition=models.Q(
+                    occupancy_status__in=[e.value for e in OccupancyStatusEnum]
+                ),
+            ),
+            models.CheckConstraint(
+                name="%(app_label)s_%(class)s_reservation_status_valid",
+                condition=models.Q(
+                    reservation_status__in=[e.value for e in ReservationStatusEnum]
+                ),
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.geo_place} - {self.availability_date} ({self.free}/{self.total})"
+
+    def has_changed(
+        self,
+        free: int,
+        total: int,
+        hut_type: Category | None = None,
+        reservation_status: str | None = None,
+        free_tolerance: int | None = None,
+    ) -> bool:
+        """Check if availability data has changed"""
+        changed = self.free != free or self.total != total
+        if hut_type is not None:
+            changed = changed or self.hut_type != hut_type
+        if reservation_status is not None:
+            changed = changed or self.reservation_status != reservation_status
+        changed = changed or self.free_tolerance != free_tolerance
+        return changed
+
+    def record_change(
+        self,
+        free: int,
+        total: int,
+        occupancy_percent: float = 0.0,
+        occupancy_status: str = "unknown",
+        reservation_status: str = "unknown",
+        hut_type: Category | None = None,
+        free_tolerance: int | None = None,
+    ) -> "GeoPlaceAvailabilityHistory":
+        """
+        Record a change to history.
+        Creates a new history entry. Previous entry's last_checked was already
+        updated to now on every check while data was unchanged.
+        """
+        now = timezone.now()
+
+        # Create new history entry (minimal fields only)
+        history = GeoPlaceAvailabilityHistory.objects.create(
+            availability=self,
+            geo_place=self.geo_place,
+            availability_date=self.availability_date,
+            free=free,
+            total=total,
+            free_tolerance=free_tolerance,
+            occupancy_percent=occupancy_percent,
+            occupancy_status=occupancy_status,
+            reservation_status=reservation_status,
+            hut_type=hut_type,
+            first_checked=now,
+            last_checked=now,
+        )
+        return history
+
+    def update_availability(
+        self,
+        free: int,
+        total: int,
+        occupancy_percent: float = 0.0,
+        occupancy_steps: int = 0,
+        occupancy_status: str = "unknown",
+        reservation_status: str = "unknown",
+        link: str = "",
+        hut_type: Category | None = None,
+        free_tolerance: int | None = None,
+    ) -> tuple[bool, "GeoPlaceAvailabilityHistory | None"]:
+        """
+        Update availability with change detection.
+        Returns (changed, history_entry).
+        """
+        now = timezone.now()
+        changed = self.has_changed(
+            free, total, hut_type, reservation_status, free_tolerance
+        )
+        history = None
+
+        if changed:
+            # Record to history before updating
+            history = self.record_change(
+                free=free,
+                total=total,
+                occupancy_percent=occupancy_percent,
+                occupancy_status=occupancy_status,
+                reservation_status=reservation_status,
+                hut_type=hut_type,
+                free_tolerance=free_tolerance,
+            )
+            # Update current state
+            self.free = free
+            self.total = total
+            self.free_tolerance = free_tolerance
+            self.occupancy_percent = occupancy_percent
+            self.occupancy_steps = occupancy_steps
+            self.occupancy_status = occupancy_status
+            self.reservation_status = reservation_status
+            self.link = link
+            self.hut_type = hut_type
+            self.last_checked = now
+            self.save()
+        else:
+            # No change in data, just update last_checked on current state and history
+            self.last_checked = now
+            self.save(update_fields=["last_checked"])
+
+            current_history = (
+                GeoPlaceAvailabilityHistory.objects.filter(
+                    availability=self, availability_date=self.availability_date
+                )
+                .order_by("-first_checked")
+                .first()
+            )
+            if current_history:
+                current_history.last_checked = now
+                current_history.save(update_fields=["last_checked"])
+
+        return changed, history
+
+
+class GeoPlaceAvailabilityHistory(TimeStampedModel):
+    """
+    Append-only log of place availability changes (port of
+    HutAvailabilityHistory).
+
+    Only records when availability actually changes (not every check).
+    Tracks state duration using first_checked and last_checked timestamps.
+    Ids carry no meaning — ordering is exclusively
+    ``(availability_date, first_checked)``; rows are never copied with their
+    source PKs (see the geoplace-availability design, D6).
+    """
+
+    objects: GeoPlaceAvailabilityHistoryManager = GeoPlaceAvailabilityHistoryManager()  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    availability = models.ForeignKey(
+        GeoPlaceAvailability,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="history",
+        verbose_name=_("Availability"),
+    )
+    geo_place = models.ForeignKey(
+        GeoPlace,
+        on_delete=models.CASCADE,
+        related_name="availability_history",
+        verbose_name=_("Place"),
+        db_index=False,  # Index defined in Meta.indexes
+    )
+    availability_date = models.DateField(
+        verbose_name=_("Availability Date"),
+        help_text=_("Target date this availability applies to"),
+        db_index=True,
+    )
+
+    # Snapshot of availability state - minimal fields for history
+    free = models.PositiveSmallIntegerField(
+        null=True,
+        verbose_name=_("Free Places"),
+    )
+    total = models.PositiveSmallIntegerField(
+        null=True,
+        verbose_name=_("Total Places"),
+    )
+    free_tolerance = models.PositiveSmallIntegerField(
+        null=True,
+        default=0,
+        verbose_name=_("Free Places Tolerance"),
+    )
+
+    # Computed fields for trend analysis
+    occupancy_percent = models.FloatField(
+        null=True,
+        verbose_name=_("Occupancy Percent"),
+    )
+    occupancy_status = models.CharField(
+        max_length=20,
+        choices=[(e.value, e.value) for e in OccupancyStatusEnum],
+        verbose_name=_("Occupancy Status"),
+        help_text=_("Status: empty, low, medium, high, full, free_unknown, unknown"),
+    )
+    reservation_status = models.CharField(
+        max_length=20,
+        choices=[(e.value, e.value) for e in ReservationStatusEnum],
+        verbose_name=_("Reservation Status"),
+        help_text=_("Status: unknown, possible, not_possible, not_online"),
+    )
+
+    # Metadata
+    hut_type = models.ForeignKey(
+        Category,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="place_availability_history",
+        verbose_name=_("Hut Type"),
+        help_text=_("Hut type on this date (open/closed)"),
+        limit_choices_to=Q(parent__slug=settings.HUTS_CATEGORY_PARENT),
+    )
+
+    # Timestamp tracking for state duration
+    first_checked = models.DateTimeField(
+        verbose_name=_("First Checked"),
+        help_text=_("When this state was first observed"),
+        db_index=True,
+    )
+    last_checked = models.DateTimeField(
+        verbose_name=_("Last Checked"),
+        help_text=_("When this state was last confirmed (updated on every check)"),
+    )
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        verbose_name = _("Place Availability History")
+        verbose_name_plural = _("Place Availability Histories")
+        ordering = ("-first_checked",)
+        indexes = [
+            models.Index(fields=["geo_place", "availability_date", "first_checked"]),
+            models.Index(fields=["availability_date", "first_checked"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                name="%(app_label)s_%(class)s_occupancy_status_valid",
+                condition=models.Q(
+                    occupancy_status__in=[e.value for e in OccupancyStatusEnum]
+                ),
+            ),
+            models.CheckConstraint(
+                name="%(app_label)s_%(class)s_reservation_status_valid",
+                condition=models.Q(
+                    reservation_status__in=[e.value for e in ReservationStatusEnum]
+                ),
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.geo_place} - {self.availability_date} ({self.free}/{self.total}) @ {self.first_checked}"
 
     @property
     def duration_seconds(self) -> float:

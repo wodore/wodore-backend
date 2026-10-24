@@ -17,20 +17,39 @@ import json
 import math
 import struct
 from collections.abc import Iterator
+from importlib import import_module
+from io import StringIO
 from typing import Any
 
 import pytest
 
+from django.apps import apps
 from django.contrib.gis.geos import Point
-from django.db import connection
+from django.core.management import call_command
+from django.db import IntegrityError, connection, transaction
 from django.utils import timezone
 
 from server.apps.availability.tiles import AvailabilityTileCache
 from server.apps.categories.models import Category
+from server.apps.geometries.models import GeoPlace, GeoPlaceSourceAssociation
 from server.apps.huts.models import Hut
 from server.apps.organizations.models import Organization
 
-from .models import HutAvailability
+from .history_move import chunk_ranges, move_chunk, snapshot
+from .models import (
+    AvailabilityStatus,
+    GeoPlaceAvailability,
+    GeoPlaceAvailabilityHistory,
+    GeoPlaceAvailabilityStatus,
+    HutAvailability,
+    HutAvailabilityHistory,
+)
+from .place_link import (
+    WODORE_ORG_SLUG,
+    hut_slug_to_place_ids,
+    resolve_place,
+    unmatched_huts,
+)
 
 # Test hut sits on the Rätikon (lon 8.5 / lat 46.5); the helper computes
 # the covering tile per zoom so the tests never hardcode tile coords.
@@ -477,3 +496,496 @@ def test_cleanup_removes_all_entries(hut, hut_types):
 
     assert deleted == count_before
     assert not AvailabilityTileCache.objects.exists()
+
+
+# ── geoplace availability models (geoplace-availability change, phase A) ──
+
+
+@pytest.fixture
+def place():
+    return GeoPlace.objects.create(
+        slug="place-1",
+        name="Test Place",
+        location=Point(HUT_LON, HUT_LAT, srid=4326),
+        country_code="CH",
+    )
+
+
+@pytest.fixture
+def place_org():
+    _reset_pk_sequence(Organization)
+    return Organization.objects.create(slug="place-org")
+
+
+def _place_availability(place, org, day_offset=0, **overrides):
+    """Create a GeoPlaceAvailability row with sensible defaults."""
+    now = timezone.now()
+    defaults = dict(
+        geo_place=place,
+        source_organization=org,
+        source_id="src-1",
+        availability_date=TODAY + datetime.timedelta(days=day_offset),
+        free=5,
+        total=10,
+        occupancy_status="medium",
+        reservation_status="possible",
+        first_checked=now,
+        last_checked=now,
+    )
+    defaults.update(overrides)
+    return GeoPlaceAvailability.objects.create(**defaults)
+
+
+@pytest.mark.django_db
+class TestGeoPlaceAvailability:
+    def test_single_row_per_place_and_date(self, place, place_org):
+        """Spec: one row per place per date — a second row is rejected."""
+        _place_availability(place, place_org)
+        with pytest.raises(IntegrityError):
+            _place_availability(place, place_org)
+
+    def test_invalid_occupancy_status_rejected(self, place, place_org):
+        """Spec: check constraints guard the status enums."""
+        with pytest.raises(IntegrityError):
+            with transaction.atomic():
+                _place_availability(place, place_org, occupancy_status="bogus")
+        with pytest.raises(IntegrityError):
+            with transaction.atomic():
+                _place_availability(place, place_org, reservation_status="nope")
+
+    def test_change_detection_records_history_only_on_change(self, place, place_org):
+        avail = _place_availability(place, place_org, free=5, total=10)
+        hour_ago = timezone.now() - datetime.timedelta(hours=1)
+
+        # Changed values → history row + updated current state
+        changed, history = avail.update_availability(
+            free=2,
+            total=10,
+            occupancy_percent=80.0,
+            occupancy_status="high",
+            reservation_status="possible",
+            hut_type=None,
+            free_tolerance=0,
+        )
+        assert changed is True
+        assert history is not None and history.free == 2
+        avail.refresh_from_db()
+        assert avail.free == 2 and avail.occupancy_status == "high"
+
+        # Age both so the no-change path can be observed advancing them;
+        # first_checked two hours back also gives duration_seconds meaning
+        two_hours_ago = timezone.now() - datetime.timedelta(hours=2)
+        history.first_checked = two_hours_ago
+        history.last_checked = hour_ago
+        history.save(update_fields=["first_checked", "last_checked"])
+        avail.last_checked = hour_ago
+        avail.save(update_fields=["last_checked"])
+
+        # Unchanged values → no new history row, last_checked advanced
+        changed, history2 = avail.update_availability(
+            free=2,
+            total=10,
+            occupancy_percent=80.0,
+            occupancy_status="high",
+            reservation_status="possible",
+            hut_type=None,
+            free_tolerance=0,
+        )
+        assert changed is False and history2 is None
+        assert GeoPlaceAvailabilityHistory.objects.count() == 1
+        avail.refresh_from_db()
+        history.refresh_from_db()
+        assert avail.last_checked > hour_ago
+        assert history.last_checked > hour_ago
+        assert history.duration_seconds >= 7000  # first_checked two hours back
+
+    def test_needing_update_priority_buckets(self, place, place_org):
+        two_hours_ago = timezone.now() - datetime.timedelta(hours=2)
+        ten_min_ago = timezone.now() - datetime.timedelta(minutes=10)
+        # 'full' last checked 2h ago → high priority bucket → included
+        _place_availability(
+            place,
+            place_org,
+            day_offset=0,
+            occupancy_status="full",
+            last_checked=two_hours_ago,
+        )
+        # 'medium' checked 10 min ago → below medium threshold → excluded
+        _place_availability(
+            place,
+            place_org,
+            day_offset=1,
+            occupancy_status="medium",
+            last_checked=ten_min_ago,
+        )
+        needing = GeoPlaceAvailability.objects.needing_update(
+            high_priority_minutes=30, medium_priority_minutes=180
+        ).filter(geo_place=place)
+        assert needing.count() == 1
+        assert needing.get().occupancy_status == "full"
+
+    def test_for_date_range_filters(self, place, place_org, hut_types):
+        open_type, _ = hut_types
+        _place_availability(place, place_org, day_offset=0)
+        _place_availability(place, place_org, day_offset=3, hut_type=open_type)
+        qs = GeoPlaceAvailability.objects.for_date_range(place_id=place.id, days=2)
+        assert [a.availability_date for a in qs] == [
+            TODAY,
+        ]
+        qs_place = GeoPlaceAvailability.objects.for_date_range(
+            place_id=place.id, days=10
+        )
+        assert qs_place.count() == 2
+
+
+@pytest.mark.django_db
+class TestGeoPlaceAvailabilityStatus:
+    def test_mark_success_and_failure_transitions(self, place):
+        status = GeoPlaceAvailabilityStatus.objects.create(
+            geo_place=place,
+            last_checked=timezone.now() - datetime.timedelta(hours=1),
+        )
+        assert status.has_data is False
+
+        status.mark_failure()
+        status.refresh_from_db()
+        assert status.consecutive_failures == 1
+        assert status.last_success is None
+
+        status.mark_failure()
+        status.refresh_from_db()
+        assert status.consecutive_failures == 2
+
+        status.mark_success()
+        status.refresh_from_db()
+        assert status.consecutive_failures == 0
+        assert status.has_data is True
+        assert status.last_success is not None
+
+
+@pytest.mark.django_db
+class TestGeoPlaceAvailabilityHistory:
+    def test_for_trend_orders_out_of_order_inserts(self, place, place_org):
+        """Spec: ordering is exclusively first_checked-based — an older row
+        inserted after a newer one still sorts correctly."""
+        avail = _place_availability(place, place_org)
+        now = timezone.now()
+        newer = GeoPlaceAvailabilityHistory.objects.create(
+            availability=avail,
+            geo_place=place,
+            availability_date=avail.availability_date,
+            free=1,
+            total=10,
+            occupancy_status="high",
+            reservation_status="possible",
+            first_checked=now + datetime.timedelta(hours=1),
+            last_checked=now + datetime.timedelta(hours=1),
+        )
+        older = GeoPlaceAvailabilityHistory.objects.create(
+            availability=avail,
+            geo_place=place,
+            availability_date=avail.availability_date,
+            free=9,
+            total=10,
+            occupancy_status="empty",
+            reservation_status="possible",
+            first_checked=now - datetime.timedelta(hours=1),
+            last_checked=now - datetime.timedelta(hours=1),
+        )
+        trend = list(
+            GeoPlaceAvailabilityHistory.objects.for_trend(
+                place.id, avail.availability_date, days_before=30
+            )
+        )
+        assert trend == [older, newer]
+
+
+# ── phase B: hut→place join, backfill, history move ───────────────────────
+
+
+@pytest.fixture
+def wodore_org():
+    # The template-cloned test DB already contains the real wodore org
+    _reset_pk_sequence(Organization)
+    org, _ = Organization.objects.get_or_create(slug=WODORE_ORG_SLUG)
+    return org
+
+
+def _link(hut, place, wodore_org):
+    return GeoPlaceSourceAssociation.objects.create(
+        organization=wodore_org, geo_place=place, source_id=hut.slug
+    )
+
+
+def _second_hut(hut_types, slug="other-hut"):
+    open_type, closed_type = hut_types
+    return Hut.objects.create(
+        slug=slug,
+        name=f"Test {slug}",
+        location=Point(HUT_LON, HUT_LAT, srid=4326),
+        is_active=True,
+        is_public=True,
+        country_field="CH",
+        hut_type_open=open_type,
+        hut_type_closed=closed_type,
+    )
+
+
+def _hut_history(hut_avail, first_checked, *, free=5):
+    return HutAvailabilityHistory.objects.create(
+        availability=hut_avail,
+        hut=hut_avail.hut,
+        availability_date=hut_avail.availability_date,
+        free=free,
+        total=10,
+        free_tolerance=0,
+        occupancy_percent=50.0,
+        occupancy_status="medium",
+        reservation_status="possible",
+        first_checked=first_checked,
+        last_checked=first_checked + datetime.timedelta(minutes=30),
+    )
+
+
+@pytest.mark.django_db
+class TestPlaceLink:
+    def test_join_resolution_via_wodore_association(self, hut, place, wodore_org):
+        assert hut_slug_to_place_ids() == {}
+        assert resolve_place(hut) is None
+        _link(hut, place, wodore_org)
+        assert hut_slug_to_place_ids() == {hut.slug: place.id}
+        assert resolve_place(hut) == place
+
+    def test_unmatched_huts_only_lists_unlinked_with_availability(
+        self, hut, hut_types, place, wodore_org
+    ):
+        open_type, _ = hut_types
+        _link(hut, place, wodore_org)
+        _add_availability(hut, 0, free=1, total=10, hut_type=open_type)  # linked
+        no_data = _second_hut(hut_types, slug="no-data-hut")  # unlinked, no rows
+        orphan = _second_hut(hut_types, slug="orphan-hut")  # unlinked with rows
+        _add_availability(orphan, 0, free=2, total=10, hut_type=open_type)
+        assert list(
+            unmatched_huts().filter(slug__in=[hut.slug, no_data.slug, orphan.slug])
+        ) == [orphan]
+        assert (
+            next(iter(unmatched_huts().filter(slug=orphan.slug))).slug == "orphan-hut"
+        )
+        assert no_data.slug == "no-data-hut"  # sanity: distinct hut
+
+
+@pytest.mark.django_db
+class TestBackfillMigration:
+    def _run(self, *, reverse=False):
+        mig = import_module(
+            "server.apps.availability.migrations.0019_backfill_geoplace_availability"
+        )
+        (mig.remove_backfill if reverse else mig.backfill)(apps, None)
+
+    def test_field_fidelity_and_status_copy(self, hut, hut_types, place, wodore_org):
+        open_type, _ = hut_types
+        _link(hut, place, wodore_org)
+        src = _add_availability(hut, 0, free=3, total=12, hut_type=open_type)
+        src.occupancy_percent = 42.5
+        src.occupancy_steps = 40
+        src.free_tolerance = 1
+        src.save()
+        status = AvailabilityStatus.objects.create(
+            hut=hut,
+            last_checked=timezone.now() - datetime.timedelta(hours=1),
+            last_success=timezone.now() - datetime.timedelta(hours=2),
+            has_data=True,
+            consecutive_failures=3,
+        )
+        self._run()
+        copied = GeoPlaceAvailability.objects.get(
+            geo_place=place, availability_date=src.availability_date
+        )
+        for field in (
+            "source_organization_id",
+            "source_id",
+            "availability_date",
+            "free",
+            "total",
+            "free_tolerance",
+            "occupancy_percent",
+            "occupancy_steps",
+            "occupancy_status",
+            "reservation_status",
+            "link",
+            "hut_type_id",
+            "first_checked",
+            "last_checked",
+        ):
+            assert getattr(copied, field) == getattr(src, field), field
+        st = GeoPlaceAvailabilityStatus.objects.get(geo_place=place)
+        for field in (
+            "last_checked",
+            "last_success",
+            "has_data",
+            "consecutive_failures",
+        ):
+            assert getattr(st, field) == getattr(status, field), field
+
+    def test_reverse_restores_empty_state(self, hut, hut_types, place, wodore_org):
+        open_type, _ = hut_types
+        _link(hut, place, wodore_org)
+        _add_availability(hut, 0, free=3, total=12, hut_type=open_type)
+        self._run()
+        assert GeoPlaceAvailability.objects.exists()
+        self._run(reverse=True)
+        assert GeoPlaceAvailability.objects.count() == 0
+        assert GeoPlaceAvailabilityStatus.objects.count() == 0
+
+    def test_rerun_skips_existing_and_unmatched_stays_out(
+        self, hut, hut_types, place, wodore_org
+    ):
+        open_type, _ = hut_types
+        _link(hut, place, wodore_org)
+        src = _add_availability(hut, 0, free=3, total=12, hut_type=open_type)
+        orphan = _second_hut(hut_types)
+        _add_availability(orphan, 0, free=4, total=8, hut_type=open_type)
+        self._run()
+        self._run()  # rerun must not raise on the unique constraint
+        assert GeoPlaceAvailability.objects.filter(geo_place=place).count() == 1
+        copied = GeoPlaceAvailability.objects.filter(geo_place=place).first()
+        assert copied is not None
+        assert copied.source_id == src.source_id
+
+
+def _setup_move(hut, hut_types, place, place_org, wodore_org):
+    """Link hut↔place and seed one hut + one place availability row (TODAY)."""
+    open_type, _ = hut_types
+    _link(hut, place, wodore_org)
+    src = _add_availability(hut, 0, free=3, total=12, hut_type=open_type)
+    _place_availability(place, place_org, day_offset=0)
+    return src
+
+
+@pytest.mark.django_db
+class TestHistoryMove:
+    def test_idempotent_rerun_epoch_cap_and_dry_run(
+        self, hut, hut_types, place, place_org, wodore_org
+    ):
+        src = _setup_move(hut, hut_types, place, place_org, wodore_org)
+        lo, _ = snapshot()  # template data below this id is not ours
+        _hut_history(src, timezone.now() - datetime.timedelta(hours=2), free=8)
+        _hut_history(src, timezone.now() - datetime.timedelta(hours=1), free=5)
+        future = _hut_history(
+            src, timezone.now() + datetime.timedelta(minutes=5), free=1
+        )
+        hi, started_at = snapshot()
+        assert hi == future.id
+
+        stats = move_chunk(lo, hi, started_at)
+        assert stats["moved"] == 2  # epoch cap excludes `future`
+        rows = list(
+            GeoPlaceAvailabilityHistory.objects.for_trend(
+                place.id, src.availability_date, days_before=7
+            )
+        )
+        assert [r.free for r in rows] == [8, 5]  # first_checked ascending
+        assert all(r.availability_id is not None for r in rows)
+
+        stats2 = move_chunk(lo, hi, started_at)
+        assert stats2["moved"] == 0
+        assert stats2["skipped_existing"] == 2
+
+        extra = _hut_history(src, timezone.now() - datetime.timedelta(hours=3), free=9)
+        stats3 = move_chunk(lo, hi + 100, started_at, dry_run=True)
+        assert stats3["moved"] == 1  # only `extra` is new in the wider range
+        assert stats3["skipped_existing"] == 2
+        assert GeoPlaceAvailabilityHistory.objects.count() == 2
+        assert extra.free == 9  # sanity
+
+    def test_unmatched_and_missing_availability_counters(
+        self, hut, hut_types, place, place_org, wodore_org
+    ):
+        open_type, _ = hut_types
+        orphan = _second_hut(hut_types)
+        orphan_src = _add_availability(orphan, 0, free=4, total=8, hut_type=open_type)
+        # Linked hut, but history date has no place availability row
+        _link(hut, place, wodore_org)
+        hut_src = _add_availability(hut, 2, free=3, total=12, hut_type=open_type)
+        # place availability exists only for TODAY (offset 0), not offset 2
+        _place_availability(place, place_org, day_offset=0)
+        lo, _ = snapshot()
+        orphan_hist = _hut_history(
+            orphan_src, timezone.now() - datetime.timedelta(hours=1), free=6
+        )
+        hut_hist = _hut_history(
+            hut_src, timezone.now() - datetime.timedelta(hours=1), free=2
+        )
+        hi, started_at = snapshot()
+
+        stats = move_chunk(lo, hi, started_at)
+        assert sorted(stats["unmatched"]) == [orphan.slug]
+        assert stats["moved"] == 1
+        assert stats["availability_missing"] == 1
+        moved_row = GeoPlaceAvailabilityHistory.objects.get(
+            availability_date=hut_src.availability_date
+        )
+        assert moved_row.availability_id is None
+        assert moved_row.geo_place == place
+        assert orphan_hist.free == 6  # sanity: source row untouched
+        assert hut_hist.pk is not None
+
+    def test_chunk_ranges(self):
+        assert chunk_ranges(0, 10) == []
+        assert chunk_ranges(5, 2) == [(0, 2), (2, 4), (4, 5)]
+        assert chunk_ranges(4, 10) == [(0, 4)]
+
+
+@pytest.mark.django_db
+class TestPhaseBCommands:
+    def test_move_command_sync_resumes_after_partial(
+        self, hut, hut_types, place, place_org, wodore_org
+    ):
+        src = _setup_move(hut, hut_types, place, place_org, wodore_org)
+        lo, _ = snapshot()
+        h1 = _hut_history(src, timezone.now() - datetime.timedelta(hours=3), free=9)
+        _hut_history(src, timezone.now() - datetime.timedelta(hours=2), free=8)
+        _hut_history(src, timezone.now() - datetime.timedelta(hours=1), free=7)
+        hi, started_at = snapshot()
+
+        # Simulate an interrupted run: only the first chunk completed
+        first = move_chunk(lo, h1.id, started_at)
+        assert first["moved"] == 1
+
+        buf = StringIO()
+        call_command(
+            "move_availability_history",
+            "--sync",
+            "--batch-size",
+            "1",
+            "--min-id",
+            str(lo),
+            "--max-id",
+            str(hi),
+            stdout=buf,
+        )
+        out = buf.getvalue()
+        assert "Done: moved=2" in out
+        place_rows = GeoPlaceAvailabilityHistory.objects.filter(geo_place=place)
+        assert place_rows.count() == 3
+        # natural-key integrity: no duplicates after resume
+        keys = list(
+            place_rows.values_list("geo_place_id", "availability_date", "first_checked")
+        )
+        assert len(keys) == len(set(keys))
+
+    def test_report_command_gate_states(self, hut, hut_types, place, wodore_org):
+        open_type, _ = hut_types
+        _link(hut, place, wodore_org)
+        _add_availability(hut, 0, free=3, total=12, hut_type=open_type)
+        buf = StringIO()
+        call_command("report_unmatched_huts", stdout=buf)
+        assert hut.slug not in buf.getvalue()  # linked huts are never listed
+
+        orphan = _second_hut(hut_types)
+        _add_availability(orphan, 0, free=4, total=8, hut_type=open_type)
+        buf2 = StringIO()
+        call_command("report_unmatched_huts", stdout=buf2)
+        out = buf2.getvalue()
+        assert orphan.slug in out
+        assert "gate: NOT empty" in out
