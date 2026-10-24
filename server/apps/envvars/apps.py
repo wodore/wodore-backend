@@ -1,5 +1,7 @@
 """App configuration for envvars."""
 
+from typing import override
+
 from django.apps import AppConfig
 
 
@@ -10,6 +12,7 @@ class EnvVarsConfig(AppConfig):
     name = "server.apps.envvars"
     verbose_name = "Environment Variables"
 
+    @override
     def ready(self) -> None:
         """Wire registry-snapshot invalidation."""
         from . import registry

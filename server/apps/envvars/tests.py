@@ -78,22 +78,24 @@ class TestModelValidation:
 
 @pytest.mark.django_db
 class TestPrecedence:
-    def test_unregistered_never_resolves(self, monkeypatch):
+    def test_unregistered_never_resolves(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv(KEY, "from-env")
         assert resolve(KEY) is None
         assert build_env({KEY}) == {}
 
-    def test_inactive_forbids_even_with_env(self, monkeypatch):
+    def test_inactive_forbids_even_with_env(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv(KEY, "from-env")
         _row(is_active=False, value="even-a-value")
         assert resolve(KEY) is None
 
-    def test_stored_value_wins_over_env(self, monkeypatch):
+    def test_stored_value_wins_over_env(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv(KEY, "from-env")
         _row(value="from-admin")
         assert resolve(KEY) == "from-admin"
 
-    def test_empty_with_falls_back_to_env_then_settings(self, monkeypatch):
+    def test_empty_with_falls_back_to_env_then_settings(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         monkeypatch.delenv(KEY, raising=False)
         monkeypatch.setattr(settings, KEY, "", raising=False)
         _row()
@@ -101,7 +103,7 @@ class TestPrecedence:
         monkeypatch.setenv(KEY, "from-env")
         assert resolve(KEY) == "from-env"
 
-    def test_pinned_empty_wins_over_env(self, monkeypatch):
+    def test_pinned_empty_wins_over_env(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv(KEY, "from-env")
         _row(env_fallback=False)
         assert resolve(KEY) == ""
@@ -110,7 +112,7 @@ class TestPrecedence:
 
 @pytest.mark.django_db
 class TestUsableAndGating:
-    def test_usable_matrix(self, monkeypatch):
+    def test_usable_matrix(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.delenv(KEY, raising=False)
         monkeypatch.setattr(settings, KEY, "", raising=False)
         _row()
@@ -120,20 +122,20 @@ class TestUsableAndGating:
         _row(value="v")
         assert usable(KEY)
 
-    def test_empty_env_value_not_usable(self, monkeypatch):
+    def test_empty_env_value_not_usable(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv(KEY, "")
         _row()
         assert resolve(KEY) == ""
         assert not usable(KEY)  # blank env keys are accidents, not intent
         assert missing_env_names(TOKEN) == {KEY}
 
-    def test_pinned_empty_is_usable(self, monkeypatch):
+    def test_pinned_empty_is_usable(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv(KEY, "ignored")
         _row(env_fallback=False)
         assert usable(KEY)
         assert missing_env_names(TOKEN) == set()
 
-    def test_inactive_not_usable(self, monkeypatch):
+    def test_inactive_not_usable(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv(KEY, "k")
         _row(is_active=False)
         assert not usable(KEY)
@@ -176,7 +178,9 @@ class TestSnapshotCache:
         _row(value="v2")  # signal invalidates
         assert rows()[KEY] == ("v2", True, True)
 
-    def test_resolve_many_resolves_only_given_names(self, monkeypatch):
+    def test_resolve_many_resolves_only_given_names(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         monkeypatch.setenv(KEY, "v")
         _row()
         _row("WODORE_OTHER_KEY", value="other")
