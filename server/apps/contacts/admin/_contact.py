@@ -2,7 +2,7 @@ from django.conf import settings
 from django.contrib import admin
 from django.db.models.functions import Lower
 from django.forms import Textarea
-from django.utils.safestring import mark_safe
+from django.utils.safestring import SafeString, mark_safe
 from django.utils.translation import gettext_lazy as _
 
 from unfold import admin as unfold_admin
@@ -99,11 +99,11 @@ class ContactAdmin(ModelAdmin):
     #    return field
 
     @display(header=True, description=_("Name and Email"), ordering=Lower("name"))
-    def name_email(self, obj):
+    def name_email(self, obj: Contact) -> tuple[str, str]:
         return (obj.name, obj.email)
 
     @display(header=True, description=_("Address"))
-    def address_fmt(self, obj):
+    def address_fmt(self, obj: Contact) -> tuple[str, SafeString]:
         adr_list = [a.strip() for a in obj.address.replace(",", "\n").split("\n")]
         header = ""
         if adr_list:
@@ -114,7 +114,7 @@ class ContactAdmin(ModelAdmin):
         return header, mark_safe(", ".join(content))
 
     @display(header=False, description=_("Phone"))
-    def mobile_or_phone(self, obj):
+    def mobile_or_phone(self, obj: Contact) -> SafeString:
         mobile = self._phone_link(obj.mobile, icon="smartphone")
         phone = self._phone_link(obj.phone, icon="call")
         return mark_safe(f"{mobile}</br>{phone}")

@@ -564,6 +564,25 @@ LAYERS: list[dict[str, Any]] = [
         "attributions": ["maptoolkit"],
     },
     {
+        # A/B pair of the product basemap: identical style except the
+        # hillshading — martin server-baked raster (AWS normals) instead
+        # of the client GPU hillshade. Hidden from the picker (show=False)
+        # but active: mapcompare + fallback chains resolve it. Re-added
+        # for the hillshade A/B decision (PR #375 lane).
+        "slug": "wd-outdoor-base-mtk",
+        "role": MapLayer.Role.basemap,
+        "name": "Wodore Outdoor (server relief)",
+        "description": (
+            "Outdoor basemap with the martin server-baked hillshade "
+            "(lighter on the client, coarser source DEM)."
+        ),
+        "spec": MapLayer.Spec.high,
+        "order": 1,
+        "show": False,  # A/B variant — not a picker product
+        "style": _fixture_style("wd-outdoor-base-mtk"),
+        "attributions": ["maptoolkit"],
+    },
+    {
         "slug": "wd-outdoor-base-ofm-hill",
         "role": MapLayer.Role.basemap,
         "name": "Wodore Outdoor (OpenFreeMap, client relief)",
