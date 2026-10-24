@@ -26,8 +26,10 @@ GeoPlace through a **role category** (`role.*`), mirroring the
   (color and mono; parties are not map features, so the map-styling
   primitive variant is omitted).
 - New `role` category vocabulary (parent + children `operator`, `brand`,
-  `owner`; `authority` on demand) created by data migration, extensible in
-  the category admin — same shape as the `season` vocabulary.
+  `owner`, `source`; `authority` on demand) created by data migration,
+  extensible in the category admin — same shape as the `season`
+  vocabulary. `source` seeds the vocabulary for the future Organization
+  convergence (portals become parties; no data uses it yet).
 - New `GeoPlaceParty` through model (geometries) — **place-level:
   applies to every geoplace regardless of `detail_type`** (amenity,
   transport, admin, natural, none), like the category and link
@@ -49,6 +51,13 @@ GeoPlace through a **role category** (`role.*`), mirroring the
   `geoplace-capacity-and-types-via-categories`) links `hut_owner` →
   association with role `role.owner`. The `Owner` model itself stays
   for `Hut` until the huts app is removed.
+- Source-role link templates (contract recorded here, implementation
+  deferred to the Organization convergence): a source-role Party carries
+  its portal object-link pattern as a template `ExternalLink` (Jinja2
+  `{{var}}` URL, rendered per place at read time from
+  `source_id`/`lang`/`slug`/`props`), replacing
+  `Organization.link_hut_pattern`. `ExternalLink` template handling
+  converges to Jinja2 then — no template rows exist today.
 - API: GeoPlace responses gain `parties` (additive, under the
   `fields[places]` selection; registered in the API changelog per
   `api-conventions`); admin gains a Party admin and a GeoPlace inline;
@@ -92,8 +101,9 @@ apart from sharing the classifier-pattern vocabulary approach.)
   in place for rollback, removed with a later cleanup).
 - **Non-goals**: removing the owners app or `Owner` (retires with
   huts); absorbing `Organization` into Party (the portals/sources may
-  converge later — nothing in this design blocks it — but booking
-  integrations and source pickers stay untouched for now); party
+  converge later — the vocabulary seeds `source` and the design records
+  the Jinja link-template contract so convergence lands ready — but
+  booking integrations and source pickers stay untouched for now); party
   logos as uploaded images (Organization-style `ImageField` — symbols
   cover curated iconography; revisit at Organization convergence);
   contacts on parties (Owner contacts die with the huts app; links

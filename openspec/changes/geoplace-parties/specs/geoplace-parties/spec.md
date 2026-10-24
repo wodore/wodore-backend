@@ -30,9 +30,9 @@ mono; the map-styling primitive variant is not used for parties).
 ### Requirement: Role category vocabulary
 
 The system SHALL provide a `role` parent category with children
-`operator`, `brand`, and `owner`, created by data migration and
-manageable in the category admin. Additional role children MAY be added
-later via migration and spec delta.
+`operator`, `brand`, `owner`, and `source`, created by data migration
+and manageable in the category admin. Additional role children MAY be
+added later via migration and spec delta.
 
 #### Scenario: Vocabulary exists after migrate
 - **WHEN** migrations run on a fresh database

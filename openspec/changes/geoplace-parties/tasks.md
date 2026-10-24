@@ -2,18 +2,21 @@
 
 ## 1. Party model, links & role vocabulary
 
-- [ ] 1.1 Data migration creating the `role` parent category with
-      children `operator`, `brand`, `owner` (active, ordered,
+- [x] 1.1 Data migration creating the `role` parent category with
+      children `operator`, `brand`, `owner`, `source` (active, ordered,
       slug-stable; idempotent rerun)
-- [ ] 1.2 Create `parties` app: `Party` (slug unique, `name` i18n via
+- [x] 1.2 Create `parties` app: `Party` (slug unique, `name` i18n via
       modeltrans, `note` i18n optional, `is_active`, `is_public`,
       `review_status`, optional `symbol_color`/`symbol_mono` FKs) +
       `PartyLink` through model (order) to `ExternalLink`; migrations,
       admin (Unfold, TABS entry, symbol pickers), `__str__`, factories
-- [ ] 1.3 `GeoPlaceParty` in geometries: role FK → Category, unique
+      (models/admin shipped with the app scaffold in #165; factories
+      added with the association work)
+- [x] 1.3 `GeoPlaceParty` in geometries: role FK → Category, unique
       `(geo_place, party, role)`, RESTRICT on party and role FKs,
       `order`, indexes; `clean()` role-subtree validation mirrored in
       the schema write path; unit tests for constraints and validation
+      (schema-write mirroring lands with the import tasks 2.x/3.x)
 
 ## 2. Brand replacement
 
