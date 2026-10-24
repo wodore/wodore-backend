@@ -1,7 +1,8 @@
+from typing import Any, override
 from urllib import request
 
 from django import forms
-from django.core.files.base import ContentFile
+from django.core.files.base import ContentFile, File
 
 from .widgets import MetaImageWidget
 
@@ -24,11 +25,12 @@ def _sanitize_file_name(name: str) -> str:
 
 
 class MetaImageFormField(forms.ImageField):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.widget = MetaImageWidget()
 
-    def to_python(self, data):
+    @override
+    def to_python(self, data: File[Any] | None) -> File[Any] | None:
         # print(f"DATA: {type(data)} - {data}")
         # Add custom logic to handle both file uploads and URL-based images
         if isinstance(data, str) and data.startswith("http"):
