@@ -8,13 +8,6 @@
       "severity": "error"
     },
     {
-      "column": 21,
-      "path": "server/apps/huts/api/_hut.py",
-      "name": "unknown-name",
-      "concise_description": "Could not find name `t`",
-      "severity": "error"
-    },
-    {
       "column": 13,
       "path": "server/settings/components/logging.py",
       "name": "bad-argument-type",
