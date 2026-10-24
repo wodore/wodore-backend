@@ -1,7 +1,8 @@
 import re
 from pathlib import Path
+from typing import Any, override
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandParser
 
 
 class Command(BaseCommand):
@@ -9,7 +10,8 @@ class Command(BaseCommand):
         "Convert SVG files to mono (black) by replacing all colors/strokes with black"
     )
 
-    def add_arguments(self, parser):
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "source_dir",
             type=str,
@@ -22,7 +24,7 @@ class Command(BaseCommand):
             help="Path to output directory (default: source_dir/mono)",
         )
 
-    def convert_svg_to_mono(self, svg_content):
+    def convert_svg_to_mono(self, svg_content: str) -> str:
         """
         Convert SVG to mono by replacing all colors with black.
 
@@ -124,7 +126,7 @@ class Command(BaseCommand):
         svg_content = re.sub(r' filter="[^"]*"', "", svg_content)
 
         # Remove style attributes that might contain colors
-        def remove_colors_from_style(match):
+        def remove_colors_from_style(match: re.Match[str]) -> str:
             style = match.group(1)
             # Remove color-related CSS properties
             style = re.sub(r"fill:\s*[^;]+;?", "", style)
@@ -140,7 +142,8 @@ class Command(BaseCommand):
 
         return svg_content
 
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         source_path = Path(options["source_dir"])
 
         if not source_path.exists():

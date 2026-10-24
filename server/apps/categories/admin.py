@@ -1,9 +1,9 @@
 import contextlib
-from typing import ClassVar
+from typing import Any, ClassVar, override
 
 from django.conf import settings
 from django.contrib import admin
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 from django.db.models.functions import Lower
 from django.http import HttpRequest
 from django.urls import reverse
@@ -23,7 +23,7 @@ from .forms import category_admin_form_factory
 from .models import Category
 
 
-class ChildCategoryInline(admin.TabularInline):
+class ChildCategoryInline(admin.TabularInline[Category, Category]):
     """Inline to show child categories in Category admin"""
 
     model = Category
@@ -49,6 +49,7 @@ class ChildCategoryInline(admin.TabularInline):
     verbose_name_plural = _("Child Categories")
     autocomplete_fields = ("symbol_color", "symbol_primitive", "symbol_mono")
 
+    @override
     def get_queryset(self, request: HttpRequest):
         """Optimize queryset for inline display."""
         qs = super().get_queryset(request)
@@ -57,7 +58,7 @@ class ChildCategoryInline(admin.TabularInline):
         ).order_by("order", "slug")
 
     @display(description="")
-    def symbol_preview(self, obj):
+    def symbol_preview(self, obj: Category):
         """Display symbol preview."""
         if obj.symbol_color and obj.symbol_color.svg_file:
             return mark_safe(
@@ -70,7 +71,7 @@ class ChildCategoryInline(admin.TabularInline):
         return "-"
 
     @display(description=_("View"))
-    def view_link(self, obj):
+    def view_link(self, obj: Category):
         """Link to view/edit this child category."""
         if obj.pk:
             url = reverse("admin:categories_category_change", args=[obj.pk])
@@ -187,7 +188,8 @@ class CategoryAdmin(ModelAdmin):
     inlines = (ChildCategoryInline,)
 
     # Add custom views for symbol management
-    def get_urls(self):
+    @override
+    def get_urls(self) -> list[Any]:
         """Add custom URL for symbols view."""
         from django.urls import path
 
@@ -201,7 +203,7 @@ class CategoryAdmin(ModelAdmin):
         ]
         return custom_urls + urls
 
-    def symbols_view(self, request):
+    def symbols_view(self, request: HttpRequest):
         """Display all symbols grouped by slug with their three style variants."""
         from django.template.response import TemplateResponse
 
@@ -246,6 +248,7 @@ class CategoryAdmin(ModelAdmin):
         }
         return TemplateResponse(request, "admin/categories_symbols.html", context)
 
+    @override
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         """Optimize queryset with parent selection."""
         qs = super().get_queryset(request)
@@ -266,7 +269,7 @@ class CategoryAdmin(ModelAdmin):
     @display(
         header=True, description=_("Name and Description"), ordering=Lower("name_i18n")
     )
-    def title(self, obj):
+    def title(self, obj: Category):
         """Display name and description."""
         level_indent = ""
         name = f"{level_indent}{obj.name_i18n}" if obj.name_i18n else obj.slug
@@ -277,7 +280,7 @@ class CategoryAdmin(ModelAdmin):
         return (name, description, "")
 
     @display(description=_("Symbol"))
-    def symbol_img(self, obj):
+    def symbol_img(self, obj: Category):
         """Display detailed symbol."""
         if obj.symbol_color and obj.symbol_color.svg_file:
             return mark_safe(
@@ -286,7 +289,7 @@ class CategoryAdmin(ModelAdmin):
         return "-"
 
     @display(description=_("Mono"))
-    def icon_img(self, obj):
+    def icon_img(self, obj: Category):
         """Display monochrome symbol."""
         if obj.symbol_mono and obj.symbol_mono.svg_file:
             return mark_safe(
@@ -295,7 +298,7 @@ class CategoryAdmin(ModelAdmin):
         return "-"
 
     @display(description=_("Identifier"), ordering="identifier")
-    def identifier_display(self, obj):
+    def identifier_display(self, obj: Category):
         """Display identifier without 'root.' prefix."""
         identifier = obj.identifier
         if identifier and identifier.startswith("root."):
@@ -303,7 +306,7 @@ class CategoryAdmin(ModelAdmin):
         return identifier
 
     @display(description=_("Children"), label=True)
-    def children_count(self, obj):
+    def children_count(self, obj: Category):
         """Display count of children.
 
         One indexed COUNT per displayed row (bounded by the page size);
@@ -323,23 +326,25 @@ class CategoryAdmin(ModelAdmin):
         return "-"
 
     @display(description=_("Order"), ordering="order")
-    def order_display(self, obj):
+    def order_display(self, obj: Category):
         """Display order value."""
         return mark_safe(f"<small>{obj.order}</small>")
 
     @display(description=_("Parent"), label=True, ordering="parent")
-    def parent_display(self, obj):
+    def parent_display(self, obj: Category):
         """Display parent category if exists."""
         if obj.parent:
             return obj.parent.name_i18n or obj.parent.slug
         return format_html('<span style="color: #999;">{}</span>', "Root")
 
-    def avatar(self, url):
+    def avatar(self, url: str):
         """Helper to create small avatar image."""
         return mark_safe(f'<img src="{url}" width="20" alt="avatar"/>')
 
     @display(description=_("Auto-set color from SVG"))
-    def auto_set_color_from_svg(self, request, queryset):
+    def auto_set_color_from_svg(
+        self, request: HttpRequest, queryset: QuerySet[Category]
+    ):
         """
         Admin action to automatically set color from SVG symbols.
 

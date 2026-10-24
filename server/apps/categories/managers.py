@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 from modeltrans.manager import MultilingualQuerySet
 
@@ -19,11 +19,11 @@ class CategoryQuerySet(MultilingualQuerySet):
         """Filter to only root-level categories (no parent)."""
         return self.filter(parent__isnull=True)
 
-    def children_of(self, parent):
+    def children_of(self, parent: "Category | None"):
         """Filter to children of a specific parent."""
         return self.filter(parent=parent)
 
-    def by_slug(self, slug: str, parent=None):
+    def by_slug(self, slug: str, parent: "Category | None" = None):
         """Get category by slug and optional parent."""
         filters = {"slug": slug, "parent": parent}
         return self.filter(**filters).first()
@@ -131,6 +131,7 @@ class CategoryQuerySet(MultilingualQuerySet):
 class CategoryManager(BaseMutlilingualManager):
     """Custom manager for Category model."""
 
+    @override
     def get_queryset(self):
         """Return custom queryset with optimized parent and symbol relationships."""
         return CategoryQuerySet(self.model, using=self._db).select_related(
