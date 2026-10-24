@@ -24,7 +24,7 @@ from django.utils import timezone
 
 from server.apps.huts.models import Hut
 
-from ...models import HutAvailability
+from ...models import GeoPlaceAvailability
 from ...services import SERVICES, AvailabilityService
 
 # availability sources that provide booking data (slug -> service)
@@ -203,9 +203,10 @@ class Command(BaseCommand):
                 f"Updating all {huts.count()} huts with availability sources{label}"
             )
         else:
-            # Default: Use priority-based selection + new huts
+            # Default: priority-based selection + new huts, driven by the
+            # place tables (geoplace-availability Phase C, task 3.3)
             click.echo("Using priority-based selection (includes new huts)")
-            huts = HutAvailability.objects.get_huts_needing_update(
+            huts = GeoPlaceAvailability.objects.get_huts_needing_update(
                 high_priority_minutes=high_priority_minutes,
                 medium_priority_minutes=medium_priority_minutes,
                 low_priority_minutes=low_priority_minutes,
