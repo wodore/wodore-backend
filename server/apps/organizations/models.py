@@ -26,6 +26,11 @@ class Organization(TimeStampedModel):
     i18n = TranslationField(
         fields=("name", "fullname", "description", "attribution", "url")
     )
+    name_i18n: str
+    fullname_i18n: str
+    description_i18n: str
+    attribution_i18n: str
+    url_i18n: str
     objects = BaseMutlilingualManager()
 
     slug = models.SlugField(unique=True, verbose_name=_("Slug"), db_index=True)
@@ -92,13 +97,13 @@ class Organization(TimeStampedModel):
         unique=False, default=0, verbose_name=_("Order")
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Organization")
         ordering = ("order", "name_i18n")
         indexes = (GinIndex(fields=["i18n"]),)
 
     def __str__(self) -> str:
-        return self.name_i18n  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation
+        return self.name_i18n
 
     @classmethod
     @lru_cache(50)

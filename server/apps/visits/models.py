@@ -46,7 +46,7 @@ class ObjectVisitDay(TimeStampedModel):
     day = models.DateField(db_index=True)
     count = models.PositiveIntegerField(default=0)
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = "Object Visit Day"
         verbose_name_plural = "Object Visit Days"
         unique_together = (("content_type", "object_id", "day"),)

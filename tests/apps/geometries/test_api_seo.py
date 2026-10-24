@@ -235,7 +235,7 @@ class TestPlaceOgPinnedImage:
         from server.apps.geometries.api_images import GALLERY_QUERY_SHAPE
 
         irc.set_response(
-            irc.response_key("place", place.slug, lang="fr", **GALLERY_QUERY_SHAPE),
+            irc.response_key("place", place.slug, lang="fr", **GALLERY_QUERY_SHAPE),  # type: ignore  # argument typing drift vs stubs
             ImageCollectionResponse(
                 type="FeatureCollection",
                 features=post_process_images([result]),

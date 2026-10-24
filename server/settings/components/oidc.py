@@ -23,7 +23,6 @@ rehearsed in staging; the later flip is an env change
 
 import json
 import logging
-import re
 from urllib.parse import urlparse
 
 import requests
@@ -126,7 +125,7 @@ OIDC_PROVIDER_PRIVATE_JWK: dict = _resolve_provider_jwk() if OIDC_ENABLED else {
 
 def _jwk_to_pem(jwk: dict) -> str:
     key = JsonWebKey.import_key(jwk, {"kty": "RSA"})
-    pem = key.as_pem(is_private=True)  # pyright: ignore[reportAttributeAccessIssue]  # authlib Key stubs lack as_pem
+    pem = key.as_pem(is_private=True)  # type: ignore  # authlib Key stubs lack as_pem
     return pem.decode() if isinstance(pem, bytes) else str(pem)
 
 
@@ -237,11 +236,16 @@ ZITADEL_API_PRIVATE_KEY = _load_zitadel_private_key()
 OIDC_RENEW_ID_TOKEN_EXPIRY_SECONDS = 60 * 60 * 24  # 24 hours
 OIDC_STORE_ACCESS_TOKEN = True
 OIDC_STORE_ID_TOKEN = True
-OIDC_EXEMPT_URLS = [
-    re.compile(r"^/v\d+/.*"),  # Exempt all API routes (any version)
-    "/static/",
-    "/media/",
-]
+# SessionRefresh scope is decided per resolved VIEW by the middleware
+# itself (see server/middleware/oidc.py): admin views (AdminSite tags)
+# and access-mixin CBVs (LoginRequiredMixin & friends) are renewed;
+# everything else - public pages, bearer-token API routes, self-gated
+# views that redirect to the login themselves (staging demos) - is out
+# of scope. This list is only an explicit escape hatch to suppress the
+# renewal on particular paths (regexes); the mozilla
+# authenticate/callback/logout routes are always exempt upstream
+# (that is also the redirect-loop protection).
+OIDC_EXEMPT_URLS = []
 
 discovery_info = None
 if ZITADEL_RP_ENABLED:

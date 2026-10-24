@@ -7,7 +7,7 @@ bottom): specific routes must come before the ``{slug}`` catch-all, and
 
 import datetime
 from http import HTTPStatus
-from typing import Any
+from typing import Any, cast
 
 import pydantic
 from benedict import benedict
@@ -404,10 +404,13 @@ def get_json_obj(
     values: dict[str, Any], flat: bool = False
 ) -> dict[str, JSONObject | F]:
     if flat:
-        return {  # pyright: ignore[reportReturnType]  # benedict key typing
-            k: F(str(v)) for k, v in benedict(values).flatten(separator="_").items()
-        }
-    new_vals = {}
+        # benedict's flatten() keys are generically typed; runtime keys are str
+        flattened = cast(
+            "dict[str, JSONObject | F]",
+            {k: F(str(v)) for k, v in benedict(values).flatten(separator="_").items()},
+        )
+        return flattened
+    new_vals: dict[str, JSONObject | F] = {}
     for key, value in values.items():
         new_vals[key] = (
             JSONObject(**get_json_obj(value)) if isinstance(value, dict) else value
@@ -785,7 +788,7 @@ class HutDetailController(ApiController):
             )
             hut_db.images = [old_photo.model_dump(), *hut_db.images]
         link = reverse_lazy("admin:huts_hut_change", args=[hut_db.pk])
-        hut_db.edit_link = request.build_absolute_uri(link)  # pyright: ignore[reportAttributeAccessIssue]
+        hut_db.edit_link = request.build_absolute_uri(str(link))
 
         # Get modified timestamp from ETag calculation
         modified_timestamp = get_last_modified_timestamp(

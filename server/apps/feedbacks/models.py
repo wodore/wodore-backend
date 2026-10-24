@@ -14,7 +14,7 @@ class _FeedbackStatusChoices(models.TextChoices):
 
 
 class Feedback(TimeStampedModel):
-    id: int  # pyright: ignore[reportIncompatibleVariableOverride]
+    id: int
 
     FeedbackStatusChoices = _FeedbackStatusChoices
 
@@ -45,7 +45,7 @@ class Feedback(TimeStampedModel):
     def __str__(self) -> str:
         return self.email
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Feedback")
         constraints = (
             models.CheckConstraint(

@@ -798,7 +798,7 @@ class Command(BaseCommand):
                 for schema, source in non_duplicates:
                     # Create GeoPlace instance (not saved yet)
                     place = GeoPlace(
-                        name=schema.name.de,
+                        name=schema.name.de,  # type: ignore  # dynamic attr: plugin-less inference gap
                         location=Point(
                             schema.location.lon, schema.location.lat, srid=4326
                         ),
@@ -819,7 +819,7 @@ class Command(BaseCommand):
 
                     detail = AmenityDetail(
                         geo_place=place,  # Will be set after bulk create
-                        operating_status=schema.operating_status.value,
+                        operating_status=schema.operating_status.value,  # type: ignore  # dynamic attr: plugin-less inference gap
                         opening_hours=schema.opening_hours,
                         phones=[p.model_dump() for p in schema.phones]
                         if schema.phones
@@ -1015,7 +1015,7 @@ class Command(BaseCommand):
 
                     for schema, source in non_duplicates:
                         place = GeoPlace(
-                            name=schema.name.de,
+                            name=schema.name.de,  # type: ignore  # dynamic attr: plugin-less inference gap
                             location=Point(
                                 schema.location.lon, schema.location.lat, srid=4326
                             ),
@@ -1034,7 +1034,7 @@ class Command(BaseCommand):
 
                         detail = AmenityDetail(
                             geo_place=place,
-                            operating_status=schema.operating_status.value,
+                            operating_status=schema.operating_status.value,  # type: ignore  # dynamic attr: plugin-less inference gap
                             opening_hours=schema.opening_hours,
                             phones=[p.model_dump() for p in schema.phones]
                             if schema.phones

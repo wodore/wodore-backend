@@ -258,8 +258,8 @@ def _init_error_tracking() -> None:
             AsyncioIntegration(),
         ],
         traces_sampler=_traces_sampler(rate),
-        before_send=_before_send,
-        before_send_transaction=_before_send_transaction,
+        before_send=_before_send,  # type: ignore  # sentry-sdk before_send stubs too narrow
+        before_send_transaction=_before_send_transaction,  # type: ignore  # ditto
     )
 
 

@@ -71,9 +71,7 @@ class ContentHashedStorage(Storage):
         return self._explicit_inner if self._explicit_inner else default_storage
 
     # ── the actual point of this class ────────────────────────────────
-    def save(  # pyright: ignore[reportIncompatibleVariableOverride]
-        self, name: str | None, content: Any, max_length: Any = None
-    ) -> str:
+    def save(self, name: str | None, content: Any, max_length: Any = None) -> str:
         if name is None:
             # No name to derive a hash from — plain delegation.
             return self._inner.save(name, content, max_length)
@@ -85,13 +83,13 @@ class ContentHashedStorage(Storage):
         return self._inner.save(target, content, max_length)
 
     # ── everything else delegates to the configured default storage ──
-    def exists(self, name: str) -> bool:  # pyright: ignore[reportIncompatibleVariableOverride]
+    def exists(self, name: str) -> bool:
         return self._inner.exists(name)
 
     def delete(self, name: str) -> None:
         self._inner.delete(name)
 
-    def url(self, name: str | None) -> str:  # pyright: ignore[reportIncompatibleVariableOverride]
+    def url(self, name: str | None) -> str:
         return self._inner.url(name)
 
     def size(self, name: str) -> int:
@@ -100,9 +98,7 @@ class ContentHashedStorage(Storage):
     def listdir(self, path: str) -> tuple[list[str], list[str]]:
         return self._inner.listdir(path)
 
-    def get_available_name(  # pyright: ignore[reportIncompatibleVariableOverride]
-        self, name: str, max_length: Any = None
-    ) -> str:
+    def get_available_name(self, name: str, max_length: Any = None) -> str:
         return self._inner.get_available_name(name, max_length)
 
     def path(self, name: str) -> str:

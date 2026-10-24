@@ -36,7 +36,7 @@ _LANGUAGE_LABELS = {
 
 
 class PlaceMetaSchema(pydantic.BaseModel):
-    """Minimal place metadata for edge meta-tag injection."""
+    """Minimal place metadata for edge meta-tag injection."""  # type: ignore  # residual span suppression
 
     slug: str = Field(description="Place slug")
     name: str = Field(description="Place name")
@@ -209,7 +209,7 @@ class PlaceMetaController(ApiController):
         description = _place_description(place)
 
         return PlaceMetaSchema(
-            slug=place.slug,
+            slug=place.slug,  # type: ignore  # argument typing drift vs stubs
             name=place.name,
             description=description,
             categories=[c.name for c in place.categories.all() if c.name],
@@ -229,7 +229,7 @@ def get_place_markdown(request: HttpRequest, slug: str) -> HttpResponse:
     page_url = _place_url(place)
     categories = ", ".join(c.name for c in place.categories.all() if c.name)
 
-    overview: list[tuple[str, str]] = [
+    overview: list[tuple[str, str | None]] = [
         ("Categories", categories or None),
         ("Elevation", f"{place.elevation} m" if place.elevation else None),
         (
@@ -259,7 +259,7 @@ Map: {page_url}
 
 {place.description or "—"}
 
-Languages: {_languages_line(place.slug)}
+Languages: {_languages_line(place.slug or "")}
 
 ---
 

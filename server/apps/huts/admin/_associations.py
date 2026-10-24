@@ -118,7 +118,7 @@ class HutOrganizationAssociationEditInline(unfold_admin.StackedInline):
     autocomplete_fields = ("organization",)  # ~680 orgs (OSM brands): no plain select
     extra = 0
     # classes = ("collapse",)  # Commented out to keep tab expanded by default
-    formfield_overrides: ClassVar = {models.JSONField: {"widget": UnfoldJSONSuit}}
+    formfield_overrides: ClassVar = {models.JSONField: {"widget": UnfoldJSONSuit}}  # type: ignore  # inline formfield_overrides typing drift
     verbose_name = _("Edit Source")
 
     def get_queryset(self, request):

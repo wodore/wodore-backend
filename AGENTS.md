@@ -226,6 +226,24 @@ that matter for any code change:
   is the URL name == operationId (startup checks E003/E004 enforce it).
   ETags on hut endpoints key on the resolved version + registry hash.
 
+## Type Checking
+
+Type checking is **pyrefly** (CLI + CI + editor LSP, one engine; openspec
+`pyrefly-type-checking`). django-stubs stays as the Django type vocabulary.
+
+```bash
+inv check.types        # or: uv run pyrefly check
+```
+
+- `pyrefly-baseline.json` suppresses pre-existing findings — **only new type
+  errors fail**. Shrinking it is deliberate: fix errors, then
+  `pyrefly check --update-baseline` (never absorb new errors into it).
+- New suppressions: `# pyrefly: ignore[rule]` or bare `# type: ignore`.
+  Legacy `# pyright: ignore[...]` comments are inert for pyrefly — remove them
+  when touching the code (full sweep is a follow-up task).
+- nvim: LazyVim runs the pyrefly LSP (pyright disabled). pi agents: the
+  committed `.pi-lens.json` points the python LSP at pyrefly.
+
 ## Testing
 
 After making changes, **always run the test suite** to verify nothing is broken:

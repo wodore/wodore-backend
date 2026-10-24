@@ -24,7 +24,7 @@ from django.utils import timezone
 
 from server.apps.huts.models import Hut
 
-from ...models import HutAvailability
+from ...models import GeoPlaceAvailability
 from ...services import SERVICES, AvailabilityService
 
 # availability sources that provide booking data (slug -> service)
@@ -203,9 +203,10 @@ class Command(BaseCommand):
                 f"Updating all {huts.count()} huts with availability sources{label}"
             )
         else:
-            # Default: Use priority-based selection + new huts
+            # Default: priority-based selection + new huts, driven by the
+            # place tables (geoplace-availability Phase C, task 3.3)
             click.echo("Using priority-based selection (includes new huts)")
-            huts = HutAvailability.objects.get_huts_needing_update(
+            huts = GeoPlaceAvailability.objects.get_huts_needing_update(
                 high_priority_minutes=high_priority_minutes,
                 medium_priority_minutes=medium_priority_minutes,
                 low_priority_minutes=low_priority_minutes,
@@ -340,7 +341,7 @@ class Command(BaseCommand):
                         current_hut = progress.tasks[fetch_task].completed or 0
                         new_batch = (current_hut // batch_size) + 1
                         if new_batch != current_batch["fetch"]:
-                            current_batch["fetch"] = new_batch
+                            current_batch["fetch"] = new_batch  # type: ignore  # argument typing drift vs stubs
                             # Update fetch status
                             progress.update(
                                 fetch_task,
@@ -361,7 +362,7 @@ class Command(BaseCommand):
 
                         # Update process status to show current batch
                         if new_batch != current_batch["process"]:
-                            current_batch["process"] = new_batch
+                            current_batch["process"] = new_batch  # type: ignore  # argument typing drift vs stubs
 
                         progress.update(
                             process_task,

@@ -65,7 +65,7 @@ def test_contract_holds_for_safe_operations():
 
     operations = []
     for result in schema.get_all_operations():
-        op = result.ok()
+        op = result.ok()  # type: ignore  # dynamic attr: plugin-less inference gap
         if op.definition.raw.get("operationId") in SAFE_OPERATIONS:
             operations.append(op)
     assert operations, "no SAFE operations found in the schema"

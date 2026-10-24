@@ -135,6 +135,14 @@ UNFOLD = {
                         ),
                     },
                     {
+                        "title": _("Parties"),
+                        "icon": "groups",
+                        "link": reverse_lazy("admin:parties_party_changelist"),
+                        "permission": lambda request: request.user.has_perm(
+                            "parties.view_party"
+                        ),
+                    },
+                    {
                         "title": _("Organizations"),
                         "icon": "corporate_fare",
                         "link": reverse_lazy(
@@ -505,6 +513,28 @@ UNFOLD = {
                     "link": reverse_lazy("admin:owners_ownerhutproxy_changelist"),
                     "permission": lambda request: request.user.has_perm(
                         "owners.view_ownerhutproxy"
+                    ),
+                },
+            ],
+        },
+        {
+            "models": [
+                "parties.party",
+                "parties.partylink",
+            ],
+            "items": [
+                {
+                    "title": _("Parties"),
+                    "link": reverse_lazy("admin:parties_party_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "parties.view_party"
+                    ),
+                },
+                {
+                    "title": _("Party Links"),
+                    "link": reverse_lazy("admin:parties_partylink_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "parties.view_partylink"
                     ),
                 },
             ],

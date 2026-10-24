@@ -46,14 +46,14 @@ def messages_text(request) -> list[str]:
 
 @pytest.fixture
 def superuser(db):
-    return get_user_model().objects.create_superuser(
+    return get_user_model().objects.create_superuser(  # type: ignore  # custom manager/queryset inference gap
         email="admin-lane@test.local", password="x"
     )
 
 
 @pytest.fixture
 def staff_user(db):
-    return get_user_model().objects.create_user(
+    return get_user_model().objects.create_user(  # type: ignore  # custom manager/queryset inference gap
         email="editor-lane@test.local", is_staff=True
     )
 
@@ -185,14 +185,8 @@ def test_changelist_actions_registered_with_change_permission(
     # View-only staff must not be able to run them (Django filters
     # changelist actions by allowed_permissions). The unfold @action
     # decorator's return typing hides the attribute (runtime-set).
-    assert (
-        LLMAdminMixin.translate_selected.allowed_permissions  # pyright: ignore[reportAttributeAccessIssue]  # runtime-set by @action
-        == ["change"]
-    )
-    assert (
-        LLMAdminMixin.assess_selected.allowed_permissions  # pyright: ignore[reportAttributeAccessIssue]  # runtime-set by @action
-        == ["change"]
-    )
+    assert LLMAdminMixin.translate_selected.allowed_permissions == ["change"]
+    assert LLMAdminMixin.assess_selected.allowed_permissions == ["change"]
 
 
 # --- Feature gating: UI only when the translation API is configured ------

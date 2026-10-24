@@ -291,7 +291,7 @@ class TestAdminSaveHook:
                 f"/admin/images/image/{image.id}/change/",
                 {
                     "source_url": "https://example.org/hut",
-                    "license": str(license_obj.id),  # pyright: ignore[reportAttributeAccessIssue]
+                    "license": str(license_obj.id),
                     "caption_en": "x",
                     "review_status": "approved",
                     "_continue": "1",

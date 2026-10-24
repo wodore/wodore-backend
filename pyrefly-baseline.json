@@ -1,0 +1,25 @@
+{
+  "errors": [
+    {
+      "column": 14,
+      "path": "server/apps/categories/api.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `QuerySet` has no attribute `active`",
+      "severity": "error"
+    },
+    {
+      "column": 48,
+      "path": "server/apps/geometries/schemas/_images.py",
+      "name": "no-matching-overload",
+      "concise_description": "No matching overload found for function `pydantic.fields.Field` called with arguments: (default_factory=type[ImageThumbhashesSchema], description=Literal['ThumbHash placeholder per rendering context (6 variants: thumb/preview × square/landscape/portrait). Individual hashes are null when not yet assessed.'])",
+      "severity": "error"
+    },
+    {
+      "column": 13,
+      "path": "server/settings/components/logging.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `CallsiteParameterAdder` is not assignable to parameter `object` with type `((logger: Logger, method_name: str, event_dict: MutableMapping[str, Any]) -> MutableMapping[str, Any]) | ((logger: Any, method_name: str, event_dict: MutableMapping[str, Any]) -> MutableMapping[str, Any])` in function `list.append`",
+      "severity": "error"
+    }
+  ]
+}

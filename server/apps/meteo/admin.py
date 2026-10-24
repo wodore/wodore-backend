@@ -49,21 +49,21 @@ class WeatherCodeSymbolInline(TabularInline):
             "symbol_night",
         )
 
-    @display(description=_("Collection"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Collection"))
     def collection_display(self, obj):
         """Display collection slug."""
         if obj.collection:
             return obj.collection.slug
         return "-"
 
-    @display(description=_("Weather Code"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Weather Code"))
     def weather_code_display(self, obj):
         """Display weather code."""
         if obj.weather_code:
             return f"WMO {obj.weather_code.code}"
         return "-"
 
-    @display(description=_("Day"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Day"))
     def symbol_day_preview(self, obj):
         """Show day symbol preview."""
         try:
@@ -76,7 +76,7 @@ class WeatherCodeSymbolInline(TabularInline):
             pass
         return mark_safe('<span style="color:#999;">-</span>')
 
-    @display(description=_("Night"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Night"))
     def symbol_night_preview(self, obj):
         """Show night symbol preview."""
         try:
@@ -139,7 +139,7 @@ class WeatherCodeAdmin(ModelAdmin):
     )
     # Note: Inlines disabled for performance - use WeatherCodeSymbol admin to manage symbols
     # inlines = [WeatherCodeSymbolInlineForWeatherCode]
-    fieldsets = (  # pyright: ignore[reportAssignmentType]  # unfold _FieldsetSpec gap
+    fieldsets = (
         (
             _("WMO Code"),
             {
@@ -189,7 +189,7 @@ class WeatherCodeAdmin(ModelAdmin):
         )
         return qs
 
-    @display(description=_("Category"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Category"))
     def category_display(self, obj):
         """Display category."""
         if obj.category and obj.category.parent:
@@ -198,7 +198,7 @@ class WeatherCodeAdmin(ModelAdmin):
             return obj.category.slug
         return "-"
 
-    @display(description=_("Day"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Day"))
     def symbol_preview_day(self, obj):
         """Show day symbol preview from weather-icons-filled collection."""
         try:
@@ -218,7 +218,7 @@ class WeatherCodeAdmin(ModelAdmin):
             pass
         return mark_safe('<span style="color:#999;">-</span>')
 
-    @display(description=_("Night"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Night"))
     def symbol_preview_night(self, obj):
         """Show night symbol preview from weather-icons-filled collection."""
         try:
@@ -235,7 +235,7 @@ class WeatherCodeAdmin(ModelAdmin):
             pass
         return mark_safe('<span style="color:#999;">-</span>')
 
-    @display(description=_("Day Description"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Day Description"))
     def description_preview_day(self, obj):
         """Show truncated day description."""
         if obj.description_day:
@@ -289,7 +289,7 @@ class WeatherCodeSymbolCollectionAdmin(ModelAdmin):
     )
     # Note: Inlines disabled for performance - use WeatherCodeSymbol admin to manage symbols
     # inlines = [WeatherCodeSymbolInlineForCollection]
-    fieldsets = (  # pyright: ignore[reportAssignmentType]  # unfold _FieldsetSpec gap
+    fieldsets = (
         (
             None,
             {
@@ -323,14 +323,14 @@ class WeatherCodeSymbolCollectionAdmin(ModelAdmin):
         # Note: Removed prefetch since inlines are disabled for performance
         return qs
 
-    @display(description=_("Organization"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Organization"))
     def source_org_display(self, obj):
         """Display source organization."""
         if obj.source_org:
             return obj.source_org.name or obj.source_org.slug
         return "-"
 
-    @display(description=_("Symbol Count"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Symbol Count"))
     def symbol_count(self, obj):
         """Display number of symbols in collection."""
         # Use annotated count if available, otherwise fall back to query
@@ -364,7 +364,7 @@ class WeatherCodeSymbolAdmin(ModelAdmin):
         "created",
         "modified",
     )
-    fieldsets = (  # pyright: ignore[reportAssignmentType]  # unfold _FieldsetSpec gap
+    fieldsets = (
         (
             None,
             {
@@ -404,21 +404,21 @@ class WeatherCodeSymbolAdmin(ModelAdmin):
             "symbol_night",
         )
 
-    @display(description=_("Weather Code"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Weather Code"))
     def weather_code_display(self, obj):
         """Display weather code."""
         if obj.weather_code:
             return f"WMO {obj.weather_code.code} ({obj.weather_code.slug})"
         return "-"
 
-    @display(description=_("Collection"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Collection"))
     def collection_display(self, obj):
         """Display collection."""
         if obj.collection:
             return obj.collection.slug
         return "-"
 
-    @display(description=_("Day Symbol"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Day Symbol"))
     def symbol_preview_day(self, obj):
         """Show day symbol preview."""
         try:
@@ -431,7 +431,7 @@ class WeatherCodeSymbolAdmin(ModelAdmin):
             pass
         return mark_safe('<span style="color:#999;">-</span>')
 
-    @display(description=_("Night Symbol"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Night Symbol"))
     def symbol_preview_night(self, obj):
         """Show night symbol preview."""
         try:

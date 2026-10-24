@@ -64,7 +64,7 @@ def annotate_hut_images(*, media_url: str = "", detail: bool = False):
     if not detail:
         extra["image_url"] = Concat(Value(media_url), F("image_set__image"))
     else:
-        extra["review_status"] = "image_set__review_status"
+        extra["review_status"] = "image_set__review_status"  # type: ignore  # django F/Concat expression assignment
 
     return JSONBAgg(
         JSONObject(

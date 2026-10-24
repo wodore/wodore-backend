@@ -175,7 +175,7 @@ class TestSitemapPlaces:
         assert b"sitemap-places-0.xml" in client.get("/v1/sitemap.xml").content
         page = client.get("/v1/sitemap-places-0.xml")
         assert page.status_code == 200
-        assert place.slug.encode() in page.content
+        assert place.slug.encode() in page.content  # type: ignore  # dynamic attr: plugin-less inference gap
 
     def test_nameless_place_excluded(
         self, seed_data, client, settings, include_category
@@ -194,7 +194,7 @@ class TestSitemapPlaces:
         place.save()
         self._clear()
         page = client.get("/v1/sitemap-places-0.xml")
-        assert place.slug.encode() not in page.content
+        assert place.slug.encode() not in page.content  # type: ignore  # dynamic attr: plugin-less inference gap
 
     def test_category_without_include_flag_excludes_places(
         self, seed_data, client, settings
@@ -212,7 +212,7 @@ class TestSitemapPlaces:
         place.categories.add(category)
         self._clear()
         page = client.get("/v1/sitemap-places-0.xml")
-        assert place.slug.encode() not in page.content
+        assert place.slug.encode() not in page.content  # type: ignore  # dynamic attr: plugin-less inference gap
 
     def test_category_tri_state_inheritance(
         self, seed_data, client, settings, include_category
@@ -245,8 +245,8 @@ class TestSitemapPlaces:
 
         self._clear()
         page = client.get("/v1/sitemap-places-0.xml")
-        assert listed.slug.encode() in page.content
-        assert excluded.slug.encode() not in page.content
+        assert listed.slug.encode() in page.content  # type: ignore  # dynamic attr: plugin-less inference gap
+        assert excluded.slug.encode() not in page.content  # type: ignore  # dynamic attr: plugin-less inference gap
 
     def test_effective_seo_sitemap_resolution(self, seed_data, include_category):
         from server.apps.categories.models import Category
@@ -296,13 +296,13 @@ class TestHreflangAlternates:
         # default), the <loc> is the default language's prefixed URL and
         # x-default points there too — the bare URL never appears.
         for lang in LANG_PREFIXES:
-            assert f"https://wodore.com/{lang}/hut/{hut.slug}" in body
-        assert f"https://wodore.com/{DEFAULT_LANG}/hut/{hut.slug}</loc>" in body
+            assert f"https://wodore.com/{lang}/hut/{hut.slug}" in body  # type: ignore  # dynamic attr: plugin-less inference gap
+        assert f"https://wodore.com/{DEFAULT_LANG}/hut/{hut.slug}</loc>" in body  # type: ignore  # dynamic attr: plugin-less inference gap
         assert (
-            f'hreflang="x-default" href="https://wodore.com/{DEFAULT_LANG}/hut/{hut.slug}"'
+            f'hreflang="x-default" href="https://wodore.com/{DEFAULT_LANG}/hut/{hut.slug}"'  # type: ignore  # dynamic attr: plugin-less inference gap
             in body
         )
-        assert f"https://wodore.com/hut/{hut.slug}</loc>" not in body
+        assert f"https://wodore.com/hut/{hut.slug}</loc>" not in body  # type: ignore  # dynamic attr: plugin-less inference gap
 
     def test_static_pages_no_alternates(self, seed_data, client):
         from django.core.cache import cache

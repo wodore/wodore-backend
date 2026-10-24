@@ -57,11 +57,11 @@ class OwnerHutAssociationsAdmin(ModelAdmin):
     inlines = (HutSourceViewInline,)
     list_select_related = ("hut_type_open",)
 
-    @display(description=_("Slug"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Slug"))
     def slug_small(self, obj):  # new
         return mark_safe(f'<span class="text-gray-500">{obj.slug}</span>')
 
-    @display(description=_("Owner"), header=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Owner"), header=True)
     def owner_title(self, obj):  # new
         if obj.hut_owner:
             return (
@@ -72,7 +72,7 @@ class OwnerHutAssociationsAdmin(ModelAdmin):
             )  # , mark_safe(f'<img src = "{obj.type.symbol_primitive.url}" width = "24"/>')
         return ("-", "")
 
-    @display(description=_("Hut"), header=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Hut"), header=True)
     def hut_title(self, obj):  # new
         return (
             obj.name_i18n,
@@ -83,7 +83,7 @@ class OwnerHutAssociationsAdmin(ModelAdmin):
         )
 
     @display(
-        description=_("Status"),  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+        description=_("Status"),
         ordering="status",
         label={
             Hut.ReviewStatusChoices.review: "info",

@@ -72,7 +72,7 @@ class HutsForTilesView(PostgresViewModel):
     # Sources (array of objects with slug and source_id)
     sources = models.JSONField(default=list)
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         managed = False
         db_table = "huts_for_tiles"
 

@@ -22,4 +22,4 @@ class GeoPlaceFactory(factory.django.DjangoModelFactory):
             return
         if extracted:
             for cat in extracted:
-                self.categories.add(cat)
+                self.categories.add(cat)  # type: ignore  # dynamic attr: plugin-less inference gap

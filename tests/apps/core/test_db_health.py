@@ -130,8 +130,8 @@ class TestReadyEndpoint:
         from django.urls import resolve
 
         match = resolve("/health/ready/")
-        assert match.func.view_class.__name__ == "HealthCheckView"
-        checks = match.func.view_initkwargs["checks"]
+        assert match.func.view_class.__name__ == "HealthCheckView"  # type: ignore  # dynamic attr: plugin-less inference gap
+        checks = match.func.view_initkwargs["checks"]  # type: ignore  # dynamic attr: plugin-less inference gap
         assert checks, "readiness view must run at least one check"
         check_class, options = checks[0]
         assert check_class is FastDatabaseReadinessCheck

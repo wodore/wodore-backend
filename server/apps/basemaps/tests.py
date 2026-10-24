@@ -94,7 +94,7 @@ class TestMapLayerConstraints:
         from django.core.exceptions import ValidationError
 
         layer = _raster_layer()
-        layer.style["layers"][0]["paint"] = {"raster-opacity": "{{nope.opacity}}"}
+        layer.style["layers"][0]["paint"] = {"raster-opacity": "{{nope.opacity}}"}  # type: ignore  # optional config access in test
         layer.save()  # DB constraints don't inspect tokens; clean() does
         with pytest.raises(ValidationError):
             layer.clean()
@@ -194,11 +194,11 @@ class TestResolution:
 
     def test_absolutize_root_relative_glyphs_and_sprite(self):
         style = {
-            "glyphs": "/font/{fontstack}/{range}.pbf",
+            "glyphs": "/font/{fontstack}/{range}",
             "sprite": [{"id": "wd", "url": "/sprite/wd-maps"}],
         }
         out = absolutize_urls(style, "http://martin:8075")
-        assert out["glyphs"] == "http://martin:8075/font/{fontstack}/{range}.pbf"
+        assert out["glyphs"] == "http://martin:8075/font/{fontstack}/{range}"
         assert out["sprite"][0]["url"] == "http://martin:8075/sprite/wd-maps"
 
     def test_absolutize_leaves_tokens(self):
@@ -783,9 +783,9 @@ class TestLegends:
         self._seed()
         assert not MapLayer.objects.filter(slug="huts-availability").exists()
         huts = MapLayer.objects.get(slug="huts")
-        assert "wd-huts" in huts.style["sources"]
+        assert "wd-huts" in huts.style["sources"]  # type: ignore  # optional config access in test
         assert "wd-bookings" in huts.style["sources"]
-        layer_ids = {layer["id"] for layer in huts.style["layers"]}
+        layer_ids = {layer["id"] for layer in huts.style["layers"]}  # type: ignore  # optional config access in test
         assert {"wd-huts", "wd-huts-selected", "wd-huts-occupation"} <= layer_ids
         assert "wd-huts-occupation-day3" in layer_ids
         # The date parameter drives the geojson source of the merged layer
@@ -819,7 +819,7 @@ class TestLegends:
         simple/detailed prefixes exist in no served sprite."""
         self._seed()
         huts = MapLayer.objects.get(slug="huts").style
-        sprite_urls = {s["id"]: s["url"] for s in huts["sprite"]}
+        sprite_urls = {s["id"]: s["url"] for s in huts["sprite"]}  # type: ignore  # optional config access in test
         assert (
             sprite_urls["wd"] == "{TILE_SERVER_URL}/sprite/accommodation,availability"
         )
@@ -1024,7 +1024,7 @@ class TestVersionFieldAndRenderCache:
         client = Client()
         first = client.get("/v1/map/styles/huts.json")
         layer = MapLayer.objects.get(slug="huts", spec=MapLayer.Spec.medium)
-        layer.style["layers"][0]["minzoom"] = 6
+        layer.style["layers"][0]["minzoom"] = 6  # type: ignore  # optional config access in test
         layer.save()
         second = client.get("/v1/map/styles/huts.json")
         assert second.headers["ETag"] != first.headers["ETag"]
@@ -1073,7 +1073,7 @@ class TestAssetVersionInjection:
                 {"id": "wd", "url": "https://tiles.example.org/sprite/accommodation"},
                 {"id": "wd-sdf", "url": "https://tiles.example.org/sdf_sprite/acco"},
             ],
-            "glyphs": "https://tiles.example.org/font/{fontstack}/{range}.pbf",
+            "glyphs": "https://tiles.example.org/font/{fontstack}/{range}",
             "sources": {
                 "wd-huts": {
                     "type": "vector",
@@ -1085,7 +1085,7 @@ class TestAssetVersionInjection:
         assert out["sprite"][0]["url"].endswith("?v=sprv")
         assert out["sprite"][1]["url"].endswith("?v=sprv")
         assert out["glyphs"] == (
-            "https://tiles.example.org/font/{fontstack}/{range}.pbf?v=fntv"
+            "https://tiles.example.org/font/{fontstack}/{range}?v=fntv"
         )
         assert out["sources"]["wd-huts"]["tiles"][0] == (
             "https://tiles.example.org/huts/{z}/{x}/{y}?v=hutv"
@@ -1489,7 +1489,7 @@ class TestPerStyleDigest:
                 {"id": "wd", "url": "{TILE_SERVER_URL}/sprite/accommodation"},
                 {"id": "mtk", "url": "https://icons.example.org/sprite"},
             ],
-            "glyphs": "{TILE_SERVER_URL}/font/{fontstack}/{range}.pbf",
+            "glyphs": "{TILE_SERVER_URL}/font/{fontstack}/{range}",
             "sources": {
                 "wd-huts": {
                     "type": "vector",
@@ -1557,9 +1557,36 @@ class TestProbeShapes:
             u for u in sprite_urls if not (u.endswith(".json") or u.endswith(".png"))
         ]
         assert not bare
-        # Fonts keep the template's .pbf (no double suffix)
+        # Fonts target the canonical extension-less route — Martin 301s
+        # `.pbf`-suffixed font URLs to it while dropping the query string
+        # (martin <= 1.16.1 redirect_font_ext), which would strip both the
+        # serve-time ?v= and the watcher nonce. Sprite bases keep their
+        # .json/.png probe suffixes (no handler on the bare base).
         for url in font_urls:
-            assert url.endswith("/0-255.pbf"), url
+            assert url.endswith("/0-255"), url
+            assert ".pbf" not in url, url
+
+    def test_seeded_glyph_templates_are_extensionless(self):
+        """Regression: authored Martin glyph templates must not carry a
+        ``.pbf`` suffix — Martin's font-ext redirect drops the query
+        string, so a suffixed template silently discards the ``?v=``
+        asset version injected at serve time (every glyph request then
+        pays a redirect and caches under a key that never rotates)."""
+        from django.core.management import call_command
+
+        from server.apps.basemaps.models import MapLayer
+
+        call_command("map_seed", verbosity=0)
+        martin_glyphs = [
+            layer.style["glyphs"]
+            for layer in MapLayer.objects.filter(is_active=True, style__isnull=False)
+            if isinstance(layer.style, dict)
+            and isinstance(layer.style.get("glyphs"), str)
+            and "/font/{fontstack}/{range}" in layer.style["glyphs"]
+        ]
+        assert martin_glyphs, "seeded styles reference Martin glyphs"
+        for glyphs in martin_glyphs:
+            assert glyphs.endswith("/font/{fontstack}/{range}"), glyphs
 
 
 @pytest.mark.django_db
@@ -1656,7 +1683,13 @@ class TestMartinWatcher:
 
         monkeypatch.setattr("server.apps.basemaps.tile_assets._fetch", fetch)
         # One unknown (404) stack must not block the fonts group…
-        unknown = next(u for u in fonts if u.endswith("/0-255.pbf"))
+        # (the "unknown" ones are expression keywords scraped from
+        # data-driven text-font arrays — they 404 on Martin by design)
+        unknown = next(
+            u
+            for u in fonts
+            if u.endswith("/case/0-255") or u.endswith("/literal/0-255")
+        )
         statuses[unknown] = 404
         stats = run_martin_watcher()
         assert "sprites" in stats["published"]

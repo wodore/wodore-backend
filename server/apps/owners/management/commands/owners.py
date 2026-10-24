@@ -41,4 +41,4 @@ class Command(CRUDCommand):
     use_limit_arg = True
     model = Owner
     model_names = "owners"
-    add_function = add_owner_function
+    add_function = add_owner_function  # type: ignore  # CRUDCommand hook typing drift

@@ -78,7 +78,7 @@ class AvailabilityTileCache(models.Model):
     expires_at = models.DateTimeField()
     hits = models.IntegerField(default=0)
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         managed = False
         db_table = "availability_tile_cache"
         verbose_name = "Availability Tile Cache"

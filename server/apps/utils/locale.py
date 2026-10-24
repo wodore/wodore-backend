@@ -100,6 +100,7 @@ class Translations(BaseModel):
         ignore_errors: bool | None = None,
     ):
         ignore_errors = self.__ignore_errors if ignore_errors is None else ignore_errors
+        lang: str | None = None
         if isinstance(value, str):
             lang = self.get_locale() if locale is None else locale
             try:
@@ -113,7 +114,7 @@ class Translations(BaseModel):
             value = value.dict()
         if isinstance(value, dict):
             for lang, value in value.items():
-                self.set(value, locale=lang, ignore_errors=ignore_errors)
+                self.set(value, locale=lang, ignore_errors=ignore_errors)  # type: ignore  # argument typing drift vs stubs
             return value
         if not ignore_errors:
             err_msg = f"Cannot set '{lang}: {value}' ({type(value)})"
@@ -151,16 +152,16 @@ class Translations(BaseModel):
 
     @classmethod
     def get_validator(cls, field: str) -> "Translations":
-        return validator(field, allow_reuse=True, pre=True)(cls.validator)  # pyright: ignore[reportArgumentType]  # pydantic v1 validator idiom
+        return validator(field, allow_reuse=True, pre=True)(cls.validator)  # type: ignore  # pydantic v1 validator idiom
 
     @classmethod
     def validator(cls, value: Union[str, dict, "Translations"]) -> "Translations":
         _t = None
         if isinstance(value, str):
             out = {get_current_locale(): value}
-            _t = Translations(**out)  # pyright: ignore[reportArgumentType]  # dynamic kwargs
+            _t = Translations(**out)  # type: ignore  # argument typing drift vs stubs
         elif isinstance(value, dict):
-            _t = Translations(**value)  # pyright: ignore[reportArgumentType]  # dynamic kwargs
+            _t = Translations(**value)
         if value is None:
             out = {get_current_locale(): value}
             _t = Translations()
@@ -223,9 +224,9 @@ class TranslationModel(BaseModel):
     def __getattr__(self, key):
         # try:
         if hasattr(super(), "__getattr__"):
-            return super().__getattr__(key)  # pyright: ignore[reportAttributeAccessIssue]  # dynamic fallback
+            return super().__getattr__(key)  # type: ignore  # dynamic attr: plugin-less inference gap
         if key[0] == "_":
-            return super().__getattr__(key)  # pyright: ignore[reportAttributeAccessIssue]  # dynamic fallback
+            return super().__getattr__(key)  # type: ignore  # dynamic attr: plugin-less inference gap
         return None
         # except:
         # raise
@@ -238,7 +239,7 @@ class TranslationModel(BaseModel):
             # return
             # super().__getattribute__(key)
             try:
-                orig = super().__getattr__(  # pyright: ignore[reportAttributeAccessIssue]  # dynamic fallback
+                orig = super().__getattr__(  # type: ignore  # dynamic attr: plugin-less inference gap
                     key
                 )
             except BaseException:
@@ -265,9 +266,7 @@ if __name__ == "__main__":
     class Demo(TranslationModel):
         name_t: Translations = Translations(locale="en")
         _name_t = Translations.get_validator("name_t")
-        name: str = Translations.TransField(  # pyright: ignore[reportAssignmentType]  # descriptor
-            field="name_t"
-        )
+        name: str = Translations.TransField(field="name_t")  # type: ignore  # TransField descriptor demo assignment
 
         bio_t: Translations = Translations(locale="fr")
         _bio_t = Translations.get_validator("bio_t")
@@ -275,16 +274,16 @@ if __name__ == "__main__":
 
         number: int = 10
 
-    demo = Demo(name_t="Tobias", bio_t="test")  # pyright: ignore[reportArgumentType]  # validator coercion
+    demo = Demo(name_t="Tobias", bio_t="test")
     rprint(demo)
     rprint(f"name: {demo.name}")
     rprint(f"bio: {demo.bio}")
     demo.name = "English"
-    demo.bio = "French"  # pyright: ignore[reportAttributeAccessIssue]  # descriptor set
+    demo.bio = "French"  # type: ignore  # descriptor set
     rprint(f"name: {demo.name}")
     rprint(f"bio: {demo.bio}")
     demo.bio_t.set_locale("it")
     rprint(f"name: {demo.name}")
     rprint(f"bio: {demo.bio}")
-    demo.bio = "Italy"  # pyright: ignore[reportAttributeAccessIssue]  # descriptor set
+    demo.bio = "Italy"  # type: ignore  # descriptor set
     rprint(f"bio: {demo.bio}")

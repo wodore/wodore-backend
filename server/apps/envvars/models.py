@@ -21,7 +21,7 @@ secretive names are refused outright (``EnvVar.clean``).
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, override
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -84,7 +84,7 @@ class EnvVar(TimeStampedModel):
         help_text=_("What this variable is used for (admin hint)"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Environment variable")
         verbose_name_plural = _("Environment variables")
         ordering = ("name",)
@@ -92,11 +92,13 @@ class EnvVar(TimeStampedModel):
     def __str__(self) -> str:
         return self.name
 
+    @override
     def save(self, *args: Any, **kwargs: Any) -> None:
         """Normalize the name to uppercase — registry lookups are exact."""
         self.name = self.name.upper()
         super().save(*args, **kwargs)
 
+    @override
     def clean(self) -> None:
         """Normalize case, then reject bad shapes and server-secret names."""
         self.name = (self.name or "").upper()

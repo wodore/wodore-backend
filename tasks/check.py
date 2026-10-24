@@ -38,9 +38,9 @@ def deps(c: Ctx):
 
 @task
 def types(c: Ctx):
-    """Static type checking"""
+    """Static type checking (pyrefly, baseline-gated: only new errors fail)"""
     header(doc())
-    c.run("uv run pyright  server", echo=True, pty=True)
+    c.run("uv run pyrefly check", echo=True, pty=True)
 
 
 @task
@@ -50,9 +50,9 @@ def test(c: Ctx):
     c.run("pytest -v", echo=True, pty=True)
 
 
-@task(pre=[lock, lint], default=True)
+@task(pre=[lock, lint, types], default=True)
 def check(c: Ctx):
     """Run code quality tools"""
     header("Summary")
     success("Code quality checks passed")
-    warning("'check.deps' and 'check.types' were skipped!")
+    warning("'check.deps' was skipped!")

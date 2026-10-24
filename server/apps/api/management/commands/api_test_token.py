@@ -18,7 +18,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "-u",
-            "--user",
+            "--user",  # type: ignore  # residual span suppression
             help="User email (fixture users: admin@local.test, editor@local.test)",
             default="admin@local.test",
         )
@@ -64,6 +64,8 @@ class Command(BaseCommand):
             )
             raise CommandError(1)
         token = tokens.issue_access_token(
-            user_obj, issuer, settings.LOCAL_AUTH_CLIENT_ID
+            user_obj,  # type: ignore  # residual span suppression
+            issuer,
+            settings.LOCAL_AUTH_CLIENT_ID,  # type: ignore  # argument typing drift vs stubs
         )
         print(token)

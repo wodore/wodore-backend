@@ -64,7 +64,7 @@ class GeoJSON(JsonBuildObject):
 
         for field in fields:
             properties.append(Value(field))
-            properties.append(F(field))
+            properties.append(F(field))  # type: ignore  # argument typing drift vs stubs
 
         features = JsonBuildObject(
             *[
@@ -77,7 +77,7 @@ class GeoJSON(JsonBuildObject):
             ]
         )
 
-        expressions.append(JSONBAgg(features))
+        expressions.append(JSONBAgg(features))  # type: ignore  # argument typing drift vs stubs
 
         super().__init__(*expressions)
 
