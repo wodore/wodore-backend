@@ -436,8 +436,8 @@ def _legend_payload(layer: MapLayer) -> dict[str, Any] | None:
     sections: list[dict[str, Any]] = []
     for section in legend.sections.all():
         entry: dict[str, Any] = {
-            "title": section.title_i18n or section.title,  # noqa: WPS308  # type: ignore  # modeltrans TranslationField dynamic attr
-            "description": section.description_i18n  # noqa: WPS308  # type: ignore  # modeltrans TranslationField dynamic attr
+            "title": section.title_i18n or section.title,  # noqa: WPS308
+            "description": section.description_i18n  # noqa: WPS308
             or section.description,
             "type": section.type,
         }
@@ -448,8 +448,8 @@ def _legend_payload(layer: MapLayer) -> dict[str, Any] | None:
         else:
             entry["items"] = [
                 {
-                    "label": item.label_i18n or item.label,  # noqa: WPS308  # type: ignore  # modeltrans TranslationField dynamic attr
-                    "description": item.description_i18n  # noqa: WPS308  # type: ignore  # modeltrans TranslationField dynamic attr
+                    "label": item.label_i18n or item.label,  # noqa: WPS308
+                    "description": item.description_i18n  # noqa: WPS308
                     or item.description,
                     "color": item.color,
                     "width": item.width,

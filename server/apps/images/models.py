@@ -47,6 +47,7 @@ class _ReviewStatusChoices(models.TextChoices):
 
 class ImageTag(TimeStampedModel):
     i18n = TranslationField(fields=("name",))
+    name_i18n: str
     objects = BaseMutlilingualManager()
 
     slug = models.SlugField(
@@ -74,6 +75,7 @@ class Image(TimeStampedModel):
     # add size field
     # add long caption or something ..
     i18n = TranslationField(fields=("caption",))
+    caption_i18n: str
     objects = BaseMutlilingualManager()
     ReviewStatusChoices = _ReviewStatusChoices
 
@@ -249,9 +251,9 @@ class Image(TimeStampedModel):
         )
 
     def __str__(self) -> str:
-        if len(str(self.caption_i18n)) > 40:  # type: ignore  # modeltrans TranslationField dynamic attr
-            return str(self.caption_i18n[:40]) + " ..."  # type: ignore  # modeltrans TranslationField dynamic attr
-        return str(self.caption_i18n)  # type: ignore  # modeltrans TranslationField dynamic attr
+        if len(str(self.caption_i18n)) > 40:
+            return str(self.caption_i18n[:40]) + " ..."
+        return str(self.caption_i18n)
 
     def get_image_tag(self, width: int = 100, height: int = 60, radius: int = 0):  # new
         try:

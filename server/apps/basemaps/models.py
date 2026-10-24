@@ -247,6 +247,8 @@ class MapLegend(TimeStampedModel):
         help_text=_("Legend intro text"),
     )
     i18n = TranslationField(fields=("title", "description"))
+    title_i18n: str
+    description_i18n: str
 
     links = models.ManyToManyField(
         "external_links.ExternalLink",
@@ -293,6 +295,8 @@ class MapLegendSection(TimeStampedModel):
     )
     order = models.PositiveSmallIntegerField(default=0, db_index=True)
     title = models.CharField(max_length=100, default="", blank=True)
+    title_i18n: str
+    description_i18n: str
     description = models.TextField(max_length=400, default="", blank=True)
     i18n = TranslationField(fields=("title", "description"))
     type = models.CharField(
@@ -348,6 +352,8 @@ class MapLegendItem(TimeStampedModel):
         related_name="items",
         db_index=True,
     )
+    label_i18n: str
+    description_i18n: str
     order = models.PositiveSmallIntegerField(default=0, db_index=True)
     label = models.CharField(max_length=100, default="", blank=True)
     description = models.TextField(max_length=400, default="", blank=True)

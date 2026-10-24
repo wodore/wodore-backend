@@ -35,6 +35,10 @@ class LicenseSlugField(models.SlugField):
 
 class License(TimeStampedModel):
     i18n = TranslationField(fields=("name", "fullname", "description", "url"))
+    name_i18n: str
+    fullname_i18n: str
+    description_i18n: str
+    url_i18n: str
     objects = BaseMutlilingualManager()
 
     slug = LicenseSlugField(unique=True)
@@ -102,7 +106,7 @@ class License(TimeStampedModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.name_i18n} - {self.fullname_i18n}"  # type: ignore  # modeltrans TranslationField dynamic attr
+        return f"{self.name_i18n} - {self.fullname_i18n}"
 
     @classmethod
     @lru_cache(50)

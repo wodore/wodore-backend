@@ -251,7 +251,7 @@ class WodoreProvider(ImageProvider):
                             {
                                 "id": place.id,
                                 "slug": place.slug,
-                                "name": place.name_i18n,  # type: ignore  # modeltrans TranslationField dynamic attr
+                                "name": place.name_i18n,
                                 "location": {
                                     "lat": place.location.y,  # type: ignore  # dynamic attr: plugin-less inference gap
                                     "lon": place.location.x,  # type: ignore  # dynamic attr: plugin-less inference gap
@@ -393,7 +393,7 @@ class WodoreProvider(ImageProvider):
                             img.source_org.slug
                         )  # Use slug for provider field
                         provider_name = (
-                            img.source_org.name_i18n or img.source_org.slug  # type: ignore  # modeltrans TranslationField dynamic attr
+                            img.source_org.name_i18n or img.source_org.slug
                         )  # Use name for attribution
                         provider_url = img.source_org.url
                         # Generate provider icon URL if logo exists

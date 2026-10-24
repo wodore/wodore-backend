@@ -17,6 +17,8 @@ class WeatherCode(TimeStampedModel):
     """
 
     i18n = TranslationField(fields=("description_day", "description_night"))
+    description_day_i18n: str
+    description_night_i18n: str
     objects = BaseMutlilingualManager()
 
     code = models.PositiveSmallIntegerField(

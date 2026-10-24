@@ -112,7 +112,7 @@ class HutSource(TimeStampedModel):
         )
 
     def __str__(self) -> str:
-        return f"{self.name} v{self.version} ({self.organization.name_i18n})"  # type: ignore  # modeltrans TranslationField dynamic attr
+        return f"{self.name} v{self.version} ({self.organization.name_i18n})"
 
     @classmethod
     def add(

@@ -160,10 +160,10 @@ class ExternalLinkAdmin(ModelAdmin):
         if obj.source.logo:
             return mark_safe(
                 f'<img class="inline" src="{settings.MEDIA_URL}{obj.source.logo}" '
-                f'width="24px" alt="{obj.source.name_i18n}" title="{obj.source.name_i18n}"/>'  # type: ignore  # modeltrans TranslationField dynamic attr
+                f'width="24px" alt="{obj.source.name_i18n}" title="{obj.source.name_i18n}"/>'
             )
 
-        return obj.source.name_i18n  # type: ignore  # modeltrans TranslationField dynamic attr
+        return obj.source.name_i18n
 
     @display(description=_("Health"))
     def health_status_display(self, obj: ExternalLink) -> str:

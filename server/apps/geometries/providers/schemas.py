@@ -55,6 +55,7 @@ class GeoPlaceSchema:
 
     slug: str
     name: str
+    name_i18n: str
     lat: float
     lon: float
     id: int | None = None  # Database ID (optional, not used by providers)
@@ -200,6 +201,7 @@ def geoplace_to_schema(geoplace: Any) -> GeoPlaceSchema:
         id=geoplace.id,  # Include database ID
         slug=geoplace.slug or "",
         name=geoplace.name_i18n,
+        name_i18n=geoplace.name_i18n,
         lat=geoplace.location.y,
         lon=geoplace.location.x,
         sources=sources,
@@ -241,6 +243,7 @@ def hut_to_schema(hut: Any) -> GeoPlaceSchema:
         id=hut.id,  # Include database ID
         slug=hut.slug or "",
         name=hut.name_i18n,
+        name_i18n=hut.name_i18n,
         lat=hut.location.y,
         lon=hut.location.x,
         sources=sources,

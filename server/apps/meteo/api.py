@@ -156,8 +156,8 @@ def build_weather_code_full(
     data: dict = {
         "code": weather_code.code,
         "slug": weather_code.slug,
-        "description_day": weather_code.description_day_i18n,  # noqa: WPS308  # type: ignore  # modeltrans TranslationField dynamic attr
-        "description_night": weather_code.description_night_i18n,  # noqa: WPS308  # type: ignore  # modeltrans TranslationField dynamic attr
+        "description_day": weather_code.description_day_i18n,  # noqa: WPS308
+        "description_night": weather_code.description_night_i18n,  # noqa: WPS308
     }
     if code_symbol is not None:
         data["symbol_day"] = _symbol_obj(request, code_symbol.symbol_day)

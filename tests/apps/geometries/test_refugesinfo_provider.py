@@ -39,6 +39,7 @@ def _place() -> GeoPlaceSchema:
     return GeoPlaceSchema(
         slug="cabane-test",
         name="Cabane Test",
+        name_i18n="Cabane Test",
         lat=44.13,
         lon=12.81,
         id=42,

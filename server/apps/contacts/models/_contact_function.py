@@ -13,6 +13,7 @@ class ContactFunction(TimeStampedModel):
     """Function of a contact, e.g. warden ..."""
 
     i18n = TranslationField(fields=("name",))
+    name_i18n: str
     objects = BaseMutlilingualManager()
 
     slug = models.SlugField(unique=True, db_index=True)
@@ -50,4 +51,4 @@ class ContactFunction(TimeStampedModel):
         indexes = (GinIndex(fields=["i18n"]),)
 
     def __str__(self) -> str:
-        return self.name_i18n  # type: ignore  # modeltrans TranslationField dynamic attr
+        return self.name_i18n
