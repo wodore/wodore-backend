@@ -16,9 +16,13 @@ from django.utils import timezone
 
 SYMBOLS_LIST_PIN = 1
 CATEGORIES_COLD_PIN = 1
-AVAILABILITY_CURRENT_PIN = 3  # hut fetch (types joined) + rows + association
-AVAILABILITY_TREND_PIN = 2  # hut fetch + history rows
-AVAILABILITY_GEOJSON_PIN = 1  # the SQL aggregate
+AVAILABILITY_CURRENT_PIN = (
+    4  # hut fetch (types joined) + place resolve + rows + association
+)
+AVAILABILITY_TREND_PIN = 3  # hut fetch + place resolve + history rows
+AVAILABILITY_GEOJSON_PIN = (
+    1  # the SQL aggregate over the availability_hut_features view
+)
 
 
 @pytest.mark.django_db
@@ -75,7 +79,12 @@ def availability_hut(db):
 
     from tests.factories.availability import AvailabilityFactory
 
-    from server.apps.availability.models import HutAvailabilityHistory
+    from server.apps.availability.models import (
+        GeoPlaceAvailability,
+        GeoPlaceAvailabilityHistory,
+        HutAvailabilityHistory,
+    )
+    from server.apps.availability.place_link import resolve_place
 
     availability = AvailabilityFactory(free=3, total=10)
     hut = availability.hut
@@ -87,6 +96,26 @@ def availability_hut(db):
     HutAvailabilityHistory.objects.create(
         hut=hut,
         availability=availability,
+        availability_date=availability.availability_date,
+        free=3,
+        total=10,
+        occupancy_percent=70.0,
+        occupancy_status="high",
+        reservation_status="unknown",
+        hut_type=hut.hut_type_open,
+        first_checked=day_start,
+        last_checked=day_start,
+    )
+    # Phase D (geoplace-availability): the trend endpoint reads the place
+    # history — mirror the entry onto the factory-mirrored place row.
+    place = resolve_place(hut)
+    assert place is not None
+    place_avail = GeoPlaceAvailability.objects.get(
+        geo_place=place, availability_date=availability.availability_date
+    )
+    GeoPlaceAvailabilityHistory.objects.create(
+        availability=place_avail,
+        geo_place=place,
         availability_date=availability.availability_date,
         free=3,
         total=10,

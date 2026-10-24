@@ -36,13 +36,21 @@ def hut_slug_to_place_ids() -> dict[str, int]:
 
 
 def resolve_place(hut: Hut, mapping: dict[str, int] | None = None) -> GeoPlace | None:
-    """Resolve a hut to its place, or ``None`` when no association exists."""
-    if mapping is None:
-        mapping = hut_slug_to_place_ids()
-    place_id = mapping.get(hut.slug)
-    if place_id is None:
-        return None
-    return GeoPlace.objects.filter(pk=place_id).first()
+    """Resolve a hut to its place, or ``None`` when no association exists.
+
+    Without ``mapping`` this issues ONE targeted query (the per-request
+    path used by the Phase D controllers) instead of loading the full
+    association map; batch callers pass a prebuilt ``mapping``.
+    """
+    if mapping is not None:
+        place_id = mapping.get(hut.slug)
+        if place_id is None:
+            return None
+        return GeoPlace.objects.filter(pk=place_id).first()
+    return GeoPlace.objects.filter(
+        source_associations__organization__slug=WODORE_ORG_SLUG,
+        source_associations__source_id=hut.slug,
+    ).first()
 
 
 def unmatched_huts() -> QuerySet[Hut]:

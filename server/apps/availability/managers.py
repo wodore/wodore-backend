@@ -295,13 +295,10 @@ class GeoPlaceAvailabilityManager(_PriorityNeedingUpdateMixin, BaseManager):
         Either date_to or days must be provided. If both are None, defaults to 14 days.
         If both are provided, date_to takes precedence.
         """
-        if date_from is None:
-            date_from = timezone.now().date()
-
+        date_from = date_from if date_from is not None else timezone.now().date()
+        span_days = days if days is not None else 14
         if date_to is None:
-            if days is None:
-                days = 14
-            date_to = date_from + datetime.timedelta(days=days)
+            date_to = date_from + datetime.timedelta(days=span_days)
 
         qs = self.filter(
             availability_date__gte=date_from,
@@ -348,12 +345,13 @@ class GeoPlaceAvailabilityManager(_PriorityNeedingUpdateMixin, BaseManager):
         from .place_link import WODORE_ORG_SLUG
 
         settings_dict = getattr(settings, "AVAILABILITY_UPDATE_SETTINGS", {})
-        if inactive_priority_minutes is None:
-            inactive_priority_minutes = settings_dict.get(
-                "INACTIVE_PRIORITY_MINUTES", 10080
-            )
+        inactive_minutes = (
+            inactive_priority_minutes
+            if inactive_priority_minutes is not None
+            else settings_dict.get("INACTIVE_PRIORITY_MINUTES", 10080)
+        )
         now = timezone.now()
-        inactive_threshold = now - datetime.timedelta(minutes=inactive_priority_minutes)
+        inactive_threshold = now - datetime.timedelta(minutes=inactive_minutes)
 
         # 1. Places with availability rows that need updates
         needing_places = (

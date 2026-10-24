@@ -24,7 +24,9 @@ from server.apps.api.query import BboxQuery, bbox_polygon
 from server.apps.api.throttling import AVAILABILITY_THROTTLES
 from server.apps.translations import LanguageQuery, activate
 
-from .models import HutAvailability, HutAvailabilityHistory
+from .feature_view import AvailabilityHutFeature
+from .models import GeoPlaceAvailability, GeoPlaceAvailabilityHistory
+from .place_link import resolve_place
 from .schemas import (
     AvailabilityTrendSchema,
     CurrentAvailabilitySchema,
@@ -141,7 +143,7 @@ class HutAvailabilityGeojsonController(ApiController):
         start_datetime = parse_availability_date(parsed_path.date)
         start_date = start_datetime.date()
 
-        qs = HutAvailability.objects.filter(
+        qs = AvailabilityHutFeature.objects.filter(
             availability_date__gte=start_date,
             availability_date__lt=start_date
             + datetime.timedelta(days=parsed_query.days),
@@ -237,9 +239,13 @@ class HutAvailabilityGeojsonController(ApiController):
 
         # Generate GeoJSON using PostgreSQL (point geometries need no
         # simplification). Version downgrades are applied uniformly by
-        # the API-version middleware for every JSON response.
-        return HutAvailabilityFeatureCollection(
-            **qs.aggregate(
+        # the API-version middleware for every JSON response. An empty
+        # result set aggregates to ``features: null`` — default to an
+        # empty list instead of failing schema validation (latent
+        # pre-Phase-D 500 on bbox views with no huts, exposed by the
+        # geoplace cutover).
+        geojson = (
+            qs.aggregate(
                 GeoJSON(
                     geom_field="location",
                     fields=properties,
@@ -247,7 +253,10 @@ class HutAvailabilityGeojsonController(ApiController):
                     simplify=False,
                 ),
             )["geojson"]
+            or {}
         )
+        geojson.setdefault("features", [])
+        return HutAvailabilityFeatureCollection(**geojson)
 
 
 class HutAvailabilityCurrentController(ApiController):
@@ -298,9 +307,16 @@ class HutAvailabilityCurrentController(ApiController):
         start_datetime = parse_availability_date(date_raw)
         start_date = start_datetime.date()
 
+        # Phase D (geoplace-availability): availability rows come from the
+        # place tables via the wodore association; the hut fetch above stays
+        # (slug/type fields, source_link derivation) until Phase E.
+        place = resolve_place(hut)
+        if place is None:
+            raise_not_found(f"No availability data found for hut '{slug}'")
+
         availabilities = (
-            HutAvailability.objects.filter(
-                hut=hut,
+            GeoPlaceAvailability.objects.filter(
+                geo_place=place,
                 availability_date__gte=start_date,
                 availability_date__lt=start_date
                 + datetime.timedelta(days=parsed_query.days),
@@ -425,9 +441,18 @@ class HutAvailabilityTrendController(ApiController):
         period_start = target_datetime - datetime.timedelta(days=parsed_query.limit)
         period_end = target_datetime
 
+        # Phase D (geoplace-availability): history comes from the place
+        # tables via the wodore association.
+        place = resolve_place(hut)
+        if place is None:
+            raise_not_found(
+                f"No historical data found for hut {slug!r} on date "
+                f"{target_date} within the specified period",
+            )
+
         history = (
-            HutAvailabilityHistory.objects.filter(
-                hut=hut,
+            GeoPlaceAvailabilityHistory.objects.filter(
+                geo_place=place,
                 availability_date=target_date,
                 first_checked__gte=period_start,
                 first_checked__lte=period_end,
