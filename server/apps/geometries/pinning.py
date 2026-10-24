@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 
 import structlog
 
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from server.apps.geometries.models import GeoPlaceImageAssociation
@@ -190,22 +190,28 @@ def _get_or_create_pin(
     if image is not None:
         return image, False
     try:
-        return (
-            Image.objects.create(
-                source_ident=ident,
-                source_org=org,
-                license=license_obj,
-                author=(result.author or "")[:255],
-                author_url=result.author_url or "",
-                source_url=_sanitize_url(result.source_url),
-                source_url_raw=_sanitize_url(result.url_large),
-                caption_en=_default_caption(result.source_id or ""),
-                capture_date=_aware(result.captured_at),
-                provider_synced_at=now,
-                image_meta=_merge_image_meta_from_result(result),
-            ),
-            True,
-        )
+        with transaction.atomic():
+            # Savepoint, not just style: a lost create race surfaces as an
+            # IntegrityError from this INSERT, and Postgres would otherwise
+            # keep the whole surrounding transaction aborted — the recovery
+            # lookup below would die with "current transaction is aborted"
+            # wherever a caller runs inside an outer atomic (review B-1).
+            return (
+                Image.objects.create(
+                    source_ident=ident,
+                    source_org=org,
+                    license=license_obj,
+                    author=(result.author or "")[:255],
+                    author_url=result.author_url or "",
+                    source_url=_sanitize_url(result.source_url),
+                    source_url_raw=_sanitize_url(result.url_large),
+                    caption_en=_default_caption(result.source_id or ""),
+                    capture_date=_aware(result.captured_at),
+                    provider_synced_at=now,
+                    image_meta=_merge_image_meta_from_result(result),
+                ),
+                True,
+            )
     except IntegrityError:
         # Lost a create race against a concurrent sync — the unique
         # constraint already minted the winner; fall back to it (or to a

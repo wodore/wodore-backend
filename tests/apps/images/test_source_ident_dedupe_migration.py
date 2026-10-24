@@ -17,13 +17,13 @@ the session's seed data, so the drop/re-add brackets the module instead
 """
 
 import importlib
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from server.apps.geometries.models import GeoPlaceImageAssociation
 from server.apps.huts.models import Hut, HutImageAssociation
-from server.apps.images.models import Image
+from server.apps.images.models import Image, ImageTag
 from server.apps.licenses.models import License
 
 pytestmark = pytest.mark.django_db
@@ -127,6 +127,45 @@ class TestMergeDuplicatePins:
         place_assoc = GeoPlaceImageAssociation.objects.get(geo_place=place)
         assert place_assoc.image_id == keeper.id
         assert place_assoc.score == 7  # the keeper's link won, not the twin's
+
+    def test_merges_triples_and_adopts_tags(self, license_obj, hut):
+        """N > 2 twins per ident: every duplicate collapses into the oldest
+        row, and tags carried only by dupes survive on the keeper (review
+        N-3/N-4 coverage)."""
+        keeper = Image.objects.create(
+            source_ident=IDENT,
+            license=license_obj,
+            created=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+        dupes = [
+            Image.objects.create(
+                source_ident=IDENT,
+                license=license_obj,
+                created=datetime(2026, 1, 2, tzinfo=UTC) + timedelta(days=n),
+            )
+            for n in range(2)
+        ]
+        keeper_tag = ImageTag.objects.create(slug="keeper-tag", name_en="Keeper")
+        dupe_tag = ImageTag.objects.create(slug="dupe-tag", name_en="Dupe")
+        keeper.tags.add(keeper_tag)
+        dupes[0].tags.add(dupe_tag)
+        # Each dupe links the hut; the keeper does not yet.
+        for dupe in dupes:
+            HutImageAssociation.objects.create(hut=hut, image=dupe, score=10)
+
+        migration = importlib.import_module(MIGRATION)
+        migration.merge_duplicate_pins(_RealApps(), None)
+
+        assert Image.objects.filter(source_ident=IDENT).count() == 1
+        keeper.refresh_from_db()
+        # Both links re-pointed onto the single survivor (not shadowed —
+        # they belonged to *different* dupe rows, so both are kept).
+        assert HutImageAssociation.objects.filter(hut=hut, image=keeper).count() == 1
+        # Tag union survives the merge.
+        assert set(keeper.tags.values_list("slug", flat=True)) == {
+            "keeper-tag",
+            "dupe-tag",
+        }
 
     def test_unique_idents_untouched(self, license_obj, hut):
         pin = Image.objects.create(

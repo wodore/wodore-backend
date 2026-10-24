@@ -111,40 +111,44 @@ class TestDuplicateSourceIdents:
 
     def test_lost_create_race_falls_back_to_existing_row(self, hut, monkeypatch):
         """Two syncs race, both lookups miss, both INSERT — the loser's
-        IntegrityError must collapse onto the winner's row."""
+        IntegrityError must collapse onto the winner's row.
+
+        Real database race, not a monkeypatched exception: the INSERT trips
+        the actual unique index while an outer transaction is open, so this
+        also pins the savepoint in ``_get_or_create_pin`` — without it,
+        Postgres keeps the transaction aborted and the recovery SELECT
+        dies with "current transaction is aborted" (review B-1)."""
+        from django.db import transaction
+
         from server.apps.geometries import pinning
 
-        pin_place_images(hut, [_result(score=80)])
+        pin_place_images(hut, [_result(score=80)])  # the race's winner
         winner = Image.objects.get(source_ident="wikicommons:File:Test.jpg")
 
         lookups = []
 
         def racing_canonical(ident):
+            # Simulate the loser's view: the first lookup misses (the
+            # winner's INSERT isn't visible yet), the recovery lookup hits.
             lookups.append(ident)
             if len(lookups) == 1:
-                return None  # mid-race: the winner's INSERT isn't visible yet
+                return None
             return (
                 pinning.Image.objects.filter(source_ident=ident)
                 .order_by("created", "id")
                 .first()
             )
 
-        def losing_create(**kwargs):
-            raise IntegrityError(
-                "duplicate key value violates unique constraint "
-                f"{SOURCE_IDENT_CONSTRAINT}"
-            )
-
         monkeypatch.setattr(pinning, "_canonical_pin", racing_canonical)
-        monkeypatch.setattr(Image.objects, "create", losing_create)
 
-        image, created = pinning._get_or_create_pin(
-            "wikicommons:File:Test.jpg",
-            _result(score=99),
-            pinning._org_for("wikicommons"),
-            pinning._license_for("cc-by-sa-4-0"),
-            timezone.now(),
-        )
+        with transaction.atomic():  # request-like context: no autocommit
+            image, created = pinning._get_or_create_pin(
+                "wikicommons:File:Test.jpg",
+                _result(score=99),
+                pinning._org_for("wikicommons"),
+                pinning._license_for("cc-by-sa-4-0"),
+                timezone.now(),
+            )
 
         assert created is False
         assert image.pk == winner.pk  # re-resolved onto the race's winner
