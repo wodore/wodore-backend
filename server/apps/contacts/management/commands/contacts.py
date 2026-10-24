@@ -1,11 +1,14 @@
 import random
+from typing import Any
 
 from server.core.management import CRUDCommand
 
 from ...models import Contact, ContactFunction
 
 
-def add_contact_function(parser, limit, **kwargs):
+def add_contact_function(
+    parser: "CRUDCommand[Contact]", limit: int, **kwargs: Any
+) -> None:
     from faker import Faker
 
     fake = Faker(["de", "fr", "it"])
@@ -31,9 +34,9 @@ def add_contact_function(parser, limit, **kwargs):
     )
 
 
-class Command(CRUDCommand):
+class Command(CRUDCommand[Contact]):
     help = "Add random (faker) contacts; drop/update/dump via the base CRUD options."
     use_limit_arg = True
-    model = Contact
+    model = Contact  # type: ignore  # argument typing drift vs stubs
     model_names = "contacts"
     add_function = add_contact_function  # type: ignore  # CRUDCommand hook typing drift
