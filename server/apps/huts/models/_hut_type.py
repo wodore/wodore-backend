@@ -55,7 +55,7 @@ class HutTypeHelper:
             Category instance or default/unknown if not found
         """
         parent = cls._get_parent()
-        category = Category.objects.by_slug(slug, parent=parent)
+        category = Category.objects.by_slug(slug, parent=parent)  # type: ignore  # from_queryset-generated method (pyrefly cannot model the factory)
         if category is None:
             return cls.get_default_type()
         return category

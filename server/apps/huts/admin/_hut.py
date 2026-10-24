@@ -360,14 +360,14 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
     def action_detail_next(self, request: HttpRequest, object_id: int):  # obj: Hut):
         obj = Hut.objects.get(id=object_id)
         return redirect(
-            reverse_lazy("admin:huts_hut_change", args=(obj.next() or object_id,))  # type: ignore  # argument typing drift vs stubs
+            str(reverse_lazy("admin:huts_hut_change", args=(obj.next() or object_id,)))
         )
 
     @action(description=_("Previous"), permissions=["view"])
     def action_detail_prev(self, request: HttpRequest, object_id: int):  # obj: Hut):
         obj = Hut.objects.get(id=object_id)
         return redirect(
-            reverse_lazy("admin:huts_hut_change", args=(obj.prev() or object_id,))  # type: ignore  # argument typing drift vs stubs
+            str(reverse_lazy("admin:huts_hut_change", args=(obj.prev() or object_id,)))
         )
 
     @action(description=_(mark_safe("set to <b>done</b>")), permissions=["change"])
@@ -377,7 +377,7 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         obj = Hut.objects.get(id=object_id)
         obj.review_status = Hut.ReviewStatusChoices.done
         obj.save()
-        return redirect(request.META.get("HTTP_REFERER"))  # type: ignore  # argument typing drift vs stubs
+        return redirect(request.META.get("HTTP_REFERER") or "/")
 
     @action(description=_(mark_safe("set to <b>review</b>")), permissions=["change"])
     def action_row_set_review_to_review(
@@ -386,7 +386,7 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         obj = Hut.objects.get(id=object_id)
         obj.review_status = Hut.ReviewStatusChoices.review
         obj.save()
-        return redirect(request.META.get("HTTP_REFERER"))  # type: ignore  # argument typing drift vs stubs
+        return redirect(request.META.get("HTTP_REFERER") or "/")
 
     @action(
         description=_(mark_safe("set to <b>reject</b> (inactive)")),
@@ -399,10 +399,10 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         obj.review_status = Hut.ReviewStatusChoices.reject
         obj.is_active = False
         obj.save()
-        return redirect(request.META.get("HTTP_REFERER"))  # type: ignore  # argument typing drift vs stubs
+        return redirect(request.META.get("HTTP_REFERER") or "/")
 
     @action(description=_(mark_safe("<b>delete</b> entry")), permissions=["delete"])
     def action_row_delete(self, request: HttpRequest, object_id: int):  # obj: Hut):
         obj = Hut.objects.get(id=object_id)
         obj.delete()
-        return redirect(request.META.get("HTTP_REFERER"))  # type: ignore  # argument typing drift vs stubs
+        return redirect(request.META.get("HTTP_REFERER") or "/")

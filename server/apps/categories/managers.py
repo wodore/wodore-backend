@@ -140,21 +140,8 @@ class CategoryManager(BaseMutlilingualManager):
             "symbol_mono",
         )
 
-    def active(self):
-        """Filter to only active categories."""
-        return self.get_queryset().active()
-
-    def roots(self):
-        """Filter to only root-level categories."""
-        return self.get_queryset().roots()
-
-    def children_of(self, parent):
-        """Get children of a specific parent."""
-        return self.get_queryset().children_of(parent)
-
-    def by_slug(self, slug: str, parent=None):
-        """Get category by slug and optional parent."""
-        return self.get_queryset().by_slug(slug, parent)
+    # active/roots/children_of/by_slug come from CategoryQuerySet via
+    # from_queryset below - typed, and queryset chains (.filter().active()) resolve.
 
     def resolve_slug(self, slug_path: str, is_active: bool = True):
         """Resolve a dot-notation slug path to a category."""
@@ -163,3 +150,6 @@ class CategoryManager(BaseMutlilingualManager):
     def find_by_slug(self, slug: str, is_active: bool = True):
         """Find category by slug, handling ambiguity."""
         return self.get_queryset().find_by_slug(slug, is_active)
+
+
+CategoryManager = CategoryManager.from_queryset(CategoryQuerySet)

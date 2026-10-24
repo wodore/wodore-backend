@@ -35,12 +35,22 @@ keep their CORS headers.
 from __future__ import annotations
 
 import json
+import typing as t
 from datetime import UTC, datetime
 
 import msgspec
 import structlog
 
 from django.http import HttpRequest, HttpResponse
+
+
+class ApiVersionedRequest(HttpRequest):
+    """HttpRequest with the attributes this middleware attaches (plugin-less typing)."""
+
+    api_version: str | None
+    api_version_source: str | None
+
+
 from django.utils.cache import patch_vary_headers
 
 from server.apps.api.error_codes import ErrorCode, problem_fields
@@ -152,8 +162,9 @@ class ApiVersionMiddleware:
         if source == "default":
             logger.info("api_version_unpinned", path=path, default_version=version)
 
-        request.api_version = version  # type: ignore  # middleware attaches request attr at runtime
-        request.api_version_source = source  # type: ignore  # middleware attaches request attr at runtime
+        typed_request = t.cast("ApiVersionedRequest", request)
+        typed_request.api_version = version
+        typed_request.api_version_source = source
 
         response = self.get_response(request)
 

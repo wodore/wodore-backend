@@ -788,7 +788,7 @@ class HutDetailController(ApiController):
             )
             hut_db.images = [old_photo.model_dump(), *hut_db.images]
         link = reverse_lazy("admin:huts_hut_change", args=[hut_db.pk])
-        hut_db.edit_link = request.build_absolute_uri(link)  # type: ignore  # argument typing drift vs stubs
+        hut_db.edit_link = request.build_absolute_uri(str(link))
 
         # Get modified timestamp from ETag calculation
         modified_timestamp = get_last_modified_timestamp(
