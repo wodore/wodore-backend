@@ -9,7 +9,7 @@ from ._base_detail import GeoPlaceDetailBase
 
 if TYPE_CHECKING:
     from server.apps.geometries.models import GeoPlace
-    from server.apps.geometries.schemas import AmenityDetailInput
+    from server.apps.geometries.schemas import GeoPlaceAmenityInput
     from server.core.utils import UpdateCreateStatus
 
 
@@ -196,7 +196,7 @@ class AmenityDetail(GeoPlaceDetailBase):
     def update_or_create(
         cls,
         place: GeoPlace,
-        schema: AmenityDetailInput,
+        schema: GeoPlaceAmenityInput,
         protected_fields: set[str] | None = None,
     ) -> tuple[AmenityDetail, UpdateCreateStatus]:
         """
@@ -204,16 +204,16 @@ class AmenityDetail(GeoPlaceDetailBase):
 
         Args:
             place: GeoPlace instance
-            schema: AmenityDetailInput schema with detail data
+            schema: GeoPlaceAmenityInput schema with detail data
             protected_fields: Set of field names that should not be updated
 
         Returns:
             Tuple of (AmenityDetail instance, UpdateCreateStatus)
 
         Example:
-            from server.apps.geometries.schemas import AmenityDetailInput
+            from server.apps.geometries.schemas import GeoPlaceAmenityInput
 
-            schema = AmenityDetailInput(
+            schema = GeoPlaceAmenityInput(
                 operating_status="open",
                 opening_hours={"mon": [["09:00", "18:00"]]},
                 phones=[PhoneSchema(number="+41 123 456 789")],
@@ -244,11 +244,14 @@ class AmenityDetail(GeoPlaceDetailBase):
         update_fields = []
 
         # Update operating_status
-        if "operating_status" not in protected:
-            if detail.operating_status != schema.operating_status:
-                detail.operating_status = schema.operating_status
-                update_fields.append("operating_status")
-                updated = True
+        if (
+            "operating_status" not in protected
+            and schema.operating_status is not None
+            and detail.operating_status != schema.operating_status
+        ):
+            detail.operating_status = schema.operating_status
+            update_fields.append("operating_status")
+            updated = True
 
         # Update opening_months
         if "opening_months" not in protected and schema.opening_months:
@@ -275,9 +278,9 @@ class AmenityDetail(GeoPlaceDetailBase):
                 updated = True
 
         # Update brand
-        if "brand" not in protected and schema.brand_slug:
+        if "brand" not in protected and schema.brand is not None:
             try:
-                brand = Category.objects.get(slug=schema.brand_slug)
+                brand = Category.objects.get(slug=schema.brand.slug)
                 if detail.brand != brand:
                     detail.brand = brand
                     update_fields.append("brand")

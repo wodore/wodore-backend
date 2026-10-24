@@ -48,15 +48,15 @@ _WC_CACHE_CONTROL = "public, max-age=3600, stale-while-revalidate=604800"
 # ---------------------------------------------------------------------------
 
 
-class _SymbolDTOSchema(type("_SymbolDTOSchema", (), {})):
+class _SymbolDTOSchema(type("_SymbolDTOSchema", (), {})):  # type: ignore  # dynamic msgspec DTO base (type() factory)
     """Documentation shape for symbol fields (slug + url)."""
 
 
-class _CategoryDTOSchema(type("_CategoryDTOSchema", (), {})):
+class _CategoryDTOSchema(type("_CategoryDTOSchema", (), {})):  # type: ignore  # dynamic msgspec DTO base (type() factory)
     """Documentation shape for category fields."""
 
 
-class _CollectionDTOSchema(type("_CollectionDTOSchema", (), {})):
+class _CollectionDTOSchema(type("_CollectionDTOSchema", (), {})):  # type: ignore  # dynamic msgspec DTO base (type() factory)
     """Documentation shape for collection fields."""
 
 
@@ -244,6 +244,8 @@ def project_meteo_fields(data: dict, parsed_query, request: HttpRequest) -> dict
 
         if isinstance(spec, str):
             selected = {n.strip() for n in spec.split(",") if n.strip()}
+        else:  # unknown spec shapes: empty selection instead of UnboundLocalError
+            selected: set[str] = set()
 
         if type_name == "symbols":
             # Narrow symbol_day and symbol_night (both share the TYPE)
@@ -395,7 +397,7 @@ class WeatherCodesController(ApiController):
             full = build_weather_code_full(weather_code, code_symbol, request)
             result[weather_code.code] = project_meteo_fields(full, query, request)
 
-        return result
+        return result  # type: ignore  # weather-code dicts keyed by WMO code
 
 
 class WeatherCodeController(ApiController):

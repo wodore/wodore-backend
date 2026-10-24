@@ -45,7 +45,7 @@ class FeedbackAdmin(ModelAdmin):
         ),
     ]
 
-    view_on_site = True  # pyright: ignore[reportIncompatibleVariableOverride, reportAssignmentType]  # Django admin idiom
+    view_on_site = True
     list_display = ("email", "subject", "created", "get_updates", "status_tag")
     list_display_links = ("email",)
     list_filter = (
@@ -59,7 +59,7 @@ class FeedbackAdmin(ModelAdmin):
     readonly_fields = ("created", "modified")
 
     @display(
-        description=_("Status"),  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+        description=_("Status"),
         ordering="status",
         label={
             # Feedback.FeedbackStatusChoices.review: "info",

@@ -36,7 +36,7 @@ def test_pk_sequences_sit_above_explicit_pks():
             cursor.execute(f"SELECT last_value, is_called FROM {seq}")
             last_value, is_called = cursor.fetchone()
             cursor.execute(
-                f"SELECT COALESCE(MAX({qn(field.column)}), 0) FROM {qn(model._meta.db_table)}"
+                f"SELECT COALESCE(MAX({qn(field.column)}), 0) FROM {qn(model._meta.db_table)}"  # type: ignore  # argument typing drift vs stubs
             )
             max_pk = cursor.fetchone()[0]
             next_id = last_value + 1 if is_called else last_value

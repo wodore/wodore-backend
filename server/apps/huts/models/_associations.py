@@ -25,7 +25,7 @@ class HutContactAssociation(TimeStampedModel):
     def __str__(self) -> str:
         return f"{self.hut} <> {self.contact}"
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Contact and Hut Association")
         ordering = ("contact__function__priority", "order", "hut__name")
         app_label = "huts"
@@ -78,7 +78,7 @@ class HutImageAssociation(TimeStampedModel):
     def __str__(self) -> str:
         return f"{self.hut} <> {self.image}"
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Image and Hut Association")
         ordering = ("hut__name", "-score", "id")
         app_label = "huts"
@@ -107,7 +107,7 @@ class HutOrganizationAssociation(TimeStampedModel, ComputedFieldsModel):
     )
     # link -> see below (computed)
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Hut and Organization Association")
         constraints = (
             models.UniqueConstraint(

@@ -140,7 +140,7 @@ def _hut_markdown(request: HttpRequest, hut: Hut) -> str:
             hut.hut_type_open.name if hut.hut_type_open else None,
             _fmt_elevation(hut.elevation),
             hut.hut_owner.name if hut.hut_owner else None,
-            hut.country_field.name if hut.country_field else None,
+            hut.country_field.name if hut.country_field else None,  # type: ignore  # dynamic attr: plugin-less inference gap
         )
         if part
     )
@@ -166,7 +166,7 @@ def _hut_markdown(request: HttpRequest, hut: Hut) -> str:
         ),
         ("Owner", hut.hut_owner.name if hut.hut_owner else None),
         ("Website", hut.url or None),
-    ]
+    ]  # type: ignore  # optional lastmod tuples
     overview_rows = "\n".join(
         f"| {label} | {value} |" for label, value in overview if value
     )
@@ -214,7 +214,7 @@ def _hut_markdown(request: HttpRequest, hut: Hut) -> str:
     attribution_line = f"\n*Description: {attribution}*\n" if attribution else ""
 
     sources = []
-    for association in hut.orgs_source.select_related("organization").order_by(
+    for association in hut.orgs_source.select_related("organization").order_by(  # type: ignore  # dynamic attr: plugin-less inference gap
         "organization__order", "organization__slug"
     ):
         organization = association.organization

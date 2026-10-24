@@ -31,7 +31,7 @@ _MAX_LISTED = 8
 class DescriptionQualityFilter(admin.SimpleListFilter):
     """Range filter for the LLM description quality score."""
 
-    title = _("description quality")  # pyright: ignore[reportAssignmentMismatch]  # SimpleListFilter API
+    title = _("description quality")
     parameter_name = "description_quality_range"
 
     def lookups(self, request, model_admin):
@@ -72,7 +72,7 @@ class LLMAdminMixin(admin.ModelAdmin):
     actions = ("translate_selected", "assess_selected")
 
     @display(
-        description=_("Quality"),  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+        description=_("Quality"),
         ordering="description_quality",
         label={
             str(score): "danger"
@@ -90,7 +90,7 @@ class LLMAdminMixin(admin.ModelAdmin):
 
     # -- changelist actions ------------------------------------------------
 
-    def get_actions(self, request) -> dict[str, t.Any]:
+    def get_actions(self, request) -> dict[str, t.Any]:  # type: ignore  # admin hook signature drift vs stubs
         """Hide the LLM bulk actions when the API is unconfigured.
 
         Filters the inherited actions instead of returning an empty dict so
@@ -102,19 +102,15 @@ class LLMAdminMixin(admin.ModelAdmin):
             actions.pop("assess_selected", None)
         return actions
 
-    @action(  # pyright: ignore[reportArgumentType]  # decorator kwargs
-        description=_(  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
-            "Translate missing languages (AI)"
-        ),
+    @action(
+        description=_("Translate missing languages (AI)"),
         permissions=["change"],
     )
     def translate_selected(self, request: HttpRequest, queryset) -> None:
         self._run_llm(request, queryset, mode="translate")
 
-    @action(  # pyright: ignore[reportArgumentType]  # decorator kwargs
-        description=_(  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
-            "Assess description (AI)"
-        ),
+    @action(
+        description=_("Assess description (AI)"),
         permissions=["change"],
     )
     def assess_selected(self, request: HttpRequest, queryset) -> None:

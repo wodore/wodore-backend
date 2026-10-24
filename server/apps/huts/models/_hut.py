@@ -87,7 +87,7 @@ class Hut(TimeStampedModel):
     # plugin-less Pyright, which flags custom-manager overrides on every
     # Django model (mutable manager invariance — django-stubs relies on its
     # mypy plugin for this, see https://github.com/typeddjango/django-stubs).
-    objects: HutManager = HutManager()  # pyright: ignore[reportIncompatibleVariableOverride]
+    objects: HutManager = HutManager()
 
     UPDATE_SCHEMA_FIELDS = (
         "slug",
@@ -302,7 +302,7 @@ class Hut(TimeStampedModel):
     # type: ignore[assignment] below: Expressions in `ordering` (Lower) make the
     # Meta type structurally incompatible with the abstract base Meta — a known
     # django-stubs/Pyright limitation, harmless at runtime.
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Hut")
         ordering = (Lower("name_i18n"),)
         indexes = (
@@ -804,7 +804,7 @@ class Hut(TimeStampedModel):
                 ):
                     old_value = getattr(hut_db, f)
                     # special comparision for dbPoint -> valus are always different because it is a class
-                    if isinstance(v, dbPoint) and v.tuple == old_value.tuple:  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
+                    if isinstance(v, dbPoint) and v.tuple == old_value.tuple:  # type: ignore[attr-defined]
                         continue
                     setattr(hut_db, f, v)
                     sp = (

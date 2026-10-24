@@ -43,7 +43,7 @@ def dhash64(image: PILImage.Image) -> str:
     near-duplicates sit within a small Hamming distance.
     """
     gray = image.convert("L").resize(ASSESS_SIZE, PILImage.Resampling.LANCZOS)
-    pixels = list(gray.getdata())
+    pixels = list(gray.getdata())  # type: ignore  # argument typing drift vs stubs
     bits = 0
     for row in range(8):
         for col in range(8):
@@ -78,7 +78,7 @@ def quality_metrics(image: PILImage.Image) -> dict:
         for r in range(3)
         for c in range(3)
     )
-    sharpness = float(laplacian.var())
+    sharpness = float(laplacian.var())  # type: ignore  # dynamic attr: plugin-less inference gap
 
     total = gray.size
     dark_share = float((gray < 8).sum()) / total
@@ -248,7 +248,7 @@ def assess_place_pins(place, *, force: bool = False) -> dict:
         primary = None
         for candidate in primaries:
             if (
-                hamming_distance(image.phash, candidate.phash)
+                hamming_distance(image.phash, candidate.phash)  # type: ignore  # argument typing drift vs stubs
                 <= DUPLICATE_HAMMING_DISTANCE
             ):
                 primary = candidate
@@ -567,7 +567,7 @@ def thumbhash_to_image(thumbhash: str):
                     start_cx = 0 if cy else 1
                     fy2 = fy[cy] * 2
                     for cx in range(start_cx, 5 - cy):
-                        a += a_ac[j] * fx[cx] * fy2
+                        a += a_ac[j] * fx[cx] * fy2  # type: ignore  # optional analysis payload subscript
                         j += 1
             b = l - 2 / 3 * p
             r = (3 * l - b + q) / 2

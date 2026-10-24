@@ -94,7 +94,7 @@ class TestMapLayerConstraints:
         from django.core.exceptions import ValidationError
 
         layer = _raster_layer()
-        layer.style["layers"][0]["paint"] = {"raster-opacity": "{{nope.opacity}}"}
+        layer.style["layers"][0]["paint"] = {"raster-opacity": "{{nope.opacity}}"}  # type: ignore  # optional config access in test
         layer.save()  # DB constraints don't inspect tokens; clean() does
         with pytest.raises(ValidationError):
             layer.clean()
@@ -783,9 +783,9 @@ class TestLegends:
         self._seed()
         assert not MapLayer.objects.filter(slug="huts-availability").exists()
         huts = MapLayer.objects.get(slug="huts")
-        assert "wd-huts" in huts.style["sources"]
+        assert "wd-huts" in huts.style["sources"]  # type: ignore  # optional config access in test
         assert "wd-bookings" in huts.style["sources"]
-        layer_ids = {layer["id"] for layer in huts.style["layers"]}
+        layer_ids = {layer["id"] for layer in huts.style["layers"]}  # type: ignore  # optional config access in test
         assert {"wd-huts", "wd-huts-selected", "wd-huts-occupation"} <= layer_ids
         assert "wd-huts-occupation-day3" in layer_ids
         # The date parameter drives the geojson source of the merged layer
@@ -819,7 +819,7 @@ class TestLegends:
         simple/detailed prefixes exist in no served sprite."""
         self._seed()
         huts = MapLayer.objects.get(slug="huts").style
-        sprite_urls = {s["id"]: s["url"] for s in huts["sprite"]}
+        sprite_urls = {s["id"]: s["url"] for s in huts["sprite"]}  # type: ignore  # optional config access in test
         assert (
             sprite_urls["wd"] == "{TILE_SERVER_URL}/sprite/accommodation,availability"
         )
@@ -1024,7 +1024,7 @@ class TestVersionFieldAndRenderCache:
         client = Client()
         first = client.get("/v1/map/styles/huts.json")
         layer = MapLayer.objects.get(slug="huts", spec=MapLayer.Spec.medium)
-        layer.style["layers"][0]["minzoom"] = 6
+        layer.style["layers"][0]["minzoom"] = 6  # type: ignore  # optional config access in test
         layer.save()
         second = client.get("/v1/map/styles/huts.json")
         assert second.headers["ETag"] != first.headers["ETag"]

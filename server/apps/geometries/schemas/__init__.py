@@ -52,9 +52,6 @@ from ._output import (
 
 __all__ = [
     "DEFAULT_THUMBHASHES",
-    "# Image schemas",
-    "# Input schemas",
-    "# Output schemas",
     "AmenityDetailSchema",
     "AmenitySchema",
     "BrandInput",

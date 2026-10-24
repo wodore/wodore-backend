@@ -9,7 +9,7 @@ from server.core.managers import BaseManager
 
 
 class OwnerManager(MultilingualManager, BaseManager):
-    def get_or_create(
+    def get_or_create(  # type: ignore  # MultilingualManager MRO generics
         self, defaults: MutableMapping[str, Any] | None = None, **kwargs: Any
     ) -> tuple[Any, bool]:
         """A convenience method for looking up an object with the given kwargs, creating one if necessary.

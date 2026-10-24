@@ -655,7 +655,6 @@ if __name__ == "__main__":
 
     async def test_camptocamp():
         """Test the Camptocamp provider."""
-        from server.apps.geometries.providers.camptocamp import CamptocampProvider
 
         # Test coordinates
         lat = 46.55553

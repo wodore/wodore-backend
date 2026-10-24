@@ -62,7 +62,7 @@ def rp_mode(settings):
 @pytest.fixture
 def oidc_session_user(client):
     """Superuser whose session was created by the OIDC backend."""
-    user = get_user_model().objects.create_superuser(
+    user = get_user_model().objects.create_superuser(  # type: ignore  # custom manager/queryset inference gap
         email="admin-session@example.test", password="x"
     )
     client.force_login(

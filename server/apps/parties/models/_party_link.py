@@ -32,7 +32,7 @@ class PartyLink(TimeStampedModel):
         help_text=_("Display order for this link"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Party Link")
         verbose_name_plural = _("Party Links")
         ordering = ["order", "id"]

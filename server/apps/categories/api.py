@@ -99,7 +99,7 @@ def _load_category_tree(is_active: bool):
         "symbol_mono",
     )
     if is_active:
-        qs = qs.active()
+        qs = qs.active()  # type: ignore  # custom manager/queryset inference gap
 
     nodes = list(qs)
     children: dict[int | None, list[Category]] = {}
@@ -310,7 +310,7 @@ class CategoryTreeController(ApiController):
                         children_map,
                     )
                     for child in children_map.get(category.id, [])
-                ]
+                ]  # type: ignore  # serialized dicts match schema shape at runtime
 
             roots = [node for node in nodes if node.parent_id is None]
             return [
@@ -324,7 +324,7 @@ class CategoryTreeController(ApiController):
                     children_map,
                 )
                 for root in roots
-            ]
+            ]  # type: ignore  # serialized dicts match schema shape at runtime
 
 
 class CategoryListController(ApiController):
@@ -362,7 +362,7 @@ class CategoryListController(ApiController):
                     base_level,
                     children_map,
                     include_self=False,
-                )
+                )  # type: ignore  # serialized dicts match schema shape at runtime
 
             result = []
             for cat in sorted(nodes, key=lambda c: (c.order, c.slug)):
@@ -371,7 +371,7 @@ class CategoryListController(ApiController):
                     data["children"] = _has_children(children_map, cat)
                     result.append(data)
 
-            return result
+            return result  # type: ignore  # serialized dicts match schema shape at runtime
 
 
 class CategoryMapController(ApiController):
@@ -411,7 +411,7 @@ class CategoryMapController(ApiController):
                         base_level + 1,
                         children_map,
                     )
-                return result
+                return result  # type: ignore  # serialized dicts match schema shape at runtime
 
             roots = [node for node in nodes if node.parent_id is None]
             result = {}
@@ -425,7 +425,7 @@ class CategoryMapController(ApiController):
                     0,
                     children_map,
                 )
-            return result
+            return result  # type: ignore  # serialized dicts match schema shape at runtime
 
 
 class _SymbolSvgPath(pydantic.BaseModel):

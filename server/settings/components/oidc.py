@@ -125,7 +125,7 @@ OIDC_PROVIDER_PRIVATE_JWK: dict = _resolve_provider_jwk() if OIDC_ENABLED else {
 
 def _jwk_to_pem(jwk: dict) -> str:
     key = JsonWebKey.import_key(jwk, {"kty": "RSA"})
-    pem = key.as_pem(is_private=True)  # pyright: ignore[reportAttributeAccessIssue]  # authlib Key stubs lack as_pem
+    pem = key.as_pem(is_private=True)  # type: ignore  # authlib Key stubs lack as_pem
     return pem.decode() if isinstance(pem, bytes) else str(pem)
 
 

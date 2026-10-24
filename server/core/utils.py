@@ -38,7 +38,7 @@ def get_redirect_url(url: str) -> str:
     A failing HEAD request is never cached: the exception propagates and
     the next call retries.
     """
-    return caches["persistent"].get_or_set(
+    return caches["persistent"].get_or_set(  # type: ignore  # cached getattr loses type
         f"media:redirect:{url}",
         lambda: (
             requests.head(

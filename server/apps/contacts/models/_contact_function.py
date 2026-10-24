@@ -13,6 +13,7 @@ class ContactFunction(TimeStampedModel):
     """Function of a contact, e.g. warden ..."""
 
     i18n = TranslationField(fields=("name",))
+    name_i18n: str
     objects = BaseMutlilingualManager()
 
     slug = models.SlugField(unique=True, db_index=True)
@@ -44,10 +45,10 @@ class ContactFunction(TimeStampedModel):
 
     # contacts -> access all contacts
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Contact Function")
         ordering = ("priority", "name_i18n")
         indexes = (GinIndex(fields=["i18n"]),)
 
     def __str__(self) -> str:
-        return self.name_i18n  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation
+        return self.name_i18n

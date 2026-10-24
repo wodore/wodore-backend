@@ -78,12 +78,12 @@ class ContactAdmin(ModelAdmin):
 
     inlines = (_ContactOwnerAssociationEditInline, _ContactHutAssociationEditInline)
 
-    def formfield_for_dbfield(self, db_field, **kwargs):
+    def formfield_for_dbfield(self, db_field, **kwargs):  # type: ignore  # admin hook signature drift vs stubs
         formfield = super().formfield_for_dbfield(db_field, **kwargs)
         if db_field.name == "address":
-            attr = formfield.widget.attrs
+            attr = formfield.widget.attrs  # type: ignore  # dynamic attr: plugin-less inference gap
             attr["rows"] = 3
-            formfield.widget = Textarea(attrs=attr)
+            formfield.widget = Textarea(attrs=attr)  # type: ignore  # dynamic attr: plugin-less inference gap
         # if db_field.name == "note_i18n":
         #    formfield.widget.attrs["readonly"] = True
         #    # formfield.widget.attrs["class"] = " ".join(INPUT_CLASSES_READONLY)
@@ -98,11 +98,11 @@ class ContactAdmin(ModelAdmin):
     #        # field.widget = Textarea
     #    return field
 
-    @display(header=True, description=_("Name and Email"), ordering=Lower("name"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(header=True, description=_("Name and Email"), ordering=Lower("name"))
     def name_email(self, obj):
         return (obj.name, obj.email)
 
-    @display(header=True, description=_("Address"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(header=True, description=_("Address"))
     def address_fmt(self, obj):
         adr_list = [a.strip() for a in obj.address.replace(",", "\n").split("\n")]
         header = ""
@@ -113,7 +113,7 @@ class ContactAdmin(ModelAdmin):
             content = adr_list[1:]
         return header, mark_safe(", ".join(content))
 
-    @display(header=False, description=_("Phone"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(header=False, description=_("Phone"))
     def mobile_or_phone(self, obj):
         mobile = self._phone_link(obj.mobile, icon="smartphone")
         phone = self._phone_link(obj.phone, icon="call")

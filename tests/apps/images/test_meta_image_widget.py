@@ -18,7 +18,7 @@ def _render(widget: MetaImageWidget) -> str:
 
 def test_raw_fallback_preview_and_download_button():
     widget = MetaImageWidget()
-    widget.raw_url = RAW
+    widget.raw_url = RAW  # type: ignore  # dynamic attr: plugin-less inference gap
     html = _render(widget)
     assert f'src="{RAW}"' in html
     assert 'id="image-preview"' in html
@@ -49,7 +49,7 @@ def test_local_file_hint():
         height = 50
 
     widget = MetaImageWidget()
-    widget.raw_url = RAW  # raw present but local file wins
+    widget.raw_url = RAW  # raw present but local file wins  # type: ignore  # dynamic attr: plugin-less inference gap
     html = widget.render("image", _FakeFieldFile())
     assert 'src="/media/images/x.jpg"' in html
     assert "mfu-badge-local" in html  # "Stored locally" hint
@@ -363,7 +363,7 @@ class TestServingCell:
         from server.apps.images.models import Image
 
         self._no_toolbar(settings)
-        admin = ImageAdmin(Image, None)
+        admin = ImageAdmin(Image, None)  # type: ignore  # unfold stub gap
         html = admin._serving_html(self._image(local=False))
         assert "mfu-qa-download" in html
         assert "extern" in html
@@ -373,7 +373,7 @@ class TestServingCell:
         from server.apps.images.models import Image
 
         self._no_toolbar(settings)
-        admin = ImageAdmin(Image, None)
+        admin = ImageAdmin(Image, None)  # type: ignore  # unfold stub gap
         html = admin._serving_html(self._image(local=True))
         assert "mfu-qa-download" not in html
         assert "local" in html

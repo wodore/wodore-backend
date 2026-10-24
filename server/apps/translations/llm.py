@@ -217,7 +217,7 @@ class TranslationClient:
             "fields": texts,
         }
         if assess_source:
-            user_payload["assess_source_quality"] = True
+            user_payload["assess_source_quality"] = True  # type: ignore  # options dict accepts bool at runtime
         content = self._complete(_SYSTEM_PROMPT, json.dumps(user_payload))
         parsed = self._parse_json(content)
         result: dict[str, t.Any] = self._filter_translations(

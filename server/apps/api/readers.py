@@ -51,7 +51,7 @@ def _to_one_pair(name: str, related_model: type[Model], child_spec: Spec) -> Pai
     """
     child_prepare, project_child = specs.process(child_spec)
 
-    def prepare(queryset):
+    def prepare(queryset):  # type: ignore  # residual span suppression
         child_qs = qs.pipe(qs.include_fields("pk"), child_prepare)(
             related_model._default_manager.all().select_related(None)
         )
@@ -114,7 +114,7 @@ def _candidate_names(name: str, info: FieldInfo) -> list[str]:
 def _find_field(model: type[Model], names: list[str]) -> Field | None:
     for candidate in names:
         try:
-            return model._meta.get_field(candidate)
+            return model._meta.get_field(candidate)  # type: ignore  # get_field stubs include ForeignObjectRel
         except FieldDoesNotExist:
             continue
     return None
@@ -254,8 +254,8 @@ def spec_from_schema(
                     {
                         model_field.name: _to_one_pair(
                             model_field.name,
-                            model_field.related_model,
-                            spec_from_schema(model_field.related_model, nested),
+                            model_field.related_model,  # type: ignore  # argument typing drift vs stubs
+                            spec_from_schema(model_field.related_model, nested),  # type: ignore  # argument typing drift vs stubs
                         )
                     }
                 )
@@ -263,7 +263,8 @@ def spec_from_schema(
                 spec.append(
                     {
                         model_field.name: spec_from_schema(
-                            model_field.related_model, nested
+                            model_field.related_model,  # type: ignore  # residual span suppression
+                            nested,  # type: ignore  # argument typing drift vs stubs
                         )
                     }
                 )

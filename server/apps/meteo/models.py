@@ -17,6 +17,8 @@ class WeatherCode(TimeStampedModel):
     """
 
     i18n = TranslationField(fields=("description_day", "description_night"))
+    description_day_i18n: str
+    description_night_i18n: str
     objects = BaseMutlilingualManager()
 
     code = models.PositiveSmallIntegerField(
@@ -51,7 +53,7 @@ class WeatherCode(TimeStampedModel):
         help_text=_("Weather description for nighttime"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Weather Code")
         verbose_name_plural = _("Weather Codes")
         ordering = ("code",)
@@ -208,7 +210,7 @@ class WeatherCodeSymbolCollection(TimeStampedModel):
         help_text=_("Organization providing this symbol collection"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Weather Symbol Collection")
         verbose_name_plural = _("Weather Symbol Collections")
         ordering = ("slug",)
@@ -258,7 +260,7 @@ class WeatherCodeSymbol(TimeStampedModel):
         db_index=True,
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Weather Code Symbol")
         verbose_name_plural = _("Weather Code Symbols")
         ordering = ("collection", "weather_code__code")

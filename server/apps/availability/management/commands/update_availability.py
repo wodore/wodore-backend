@@ -340,7 +340,7 @@ class Command(BaseCommand):
                         current_hut = progress.tasks[fetch_task].completed or 0
                         new_batch = (current_hut // batch_size) + 1
                         if new_batch != current_batch["fetch"]:
-                            current_batch["fetch"] = new_batch
+                            current_batch["fetch"] = new_batch  # type: ignore  # argument typing drift vs stubs
                             # Update fetch status
                             progress.update(
                                 fetch_task,
@@ -361,7 +361,7 @@ class Command(BaseCommand):
 
                         # Update process status to show current batch
                         if new_batch != current_batch["process"]:
-                            current_batch["process"] = new_batch
+                            current_batch["process"] = new_batch  # type: ignore  # argument typing drift vs stubs
 
                         progress.update(
                             process_task,

@@ -47,6 +47,7 @@ class _ReviewStatusChoices(models.TextChoices):
 
 class ImageTag(TimeStampedModel):
     i18n = TranslationField(fields=("name",))
+    name_i18n: str
     objects = BaseMutlilingualManager()
 
     slug = models.SlugField(
@@ -74,12 +75,13 @@ class Image(TimeStampedModel):
     # add size field
     # add long caption or something ..
     i18n = TranslationField(fields=("caption",))
+    caption_i18n: str
     objects = BaseMutlilingualManager()
     ReviewStatusChoices = _ReviewStatusChoices
 
     # TODO: TAGS!!
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)  # type: ignore  # custom pk: Django idiom redeclares Model.id
 
     image = MetaImageField(
         # Content-hashed storage: media is immutable-cached, a URL must
@@ -268,7 +270,7 @@ class Image(TimeStampedModel):
             # source URL so admin thumbnails work for pins too.
             source = self.image if self.image else self.source_url_raw
             img = (
-                ImagorImage(source)
+                ImagorImage(source)  # type: ignore  # imagor wrapper typing
                 .transform(
                     size=f"{width}x{height}",
                     focal=focal_str,
@@ -355,7 +357,7 @@ class Image(TimeStampedModel):
                     # fix wrong url for refuges.info images
                     photo_schema.raw_url = photo_schema.raw_url.replace(
                         "-originale", "-reduite"
-                    )
+                    )  # type: ignore  # url assigned as raw str, validated at runtime
                     return cls.create_image_from_schema(
                         photo_schema,
                         path=path,
@@ -446,7 +448,7 @@ class Image(TimeStampedModel):
             source_org_slug = source_org_slug[:50]
             source_org = Organization.objects.get_or_create(
                 slug=source_org_slug,
-                defaults={"name_en": photo_schema.source.name[:100]},
+                defaults={"name_en": photo_schema.source.name[:100]},  # type: ignore  # dynamic attr: plugin-less inference gap
             )[0]
             if not Organization.objects.filter(slug=source_org_slug).exists():
                 img_review_status = Image.ReviewStatusChoices.pending
@@ -531,9 +533,9 @@ class Image(TimeStampedModel):
                 review_comment += f"- Missing caption, use '{default_caption}' from file path instead.\n"
                 img_review_status = Image.ReviewStatusChoices.pending
             if source_org_slug == "refuges":
-                image.caption_fr = default_caption.strip().strip('"')
+                image.caption_fr = default_caption.strip().strip('"')  # type: ignore  # dynamic attr: plugin-less inference gap
             else:
-                image.caption_de = default_caption.strip().strip('"')
+                image.caption_de = default_caption.strip().strip('"')  # type: ignore  # dynamic attr: plugin-less inference gap
         if photo_schema.comment:
             review_comment += f"\n---\nSource Comment:\n\n{photo_schema.comment}\n"
         review_comment += f"\n---\nSource Data:\n\n```json\n{photo_schema.model_dump_json(indent=2)}\n```"
@@ -545,5 +547,5 @@ class Image(TimeStampedModel):
             logging.info("Image added successfully!")
             return image
         except IntegrityError as e:
-            logging.error("Error adding image %s: %s", image.caption_de, e)
+            logging.error("Error adding image %s: %s", image.caption_de, e)  # type: ignore  # dynamic attr: plugin-less inference gap
             return None

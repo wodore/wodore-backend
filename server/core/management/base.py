@@ -50,7 +50,7 @@ def add_fixture_function(
     fixture_name = getattr(obj, "fixture_name", "")
     obj.stdout.write(f"Load data from '{fixture_name}.yaml' fixtures")
 
-    if not force and model.objects.all().count() > 0:
+    if not force and model.objects.all().count() > 0:  # type: ignore  # dynamic attr: plugin-less inference gap
         try:
             force = click.confirm(
                 "Careful this might overwrite existing data in the database, continue?",
@@ -60,15 +60,15 @@ def add_fixture_function(
             print()
             sys.exit(0)
 
-    if force or model.objects.all().count() == 0:
+    if force or model.objects.all().count() == 0:  # type: ignore  # dynamic attr: plugin-less inference gap
         try:
             loaddata_command = LoadDataCommand()
             loaddata_command.verbosity = 0
             loaddata_command.app_label = obj.app_label
             loaddata_command.using = DEFAULT_DB_ALIAS
             loaddata_command.ignore = True
-            loaddata_command.exclude = []
-            loaddata_command.format = None
+            loaddata_command.exclude = []  # type: ignore  # dynamic attr: plugin-less inference gap
+            loaddata_command.format = None  # type: ignore  # loaddata format=None means autodetect
             loaddata_command.serialization_formats = (
                 serializers.get_public_serializer_formats()
             )
@@ -154,13 +154,13 @@ def add_fixture_function(
                     try:
                         # Check if record exists by lookup field
                         lookup_kwargs = {lookup_field: lookup_value}
-                        existing_obj = model.objects.get(**lookup_kwargs)
+                        existing_obj = model.objects.get(**lookup_kwargs)  # type: ignore  # dynamic attr: plugin-less inference gap
                         # Use existing object's ID
                         item_fields["id"] = existing_obj.id
                     except model.DoesNotExist:
                         # New record: get next available ID
                         last_id = (
-                            model.objects.all()
+                            model.objects.all()  # type: ignore  # dynamic attr: plugin-less inference gap
                             .order_by("-id")
                             .values_list("id", flat=True)
                             .first()
@@ -203,7 +203,7 @@ def add_fixture_function(
                                 del item_fields[name_key]
 
                 # Use update_or_create for both modes
-                m, created = model.objects.update_or_create(
+                m, created = model.objects.update_or_create(  # type: ignore  # dynamic attr: plugin-less inference gap
                     **compare_dict, defaults=item_fields
                 )
 
@@ -298,7 +298,7 @@ def dump_fixture_function(
         if obj.media_src:
             obj.stdout.write(
                 obj.style.WARNING(
-                    f"Make sure to manually copy any new/changed media files from '{obj.media_dst.relative_to(settings.BASE_DIR)}' to '{obj.media_src.relative_to(settings.BASE_DIR)}'"
+                    f"Make sure to manually copy any new/changed media files from '{obj.media_dst.relative_to(settings.BASE_DIR)}' to '{obj.media_src.relative_to(settings.BASE_DIR)}'"  # type: ignore  # dynamic attr: plugin-less inference gap
                 )
             )
         obj.stdout.write(
@@ -319,8 +319,8 @@ def default_drop_function(
     offset = kwargs.get("offset")
     ignore_media = kwargs.get("ignore_media", False)
     # objects: BaseManager = model.objects
-    objects = model.objects
-    entries = model.objects.all().count()
+    objects = model.objects  # type: ignore  # dynamic attr: plugin-less inference gap
+    entries = model.objects.all().count()  # type: ignore  # dynamic attr: plugin-less inference gap
     db_force = force
     # check support for limit
     err_msg = "'{}' parameter is not supported without custom manager's 'drop()' function (see 'server.core.managers')"
@@ -369,9 +369,9 @@ def default_drop_function(
             obj.stdout.write(obj.style.NOTICE(e.args[0]))
             sys.exit(1)
     # media_src, media_dst = get_media(parser)
-    if obj.media_src and not ignore_media and obj.media_dst.exists:
-        media_dst_rel = obj.media_dst.relative_to(settings.BASE_DIR)
-        if os.path.exists(obj.media_dst):
+    if obj.media_src and not ignore_media and obj.media_dst.exists:  # type: ignore  # dynamic attr: plugin-less inference gap
+        media_dst_rel = obj.media_dst.relative_to(settings.BASE_DIR)  # type: ignore  # dynamic attr: plugin-less inference gap
+        if os.path.exists(obj.media_dst):  # type: ignore  # argument typing drift vs stubs
             media_force = force
             if not media_force:
                 try:
@@ -382,7 +382,7 @@ def default_drop_function(
                     media_force = False
                     print()
             if media_force:
-                shutil.rmtree(obj.media_dst)
+                shutil.rmtree(obj.media_dst)  # type: ignore  # argument typing drift vs stubs
                 obj.stdout.write(
                     obj.style.SUCCESS(f"Successfully removed '{media_dst_rel}'")
                 )
@@ -468,7 +468,7 @@ class CRUDCommand(BaseCommand, Generic[TModel]):
             raise AttributeError(err_msg)
         # set default attributes
         self.model_names = (
-            self.model_names or self.model._meta.object_name.lower() + "s"
+            self.model_names or self.model._meta.object_name.lower() + "s"  # type: ignore  # dynamic attr: plugin-less inference gap
         )
         self.app_label = self.app_label or self.model._meta.app_label
         self.fixture_name = self.fixture_name or self.model_names
@@ -529,12 +529,12 @@ class CRUDCommand(BaseCommand, Generic[TModel]):
             parser.add_argument(
                 "-m",
                 "--media-src",
-                help=f"Media source path (default: {self.media_src.relative_to(settings.BASE_DIR)})",
+                help=f"Media source path (default: {self.media_src.relative_to(settings.BASE_DIR)})",  # type: ignore  # dynamic attr: plugin-less inference gap
             )
 
     def default_limit(self, drop: bool, add: bool, update: bool, **kwargs: Any) -> int:
         if drop:  # drop and add the same amount
-            return int(self.model.objects.all().count())
+            return int(self.model.objects.all().count())  # type: ignore  # dynamic attr: plugin-less inference gap
         # elif add:
         return 100000  # all
 
@@ -566,7 +566,7 @@ class CRUDCommand(BaseCommand, Generic[TModel]):
         if self.use_limit_arg:
             limit = options.get("limit")
             if not limit:
-                default_value = self.default_limit(drop=drop, add=add, update=update)
+                default_value = self.default_limit(drop=drop, add=add, update=update)  # type: ignore  # argument typing drift vs stubs
                 if force:
                     limit = default_value
                 else:

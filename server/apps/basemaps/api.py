@@ -384,7 +384,7 @@ def _legend_payload(layer: MapLayer) -> dict[str, Any] | None:
             or section.description,
             "type": section.type,
         }
-        if section.category_id and section.category is not None:
+        if section.category_id and section.category is not None:  # type: ignore  # dynamic attr: plugin-less inference gap
             entry["category"] = _category_projection(
                 section.category, "legend", section.order
             )

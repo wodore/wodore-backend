@@ -173,9 +173,11 @@ class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimp
         return self.update_user(user, claims)
 
     def update_user(self, user: User, claims: dict) -> User:
-        user.email = claims.get("email")
-        user.first_name = claims.get("given_name")
-        user.last_name = claims.get("family_name")
+        # `or`-guards: claims may omit these (spec-legal); email is a non-nullable
+        # unique column — never assign None (review finding: data-integrity bug).
+        user.email = claims.get("email") or user.email
+        user.first_name = claims.get("given_name") or user.first_name
+        user.last_name = claims.get("family_name") or user.last_name
         zitadel_groups = self.get_groups(claims)
         # default:
         user.is_superuser = False

@@ -48,7 +48,7 @@ class Symbol(TimeStampedModel):
     StyleChoices = _SymbolStyleChoices
 
     # Identification
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)  # type: ignore  # custom pk: Django idiom redeclares Model.id
     slug = models.SlugField(
         max_length=100,
         db_index=True,
@@ -70,7 +70,6 @@ class Symbol(TimeStampedModel):
     # identical content deduplicates onto one canonical file.
     svg_file = models.FileField(
         upload_to="symbols/",
-        # pyright: ignore[reportArgumentType]  # delegating Storage
         # subclass — runtime-validated (system checks, migrations)
         storage=hashed_symbol_storage,
         verbose_name=_("SVG File"),
@@ -151,7 +150,7 @@ class Symbol(TimeStampedModel):
     )
     uploaded_date = MonitorField(monitor="svg_file", verbose_name=_("Uploaded Date"))
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Symbol")
         verbose_name_plural = _("Symbols")
         ordering = ("slug", "style")
@@ -175,7 +174,7 @@ class Symbol(TimeStampedModel):
         )
 
     def __str__(self) -> str:
-        return f"{self.slug} ({self.get_style_display()})"  # pyright: ignore[reportAttributeAccessIssue]  # choices auto-method
+        return f"{self.slug} ({self.get_style_display()})"
 
     @classmethod
     def get_fields_all(cls) -> list[str]:
@@ -219,7 +218,7 @@ class SymbolGroup(Symbol):
     on a single line in the admin interface.
     """
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         proxy = True
         verbose_name = _("Symbol Group")
         verbose_name_plural = _("Symbol Groups")
@@ -260,7 +259,7 @@ class SymbolCollection(TimeStampedModel):
         ),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Symbol Collection")
         verbose_name_plural = _("Symbol Collections")
         ordering = ("slug",)
@@ -370,7 +369,7 @@ class Icon(TimeStampedModel):
         help_text=_("Reference to monochrome symbol from Symbols app"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Icon")
         verbose_name_plural = _("Icons")
         ordering = ("pack__slug", "order", "slug")
@@ -388,7 +387,7 @@ class Icon(TimeStampedModel):
     def clean(self):
         """Reject root categories (subgroups only, see design D4)."""
         super().clean()
-        if self.category_id and self.category.parent_id is None:  # pyright: ignore[reportAttributeAccessIssue]  # FK attnames: django-stubs gap
+        if self.category_id and self.category.parent_id is None:  # type: ignore  # dynamic attr: plugin-less inference gap
             raise ValidationError(
                 {"category": _("Icons may only reference non-root categories.")}
             )
@@ -444,7 +443,7 @@ class IconKeyword(TimeStampedModel):
         help_text=_("Accent- and case-folded form used for matching"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Icon Keyword")
         verbose_name_plural = _("Icon Keywords")
         ordering = ("icon", "locale", "keyword_folded")
@@ -505,7 +504,7 @@ class IconCuratedList(TimeStampedModel):
         help_text=_("Curated icons, managed in the admin"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Icon Curated List")
         verbose_name_plural = _("Icon Curated Lists")
         ordering = ("slug",)
@@ -538,7 +537,7 @@ class IconCuratedListEntry(TimeStampedModel):
         verbose_name=_("Icon"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Icon Curated List Entry")
         verbose_name_plural = _("Icon Curated List Entries")
         ordering = ("curated_list", "icon__order", "icon__slug")
@@ -550,4 +549,4 @@ class IconCuratedListEntry(TimeStampedModel):
         )
 
     def __str__(self) -> str:
-        return f"{self.curated_list_id}:{self.icon_id}"  # pyright: ignore[reportAttributeAccessIssue]  # FK attnames: django-stubs gap
+        return f"{self.curated_list_id}:{self.icon_id}"

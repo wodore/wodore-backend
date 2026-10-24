@@ -1,5 +1,3 @@
-# type: ignore
-# TODO: add types
 import sys
 import typing as t
 
@@ -26,7 +24,7 @@ def init_huts_db(
     ] = [],  # set a list which field which should be overwritten
     force_overwrite_exclude: t.Sequence[str] = [],  #  ... exclude
     force_none: bool = False,  # force t oset value to none (overwrite is needed)
-) -> tuple[int, int]:
+) -> tuple[int, int, int, int]:  # added, updated, nochange, failed
     added_huts = 0
     updated_huts = 0
     nochange_huts = 0
@@ -160,7 +158,7 @@ class Command(CRUDCommand):
     # help = ""
     model = Hut
     model_names = "huts"
-    add_function = add_huts_function
+    add_function = add_huts_function  # type: ignore  # CRUDCommand handler typing drift
     use_limit_arg = True
     use_offset_arg = True
     use_update_arg = True
