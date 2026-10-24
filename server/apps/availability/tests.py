@@ -19,6 +19,7 @@ import struct
 from collections.abc import Iterator
 from importlib import import_module
 from io import StringIO
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -44,12 +45,14 @@ from .models import (
     HutAvailability,
     HutAvailabilityHistory,
 )
+from .place_dualwrite import mirror_status
 from .place_link import (
     WODORE_ORG_SLUG,
     hut_slug_to_place_ids,
     resolve_place,
     unmatched_huts,
 )
+from .services import AvailabilityService
 
 # Test hut sits on the Rätikon (lon 8.5 / lat 46.5); the helper computes
 # the covering tile per zoom so the tests never hardcode tile coords.
@@ -989,3 +992,284 @@ class TestPhaseBCommands:
         out = buf2.getvalue()
         assert orphan.slug in out
         assert "gate: NOT empty" in out
+
+
+# ── phase C: dual-write + place-driven cadence ───────────────────────────
+
+
+def _fake_booking(
+    date,
+    *,
+    free=5,
+    total=10,
+    hut_type=None,
+    status="medium",
+    reservation="possible",
+    link="",
+):
+    return SimpleNamespace(
+        date=date,
+        free=free,
+        total=total,
+        free_tolerance=0,
+        occupancy_percent=50.0,
+        occupancy_steps=50,
+        occupancy_status=status,
+        reservation_status=reservation,
+        link=link,
+        hut_type=hut_type,
+    )
+
+
+def _fake_hut_booking(hut, bookings, source):
+    return SimpleNamespace(
+        slug=hut.slug, source=source, source_id="src-1", bookings=bookings
+    )
+
+
+def _seed_both_sides(hut, place, place_org, *, free=5, total=10):
+    """Seed matching current-state rows on both sides for TODAY."""
+    aged = timezone.now() - datetime.timedelta(hours=2)
+    hut_avail = HutAvailability.objects.create(
+        hut=hut,
+        source_organization=place_org,
+        source_id="src-1",
+        availability_date=TODAY,
+        free=free,
+        total=total,
+        free_tolerance=0,
+        occupancy_percent=50.0,
+        occupancy_steps=50,
+        occupancy_status="medium",
+        reservation_status="possible",
+        link="",
+        hut_type=None,
+        first_checked=aged,
+        last_checked=aged,
+    )
+    place_avail = GeoPlaceAvailability.objects.create(
+        geo_place=place,
+        source_organization=place_org,
+        source_id="src-1",
+        availability_date=TODAY,
+        free=free,
+        total=total,
+        free_tolerance=0,
+        occupancy_percent=50.0,
+        occupancy_steps=50,
+        occupancy_status="medium",
+        reservation_status="possible",
+        link="",
+        hut_type=None,
+        first_checked=aged,
+        last_checked=aged,
+    )
+    return hut_avail, place_avail
+
+
+@pytest.mark.django_db
+class TestDualWrite:
+    def test_batch_writes_both_sides_identically(
+        self, hut, hut_types, place, place_org, wodore_org
+    ):
+        _link(hut, place, wodore_org)
+        hut_avail, place_avail = _seed_both_sides(hut, place, place_org)
+        now = timezone.now()
+        tomorrow = TODAY + datetime.timedelta(days=1)
+        batch = [
+            (
+                hut,
+                _fake_hut_booking(
+                    hut,
+                    [
+                        _fake_booking(TODAY, free=2),  # changed
+                        _fake_booking(tomorrow, free=7, total=12),  # new date
+                    ],
+                    source=place_org.slug,
+                ),
+            )
+        ]
+        results = AvailabilityService._process_huts_batch(
+            batch=batch, now=now, update_history_last_checked=True
+        )
+        assert results[0].success
+        assert results[0].records_created == 1
+        assert results[0].records_updated == 1
+
+        hut_avail.refresh_from_db()
+        place_avail.refresh_from_db()
+        assert hut_avail.free == 2 and place_avail.free == 2
+        assert hut_avail.last_checked == now
+        assert place_avail.last_checked == now
+        assert place_avail.first_checked == hut_avail.first_checked
+
+        new_hut = HutAvailability.objects.get(hut=hut, availability_date=tomorrow)
+        new_place = GeoPlaceAvailability.objects.get(
+            geo_place=place, availability_date=tomorrow
+        )
+        for field in (
+            "free",
+            "total",
+            "occupancy_percent",
+            "occupancy_status",
+            "reservation_status",
+            "first_checked",
+            "last_checked",
+        ):
+            assert getattr(new_place, field) == getattr(new_hut, field), field
+
+        # change event + initial entry for the created row — on both sides
+        assert HutAvailabilityHistory.objects.filter(hut=hut).count() == 2
+        assert GeoPlaceAvailabilityHistory.objects.filter(geo_place=place).count() == 2
+        hh = HutAvailabilityHistory.objects.get(hut=hut, availability_date=TODAY)
+        ph = GeoPlaceAvailabilityHistory.objects.get(
+            geo_place=place, availability_date=TODAY
+        )
+        for field in (
+            "free",
+            "total",
+            "occupancy_percent",
+            "occupancy_status",
+            "first_checked",
+            "last_checked",
+        ):
+            assert getattr(ph, field) == getattr(hh, field), field
+
+    def test_unchanged_run_advances_last_checked_both_sides(
+        self, hut, hut_types, place, place_org, wodore_org
+    ):
+        _link(hut, place, wodore_org)
+        hut_avail, place_avail = _seed_both_sides(hut, place, place_org)
+        aged = timezone.now() - datetime.timedelta(hours=3)
+        hh = HutAvailabilityHistory.objects.create(
+            availability=hut_avail,
+            hut=hut,
+            availability_date=TODAY,
+            free=5,
+            total=10,
+            free_tolerance=0,
+            occupancy_percent=50.0,
+            occupancy_status="medium",
+            reservation_status="possible",
+            first_checked=aged,
+            last_checked=aged,
+        )
+        ph = GeoPlaceAvailabilityHistory.objects.create(
+            availability=place_avail,
+            geo_place=place,
+            availability_date=TODAY,
+            free=5,
+            total=10,
+            free_tolerance=0,
+            occupancy_percent=50.0,
+            occupancy_status="medium",
+            reservation_status="possible",
+            first_checked=aged,
+            last_checked=aged,
+        )
+        now = timezone.now()
+        batch = [
+            (
+                hut,
+                _fake_hut_booking(hut, [_fake_booking(TODAY)], source=place_org.slug),
+            )
+        ]
+        AvailabilityService._process_huts_batch(
+            batch=batch, now=now, update_history_last_checked=True
+        )
+        hut_avail.refresh_from_db()
+        place_avail.refresh_from_db()
+        assert hut_avail.last_checked == now
+        assert place_avail.last_checked == now
+        hh.refresh_from_db()
+        ph.refresh_from_db()
+        assert hh.last_checked == now
+        assert ph.last_checked == now
+        assert HutAvailabilityHistory.objects.filter(hut=hut).count() == 1
+        assert GeoPlaceAvailabilityHistory.objects.filter(geo_place=place).count() == 1
+
+    def test_unmatched_hut_writes_hut_side_only(self, hut, hut_types, place_org):
+        before = GeoPlaceAvailability.objects.count()
+        now = timezone.now()
+        tomorrow = TODAY + datetime.timedelta(days=1)
+        batch = [
+            (
+                hut,
+                _fake_hut_booking(
+                    hut, [_fake_booking(tomorrow)], source=place_org.slug
+                ),
+            )
+        ]
+        results = AvailabilityService._process_huts_batch(batch=batch, now=now)
+        assert results[0].success
+        assert HutAvailability.objects.filter(hut=hut).count() == 1
+        assert GeoPlaceAvailability.objects.count() == before  # place side skipped
+
+    def test_mirror_status_lifecycle(self, hut, place, wodore_org):
+        _link(hut, place, wodore_org)
+        t1 = timezone.now()
+        mirror_status([hut], [], t1)
+        st = GeoPlaceAvailabilityStatus.objects.get(geo_place=place)
+        assert st.has_data is True
+        assert st.last_success == t1
+        assert st.consecutive_failures == 0
+
+        t2 = t1 + datetime.timedelta(minutes=1)
+        mirror_status([], [hut], t2)
+        st.refresh_from_db()
+        assert st.consecutive_failures == 1
+
+        t3 = t1 + datetime.timedelta(minutes=2)
+        mirror_status([hut], [], t3)
+        st.refresh_from_db()
+        assert st.consecutive_failures == 0
+        assert st.last_success == t3
+
+
+@pytest.mark.django_db
+class TestPlaceDrivenCadence:
+    def test_discovery_covers_all_three_branches(
+        self, hut, hut_types, place, place_org, wodore_org
+    ):
+        # Branch 1: linked hut with a stale high-priority place row
+        _link(hut, place, wodore_org)
+        Hut.objects.filter(pk=hut.pk).update(availability_source_ref=place_org)
+        aged = timezone.now() - datetime.timedelta(hours=2)
+        GeoPlaceAvailability.objects.create(
+            geo_place=place,
+            source_organization=place_org,
+            source_id="src-1",
+            availability_date=TODAY,
+            free=0,
+            total=10,
+            occupancy_status="full",
+            reservation_status="possible",
+            first_checked=aged,
+            last_checked=aged,
+        )
+
+        # Branch 2: linked hut whose place status is stale
+        place2 = GeoPlace.objects.create(
+            slug="place-2",
+            name="Place Two",
+            location=Point(HUT_LON, HUT_LAT, srid=4326),
+            country_code="CH",
+        )
+        hut_b = _second_hut(hut_types, slug="stale-status-hut")
+        _link(hut_b, place2, wodore_org)
+        Hut.objects.filter(pk=hut_b.pk).update(availability_source_ref=place_org)
+        GeoPlaceAvailabilityStatus.objects.create(
+            geo_place=place2,
+            last_checked=timezone.now() - datetime.timedelta(days=8),
+        )
+
+        # Branch 3: unmatched hut with a source but no place status
+        hut_c = _second_hut(hut_types, slug="unmatched-new-hut")
+        Hut.objects.filter(pk=hut_c.pk).update(availability_source_ref=place_org)
+
+        huts = GeoPlaceAvailability.objects.get_huts_needing_update(
+            high_priority_minutes=30, medium_priority_minutes=180
+        )
+        slugs = set(huts.values_list("slug", flat=True))
+        # dev-data subset assertions (template rows also match the branches)
+        assert {"test-hut", "stale-status-hut", "unmatched-new-hut"} <= slugs

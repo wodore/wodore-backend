@@ -30,7 +30,9 @@ def backfill(apps, schema_editor):
     huts are counted and printed, never skipped silently. Existing target
     rows are skipped, so a partially applied rerun is safe.
     """
-    GeoPlaceSourceAssociation = apps.get_model("geometries", "GeoPlaceSourceAssociation")
+    GeoPlaceSourceAssociation = apps.get_model(
+        "geometries", "GeoPlaceSourceAssociation"
+    )
     HutAvailability = apps.get_model("availability", "HutAvailability")
     AvailabilityStatus = apps.get_model("availability", "AvailabilityStatus")
     GeoPlaceAvailability = apps.get_model("availability", "GeoPlaceAvailability")
@@ -64,9 +66,7 @@ def backfill(apps, schema_editor):
             continue
         existing.add(key)
         kwargs = {field: getattr(row, field) for field in _AVAILABILITY_FIELDS}
-        to_create.append(
-            GeoPlaceAvailability(geo_place_id=place_id, **kwargs)
-        )
+        to_create.append(GeoPlaceAvailability(geo_place_id=place_id, **kwargs))
         copied += 1
         if len(to_create) >= BATCH_SIZE:
             GeoPlaceAvailability.objects.bulk_create(to_create)
@@ -122,9 +122,11 @@ def remove_backfill(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ("availability", "0018_geoplaceavailabilitystatus_geoplaceavailability_and_more"),
+        (
+            "availability",
+            "0018_geoplaceavailabilitystatus_geoplaceavailability_and_more",
+        ),
     ]
 
     operations = [

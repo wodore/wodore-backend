@@ -315,6 +315,100 @@ class GeoPlaceAvailabilityManager(_PriorityNeedingUpdateMixin, BaseManager):
             "geo_place", "source_organization", "hut_type"
         ).order_by("geo_place", "availability_date")
 
+    def get_huts_needing_update(
+        self,
+        high_priority_minutes: int | None = None,
+        medium_priority_minutes: int | None = None,
+        low_priority_minutes: int | None = None,
+        inactive_priority_minutes: int | None = None,
+        next_days: int | None = None,
+    ) -> models.QuerySet:
+        """
+        Hut discovery driven by the place tables (Phase C of the
+        geoplace-availability change; replaces the hut-side
+        ``get_huts_needing_update`` at the reader cutover).
+
+        Returns huts that either:
+        1. Have place availability rows needing updates (priority rules,
+           shared with the hut side via the mixin)
+        2. Have a GeoPlaceAvailabilityStatus needing recheck (even if they
+           previously returned empty)
+        3. Have ``availability_source_ref`` but no place status yet — new
+           huts AND unmatched huts (no place association). Unmatched huts
+           are fetched and logged as unmatched by the dual-write (design
+           D5) — intentional, not an error.
+        """
+        from django.conf import settings
+        from django.db.models import Exists, OuterRef, Subquery
+
+        from server.apps.geometries.models import GeoPlaceSourceAssociation
+        from server.apps.huts.models import Hut
+
+        from .models import GeoPlaceAvailabilityStatus
+        from .place_link import WODORE_ORG_SLUG
+
+        settings_dict = getattr(settings, "AVAILABILITY_UPDATE_SETTINGS", {})
+        if inactive_priority_minutes is None:
+            inactive_priority_minutes = settings_dict.get(
+                "INACTIVE_PRIORITY_MINUTES", 10080
+            )
+        now = timezone.now()
+        inactive_threshold = now - datetime.timedelta(minutes=inactive_priority_minutes)
+
+        # 1. Places with availability rows that need updates
+        needing_places = (
+            self.needing_update(
+                high_priority_minutes=high_priority_minutes,
+                medium_priority_minutes=medium_priority_minutes,
+                low_priority_minutes=low_priority_minutes,
+                inactive_priority_minutes=inactive_priority_minutes,
+                next_days=next_days,
+            )
+            .values_list("geo_place_id", flat=True)
+            .distinct()
+        )
+
+        # 2. Places whose status needs rechecking
+        recheck_places = GeoPlaceAvailabilityStatus.objects.filter(
+            last_checked__lt=inactive_threshold
+        ).values_list("geo_place_id", flat=True)
+
+        stale_slugs = GeoPlaceSourceAssociation.objects.filter(
+            organization__slug=WODORE_ORG_SLUG,
+            geo_place_id__in=needing_places.union(recheck_places),
+        ).values_list("source_id", flat=True)
+
+        # This hut's place, expressed as a direct reverse join
+        # (``OuterRef`` does not chain through nested subqueries — it must
+        # resolve against the outer Hut query in one hop).
+        hut_place_join = models.Q(
+            geo_place__source_associations__organization__slug=WODORE_ORG_SLUG,
+            geo_place__source_associations__source_id=OuterRef("slug"),
+        )
+
+        # 3. Huts with a source but no status for their place — for
+        # unmatched huts the join matches nothing, so they are included
+        never_checked = ~Exists(
+            GeoPlaceAvailabilityStatus.objects.filter(hut_place_join)
+        )
+
+        failures = GeoPlaceAvailabilityStatus.objects.filter(hut_place_join).values(
+            "consecutive_failures"
+        )[:1]
+        last_checked = GeoPlaceAvailabilityStatus.objects.filter(hut_place_join).values(
+            "last_checked"
+        )[:1]
+
+        return (
+            Hut.objects.filter(availability_source_ref__isnull=False)
+            .filter(models.Q(slug__in=stale_slugs) | never_checked)
+            .annotate(
+                place_failures=Subquery(failures),
+                place_last_checked=Subquery(last_checked),
+            )
+            .order_by("-place_failures", "place_last_checked")
+        )
+
 
 class GeoPlaceAvailabilityHistoryManager(BaseManager):
     """Custom manager for GeoPlaceAvailabilityHistory"""

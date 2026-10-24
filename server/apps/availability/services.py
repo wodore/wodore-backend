@@ -20,6 +20,7 @@ from server.apps.huts.models import Hut, HutTypeHelper
 from server.apps.organizations.models import Organization
 
 from .models import AvailabilityStatus, HutAvailability, HutAvailabilityHistory
+from .place_dualwrite import mirror_batch, mirror_mark_failure, mirror_status
 
 SERVICES: dict = settings.SERVICES
 
@@ -347,6 +348,8 @@ class AvailabilityService:
                     )
                     if process_progress_callback is not None:
                         process_progress_callback()
+                # Dual-write: mirror the fetch failures (Phase C)
+                mirror_mark_failure(batch_huts, now)
                 # Continue with next batch
                 continue
 
@@ -482,6 +485,10 @@ class AvailabilityService:
                         "consecutive_failures",
                     ],
                 )
+
+            # Dual-write: mirror fetch health onto the place status
+            # (Phase C)
+            mirror_status(successful_huts, failed_huts, now)
 
         successful = sum(1 for r in results if r.success)
         failed = sum(1 for r in results if not r.success)
@@ -821,6 +828,15 @@ class AvailabilityService:
                             list(set(all_dates)),
                         ],
                     )
+
+            # Dual-write: mirror the batch onto the place tables (Phase C
+            # of the geoplace-availability change, design D7) — same
+            # transaction, same ``now``; unmatched huts are logged inside.
+            mirror_batch(
+                batch=batch,
+                now=now,
+                update_history_last_checked=update_history_last_checked,
+            )
 
         return results
 

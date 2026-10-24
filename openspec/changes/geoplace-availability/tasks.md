@@ -43,17 +43,17 @@
 
 ## 3. Write-path retarget (Phase C)
 
-- [ ] 3.1 Retarget the `AvailabilityService` persistence edge to the
+- [x] 3.1 Retarget the `AvailabilityService` persistence edge to the
   GeoPlace availability tables (hut resolves to (place, source) via the join;
   fetch and schema-conversion layers untouched; carry over
   `_sanitize_negative_free` and the batch-size/statement-timeout constants
   verbatim)
-- [ ] 3.2 Dual-write: keep hut tables and place tables identical during the
+- [x] 3.2 Dual-write: keep hut tables and place tables identical during the
   transition window
-- [ ] 3.3 Drive the update cadence from `GeoPlaceAvailabilityStatus` (port
+- [x] 3.3 Drive the update cadence from `GeoPlaceAvailabilityStatus` (port
   `get_huts_needing_update` semantics; unmatched huts are still discovered
   and fetched during the dual-write window — logged, not errored)
-- [ ] 3.4 Integration tests: `update_availability` lands current state,
+- [x] 3.4 Integration tests: `update_availability` lands current state,
   history (on change only), and status on the place; hut rows stay in sync
 
 ## 4. Reader cutover (Phase D)
