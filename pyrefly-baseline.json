@@ -1,80 +1,10 @@
 {
   "errors": [
     {
-      "column": 24,
-      "path": "server/apps/categories/api.py",
-      "name": "bad-return",
-      "concise_description": "Returned type `list[dict[Unknown, Unknown]]` is not assignable to declared return type `list[CategoryTreeSchema]`",
-      "severity": "error"
-    },
-    {
-      "column": 20,
-      "path": "server/apps/categories/api.py",
-      "name": "bad-return",
-      "concise_description": "Returned type `list[dict[Unknown, Unknown]]` is not assignable to declared return type `list[CategoryTreeSchema]`",
-      "severity": "error"
-    },
-    {
-      "column": 24,
-      "path": "server/apps/categories/api.py",
-      "name": "bad-return",
-      "concise_description": "Returned type `list[dict[Unknown, Unknown]]` is not assignable to declared return type `list[CategoryListItemSchema]`",
-      "severity": "error"
-    },
-    {
-      "column": 39,
-      "path": "server/apps/geometries/api_seo.py",
-      "name": "bad-assignment",
-      "concise_description": "`list[tuple[str, str | None]]` is not assignable to `list[tuple[str, str]]`",
-      "severity": "error"
-    },
-    {
-      "column": 29,
-      "path": "server/apps/geometries/api_seo.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `str | None` is not assignable to parameter `slug` with type `str` in function `_languages_line`",
-      "severity": "error"
-    },
-    {
-      "column": 17,
-      "path": "server/apps/geometries/providers/wodore.py",
-      "name": "bad-assignment",
-      "concise_description": "`QuerySet[GeoPlace, GeoPlace]` is not assignable to variable `places` with type `list[GeoPlaceSchema]`",
-      "severity": "error"
-    },
-    {
       "column": 48,
       "path": "server/apps/geometries/schemas/_images.py",
       "name": "no-matching-overload",
       "concise_description": "No matching overload found for function `pydantic.fields.Field` called with arguments: (default_factory=type[ImageThumbhashesSchema], description=Literal['ThumbHash placeholder per rendering context (6 variants: thumb/preview × square/landscape/portrait). Individual hashes are null when not yet assessed.'])",
-      "severity": "error"
-    },
-    {
-      "column": 16,
-      "path": "server/apps/huts/api/_hut.py",
-      "name": "bad-return",
-      "concise_description": "Returned type `dict[_KPT, F]` is not assignable to declared return type `dict[str, F | JSONObject]`",
-      "severity": "error"
-    },
-    {
-      "column": 39,
-      "path": "server/apps/huts/api/_hut_markdown.py",
-      "name": "bad-assignment",
-      "concise_description": "`list[tuple[str, str | None]]` is not assignable to `list[tuple[str, str]]`",
-      "severity": "error"
-    },
-    {
-      "column": 44,
-      "path": "server/apps/images/models.py",
-      "name": "bad-assignment",
-      "concise_description": "`str` is not assignable to attribute `raw_url` with type `HttpUrl`",
-      "severity": "error"
-    },
-    {
-      "column": 21,
-      "path": "server/apps/utils/locale.py",
-      "name": "bad-assignment",
-      "concise_description": "`Translations.TransField` is not assignable to `str`",
       "severity": "error"
     },
     {

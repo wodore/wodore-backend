@@ -137,18 +137,18 @@ class WodoreProvider(ImageProvider):
             from server.apps.geometries.models import GeoPlace
 
             # Get GeoPlaces within 10m radius
-            places = (
+            nearby_qs = (
                 GeoPlace.objects.filter(
                     is_active=True,
                     is_public=True,
                     location__distance_lte=(query_point, D(m=10)),
                 )
                 .annotate(distance=Distance("location", query_point))
-                .prefetch_related("image_associations__image__license")  # type: ignore  # queryset feeding schema list at runtime
+                .prefetch_related("image_associations__image__license")
             )
 
             results = []
-            for place in places:
+            for place in nearby_qs:
                 place_qid = None
                 if hasattr(place, "osm_tags") and place.osm_tags:
                     place_qid = place.osm_tags.get("wikidata")
