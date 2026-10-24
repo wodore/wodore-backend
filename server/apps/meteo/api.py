@@ -7,7 +7,9 @@ fieldsets, harmonized with the other search endpoints). The old
 removed. Shape change: slug shorthand values are now objects.
 """
 
+import hashlib
 from http import HTTPStatus
+from typing import Any
 
 import pydantic
 from dmr import APIError, Path, Query, RedirectTo, ResponseSpec, modify
@@ -21,7 +23,9 @@ from server.apps.api.controller import (
     REDIRECT_CACHE_CONTROL,
     ApiController,
     cache_headers,
+    etag_page,
     raise_not_found,
+    revalidate_headers,
 )
 from server.apps.api.projection import field_selected
 from server.apps.api.query import sparse_fields_query
@@ -94,6 +98,46 @@ METEO_FIELD_MAP = {
     "categories": "category",
     "collections": "collection",
 }
+
+
+#: Memo window for the weather-codes version aggregate (same as basemaps).
+_WC_VERSION_TTL = 10
+_WC_VERSION_CACHE_KEY = "meteo:weather-codes-version"
+
+
+def _weather_codes_version() -> str:
+    """Version of everything the weather_codes endpoint serializes.
+
+    Covers WeatherCode, WeatherCodeSymbolCollection, WeatherCodeSymbol,
+    and Category — an edit to any of them must rotate the ETag.
+    Memoized for ``_WC_VERSION_TTL`` seconds (freshness bound only).
+    """
+    from django.core.cache import cache
+    from django.db.models import Max
+
+    from server.apps.categories.models import Category as _Category
+
+    def compute() -> str:
+        models: list[Any] = [
+            WeatherCode,
+            WeatherCodeSymbolCollection,
+            WeatherCodeSymbol,
+            _Category,
+        ]
+        parts = []
+        for model in models:
+            agg: dict[str, Any] = {"c": model.objects.count()}
+            if "modified" in {f.name for f in model._meta.get_fields()}:
+                agg["m"] = model.objects.aggregate(m=Max("modified"))["m"]
+            stamp = agg["m"].isoformat() if agg.get("m") else "-"
+            parts.append(f"{model.__name__}:{agg['c']}:{stamp}")
+        return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
+
+    return str(cache.get_or_set(_WC_VERSION_CACHE_KEY, compute, _WC_VERSION_TTL))
+
+
+def _wc_version(request: HttpRequest, **_: Any) -> str:
+    return _weather_codes_version()
 
 
 # ---------------------------------------------------------------------------
@@ -271,7 +315,7 @@ class WeatherCodesController(ApiController):
 
     @modify(
         operation_id="get_weather_codes",
-        headers=cache_headers(CACHE_MAX_AGE),
+        headers=revalidate_headers(),
     )
     def get(
         self, parsed_query: Query[WeatherCodesQuery]
@@ -495,7 +539,11 @@ class WeatherSvgController(ApiController):
 
 
 paths = [
-    path("weather_codes", WeatherCodesController.as_view(), name="get_weather_codes"),
+    path(
+        "weather_codes",
+        etag_page(_wc_version)(WeatherCodesController.as_view()),
+        name="get_weather_codes",
+    ),
     path(
         "weather_codes/<int:code>",
         WeatherCodeController.as_view(),

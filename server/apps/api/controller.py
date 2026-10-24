@@ -19,8 +19,12 @@ one predictable format, documented in the OpenAPI schema via dmr's
 ``error_model`` mechanism.
 """
 
+import hashlib
 import typing
+from functools import wraps
 from http import HTTPStatus
+from typing import Any
+from urllib.parse import urlencode
 
 from dmr import APIError, Controller, NewCookie, NewHeader
 from dmr.endpoint import Endpoint
@@ -30,7 +34,7 @@ from dmr.renderers import Renderer
 from dmr.serializer import BaseSerializer
 from typing_extensions import TypedDict, override
 
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpRequest, HttpResponse
 
 from server.apps.api.error_codes import ErrorCode, enrich_problem_details
 
@@ -210,3 +214,63 @@ def cache_headers(max_age: int) -> dict[str, NewHeader]:
 #: name), so a briefly stale redirect is cheap — without the short
 #: max-age a replaced icon would stay stale for the full window.
 REDIRECT_CACHE_CONTROL = "public, max-age=86400, stale-while-revalidate=604800"
+
+#: Revalidate-always caching for evolving documents (api-conventions):
+#: stored, but revalidated on every use — one online reload is fresh;
+#: offline/origin-down may serve the stored copy for a day.
+REVALIDATE_CACHE_CONTROL = "public, max-age=0, must-revalidate, stale-if-error=604800"
+
+
+def revalidate_headers() -> dict[str, NewHeader]:
+    """``Cache-Control`` header spec for ``@modify(headers=...)``."""
+    return {"Cache-Control": NewHeader(value=REVALIDATE_CACHE_CONTROL)}
+
+
+def etag_page(version_fn: Any) -> Any:
+    """Conditional-request wrapper for collection/detail views.
+
+    Computes a strong ETag from the version function plus every query
+    parameter and the resolved API version. ``If-None-Match`` answers
+    304 without rendering; otherwise the rendered body is cached keyed
+    by the ETag (version-keyed ⇒ self-busting — no time-based page
+    cache).
+    """
+
+    def decorator(view: Any) -> Any:
+        @wraps(view)
+        def wrapped(request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
+            version = version_fn(request, **kwargs)
+            vary = "|".join(
+                (
+                    request.path,
+                    version,
+                    urlencode(sorted(request.GET.items())),
+                    getattr(request, "api_version", "") or "",
+                )
+            )
+            etag = f'"{hashlib.sha256(vary.encode()).hexdigest()[:20]}"'
+            match = request.headers.get("If-None-Match") == etag
+            if match:
+                response = HttpResponse(status=HTTPStatus.NOT_MODIFIED)
+            else:
+                from django.core.cache import cache
+
+                body = cache.get(f"api:doc:{etag}")
+                if body is None:
+                    response = view(request, *args, **kwargs)
+                    if response.status_code == HTTPStatus.OK:
+                        cache.set(
+                            f"api:doc:{etag}",
+                            response.content,
+                            timeout=24 * 60 * 60,
+                        )
+                else:
+                    response = HttpResponse(body, content_type="application/json")
+            if match or response.status_code == HTTPStatus.OK:
+                response.headers["ETag"] = etag
+                response.headers["Cache-Control"] = REVALIDATE_CACHE_CONTROL
+            return response
+
+        return wrapped
+
+    return decorator
