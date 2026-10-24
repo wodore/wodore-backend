@@ -160,12 +160,12 @@ DEBUG_TOOLBAR_CONFIG = {
 
 # This will make debug toolbar to work with django-csp,
 # since `ddt` loads some scripts from `ajax.googleapis.com`:
-CONTENT_SECURITY_POLICY["DIRECTIVES"]["script-src"] += ("ajax.googleapis.com",)
-CONTENT_SECURITY_POLICY["DIRECTIVES"]["connect-src"] += ("'self'",)
-CONTENT_SECURITY_POLICY["DIRECTIVES"]["img-src"] += ("http:",)
+CONTENT_SECURITY_POLICY["DIRECTIVES"]["script-src"] += ("ajax.googleapis.com",)  # type: ignore
+CONTENT_SECURITY_POLICY["DIRECTIVES"]["connect-src"] += ("'self'",)  # type: ignore
+CONTENT_SECURITY_POLICY["DIRECTIVES"]["img-src"] += ("http:",)  # type: ignore
 
 # Demo page (demos/mapcompare) + basemap styles fetch external tiles:
-CONTENT_SECURITY_POLICY["DIRECTIVES"]["connect-src"] += (
+CONTENT_SECURITY_POLICY["DIRECTIVES"]["connect-src"] += (  # type: ignore
     "http://localhost:3739",  # lane Martin (demos page tile server)
     "https://wmts.geo.admin.ch",  # swisstopo relief + pixelkarte WMTS
     "https://tiles.maptoolkit.org",  # MTK vector/raster tiles

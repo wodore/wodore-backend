@@ -196,6 +196,8 @@ def project_meteo_fields(data: dict, parsed_query, request: HttpRequest) -> dict
 
         if isinstance(spec, str):
             selected = {n.strip() for n in spec.split(",") if n.strip()}
+        else:  # unknown spec shapes: empty selection instead of UnboundLocalError
+            selected: set[str] = set()
 
         if type_name == "symbols":
             # Narrow symbol_day and symbol_night (both share the TYPE)

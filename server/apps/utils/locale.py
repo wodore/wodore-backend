@@ -100,6 +100,7 @@ class Translations(BaseModel):
         ignore_errors: bool | None = None,
     ):
         ignore_errors = self.__ignore_errors if ignore_errors is None else ignore_errors
+        lang: str | None = None
         if isinstance(value, str):
             lang = self.get_locale() if locale is None else locale
             try:

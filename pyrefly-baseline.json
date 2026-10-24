@@ -631,24 +631,10 @@
       "severity": "error"
     },
     {
-      "column": 68,
-      "path": "server/apps/geometries/config/osm_categories.py",
-      "name": "bad-function-definition",
-      "concise_description": "Default `None` is not assignable to parameter `category_names` with type `list[str]`",
-      "severity": "error"
-    },
-    {
       "column": 65,
       "path": "server/apps/geometries/management/commands/drop_geoplaces.py",
       "name": "no-matching-overload",
       "concise_description": "No matching overload found for function `str.join` called with arguments: (list[str] | None)",
-      "severity": "error"
-    },
-    {
-      "column": 52,
-      "path": "server/apps/geometries/management/commands/geoplaces_import_osm.py",
-      "name": "bad-function-definition",
-      "concise_description": "Default `None` is not assignable to parameter `category_names` with type `list[str]`",
       "severity": "error"
     },
     {
@@ -708,41 +694,6 @@
       "severity": "error"
     },
     {
-      "column": 25,
-      "path": "server/apps/geometries/management/commands/geoplaces_import_osm.py",
-      "name": "bad-function-definition",
-      "concise_description": "Default `None` is not assignable to parameter `category` with type `str`",
-      "severity": "error"
-    },
-    {
-      "column": 25,
-      "path": "server/apps/geometries/management/commands/geoplaces_import_osm.py",
-      "name": "bad-function-definition",
-      "concise_description": "Default `None` is not assignable to parameter `osm_type` with type `str`",
-      "severity": "error"
-    },
-    {
-      "column": 23,
-      "path": "server/apps/geometries/management/commands/geoplaces_import_osm.py",
-      "name": "bad-function-definition",
-      "concise_description": "Default `None` is not assignable to parameter `osm_id` with type `int`",
-      "severity": "error"
-    },
-    {
-      "column": 22,
-      "path": "server/apps/geometries/management/commands/geoplaces_import_osm.py",
-      "name": "bad-function-definition",
-      "concise_description": "Default `None` is not assignable to parameter `error` with type `str`",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "server/apps/geometries/management/commands/geoplaces_import_osm.py",
-      "name": "bad-function-definition",
-      "concise_description": "Default `None` is not assignable to parameter `osm_tags` with type `dict[Unknown, Unknown]`",
-      "severity": "error"
-    },
-    {
       "column": 16,
       "path": "server/apps/geometries/management/commands/geoplaces_import_osm.py",
       "name": "bad-return",
@@ -754,20 +705,6 @@
       "path": "server/apps/geometries/management/commands/geoplaces_import_osm.py",
       "name": "unsupported-operation",
       "concise_description": "Cannot set item in `dict[str, list[dict[str, str | None]]]`",
-      "severity": "error"
-    },
-    {
-      "column": 23,
-      "path": "server/apps/geometries/management/commands/geoplaces_import_osm.py",
-      "name": "bad-function-definition",
-      "concise_description": "Default `None` is not assignable to parameter `state` with type `dict[Unknown, Unknown]`",
-      "severity": "error"
-    },
-    {
-      "column": 28,
-      "path": "server/apps/geometries/management/commands/geoplaces_import_osm.py",
-      "name": "bad-function-definition",
-      "concise_description": "Default `None` is not assignable to parameter `state_file` with type `Path`",
       "severity": "error"
     },
     {
@@ -792,20 +729,6 @@
       "severity": "error"
     },
     {
-      "column": 31,
-      "path": "server/apps/geometries/management/commands/geoplaces_import_osm.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `dict[Unknown, Unknown] | None` is not assignable to parameter `state` with type `dict[Unknown, Unknown]` in function `concurrent.futures._base.Executor.submit`",
-      "severity": "error"
-    },
-    {
-      "column": 36,
-      "path": "server/apps/geometries/management/commands/geoplaces_import_osm.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Path | None` is not assignable to parameter `state_file` with type `Path` in function `concurrent.futures._base.Executor.submit`",
-      "severity": "error"
-    },
-    {
       "column": 29,
       "path": "server/apps/geometries/management/commands/geoplaces_import_osm.py",
       "name": "bad-argument-type",
@@ -831,41 +754,6 @@
       "path": "server/apps/geometries/management/commands/geoplaces_import_osm.py",
       "name": "bad-argument-type",
       "concise_description": "Argument `str | None` is not assignable to parameter `x` with type `Buffer | SupportsFloat | SupportsIndex | str` in function `float.__new__`",
-      "severity": "error"
-    },
-    {
-      "column": 30,
-      "path": "server/apps/geometries/management/commands/geoplaces_import_osm.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `str | None` is not assignable to parameter `category` with type `str` in function `Command._log_error_to_file`",
-      "severity": "error"
-    },
-    {
-      "column": 30,
-      "path": "server/apps/geometries/management/commands/geoplaces_import_osm.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Unknown | None` is not assignable to parameter `osm_type` with type `str` in function `Command._log_error_to_file`",
-      "severity": "error"
-    },
-    {
-      "column": 28,
-      "path": "server/apps/geometries/management/commands/geoplaces_import_osm.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Unknown | None` is not assignable to parameter `osm_id` with type `int` in function `Command._log_error_to_file`",
-      "severity": "error"
-    },
-    {
-      "column": 30,
-      "path": "server/apps/geometries/management/commands/geoplaces_import_osm.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Unknown | None` is not assignable to parameter `osm_tags` with type `dict[Unknown, Unknown]` in function `Command._log_error_to_file`",
-      "severity": "error"
-    },
-    {
-      "column": 36,
-      "path": "server/apps/geometries/management/commands/geoplaces_import_osm.py",
-      "name": "unbound-name",
-      "concise_description": "`result` may be uninitialized",
       "severity": "error"
     },
     {
@@ -1590,80 +1478,10 @@
       "severity": "error"
     },
     {
-      "column": 72,
-      "path": "server/apps/meteo/api.py",
-      "name": "unbound-name",
-      "concise_description": "`selected` may be uninitialized",
-      "severity": "error"
-    },
-    {
-      "column": 73,
-      "path": "server/apps/meteo/api.py",
-      "name": "unbound-name",
-      "concise_description": "`selected` may be uninitialized",
-      "severity": "error"
-    },
-    {
-      "column": 75,
-      "path": "server/apps/meteo/api.py",
-      "name": "unbound-name",
-      "concise_description": "`selected` may be uninitialized",
-      "severity": "error"
-    },
-    {
       "column": 16,
       "path": "server/apps/meteo/api.py",
       "name": "bad-return",
       "concise_description": "Returned type `dict[Unknown, dict[Unknown, Unknown]]` is not assignable to declared return type `dict[int, WeatherCodeValue]`",
-      "severity": "error"
-    },
-    {
-      "column": 35,
-      "path": "server/apps/meteo/management/commands/reset_weather_data.py",
-      "name": "unbound-name",
-      "concise_description": "`collections_count` may be uninitialized",
-      "severity": "error"
-    },
-    {
-      "column": 48,
-      "path": "server/apps/meteo/management/commands/reset_weather_data.py",
-      "name": "unbound-name",
-      "concise_description": "`collections_qs` may be uninitialized",
-      "severity": "error"
-    },
-    {
-      "column": 38,
-      "path": "server/apps/meteo/management/commands/reset_weather_data.py",
-      "name": "unbound-name",
-      "concise_description": "`symbols_qs` may be uninitialized",
-      "severity": "error"
-    },
-    {
-      "column": 41,
-      "path": "server/apps/meteo/management/commands/reset_weather_data.py",
-      "name": "unbound-name",
-      "concise_description": "`total_codes` may be uninitialized",
-      "severity": "error"
-    },
-    {
-      "column": 36,
-      "path": "server/apps/meteo/management/commands/reset_weather_data.py",
-      "name": "unbound-name",
-      "concise_description": "`codes_qs` may be uninitialized",
-      "severity": "error"
-    },
-    {
-      "column": 35,
-      "path": "server/apps/meteo/management/commands/reset_weather_data.py",
-      "name": "unbound-name",
-      "concise_description": "`collections_count` may be uninitialized",
-      "severity": "error"
-    },
-    {
-      "column": 41,
-      "path": "server/apps/meteo/management/commands/reset_weather_data.py",
-      "name": "unbound-name",
-      "concise_description": "`total_codes` may be uninitialized",
       "severity": "error"
     },
     {
@@ -1797,13 +1615,6 @@
       "path": "server/apps/utils/locale.py",
       "name": "bad-argument-type",
       "concise_description": "Argument `str | Unknown` is not assignable to parameter `locale` with type `Literal['de', 'en', 'fr', 'it'] | None` in function `Translations.set`",
-      "severity": "error"
-    },
-    {
-      "column": 38,
-      "path": "server/apps/utils/locale.py",
-      "name": "unbound-name",
-      "concise_description": "`lang` is uninitialized",
       "severity": "error"
     },
     {
@@ -2094,136 +1905,10 @@
       "severity": "error"
     },
     {
-      "column": 34,
-      "path": "server/settings/components/logging.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `list[CallsiteParameterAdder | TimeStamper]` is not assignable to parameter `iterable` with type `Iterable[((logger: Logger, method_name: str, event_dict: MutableMapping[str, Any]) -> MutableMapping[str, Any]) | ((logger: Any, method_name: str, event_dict: MutableMapping[str, Any]) -> MutableMapping[str, Any])]` in function `list.extend`",
-      "severity": "error"
-    },
-    {
-      "column": 34,
-      "path": "server/settings/components/logging.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `(logger: Logger, method_name: str, event_dict: dict[Unknown, Unknown]) -> dict[Unknown, Unknown]` is not assignable to parameter `object` with type `((logger: Logger, method_name: str, event_dict: MutableMapping[str, Any]) -> MutableMapping[str, Any]) | ((logger: Any, method_name: str, event_dict: MutableMapping[str, Any]) -> MutableMapping[str, Any])` in function `list.append`",
-      "severity": "error"
-    },
-    {
       "column": 13,
       "path": "server/settings/components/logging.py",
       "name": "bad-argument-type",
       "concise_description": "Argument `CallsiteParameterAdder` is not assignable to parameter `object` with type `((logger: Logger, method_name: str, event_dict: MutableMapping[str, Any]) -> MutableMapping[str, Any]) | ((logger: Any, method_name: str, event_dict: MutableMapping[str, Any]) -> MutableMapping[str, Any])` in function `list.append`",
-      "severity": "error"
-    },
-    {
-      "column": 37,
-      "path": "server/settings/components/logging.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `TimeStamper` is not assignable to parameter `object` with type `((logger: Logger, method_name: str, event_dict: MutableMapping[str, Any]) -> MutableMapping[str, Any]) | ((logger: Any, method_name: str, event_dict: MutableMapping[str, Any]) -> MutableMapping[str, Any])` in function `list.insert`",
-      "severity": "error"
-    },
-    {
-      "column": 11,
-      "path": "server/settings/components/oidc.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Key` has no attribute `as_pem`",
-      "severity": "error"
-    },
-    {
-      "column": 4,
-      "path": "server/settings/components/registry.py",
-      "name": "unknown-name",
-      "concise_description": "Could not find name `ZITADEL_RP_ENABLED`",
-      "severity": "error"
-    },
-    {
-      "column": 5,
-      "path": "server/settings/components/registry.py",
-      "name": "unbound-name",
-      "concise_description": "`INSTALLED_APPS` is uninitialized",
-      "severity": "error"
-    },
-    {
-      "column": 5,
-      "path": "server/settings/components/registry.py",
-      "name": "unbound-name",
-      "concise_description": "`AUTHENTICATION_BACKENDS` is uninitialized",
-      "severity": "error"
-    },
-    {
-      "column": 4,
-      "path": "server/settings/components/registry.py",
-      "name": "unknown-name",
-      "concise_description": "Could not find name `OIDC_ENABLED`",
-      "severity": "error"
-    },
-    {
-      "column": 5,
-      "path": "server/settings/components/registry.py",
-      "name": "unbound-name",
-      "concise_description": "`INSTALLED_APPS` may be uninitialized",
-      "severity": "error"
-    },
-    {
-      "column": 5,
-      "path": "server/settings/components/registry.py",
-      "name": "unbound-name",
-      "concise_description": "`MIDDLEWARE` is uninitialized",
-      "severity": "error"
-    },
-    {
-      "column": 5,
-      "path": "server/settings/components/registry.py",
-      "name": "unbound-name",
-      "concise_description": "`AUTHENTICATION_BACKENDS` may be uninitialized",
-      "severity": "error"
-    },
-    {
-      "column": 21,
-      "path": "server/settings/components/sentry.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `(event: dict[Unknown, Unknown], hint: dict[Unknown, Unknown]) -> dict[Unknown, Unknown] | None` is not assignable to parameter `before_send` with type `((Event, dict[str, Any]) -> Event | None) | None` in function `sentry_sdk.consts.ClientConstructor.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 33,
-      "path": "server/settings/components/sentry.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `(event: dict[Unknown, Unknown], hint: dict[Unknown, Unknown]) -> dict[Unknown, Unknown]` is not assignable to parameter `before_send_transaction` with type `((Event, dict[str, Any]) -> Event | None) | None` in function `sentry_sdk.consts.ClientConstructor.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 1,
-      "path": "server/settings/environments/development.py",
-      "name": "bad-assignment",
-      "concise_description": "`tuple[str, str, str, str, str, Literal['ajax.googleapis.com']]` is not assignable to dict key `script-src` with type `tuple[str, str, str, str, str]`",
-      "severity": "error"
-    },
-    {
-      "column": 1,
-      "path": "server/settings/environments/development.py",
-      "name": "bad-assignment",
-      "concise_description": "`tuple[str, str, str, Any, str, str, Literal['\\'self\\'']]` is not assignable to dict key `connect-src` with type `tuple[str, str, str, Any, str, str]`",
-      "severity": "error"
-    },
-    {
-      "column": 1,
-      "path": "server/settings/environments/development.py",
-      "name": "bad-assignment",
-      "concise_description": "`tuple[str, str, str, str, str, Literal['http:']]` is not assignable to dict key `img-src` with type `tuple[str, str, str, str, str]`",
-      "severity": "error"
-    },
-    {
-      "column": 1,
-      "path": "server/settings/environments/development.py",
-      "name": "bad-assignment",
-      "concise_description": "`tuple[str, str, str, Any, str, str, Literal['http://localhost:3739'], Literal['https://wmts.geo.admin.ch'], Literal['https://tiles.maptoolkit.org'], Literal['https://icons.maptoolkit.org'], Literal['https://tiles.mapterhorn.com'], Literal['https://elevation-tiles-prod.s3.amazonaws.com']]` is not assignable to dict key `connect-src` with type `tuple[str, str, str, Any, str, str]`",
-      "severity": "error"
-    },
-    {
-      "column": 1,
-      "path": "server/settings/environments/staging.py",
-      "name": "unbound-name",
-      "concise_description": "`INSTALLED_APPS` is uninitialized",
       "severity": "error"
     },
     {

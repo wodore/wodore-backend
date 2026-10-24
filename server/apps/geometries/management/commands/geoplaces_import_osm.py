@@ -64,7 +64,7 @@ class OSMElement:
 class OSMHandler(osmium.SimpleHandler):
     """Handler for parsing OSM PBF files using category mappings."""
 
-    def __init__(self, category_names: list[str] = None):
+    def __init__(self, category_names: list[str] | None = None):
         super().__init__()
         self.amenities = []
         self.category_names = category_names
@@ -790,11 +790,11 @@ class Command(BaseCommand):
     def _log_error_to_file(
         self,
         name: str,
-        category: str = None,
-        osm_type: str = None,
-        osm_id: int = None,
-        error: str = None,
-        osm_tags: dict = None,
+        category: str | None = None,
+        osm_type: str | None = None,
+        osm_id: int | None = None,
+        error: str | None = None,
+        osm_tags: dict | None = None,
     ) -> None:
         """Log error to file immediately (on-the-fly).
 
@@ -1789,8 +1789,8 @@ class Command(BaseCommand):
         console,
         progress,
         overall_task,
-        state: dict = None,
-        state_file: Path = None,
+        state: dict | None = None,
+        state_file: Path | None = None,
     ) -> dict:
         """Worker function to process a single mapping in parallel.
 
@@ -3291,6 +3291,7 @@ class Command(BaseCommand):
                 max_retries = 3
                 retry_delay = 5  # seconds
 
+                result: dict = {}  # assigned on success; re-raised otherwise
                 for attempt in range(max_retries):
                     try:
                         # Make direct HTTP request to Overpass API
