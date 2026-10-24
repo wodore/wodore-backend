@@ -12,7 +12,7 @@ from http import HTTPStatus
 from typing import Any
 
 import pydantic
-from dmr import APIError, Path, Query, RedirectTo, ResponseSpec, modify
+from dmr import APIError, NewHeader, Path, Query, RedirectTo, ResponseSpec, modify
 from dmr.headers import HeaderSpec
 from dmr.routing import path
 from pydantic import Field
@@ -25,7 +25,6 @@ from server.apps.api.controller import (
     cache_headers,
     etag_page,
     raise_not_found,
-    revalidate_headers,
 )
 from server.apps.api.projection import field_selected
 from server.apps.api.query import sparse_fields_query
@@ -38,6 +37,11 @@ from .schemas import DayTimeEnum
 
 DEFAULT_COLLECTION = "weather-icons-outlined-mono"
 CACHE_MAX_AGE = 7 * 24 * 60 * 60  # 7 days in seconds
+
+#: Weather codes are static lookup data — clients may reuse the cached
+#: response for an hour without revalidating; stale-while-revalidate
+#: keeps the slot warm while a background revalidation runs.
+_WC_CACHE_CONTROL = "public, max-age=3600, stale-while-revalidate=604800"
 
 # ---------------------------------------------------------------------------
 # Shared types for sparse fieldsets documentation
@@ -315,7 +319,7 @@ class WeatherCodesController(ApiController):
 
     @modify(
         operation_id="get_weather_codes",
-        headers=revalidate_headers(),
+        headers={"Cache-Control": NewHeader(value=_WC_CACHE_CONTROL)},
     )
     def get(
         self, parsed_query: Query[WeatherCodesQuery]
@@ -541,7 +545,9 @@ class WeatherSvgController(ApiController):
 paths = [
     path(
         "weather_codes",
-        etag_page(_wc_version)(WeatherCodesController.as_view()),
+        etag_page(_wc_version, cache_control=_WC_CACHE_CONTROL)(
+            WeatherCodesController.as_view()
+        ),
         name="get_weather_codes",
     ),
     path(

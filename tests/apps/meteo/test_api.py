@@ -8,7 +8,7 @@ from server.apps.organizations.models import Organization
 pytestmark = [pytest.mark.django_db]
 
 WEATHER_CODES_URL = "/v1/meteo/weather_codes"
-REVALIDATE_CACHE_CONTROL = "public, max-age=0, must-revalidate, stale-if-error=604800"
+WC_CACHE_CONTROL = "public, max-age=3600, stale-while-revalidate=604800"
 
 
 @pytest.fixture
@@ -48,7 +48,7 @@ class TestWeatherCodesCaching:
         response = client.get(WEATHER_CODES_URL)
         assert response.status_code == 200
         assert "ETag" in response
-        assert response["Cache-Control"] == REVALIDATE_CACHE_CONTROL
+        assert response["Cache-Control"] == WC_CACHE_CONTROL
         etag = response["ETag"]
         assert etag.startswith('"') and etag.endswith('"')
 

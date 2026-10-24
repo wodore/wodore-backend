@@ -226,7 +226,10 @@ def revalidate_headers() -> dict[str, NewHeader]:
     return {"Cache-Control": NewHeader(value=REVALIDATE_CACHE_CONTROL)}
 
 
-def etag_page(version_fn: Any) -> Any:
+def etag_page(
+    version_fn: Any,
+    cache_control: str = REVALIDATE_CACHE_CONTROL,
+) -> Any:
     """Conditional-request wrapper for collection/detail views.
 
     Computes a strong ETag from the version function plus every query
@@ -234,6 +237,9 @@ def etag_page(version_fn: Any) -> Any:
     304 without rendering; otherwise the rendered body is cached keyed
     by the ETag (version-keyed ⇒ self-busting — no time-based page
     cache).
+
+    ``cache_control`` overrides the ``Cache-Control`` header written on
+    200 and 304 responses (default: ``REVALIDATE_CACHE_CONTROL``).
     """
 
     def decorator(view: Any) -> Any:
@@ -268,7 +274,7 @@ def etag_page(version_fn: Any) -> Any:
                     response = HttpResponse(body, content_type="application/json")
             if match or response.status_code == HTTPStatus.OK:
                 response.headers["ETag"] = etag
-                response.headers["Cache-Control"] = REVALIDATE_CACHE_CONTROL
+                response.headers["Cache-Control"] = cache_control
             return response
 
         return wrapped
