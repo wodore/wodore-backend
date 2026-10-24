@@ -2,25 +2,25 @@
 
 ## 1. Models & schema (Phase A)
 
-- [ ] 1.1 Add `GeoPlaceAvailability` (fields/constraints per spec, port of
+- [x] 1.1 Add `GeoPlaceAvailability` (fields/constraints per spec, port of
   `HutAvailability`; attribution columns unchanged; check constraints on
   occupancy/reservation enums; indexes `(geo_place, availability_date)` and
   `(availability_date, last_checked)`; `hut_type` FK keeps its
   `limit_choices_to` filter) + manager port (`for_date_range`,
   needing-update query surface)
-- [ ] 1.2 Add `GeoPlaceAvailabilityHistory` (FK availability SET_NULL, FK
+- [x] 1.2 Add `GeoPlaceAvailabilityHistory` (FK availability SET_NULL, FK
   geo_place CASCADE, snapshot fields, durations; check constraints on
   occupancy/reservation enums; index `(geo_place, availability_date,
   first_checked)`; `hut_type` FK keeps its `limit_choices_to` filter) +
   `for_trend` manager port
-- [ ] 1.3 Add `GeoPlaceAvailabilityStatus` (OneToOne place with
+- [x] 1.3 Add `GeoPlaceAvailabilityStatus` (OneToOne place with
   `primary_key=True`, fetch health fields, mark_success/mark_failure,
   `-last_checked` ordering)
-- [ ] 1.4 Port the change-detection design (`update_availability` /
+- [x] 1.4 Port the change-detection design (`update_availability` /
   `record_change` / `has_changed`) onto the new models
-- [ ] 1.5 Schema migration for all three models; `manage.py check` +
+- [x] 1.5 Schema migration for all three models; `manage.py check` +
   `makemigrations --check` clean
-- [ ] 1.6 Model factories + unit tests (uniqueness, change detection, status
+- [x] 1.6 Model factories + unit tests (uniqueness, change detection, status
   transitions, manager queries)
 
 ## 2. Backfill (Phase B)

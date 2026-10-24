@@ -22,15 +22,21 @@ from typing import Any
 import pytest
 
 from django.contrib.gis.geos import Point
-from django.db import connection
+from django.db import IntegrityError, connection, transaction
 from django.utils import timezone
 
 from server.apps.availability.tiles import AvailabilityTileCache
 from server.apps.categories.models import Category
+from server.apps.geometries.models import GeoPlace
 from server.apps.huts.models import Hut
 from server.apps.organizations.models import Organization
 
-from .models import HutAvailability
+from .models import (
+    GeoPlaceAvailability,
+    GeoPlaceAvailabilityHistory,
+    GeoPlaceAvailabilityStatus,
+    HutAvailability,
+)
 
 # Test hut sits on the Rätikon (lon 8.5 / lat 46.5); the helper computes
 # the covering tile per zoom so the tests never hardcode tile coords.
@@ -477,3 +483,205 @@ def test_cleanup_removes_all_entries(hut, hut_types):
 
     assert deleted == count_before
     assert not AvailabilityTileCache.objects.exists()
+
+
+# ── geoplace availability models (geoplace-availability change, phase A) ──
+
+
+@pytest.fixture
+def place():
+    return GeoPlace.objects.create(
+        slug="place-1",
+        name="Test Place",
+        location=Point(HUT_LON, HUT_LAT, srid=4326),
+        country_code="CH",
+    )
+
+
+@pytest.fixture
+def place_org():
+    _reset_pk_sequence(Organization)
+    return Organization.objects.create(slug="place-org")
+
+
+def _place_availability(place, org, day_offset=0, **overrides):
+    """Create a GeoPlaceAvailability row with sensible defaults."""
+    now = timezone.now()
+    defaults = dict(
+        geo_place=place,
+        source_organization=org,
+        source_id="src-1",
+        availability_date=TODAY + datetime.timedelta(days=day_offset),
+        free=5,
+        total=10,
+        occupancy_status="medium",
+        reservation_status="possible",
+        first_checked=now,
+        last_checked=now,
+    )
+    defaults.update(overrides)
+    return GeoPlaceAvailability.objects.create(**defaults)
+
+
+@pytest.mark.django_db
+class TestGeoPlaceAvailability:
+    def test_single_row_per_place_and_date(self, place, place_org):
+        """Spec: one row per place per date — a second row is rejected."""
+        _place_availability(place, place_org)
+        with pytest.raises(IntegrityError):
+            _place_availability(place, place_org)
+
+    def test_invalid_occupancy_status_rejected(self, place, place_org):
+        """Spec: check constraints guard the status enums."""
+        with pytest.raises(IntegrityError):
+            with transaction.atomic():
+                _place_availability(place, place_org, occupancy_status="bogus")
+        with pytest.raises(IntegrityError):
+            with transaction.atomic():
+                _place_availability(place, place_org, reservation_status="nope")
+
+    def test_change_detection_records_history_only_on_change(self, place, place_org):
+        avail = _place_availability(place, place_org, free=5, total=10)
+        hour_ago = timezone.now() - datetime.timedelta(hours=1)
+
+        # Changed values → history row + updated current state
+        changed, history = avail.update_availability(
+            free=2,
+            total=10,
+            occupancy_percent=80.0,
+            occupancy_status="high",
+            reservation_status="possible",
+            hut_type=None,
+            free_tolerance=0,
+        )
+        assert changed is True
+        assert history is not None and history.free == 2
+        avail.refresh_from_db()
+        assert avail.free == 2 and avail.occupancy_status == "high"
+
+        # Age both so the no-change path can be observed advancing them;
+        # first_checked two hours back also gives duration_seconds meaning
+        two_hours_ago = timezone.now() - datetime.timedelta(hours=2)
+        history.first_checked = two_hours_ago
+        history.last_checked = hour_ago
+        history.save(update_fields=["first_checked", "last_checked"])
+        avail.last_checked = hour_ago
+        avail.save(update_fields=["last_checked"])
+
+        # Unchanged values → no new history row, last_checked advanced
+        changed, history2 = avail.update_availability(
+            free=2,
+            total=10,
+            occupancy_percent=80.0,
+            occupancy_status="high",
+            reservation_status="possible",
+            hut_type=None,
+            free_tolerance=0,
+        )
+        assert changed is False and history2 is None
+        assert GeoPlaceAvailabilityHistory.objects.count() == 1
+        avail.refresh_from_db()
+        history.refresh_from_db()
+        assert avail.last_checked > hour_ago
+        assert history.last_checked > hour_ago
+        assert history.duration_seconds >= 7000  # first_checked two hours back
+
+    def test_needing_update_priority_buckets(self, place, place_org):
+        two_hours_ago = timezone.now() - datetime.timedelta(hours=2)
+        ten_min_ago = timezone.now() - datetime.timedelta(minutes=10)
+        # 'full' last checked 2h ago → high priority bucket → included
+        _place_availability(
+            place,
+            place_org,
+            day_offset=0,
+            occupancy_status="full",
+            last_checked=two_hours_ago,
+        )
+        # 'medium' checked 10 min ago → below medium threshold → excluded
+        _place_availability(
+            place,
+            place_org,
+            day_offset=1,
+            occupancy_status="medium",
+            last_checked=ten_min_ago,
+        )
+        needing = GeoPlaceAvailability.objects.needing_update(
+            high_priority_minutes=30, medium_priority_minutes=180
+        )
+        assert needing.count() == 1
+        assert needing.get().occupancy_status == "full"
+
+    def test_for_date_range_filters(self, place, place_org, hut_types):
+        open_type, _ = hut_types
+        _place_availability(place, place_org, day_offset=0)
+        _place_availability(place, place_org, day_offset=3, hut_type=open_type)
+        qs = GeoPlaceAvailability.objects.for_date_range(days=2)
+        assert [a.availability_date for a in qs] == [
+            TODAY,
+        ]
+        qs_place = GeoPlaceAvailability.objects.for_date_range(
+            place_id=place.id, days=10
+        )
+        assert qs_place.count() == 2
+
+
+@pytest.mark.django_db
+class TestGeoPlaceAvailabilityStatus:
+    def test_mark_success_and_failure_transitions(self, place):
+        status = GeoPlaceAvailabilityStatus.objects.create(
+            geo_place=place,
+            last_checked=timezone.now() - datetime.timedelta(hours=1),
+        )
+        assert status.has_data is False
+
+        status.mark_failure()
+        status.refresh_from_db()
+        assert status.consecutive_failures == 1
+        assert status.last_success is None
+
+        status.mark_failure()
+        status.refresh_from_db()
+        assert status.consecutive_failures == 2
+
+        status.mark_success()
+        status.refresh_from_db()
+        assert status.consecutive_failures == 0
+        assert status.has_data is True
+        assert status.last_success is not None
+
+
+@pytest.mark.django_db
+class TestGeoPlaceAvailabilityHistory:
+    def test_for_trend_orders_out_of_order_inserts(self, place, place_org):
+        """Spec: ordering is exclusively first_checked-based — an older row
+        inserted after a newer one still sorts correctly."""
+        avail = _place_availability(place, place_org)
+        now = timezone.now()
+        newer = GeoPlaceAvailabilityHistory.objects.create(
+            availability=avail,
+            geo_place=place,
+            availability_date=avail.availability_date,
+            free=1,
+            total=10,
+            occupancy_status="high",
+            reservation_status="possible",
+            first_checked=now + datetime.timedelta(hours=1),
+            last_checked=now + datetime.timedelta(hours=1),
+        )
+        older = GeoPlaceAvailabilityHistory.objects.create(
+            availability=avail,
+            geo_place=place,
+            availability_date=avail.availability_date,
+            free=9,
+            total=10,
+            occupancy_status="empty",
+            reservation_status="possible",
+            first_checked=now - datetime.timedelta(hours=1),
+            last_checked=now - datetime.timedelta(hours=1),
+        )
+        trend = list(
+            GeoPlaceAvailabilityHistory.objects.for_trend(
+                place.id, avail.availability_date, days_before=30
+            )
+        )
+        assert trend == [older, newer]
