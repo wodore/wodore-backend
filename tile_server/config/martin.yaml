@@ -285,7 +285,7 @@ postgres:
 #   contours - Mapterhorn Terrarium tiles -> traced vector MVT (PRIORITY:
 #     offloads the client-side maplibre-contour plugin; layer `contour`,
 #     tags `ele` (int m) + `major` (bool))
-#   hillshade - AWS Terrain Tiles Mapzen *normal* tiles -> baked raster PNG
+#   hillshade - AWS Terrain Tiles Mapzen *normal* tiles -> baked raster webp
 # Both outputs REPLACE the source tiles, served at
 # /hillshade/{z}/{x}/{y} and /contours/{z}/{x}/{y}.
 # Free, world-wide, no API key:
@@ -314,7 +314,8 @@ passthrough:
       # stops at z15 (verified: normal/15 answers 200).
       maxzoom: 15
       cache_control: public, max-age=2592000
-      convert_to_hillshade: auto
+      convert_to_hillshade:
+        format: webp
     contours:
       # Upstream: AWS Terrain Tiles terrarium PNG (global ~30m, coarser in the
       # Alps but CLEAN tile geometry). The preferred Mapterhorn Terrarium webp
