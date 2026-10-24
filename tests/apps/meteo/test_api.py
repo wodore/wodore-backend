@@ -12,14 +12,28 @@ WC_CACHE_CONTROL = "public, max-age=3600, stale-while-revalidate=604800"
 
 
 @pytest.fixture
-def collection(db):
+def _org(db):
     org, _ = Organization.objects.get_or_create(
         slug="test-wmo-org",
         defaults={"name": "Test WMO Org", "is_active": True},
     )
+    return org
+
+
+@pytest.fixture
+def collection(_org):
     col, _ = WeatherCodeSymbolCollection.objects.get_or_create(
         slug="weather-icons-outlined-mono",
-        defaults={"source_org": org},
+        defaults={"source_org": _org},
+    )
+    return col
+
+
+@pytest.fixture
+def alt_collection(_org):
+    col, _ = WeatherCodeSymbolCollection.objects.get_or_create(
+        slug="alt-test-collection",
+        defaults={"source_org": _org},
     )
     return col
 
@@ -60,31 +74,35 @@ class TestWeatherCodesCaching:
         second = client.get(WEATHER_CODES_URL, HTTP_IF_NONE_MATCH=etag)
         assert second.status_code == 304
         assert second["ETag"] == etag
+        assert second["Cache-Control"] == WC_CACHE_CONTROL
         assert second.content == b""
+
+    def test_if_none_match_list_returns_304(self, weather_codes, client):
+        """Comma-separated If-None-Match list (CDN revalidation form)."""
+        etag = client.get(WEATHER_CODES_URL)["ETag"]
+
+        response = client.get(
+            WEATHER_CODES_URL,
+            HTTP_IF_NONE_MATCH=f'"other-etag", {etag}',
+        )
+        assert response.status_code == 304
+
+    def test_if_none_match_wildcard_returns_304(self, weather_codes, client):
+        """If-None-Match: * must match any current representation."""
+        response = client.get(WEATHER_CODES_URL, HTTP_IF_NONE_MATCH="*")
+        assert response.status_code == 304
 
     def test_etag_varies_by_lang(self, weather_codes, client):
         en = client.get(WEATHER_CODES_URL, {"lang": "en"})["ETag"]
         de = client.get(WEATHER_CODES_URL, {"lang": "de"})["ETag"]
         assert en != de
 
-    def test_etag_varies_by_collection(self, weather_codes, client):
-        """Collection query param is part of the ETag vary key."""
-        default_etag = client.get(WEATHER_CODES_URL)["ETag"]
-        # Use a second valid collection slug that happens to not exist;
-        # etag_page computes the ETag before the view renders, so the
-        # ETag still differs even when the response is a non-200.
-        import hashlib
-        from urllib.parse import urlencode
-
-        def _etag(path, version, params):
-            vary = "|".join((path, version, urlencode(sorted(params.items())), ""))
-            return f'"{hashlib.sha256(vary.encode()).hexdigest()[:20]}"'
-
-        # ETags with different collection params encode different query strings.
-        etag_a = _etag("/v1/meteo/weather_codes", "v", {"collection": "col-a"})
-        etag_b = _etag("/v1/meteo/weather_codes", "v", {"collection": "col-b"})
-        assert etag_a != etag_b
-        assert default_etag != etag_a
+    def test_etag_varies_by_collection(self, weather_codes, alt_collection, client):
+        """Different collection slug must produce a different ETag."""
+        default = client.get(WEATHER_CODES_URL)["ETag"]
+        other = client.get(WEATHER_CODES_URL, {"collection": alt_collection.slug})
+        assert other.status_code == 200
+        assert other["ETag"] != default
 
     def test_stale_etag_returns_200(self, weather_codes, client):
         first = client.get(WEATHER_CODES_URL)

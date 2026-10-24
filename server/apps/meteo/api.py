@@ -12,7 +12,7 @@ from http import HTTPStatus
 from typing import Any
 
 import pydantic
-from dmr import APIError, NewHeader, Path, Query, RedirectTo, ResponseSpec, modify
+from dmr import APIError, Path, Query, RedirectTo, ResponseSpec, modify
 from dmr.headers import HeaderSpec
 from dmr.routing import path
 from pydantic import Field
@@ -317,10 +317,7 @@ class WeatherSvgPath(pydantic.BaseModel):
 class WeatherCodesController(ApiController):
     """All weather codes, keyed by WMO code."""
 
-    @modify(
-        operation_id="get_weather_codes",
-        headers={"Cache-Control": NewHeader(value=_WC_CACHE_CONTROL)},
-    )
+    @modify(operation_id="get_weather_codes")  # Cache-Control is owned by etag_page
     def get(
         self, parsed_query: Query[WeatherCodesQuery]
     ) -> dict[int, WeatherCodeValue]:

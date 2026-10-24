@@ -226,6 +226,25 @@ def revalidate_headers() -> dict[str, NewHeader]:
     return {"Cache-Control": NewHeader(value=REVALIDATE_CACHE_CONTROL)}
 
 
+def _etag_matches(header: str, etag: str) -> bool:
+    """RFC 7232-compliant If-None-Match check.
+
+    Handles the wildcard ``*``, comma-separated lists (CDN revalidation),
+    and weak ``W/"…"`` tags (stripped for comparison — RFC 7232 §3.2:
+    a recipient MUST use the weak comparison function for If-None-Match).
+    """
+    if header.strip() == "*":
+        return True
+    # Normalize the server ETag: strip surrounding quotes.
+    normalized = etag.strip('"')
+    for candidate in header.split(","):
+        candidate = candidate.strip()
+        candidate = candidate.removeprefix("W/")
+        if candidate.strip('"') == normalized:
+            return True
+    return False
+
+
 def etag_page(
     version_fn: Any,
     cache_control: str = REVALIDATE_CACHE_CONTROL,
@@ -255,7 +274,8 @@ def etag_page(
                 )
             )
             etag = f'"{hashlib.sha256(vary.encode()).hexdigest()[:20]}"'
-            match = request.headers.get("If-None-Match") == etag
+            inm = request.headers.get("If-None-Match", "")
+            match = bool(inm) and _etag_matches(inm, etag)
             if match:
                 response = HttpResponse(status=HTTPStatus.NOT_MODIFIED)
             else:
@@ -265,6 +285,9 @@ def etag_page(
                 if body is None:
                     response = view(request, *args, **kwargs)
                     if response.status_code == HTTPStatus.OK:
+                        # api:doc: replaced basemaps:doc: when etag_page moved to
+                        # the shared module; one-time cold-miss per key on deploy
+                        # (old entries expire in 24 h).
                         cache.set(
                             f"api:doc:{etag}",
                             response.content,
