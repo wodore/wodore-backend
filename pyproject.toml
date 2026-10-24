@@ -333,6 +333,22 @@ python-interpreter-path = ".venv/bin/python"
 baseline = "pyrefly-baseline.json" # ratchet: suppresses pre-existing findings; only NEW type errors fail
 
 
+[[tool.pyrefly.sub-config]]
+# Strict-typing ratchet: accounts app opts into stricter implicit-any/override rules.
+# Other apps follow the same pattern as they are cleaned up ("ratchet" per app).
+matches = "server/apps/accounts/**"
+
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = true
+implicit-any-type-argument = true
+implicit-any-lambda = true
+implicit-any-empty-container = true
+implicit-any-attribute = true
+missing-override-decorator = true
+bad-override = true
+method-assign = true
+
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
