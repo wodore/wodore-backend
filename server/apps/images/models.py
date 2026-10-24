@@ -8,6 +8,7 @@ import requests
 from colorfield.fields import ColorField
 from hut_services import LicenseSchema, PhotoSchema, TranslationSchema
 from PIL import Image as PILImage
+from pydantic_string_url import HttpUrl
 
 from model_utils.fields import (
     MonitorField,
@@ -355,9 +356,9 @@ class Image(TimeStampedModel):
             if e.response.status_code == 404:
                 if "-originale" in photo_schema.raw_url:
                     # fix wrong url for refuges.info images
-                    photo_schema.raw_url = photo_schema.raw_url.replace(
-                        "-originale", "-reduite"
-                    )  # type: ignore  # url assigned as raw str, validated at runtime
+                    photo_schema.raw_url = HttpUrl(
+                        str(photo_schema.raw_url).replace("-originale", "-reduite")
+                    )
                     return cls.create_image_from_schema(
                         photo_schema,
                         path=path,

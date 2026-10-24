@@ -1,7 +1,7 @@
 """Category endpoints on dmr (tree/list/map + symbol SVG redirects)."""
 
 from http import HTTPStatus
-from typing import Any
+from typing import Any, cast
 
 import pydantic
 from dmr import APIError, Path, Query, RedirectTo, ResponseSpec, modify
@@ -299,7 +299,7 @@ class CategoryTreeController(ApiController):
                 )
                 base_level = category.get_level()
 
-                return [
+                return cast("list[CategoryTreeSchema]", [
                     get_descendants_tree(
                         child,
                         request,
@@ -310,10 +310,10 @@ class CategoryTreeController(ApiController):
                         children_map,
                     )
                     for child in children_map.get(category.id, [])
-                ]  # type: ignore  # serialized dicts match schema shape at runtime
+                ])
 
             roots = [node for node in nodes if node.parent_id is None]
-            return [
+            return cast("list[CategoryTreeSchema]", [
                 get_descendants_tree(
                     root,
                     request,
@@ -324,7 +324,7 @@ class CategoryTreeController(ApiController):
                     children_map,
                 )
                 for root in roots
-            ]  # type: ignore  # serialized dicts match schema shape at runtime
+            ])
 
 
 class CategoryListController(ApiController):
@@ -353,7 +353,7 @@ class CategoryListController(ApiController):
                     parsed_path.parent_slug, query.is_active
                 )
                 base_level = category.get_level()
-                return get_descendants_flat(
+                return cast("list[CategoryListItemSchema]", get_descendants_flat(
                     category,
                     request,
                     query.level,
@@ -362,7 +362,7 @@ class CategoryListController(ApiController):
                     base_level,
                     children_map,
                     include_self=False,
-                )  # type: ignore  # serialized dicts match schema shape at runtime
+                ))
 
             result = []
             for cat in sorted(nodes, key=lambda c: (c.order, c.slug)):
