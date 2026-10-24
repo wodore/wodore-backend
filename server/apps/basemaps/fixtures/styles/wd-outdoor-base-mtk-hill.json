@@ -2169,13 +2169,6 @@
       "type": "raster-dem",
       "url": "https://tiles.maptoolkit.org/terrainrgb.json",
       "encoding": "terrarium"
-    },
-    "hillshade-server": {
-      "type": "raster",
-      "tiles": ["/hillshade/{z}/{x}/{y}"],
-      "tileSize": 512,
-      "maxzoom": 15,
-      "attribution": "<a href='https://registry.opendata.aws/terrain-tiles/'>AWS Terrain Tiles</a>"
     }
   },
   "layers": [
@@ -2232,27 +2225,6 @@
         "maptoolkit:legend": {
           "hidden": true
         }
-      }
-    },
-    {
-      "id": "relief_hillshade_server",
-      "type": "raster",
-      "source": "hillshade-server",
-      "minzoom": 12.8,
-      "paint": {
-        "raster-opacity": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          12.8,
-          0.55,
-          14,
-          0.62,
-          15,
-          0.7
-        ],
-        "raster-brightness-min": 0.4,
-        "raster-resampling": "linear"
       }
     },
     {
