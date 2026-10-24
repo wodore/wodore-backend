@@ -8,8 +8,11 @@ repos:
       - id: check-yaml
         args: [--unsafe]
       - id: end-of-file-fixer
+        # baseline is a generated artifact — regenerated, never hand-edited
+        exclude: ^pyrefly-baseline\.json$
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
+        exclude: ^pyrefly-baseline\.json$
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: "v0.16.8"
@@ -23,3 +26,4 @@ repos:
     hooks:
       - id: prettier
         types_or: [css, javascript, json, scss, yaml]
+        exclude: ^pyrefly-baseline\.json$
