@@ -561,16 +561,6 @@ LAYERS: list[dict[str, Any]] = [
         "order": 0,  # the product slot (plain non-hill pair retired)
         "show": True,
         "style": _fixture_style("wd-outdoor-base-mtk-hill"),
-        # spec=low: martin server-baked hillshade only (AWS normals → baked
-        # raster webp). No rgb-tiles source, no GPU hillshade layer — weak
-        # devices fetch no DEM at all. spec=medium falls through to low via
-        # the SPEC_FALLBACKS chain (medium → low → high).
-        "variants": [
-            {
-                "spec": MapLayer.Spec.low,
-                "style": _fixture_style("wd-outdoor-base-mtk-hill-low"),
-            }
-        ],
         "attributions": ["maptoolkit"],
     },
     {
