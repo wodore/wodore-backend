@@ -249,6 +249,18 @@ class Image(TimeStampedModel):
                 name="%(app_label)s_%(class)s_review_status_valid",
                 condition=models.Q(review_status__in=_ReviewStatusChoices.values),
             ),
+            # Pins dedupe by source_ident ("<provider>:<source_id>",
+            # server.apps.geometries.pinning). Partial: uploads/imports without
+            # a source ident keep ""/NULL and stay unconstrained. Closes the
+            # create race between the request-path write-through, the django-q2
+            # refresh and the geoimages_pin sweeps, whose twins made every
+            # later get_or_create raise MultipleObjectsReturned (Sentry
+            # 155850205, hut cedullo).
+            models.UniqueConstraint(
+                name="%(app_label)s_%(class)s_source_ident_unique",
+                fields=["source_ident"],
+                condition=models.Q(source_ident__gt=""),
+            ),
         )
 
     def __str__(self) -> str:
@@ -342,9 +354,19 @@ class Image(TimeStampedModel):
                 else ""
             )
 
-        if cls.objects.filter(source_ident=source_ident).exists():
-            logging.info("Image already exists, skipping...")
-            return cls.objects.get(source_ident=source_ident)
+        if source_ident:
+            # Tolerant of legacy duplicate rows (source_ident had no unique
+            # constraint — see migration 0033): resolve the canonical row
+            # instead of crashing on twins; an empty ident must NOT dedupe
+            # (it matched every ident-less upload ever made).
+            existing = (
+                cls.objects.filter(source_ident=source_ident)
+                .order_by("created", "id")
+                .first()
+            )
+            if existing is not None:
+                logging.info("Image already exists, skipping...")
+                return existing
 
         headers = {"User-Agent": settings.BOT_AGENT}
         # Download the image from the raw_url

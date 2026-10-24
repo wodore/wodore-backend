@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 
 import structlog
 
+from django.db import IntegrityError
 from django.utils import timezone
 
 from server.apps.geometries.models import GeoPlaceImageAssociation
@@ -158,6 +159,63 @@ def _association_for(place):
     raise TypeError(f"Unsupported place type for pinning: {type(place)!r}")
 
 
+def _canonical_pin(ident: str) -> Image | None:
+    """The canonical row for an ident: oldest first (``Image.Meta.ordering``;
+    also the row the dedupe migration keeps). Tolerant of legacy duplicate
+    rows — returns a row instead of raising like ``get()`` would."""
+    return Image.objects.filter(source_ident=ident).order_by("created", "id").first()
+
+
+def _get_or_create_pin(
+    ident: str,
+    result: ImageResult,
+    org: Organization,
+    license_obj: License,
+    now: datetime,
+) -> tuple[Image, bool]:
+    """Resolve the pinned ``Image`` row for ``ident`` (dupe-tolerant, race-safe).
+
+    ``source_ident`` had no unique constraint originally, so concurrent
+    syncs (request write-through vs. django-q2 refresh vs. the
+    ``geoimages_pin`` sweep) could each see "no row" and both create one —
+    and every later sync then crashed in ``get_or_create`` with
+    ``MultipleObjectsReturned`` ("get() returned more than one Image",
+    Sentry 155850205, hut cedullo). Resolution now picks the canonical
+    row (oldest first, matching ``Image.Meta.ordering`` and the dedupe
+    migration) instead of using ``get_or_create``; create races collapse
+    onto the winner via the unique constraint (``IntegrityError`` →
+    re-resolve).
+    """
+    image = _canonical_pin(ident)
+    if image is not None:
+        return image, False
+    try:
+        return (
+            Image.objects.create(
+                source_ident=ident,
+                source_org=org,
+                license=license_obj,
+                author=(result.author or "")[:255],
+                author_url=result.author_url or "",
+                source_url=_sanitize_url(result.source_url),
+                source_url_raw=_sanitize_url(result.url_large),
+                caption_en=_default_caption(result.source_id or ""),
+                capture_date=_aware(result.captured_at),
+                provider_synced_at=now,
+                image_meta=_merge_image_meta_from_result(result),
+            ),
+            True,
+        )
+    except IntegrityError:
+        # Lost a create race against a concurrent sync — the unique
+        # constraint already minted the winner; fall back to it (or to a
+        # legacy duplicate that appeared since our lookup).
+        image = _canonical_pin(ident)
+        if image is None:  # pragma: no cover — constraint fired spuriously
+            raise
+        return image, False
+
+
 def pin_place_images(place, results: list[ImageResult]) -> PinStats:
     """Pin provider results to a place (Hut or GeoPlace).
 
@@ -188,21 +246,7 @@ def pin_place_images(place, results: list[ImageResult]) -> PinStats:
         org = _org_for(result.provider)
         license_obj = _license_for(result.license_slug)
 
-        image, created = Image.objects.get_or_create(
-            source_ident=ident,
-            defaults={
-                "source_org": org,
-                "license": license_obj,
-                "author": (result.author or "")[:255],
-                "author_url": result.author_url or "",
-                "source_url": _sanitize_url(result.source_url),
-                "source_url_raw": _sanitize_url(result.url_large),
-                "caption_en": _default_caption(result.source_id or ""),
-                "capture_date": _aware(result.captured_at),
-                "provider_synced_at": now,
-                "image_meta": _merge_image_meta_from_result(result),
-            },
-        )
+        image, created = _get_or_create_pin(ident, result, org, license_obj, now)
         if created:
             stats.created += 1
         else:
