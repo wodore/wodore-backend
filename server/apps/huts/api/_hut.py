@@ -7,7 +7,7 @@ bottom): specific routes must come before the ``{slug}`` catch-all, and
 
 import datetime
 from http import HTTPStatus
-from typing import Any
+from typing import Any, cast
 
 import pydantic
 from benedict import benedict
@@ -404,9 +404,12 @@ def get_json_obj(
     values: dict[str, Any], flat: bool = False
 ) -> dict[str, JSONObject | F]:
     if flat:
-        return {
-            k: F(str(v)) for k, v in benedict(values).flatten(separator="_").items()
-        }  # type: ignore  # flattened benedict keys
+        # benedict's flatten() keys are generically typed; runtime keys are str
+        flattened = cast(
+            "dict[str, JSONObject | F]",
+            {k: F(str(v)) for k, v in benedict(values).flatten(separator="_").items()},
+        )
+        return flattened
     new_vals: dict[str, JSONObject | F] = {}
     for key, value in values.items():
         new_vals[key] = (

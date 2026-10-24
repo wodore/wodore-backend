@@ -145,7 +145,7 @@ def _hut_markdown(request: HttpRequest, hut: Hut) -> str:
         if part
     )
 
-    overview: list[tuple[str, str]] = [
+    overview: list[tuple[str, str | None]] = [
         (
             "Type (standard operation)",
             hut.hut_type_open.name if hut.hut_type_open else None,
@@ -166,7 +166,7 @@ def _hut_markdown(request: HttpRequest, hut: Hut) -> str:
         ),
         ("Owner", hut.hut_owner.name if hut.hut_owner else None),
         ("Website", hut.url or None),
-    ]  # type: ignore  # optional lastmod tuples
+    ]
     overview_rows = "\n".join(
         f"| {label} | {value} |" for label, value in overview if value
     )

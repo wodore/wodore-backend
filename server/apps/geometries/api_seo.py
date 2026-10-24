@@ -229,7 +229,7 @@ def get_place_markdown(request: HttpRequest, slug: str) -> HttpResponse:
     page_url = _place_url(place)
     categories = ", ".join(c.name for c in place.categories.all() if c.name)
 
-    overview: list[tuple[str, str]] = [
+    overview: list[tuple[str, str | None]] = [
         ("Categories", categories or None),
         ("Elevation", f"{place.elevation} m" if place.elevation else None),
         (
@@ -238,7 +238,7 @@ def get_place_markdown(request: HttpRequest, slug: str) -> HttpResponse:
             if place.location
             else None,
         ),
-    ]  # type: ignore  # optional lastmod tuples
+    ]
     overview_rows = "\n".join(
         f"| {label} | {value} |" for label, value in overview if value
     )
@@ -259,7 +259,7 @@ Map: {page_url}
 
 {place.description or "—"}
 
-Languages: {_languages_line(place.slug)}  # type: ignore  # argument typing drift vs stubs
+Languages: {_languages_line(place.slug or "")}
 
 ---
 
