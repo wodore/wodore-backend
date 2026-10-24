@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from contextlib import ContextDecorator
 from functools import wraps
+from types import TracebackType
 from typing import Any
 
 from django.http import HttpRequest
@@ -10,20 +11,19 @@ from django.utils.translation import get_language as django_get_language
 
 # TODO activate django lang settings as well
 
-_LANG = None
+_LANG: str | None = None
 
 
-def activate(language):
+def activate(language: str | None) -> str | None:
     _LANG = language
     return _LANG
 
 
-def deactivate():
+def deactivate() -> None:
     _LANG = None
-    return _LANG
 
 
-def get_language():
+def get_language() -> str | None:
     return _LANG
 
 
@@ -48,16 +48,16 @@ def with_language_param(
 
 
 class override(ContextDecorator):
-    def __init__(self, language=None, deactivate=False):
+    def __init__(self, language: str | None = None, deactivate: bool = False) -> None:
         if not language:
-            self.language = None
+            self.language: str | None = None
         elif language.lower() in ["_", "default"]:
             self.language = django_get_normalised_language()
         else:
             self.language = language
         self.deactivate = deactivate
 
-    def __enter__(self):
+    def __enter__(self) -> None:
         # self.old_language = get_language()
         if self.language is not None:
             activate(self.language)
@@ -66,7 +66,12 @@ class override(ContextDecorator):
             deactivate()
             django_deactivate()
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
         deactivate()
         django_deactivate()
         # if self.old_language is None:
@@ -77,7 +82,7 @@ class override(ContextDecorator):
         #    activate(self.old_language)
 
 
-def normalise_language_code(lang_code):
+def normalise_language_code(lang_code: str) -> str:
     """
     For consistency always operate on language codes
     that are lowercase and use dashes as separators for
@@ -88,13 +93,13 @@ def normalise_language_code(lang_code):
     return lang_code.lower().replace("_", "-")
 
 
-def get_normalised_language():
+def get_normalised_language() -> str | None:
     lang = get_language()
     if lang:
         return normalise_language_code(lang)
 
 
-def django_get_normalised_language():
+def django_get_normalised_language() -> str | None:
     lang = django_get_language()
     if lang:
         return normalise_language_code(lang)
