@@ -33,7 +33,9 @@
   `GeoPlaceAvailabilityStatus` through the join
 - [ ] 2.3 `move_availability_history` command: idempotent (natural key
   `(geo_place, availability_date, first_checked)`), resumable (id-range
-  cursor), chunked via django-q, `--dry-run`; never copies hut PKs, never
+  cursor over source `HutAvailabilityHistory` ids; snapshot max source id
+  at start and skip `first_checked` ≥ start so it never touches post-start
+  events), chunked via django-q, `--dry-run`; never copies hut PKs, never
   orders by id
 - [ ] 2.4 Backfill report listing unmatched huts (gate artifact for Phase E)
 - [ ] 2.5 Tests: join resolution, copy fidelity (field-for-field), idempotent
@@ -67,8 +69,9 @@
   follows; deprecated `huts/api/_booking.py` and `api/readers.py` are
   unaffected — no change
 - [ ] 4.3 Admin read surfaces (availability/history/status) read the place
-  tables; the Hut admin availability inline keeps reading hut models until
-  Phase E
+  tables (history admin `search_fields` move to GeoPlace equivalents,
+  `hut__name`/`hut__slug` → `geo_place__…`); the Hut admin availability
+  inline keeps reading hut models until Phase E
 - [ ] 4.4 Contract tests pinning tile feature properties (`slug`, `dN_*`,
   `capacity`, `days`) and booking responses/ETags — identical before/after;
   the GeoJSON feature `id` stays hut-side until Phase E
@@ -77,7 +80,8 @@
 
 - [ ] 5.1 Gate check: backfill unmatched report empty and Phase D verified in
   prod; assess the GeoJSON feature `id` switch (hut id → place id) against
-  the API versioning runbook
+  the API versioning runbook — if deemed breaking, the id switch ships
+  separately via the `api:` protocol and does not block the model removal
 - [ ] 5.2 Removal migration + code cleanup: drop `AvailabilityStatus`,
   `HutAvailability`, `HutAvailabilityHistory`, admin surfaces, old write
   path, and the dual-write path

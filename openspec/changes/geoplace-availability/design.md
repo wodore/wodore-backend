@@ -101,21 +101,26 @@ matching place are logged and reported — never skipped silently.
 
 Current state: straight column copy in a data migration through the D5 join
 (no recompute, no fetch). History: new `move_availability_history` command —
-idempotent (natural-key dedupe), resumable (id-range cursor), chunked via
-django-q, `--dry-run`. Speed does not matter; volume is hut-rows × change
-events. Status rows are backfilled in the data migration too (preserves
-last_checked/last_success/consecutive_failures so the cadence does not
-reset).
+idempotent (natural-key dedupe), resumable (id-range cursor over source
+`HutAvailabilityHistory` ids), chunked via django-q, `--dry-run`. Speed does
+not matter; volume is hut-rows × change events. Status rows are backfilled
+in the data migration too (preserves last_checked/last_success/
+consecutive_failures so the cadence does not reset).
 
 History move rules (id and ordering): never copy hut PKs — fresh
 auto-increment ids that carry no meaning; never order or filter history by
 id — ordering is exclusively `(availability_date, first_checked)` with the
 composite index as sort key; dedupe by natural key
 `(geo_place, availability_date, first_checked)`, so out-of-order inserts
-(backfill chunks landing after live dual-write rows) are always safe. If
-Phase C deploys while the history move still runs, the same change event may
-arrive from both paths with identical values and `first_checked` and
-collapses via the natural key. Accepted residual risk: two real events for
+(backfill chunks landing after live dual-write rows) are always safe.
+Phase-interleave safety: the move command snapshots the max source id at
+start (and skips any row with `first_checked` ≥ its start time), so it only
+ever touches pre-start events; dual-write stamps rows at Phase-C-or-later
+time. The two paths therefore occupy non-overlapping ranges by construction
+— no `(geo_place, availability_date, first_checked)` triple can arrive
+from both, even if Phase C deploys while the move still runs. The
+natural-key dedupe exists for the move command's own idempotency (re-runs
+and chunk-boundary retries). Accepted residual risk: two real events for
 the same (place, date) within one clock instant would dedupe to one —
 impossible at the current per-hut serialized update cadence. UUID PKs were
 considered and rejected: no house precedent, no distributed-ID problem to
@@ -147,7 +152,9 @@ until E — do not migrate it in D. Same for the GeoJSON controller's feature
 `id` (`F("hut_id")` today): D keeps it hut-side via the reverse join for
 byte-identical output; switching it to the place id happens at E and MUST
 be assessed against the API versioning runbook then (value change for
-clients keying features by id).
+clients keying features by id). If the runbook deems it breaking, the id
+switch ships separately under the `api:` versioning protocol — it does not
+block the hut-model removal; the two are separable steps.
 
 Each phase is independently deployable and reversible (E is irreversible but
 gated on zero unmatched huts in the B report and D verified in prod).
