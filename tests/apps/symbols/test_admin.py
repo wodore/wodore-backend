@@ -22,7 +22,7 @@ def admin_client(settings, imported_db, db):
     """Superuser client rendering admin pages without the debug toolbar."""
     settings.MIDDLEWARE = [m for m in settings.MIDDLEWARE if "debug_toolbar" not in m]
     settings.ALLOWED_HOSTS = list(settings.ALLOWED_HOSTS) + ["testserver"]
-    admin = get_user_model().objects.create_superuser(  # pyright: ignore[reportAttributeAccessIssue]  # custom UserManager: django-stubs gap  # type: ignore  # custom manager/queryset inference gap
+    admin = get_user_model().objects.create_superuser(  # type: ignore  # custom manager method inference gap
         email="admin@example.com", password="pw"
     )
     client = Client()

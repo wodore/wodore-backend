@@ -84,7 +84,7 @@ class EnvVar(TimeStampedModel):
         help_text=_("What this variable is used for (admin hint)"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Environment variable")
         verbose_name_plural = _("Environment variables")
         ordering = ("name",)

@@ -185,14 +185,8 @@ def test_changelist_actions_registered_with_change_permission(
     # View-only staff must not be able to run them (Django filters
     # changelist actions by allowed_permissions). The unfold @action
     # decorator's return typing hides the attribute (runtime-set).
-    assert (
-        LLMAdminMixin.translate_selected.allowed_permissions  # pyright: ignore[reportAttributeAccessIssue]  # runtime-set by @action
-        == ["change"]
-    )
-    assert (
-        LLMAdminMixin.assess_selected.allowed_permissions  # pyright: ignore[reportAttributeAccessIssue]  # runtime-set by @action
-        == ["change"]
-    )
+    assert LLMAdminMixin.translate_selected.allowed_permissions == ["change"]
+    assert LLMAdminMixin.assess_selected.allowed_permissions == ["change"]
 
 
 # --- Feature gating: UI only when the translation API is configured ------

@@ -106,7 +106,7 @@ class GeoPlaceSourceAssociationInline(unfold_admin.TabularInline):
     def has_delete_permission(self, request, obj):  # type: ignore  # inline-admin default-param drift, plugin-less
         return False
 
-    @display(description=_("Extra Data"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Extra Data"))
     def extra_display(self, obj: GeoPlaceSourceAssociation) -> str:
         """Display extra data in a readable format."""
         if not obj.extra:
@@ -378,24 +378,24 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         """Display name and slug in the same column, like Hut admin."""
         return (obj.name_i18n, mark_safe(f"<small><code>{obj.slug}</code></small>"))
 
-    @display(description=_("Categories"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Categories"))
     def categories_display(self, obj: GeoPlace) -> str:
         """Display categories with parents if available."""
         categories = list(obj.categories.all())
         return _format_categories_list(categories)
 
-    @display(description=_("Elevation"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Elevation"))
     def elevation_display(self, obj: GeoPlace) -> str:
         """Display elevation with unit."""
         if obj.elevation is not None:
             return f"{obj.elevation} m"
         return "-"
 
-    @display(description=_("Sources"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Sources"))
     def sources_display(self, obj: GeoPlace) -> str:
         """Display source organizations as icons."""
 
-        sources = obj.source_associations.select_related("organization").all()  # pyright: ignore[reportAttributeAccessIssue]  # reverse relation, plugin-less  # type: ignore  # dynamic attr: plugin-less inference gap
+        sources = obj.source_associations.select_related("organization").all()  # type: ignore  # dynamic attr: plugin-less inference gap
         if not sources:
             return "-"
 
@@ -425,7 +425,7 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
 
         return mark_safe(f"<span>{''.join(imgs)}</span>")
 
-    @display(description=_("Importance"), ordering="importance")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Importance"), ordering="importance")
     def importance_display(self, obj: GeoPlace) -> str:
         """Display importance as a progress bar with blue color range."""
         # Use blue color gradient
@@ -437,17 +437,17 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             active=True,
         )
 
-    @display(description=_("Visits 30d"), ordering="visits_30d")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Visits 30d"), ordering="visits_30d")
     def visits_30d(self, obj: GeoPlace) -> int:
         """Visit sum over the last 30 days (openspec: place-visit-counter)."""
-        return obj.visits_30d  # pyright: ignore[reportAttributeAccessIssue]  # get_queryset annotation  # type: ignore  # dynamic attr: plugin-less inference gap
+        return obj.visits_30d  # type: ignore  # dynamic attr: plugin-less inference gap
 
-    @display(description=_("Visits 1y"), ordering="visits_365d")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Visits 1y"), ordering="visits_365d")
     def visits_365d(self, obj: GeoPlace) -> int:
         """Visit sum over the last year (openspec: place-visit-counter)."""
-        return obj.visits_365d  # pyright: ignore[reportAttributeAccessIssue]  # get_queryset annotation  # type: ignore  # dynamic attr: plugin-less inference gap
+        return obj.visits_365d  # type: ignore  # dynamic attr: plugin-less inference gap
 
-    @display(description=_("Created/Modified"), ordering="modified")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Created/Modified"), ordering="modified")
     def timestamps_display(self, obj: GeoPlace) -> str:
         """Display created and modified timestamps in one column with small font."""
         created = obj.created.strftime("%Y-%m-%d %H:%M") if obj.created else "-"
@@ -463,7 +463,7 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         )
 
     @display(
-        description=_("Review"),  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+        description=_("Review"),
         label={
             "new": "warning",
             "review": "info",
@@ -475,7 +475,7 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         """Display review status as colored label."""
         return obj.review_status
 
-    @display(description=_("Location"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Location"))
     def location_display(self, obj: GeoPlace) -> str:
         """Display location coordinates."""
         if obj.location:
@@ -620,23 +620,23 @@ class AmenityDetailAdmin(ModelAdmin):
 
     # Display methods
 
-    @display(description=_("Place Name"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Place Name"))
     def place_name(self, obj: AmenityDetail) -> str:
         """Display associated place name."""
         return obj.geo_place.name_i18n
 
-    @display(description=_("Categories"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Categories"))
     def place_categories(self, obj: AmenityDetail) -> str:
         """Display place categories."""
         categories = list(obj.geo_place.categories.all())
         return _format_categories_list(categories)
 
-    @display(description=_("Opening Hours"), boolean=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Opening Hours"), boolean=True)
     def has_opening_hours(self, obj: AmenityDetail) -> bool:
         """Check if opening hours are defined."""
         return bool(obj.opening_hours)
 
-    @display(description=_("Phones"), boolean=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Phones"), boolean=True)
     def has_phones(self, obj: AmenityDetail) -> bool:
         """Check if phone numbers are defined."""
         return bool(obj.phones)

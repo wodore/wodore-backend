@@ -595,10 +595,7 @@ class Command(BaseCommand):
                 folded = fold_keyword(text)
                 if folded:
                     wanted[(locale, folded)] = text
-        existing = {
-            (kw.locale, kw.keyword_folded): kw
-            for kw in icon.keywords.all()  # pyright: ignore[reportAttributeAccessIssue]  # reverse FK: django-stubs gap
-        }
+        existing = {(kw.locale, kw.keyword_folded): kw for kw in icon.keywords.all()}
         created = 0
         for (locale, folded), text in wanted.items():
             if (locale, folded) not in existing and not self.dry_run:

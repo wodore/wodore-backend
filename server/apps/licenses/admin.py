@@ -34,7 +34,7 @@ class LicenseAdmin(ModelAdmin):
 
     form = required_i18n_fields_form_factory("name", "fullname")
     fieldsets = LicenseAdminFieldsets  # type: ignore  # admin fieldsets/list_filter typing drift (lazy gettext)
-    view_on_site = True  # type: ignore[misc]  # pyright: ignore[reportIncompatiblePropertyOverride, reportAssignmentType]  # Django admin idiom
+    view_on_site = True  # type: ignore[misc]
     list_filter_submit = True  # Add submit button for filters
     autocomplete_fields = ("category",)
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
@@ -84,7 +84,7 @@ class LicenseAdmin(ModelAdmin):
     )
 
     @display(
-        description=_("Review"),  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+        description=_("Review"),
         label={
             ReviewStatus.NEW: "warning",
             ReviewStatus.REVIEW: "info",

@@ -34,7 +34,7 @@ class HutSource(TimeStampedModel):
 
     ReviewStatusChoices = _ReviewStatusChoices
 
-    objects: BaseManager = BaseManager()  # pyright: ignore[reportIncompatibleVariableOverride]
+    objects: BaseManager = BaseManager()
 
     source_id = models.CharField(
         blank=False,
@@ -100,7 +100,7 @@ class HutSource(TimeStampedModel):
         verbose_name=_("Hut"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = "Hut Source"
         verbose_name_plural = "Hut Sources"
         ordering = (Lower("name"), "organization__order")

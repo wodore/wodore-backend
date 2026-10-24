@@ -58,7 +58,7 @@ class ImageTagAdmin(ModelAdmin):
             f'<div style="background-color:{value};border-radius:{radius}px;min-height:{height}px;min-width:{width}px;max-height:{height}px;max-width:{width}px"></div>'
         )
 
-    @display(description=_("Color"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Color"))
     def color_tag(self, obj):
         return self.show_color(obj.color)
 
@@ -70,7 +70,7 @@ class ImageAdmin(ModelAdmin):
 
     form = required_i18n_fields_form_factory("caption")
     fieldsets = ImageAdminFieldsets  # type: ignore  # admin fieldsets/list_filter typing drift (lazy gettext)
-    view_on_site = True  # pyright: ignore[reportIncompatibleVariableOverride, reportAssignmentType]  # Django admin idiom
+    view_on_site = True
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
     list_display = (
         "thumb",
@@ -148,14 +148,14 @@ class ImageAdmin(ModelAdmin):
             )
         return mark_safe(f'<div class="mfu-inline">{pill}</div>')
 
-    @display(description=_("Serving"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs unfold stub gap
+    @display(description=_("Serving"))
     def serving(self, obj):
         """Where the pixels come from: local file or external pin."""
         return self._serving_html(obj)
 
     def save_model(self, request, obj, form, change):
-        if not obj.uploaded_by_user:  # pyright: ignore[reportAttributeAccessIssue]
-            obj.uploaded_by_user = request.user  # pyright: ignore[reportAttributeAccessIssue]
+        if not obj.uploaded_by_user:
+            obj.uploaded_by_user = request.user
         super().save_model(request, obj, form, change)
         if change:
             # Manual edits (file swap, focal/crop, URLs) change the pixels or
@@ -374,7 +374,7 @@ class ImageAdmin(ModelAdmin):
         return self._redirect_back(request)
 
     @display(
-        description=_("Quality"),  # pyright: ignore[reportArgumentType]  # _StrPromise vs unfold stub gap
+        description=_("Quality"),
         ordering="quality_score",
     )
     def quality_display(self, obj):
@@ -563,7 +563,7 @@ class ImageAdmin(ModelAdmin):
         return mark_safe(img)
 
     @display(
-        description=_("Status"),  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+        description=_("Status"),
         ordering="review_status",
     )
     def review_tag(self, obj):
@@ -605,7 +605,7 @@ class ImageAdmin(ModelAdmin):
             f'<div class="mfu-cell-actions">{"".join(buttons)}</div></div>'
         )
 
-    @display(description=_("Huts"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Huts"))
     def show_huts(self, obj):
         huts = []
         for hut in obj.huts.all():

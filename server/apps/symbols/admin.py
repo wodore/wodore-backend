@@ -69,15 +69,15 @@ class SymbolAdmin(ModelAdmin):
     )
 
     def save_model(self, request, obj, form, change):
-        if not obj.uploaded_by_user:  # pyright: ignore[reportAttributeAccessIssue]  # model attr: django-stubs gap
-            obj.uploaded_by_user = request.user  # pyright: ignore[reportAttributeAccessIssue]  # model attr: django-stubs gap
+        if not obj.uploaded_by_user:
+            obj.uploaded_by_user = request.user
         super().save_model(request, obj, form, change)
 
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request)
         return qs.select_related("license", "source_org", "uploaded_by_user")
 
-    @display(description=_("SVG"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("SVG"))
     def svg_preview(self, obj):
         """Show SVG preview in list view."""
         try:
@@ -89,7 +89,7 @@ class SymbolAdmin(ModelAdmin):
             pass
         return mark_safe('<span style="color:#999;">No file</span>')
 
-    @display(description=_("Preview"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Preview"))
     def svg_preview_inline(self, obj):
         """Show SVG preview inline in the form."""
         try:
@@ -103,7 +103,7 @@ class SymbolAdmin(ModelAdmin):
             pass
         return mark_safe('<span style="color:#999;">No file uploaded</span>')
 
-    @display(description=_("Search Text"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Search Text"))
     def search_text_display(self, obj):
         """Show search text in list view."""
         if obj.search_text:
@@ -115,7 +115,7 @@ class SymbolAdmin(ModelAdmin):
             return mark_safe(f'<small style="color:#666;">{text}</small>')
         return mark_safe('<small style="color:#999;">-</small>')
 
-    @display(description=_("License"), header=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("License"), header=True)
     def license_display(self, obj):
         """Show license with link."""
         if obj.license:
@@ -125,7 +125,7 @@ class SymbolAdmin(ModelAdmin):
             return link, link
         return mark_safe("-"), mark_safe("-")
 
-    @display(description=_("Source"), header=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Source"), header=True)
     def source_display(self, obj):
         """Show source information."""
         parts = []
@@ -143,7 +143,7 @@ class SymbolAdmin(ModelAdmin):
             return source_text, source_text
         return mark_safe("-"), mark_safe("-")
 
-    @display(description=_("Status"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Status"))
     def review_status_display(self, obj):
         """Show review status."""
         return obj.get_review_status_display()
@@ -228,23 +228,23 @@ class IconAdmin(ModelAdmin):
                 qs = qs.filter(pack=first_pack)
         return qs
 
-    @display(description=_("Name"), header=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Name"), header=True)
     def name_i18n_display(self, obj):
         name = obj.name_i18n or obj.name or "-"
         return (name, "")  # header display requires a tuple
 
-    @display(description=_("Unicode"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Unicode"))
     def unicode_display(self, obj):
         return obj.unicode or "-"
 
-    @display(description=_("Category"), header=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Category"), header=True)
     def category_display(self, obj):
         if obj.category is None:
             return ("-", "")
         group = obj.category.parent.slug if obj.category.parent_id else ""
         return (f"{group} → {obj.category.slug}", obj.category.slug)
 
-    @display(description=_("Symbols"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Symbols"))
     def symbol_previews(self, obj):
         """Preview thumbnails of the three symbol slots."""
         cells = []
@@ -273,16 +273,16 @@ class SymbolCollectionAdmin(ModelAdmin):
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         return super().get_queryset(request).annotate(_icon_count=Count("icons"))
 
-    @display(description=_("Source Org"), header=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Source Org"), header=True)
     def source_org_display(self, obj):
         name = obj.source_org.name_i18n if obj.source_org else "-"
         return (name, "")
 
-    @display(description=_("Icons"), ordering="_icon_count")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Icons"), ordering="_icon_count")
     def icon_count(self, obj):
         return getattr(obj, "_icon_count", 0)
 
-    @display(description=_("Imported ref"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Imported ref"))
     def ref_display(self, obj):
         return (obj.extra or {}).get("ref", "-")
 
@@ -312,11 +312,11 @@ class IconCuratedListAdmin(ModelAdmin):
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         return super().get_queryset(request).annotate(_entry_count=Count("entries"))
 
-    @display(description=_("Name"), header=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Name"), header=True)
     def name_i18n_display(self, obj):
         name = getattr(obj, "name_i18n", "") or obj.name or "-"
         return (name, "")
 
-    @display(description=_("Icons"), ordering="_entry_count")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Icons"), ordering="_entry_count")
     def entry_count(self, obj):
         return getattr(obj, "_entry_count", 0)

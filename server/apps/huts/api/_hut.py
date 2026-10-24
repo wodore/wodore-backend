@@ -404,7 +404,7 @@ def get_json_obj(
     values: dict[str, Any], flat: bool = False
 ) -> dict[str, JSONObject | F]:
     if flat:
-        return {  # pyright: ignore[reportReturnType]  # benedict key typing
+        return {
             k: F(str(v)) for k, v in benedict(values).flatten(separator="_").items()
         }  # type: ignore  # flattened benedict keys
     new_vals: dict[str, JSONObject | F] = {}
@@ -785,7 +785,7 @@ class HutDetailController(ApiController):
             )
             hut_db.images = [old_photo.model_dump(), *hut_db.images]
         link = reverse_lazy("admin:huts_hut_change", args=[hut_db.pk])
-        hut_db.edit_link = request.build_absolute_uri(link)  # pyright: ignore[reportAttributeAccessIssue]  # type: ignore  # middleware attaches request attr at runtime
+        hut_db.edit_link = request.build_absolute_uri(link)  # type: ignore  # argument typing drift vs stubs
 
         # Get modified timestamp from ETag calculation
         modified_timestamp = get_last_modified_timestamp(

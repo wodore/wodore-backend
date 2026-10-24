@@ -79,7 +79,7 @@ class Category(ComputedFieldsModel, TimeStampedModel):
 
         Assumes parent is pre-fetched via select_related when needed.
         """
-        if self.parent_id and self.parent:  # pyright: ignore[reportAttributeAccessIssue]
+        if self.parent_id and self.parent:
             # Direct access - relies on select_related in queryset
             parent_slug = self.parent.slug
             return f"{parent_slug}.{self.slug}"
@@ -206,7 +206,7 @@ class Category(ComputedFieldsModel, TimeStampedModel):
         ),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Category")
         verbose_name_plural = _("Categories")
         ordering = ("parent__order", "order", "slug")
@@ -270,12 +270,12 @@ class Category(ComputedFieldsModel, TimeStampedModel):
 
         descendants_ids = []
         if include_self:
-            descendants_ids.append(self.id)  # pyright: ignore[reportAttributeAccessIssue]
+            descendants_ids.append(self.id)
 
         to_process = [self]
         while to_process:
             current = to_process.pop(0)
-            children = list(current.children.all())  # pyright: ignore[reportAttributeAccessIssue]
+            children = list(current.children.all())
             descendants_ids.extend([c.id for c in children])
             to_process.extend(children)  # type: ignore  # argument typing drift vs stubs
 
@@ -311,7 +311,7 @@ class Category(ComputedFieldsModel, TimeStampedModel):
 
     def has_children(self) -> bool:
         """Check if this category has any children."""
-        return self.children.exists()  # pyright: ignore[reportAttributeAccessIssue]
+        return self.children.exists()
 
     def get_default_or_self(self) -> "Category":
         """Get the default child if set, otherwise return self."""

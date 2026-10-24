@@ -170,14 +170,14 @@ def verify_access_token(
     try:
         claims = jwt.decode(
             token,
-            _verification_key(),  # pyright: ignore[reportArgumentType]  # type: ignore  # argument typing drift vs stubs
+            _verification_key(),  # type: ignore  # argument typing drift vs stubs
         )
         exp = int(claims.get("exp", 0))
         if exp < floor(time.time()):
             raise ValueError("token expired")
         if not issuer_matches(claims.get("iss"), allowed_issuers):
             raise ValueError("token issuer is not the built-in provider")
-        return dict(claims)  # pyright: ignore[reportUnknownArgumentType]
+        return dict(claims)
     except ValueError:
         raise
     except Exception as exc:  # authlib raises BadSignature/DecodeError subclasses

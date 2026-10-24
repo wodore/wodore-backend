@@ -41,8 +41,8 @@ class TestHutsApi:
         # ``name_i18n`` validation alias dropped the ``name`` key of the
         # _resolve_symbol dict and served null, hiding bed counts in the
         # apps (unreleased API regression, caught on staging).
-        assert data["type_open"]["slug"] == hut.hut_type_open.slug  # pyright: ignore[reportOptionalSubscript]
-        assert data["type_open"]["name"], data["type_open"]  # pyright: ignore[reportOptionalSubscript]
+        assert data["type_open"]["slug"] == hut.hut_type_open.slug
+        assert data["type_open"]["name"], data["type_open"]
         # The annotate-heavy relations that broke in #202/#190:
         assert "sources" in data
         assert "images" in data

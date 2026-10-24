@@ -345,10 +345,7 @@ def _to_dto(icon: Icon, request: HttpRequest) -> IconDto:
         unicode=icon.unicode or None,
         category=category.parent.slug if category else None,  # type: ignore  # dynamic attr: plugin-less inference gap
         subcategory=category.slug if category else None,
-        lists=sorted(
-            cl.slug  # pyright: ignore[reportAttributeAccessIssue]  # reverse M2M: django-stubs gap
-            for cl in icon.curated_lists.all()  # pyright: ignore[reportAttributeAccessIssue]  # reverse M2M: django-stubs gap
-        ),
+        lists=sorted(cl.slug for cl in icon.curated_lists.all()),
         urls=IconUrls.model_validate(urls) if urls else None,
     )
 

@@ -67,7 +67,7 @@ class MapSlot(TimeStampedModel):
         help_text=_("Render order of the slot (lower renders beneath)"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Map slot")
         verbose_name_plural = _("Map slots")
         ordering = ("order", "slug")
@@ -149,7 +149,7 @@ class MapParameter(TimeStampedModel):
         ),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Map parameter")
         verbose_name_plural = _("Map parameters")
         ordering = ("kind", "slug")
@@ -205,7 +205,7 @@ class MapCoverage(TimeStampedModel):
         help_text=_("Coverage multipolygon (WGS84)"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Map coverage")
         verbose_name_plural = _("Map coverages")
         ordering = ("slug",)
@@ -263,7 +263,7 @@ class MapLegend(TimeStampedModel):
         legend_links: QuerySet[MapLegendLink]
         layers: QuerySet[MapLayer]
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Map legend")
         verbose_name_plural = _("Map legends")
         ordering = ("pk",)
@@ -314,7 +314,7 @@ class MapLegendSection(TimeStampedModel):
         ),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Legend section")
         verbose_name_plural = _("Legend sections")
         ordering = ("legend", "order", "pk")
@@ -376,7 +376,7 @@ class MapLegendItem(TimeStampedModel):
         help_text=_("Icon library reference (optional)"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Legend item")
         verbose_name_plural = _("Legend items")
         ordering = ("section", "order", "pk")
@@ -402,7 +402,7 @@ class MapLegendLink(TimeStampedModel):
     )
     order = models.PositiveSmallIntegerField(default=0)
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Legend link")
         verbose_name_plural = _("Legend links")
         ordering = ("legend", "order", "pk")
@@ -670,7 +670,7 @@ class MapLayer(TimeStampedModel):
         fallback_layers: QuerySet[MapLayer]
         fallback_id: int | None
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Map layer")
         verbose_name_plural = _("Map layers")
         ordering = ("role", "order", "slug", "spec")
@@ -836,7 +836,7 @@ class MapLayerParameter(TimeStampedModel):
         help_text=_("Authored per-layer default (wins over registry default)"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Layer parameter")
         verbose_name_plural = _("Layer parameters")
         ordering = ("parameter__slug",)
@@ -883,7 +883,7 @@ class MapLayerCategory(TimeStampedModel):
         help_text=_("Order within the use group"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Layer category")
         verbose_name_plural = _("Layer categories")
         ordering = ("layer", "use", "order", "category__slug")
@@ -922,7 +922,7 @@ class MapLayerAttribution(TimeStampedModel):
         help_text=_("Attribution display order"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Layer attribution")
         verbose_name_plural = _("Layer attributions")
         ordering = ("layer", "order", "organization__slug")

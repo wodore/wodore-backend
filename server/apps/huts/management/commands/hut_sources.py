@@ -91,7 +91,7 @@ def add_hut_source_db(  # type: ignore[no-any-unimported]
         click.secho(
             f"  ... {status.value:<8}", fg=status_color.get(status, "red"), nl=False
         )
-        click.secho(f" (#{shut.id})", dim=True)  # pyright: ignore[reportAttributeAccessIssue]
+        click.secho(f" (#{shut.id})", dim=True)
         source_huts.append(shut)
     added = counter[UpdateCreateStatus.created]
     updated = counter[UpdateCreateStatus.updated]
@@ -160,9 +160,9 @@ def add_hutsources_function(
 @register_command(group="Huts")
 class Command(CRUDCommand[HutSource]):
     # help = ""
-    model = HutSource  # pyright: ignore[reportAssignmentType] — CRUDCommand convention: class assigned to `model`  # type: ignore  # CRUDCommand model attr typing drift
+    model = HutSource  # type: ignore  # argument typing drift vs stubs
     model_names = "hutsources"
-    add_function = add_hutsources_function  # pyright: ignore[reportAssignmentType] — see `model`  # type: ignore  # CRUDCommand handler typing drift
+    add_function = add_hutsources_function  # type: ignore  # argument typing drift vs stubs
     use_limit_arg = True
     use_offset_arg = True
     # use_update_arg = True

@@ -90,7 +90,7 @@ class License(TimeStampedModel):
         help_text=_("Review comments or notes"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("License")
         ordering = ("order", "name_i18n")
         indexes = (GinIndex(fields=["i18n"]),)
@@ -102,7 +102,7 @@ class License(TimeStampedModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.name_i18n} - {self.fullname_i18n}"  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation  # type: ignore  # modeltrans TranslationField dynamic attr
+        return f"{self.name_i18n} - {self.fullname_i18n}"  # type: ignore  # modeltrans TranslationField dynamic attr
 
     @classmethod
     @lru_cache(50)

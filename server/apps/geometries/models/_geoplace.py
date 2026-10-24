@@ -296,7 +296,7 @@ class GeoPlace(TimeStampedModel):
         verbose_name=_("Images"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]  # TimeStampedModel.Meta inheritance
+    class Meta:
         verbose_name = _("Geo Place")
         verbose_name_plural = _("Geo Places")
         ordering = ("-importance", Lower("name_i18n"))
@@ -987,10 +987,10 @@ class GeoPlace(TimeStampedModel):
         seen_ids: set[int] = set()
         for identifier in identifiers:
             category = cls._resolve_category_from_identifier(identifier)
-            if category.id in seen_ids:  # pyright: ignore[reportAttributeAccessIssue]
+            if category.id in seen_ids:
                 continue
             categories.append(category)
-            seen_ids.add(category.id)  # pyright: ignore[reportAttributeAccessIssue]  # auto PK, plugin-less
+            seen_ids.add(category.id)
         return categories
 
     @classmethod
@@ -1204,9 +1204,7 @@ class GeoPlace(TimeStampedModel):
         if "categories" not in protected and categories:
             existing_ids = set(place.categories.values_list("id", flat=True))
             new_categories = [
-                category
-                for category in categories
-                if category.id not in existing_ids  # pyright: ignore[reportAttributeAccessIssue]  # auto PK, plugin-less
+                category for category in categories if category.id not in existing_ids
             ]
             if new_categories:
                 GeoPlaceCategory.objects.bulk_create(
@@ -1309,7 +1307,7 @@ class GeoPlace(TimeStampedModel):
         if schema.detail_type == DetailType.AMENITY and schema.operating_status:
             # Build amenity detail data from flattened schema
             try:
-                amenity_detail = place.amenity_detail  # pyright: ignore[reportAttributeAccessIssue]  # reverse relation, plugin-less  # type: ignore  # dynamic attr: plugin-less inference gap
+                amenity_detail = place.amenity_detail  # type: ignore  # dynamic attr: plugin-less inference gap
                 is_new = False
             except AmenityDetail.DoesNotExist:
                 amenity_detail = AmenityDetail(geo_place=place)

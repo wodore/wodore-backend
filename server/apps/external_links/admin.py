@@ -115,7 +115,7 @@ class ExternalLinkAdmin(ModelAdmin):
     ]
 
     @display(
-        description=_("Review"),  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+        description=_("Review"),
         label={
             ReviewStatus.NEW: "warning",
             ReviewStatus.REVIEW: "info",
@@ -127,12 +127,12 @@ class ExternalLinkAdmin(ModelAdmin):
         """Display review status as colored label."""
         return obj.review_status
 
-    @display(description=_("ID"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("ID"))
     def identifier_code(self, obj: ExternalLink) -> str:
         """Display identifier wrapped in code tag."""
         return mark_safe(f"<code>{obj.identifier}</code>")
 
-    @display(description=_("Link"), header=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Link"), header=True)
     def label_and_url(self, obj: ExternalLink) -> tuple:
         """Display label and clickable URL together."""
         url = obj.url_i18n
@@ -151,7 +151,7 @@ class ExternalLinkAdmin(ModelAdmin):
 
         return (obj.label_i18n, url_link)
 
-    @display(description=_("Source"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Source"))
     def source_logo(self, obj: ExternalLink) -> str:
         """Display source organization with logo icon."""
         if not obj.source:
@@ -160,12 +160,12 @@ class ExternalLinkAdmin(ModelAdmin):
         if obj.source.logo:
             return mark_safe(
                 f'<img class="inline" src="{settings.MEDIA_URL}{obj.source.logo}" '
-                f'width="24px" alt="{obj.source.name_i18n}" title="{obj.source.name_i18n}"/>'  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation  # type: ignore  # modeltrans TranslationField dynamic attr
+                f'width="24px" alt="{obj.source.name_i18n}" title="{obj.source.name_i18n}"/>'  # type: ignore  # modeltrans TranslationField dynamic attr
             )
 
-        return obj.source.name_i18n  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation  # type: ignore  # modeltrans TranslationField dynamic attr
+        return obj.source.name_i18n  # type: ignore  # modeltrans TranslationField dynamic attr
 
-    @display(description=_("Health"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Health"))
     def health_status_display(self, obj: ExternalLink) -> str:
         """Display health status with color indicator."""
         if not obj.last_checked:

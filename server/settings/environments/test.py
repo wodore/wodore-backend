@@ -28,4 +28,4 @@ EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 # Membership check: environments/test.py star-imports development, so
 # with dev extras installed the app is already present.
 if "server.apps.demos" not in INSTALLED_APPS:
-    INSTALLED_APPS += ("server.apps.demos",)  # pyright: ignore[reportUndefinedVariable]
+    INSTALLED_APPS += ("server.apps.demos",)

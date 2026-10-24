@@ -54,13 +54,13 @@ def login(c: Ctx, token: str | None = None):
 def from_pyproject(c: Ctx, name: str):
     return c.run(
         f"uvx --from=toml-cli toml get --toml-path=pyproject.toml {name}", hide=True
-    ).stdout.strip()  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]  # invoke Result|None
+    ).stdout.strip()  # invoke Result|None
 
 
 def check_dirty_files(c: Ctx, force: bool = False):
     dirty_files = (
         c.run("git diff-files --name-only", hide=True)
-        .stdout.strip()  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]  # invoke Result|None
+        .stdout.strip()  # invoke Result|None
         .strip("\n")
         .strip()
         .split("\n")
@@ -96,7 +96,9 @@ def get_tags(
         info(f"Package version: '{package_version}'")
 
     if not no_sha_tag:
-        git_short_hash = c.run("git rev-parse --short HEAD", hide=True).stdout.strip()  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]  # invoke Result|None
+        git_short_hash = c.run(
+            "git rev-parse --short HEAD", hide=True
+        ).stdout.strip()  # invoke Result|None
         # Add timestamp + SHA tag (matching CI format: YYYYMMDDTHHmm-sha-<short-sha>)
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M")
         tag_names += [f"{timestamp}-sha-{git_short_hash}"]
@@ -128,7 +130,7 @@ class DotEnv:
         fd, self.path = tempfile.mkstemp()
         dot_env = context.run(
             "./docker/django/get_env.sh --env dev", hide=True
-        ).stdout.strip()  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]  # invoke Result|None
+        ).stdout.strip()  # invoke Result|None
         with os.fdopen(fd, "w") as tmp:
             tmp.write(dot_env)
 
@@ -173,7 +175,7 @@ def show(
     filters = [f"--filter reference={ls}" for ls in docker_ls]
     out = (
         c.run(f"docker images {' '.join(filters)}", hide=True)
-        .stdout.strip()  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]  # invoke Result|None
+        .stdout.strip()  # invoke Result|None
         .split("\n")
     )
     echo(f"[b]{out[0]}[/]")
@@ -252,7 +254,9 @@ def buildx(
             no_sha_tag=no_sha_tag,
         )
         dockerfile = f"./docker/django/Dockerfile.{dist}"
-        git_full_hash = c.run("git rev-parse HEAD", hide=True).stdout.strip()  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]  # invoke Result|None
+        git_full_hash = c.run(
+            "git rev-parse HEAD", hide=True
+        ).stdout.strip()  # invoke Result|None
         git_short_hash = git_full_hash[:7]
         build_args = {
             "DJANGO_ENV": django_env,
@@ -293,7 +297,7 @@ def buildx(
         except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as e:
             error(f"Failed to build the container.\n{e}")
         success(
-            f"Successfully built the container '{image.id.split(':')[1][:12]}' with a size of [blue]{humanize.naturalsize(image.size)}[/] {humanize.naturaltime(image.created)}."  # pyright: ignore[reportPossiblyUnbound, reportOptionalMemberAccess, reportAttributeAccessIssue]  # dynamic image object
+            f"Successfully built the container '{image.id.split(':')[1][:12]}' with a size of [blue]{humanize.naturalsize(image.size)}[/] {humanize.naturaltime(image.created)}."  # dynamic image object
         )
         if push:
             pkg_registry, _ = push_tags[0].split(":")
@@ -303,7 +307,9 @@ def buildx(
                 info(f"  - '{tag}'")
             dc.push(push_tags)
             success(f"Pushed to 'https://{pkg_registry}'.")
-    show(c, distro=distro, tag=tags[0].split(":")[1].split("-")[0])  # pyright: ignore[reportPossiblyUnbound]  # tags from try block
+    show(
+        c, distro=distro, tag=tags[0].split(":")[1].split("-")[0]
+    )  # tags from try block
 
 
 @task(
@@ -405,7 +411,9 @@ def slim(
             dc.push(push_tags)
             success(f"Pushed to 'https://{pkg_registry}'.")
         docker_ls.append(tags[0])
-    show(c, distro=distro, tag=tags[0].split(":")[1].split("-")[0], slim=True)  # pyright: ignore[reportPossiblyUnbound]  # tags from try block
+    show(
+        c, distro=distro, tag=tags[0].split(":")[1].split("-")[0], slim=True
+    )  # tags from try block
 
 
 @task(
@@ -478,7 +486,9 @@ def run(
     #    warning("Remove directory: " + str(e))
     if detach:
         info(f"Open 'http://0.0.0.0:{port}'.")
-        info(f"Run 'docker stop {container.name}' to stop the container again")  # pyright: ignore[reportAttributeAccessIssue]  # dynamic container object
+        info(
+            f"Run 'docker stop {container.name}' to stop the container again"
+        )  # dynamic container object
 
 
 @task(
@@ -498,4 +508,6 @@ def publish(
     """Publish to docker registry"""
     buildx(c, distro=distro, version_tag=version_tag, push=True)
     if slim:
-        slim(c, push=True, version_tag=version_tag, distro=distro)  # pyright: ignore[reportCallIssue]  # @task-decorated callable
+        slim(
+            c, push=True, version_tag=version_tag, distro=distro
+        )  # @task-decorated callable

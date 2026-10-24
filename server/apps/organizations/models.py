@@ -92,13 +92,13 @@ class Organization(TimeStampedModel):
         unique=False, default=0, verbose_name=_("Order")
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Organization")
         ordering = ("order", "name_i18n")
         indexes = (GinIndex(fields=["i18n"]),)
 
     def __str__(self) -> str:
-        return self.name_i18n  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation  # type: ignore  # modeltrans TranslationField dynamic attr
+        return self.name_i18n  # type: ignore  # modeltrans TranslationField dynamic attr
 
     @classmethod
     @lru_cache(50)

@@ -44,10 +44,10 @@ class ContactFunction(TimeStampedModel):
 
     # contacts -> access all contacts
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Contact Function")
         ordering = ("priority", "name_i18n")
         indexes = (GinIndex(fields=["i18n"]),)
 
     def __str__(self) -> str:
-        return self.name_i18n  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation  # type: ignore  # modeltrans TranslationField dynamic attr
+        return self.name_i18n  # type: ignore  # modeltrans TranslationField dynamic attr

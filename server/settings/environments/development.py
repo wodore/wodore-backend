@@ -225,6 +225,4 @@ AXES_ENABLED = False
 # Zitadel RP mode only (AUTH_PROVIDER=zitadel): refresh OIDC sessions.
 
 if ZITADEL_RP_ENABLED:
-    MIDDLEWARE += (
-        "server.middleware.oidc.AsyncSafeSessionRefresh",  # pyright: ignore[reportUndefinedVariable]
-    )
+    MIDDLEWARE += ("server.middleware.oidc.AsyncSafeSessionRefresh",)

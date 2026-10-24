@@ -159,9 +159,9 @@ class Translations(BaseModel):
         _t = None
         if isinstance(value, str):
             out = {get_current_locale(): value}
-            _t = Translations(**out)  # pyright: ignore[reportArgumentType]  # dynamic kwargs  # type: ignore  # argument typing drift vs stubs
+            _t = Translations(**out)  # type: ignore  # argument typing drift vs stubs
         elif isinstance(value, dict):
-            _t = Translations(**value)  # pyright: ignore[reportArgumentType]  # dynamic kwargs
+            _t = Translations(**value)
         if value is None:
             out = {get_current_locale(): value}
             _t = Translations()
@@ -224,9 +224,9 @@ class TranslationModel(BaseModel):
     def __getattr__(self, key):
         # try:
         if hasattr(super(), "__getattr__"):
-            return super().__getattr__(key)  # pyright: ignore[reportAttributeAccessIssue]  # dynamic fallback  # type: ignore  # dynamic attr: plugin-less inference gap
+            return super().__getattr__(key)  # type: ignore  # dynamic attr: plugin-less inference gap
         if key[0] == "_":
-            return super().__getattr__(key)  # pyright: ignore[reportAttributeAccessIssue]  # dynamic fallback  # type: ignore  # dynamic attr: plugin-less inference gap
+            return super().__getattr__(key)  # type: ignore  # dynamic attr: plugin-less inference gap
         return None
         # except:
         # raise
@@ -239,7 +239,7 @@ class TranslationModel(BaseModel):
             # return
             # super().__getattribute__(key)
             try:
-                orig = super().__getattr__(  # pyright: ignore[reportAttributeAccessIssue]  # dynamic fallback  # type: ignore  # dynamic attr: plugin-less inference gap
+                orig = super().__getattr__(  # type: ignore  # dynamic attr: plugin-less inference gap
                     key
                 )
             except BaseException:
@@ -266,9 +266,7 @@ if __name__ == "__main__":
     class Demo(TranslationModel):
         name_t: Translations = Translations(locale="en")
         _name_t = Translations.get_validator("name_t")
-        name: str = Translations.TransField(  # pyright: ignore[reportAssignmentType]  # descriptor
-            field="name_t"
-        )  # type: ignore  # TransField descriptor demo assignment
+        name: str = Translations.TransField(field="name_t")  # type: ignore  # TransField descriptor demo assignment
 
         bio_t: Translations = Translations(locale="fr")
         _bio_t = Translations.get_validator("bio_t")
@@ -276,7 +274,7 @@ if __name__ == "__main__":
 
         number: int = 10
 
-    demo = Demo(name_t="Tobias", bio_t="test")  # pyright: ignore[reportArgumentType]  # validator coercion
+    demo = Demo(name_t="Tobias", bio_t="test")
     rprint(demo)
     rprint(f"name: {demo.name}")
     rprint(f"bio: {demo.bio}")

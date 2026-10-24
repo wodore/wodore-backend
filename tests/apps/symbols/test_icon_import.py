@@ -106,9 +106,7 @@ class TestFullImport:
         """emojibase '2764-FE0F' joins fluent metadata '2764'."""
         icon = Icon.objects.get(pack__slug="fluent-emoji", slug="red-heart")
         assert icon.unicode == "2764"
-        assert icon.keywords.filter(  # pyright: ignore[reportAttributeAccessIssue]  # reverse FK: django-stubs gap
-            locale="en", keyword_folded="red heart"
-        ).exists()
+        assert icon.keywords.filter(locale="en", keyword_folded="red heart").exists()
 
     def test_skin_tone_layout(self):
         assert Icon.objects.filter(
@@ -140,7 +138,7 @@ class TestFullImport:
         icon = Icon.objects.get(pack__slug="fluent-emoji", slug="brand-logo")
         assert icon.unicode == "E000"
         assert icon.category is None
-        assert not icon.keywords.exists()  # pyright: ignore[reportAttributeAccessIssue]  # reverse FK: django-stubs gap
+        assert not icon.keywords.exists()
         assert "brand-logo" in self.output
 
     def test_noto_pack_single_style_same_slug(self):
@@ -155,13 +153,11 @@ class TestFullImport:
 
     def test_noto_unmatched_slug_fallback(self):
         icon = Icon.objects.get(pack__slug="noto-emoji", slug="emoji-0023")
-        assert not icon.keywords.exists()  # pyright: ignore[reportAttributeAccessIssue]  # reverse FK: django-stubs gap
+        assert not icon.keywords.exists()
 
     def test_keywords_folded_and_localized(self):
         icon = Icon.objects.get(pack__slug="fluent-emoji", slug="tent")
-        folded = set(
-            icon.keywords.values_list("locale", "keyword_folded")  # pyright: ignore[reportAttributeAccessIssue]  # reverse FK: django-stubs gap
-        )
+        folded = set(icon.keywords.values_list("locale", "keyword_folded"))
         assert folded == {
             ("en", "tent"),
             ("en", "camping"),
@@ -169,9 +165,7 @@ class TestFullImport:
             ("de", "campen"),
             ("de", "zelten"),
         }
-        keyword = icon.keywords.get(  # pyright: ignore[reportAttributeAccessIssue]  # reverse FK: django-stubs gap
-            locale="de", keyword_folded="zelt"
-        )
+        keyword = icon.keywords.get(locale="de", keyword_folded="zelt")
         assert keyword.keyword == "Zelt"
 
     def test_taxonomy_localized_and_idempotent_shape(self):
@@ -263,7 +257,7 @@ class TestFlagImports:
 
     def test_flag_keywords_localized(self):
         icon = Icon.objects.get(pack__slug="flag-icons", slug="flag-switzerland")
-        assert icon.keywords.filter(  # pyright: ignore[reportAttributeAccessIssue]  # reverse FK: django-stubs gap
+        assert icon.keywords.filter(
             locale="de", keyword_folded="fahne: schweiz"
         ).exists()
 

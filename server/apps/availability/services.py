@@ -241,9 +241,9 @@ class AvailabilityService:
                     ):
                         # Same capacity for both states - rely on external unattended flag
                         if b.unattended and h.get("hut_type_closed_slug") is not None:
-                            b.hut_type = h["hut_type_closed_slug"]  # pyright: ignore[reportAttributeAccessIssue]  # type: ignore  # msgspec Struct dynamic attr (hut-services)
+                            b.hut_type = h["hut_type_closed_slug"]  # type: ignore  # msgspec Struct dynamic attr (hut-services)
                         else:
-                            b.hut_type = (  # pyright: ignore[reportAttributeAccessIssue]  # type: ignore  # msgspec Struct dynamic attr (hut-services)
+                            b.hut_type = (  # type: ignore  # msgspec Struct dynamic attr (hut-services)
                                 h.get("hut_type_open_slug") or HutTypeEnum.unknown.value
                             )
                     # Use capacity to determine state: fewer beds = closed, more beds = open
@@ -255,11 +255,11 @@ class AvailabilityService:
                         and h.get("hut_type_closed_slug") is not None
                     ):
                         # Booking total is at or below closed capacity → reduced/closed state
-                        b.hut_type = h["hut_type_closed_slug"]  # pyright: ignore[reportAttributeAccessIssue]  # type: ignore  # msgspec Struct dynamic attr (hut-services)
+                        b.hut_type = h["hut_type_closed_slug"]  # type: ignore  # msgspec Struct dynamic attr (hut-services)
                     # Default: open state (includes unknown status, no closed type, etc.)
                     else:
                         # Fall back to open (default), or unknown if open is also None
-                        b.hut_type = (  # pyright: ignore[reportAttributeAccessIssue]  # type: ignore  # msgspec Struct dynamic attr (hut-services)
+                        b.hut_type = (  # type: ignore  # msgspec Struct dynamic attr (hut-services)
                             h.get("hut_type_open_slug") or HutTypeEnum.unknown.value
                         )
 
@@ -339,7 +339,7 @@ class AvailabilityService:
                     failed_huts.append(hut)
                     results.append(
                         UpdateResult(
-                            hut_id=hut.id,  # pyright: ignore[reportAttributeAccessIssue]
+                            hut_id=hut.id,
                             hut_slug=hut.slug,
                             success=False,
                             error_message=f"Batch fetch error: {fetch_error!s}",
@@ -362,7 +362,7 @@ class AvailabilityService:
                     failed_huts.append(hut)
                     results.append(
                         UpdateResult(
-                            hut_id=hut.id,  # pyright: ignore[reportAttributeAccessIssue]
+                            hut_id=hut.id,
                             hut_slug=hut.slug,
                             success=False,
                             error_message="No booking data returned",
@@ -409,7 +409,7 @@ class AvailabilityService:
                         failed_huts.append(hut)
                         results.append(
                             UpdateResult(
-                                hut_id=hut.id,  # pyright: ignore[reportAttributeAccessIssue]
+                                hut_id=hut.id,
                                 hut_slug=hut.slug,
                                 success=False,
                                 error_message=f"Batch processing error: {e!s}",
@@ -524,7 +524,7 @@ class AvailabilityService:
         }
 
         # Collect all dates and hut IDs for bulk queries
-        all_hut_ids = [hut.id for hut, _ in batch]  # pyright: ignore[reportAttributeAccessIssue]
+        all_hut_ids = [hut.id for hut, _ in batch]
         all_dates = []
         for _, hut_booking in batch:
             all_dates.extend([booking.date for booking in hut_booking.bookings])
@@ -582,7 +582,7 @@ class AvailabilityService:
                 if not source_org:
                     results.append(
                         UpdateResult(
-                            hut_id=hut.id,  # pyright: ignore[reportAttributeAccessIssue]
+                            hut_id=hut.id,
                             hut_slug=hut.slug,
                             success=False,
                             error_message=f"Organization '{hut_booking.source}' not found",
@@ -612,9 +612,7 @@ class AvailabilityService:
                         else None
                     )
 
-                    availability = availability_index.get(
-                        (hut.id, booking.date)  # pyright: ignore[reportAttributeAccessIssue]
-                    )
+                    availability = availability_index.get((hut.id, booking.date))
 
                     if availability is None:
                         # Create new availability record. The same payload can
@@ -623,9 +621,7 @@ class AvailabilityService:
                         # one row — re-use the already-queued row and let the
                         # latest values win instead of violating
                         # ``unique_hut_date`` and rolling back the whole batch.
-                        new_avail = queued_new.get(
-                            (hut.id, booking.date)  # pyright: ignore[reportAttributeAccessIssue]
-                        )
+                        new_avail = queued_new.get((hut.id, booking.date))
                         if new_avail is None:
                             new_avail = HutAvailability(
                                 hut=hut,
@@ -644,7 +640,7 @@ class AvailabilityService:
                                 first_checked=now,
                                 last_checked=now,
                             )
-                            queued_new[(hut.id, booking.date)] = new_avail  # pyright: ignore[reportAttributeAccessIssue]
+                            queued_new[(hut.id, booking.date)] = new_avail
                             all_new_availabilities.append(new_avail)
                             created_count += 1
                         else:
@@ -708,7 +704,7 @@ class AvailabilityService:
 
                 results.append(
                     UpdateResult(
-                        hut_id=hut.id,  # pyright: ignore[reportAttributeAccessIssue]
+                        hut_id=hut.id,
                         hut_slug=hut.slug,
                         success=True,
                         records_created=created_count,
@@ -1042,7 +1038,7 @@ class AvailabilityService:
         # to avoid N individual database writes
 
         return UpdateResult(
-            hut_id=hut.id,  # pyright: ignore[reportAttributeAccessIssue]
+            hut_id=hut.id,
             hut_slug=hut.slug,
             success=True,
             records_created=created_count,
@@ -1079,7 +1075,7 @@ class AvailabilityService:
             batch_result.results[0]
             if batch_result.results
             else UpdateResult(
-                hut_id=hut.id,  # pyright: ignore[reportAttributeAccessIssue]
+                hut_id=hut.id,
                 hut_slug=hut.slug,
                 success=False,
                 error_message="No result returned from batch update",

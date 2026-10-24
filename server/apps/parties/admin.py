@@ -50,7 +50,7 @@ class PartyAdmin(ModelAdmin):
 
     inlines = (_PartyLinksInline,)
 
-    fieldsets = (  # pyright: ignore[reportAssignmentType]  # unfold _FieldsetSpec gap
+    fieldsets = (
         (
             _("Main Information"),
             {
@@ -79,11 +79,11 @@ class PartyAdmin(ModelAdmin):
         qs = super().get_queryset(request)
         return qs.annotate(number_links=models.Count("link_associations"))
 
-    @display(description=_("Links"), ordering="number_links")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Links"), ordering="number_links")
     def show_numbers_links(self, obj):
         return obj.number_links
 
-    @display(header=True, description=_("Name"), ordering=Lower("name_i18n"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(header=True, description=_("Name"), ordering=Lower("name_i18n"))
     def name_slug(self, obj):
         return obj.name_i18n, obj.slug
 
