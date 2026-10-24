@@ -49,6 +49,8 @@ class ApiVersionedRequest(HttpRequest):
 
     api_version: str | None
     api_version_source: str | None
+
+
 from django.utils.cache import patch_vary_headers
 
 from server.apps.api.error_codes import ErrorCode, problem_fields
