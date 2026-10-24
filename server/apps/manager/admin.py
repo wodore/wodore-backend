@@ -31,6 +31,9 @@ from .widgets import UnfoldJSONSuit, UnfoldReadonlyJSONSuit
 # Generic over the admin's model: subscripted usages (``UserAdmin[AccountsUser]``
 # below) pin it precisely. The ``Any`` default preserves the pre-ratchet
 # behavior of bare subclassers in other apps (model parameter unsolved).
+# Do NOT switch to ``default=models.Model``: it narrows ``obj`` params and
+# attribute access for bare subclassers and fails 8 checks in
+# external_geonames/images (outside this app's ratchet scope).
 _ModelT = TypeVar("_ModelT", bound=models.Model, default=Any)
 
 
@@ -279,10 +282,11 @@ class RelatedOnlyCheckboxFilter(MultiValueMixin, admin.RelatedOnlyFieldListFilte
     def choices(self, changelist: ChangeList) -> Iterator[Any]:
         """Render checkbox forms for the related values actually in use.
 
-        Delegates to unfold's ``RelatedCheckboxFilter.choices`` rendering:
-        ``self`` duck-types as that filter (``cast``), because
-        ``lookup_choices`` and the facet machinery come from the
-        ``RelatedOnlyFieldListFilter`` base, not from unfold's class.
+        Delegates to unfold's ``RelatedCheckboxFilter.choices`` rendering.
+        The ``cast`` is safe: both filters share the MultiValueMixin +
+        RelatedFieldListFilter interface — ``lookup_choices`` and the facet
+        machinery come from the ``RelatedOnlyFieldListFilter`` base, so
+        ``self`` satisfies everything unfold's method touches.
         Yields unfold's ``{"form": ...}`` dicts, not the choice dicts of the
         stock admin filter (the stub's shape is private and does not fit).
         """
