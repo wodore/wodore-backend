@@ -52,7 +52,7 @@ class Command(BaseCommand):
                 "name": place.name,
                 "location": f"SRID=4326;POINT ({location.x} {location.y})",
                 "elevation": place.elevation,
-                "country": place.country_code.code,
+                "country": place.country_code.code,  # type: ignore  # dynamic attr: plugin-less inference gap
                 "importance": place.importance,
                 "detail_type": place.detail_type,
             }

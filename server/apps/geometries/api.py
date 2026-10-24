@@ -399,7 +399,7 @@ class GeoSearchController(ApiController):
                 build_sources(result, place, media_url)
             results.append(result)
 
-        return results
+        return results  # type: ignore  # serialized dicts match schema shape at runtime
 
 
 class GeoNearbyController(ApiController):
@@ -480,7 +480,7 @@ class GeoNearbyController(ApiController):
                 )
             )
 
-        return results
+        return results  # type: ignore  # serialized dicts match schema shape at runtime
 
 
 class AmenityController(ApiController):
@@ -589,9 +589,9 @@ class AmenityController(ApiController):
                     .first()
                 )
             if annotated is not None:
-                place.source_slugs = getattr(annotated, "source_slugs", None)
-                place.source_ids = getattr(annotated, "source_ids", None)
-                place.sources_data = getattr(annotated, "sources_data", None)
+                place.source_slugs = getattr(annotated, "source_slugs", None)  # type: ignore  # dynamic attr: plugin-less inference gap
+                place.source_ids = getattr(annotated, "source_ids", None)  # type: ignore  # dynamic attr: plugin-less inference gap
+                place.sources_data = getattr(annotated, "sources_data", None)  # type: ignore  # dynamic attr: plugin-less inference gap
 
         result = base_result(place, media_url)
         result["description"] = place.description_i18n  # noqa: WPS308
@@ -602,14 +602,14 @@ class AmenityController(ApiController):
         if categories_data:
             result["categories"] = categories_data
 
-        if place.amenity_detail:
+        if place.amenity_detail:  # type: ignore  # dynamic attr: plugin-less inference gap
             result["amenity_detail"] = {
-                "operating_status": place.amenity_detail.operating_status,
-                "opening_months": place.amenity_detail.opening_months or {},
-                "opening_hours": place.amenity_detail.opening_hours or {},
-                "websites": place.amenity_detail.websites or [],
-                "phones": place.amenity_detail.phones or [],
-                "extra": place.amenity_detail.extra or {},
+                "operating_status": place.amenity_detail.operating_status,  # type: ignore  # dynamic attr: plugin-less inference gap
+                "opening_months": place.amenity_detail.opening_months or {},  # type: ignore  # dynamic attr: plugin-less inference gap
+                "opening_hours": place.amenity_detail.opening_hours or {},  # type: ignore  # dynamic attr: plugin-less inference gap
+                "websites": place.amenity_detail.websites or [],  # type: ignore  # dynamic attr: plugin-less inference gap
+                "phones": place.amenity_detail.phones or [],  # type: ignore  # dynamic attr: plugin-less inference gap
+                "extra": place.amenity_detail.extra or {},  # type: ignore  # dynamic attr: plugin-less inference gap
             }
 
         build_sources(result, place, media_url)

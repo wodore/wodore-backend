@@ -16,7 +16,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from django.http import FileResponse, Http404, HttpRequest, HttpResponse
+from django.http import FileResponse, Http404, HttpRequest
 
 #: Directory with the bundled assets (shipped with the image).
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
@@ -29,7 +29,7 @@ ASSET_FILES = frozenset({"wodore_watermark.png"})
 CACHE_CONTROL = "public, max-age=604800"
 
 
-def serve_logo(request: HttpRequest, name: str) -> HttpResponse:
+def serve_logo(request: HttpRequest, name: str) -> FileResponse:
     """Serve one whitelisted asset file from ``assets/``."""
     if name not in ASSET_FILES:
         raise Http404(f"Unknown asset {name!r}.")

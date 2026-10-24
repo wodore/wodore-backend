@@ -265,7 +265,7 @@ class TestPinnedVersionClients:
         response = ProbeController.as_view()(response)
         assert response.status_code == 401
         assert_problem_members(
-            _json.loads(response.content),
+            _json.loads(response.content),  # type: ignore  # dynamic attr: plugin-less inference gap
             status=401,
             code="not_authenticated",
         )

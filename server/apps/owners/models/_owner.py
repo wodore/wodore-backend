@@ -50,14 +50,10 @@ class Owner(TimeStampedModel):
         verbose_name=_("Contacts"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Owner")
         indexes = (GinIndex(fields=["i18n"]),)
         ordering = (Lower("name_i18n"),)
 
     def __str__(self) -> str:
-        return self.name_i18n  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation
-
-    @classmethod
-    def get_or_create(cls) -> "Owner":
-        super().get_or_create()
+        return self.name_i18n

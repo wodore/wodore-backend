@@ -111,6 +111,7 @@ class TestOtherProviderClients:
         place = GeoPlaceSchema(
             slug="test-place",
             name="Test Place",
+            name_i18n="Test Place",
             lat=46.5,
             lon=7.5,
             sources=[Source(slug="refuges", source_id="123")],

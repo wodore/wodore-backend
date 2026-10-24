@@ -100,7 +100,7 @@ class Party(TimeStampedModel):
         limit_choices_to={"style": "mono"},
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Party")
         verbose_name_plural = _("Parties")
         indexes = (GinIndex(fields=["i18n"]),)
@@ -113,4 +113,4 @@ class Party(TimeStampedModel):
         ordering = (Lower("name_i18n"),)
 
     def __str__(self) -> str:
-        return self.name_i18n  # pyright: ignore[reportAttributeAccessIssue]  # modeltrans
+        return self.name_i18n

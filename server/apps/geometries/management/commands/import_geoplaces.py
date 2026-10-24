@@ -305,8 +305,8 @@ class Command(BaseCommand):
         if not org_data:
             org_data = fallback_orgs.get(slug, {})
             org_data["slug"] = slug
-            org_data["is_active"] = True
-            org_data["is_public"] = False
+            org_data["is_active"] = True  # type: ignore  # defaults dict accepts bool at runtime
+            org_data["is_public"] = False  # type: ignore  # defaults dict accepts bool at runtime
             self.stdout.write(f"Using minimal data for '{slug}' (not in fixture)")
 
         if dry_run:
@@ -763,7 +763,7 @@ class Command(BaseCommand):
             source_id=hut.slug,
             name=hut.name,
             location=hut.location,
-            elevation=self._normalize_elevation(hut.elevation),
+            elevation=self._normalize_elevation(hut.elevation),  # type: ignore  # argument typing drift vs stubs
             country_code=hut.country_field,
             importance=importance,
             is_active=hut.is_active,
@@ -795,7 +795,7 @@ class Command(BaseCommand):
         if place.location != hut.location:
             place.location = hut.location
             changed = True
-        new_elevation = self._normalize_elevation(hut.elevation)
+        new_elevation = self._normalize_elevation(hut.elevation)  # type: ignore  # argument typing drift vs stubs
         if place.elevation != new_elevation:
             place.elevation = new_elevation
             changed = True

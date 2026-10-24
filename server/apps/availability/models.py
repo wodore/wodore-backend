@@ -33,7 +33,7 @@ class AvailabilityStatus(TimeStampedModel):
     - Preventing repeated failed attempts to fetch unavailable huts
     """
 
-    objects: AvailabilityStatusManager = AvailabilityStatusManager()  # pyright: ignore[reportIncompatibleVariableOverride]
+    objects: AvailabilityStatusManager = AvailabilityStatusManager()
 
     hut = models.OneToOneField(
         Hut,
@@ -64,7 +64,7 @@ class AvailabilityStatus(TimeStampedModel):
         help_text=_("Number of consecutive times the fetch returned no data or failed"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Availability Status")
         verbose_name_plural = _("Availability Statuses")
         ordering = ("-last_checked",)
@@ -99,7 +99,7 @@ class HutAvailability(TimeStampedModel):
     Optimized for fast reads (map queries, detail views).
     """
 
-    objects: HutAvailabilityManager = HutAvailabilityManager()  # pyright: ignore[reportIncompatibleVariableOverride]
+    objects: HutAvailabilityManager = HutAvailabilityManager()
 
     hut = models.ForeignKey(
         Hut,
@@ -208,7 +208,7 @@ class HutAvailability(TimeStampedModel):
         db_index=True,
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Hut Availability")
         verbose_name_plural = _("Hut Availabilities")
         ordering = ("availability_date", "hut__name")
@@ -361,7 +361,7 @@ class HutAvailabilityHistory(TimeStampedModel):
     Tracks state duration using first_checked and last_checked timestamps.
     """
 
-    objects: HutAvailabilityHistoryManager = HutAvailabilityHistoryManager()  # pyright: ignore[reportIncompatibleVariableOverride]
+    objects: HutAvailabilityHistoryManager = HutAvailabilityHistoryManager()
 
     availability = models.ForeignKey(
         HutAvailability,
@@ -440,7 +440,7 @@ class HutAvailabilityHistory(TimeStampedModel):
         help_text=_("When this state was last confirmed (updated on every check)"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Hut Availability History")
         verbose_name_plural = _("Hut Availability Histories")
         ordering = ("-first_checked",)

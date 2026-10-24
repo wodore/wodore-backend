@@ -25,14 +25,14 @@ class PrefixedClient(Client):
     def _prefix_url(self, url):
         return f"{self.prefix}{url}"
 
-    def get(self, path, data=None, **kwargs):
+    def get(self, path, data=None, **kwargs):  # type: ignore  # test client signature drift
         return super().get(self._prefixed(path), data, **kwargs)
 
-    def post(self, path, data=None, **kwargs):
+    def post(self, path, data=None, **kwargs):  # type: ignore  # test client signature drift
         return super().post(self._prefixed(path), data, **kwargs)
 
-    def put(self, path, data=None, **kwargs):
+    def put(self, path, data=None, **kwargs):  # type: ignore  # test client signature drift
         return super().put(self._prefixed(path), data, **kwargs)
 
-    def delete(self, path, data=None, **kwargs):
+    def delete(self, path, data=None, **kwargs):  # type: ignore  # test client signature drift
         return super().delete(self._prefixed(path), data, **kwargs)

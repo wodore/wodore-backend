@@ -35,12 +35,22 @@ keep their CORS headers.
 from __future__ import annotations
 
 import json
+import typing as t
 from datetime import UTC, datetime
 
 import msgspec
 import structlog
 
 from django.http import HttpRequest, HttpResponse
+
+
+class ApiVersionedRequest(HttpRequest):
+    """HttpRequest with the attributes this middleware attaches (plugin-less typing)."""
+
+    api_version: str | None
+    api_version_source: str | None
+
+
 from django.utils.cache import patch_vary_headers
 
 from server.apps.api.error_codes import ErrorCode, problem_fields
@@ -66,7 +76,7 @@ def _error_response(status: int, code: ErrorCode, detail: str) -> HttpResponse:
     version errors are about the request, not a resource (design D3).
     """
     body = {"code": code, "detail": detail}
-    body.update(problem_fields(code, status=status))
+    body.update(problem_fields(code, status=status))  # type: ignore  # mapping.update stub overload
     return HttpResponse(
         json.dumps(body),
         content_type="application/json",
@@ -138,8 +148,8 @@ class ApiVersionMiddleware:
         # Sunset versions are rejected everywhere except the discovery
         # endpoint (excluded above) — docs/schema included: a sunset
         # version's snapshot is of no use anymore.
-        if registry.is_sunset(version):
-            change = registry.get_change(version)
+        if registry.is_sunset(version):  # type: ignore  # argument typing drift vs stubs
+            change = registry.get_change(version)  # type: ignore  # argument typing drift vs stubs
             sunset = change.sunset_date if change else None
             return _error_response(
                 410,
@@ -152,8 +162,9 @@ class ApiVersionMiddleware:
         if source == "default":
             logger.info("api_version_unpinned", path=path, default_version=version)
 
-        request.api_version = version
-        request.api_version_source = source
+        typed_request = t.cast("ApiVersionedRequest", request)
+        typed_request.api_version = version
+        typed_request.api_version_source = source
 
         response = self.get_response(request)
 

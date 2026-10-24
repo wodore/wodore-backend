@@ -55,6 +55,17 @@ class Command(BaseCommand):
         symbols_count = 0
 
         # Delete collections and their mappings
+        # Pre-computed below under the same guards that gate their use —
+        # initialize so the checker (and any future guard slip) sees bindings.
+        from server.apps.symbols.models import Symbol
+
+        collections_qs = WeatherCodeSymbolCollection.objects.none()
+        collections_count = 0
+        symbols_qs = Symbol.objects.none()
+        symbols_count = 0
+        codes_qs = WeatherCode.objects.none()
+        total_codes = 0
+
         if not codes_only:
             collections_qs = WeatherCodeSymbolCollection.objects.all()
             if collection_slug:
@@ -93,8 +104,6 @@ class Command(BaseCommand):
                         .distinct()
                     )
                     all_symbol_ids = set(symbol_day_ids) | set(symbol_night_ids)
-
-                    from server.apps.symbols.models import Symbol
 
                     symbols_qs = Symbol.objects.filter(id__in=all_symbol_ids)
                     symbols_count = symbols_qs.count()

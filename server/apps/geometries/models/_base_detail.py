@@ -21,7 +21,7 @@ class GeoPlaceDetailBase(TimeStampedModel):
             _trackable_fields = ["operating_status", "opening_hours", "phones", "brand"]
     """
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         abstract = True
 
     # Child classes should override this
@@ -83,7 +83,7 @@ class GeoPlaceDetailBase(TimeStampedModel):
 
         # Update parent GeoPlace if any fields were modified
         if modified_fields:
-            place = self.geo_place  # pyright: ignore[reportAttributeAccessIssue]  # abstract FK
+            place = self.geo_place  # type: ignore  # dynamic attr: plugin-less inference gap
             place.is_modified = True
 
             # Add modified detail fields to parent's protected_fields

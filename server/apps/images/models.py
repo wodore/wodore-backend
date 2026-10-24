@@ -8,6 +8,7 @@ import requests
 from colorfield.fields import ColorField
 from hut_services import LicenseSchema, PhotoSchema, TranslationSchema
 from PIL import Image as PILImage
+from pydantic_string_url import HttpUrl
 
 from model_utils.fields import (
     MonitorField,
@@ -47,6 +48,7 @@ class _ReviewStatusChoices(models.TextChoices):
 
 class ImageTag(TimeStampedModel):
     i18n = TranslationField(fields=("name",))
+    name_i18n: str
     objects = BaseMutlilingualManager()
 
     slug = models.SlugField(
@@ -74,12 +76,13 @@ class Image(TimeStampedModel):
     # add size field
     # add long caption or something ..
     i18n = TranslationField(fields=("caption",))
+    caption_i18n: str
     objects = BaseMutlilingualManager()
     ReviewStatusChoices = _ReviewStatusChoices
 
     # TODO: TAGS!!
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)  # type: ignore  # custom pk: Django idiom redeclares Model.id
 
     image = MetaImageField(
         # Content-hashed storage: media is immutable-cached, a URL must
@@ -246,6 +249,18 @@ class Image(TimeStampedModel):
                 name="%(app_label)s_%(class)s_review_status_valid",
                 condition=models.Q(review_status__in=_ReviewStatusChoices.values),
             ),
+            # Pins dedupe by source_ident ("<provider>:<source_id>",
+            # server.apps.geometries.pinning). Partial: uploads/imports without
+            # a source ident keep ""/NULL and stay unconstrained. Closes the
+            # create race between the request-path write-through, the django-q2
+            # refresh and the geoimages_pin sweeps, whose twins made every
+            # later get_or_create raise MultipleObjectsReturned (Sentry
+            # 155850205, hut cedullo).
+            models.UniqueConstraint(
+                name="%(app_label)s_%(class)s_source_ident_unique",
+                fields=["source_ident"],
+                condition=models.Q(source_ident__gt=""),
+            ),
         )
 
     def __str__(self) -> str:
@@ -268,7 +283,7 @@ class Image(TimeStampedModel):
             # source URL so admin thumbnails work for pins too.
             source = self.image if self.image else self.source_url_raw
             img = (
-                ImagorImage(source)
+                ImagorImage(source)  # type: ignore  # imagor wrapper typing
                 .transform(
                     size=f"{width}x{height}",
                     focal=focal_str,
@@ -339,9 +354,19 @@ class Image(TimeStampedModel):
                 else ""
             )
 
-        if cls.objects.filter(source_ident=source_ident).exists():
-            logging.info("Image already exists, skipping...")
-            return cls.objects.get(source_ident=source_ident)
+        if source_ident:
+            # Tolerant of legacy duplicate rows (source_ident had no unique
+            # constraint — see migration 0033): resolve the canonical row
+            # instead of crashing on twins; an empty ident must NOT dedupe
+            # (it matched every ident-less upload ever made).
+            existing = (
+                cls.objects.filter(source_ident=source_ident)
+                .order_by("created", "id")
+                .first()
+            )
+            if existing is not None:
+                logging.info("Image already exists, skipping...")
+                return existing
 
         headers = {"User-Agent": settings.BOT_AGENT}
         # Download the image from the raw_url
@@ -353,8 +378,8 @@ class Image(TimeStampedModel):
             if e.response.status_code == 404:
                 if "-originale" in photo_schema.raw_url:
                     # fix wrong url for refuges.info images
-                    photo_schema.raw_url = photo_schema.raw_url.replace(
-                        "-originale", "-reduite"
+                    photo_schema.raw_url = HttpUrl(
+                        str(photo_schema.raw_url).replace("-originale", "-reduite")
                     )
                     return cls.create_image_from_schema(
                         photo_schema,
@@ -446,7 +471,7 @@ class Image(TimeStampedModel):
             source_org_slug = source_org_slug[:50]
             source_org = Organization.objects.get_or_create(
                 slug=source_org_slug,
-                defaults={"name_en": photo_schema.source.name[:100]},
+                defaults={"name_en": photo_schema.source.name[:100]},  # type: ignore  # dynamic attr: plugin-less inference gap
             )[0]
             if not Organization.objects.filter(slug=source_org_slug).exists():
                 img_review_status = Image.ReviewStatusChoices.pending
@@ -531,9 +556,9 @@ class Image(TimeStampedModel):
                 review_comment += f"- Missing caption, use '{default_caption}' from file path instead.\n"
                 img_review_status = Image.ReviewStatusChoices.pending
             if source_org_slug == "refuges":
-                image.caption_fr = default_caption.strip().strip('"')
+                image.caption_fr = default_caption.strip().strip('"')  # type: ignore  # dynamic attr: plugin-less inference gap
             else:
-                image.caption_de = default_caption.strip().strip('"')
+                image.caption_de = default_caption.strip().strip('"')  # type: ignore  # dynamic attr: plugin-less inference gap
         if photo_schema.comment:
             review_comment += f"\n---\nSource Comment:\n\n{photo_schema.comment}\n"
         review_comment += f"\n---\nSource Data:\n\n```json\n{photo_schema.model_dump_json(indent=2)}\n```"
@@ -545,5 +570,5 @@ class Image(TimeStampedModel):
             logging.info("Image added successfully!")
             return image
         except IntegrityError as e:
-            logging.error("Error adding image %s: %s", image.caption_de, e)
+            logging.error("Error adding image %s: %s", image.caption_de, e)  # type: ignore  # dynamic attr: plugin-less inference gap
             return None

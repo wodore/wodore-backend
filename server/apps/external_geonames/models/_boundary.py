@@ -13,7 +13,7 @@ class Boundary(TimeStampedModel):
     Read-only in admin. Imported from shapes files and admin codes.
     """
 
-    objects: BaseManager = BaseManager()  # pyright: ignore[reportIncompatibleVariableOverride]  # django-stubs generics
+    objects: BaseManager = BaseManager()
 
     # Primary identifier
     geoname_id = models.BigIntegerField(
@@ -69,7 +69,7 @@ class Boundary(TimeStampedModel):
         help_text=_("Last modification date from GeoNames"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Boundary")
         verbose_name_plural = _("Boundaries")
         ordering = ("name",)

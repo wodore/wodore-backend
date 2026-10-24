@@ -36,4 +36,4 @@ class Command(CRUDCommand):
     use_limit_arg = True
     model = Contact
     model_names = "contacts"
-    add_function = add_contact_function
+    add_function = add_contact_function  # type: ignore  # CRUDCommand hook typing drift

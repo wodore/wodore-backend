@@ -241,7 +241,7 @@ class ImagePropertiesSchema(BaseModel):
             "thumb/preview × square/landscape/portrait). "
             "Individual hashes are null when not yet assessed."
         ),
-    )
+    )  # type: ignore  # pydantic Field overload with long description
 
 
 # GeoJSON types

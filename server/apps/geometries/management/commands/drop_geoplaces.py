@@ -76,7 +76,7 @@ class Command(BaseCommand):
             description = "ALL geoplaces"
         else:
             queryset = GeoPlace.objects.filter(country_code__in=countries)
-            description = f"geoplaces from countries: {', '.join(countries)}"
+            description = f"geoplaces from countries: {', '.join(countries or [])}"
 
         count = queryset.count()
 

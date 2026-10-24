@@ -106,4 +106,4 @@ class TestAssessPlacePins:
 
         assert stats["duplicates"] == 1
         weak.refresh_from_db()
-        assert weak.image_meta["duplicate_of"] == strong.source_ident
+        assert weak.image_meta["duplicate_of"] == strong.source_ident  # type: ignore  # optional config access in test

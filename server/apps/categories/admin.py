@@ -69,7 +69,7 @@ class ChildCategoryInline(admin.TabularInline):
             )
         return "-"
 
-    @display(description=_("View"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("View"))
     def view_link(self, obj):
         """Link to view/edit this child category."""
         if obj.pk:
@@ -132,7 +132,7 @@ class CategoryAdmin(ModelAdmin):
         "modified",
     )
 
-    fieldsets = (  # pyright: ignore[reportAssignmentType]  # unfold _FieldsetSpec gap
+    fieldsets = (
         (
             _("Main Information"),
             {
@@ -276,7 +276,7 @@ class CategoryAdmin(ModelAdmin):
         # Remove avatar to avoid FileField.url access (symbols shown in other columns)
         return (name, description, "")
 
-    @display(description=_("Symbol"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Symbol"))
     def symbol_img(self, obj):
         """Display detailed symbol."""
         if obj.symbol_color and obj.symbol_color.svg_file:
@@ -285,7 +285,7 @@ class CategoryAdmin(ModelAdmin):
             )
         return "-"
 
-    @display(description=_("Mono"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Mono"))
     def icon_img(self, obj):
         """Display monochrome symbol."""
         if obj.symbol_mono and obj.symbol_mono.svg_file:
@@ -294,7 +294,7 @@ class CategoryAdmin(ModelAdmin):
             )
         return "-"
 
-    @display(description=_("Identifier"), ordering="identifier")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Identifier"), ordering="identifier")
     def identifier_display(self, obj):
         """Display identifier without 'root.' prefix."""
         identifier = obj.identifier
@@ -302,7 +302,7 @@ class CategoryAdmin(ModelAdmin):
             return identifier[5:]  # Remove 'root.' prefix
         return identifier
 
-    @display(description=_("Children"), label=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Children"), label=True)
     def children_count(self, obj):
         """Display count of children.
 
@@ -322,12 +322,12 @@ class CategoryAdmin(ModelAdmin):
             )
         return "-"
 
-    @display(description=_("Order"), ordering="order")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Order"), ordering="order")
     def order_display(self, obj):
         """Display order value."""
         return mark_safe(f"<small>{obj.order}</small>")
 
-    @display(description=_("Parent"), label=True, ordering="parent")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Parent"), label=True, ordering="parent")
     def parent_display(self, obj):
         """Display parent category if exists."""
         if obj.parent:
@@ -338,7 +338,7 @@ class CategoryAdmin(ModelAdmin):
         """Helper to create small avatar image."""
         return mark_safe(f'<img src="{url}" width="20" alt="avatar"/>')
 
-    @display(description=_("Auto-set color from SVG"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Auto-set color from SVG"))
     def auto_set_color_from_svg(self, request, queryset):
         """
         Admin action to automatically set color from SVG symbols.
@@ -373,4 +373,4 @@ class CategoryAdmin(ModelAdmin):
                 level="warning",
             )
 
-    auto_set_color_from_svg.short_description = _("Auto-set color from SVG symbols")  # pyright: ignore[reportFunctionMemberAccess]  # legacy Django admin attr
+    auto_set_color_from_svg.short_description = _("Auto-set color from SVG symbols")

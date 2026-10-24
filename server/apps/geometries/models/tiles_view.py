@@ -224,7 +224,7 @@ class GeoPlacesForTilesView(PostgresViewModel):
     # Organization sources (array of objects with slug and source_id)
     sources = models.JSONField(default=list)
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         managed = False
         db_table = "geoplaces_for_tiles"
 

@@ -230,7 +230,7 @@ class ImageInfoSchema(BaseModel):
             except Exception as e:
                 print(e)
                 img = "Missing"
-        return img_urls
+        return img_urls  # type: ignore  # cfg.name is a config literal, never None
 
 
 class HutSchemaOptional(BaseModel):

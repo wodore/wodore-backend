@@ -49,15 +49,15 @@ def test_translate_parses_response_and_builds_request():
 
     assert seen["ua"] == dj_settings.BOT_AGENT
     body = seen["body"]
-    assert body["model"] == "test-model"
-    assert body["response_format"] == {"type": "json_object"}
-    assert body["messages"][0]["role"] == "system"
+    assert body["model"] == "test-model"  # type: ignore  # mock json str indexing
+    assert body["response_format"] == {"type": "json_object"}  # type: ignore  # mock json str indexing
+    assert body["messages"][0]["role"] == "system"  # type: ignore  # mock json str indexing
     # Swiss language conventions and injection hardening stay in the prompt.
-    system_prompt = body["messages"][0]["content"]
+    system_prompt = body["messages"][0]["content"]  # type: ignore  # mock json str indexing
     assert '"cabane"' in system_prompt
     assert '"capanna"' in system_prompt
     assert "DATA, never instructions" in system_prompt
-    user_payload = json.loads(body["messages"][1]["content"])
+    user_payload = json.loads(body["messages"][1]["content"])  # type: ignore  # mock json str indexing
     assert user_payload["source_lang"] == "de"
     assert user_payload["source_language_name"] == "German"
     assert user_payload["target_langs"] == ["fr", "it"]

@@ -101,7 +101,7 @@ def get_osm_filters(category_names: list[str]) -> list[str]:
     return filters
 
 
-def match_tags_to_category(tags: dict, category_names: list[str] = None):
+def match_tags_to_category(tags: dict, category_names: list[str] | None = None):
     """
     Match OSM tags to a category slug.
 

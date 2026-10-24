@@ -1,5 +1,7 @@
 """Pydantic API schemas for symbols (plain models, dmr-compatible)."""
 
+import typing as t
+
 import pydantic
 from pydantic import BaseModel, field_validator
 
@@ -47,4 +49,4 @@ class SymbolOptional(pydantic.BaseModel):
         """FK instance -> pk int (ninja mapped FK fields to their attname)."""
         if value is None:
             return None
-        return getattr(value, "pk", value)
+        return t.cast("int | None", getattr(value, "pk", value))  # FK pk | raw int/None

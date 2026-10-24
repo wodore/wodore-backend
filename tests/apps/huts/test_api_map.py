@@ -420,7 +420,7 @@ class TestSpotlightFalloff:
         card = self._card("spotlight", offline_render)
 
         def sat(x):
-            r, g, b = card.getpixel((x, 315))
+            r, g, b = card.getpixel((x, 315))  # type: ignore  # optional geometry unpacking in test
             return colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)[1]
 
         sats = [sat(x) for x in range(0, 1200, 24)]
@@ -429,9 +429,9 @@ class TestSpotlightFalloff:
 
     def test_render_version_busts_cache_key(self):
         key_a = ogmap.static_map_cache_key({"v": "x"})
-        ogmap.RENDER_VERSION = ogmap.RENDER_VERSION + 1
+        ogmap.RENDER_VERSION = ogmap.RENDER_VERSION + 1  # type: ignore  # test overrides class literal
         try:
             key_b = ogmap.static_map_cache_key({"v": "x"})
         finally:
-            ogmap.RENDER_VERSION = ogmap.RENDER_VERSION - 1
+            ogmap.RENDER_VERSION = ogmap.RENDER_VERSION - 1  # type: ignore  # test overrides class literal
         assert key_a != key_b

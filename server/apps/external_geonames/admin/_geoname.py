@@ -191,11 +191,11 @@ class GeoNameAdmin(ModelAdmin):
         ),
     )
 
-    @display(header=True, description=_("Name"), ordering="name")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(header=True, description=_("Name"), ordering="name")
     def name_display(self, obj: GeoName) -> tuple:
         return (obj.name, obj.geoname_id)
 
-    @display(header=True, description=_("Admin"), ordering="name")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(header=True, description=_("Admin"), ordering="name")
     def admin_display(self, obj: GeoName) -> tuple:
         admin_codes = []
         if obj.admin2_code:
@@ -209,28 +209,28 @@ class GeoNameAdmin(ModelAdmin):
             "«".join(admin_codes),
         )
 
-    @display(description=_("Feature"), ordering="feature", label=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Feature"), ordering="feature", label=True)
     def feature_display(self, obj: GeoName) -> str:
         return mark_safe(f"<large>{obj.feature.id}</large>")
 
-    @display(header=True, description=_("Parent"), ordering="parent__name")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(header=True, description=_("Parent"), ordering="parent__name")
     def parent_display(self, obj: GeoName) -> tuple:
         if obj.parent:
             return (obj.hierarchy_type, obj.parent.name)
         return ("", "")
 
-    @display(header=True, description=_("Location"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(header=True, description=_("Location"))
     def location_coords(self, obj):
         return (
             f"{obj.location.y:.3f}/{obj.location.x:.3f}",
             f"{obj.elevation}m" if obj.elevation else "-",
         )
 
-    @display(description=_("Enabled"), ordering="feature__is_enabled", boolean=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Enabled"), ordering="feature__is_enabled", boolean=True)
     def feature_enabled(self, obj: GeoName) -> bool:
         return obj.feature.is_enabled
 
-    @display(description=_("Importance"), ordering="feature__importance")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Importance"), ordering="feature__importance")
     def feature_importance(self, obj: GeoName) -> int:
         return obj.feature.importance
 

@@ -34,7 +34,7 @@ def test_mapcompare_rejects_non_superuser_in_staging(
 ) -> None:
     """Non-DEBUG (staging): authenticated non-superusers also redirected."""
     User = get_user_model()
-    user = User.objects.create_user(email="staff@test", password="x")
+    user = User.objects.create_user(email="staff@test", password="x")  # type: ignore  # custom manager/queryset inference gap
     request = rf.get("/demos/mapcompare/")
     request.user = user
     response = mapcompare(request)
@@ -44,7 +44,7 @@ def test_mapcompare_rejects_non_superuser_in_staging(
 def test_mapcompare_allows_superuser_in_staging(rf: RequestFactory, db: None) -> None:
     """Non-DEBUG (staging): superusers get the page."""
     UserModel = get_user_model()
-    admin = UserModel.objects.create_superuser(email="root@test", password="x")
+    admin = UserModel.objects.create_superuser(email="root@test", password="x")  # type: ignore  # custom manager/queryset inference gap
     request = rf.get("/demos/mapcompare/")
     request.user = admin
     response = mapcompare(request)

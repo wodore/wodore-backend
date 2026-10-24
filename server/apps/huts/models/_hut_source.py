@@ -34,7 +34,7 @@ class HutSource(TimeStampedModel):
 
     ReviewStatusChoices = _ReviewStatusChoices
 
-    objects: BaseManager = BaseManager()  # pyright: ignore[reportIncompatibleVariableOverride]
+    objects: BaseManager = BaseManager()
 
     source_id = models.CharField(
         blank=False,
@@ -83,7 +83,7 @@ class HutSource(TimeStampedModel):
         blank=True,
         default=dict,
     )
-    previous_object = models.ForeignKey["HutSource"](
+    previous_object = models.ForeignKey(
         "self",
         blank=True,
         null=True,
@@ -91,7 +91,7 @@ class HutSource(TimeStampedModel):
         verbose_name=_("Previous Entry"),
         help_text=_("Id to the previous object."),
     )
-    hut = models.ForeignKey["Hut"](
+    hut = models.ForeignKey(
         "Hut",
         null=True,
         blank=True,
@@ -100,7 +100,7 @@ class HutSource(TimeStampedModel):
         verbose_name=_("Hut"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = "Hut Source"
         verbose_name_plural = "Hut Sources"
         ordering = (Lower("name"), "organization__order")
@@ -136,8 +136,8 @@ class HutSource(TimeStampedModel):
                 ignore_type_in_groups=[DeepDiff.numbers, (list, tuple)],
             )
             loc_diff = ""
-            if other_hut_src.location.distance(hut_source.location) > 0.00005:
-                loc_diff = f"Location changed from '{other_hut_src.location.tuple}' to '{hut_source.location.tuple}'"
+            if other_hut_src.location.distance(hut_source.location) > 0.00005:  # type: ignore  # dynamic attr: plugin-less inference gap
+                loc_diff = f"Location changed from '{other_hut_src.location.tuple}' to '{hut_source.location.tuple}'"  # type: ignore  # dynamic attr: plugin-less inference gap
             if diff or loc_diff:  # something changed, add a new entry:
                 diff_comment = (
                     diff.pretty()

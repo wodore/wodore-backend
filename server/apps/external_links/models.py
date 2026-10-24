@@ -164,7 +164,7 @@ class ExternalLink(TimeStampedModel):
         help_text=_("Whether this link is active (soft delete)"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("External Link")
         verbose_name_plural = _("External Links")
         ordering = ["-created"]

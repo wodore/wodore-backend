@@ -55,7 +55,7 @@ class GeoPlaceImageAssociation(TimeStampedModel):
     def __str__(self) -> str:
         return f"{self.geo_place} <> {self.image}"
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Image and Geo Place Association")
         ordering = ("geo_place__name", "-score", "id")
         constraints = (
@@ -136,7 +136,7 @@ class GeoPlaceSourceAssociation(TimeStampedModel, ComputedFieldsModel):
         help_text=_("Source precedence for field conflicts (lower number wins)"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Geo Place and Organization Association")
         indexes = [
             models.Index(fields=["priority"]),
@@ -201,7 +201,7 @@ class GeoPlaceExternalLink(models.Model):
         help_text=_("Display order for this link"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Geo Place Link")
         verbose_name_plural = _("Geo Place Links")
         ordering = ["order", "id"]
@@ -251,7 +251,7 @@ class GeoPlaceCategory(TimeStampedModel):
         help_text=_("Category-specific overflow data (JSON)"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         db_table = "geometries_geoplace_category"
         verbose_name = _("Geo Place Category Association")
         verbose_name_plural = _("Geo Place Category Associations")

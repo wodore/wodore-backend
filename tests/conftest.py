@@ -41,7 +41,7 @@ def _reset_pk_sequences() -> None:
             if not seq:
                 continue
             cursor.execute(
-                f"SELECT setval(%s, COALESCE((SELECT MAX({qn(field.column)})"
+                f"SELECT setval(%s, COALESCE((SELECT MAX({qn(field.column)})"  # type: ignore  # argument typing drift vs stubs
                 f" FROM {qn(table)}), 0) + 1, false)",
                 [seq],
             )

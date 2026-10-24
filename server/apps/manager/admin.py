@@ -4,8 +4,8 @@ from jsonsuit.widgets import JSONSuit, ReadonlyJSONSuit
 # Register your models here.
 from django.contrib import admin
 from django.contrib.auth.admin import (  # shadowed below (Django admin idiom)
-    GroupAdmin,  # pyright: ignore[reportAssignmentType]
-    UserAdmin,  # pyright: ignore[reportAssignmentType]
+    GroupAdmin,
+    UserAdmin,
 )
 from django.contrib.auth.models import Group
 from django.contrib.gis.admin import GISModelAdmin
@@ -92,7 +92,7 @@ for model, admin_model in new_registry_items.items():
 
 
 @admin.register(AccountsUser)
-class UserAdmin(UserAdmin, ModelAdmin):  # pyright: ignore[reportGeneralTypeIssues]  # Django admin shadowing idiom
+class UserAdmin(UserAdmin, ModelAdmin):
     form = UserChangeForm
     add_form = UserCreationForm
     change_password_form = AdminPasswordChangeForm
@@ -135,7 +135,7 @@ admin.site.unregister(Group)
 
 
 @admin.register(Group)
-class GroupAdmin(GroupAdmin, ModelAdmin):  # pyright: ignore[reportGeneralTypeIssues]  # Django admin shadowing idiom
+class GroupAdmin(GroupAdmin, ModelAdmin):
     pass
 
 
@@ -157,7 +157,7 @@ from unfold.widgets import (
 for _model in [Schedule, Success, Failure, OrmQ]:
     try:
         admin.site.unregister(_model)
-    except admin.sites.NotRegistered:  # pyright: ignore[reportAttributeAccessIssue]  # runtime-valid submodule attr
+    except admin.sites.NotRegistered:  # type: ignore  # dynamic attr: plugin-less inference gap
         pass
 
 
