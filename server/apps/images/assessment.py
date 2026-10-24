@@ -239,7 +239,7 @@ def assess_place_pins(place, *, force: bool = False) -> dict:
         hashed,
         key=lambda img: (
             -(img.quality_score or 0),
-            -(img.image_meta or {}).get("width") or 0,
+            -((img.image_meta or {}).get("width") or 0),
         ),
     )
     primaries = []
