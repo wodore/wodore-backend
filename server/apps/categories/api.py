@@ -99,7 +99,7 @@ def _load_category_tree(is_active: bool):
         "symbol_mono",
     )
     if is_active:
-        qs = qs.active()  # type: ignore  # custom manager/queryset inference gap
+        qs = qs.active()
 
     nodes = list(qs)
     children: dict[int | None, list[Category]] = {}

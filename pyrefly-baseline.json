@@ -1,6 +1,13 @@
 {
   "errors": [
     {
+      "column": 14,
+      "path": "server/apps/categories/api.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `QuerySet` has no attribute `active`",
+      "severity": "error"
+    },
+    {
       "column": 48,
       "path": "server/apps/geometries/schemas/_images.py",
       "name": "no-matching-overload",
