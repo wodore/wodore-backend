@@ -379,6 +379,22 @@ method-assign = true
 
 
 [[tool.pyrefly.sub-config]]
+# Strict-typing ratchet: meta_image_field app — annotation-completeness rules
+# the default preset does not enforce; only this subtree is affected.
+matches = "server/apps/meta_image_field/**"
+
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = true
+implicit-any-type-argument = true
+implicit-any-lambda = true
+implicit-any-empty-container = true
+implicit-any-attribute = true
+missing-override-decorator = true
+bad-override = true
+method-assign = true
+
+
+[[tool.pyrefly.sub-config]]
 # Strict-typing ratchet: accounts app opts into stricter implicit-any/override rules.
 # Other apps follow the same pattern as they are cleaned up ("ratchet" per app).
 matches = "server/apps/accounts/**"
