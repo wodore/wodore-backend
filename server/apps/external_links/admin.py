@@ -4,6 +4,8 @@ from typing import ClassVar
 
 from django.conf import settings
 from django.contrib import admin, messages
+from django.db.models import QuerySet
+from django.http import HttpRequest
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
@@ -133,7 +135,7 @@ class ExternalLinkAdmin(ModelAdmin):
         return mark_safe(f"<code>{obj.identifier}</code>")
 
     @display(description=_("Link"), header=True)
-    def label_and_url(self, obj: ExternalLink) -> tuple:
+    def label_and_url(self, obj: ExternalLink) -> tuple[str, str]:
         """Display label and clickable URL together."""
         url = obj.url_i18n
         icon = '<span class="material-symbols-outlined" style="font-size:x-small">open_in_new</span>'
@@ -185,7 +187,9 @@ class ExternalLinkAdmin(ModelAdmin):
             )
 
     @admin.action(description=_("Check health of selected links"))
-    def check_health_selected(self, request, queryset):
+    def check_health_selected(
+        self, request: HttpRequest, queryset: QuerySet[ExternalLink]
+    ) -> None:
         """Admin action to check health of selected external links."""
         checked = 0
         success = 0

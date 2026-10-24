@@ -1,8 +1,9 @@
 from datetime import timedelta
+from typing import Any, override
 
 from django_admin_runner import register_command
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandParser
 from django.db import models
 from django.utils import timezone
 
@@ -13,7 +14,8 @@ from server.apps.external_links.models import ExternalLink
 class Command(BaseCommand):
     help = "Check health of external links"
 
-    def add_arguments(self, parser):
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--days",
             type=int,
@@ -37,7 +39,8 @@ class Command(BaseCommand):
             help="Limit number of links to check",
         )
 
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         days = options["days"]
         check_all = options["all"]
         failed_only = options["failed_only"]
