@@ -16,6 +16,7 @@ from ``auth_user``, primary keys preserved) and converted to UUID keys in
 """
 
 import uuid
+from typing import ClassVar
 
 from django.contrib.auth.models import AbstractUser
 from django.db import models
@@ -32,7 +33,7 @@ class User(AbstractUser):
     EMAIL_FIELD = "email"
     REQUIRED_FIELDS: list[str] = []  # type: ignore[assignment]  # Django idiom
 
-    objects = UserManager()
+    objects: ClassVar[UserManager] = UserManager()  # type: ignore  # @override cannot decorate class-body assignments; Django manager idiom
 
     def __str__(self) -> str:
         return self.email

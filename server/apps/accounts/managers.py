@@ -1,12 +1,19 @@
 """User manager for the email-identity user model."""
 
+from typing import TYPE_CHECKING, Any
+
 from django.contrib.auth.models import UserManager as DjangoUserManager
 
+if TYPE_CHECKING:
+    from .models import User
 
-class UserManager(DjangoUserManager):
+
+class UserManager(DjangoUserManager["User"]):
     use_in_migrations = True
 
-    def _create_user(self, email: str, password: str | None, **extra_fields):
+    def _create_user(
+        self, email: str, password: str | None, **extra_fields: Any
+    ) -> "User":
         if not email:
             raise ValueError("An email address is required")
         email = self.normalize_email(email)
