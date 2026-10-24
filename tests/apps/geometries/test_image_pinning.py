@@ -10,6 +10,7 @@ import pytest
 from tests.helpers import PrefixedClient as TestClient
 
 from django.contrib.gis.geos import Point
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from server.apps.geometries import image_response_cache as irc
@@ -17,6 +18,7 @@ from server.apps.geometries.pinning import pin_place_images, place_has_visible_p
 from server.apps.geometries.providers.base import ImageResult
 from server.apps.huts.models import Hut, HutImageAssociation
 from server.apps.images.models import Image
+from server.apps.licenses.models import License
 
 pytestmark = pytest.mark.django_db
 
@@ -68,6 +70,84 @@ def hut(seed_data):
     hut.images_pinned_at = None
     hut.save(update_fields=["images_pinned_at"])
     return hut
+
+
+SOURCE_IDENT_CONSTRAINT = "images_image_source_ident_unique"
+
+
+class TestDuplicateSourceIdents:
+    """Legacy twin Image rows must not crash pin syncs.
+
+    ``source_ident`` had no unique constraint (until images migration 0033),
+    so concurrent syncs — request write-through vs. django-q2 refresh vs. the
+    ``geoimages_pin`` sweep — could mint twins, and every later sync then
+    raised ``MultipleObjectsReturned`` in ``get_or_create`` ("get() returned
+    more than one Image -- it returned 2!", Sentry 155850205, hut cedullo).
+    The runtime resolves the canonical (oldest) row (covered end-to-end in
+    tests/apps/images/test_source_ident_dedupe_migration.py against the
+    pre-0033 schema); the partial unique constraint blocks new twins.
+    """
+
+    @pytest.fixture
+    def license_obj(self):
+        return License.objects.get_or_create(
+            slug="cc-by-sa-4-0", defaults={"no_publication": False}
+        )[0]
+
+    def test_constraint_blocks_new_twins(self, license_obj):
+        Image.objects.create(
+            source_ident="wikicommons:File:Dupe.jpg", license=license_obj
+        )
+        with pytest.raises(IntegrityError), transaction.atomic():
+            Image.objects.create(
+                source_ident="wikicommons:File:Dupe.jpg", license=license_obj
+            )
+
+    def test_identless_uploads_stay_unconstrained(self, license_obj):
+        """Uploads without a source ident legitimately repeat ""/NULL."""
+        Image.objects.create(source_ident="", license=license_obj)
+        Image.objects.create(source_ident="", license=license_obj)
+        Image.objects.create(source_ident=None, license=license_obj)
+
+    def test_lost_create_race_falls_back_to_existing_row(self, hut, monkeypatch):
+        """Two syncs race, both lookups miss, both INSERT — the loser's
+        IntegrityError must collapse onto the winner's row."""
+        from server.apps.geometries import pinning
+
+        pin_place_images(hut, [_result(score=80)])
+        winner = Image.objects.get(source_ident="wikicommons:File:Test.jpg")
+
+        lookups = []
+
+        def racing_canonical(ident):
+            lookups.append(ident)
+            if len(lookups) == 1:
+                return None  # mid-race: the winner's INSERT isn't visible yet
+            return (
+                pinning.Image.objects.filter(source_ident=ident)
+                .order_by("created", "id")
+                .first()
+            )
+
+        def losing_create(**kwargs):
+            raise IntegrityError(
+                "duplicate key value violates unique constraint "
+                f"{SOURCE_IDENT_CONSTRAINT}"
+            )
+
+        monkeypatch.setattr(pinning, "_canonical_pin", racing_canonical)
+        monkeypatch.setattr(Image.objects, "create", losing_create)
+
+        image, created = pinning._get_or_create_pin(
+            "wikicommons:File:Test.jpg",
+            _result(score=99),
+            pinning._org_for("wikicommons"),
+            pinning._license_for("cc-by-sa-4-0"),
+            timezone.now(),
+        )
+
+        assert created is False
+        assert image.pk == winner.pk  # re-resolved onto the race's winner
 
 
 class TestPinService:
