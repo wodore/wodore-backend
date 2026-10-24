@@ -20,18 +20,27 @@
 
 ## 2. Brand replacement
 
-- [ ] 2.1 Data migration: for every `AmenityDetail` with `brand`,
+- [x] 2.1 Data migration: for every `AmenityDetail` with `brand`,
       get_or_create Party (slug from category slug, name from category
-      i18n) + association role `role.brand`; idempotent
-- [ ] 2.2 Remove `AmenityDetail.brand` FK (+ `amenity_brands`
+      i18n) + association role `role.brand`; idempotent (0053: convert
+      + FK removal in one migration, reverse is column-restore noop)
+- [x] 2.2 Remove `AmenityDetail.brand` FK (+ `amenity_brands`
       related_name), the admin autocomplete scoping, and `BrandInput`;
       replace with `PartyInput` (slug, name, role identifier) in the
       input schema; update `AmenityDetail.update_or_create` to write
-      the association instead of the FK
-- [ ] 2.3 OSM import: `brand` tag → Party(role `role.brand`,
+      the association instead of the FK (shared
+      `_write_party_associations` helper also drives the GeoPlace-level
+      create/update schema paths; dedup matches brand-party
+      associations instead of the FK; the brand category LRU cache and
+      `_get_brand_category_by_slug` are gone)
+- [x] 2.3 OSM import: `brand` tag → Party(role `role.brand`,
       get_or_create by slug); `operator` tag → Party(role
       `role.operator`, review status `review`, single values only);
-      drop `_get_or_create_brand_category`; import tests
+      drop `_get_or_create_brand_category`; import tests (both precache
+      paths pre-mint parties — operators first, into review;
+      `_get_or_create_brand_organization` brand→Organization minting
+      also removed; write-path tests pin the schema contract the
+      import drives)
 
 ## 3. Owner merge & hut import
 

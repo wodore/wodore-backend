@@ -9,7 +9,7 @@ from ._base_detail import GeoPlaceDetailBase
 
 if TYPE_CHECKING:
     from server.apps.geometries.models import GeoPlace
-    from server.apps.geometries.schemas import GeoPlaceAmenityInput
+    from server.apps.geometries.schemas import GeoPlaceAmenityInput, PartyInput
     from server.core.utils import UpdateCreateStatus
 
 
@@ -47,7 +47,6 @@ class AmenityDetail(GeoPlaceDetailBase):
         "opening_months",
         "opening_hours",
         "phones",
-        "brand",
     ]
 
     # OneToOne relationship to GeoPlace
@@ -100,17 +99,6 @@ class AmenityDetail(GeoPlaceDetailBase):
         help_text=_(
             "List of phone numbers: [{'number': '+41 123 456 78 90', 'label': 'Main'}]"
         ),
-    )
-
-    # Brand information
-    brand = models.ForeignKey(
-        "categories.Category",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="amenity_brands",
-        verbose_name=_("Brand"),
-        help_text=_("Brand category (e.g., Volg, Migros, Coop)"),
     )
 
     class Meta:
@@ -193,6 +181,42 @@ class AmenityDetail(GeoPlaceDetailBase):
             self.save(update_fields=["opening_months"])
 
     @classmethod
+    def _write_party_associations(
+        cls, place: GeoPlace, parties: list[PartyInput]
+    ) -> bool:
+        """Write schema party associations onto the place (idempotent).
+
+        Mirrors ``GeoPlaceParty.clean()`` validation: an unknown or
+        non-``role.*`` identifier raises ``ValueError`` instead of being
+        silently dropped. Returns True when a new association was
+        created. Shared by ``update_or_create`` and the GeoPlace-level
+        schema create/update paths.
+        """
+        from server.apps.categories.models import Category
+        from server.apps.parties.models import Party
+
+        from . import GeoPlaceParty
+
+        created_any = False
+        for entry in parties:
+            role = Category.objects.filter(identifier=entry.role).first()
+            if role is None or role.parent_id is None or role.parent.slug != "role":
+                raise ValueError(f"Invalid party role identifier: {entry.role}")
+            party_defaults: dict[str, object] = {
+                "name": entry.name or entry.slug.replace("_", " ").title(),
+            }
+            if entry.review_status:
+                party_defaults["review_status"] = entry.review_status
+            party, _created = Party.objects.get_or_create(
+                slug=entry.slug, defaults=party_defaults
+            )
+            _assoc, assoc_created = GeoPlaceParty.objects.get_or_create(
+                geo_place=place, party=party, role=role
+            )
+            created_any = created_any or assoc_created
+        return created_any
+
+    @classmethod
     def update_or_create(
         cls,
         place: GeoPlace,
@@ -224,7 +248,6 @@ class AmenityDetail(GeoPlaceDetailBase):
                 protected_fields={"phones"},
             )
         """
-        from server.apps.categories.models import Category
         from server.core import UpdateCreateStatus
 
         # Import schema here to avoid circular import during model loading
@@ -277,23 +300,19 @@ class AmenityDetail(GeoPlaceDetailBase):
                 update_fields.append("phones")
                 updated = True
 
-        # Update brand
-        if "brand" not in protected and schema.brand is not None:
-            try:
-                brand = Category.objects.get(slug=schema.brand.slug)
-                if detail.brand != brand:
-                    detail.brand = brand
-                    update_fields.append("brand")
-                    updated = True
-            except Category.DoesNotExist:
-                pass
+        # Update party associations (place-level; replaces the former
+        # brand FK — parties attach to the place, not the detail row)
+        if "parties" not in protected and schema.parties:
+            if cls._write_party_associations(place, schema.parties):
+                updated = True
 
         # Save the detail (without tracking modifications - this is an import)
         if is_new:
             detail.save(track_modifications=False)
             return detail, UpdateCreateStatus.created
         elif updated:
-            detail.save(update_fields=update_fields, track_modifications=False)
+            if update_fields:
+                detail.save(update_fields=update_fields, track_modifications=False)
             return detail, UpdateCreateStatus.updated
         else:
             return detail, UpdateCreateStatus.no_change

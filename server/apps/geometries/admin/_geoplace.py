@@ -495,14 +495,13 @@ class AmenityDetailAdmin(ModelAdmin):
     Admin interface for AmenityDetail model.
 
     Provides management of amenity-specific details like opening hours,
-    operating status, and brand information.
+    operating status, and contact information.
     """
 
     list_display = (
         "place_name",
         "place_categories",
         "operating_status",
-        "brand",
         "has_opening_hours",
         "has_phones",
         "created",
@@ -513,8 +512,6 @@ class AmenityDetailAdmin(ModelAdmin):
 
     list_filter = (
         "operating_status",
-        "brand__parent",
-        "brand",
         "geo_place__categories__parent",
         "geo_place__categories",
         "geo_place__country_code",
@@ -528,28 +525,7 @@ class AmenityDetailAdmin(ModelAdmin):
         "geo_place__categories__slug",
     )
 
-    autocomplete_fields = ("geo_place", "brand")
-
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        """Filter FK choices based on field type."""
-        if db_field.name == "brand":
-            # Only show categories that are children of 'brands' parent
-            # or adjust this filter based on your category structure
-            from server.apps.categories.models import Category
-
-            # Try to get brands parent category
-            brands_parent = Category.objects.filter(identifier="root.brand").first()
-            if brands_parent:
-                kwargs["queryset"] = Category.objects.filter(
-                    parent=brands_parent
-                ).order_by("name")
-            else:
-                # Fallback: show all categories (or implement different logic)
-                kwargs["queryset"] = Category.objects.filter(
-                    parent__isnull=False
-                ).order_by("parent__name", "name")
-
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    autocomplete_fields = ("geo_place",)
 
     readonly_fields = (
         "created",
@@ -570,14 +546,6 @@ class AmenityDetailAdmin(ModelAdmin):
             {
                 "fields": [
                     "operating_status",
-                ],
-            },
-        ),
-        (
-            _("Brand"),
-            {
-                "fields": [
-                    "brand",
                 ],
             },
         ),

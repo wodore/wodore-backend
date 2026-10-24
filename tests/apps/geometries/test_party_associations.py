@@ -1,13 +1,15 @@
 """Unit tests for GeoPlaceParty associations and the role vocabulary.
 
-OpenSpec change: ``geoplace-parties`` (tasks 1.1 and 1.3) — the
-vocabulary is seeded by migration ``0052`` (runs on the test database),
-so these tests pin the seed and the association contract: role-subtree
-validation, uniqueness per ``(geo_place, party, role)``, separate rows
-for multiple roles, and RESTRICT on party and role FKs.
+OpenSpec change: ``geoplace-parties`` (tasks 1.1, 1.3 and the 2.2 write
+path) — the vocabulary is seeded by migration ``0052`` (runs on the
+test database), so these tests pin the seed, the association contract
+(role-subtree validation, uniqueness per ``(geo_place, party, role)``,
+separate rows for multiple roles, RESTRICT on party and role FKs), and
+the schema write path that replaced the ``AmenityDetail.brand`` FK.
 """
 
 import pytest
+from hut_services import LocationSchema
 
 from tests.factories.geometries import GeoPlaceFactory
 from tests.factories.parties import PartyFactory
@@ -17,7 +19,10 @@ from django.db import IntegrityError, transaction
 from django.db.models import RestrictedError
 
 from server.apps.categories.models import Category
-from server.apps.geometries.models import GeoPlaceParty
+from server.apps.geometries.models import AmenityDetail, GeoPlaceParty
+from server.apps.geometries.schemas import GeoPlaceAmenityInput, PartyInput
+from server.apps.parties.models import Party
+from server.core import UpdateCreateStatus
 
 pytestmark = pytest.mark.django_db
 
@@ -118,3 +123,92 @@ class TestGeoPlaceParty:
 
         with pytest.raises(RestrictedError):
             association.role.delete()
+
+
+class TestAmenityWritePath:
+    """AmenityDetail.update_or_create writes party associations (2.2)."""
+
+    @staticmethod
+    def _schema(*entries: dict) -> GeoPlaceAmenityInput:
+        return GeoPlaceAmenityInput(
+            name="Test Place",
+            location=LocationSchema(lon=7.7343, lat=46.0234),
+            country_code="CH",
+            place_type_identifiers=[],
+            parties=[PartyInput(**entry) for entry in entries],
+        )
+
+    def test_parties_write_creates_party_and_association(self):
+        place = GeoPlaceFactory()
+
+        _detail, status = AmenityDetail.update_or_create(
+            place=place,
+            schema=self._schema({"slug": "volg", "name": "Volg", "role": "role.brand"}),
+        )
+
+        assert status == UpdateCreateStatus.created
+        association = place.party_associations.get()  # type: ignore  # reverse FK: plugin-less inference gap
+        assert association.role.identifier == "role.brand"
+        assert association.party.slug == "volg"
+        assert association.party.name == "Volg"
+
+    def test_parties_write_idempotent(self):
+        place = GeoPlaceFactory()
+        schema = self._schema({"slug": "volg", "name": "Volg", "role": "role.brand"})
+
+        AmenityDetail.update_or_create(place=place, schema=schema)
+        _detail, status = AmenityDetail.update_or_create(place=place, schema=schema)
+
+        assert status == UpdateCreateStatus.no_change
+        assert place.party_associations.count() == 1  # type: ignore  # reverse FK
+
+    def test_operator_party_mints_into_review(self):
+        place = GeoPlaceFactory()
+
+        AmenityDetail.update_or_create(
+            place=place,
+            schema=self._schema(
+                {
+                    "slug": "sac_bern",
+                    "name": "SAC Bern",
+                    "role": "role.operator",
+                    "review_status": "review",
+                }
+            ),
+        )
+
+        party = Party.objects.get(slug="sac_bern")
+        assert party.review_status == "review"
+
+    def test_unknown_role_identifier_rejected(self):
+        place = GeoPlaceFactory()
+
+        with pytest.raises(ValueError):
+            AmenityDetail.update_or_create(
+                place=place,
+                schema=self._schema(
+                    {"slug": "volg", "name": "Volg", "role": "role.nonexistent"}
+                ),
+            )
+
+    def test_role_parent_identifier_rejected(self):
+        place = GeoPlaceFactory()
+
+        with pytest.raises(ValueError):
+            AmenityDetail.update_or_create(
+                place=place,
+                schema=self._schema(
+                    {"slug": "volg", "name": "Volg", "role": "root.role"}
+                ),
+            )
+
+    def test_protected_parties_skipped(self):
+        place = GeoPlaceFactory()
+
+        AmenityDetail.update_or_create(
+            place=place,
+            schema=self._schema({"slug": "volg", "name": "Volg", "role": "role.brand"}),
+            protected_fields={"parties"},
+        )
+
+        assert place.party_associations.count() == 0  # type: ignore  # reverse FK

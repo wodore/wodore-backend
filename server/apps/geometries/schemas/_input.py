@@ -57,11 +57,13 @@ class DeletePolicyEnum(str, Enum):
 
 
 # Helper schemas
-class BrandInput(BaseModel):
-    """Brand information."""
+class PartyInput(BaseModel):
+    """Role-classified party association input."""
 
-    slug: str  # Category slug for the brand
-    name: str | None = None  # Optional brand name if not in category
+    slug: str  # Party slug
+    name: str | None = None  # Optional party name if the party does not exist yet
+    role: str  # Role category identifier (e.g., "role.brand", "role.operator")
+    review_status: str | None = None  # Review status for newly minted parties
 
 
 class SourceInput(BaseModel):
@@ -132,7 +134,7 @@ class GeoPlaceBaseInput(BaseModel):
     opening_months: dict[str, str] = Field(default_factory=dict)
     opening_hours: dict[str, Any] = Field(default_factory=dict)
     phones: list[PhoneSchema] = Field(default_factory=list)
-    brand: BrandInput | None = None
+    parties: list[PartyInput] = Field(default_factory=list)
 
     # Admin-specific fields (flattened)
     admin_level: int | None = None
