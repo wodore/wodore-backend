@@ -30,7 +30,7 @@ def _count(obj, days_ago: int, n: int) -> None:
 
 @pytest.fixture
 def superuser(db):
-    user = get_user_model().objects.create_superuser(  # pyright: ignore[reportAttributeAccessIssue]  # custom manager
+    user = get_user_model().objects.create_superuser(  # pyright: ignore[reportAttributeAccessIssue]  # custom manager  # type: ignore  # custom manager/queryset inference gap
         email="visits-admin@example.com", password="pw"
     )
     return user

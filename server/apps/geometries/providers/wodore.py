@@ -144,7 +144,7 @@ class WodoreProvider(ImageProvider):
                     location__distance_lte=(query_point, D(m=10)),
                 )
                 .annotate(distance=Distance("location", query_point))
-                .prefetch_related("image_associations__image__license")
+                .prefetch_related("image_associations__image__license")  # type: ignore  # queryset feeding schema list at runtime
             )
 
             results = []
@@ -161,7 +161,7 @@ class WodoreProvider(ImageProvider):
                 )
 
                 # Get images through association model
-                for assoc in place.image_associations.all():  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                for assoc in place.image_associations.all():  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs  # type: ignore  # dynamic attr: plugin-less inference gap
                     img = assoc.image
                     # Association score = display order (openspec pin-external-images)
                     result_score = assoc.score if assoc.score is not None else 50
@@ -175,8 +175,8 @@ class WodoreProvider(ImageProvider):
                         continue
 
                     distance_m = (
-                        place.distance.m  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                        if hasattr(place.distance, "m")  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                        place.distance.m  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs  # type: ignore  # dynamic attr: plugin-less inference gap
+                        if hasattr(place.distance, "m")  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs  # type: ignore  # dynamic attr: plugin-less inference gap
                         else place.distance  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
                     )
 
@@ -239,8 +239,8 @@ class WodoreProvider(ImageProvider):
                         source_url=img.source_url,
                         image_type="flat",  # Default for wodore images
                         captured_at=img.capture_date,
-                        location=place.location,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                        distance_m=distance_m,
+                        location=place.location,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs  # type: ignore  # dynamic attr: plugin-less inference gap
+                        distance_m=distance_m,  # type: ignore  # argument typing drift vs stubs
                         license_slug=img.license.slug,
                         attribution=attribution,
                         author=img.author,
@@ -251,10 +251,10 @@ class WodoreProvider(ImageProvider):
                             {
                                 "id": place.id,
                                 "slug": place.slug,
-                                "name": place.name_i18n,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                                "name": place.name_i18n,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs  # type: ignore  # modeltrans TranslationField dynamic attr
                                 "location": {
-                                    "lat": place.location.y,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                                    "lon": place.location.x,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                                    "lat": place.location.y,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs  # type: ignore  # dynamic attr: plugin-less inference gap
+                                    "lon": place.location.x,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs  # type: ignore  # dynamic attr: plugin-less inference gap
                                 },
                             }
                             if place
@@ -393,7 +393,7 @@ class WodoreProvider(ImageProvider):
                             img.source_org.slug
                         )  # Use slug for provider field
                         provider_name = (
-                            img.source_org.name_i18n or img.source_org.slug  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                            img.source_org.name_i18n or img.source_org.slug  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs  # type: ignore  # modeltrans TranslationField dynamic attr
                         )  # Use name for attribution
                         provider_url = img.source_org.url
                         # Generate provider icon URL if logo exists

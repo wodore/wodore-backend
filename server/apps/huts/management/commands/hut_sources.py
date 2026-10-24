@@ -45,7 +45,7 @@ def add_hut_source_db(  # type: ignore[no-any-unimported]
         no_location = hut.location is None
         shut = HutSource(
             source_id=hut.source_id,
-            location=None if no_location else dbPoint(hut.location.lon_lat),
+            location=None if no_location else dbPoint(hut.location.lon_lat),  # type: ignore  # dynamic attr: plugin-less inference gap
             organization=org,
             name=hut.name,
             source_data=hut.source_data.model_dump(by_alias=True, mode="json")
@@ -160,9 +160,9 @@ def add_hutsources_function(
 @register_command(group="Huts")
 class Command(CRUDCommand[HutSource]):
     # help = ""
-    model = HutSource  # pyright: ignore[reportAssignmentType] — CRUDCommand convention: class assigned to `model`
+    model = HutSource  # pyright: ignore[reportAssignmentType] — CRUDCommand convention: class assigned to `model`  # type: ignore  # CRUDCommand model attr typing drift
     model_names = "hutsources"
-    add_function = add_hutsources_function  # pyright: ignore[reportAssignmentType] — see `model`
+    add_function = add_hutsources_function  # pyright: ignore[reportAssignmentType] — see `model`  # type: ignore  # CRUDCommand handler typing drift
     use_limit_arg = True
     use_offset_arg = True
     # use_update_arg = True

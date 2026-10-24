@@ -160,10 +160,10 @@ class ExternalLinkAdmin(ModelAdmin):
         if obj.source.logo:
             return mark_safe(
                 f'<img class="inline" src="{settings.MEDIA_URL}{obj.source.logo}" '
-                f'width="24px" alt="{obj.source.name_i18n}" title="{obj.source.name_i18n}"/>'  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation
+                f'width="24px" alt="{obj.source.name_i18n}" title="{obj.source.name_i18n}"/>'  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation  # type: ignore  # modeltrans TranslationField dynamic attr
             )
 
-        return obj.source.name_i18n  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation
+        return obj.source.name_i18n  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation  # type: ignore  # modeltrans TranslationField dynamic attr
 
     @display(description=_("Health"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def health_status_display(self, obj: ExternalLink) -> str:

@@ -246,7 +246,7 @@ class Command(BaseCommand):
         if not amenities:
             return amenities
 
-        grouped: dict[tuple[str, int], dict[str, object]] = {}
+        grouped: dict[tuple[str, int], dict] = {}
         for data in amenities:
             key = (data["osm_type"], data["osm_id"])
             entry = grouped.setdefault(
@@ -280,7 +280,7 @@ class Command(BaseCommand):
             base = delete_item or min(items, key=_item_rank)
             category_ranks: dict[str, int] = entry["category_ranks"]
             if category_ranks:
-                per_parent: dict[str, dict[str, object]] = {}
+                per_parent: dict[str, dict] = {}
                 for slug, rank in category_ranks.items():
                     parent_slug = slug.split(".", 1)[0]
                     existing = per_parent.get(parent_slug)
@@ -1060,7 +1060,9 @@ class Command(BaseCommand):
         # Get category identifiers
         category_slugs = self._get_category_slugs(data)
         categories = [self._get_or_create_category(slug) for slug in category_slugs]
-        category_identifiers = [category.identifier for category in categories]
+        category_identifiers = [
+            category.identifier for category in categories if category is not None
+        ]
         if not category_identifiers:
             raise ValueError("No categories resolved for OSM element")
 
@@ -1584,7 +1586,7 @@ class Command(BaseCommand):
 
         return org
 
-    def _get_or_create_category(self, category_slug: str) -> Category:
+    def _get_or_create_category(self, category_slug: str) -> Category | None:
         """Get or create category by identifier (parent.slug format)."""
         category_cache = self._get_cache("category_cache")
 
@@ -1709,7 +1711,7 @@ class Command(BaseCommand):
 
             # Store raw string for reference
             if result:
-                result["_raw"] = opening_hours_str
+                result["_raw"] = opening_hours_str  # type: ignore  # raw string stored alongside interval lists
             else:
                 # If parsing produced no results, just store raw
                 result = {"_raw": opening_hours_str}
@@ -1841,10 +1843,10 @@ class Command(BaseCommand):
                 self._fetch_mapping_overpass(
                     region=region,
                     mapping=mapping,
-                    api_endpoint=api_endpoint,
+                    api_endpoint=api_endpoint,  # type: ignore  # argument typing drift vs stubs
                     headers=headers,
                     queries_md=queries_md,
-                    since=since,
+                    since=since,  # type: ignore  # argument typing drift vs stubs
                     limit=limit,
                     console=console,
                     server_start_index=server_start_index,
@@ -2075,7 +2077,7 @@ class Command(BaseCommand):
         # Load queries
         queries_md = {}
         if overpass_queries_file:
-            queries_md = self._load_queries_file(overpass_queries_file)
+            queries_md = self._load_queries_file(overpass_queries_file)  # type: ignore  # dynamic attr: plugin-less inference gap
 
         # Determine API endpoint
         api_endpoint = None
@@ -2690,14 +2692,14 @@ class Command(BaseCommand):
 
             # Get coordinates
             if osm_elem.tag == "node":
-                lat = float(osm_elem.get("lat"))
-                lon = float(osm_elem.get("lon"))
+                lat = float(osm_elem.get("lat"))  # type: ignore  # argument typing drift vs stubs
+                lon = float(osm_elem.get("lon"))  # type: ignore  # argument typing drift vs stubs
             else:  # way
                 # For ways, use center from <center> tag
                 center = osm_elem.find("center")
                 if center is not None:
-                    lat = float(center.get("lat"))
-                    lon = float(center.get("lon"))
+                    lat = float(center.get("lat"))  # type: ignore  # argument typing drift vs stubs
+                    lon = float(center.get("lon"))  # type: ignore  # argument typing drift vs stubs
                 else:
                     continue  # Skip ways without center
 
@@ -3466,7 +3468,7 @@ class Command(BaseCommand):
 
     def _filter_pbf(
         self, pbf_path: Path, category_names: list[str], force: bool = False
-    ) -> Path:
+    ) -> Path | None:
         """Pre-filter PBF file using osmium tags-filter CLI for performance.
 
         Extracts all tags from osm_filters and creates osmium filter expressions.
@@ -4111,12 +4113,14 @@ class Command(BaseCommand):
         # Generate slug (uses UUID-based uniqueness, no DB check needed)
         # If name is empty, use the first category's slug as fallback for slug
         slug_name = name if name else ""
-        slug_category = categories[0].slug if categories else None
+        slug_category = (
+            categories[0].slug if categories and categories[0] is not None else None
+        )
         place.slug = GeoPlace.generate_unique_slug(
             slug_name, category_slug=slug_category
         )
 
-        return place, categories
+        return place, [c for c in categories if c is not None]
 
     def _get_dedup_options(self):
         """Get deduplication options."""

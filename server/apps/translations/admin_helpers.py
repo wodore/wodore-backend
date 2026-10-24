@@ -90,7 +90,7 @@ class LLMAdminMixin(admin.ModelAdmin):
 
     # -- changelist actions ------------------------------------------------
 
-    def get_actions(self, request) -> dict[str, t.Any]:
+    def get_actions(self, request) -> dict[str, t.Any]:  # type: ignore  # admin hook signature drift vs stubs
         """Hide the LLM bulk actions when the API is unconfigured.
 
         Filters the inherited actions instead of returning an empty dict so

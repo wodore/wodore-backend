@@ -157,7 +157,7 @@ from unfold.widgets import (
 for _model in [Schedule, Success, Failure, OrmQ]:
     try:
         admin.site.unregister(_model)
-    except admin.sites.NotRegistered:  # pyright: ignore[reportAttributeAccessIssue]  # runtime-valid submodule attr
+    except admin.sites.NotRegistered:  # pyright: ignore[reportAttributeAccessIssue]  # runtime-valid submodule attr  # type: ignore  # django.contrib stub gap
         pass
 
 

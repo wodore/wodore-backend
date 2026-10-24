@@ -173,9 +173,9 @@ class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimp
         return self.update_user(user, claims)
 
     def update_user(self, user: User, claims: dict) -> User:
-        user.email = claims.get("email")
-        user.first_name = claims.get("given_name")
-        user.last_name = claims.get("family_name")
+        user.email = claims.get("email")  # type: ignore  # OIDC claims optional (upstream pattern)
+        user.first_name = claims.get("given_name")  # type: ignore  # OIDC claims optional (upstream pattern)
+        user.last_name = claims.get("family_name")  # type: ignore  # OIDC claims optional (upstream pattern)
         zitadel_groups = self.get_groups(claims)
         # default:
         user.is_superuser = False

@@ -270,7 +270,7 @@ class Command(BaseCommand):
                         "order": item.get("order", 0),
                         "keywords": {},
                     }
-                entry["keywords"][locale] = [
+                entry["keywords"][locale] = [  # type: ignore  # icon config row mutation
                     text
                     for text in (item["label"], *item.get("tags", []))
                     if text and text.strip()

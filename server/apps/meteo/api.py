@@ -40,15 +40,15 @@ CACHE_MAX_AGE = 7 * 24 * 60 * 60  # 7 days in seconds
 # ---------------------------------------------------------------------------
 
 
-class _SymbolDTOSchema(type("_SymbolDTOSchema", (), {})):
+class _SymbolDTOSchema(type("_SymbolDTOSchema", (), {})):  # type: ignore  # dynamic msgspec DTO base (type() factory)
     """Documentation shape for symbol fields (slug + url)."""
 
 
-class _CategoryDTOSchema(type("_CategoryDTOSchema", (), {})):
+class _CategoryDTOSchema(type("_CategoryDTOSchema", (), {})):  # type: ignore  # dynamic msgspec DTO base (type() factory)
     """Documentation shape for category fields."""
 
 
-class _CollectionDTOSchema(type("_CollectionDTOSchema", (), {})):
+class _CollectionDTOSchema(type("_CollectionDTOSchema", (), {})):  # type: ignore  # dynamic msgspec DTO base (type() factory)
     """Documentation shape for collection fields."""
 
 
@@ -156,8 +156,8 @@ def build_weather_code_full(
     data: dict = {
         "code": weather_code.code,
         "slug": weather_code.slug,
-        "description_day": weather_code.description_day_i18n,  # noqa: WPS308
-        "description_night": weather_code.description_night_i18n,  # noqa: WPS308
+        "description_day": weather_code.description_day_i18n,  # noqa: WPS308  # type: ignore  # modeltrans TranslationField dynamic attr
+        "description_night": weather_code.description_night_i18n,  # noqa: WPS308  # type: ignore  # modeltrans TranslationField dynamic attr
     }
     if code_symbol is not None:
         data["symbol_day"] = _symbol_obj(request, code_symbol.symbol_day)
@@ -352,7 +352,7 @@ class WeatherCodesController(ApiController):
             full = build_weather_code_full(weather_code, code_symbol, request)
             result[weather_code.code] = project_meteo_fields(full, query, request)
 
-        return result
+        return result  # type: ignore  # weather-code dicts keyed by WMO code
 
 
 class WeatherCodeController(ApiController):

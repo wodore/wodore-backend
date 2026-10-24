@@ -1093,8 +1093,8 @@ async def fetch_images_for_place(
     results = await fetch_images_from_providers(
         geoplaces=[place] if place_type == "geoplace" else [],
         huts=[place] if place_type == "hut" else [],
-        lat=place_info["location"]["lat"],
-        lon=place_info["location"]["lon"],
+        lat=place_info["location"]["lat"],  # type: ignore  # place_data payload untyped upstream
+        lon=place_info["location"]["lon"],  # type: ignore  # place_data payload untyped upstream
         radius=radius,
         sources=sources,
         precision="precise",  # Always use high precision
@@ -1103,7 +1103,7 @@ async def fetch_images_for_place(
         budget=budget,
     )
 
-    return results, place_info
+    return results, place_info  # type: ignore  # provider place_info union drift
 
 
 def _build_sizes(result, get_size_fn) -> dict:

@@ -139,7 +139,7 @@ def _current_aliases_config() -> dict:
 
 def test_check_silent_before_django_62():
     """Pre-6.2 (today) the vendored wiring is the intended state."""
-    assert UPSTREAM_FIXED_IN > (6, 1), (
+    assert UPSTREAM_FIXED_IN > (6, 1), (  # type: ignore  # literal tuple comparison in test
         "project is on Django 6.1.x — adjust this test with the removal"
     )
     errors = _validate(_current_aliases_config(), (6, 1, 5, "final", 0))

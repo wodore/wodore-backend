@@ -47,7 +47,7 @@ class HutSourceViewInline(unfold_admin.StackedInline):
     can_delete = False
     autocomplete_fields = ("organization",)  # ~680 orgs (OSM brands): no plain select
     # classes = ("collapse",)  # Commented out to keep tab expanded by default
-    formfield_overrides: ClassVar = {
+    formfield_overrides: ClassVar = {  # type: ignore  # inline formfield_overrides typing drift
         models.JSONField: {"widget": UnfoldReadonlyJSONSuit}
     }
 
@@ -124,7 +124,7 @@ class HutsSourceAdmin(ModelAdmin):
     def get_form(self, request, obj=None, change=False, **kwargs):
         form = super().get_form(request, obj, **kwargs)
         if obj is not None:
-            form.base_fields["previous_object"].queryset = (  # pyright: ignore[reportAttributeAccessIssue] — ModelChoiceField attr
+            form.base_fields["previous_object"].queryset = (  # pyright: ignore[reportAttributeAccessIssue] — ModelChoiceField attr  # type: ignore  # dynamic attr: plugin-less inference gap
                 # HutSource.objects.select_related("organization")
                 HutSource.objects.filter(
                     source_id=obj.source_id, version__lt=obj.version

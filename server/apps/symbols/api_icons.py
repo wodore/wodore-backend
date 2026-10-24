@@ -78,7 +78,7 @@ class _IconMeta(NamedTuple):
 class IconsQuery(
     LanguageQuery := __import__(
         "server.apps.translations.schema", fromlist=["LanguageQuery"]
-    ).LanguageQuery
+    ).LanguageQuery  # type: ignore  # lazy LanguageQuery base import
 ):
     """Query parameters of the icons endpoint."""
 
@@ -346,7 +346,7 @@ def _to_dto(icon: Icon, request: HttpRequest) -> IconDto:
         slug=icon.slug,
         pack=icon.pack.slug,
         unicode=icon.unicode or None,
-        category=category.parent.slug if category else None,
+        category=category.parent.slug if category else None,  # type: ignore  # dynamic attr: plugin-less inference gap
         subcategory=category.slug if category else None,
         lists=sorted(
             cl.slug  # pyright: ignore[reportAttributeAccessIssue]  # reverse M2M: django-stubs gap

@@ -122,7 +122,7 @@ class HutManager(MultilingualManager, BaseManager):  # pyright: ignore[reportInc
         }
 
         # Add the trigram similarity annotations
-        annotations.update(similarity_annotations)  # pyright: ignore[reportArgumentType, reportCallIssue]  # RawSQL values
+        annotations.update(similarity_annotations)  # pyright: ignore[reportArgumentType, reportCallIssue]  # RawSQL values  # type: ignore  # mapping.update stub overload
 
         # Annotate with search rank and individual similarity scores
         qs = qs.annotate(**annotations)

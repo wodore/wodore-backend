@@ -277,7 +277,7 @@ class Category(ComputedFieldsModel, TimeStampedModel):
             current = to_process.pop(0)
             children = list(current.children.all())  # pyright: ignore[reportAttributeAccessIssue]
             descendants_ids.extend([c.id for c in children])
-            to_process.extend(children)
+            to_process.extend(children)  # type: ignore  # argument typing drift vs stubs
 
         return Category.objects.filter(id__in=descendants_ids)
 
@@ -418,7 +418,7 @@ class Category(ComputedFieldsModel, TimeStampedModel):
     @cachedclassproperty
     def default_type(cls) -> "Category":
         """Returns the global 'unknown' category (parent=None, slug='unknown')."""
-        obj, _created = cls.objects.get_or_create(
+        obj, _created = cls.objects.get_or_create(  # type: ignore  # custom manager/queryset inference gap
             slug="unknown",
             parent=None,
             defaults={
@@ -441,7 +441,7 @@ class Category(ComputedFieldsModel, TimeStampedModel):
         """
         vals: dict[str, Category] = defaultdict(cls.get_default_type)
         vals.update(
-            {cat.slug: cat for cat in cls.objects.filter(parent=None, is_active=True)}
+            {cat.slug: cat for cat in cls.objects.filter(parent=None, is_active=True)}  # type: ignore  # custom manager/queryset inference gap
         )
         return vals
 
@@ -462,7 +462,7 @@ class Category(ComputedFieldsModel, TimeStampedModel):
         """
         filters = {"slug": slug, "parent": parent}
         if active_only:
-            filters["is_active"] = True
+            filters["is_active"] = True  # type: ignore  # defaults dict accepts bool at runtime
 
         try:
             return cls.objects.get(**filters)

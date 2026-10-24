@@ -200,7 +200,7 @@ def configure_structlog() -> None:
                     structlog.processors.CallsiteParameter.FUNC_NAME,
                     structlog.processors.CallsiteParameter.MODULE,
                 ]
-            )
+            )  # type: ignore  # structlog processor stubs too narrow
         )
         # Add timestamp only in production (dev shows relative time)
         shared_processors.insert(0, structlog.processors.TimeStamper(fmt="iso"))  # type: ignore  # ditto

@@ -243,7 +243,7 @@ class TestPinsEndpoint:
             ).score
             for f in response.json()["features"]
         ]
-        assert scores == sorted(scores, reverse=True)
+        assert scores == sorted(scores, reverse=True)  # type: ignore  # optional pks sorted in test
 
     def test_lazy_pins_on_first_visit(self, client, hut, fetch):
         assert not place_has_visible_pins(hut)

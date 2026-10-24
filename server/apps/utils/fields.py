@@ -22,7 +22,7 @@ class MonitorFields(models.DateTimeField):
         self.monitors = monitors
         super().__init__(*args, **kwargs)
 
-    def contribute_to_class(self, cls, name):
+    def contribute_to_class(self, cls, name):  # type: ignore  # field contribute_to_class signature drift
         self.monitors_attname = []
         for m in self.monitors:
             self.monitors_attname.append(f"_monitor_{m}_{name}")

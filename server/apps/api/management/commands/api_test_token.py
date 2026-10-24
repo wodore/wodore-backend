@@ -64,6 +64,8 @@ class Command(BaseCommand):
             )
             raise CommandError(1)
         token = tokens.issue_access_token(
-            user_obj, issuer, settings.LOCAL_AUTH_CLIENT_ID
+            user_obj,
+            issuer,
+            settings.LOCAL_AUTH_CLIENT_ID,  # type: ignore  # argument typing drift vs stubs
         )
         print(token)

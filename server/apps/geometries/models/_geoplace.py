@@ -1309,7 +1309,7 @@ class GeoPlace(TimeStampedModel):
         if schema.detail_type == DetailType.AMENITY and schema.operating_status:
             # Build amenity detail data from flattened schema
             try:
-                amenity_detail = place.amenity_detail  # pyright: ignore[reportAttributeAccessIssue]  # reverse relation, plugin-less
+                amenity_detail = place.amenity_detail  # pyright: ignore[reportAttributeAccessIssue]  # reverse relation, plugin-less  # type: ignore  # dynamic attr: plugin-less inference gap
                 is_new = False
             except AmenityDetail.DoesNotExist:
                 amenity_detail = AmenityDetail(geo_place=place)

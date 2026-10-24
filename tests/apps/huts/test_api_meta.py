@@ -265,7 +265,7 @@ class TestHutMetaOgSources:
                 return f"https://wodore.com{uri}"
 
         feature = _map_fallback_feature(
-            _Req(),
+            _Req(),  # type: ignore  # middleware attaches request attr at runtime
             slug=hut.slug,
             lat=46.5,
             lon=7.5,

@@ -28,7 +28,7 @@ class OrganizationAdmin(ModelAdmin):
     """Admin panel example for ``BlogPost`` model."""
 
     form = required_i18n_fields_form_factory("name", "fullname")
-    fieldsets = OrganizationAdminFieldsets
+    fieldsets = OrganizationAdminFieldsets  # type: ignore  # admin fieldsets/list_filter typing drift (lazy gettext)
     view_on_site = True  # pyright: ignore[reportIncompatibleVariableOverride, reportAssignmentType]  # Django admin idiom
     list_display = (
         "organization",

@@ -110,7 +110,7 @@ class TestContentHashedStorage:
         stats = canonicalize_symbol_storage(Symbol)
         assert stats["renamed"] >= 1
         symbol.refresh_from_db()
-        new_name = symbol.svg_file.name
+        new_name = symbol.svg_file.name  # type: ignore  # dynamic attr: plugin-less inference gap
         assert new_name != legacy_name
         assert default_storage.exists(new_name)
         assert not default_storage.exists(legacy_name)  # old file removed

@@ -35,7 +35,7 @@ def mapcompare(request: HttpRequest) -> HttpResponse:
         return render(request, "demos/mapcompare.html")
 
     # Non-DEBUG (staging): require superuser
-    if not request.user.is_authenticated or not request.user.is_superuser:
+    if not request.user.is_authenticated or not request.user.is_superuser:  # type: ignore  # dynamic attr: plugin-less inference gap
         return redirect_to_login(request.get_full_path())
 
     return render(request, "demos/mapcompare.html")

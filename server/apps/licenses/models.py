@@ -102,7 +102,7 @@ class License(TimeStampedModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.name_i18n} - {self.fullname_i18n}"  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation
+        return f"{self.name_i18n} - {self.fullname_i18n}"  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation  # type: ignore  # modeltrans TranslationField dynamic attr
 
     @classmethod
     @lru_cache(50)

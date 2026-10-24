@@ -150,7 +150,9 @@ class TestProtectedEndpoints:
 
         admin = get_user_model().objects.get(email="admin@local.test")
         forged = tokens.issue_access_token(
-            admin, "https://evil.example/oauth/local", "wodore-local-dev"
+            admin,
+            "https://evil.example/oauth/local",
+            "wodore-local-dev",  # type: ignore  # argument typing drift vs stubs
         )
         response = _get(
             AdminOnlyController,

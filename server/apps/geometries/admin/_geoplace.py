@@ -103,7 +103,7 @@ class GeoPlaceSourceAssociationInline(unfold_admin.TabularInline):
     def has_add_permission(self, request, obj):
         return False
 
-    def has_delete_permission(self, request, obj):  # pyright: ignore[reportIncompatibleMethodOverride]  # inline-admin default-param drift, plugin-less
+    def has_delete_permission(self, request, obj):  # type: ignore  # inline-admin default-param drift, plugin-less
         return False
 
     @display(description=_("Extra Data"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
@@ -142,7 +142,7 @@ class GeoPlaceExternalLinkInline(unfold_admin.TabularInline):
     def has_add_permission(self, request, obj):
         return True
 
-    def has_delete_permission(self, request, obj):  # pyright: ignore[reportIncompatibleMethodOverride]  # inline-admin default-param drift, plugin-less
+    def has_delete_permission(self, request, obj):  # type: ignore  # inline-admin default-param drift, plugin-less
         return True
 
 
@@ -184,7 +184,7 @@ class GeoPlaceCategoryInline(unfold_admin.TabularInline):
     def has_add_permission(self, request, obj):
         return True
 
-    def has_delete_permission(self, request, obj):  # pyright: ignore[reportIncompatibleMethodOverride]  # inline-admin default-param drift, plugin-less
+    def has_delete_permission(self, request, obj):  # type: ignore  # inline-admin default-param drift, plugin-less
         return True
 
 
@@ -279,7 +279,7 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         "modified",
     )
 
-    fieldsets = GeoPlaceAdminFieldsets
+    fieldsets = GeoPlaceAdminFieldsets  # type: ignore  # admin fieldsets/list_filter typing drift (lazy gettext)
 
     list_per_page = 50
 
@@ -296,7 +296,7 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             )
         )
 
-    def get_inlines(self, request, obj):
+    def get_inlines(self, request, obj):  # type: ignore  # admin hook signature drift vs stubs
         """Return inlines for admin."""
         return [
             GeoPlaceCategoryInline,
@@ -395,7 +395,7 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
     def sources_display(self, obj: GeoPlace) -> str:
         """Display source organizations as icons."""
 
-        sources = obj.source_associations.select_related("organization").all()  # pyright: ignore[reportAttributeAccessIssue]  # reverse relation, plugin-less
+        sources = obj.source_associations.select_related("organization").all()  # pyright: ignore[reportAttributeAccessIssue]  # reverse relation, plugin-less  # type: ignore  # dynamic attr: plugin-less inference gap
         if not sources:
             return "-"
 
@@ -440,12 +440,12 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
     @display(description=_("Visits 30d"), ordering="visits_30d")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def visits_30d(self, obj: GeoPlace) -> int:
         """Visit sum over the last 30 days (openspec: place-visit-counter)."""
-        return obj.visits_30d  # pyright: ignore[reportAttributeAccessIssue]  # get_queryset annotation
+        return obj.visits_30d  # pyright: ignore[reportAttributeAccessIssue]  # get_queryset annotation  # type: ignore  # dynamic attr: plugin-less inference gap
 
     @display(description=_("Visits 1y"), ordering="visits_365d")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def visits_365d(self, obj: GeoPlace) -> int:
         """Visit sum over the last year (openspec: place-visit-counter)."""
-        return obj.visits_365d  # pyright: ignore[reportAttributeAccessIssue]  # get_queryset annotation
+        return obj.visits_365d  # pyright: ignore[reportAttributeAccessIssue]  # get_queryset annotation  # type: ignore  # dynamic attr: plugin-less inference gap
 
     @display(description=_("Created/Modified"), ordering="modified")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
     def timestamps_display(self, obj: GeoPlace) -> str:

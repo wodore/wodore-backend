@@ -46,14 +46,14 @@ def messages_text(request) -> list[str]:
 
 @pytest.fixture
 def superuser(db):
-    return get_user_model().objects.create_superuser(
+    return get_user_model().objects.create_superuser(  # type: ignore  # custom manager/queryset inference gap
         email="admin-lane@test.local", password="x"
     )
 
 
 @pytest.fixture
 def staff_user(db):
-    return get_user_model().objects.create_user(
+    return get_user_model().objects.create_user(  # type: ignore  # custom manager/queryset inference gap
         email="editor-lane@test.local", is_staff=True
     )
 

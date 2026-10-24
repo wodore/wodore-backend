@@ -170,7 +170,7 @@ def verify_access_token(
     try:
         claims = jwt.decode(
             token,
-            _verification_key(),  # pyright: ignore[reportArgumentType]
+            _verification_key(),  # pyright: ignore[reportArgumentType]  # type: ignore  # argument typing drift vs stubs
         )
         exp = int(claims.get("exp", 0))
         if exp < floor(time.time()):

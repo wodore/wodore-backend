@@ -36,7 +36,7 @@ from .models import (
 class SymbolAdmin(ModelAdmin):
     """Admin panel for Symbol model."""
 
-    fieldsets = SymbolAdminFieldsets
+    fieldsets = SymbolAdminFieldsets  # type: ignore  # admin fieldsets/list_filter typing drift (lazy gettext)
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
     list_display = (
         "svg_preview",

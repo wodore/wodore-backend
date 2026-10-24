@@ -77,7 +77,7 @@ class TestProjection:
 
         HutFields = sparse_fields_query(
             huts=HutSchemaDetails,
-            sources=HutSchemaDetails.model_fields["sources"].annotation,
+            sources=HutSchemaDetails.model_fields["sources"].annotation,  # type: ignore  # argument typing drift vs stubs
         )
 
         class HQ(HutFields):

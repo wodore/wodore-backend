@@ -80,7 +80,7 @@ class TestClientIpBuckets:
         assert "Retry-After" in throttled.headers
         assert throttled.headers["X-RateLimit-Limit"] == str(_PROBE_LIMIT)
         assert throttled.headers["X-RateLimit-Remaining"] == "0"
-        body = json.loads(throttled.content)
+        body = json.loads(throttled.content)  # type: ignore  # dynamic attr: plugin-less inference gap
         assert body["code"] == "throttled"
         assert body["detail"]
         # RFC 9457 problem members (openspec: api-errors): the throttle
@@ -154,4 +154,4 @@ class TestAvailabilityWiring:
     def test_throttles_use_client_ip_on_the_shared_alias(self):
         for throttle in (AVAILABILITY_BURST_THROTTLE, AVAILABILITY_DAILY_THROTTLE):
             assert isinstance(throttle.cache_key, ClientIp)
-            assert throttle._backend.cache_name == "throttling"
+            assert throttle._backend.cache_name == "throttling"  # type: ignore  # dynamic attr: plugin-less inference gap

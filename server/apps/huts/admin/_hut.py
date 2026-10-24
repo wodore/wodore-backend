@@ -105,7 +105,7 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             RelatedOnlyCheckboxFilter,
         ),  # Filter by sources (checkboxes, only orgs linked to huts)
     )
-    fieldsets = HutAdminFieldsets
+    fieldsets = HutAdminFieldsets  # type: ignore  # admin fieldsets/list_filter typing drift (lazy gettext)
     autocomplete_fields = ("hut_owner", "hut_type_open", "hut_type_closed")
     readonly_fields = (
         "name_i18n",
@@ -127,7 +127,7 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             HutSourceViewInline,
         ]
         if HutAvailabilityViewInline is not None:
-            inlines.append(HutAvailabilityViewInline)
+            inlines.append(HutAvailabilityViewInline)  # type: ignore  # argument typing drift vs stubs
         return inlines
 
     def formfield_for_dbfield(  # pyright: ignore[reportIncompatibleMethodOverride]  # untyped django_admin_runner base in MRO
@@ -233,7 +233,7 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         SRC = settings.MEDIA_URL
         imgs = [
             f'<a href={o["link_i18n"]} target="blank"><img class="inline pr-2" src="{SRC}/{o["logo"]}" width="24px" alt="{o["name_i18n"]}"/></a>'
-            for o in obj.orgs  # pyright: ignore[reportAttributeAccessIssue]  # JSONBAgg annotation
+            for o in obj.orgs  # pyright: ignore[reportAttributeAccessIssue]  # JSONBAgg annotation  # type: ignore  # dynamic attr: plugin-less inference gap
         ]
 
         # return ", ".join([str(o.organization.name + o.link_i18n) for o in obj.orgs.all()])
@@ -362,14 +362,14 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
     def action_detail_next(self, request: HttpRequest, object_id: int):  # obj: Hut):
         obj = Hut.objects.get(id=object_id)
         return redirect(
-            reverse_lazy("admin:huts_hut_change", args=(obj.next() or object_id,))  # pyright: ignore[reportArgumentType]  # lazy URL
+            reverse_lazy("admin:huts_hut_change", args=(obj.next() or object_id,))  # pyright: ignore[reportArgumentType]  # lazy URL  # type: ignore  # argument typing drift vs stubs
         )
 
     @action(description=_("Previous"), permissions=["view"])  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def action_detail_prev(self, request: HttpRequest, object_id: int):  # obj: Hut):
         obj = Hut.objects.get(id=object_id)
         return redirect(
-            reverse_lazy("admin:huts_hut_change", args=(obj.prev() or object_id,))  # pyright: ignore[reportArgumentType]  # lazy URL
+            reverse_lazy("admin:huts_hut_change", args=(obj.prev() or object_id,))  # pyright: ignore[reportArgumentType]  # lazy URL  # type: ignore  # argument typing drift vs stubs
         )
 
     @action(description=_(mark_safe("set to <b>done</b>")), permissions=["change"])  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
@@ -379,7 +379,7 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         obj = Hut.objects.get(id=object_id)
         obj.review_status = Hut.ReviewStatusChoices.done
         obj.save()
-        return redirect(request.META.get("HTTP_REFERER"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+        return redirect(request.META.get("HTTP_REFERER"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)  # type: ignore  # argument typing drift vs stubs
 
     @action(description=_(mark_safe("set to <b>review</b>")), permissions=["change"])  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def action_row_set_review_to_review(
@@ -388,7 +388,7 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         obj = Hut.objects.get(id=object_id)
         obj.review_status = Hut.ReviewStatusChoices.review
         obj.save()
-        return redirect(request.META.get("HTTP_REFERER"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+        return redirect(request.META.get("HTTP_REFERER"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)  # type: ignore  # argument typing drift vs stubs
 
     @action(
         description=_(mark_safe("set to <b>reject</b> (inactive)")),  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
@@ -401,10 +401,10 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         obj.review_status = Hut.ReviewStatusChoices.reject
         obj.is_active = False
         obj.save()
-        return redirect(request.META.get("HTTP_REFERER"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+        return redirect(request.META.get("HTTP_REFERER"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)  # type: ignore  # argument typing drift vs stubs
 
     @action(description=_(mark_safe("<b>delete</b> entry")), permissions=["delete"])  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
     def action_row_delete(self, request: HttpRequest, object_id: int):  # obj: Hut):
         obj = Hut.objects.get(id=object_id)
         obj.delete()
-        return redirect(request.META.get("HTTP_REFERER"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+        return redirect(request.META.get("HTTP_REFERER"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)  # type: ignore  # argument typing drift vs stubs

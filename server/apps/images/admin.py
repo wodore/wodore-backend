@@ -43,7 +43,7 @@ class ImageTagAdmin(ModelAdmin):
     """Admin panel example for ``BlogPost`` model."""
 
     form = required_i18n_fields_form_factory("name")
-    fieldsets = ImageTagAdminFieldsets
+    fieldsets = ImageTagAdminFieldsets  # type: ignore  # admin fieldsets/list_filter typing drift (lazy gettext)
     search_fields = ("slug", "name_i18n")
     list_display = ("slug", "name_i18n", "color_tag")
     readonly_fields = (
@@ -69,7 +69,7 @@ class ImageAdmin(ModelAdmin):
     """Admin panel example for ``BlogPost`` model."""
 
     form = required_i18n_fields_form_factory("caption")
-    fieldsets = ImageAdminFieldsets
+    fieldsets = ImageAdminFieldsets  # type: ignore  # admin fieldsets/list_filter typing drift (lazy gettext)
     view_on_site = True  # pyright: ignore[reportIncompatibleVariableOverride, reportAssignmentType]  # Django admin idiom
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
     list_display = (
@@ -205,7 +205,7 @@ class ImageAdmin(ModelAdmin):
                 )
         return _safe(f'<div class="mfu-th-row">{"".join(parts)}</div>')
 
-    def get_form(self, request, obj=None, **kwargs):
+    def get_form(self, request, obj=None, **kwargs):  # type: ignore  # admin hook signature drift vs stubs
         form = super().get_form(request, obj, **kwargs)
         image_field = form.base_fields.get("image")
         if image_field is not None and hasattr(image_field, "widget"):

@@ -34,16 +34,16 @@ def _make_availability(hut: Hut, org: Organization) -> HutAvailability:
 
 class TestFreeTolerance:
     def test_default_zero(self, seed_data) -> None:
-        avail = _make_availability(Hut.objects.first(), Organization.objects.first())
+        avail = _make_availability(Hut.objects.first(), Organization.objects.first())  # type: ignore  # argument typing drift vs stubs
         assert avail.free_tolerance == 0
 
     def test_update_availability_records_tolerance(self, seed_data) -> None:
-        avail = _make_availability(Hut.objects.first(), Organization.objects.first())
+        avail = _make_availability(Hut.objects.first(), Organization.objects.first())  # type: ignore  # argument typing drift vs stubs
         changed, history = avail.update_availability(
             free=10,  # same free
             total=50,  # same total
-            occupancy_percent=avail.occupancy_percent,
-            occupancy_steps=avail.occupancy_steps,
+            occupancy_percent=avail.occupancy_percent,  # type: ignore  # argument typing drift vs stubs
+            occupancy_steps=avail.occupancy_steps,  # type: ignore  # argument typing drift vs stubs
             occupancy_status=avail.occupancy_status,
             reservation_status=avail.reservation_status,
             free_tolerance=5,  # NEW tolerance -> change detected
@@ -55,7 +55,7 @@ class TestFreeTolerance:
         assert history.free_tolerance == 5
 
     def test_tolerance_change_alone_flags_change(self, seed_data) -> None:
-        avail = _make_availability(Hut.objects.first(), Organization.objects.first())
+        avail = _make_availability(Hut.objects.first(), Organization.objects.first())  # type: ignore  # argument typing drift vs stubs
         assert (
             avail.has_changed(
                 free=10,
@@ -76,7 +76,7 @@ class TestFreeTolerance:
         )
 
     def test_history_records_tolerance_snapshot(self, seed_data) -> None:
-        avail = _make_availability(Hut.objects.first(), Organization.objects.first())
+        avail = _make_availability(Hut.objects.first(), Organization.objects.first())  # type: ignore  # argument typing drift vs stubs
         history = avail.record_change(
             free=8,
             total=50,

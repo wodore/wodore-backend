@@ -24,8 +24,8 @@ from .managers import UserManager
 
 
 class User(AbstractUser):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    username = None
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)  # type: ignore  # custom pk: Django idiom redeclares Model.id
+    username = None  # type: ignore  # email-only user model: username disabled (Django idiom)
     email = models.EmailField("email address", unique=True)
 
     USERNAME_FIELD = "email"

@@ -400,7 +400,7 @@ class BearerSyncAuth(_HttpBasicAuth, SyncAuth):
         """RFC 9110 challenge for 401 responses."""
         return "Bearer"
 
-    def security_schemes(self, metadata, controller_cls):
+    def security_schemes(self, metadata, controller_cls):  # type: ignore  # dmr SyncAuth hook signature drift
         from dmr.openapi.objects import SecurityScheme
 
         return {
@@ -468,7 +468,7 @@ class AuthBearer(BearerSyncAuth):
                     "detail": "Authentication is not configured on this "
                     "server (OIDC is disabled).",
                 },
-                status_code=401,
+                status_code=401,  # type: ignore  # argument typing drift vs stubs
             )
         request: HttpRequest = controller.request
         for validator in self.validators:

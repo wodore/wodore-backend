@@ -57,7 +57,3 @@ class Owner(TimeStampedModel):
 
     def __str__(self) -> str:
         return self.name_i18n  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation
-
-    @classmethod
-    def get_or_create(cls) -> "Owner":
-        super().get_or_create()

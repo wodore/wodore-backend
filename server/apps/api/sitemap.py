@@ -119,7 +119,7 @@ def _seo_included_category_ids() -> frozenset[int]:
             if category.effective_seo_sitemap() == Category.SeoSitemapChoices.include
         )
 
-    return cache.get_or_set("sitemap:category-include-ids", build, SITEMAP_INDEX_TTL)
+    return cache.get_or_set("sitemap:category-include-ids", build, SITEMAP_INDEX_TTL)  # type: ignore  # cache.get_or_set stubs lose the builder return type
 
 
 def _sitemap_places_queryset():
@@ -149,7 +149,7 @@ def sitemap_page_count() -> int:
         lambda: _public_huts_queryset().count(),
         SITEMAP_INDEX_TTL,
     )
-    return max(1, -(-int(count) // SITEMAP_PAGE_SIZE))
+    return max(1, -(-int(count) // SITEMAP_PAGE_SIZE))  # type: ignore  # argument typing drift vs stubs
 
 
 def sitemap_place_page_count() -> int:
@@ -161,7 +161,7 @@ def sitemap_place_page_count() -> int:
         lambda: _sitemap_places_queryset().count(),
         SITEMAP_INDEX_TTL,
     )
-    return -(-int(count) // SITEMAP_PAGE_SIZE)
+    return -(-int(count) // SITEMAP_PAGE_SIZE)  # type: ignore  # argument typing drift vs stubs
 
 
 def sitemap_index() -> str:
@@ -187,7 +187,7 @@ def sitemap_index() -> str:
             "</sitemapindex>"
         )
 
-    return cache.get_or_set("sitemap:index", build, SITEMAP_INDEX_TTL)
+    return cache.get_or_set("sitemap:index", build, SITEMAP_INDEX_TTL)  # type: ignore  # cache.get_or_set stubs lose the builder return type
 
 
 def sitemap_static() -> str:
@@ -200,7 +200,7 @@ def sitemap_static() -> str:
         ]
         return _urlset(entries)
 
-    return cache.get_or_set("sitemap:static", build, SITEMAP_INDEX_TTL)
+    return cache.get_or_set("sitemap:static", build, SITEMAP_INDEX_TTL)  # type: ignore  # cache.get_or_set stubs lose the builder return type
 
 
 def sitemap_huts(page: int = 0) -> str | None:

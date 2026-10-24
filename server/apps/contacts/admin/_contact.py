@@ -78,12 +78,12 @@ class ContactAdmin(ModelAdmin):
 
     inlines = (_ContactOwnerAssociationEditInline, _ContactHutAssociationEditInline)
 
-    def formfield_for_dbfield(self, db_field, **kwargs):
+    def formfield_for_dbfield(self, db_field, **kwargs):  # type: ignore  # admin hook signature drift vs stubs
         formfield = super().formfield_for_dbfield(db_field, **kwargs)
         if db_field.name == "address":
-            attr = formfield.widget.attrs
+            attr = formfield.widget.attrs  # type: ignore  # dynamic attr: plugin-less inference gap
             attr["rows"] = 3
-            formfield.widget = Textarea(attrs=attr)
+            formfield.widget = Textarea(attrs=attr)  # type: ignore  # dynamic attr: plugin-less inference gap
         # if db_field.name == "note_i18n":
         #    formfield.widget.attrs["readonly"] = True
         #    # formfield.widget.attrs["class"] = " ".join(INPUT_CLASSES_READONLY)

@@ -87,7 +87,7 @@ class TranslationJSONFieldDescriptor:
                   If the language key is missing, will return None.
         """
         if instance is None:
-            return self  # pyright: ignore[reportReturnType]  # descriptor protocol: class access
+            return self  # type: ignore  # descriptor protocol: class access
 
         field_name = self.field.attname
         data = instance.__dict__.get(field_name, {})

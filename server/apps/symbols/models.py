@@ -48,7 +48,7 @@ class Symbol(TimeStampedModel):
     StyleChoices = _SymbolStyleChoices
 
     # Identification
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)  # type: ignore  # custom pk: Django idiom redeclares Model.id
     slug = models.SlugField(
         max_length=100,
         db_index=True,
@@ -388,7 +388,7 @@ class Icon(TimeStampedModel):
     def clean(self):
         """Reject root categories (subgroups only, see design D4)."""
         super().clean()
-        if self.category_id and self.category.parent_id is None:  # pyright: ignore[reportAttributeAccessIssue]  # FK attnames: django-stubs gap
+        if self.category_id and self.category.parent_id is None:  # pyright: ignore[reportAttributeAccessIssue]  # FK attnames: django-stubs gap  # type: ignore  # dynamic attr: plugin-less inference gap
             raise ValidationError(
                 {"category": _("Icons may only reference non-root categories.")}
             )

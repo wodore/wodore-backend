@@ -724,7 +724,7 @@ class PlaceImagesController(ApiController):
             features = [
                 _map_fallback_feature(
                     request,
-                    slug=place.slug,
+                    slug=place.slug,  # type: ignore  # argument typing drift vs stubs
                     lat=place.location.y,
                     lon=place.location.x,
                     modified=place.modified,
@@ -1012,9 +1012,9 @@ def hut_gallery_response(
         entity=hut,
         request=request,
         place_type="hut",
-        radius=GALLERY_QUERY_SHAPE["radius"],
+        radius=GALLERY_QUERY_SHAPE["radius"],  # type: ignore  # argument typing drift vs stubs
         sources_list=None,
-        static_map_fallback=GALLERY_QUERY_SHAPE["fallback"],
+        static_map_fallback=GALLERY_QUERY_SHAPE["fallback"],  # type: ignore  # argument typing drift vs stubs
     )
 
 
@@ -1036,9 +1036,9 @@ def place_gallery_response(
         entity=place,
         request=request,
         place_type="geoplace",
-        radius=GALLERY_QUERY_SHAPE["radius"],
+        radius=GALLERY_QUERY_SHAPE["radius"],  # type: ignore  # argument typing drift vs stubs
         sources_list=None,
-        static_map_fallback=GALLERY_QUERY_SHAPE["fallback"],
+        static_map_fallback=GALLERY_QUERY_SHAPE["fallback"],  # type: ignore  # argument typing drift vs stubs
     )
 
 

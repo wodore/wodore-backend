@@ -50,4 +50,4 @@ class ContactFunction(TimeStampedModel):
         indexes = (GinIndex(fields=["i18n"]),)
 
     def __str__(self) -> str:
-        return self.name_i18n  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation
+        return self.name_i18n  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation  # type: ignore  # modeltrans TranslationField dynamic attr

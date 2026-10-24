@@ -83,7 +83,7 @@ class HutSource(TimeStampedModel):
         blank=True,
         default=dict,
     )
-    previous_object = models.ForeignKey["HutSource"](
+    previous_object = models.ForeignKey(
         "self",
         blank=True,
         null=True,
@@ -91,7 +91,7 @@ class HutSource(TimeStampedModel):
         verbose_name=_("Previous Entry"),
         help_text=_("Id to the previous object."),
     )
-    hut = models.ForeignKey["Hut"](
+    hut = models.ForeignKey(
         "Hut",
         null=True,
         blank=True,
@@ -112,7 +112,7 @@ class HutSource(TimeStampedModel):
         )
 
     def __str__(self) -> str:
-        return f"{self.name} v{self.version} ({self.organization.name_i18n})"
+        return f"{self.name} v{self.version} ({self.organization.name_i18n})"  # type: ignore  # modeltrans TranslationField dynamic attr
 
     @classmethod
     def add(
@@ -136,8 +136,8 @@ class HutSource(TimeStampedModel):
                 ignore_type_in_groups=[DeepDiff.numbers, (list, tuple)],
             )
             loc_diff = ""
-            if other_hut_src.location.distance(hut_source.location) > 0.00005:
-                loc_diff = f"Location changed from '{other_hut_src.location.tuple}' to '{hut_source.location.tuple}'"
+            if other_hut_src.location.distance(hut_source.location) > 0.00005:  # type: ignore  # dynamic attr: plugin-less inference gap
+                loc_diff = f"Location changed from '{other_hut_src.location.tuple}' to '{hut_source.location.tuple}'"  # type: ignore  # dynamic attr: plugin-less inference gap
             if diff or loc_diff:  # something changed, add a new entry:
                 diff_comment = (
                     diff.pretty()

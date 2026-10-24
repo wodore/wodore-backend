@@ -33,7 +33,7 @@ class LicenseAdmin(ModelAdmin):
     """Admin panel example for ``BlogPost`` model."""
 
     form = required_i18n_fields_form_factory("name", "fullname")
-    fieldsets = LicenseAdminFieldsets
+    fieldsets = LicenseAdminFieldsets  # type: ignore  # admin fieldsets/list_filter typing drift (lazy gettext)
     view_on_site = True  # type: ignore[misc]  # pyright: ignore[reportIncompatiblePropertyOverride, reportAssignmentType]  # Django admin idiom
     list_filter_submit = True  # Add submit button for filters
     autocomplete_fields = ("category",)

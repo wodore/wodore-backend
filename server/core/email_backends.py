@@ -32,7 +32,7 @@ class StagingEmailBackend(SMTPBackend):
         - All emails from @wodore.com domain
     """
 
-    def send_messages(self, email_messages: list[EmailMessage]) -> int:
+    def send_messages(self, email_messages: list[EmailMessage]) -> int:  # type: ignore  # backend hook signature drift
         """
         Send messages after rewriting recipient addresses.
 

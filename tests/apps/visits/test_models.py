@@ -141,7 +141,7 @@ class TestFlush:
         assert rows.count() == 2  # one per (object, day)
         hut_row = rows.get(object_id=hut.pk, content_type__model="hut")
         assert hut_row.count == 2
-        place_row = rows.get(object_id=place.pk, content_type__model="geoplace")
+        place_row = rows.get(object_id=place.pk, content_type__model="geoplace")  # type: ignore  # dynamic attr: plugin-less inference gap
         assert place_row.count == 1
 
     def test_flush_accumulates_across_flushes(self, hut):

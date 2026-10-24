@@ -241,9 +241,9 @@ class AvailabilityService:
                     ):
                         # Same capacity for both states - rely on external unattended flag
                         if b.unattended and h.get("hut_type_closed_slug") is not None:
-                            b.hut_type = h["hut_type_closed_slug"]  # pyright: ignore[reportAttributeAccessIssue]
+                            b.hut_type = h["hut_type_closed_slug"]  # pyright: ignore[reportAttributeAccessIssue]  # type: ignore  # msgspec Struct dynamic attr (hut-services)
                         else:
-                            b.hut_type = (  # pyright: ignore[reportAttributeAccessIssue]
+                            b.hut_type = (  # pyright: ignore[reportAttributeAccessIssue]  # type: ignore  # msgspec Struct dynamic attr (hut-services)
                                 h.get("hut_type_open_slug") or HutTypeEnum.unknown.value
                             )
                     # Use capacity to determine state: fewer beds = closed, more beds = open
@@ -255,11 +255,11 @@ class AvailabilityService:
                         and h.get("hut_type_closed_slug") is not None
                     ):
                         # Booking total is at or below closed capacity → reduced/closed state
-                        b.hut_type = h["hut_type_closed_slug"]  # pyright: ignore[reportAttributeAccessIssue]
+                        b.hut_type = h["hut_type_closed_slug"]  # pyright: ignore[reportAttributeAccessIssue]  # type: ignore  # msgspec Struct dynamic attr (hut-services)
                     # Default: open state (includes unknown status, no closed type, etc.)
                     else:
                         # Fall back to open (default), or unknown if open is also None
-                        b.hut_type = (  # pyright: ignore[reportAttributeAccessIssue]
+                        b.hut_type = (  # pyright: ignore[reportAttributeAccessIssue]  # type: ignore  # msgspec Struct dynamic attr (hut-services)
                             h.get("hut_type_open_slug") or HutTypeEnum.unknown.value
                         )
 
