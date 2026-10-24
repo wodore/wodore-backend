@@ -5,8 +5,8 @@ D5). Phase E (hut model removal) is gated on this report being empty.
 """
 
 from django.core.management.base import BaseCommand
-from django.db.models import Count
 
+from ...models import HutAvailability
 from ...place_link import unmatched_huts
 
 
@@ -17,7 +17,7 @@ class Command(BaseCommand):
     )
 
     def handle(self, *args, **options):
-        huts = unmatched_huts().annotate(rows=Count("availabilities"))
+        huts = unmatched_huts()
         if not huts:
             self.stdout.write(
                 self.style.SUCCESS(
@@ -33,6 +33,8 @@ class Command(BaseCommand):
             )
         )
         for hut in huts:
-            last = hut.availabilities.order_by("-availability_date").first()
+            qs = HutAvailability.objects.filter(hut=hut)
+            last = qs.order_by("-availability_date").first()
+            rows = qs.count()
             last_info = f", last date {last.availability_date}" if last else ""
-            self.stdout.write(f"  {hut.slug}: {hut.rows} row(s){last_info}")
+            self.stdout.write(f"  {hut.slug}: {rows} row(s){last_info}")

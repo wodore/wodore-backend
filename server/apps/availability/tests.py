@@ -848,9 +848,9 @@ class TestBackfillMigration:
         self._run()
         self._run()  # rerun must not raise on the unique constraint
         assert GeoPlaceAvailability.objects.filter(geo_place=place).count() == 1
-        assert GeoPlaceAvailability.objects.filter(
-            geo_place=place
-        ).first().source_id == (src.source_id)
+        copied = GeoPlaceAvailability.objects.filter(geo_place=place).first()
+        assert copied is not None
+        assert copied.source_id == src.source_id
 
 
 def _setup_move(hut, hut_types, place, place_org, wodore_org):
