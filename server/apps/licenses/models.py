@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Any, override
 
 from modeltrans.fields import TranslationField
 
@@ -22,7 +23,7 @@ validate_lic_slug = RegexValidator(
 )
 
 
-class LicenseSlugField(models.SlugField):
+class LicenseSlugField(models.SlugField[str, str]):
     """SlugField that also allows dots (e.g. ``cc-by-4.0``).
 
     Validators passed via ``validators=`` run *in addition to* the field's
@@ -151,7 +152,8 @@ class License(TimeStampedModel):
             return 0
         return highest_order.get("order", 0) + 10
 
-    def save(self, *args, **kwargs):
+    @override
+    def save(self, *args: Any, **kwargs: Any) -> None:
         if self.order == 0 or self.order is None:
             self.order = License.get_next_order_number()
         super().save(*args, **kwargs)

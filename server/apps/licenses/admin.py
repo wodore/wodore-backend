@@ -126,5 +126,5 @@ class LicenseAdmin(ModelAdmin):
     #    return (obj.name_i18n, obj.fullname_i18n, self.logo_thumb(obj))
 
     @display(description="#", ordering=None)
-    def order_small(self, obj):
+    def order_small(self, obj: License) -> str:
         return mark_safe(f"<small>{obj.order}</small>")
