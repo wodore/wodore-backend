@@ -3,7 +3,7 @@ from typing import ClassVar
 from django.contrib import admin
 
 # Models
-from django.utils.safestring import mark_safe
+from django.utils.safestring import SafeString, mark_safe
 from django.utils.translation import gettext_lazy as _
 
 from unfold.contrib.filters.admin import (
@@ -126,5 +126,5 @@ class LicenseAdmin(ModelAdmin):
     #    return (obj.name_i18n, obj.fullname_i18n, self.logo_thumb(obj))
 
     @display(description="#", ordering=None)
-    def order_small(self, obj: License) -> str:
+    def order_small(self, obj: License) -> SafeString:
         return mark_safe(f"<small>{obj.order}</small>")
