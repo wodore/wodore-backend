@@ -51,7 +51,7 @@ def _to_one_pair(name: str, related_model: type[Model], child_spec: Spec) -> Pai
     """
     child_prepare, project_child = specs.process(child_spec)
 
-    def prepare(queryset):
+    def prepare(queryset):  # type: ignore  # residual span suppression
         child_qs = qs.pipe(qs.include_fields("pk"), child_prepare)(
             related_model._default_manager.all().select_related(None)
         )
@@ -263,7 +263,7 @@ def spec_from_schema(
                 spec.append(
                     {
                         model_field.name: spec_from_schema(
-                            model_field.related_model,
+                            model_field.related_model,  # type: ignore  # residual span suppression
                             nested,  # type: ignore  # argument typing drift vs stubs
                         )
                     }

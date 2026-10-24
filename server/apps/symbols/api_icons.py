@@ -33,6 +33,7 @@ from django.db.models import Q
 from django.http import HttpRequest, HttpResponse
 from django.utils.http import http_date
 
+import server.apps.translations.schema
 from server.apps.api.controller import ApiController
 from server.apps.apiversions.transforms import version_cache_key
 from server.apps.categories.models import Category
@@ -75,11 +76,7 @@ class _IconMeta(NamedTuple):
     slug: str
 
 
-class IconsQuery(
-    LanguageQuery := __import__(
-        "server.apps.translations.schema", fromlist=["LanguageQuery"]
-    ).LanguageQuery  # type: ignore  # lazy LanguageQuery base import
-):
+class IconsQuery(server.apps.translations.schema.LanguageQuery):
     """Query parameters of the icons endpoint."""
 
     search: str = Field(

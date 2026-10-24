@@ -71,13 +71,6 @@
       "severity": "error"
     },
     {
-      "column": 5,
-      "path": "server/apps/symbols/api_icons.py",
-      "name": "invalid-inheritance",
-      "concise_description": "Invalid expression form for base class: `LanguageQuery := __import__(\n        \"server.apps.translations.schema\", fromlist=[\"LanguageQuery\"]\n    ).LanguageQuery`",
-      "severity": "error"
-    },
-    {
       "column": 21,
       "path": "server/apps/utils/locale.py",
       "name": "bad-assignment",

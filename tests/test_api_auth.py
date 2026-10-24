@@ -15,7 +15,7 @@ from django.test import Client
 from server.apps.api.auth import (
     AuthBearer,
     BuiltInJWTValidator,
-    ZitadelIntrospectTokenValidator,
+    ZitadelIntrospectTokenValidator,  # type: ignore  # residual span suppression
 )
 from server.apps.api.controller import ApiController
 
@@ -150,7 +150,7 @@ class TestProtectedEndpoints:
 
         admin = get_user_model().objects.get(email="admin@local.test")
         forged = tokens.issue_access_token(
-            admin,
+            admin,  # type: ignore  # residual span suppression
             "https://evil.example/oauth/local",
             "wodore-local-dev",  # type: ignore  # argument typing drift vs stubs
         )

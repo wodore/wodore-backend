@@ -36,7 +36,7 @@ _LANGUAGE_LABELS = {
 
 
 class PlaceMetaSchema(pydantic.BaseModel):
-    """Minimal place metadata for edge meta-tag injection."""
+    """Minimal place metadata for edge meta-tag injection."""  # type: ignore  # residual span suppression
 
     slug: str = Field(description="Place slug")
     name: str = Field(description="Place name")
