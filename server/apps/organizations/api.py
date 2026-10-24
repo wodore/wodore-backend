@@ -1,5 +1,7 @@
 """Organization endpoints (GET list + detail) on dmr."""
 
+from typing import Any
+
 import pydantic
 from dmr import Path, Query, modify
 from dmr.routing import path
@@ -39,7 +41,7 @@ class OrganizationsController(ApiController):
     def get(
         self,
         parsed_query: Query[OrganizationListQuery],
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """List organizations used for the huts."""
         orgs = Organization.objects.all().filter(is_active=True)
         if isinstance(parsed_query.is_public, bool):
@@ -62,7 +64,7 @@ class OrganizationDetailController(ApiController):
         self,
         parsed_path: Path[OrgSlugPath],
         parsed_query: Query[OrganizationDetailQuery],
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Get a single organization by its slug."""
         org = Organization.objects.filter(slug=parsed_path.slug, is_active=True).first()
         if org is None:
