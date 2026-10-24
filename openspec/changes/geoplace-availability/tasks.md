@@ -58,21 +58,21 @@
 
 ## 4. Reader cutover (Phase D)
 
-- [ ] 4.1 Martin `availability` function SQL reads the place tables (keeps
+- [x] 4.1 Martin `availability` function SQL reads the place tables (keeps
   joining `huts_hut` for the `dN_type` open/closed classification until
   Phase E); regenerate `martin_sync`; document/perform the edge tile-cache
   purge AND `TRUNCATE availability_tile_cache` at deploy
-- [ ] 4.2 The three availability API controllers
+- [x] 4.2 The three availability API controllers
   (`HutAvailabilityGeojsonController`, `HutAvailabilityCurrentController` —
   keeps the hut-side `source_link` lookup until Phase E — and
   `HutAvailabilityTrendController`) read the place tables; `etag_utils`
   follows; deprecated `huts/api/_booking.py` and `api/readers.py` are
   unaffected — no change
-- [ ] 4.3 Admin read surfaces (availability/history/status) read the place
+- [x] 4.3 Admin read surfaces (availability/history/status) read the place
   tables (history admin `search_fields` move to GeoPlace equivalents,
   `hut__name`/`hut__slug` → `geo_place__…`); the Hut admin availability
   inline keeps reading hut models until Phase E
-- [ ] 4.4 Contract tests pinning tile feature properties (`slug`, `dN_*`,
+- [x] 4.4 Contract tests pinning tile feature properties (`slug`, `dN_*`,
   `capacity`, `days`) and booking responses/ETags — identical before/after;
   the GeoJSON feature `id` stays hut-side until Phase E
 

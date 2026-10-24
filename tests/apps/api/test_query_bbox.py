@@ -11,10 +11,8 @@ import datetime
 import pytest
 
 from django.contrib.gis.geos import Point
-from django.utils import timezone
 
 from server.apps.api.query import bbox_polygon
-from server.apps.availability.models import HutAvailability
 from server.apps.huts.models import Hut
 from server.apps.organizations.models import Organization
 
@@ -109,22 +107,17 @@ class TestAvailabilityGeojsonBbox:
         west_hut = next(h for h in Hut.objects.all() if h.location.x <= 8.1)
         assert east_hut is not None and west_hut is not None
 
-        now = timezone.now()
+        # Phase D (geoplace-availability): seeded via the factory so the
+        # place-side mirror exists — readers serve from the place tables.
+        from tests.factories.availability import AvailabilityFactory
+
         for hut in (east_hut, west_hut):
-            HutAvailability.objects.create(
+            AvailabilityFactory(
                 hut=hut,
-                availability_date=datetime.date(2027, 7, 1),
-                first_checked=now,
-                last_checked=now,
                 source_organization=org,
-                source_id="123",
+                availability_date=datetime.date(2027, 7, 1),
                 free=10,
                 total=50,
-                free_tolerance=0,
-                occupancy_percent=80.0,
-                occupancy_steps=80,
-                occupancy_status="high",
-                reservation_status="possible",
             )
 
         response = client.get(

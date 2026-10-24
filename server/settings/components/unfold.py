@@ -120,10 +120,10 @@ UNFOLD = {
                         "title": _("Availability"),
                         "icon": "event_available",
                         "link": reverse_lazy(
-                            "admin:availability_hutavailability_changelist"
+                            "admin:availability_geoplaceavailability_changelist"
                         ),
                         "permission": lambda request: request.user.has_perm(
-                            "availability.view_hutavailability"
+                            "availability.view_geoplaceavailability"
                         ),
                     },
                     {
@@ -429,36 +429,36 @@ UNFOLD = {
         },
         {
             "models": [
-                "availability.hutavailability",
-                "availability.hutavailabilityhistory",
-                "availability.availabilitystatus",
+                "availability.geoplaceavailability",
+                "availability.geoplaceavailabilityhistory",
+                "availability.geoplaceavailabilitystatus",
             ],
             "items": [
                 {
                     "title": _("Availability"),
                     "link": reverse_lazy(
-                        "admin:availability_hutavailability_changelist"
+                        "admin:availability_geoplaceavailability_changelist"
                     ),
                     "permission": lambda request: request.user.has_perm(
-                        "availability.view_hutavailability"
+                        "availability.view_geoplaceavailability"
                     ),
                 },
                 {
                     "title": _("History"),
                     "link": reverse_lazy(
-                        "admin:availability_hutavailabilityhistory_changelist"
+                        "admin:availability_geoplaceavailabilityhistory_changelist"
                     ),
                     "permission": lambda request: request.user.has_perm(
-                        "availability.view_hutavailabilityhistory"
+                        "availability.view_geoplaceavailabilityhistory"
                     ),
                 },
                 {
                     "title": _("Status"),
                     "link": reverse_lazy(
-                        "admin:availability_availabilitystatus_changelist"
+                        "admin:availability_geoplaceavailabilitystatus_changelist"
                     ),
                     "permission": lambda request: request.user.has_perm(
-                        "availability.view_availabilitystatus"
+                        "availability.view_geoplaceavailabilitystatus"
                     ),
                 },
             ],

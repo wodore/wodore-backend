@@ -28,6 +28,7 @@ from django.apps import apps
 from django.contrib.gis.geos import Point
 from django.core.management import call_command
 from django.db import IntegrityError, connection, transaction
+from django.urls import reverse
 from django.utils import timezone
 
 from server.apps.availability.tiles import AvailabilityTileCache
@@ -231,10 +232,12 @@ def _reset_pk_sequence(model) -> None:
         )
 
 
-def _add_availability(hut, day_offset, *, free, total, hut_type, status="medium"):
+def _add_availability(
+    hut, day_offset, *, free, total, hut_type, status="medium", mirror_place=False
+):
     now = timezone.now()
     _reset_pk_sequence(Organization)
-    return HutAvailability.objects.create(
+    src = HutAvailability.objects.create(
         hut=hut,
         source_organization=Organization.objects.create(
             slug=f"org-{hut.slug}-{day_offset}"
@@ -249,6 +252,37 @@ def _add_availability(hut, day_offset, *, free, total, hut_type, status="medium"
         first_checked=now,
         last_checked=now,
     )
+    if mirror_place:
+        # Phase D contract: the tile function and readers serve from the
+        # place tables — create the linked place + a mirrored place row so
+        # these tests pin byte-identical cutover output.
+        place = resolve_place(hut)
+        if place is None:
+            place = GeoPlace.objects.create(
+                slug=f"pl-{hut.slug}"[:15],
+                name=f"Place {hut.name}",
+                location=hut.location,
+                country_code=hut.country_field or "CH",
+            )
+            _reset_pk_sequence(Organization)
+            wodore, _ = Organization.objects.get_or_create(slug=WODORE_ORG_SLUG)
+            GeoPlaceSourceAssociation.objects.create(
+                organization=wodore, geo_place=place, source_id=hut.slug
+            )
+        GeoPlaceAvailability.objects.create(
+            geo_place=place,
+            source_organization=src.source_organization,
+            source_id=src.source_id,
+            availability_date=src.availability_date,
+            free=free,
+            total=total,
+            occupancy_status=status,
+            reservation_status="possible",
+            hut_type=hut_type,
+            first_checked=now,
+            last_checked=now,
+        )
+    return src
 
 
 # ── tile content ─────────────────────────────────────────────────────────
@@ -259,8 +293,18 @@ class TestAvailabilityTiles:
     def test_flattened_day_properties(self, hut, hut_types):
         """A hut with two days of data yields d0/d1 props incl. hut type."""
         open_type, _ = hut_types
-        _add_availability(hut, 0, free=5, total=20, hut_type=open_type)
-        _add_availability(hut, 1, free=0, total=20, hut_type=open_type, status="full")
+        _add_availability(
+            hut, 0, mirror_place=True, free=5, total=20, hut_type=open_type
+        )
+        _add_availability(
+            hut,
+            1,
+            mirror_place=True,
+            free=0,
+            total=20,
+            hut_type=open_type,
+            status="full",
+        )
 
         x, y = _tile_for(HUT_LON, HUT_LAT, 9)
         tile = fetch_tile(9, x, y, {"date": TODAY.isoformat(), "cache_ttl": 0})
@@ -287,7 +331,9 @@ class TestAvailabilityTiles:
     def test_reduced_type_discriminator(self, hut, hut_types):
         """hut_type == hut.hut_type_closed → 'reduced'."""
         _, closed_type = hut_types
-        _add_availability(hut, 0, free=3, total=10, hut_type=closed_type)
+        _add_availability(
+            hut, 0, mirror_place=True, free=3, total=10, hut_type=closed_type
+        )
 
         x, y = _tile_for(HUT_LON, HUT_LAT, 9)
         tile = fetch_tile(9, x, y, {"date": TODAY.isoformat(), "cache_ttl": 0})
@@ -299,7 +345,7 @@ class TestAvailabilityTiles:
 
     def test_null_hut_type_omits_type_props(self, hut):
         """Availability rows without hut_type still render the day."""
-        _add_availability(hut, 0, free=1, total=2, hut_type=None)
+        _add_availability(hut, 0, mirror_place=True, free=1, total=2, hut_type=None)
 
         x, y = _tile_for(HUT_LON, HUT_LAT, 9)
         tile = fetch_tile(9, x, y, {"date": TODAY.isoformat(), "cache_ttl": 0})
@@ -314,7 +360,9 @@ class TestAvailabilityTiles:
         """Below days_max_zoom (default 7) only day 0 is served."""
         open_type, _ = hut_types
         for day in range(4):
-            _add_availability(hut, day, free=day, total=10, hut_type=open_type)
+            _add_availability(
+                hut, day, free=day, total=10, hut_type=open_type, mirror_place=True
+            )
 
         x, y = _tile_for(HUT_LON, HUT_LAT, 6)  # z6 < default 7
         tile = fetch_tile(6, x, y, {"date": TODAY.isoformat(), "cache_ttl": 0})
@@ -338,7 +386,9 @@ class TestAvailabilityTiles:
         """days=2 at z9 → exactly two day columns."""
         open_type, _ = hut_types
         for day in range(4):
-            _add_availability(hut, day, free=day, total=10, hut_type=open_type)
+            _add_availability(
+                hut, day, free=day, total=10, hut_type=open_type, mirror_place=True
+            )
 
         x, y = _tile_for(HUT_LON, HUT_LAT, 9)
         tile = fetch_tile(
@@ -353,7 +403,9 @@ class TestAvailabilityTiles:
     def test_date_window_filters_rows(self, hut, hut_types):
         """Availability outside the requested window is not in the tile."""
         open_type, _ = hut_types
-        _add_availability(hut, 3, free=7, total=10, hut_type=open_type)
+        _add_availability(
+            hut, 3, mirror_place=True, free=7, total=10, hut_type=open_type
+        )
 
         x, y = _tile_for(HUT_LON, HUT_LAT, 9)
         # days=2 → the day-3 row falls outside the window → no feature
@@ -375,7 +427,9 @@ class TestAvailabilityTiles:
         """date is required: missing/garbage dates yield empty tiles, not
         a "today" default ("now" logic belongs to the client)."""
         open_type, _ = hut_types
-        _add_availability(hut, 0, free=1, total=4, hut_type=open_type)
+        _add_availability(
+            hut, 0, mirror_place=True, free=1, total=4, hut_type=open_type
+        )
 
         x, y = _tile_for(HUT_LON, HUT_LAT, 9)
         for params in (
@@ -392,7 +446,9 @@ class TestAvailabilityTiles:
         """days=99 clamps to 8 — valid date still serves data."""
         open_type, _ = hut_types
         for day in range(8):
-            _add_availability(hut, day, free=day, total=10, hut_type=open_type)
+            _add_availability(
+                hut, day, free=day, total=10, hut_type=open_type, mirror_place=True
+            )
 
         x, y = _tile_for(HUT_LON, HUT_LAT, 9)
         tile = fetch_tile(
@@ -406,7 +462,9 @@ class TestAvailabilityTiles:
 
     def test_inactive_or_private_huts_excluded(self, hut, hut_types):
         open_type, _ = hut_types
-        _add_availability(hut, 0, free=1, total=4, hut_type=open_type)
+        _add_availability(
+            hut, 0, mirror_place=True, free=1, total=4, hut_type=open_type
+        )
         Hut.objects.filter(pk=hut.pk).update(is_public=False)
 
         x, y = _tile_for(HUT_LON, HUT_LAT, 9)
@@ -430,7 +488,9 @@ class TestAvailabilityTileCache:
 
     def test_second_call_hits_cache(self, hut, hut_types):
         open_type, _ = hut_types
-        _add_availability(hut, 0, free=5, total=20, hut_type=open_type)
+        _add_availability(
+            hut, 0, mirror_place=True, free=5, total=20, hut_type=open_type
+        )
 
         x, y = self._z9()
         params = {"date": TODAY.isoformat()}
@@ -444,7 +504,9 @@ class TestAvailabilityTileCache:
 
     def test_cache_ttl_zero_bypasses_cache(self, hut, hut_types):
         open_type, _ = hut_types
-        _add_availability(hut, 0, free=5, total=20, hut_type=open_type)
+        _add_availability(
+            hut, 0, mirror_place=True, free=5, total=20, hut_type=open_type
+        )
 
         x, y = self._z9()
         fetch_tile(9, x, y, {"date": TODAY.isoformat(), "cache_ttl": 0})
@@ -453,8 +515,12 @@ class TestAvailabilityTileCache:
     def test_different_params_cache_separately(self, hut, hut_types):
         """cache_ttl is not part of the key; days is."""
         open_type, _ = hut_types
-        _add_availability(hut, 0, free=5, total=20, hut_type=open_type)
-        _add_availability(hut, 1, free=6, total=20, hut_type=open_type)
+        _add_availability(
+            hut, 0, mirror_place=True, free=5, total=20, hut_type=open_type
+        )
+        _add_availability(
+            hut, 1, mirror_place=True, free=6, total=20, hut_type=open_type
+        )
 
         x, y = self._z9()
         fetch_tile(9, x, y, {"date": TODAY.isoformat(), "cache_ttl": 60})
@@ -465,7 +531,9 @@ class TestAvailabilityTileCache:
 
     def test_expired_entry_is_regenerated(self, hut, hut_types):
         open_type, _ = hut_types
-        _add_availability(hut, 0, free=5, total=20, hut_type=open_type)
+        _add_availability(
+            hut, 0, mirror_place=True, free=5, total=20, hut_type=open_type
+        )
 
         x, y = self._z9()
         params = {"date": TODAY.isoformat()}
@@ -486,7 +554,7 @@ class TestAvailabilityTileCache:
 def test_cleanup_removes_all_entries(hut, hut_types):
     """cleanup_availability_tile_cache(0) empties the cache table."""
     open_type, _ = hut_types
-    _add_availability(hut, 0, free=5, total=20, hut_type=open_type)
+    _add_availability(hut, 0, mirror_place=True, free=5, total=20, hut_type=open_type)
 
     x, y = _tile_for(HUT_LON, HUT_LAT, 9)
     fetch_tile(9, x, y, {"date": TODAY.isoformat()})
@@ -1346,3 +1414,104 @@ class TestPlaceDrivenCadence:
         slugs = set(huts.values_list("slug", flat=True))
         # dev-data subset assertions (template rows also match the branches)
         assert {"test-hut", "stale-status-hut", "unmatched-new-hut"} <= slugs
+
+
+# ── phase D: reader cutover contract (controllers serve from places) ─────
+
+
+@pytest.mark.django_db
+class TestReaderCutoverControllers:
+    def _client(self):
+        from django.test import Client
+
+        return Client()
+
+    def _seed_place_row(self, place, place_org, hut_types, *, free=4):
+        open_type, _ = hut_types
+        now = timezone.now()
+        return GeoPlaceAvailability.objects.create(
+            geo_place=place,
+            source_organization=place_org,
+            source_id="src-1",
+            availability_date=TODAY,
+            free=free,
+            total=10,
+            free_tolerance=0,
+            occupancy_percent=40.0,
+            occupancy_steps=40,
+            occupancy_status="medium",
+            reservation_status="possible",
+            link="",
+            hut_type=open_type,
+            first_checked=now,
+            last_checked=now,
+        )
+
+    def test_current_endpoint_serves_place_rows(
+        self, hut, hut_types, place, place_org, wodore_org
+    ):
+        _link(hut, place, wodore_org)
+        self._seed_place_row(place, place_org, hut_types)
+        resp = self._client().get(
+            reverse(
+                "v1:get_hut_availability_current", args=[hut.slug, TODAY.isoformat()]
+            )
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["id"] == hut.id  # feature id stays hut-side until Phase E
+        assert data["slug"] == hut.slug
+        assert data["data"][0]["free"] == 4
+        assert data["data"][0]["type"] == "standard"
+
+    def test_current_endpoint_404_for_unmatched_hut(self, hut):
+        resp = self._client().get(
+            reverse(
+                "v1:get_hut_availability_current", args=[hut.slug, TODAY.isoformat()]
+            )
+        )
+        assert resp.status_code == 404
+
+    def test_trend_endpoint_serves_place_history(
+        self, hut, hut_types, place, place_org, wodore_org
+    ):
+        _link(hut, place, wodore_org)
+        avail = self._seed_place_row(place, place_org, hut_types)
+        # Recorded a day back — the trend window ends at the target date's
+        # parse point, so a "recorded today" event falls outside it.
+        day_ago = timezone.now() - datetime.timedelta(days=1)
+        GeoPlaceAvailabilityHistory.objects.create(
+            availability=avail,
+            geo_place=place,
+            availability_date=TODAY,
+            free=7,
+            total=10,
+            free_tolerance=0,
+            occupancy_percent=70.0,
+            occupancy_status="high",
+            reservation_status="possible",
+            first_checked=day_ago,
+            last_checked=day_ago,
+        )
+        resp = self._client().get(
+            reverse("v1:get_hut_availability_trend", args=[hut.slug, TODAY.isoformat()])
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["id"] == hut.id
+        assert data["data"][0]["free"] == 7
+
+    def test_geojson_endpoint_serves_view_rows(
+        self, hut, hut_types, place, place_org, wodore_org
+    ):
+        _link(hut, place, wodore_org)
+        self._seed_place_row(place, place_org, hut_types)
+        resp = self._client().get(
+            reverse("v1:get_hut_availability_geojson", args=[TODAY.isoformat()])
+        )
+        assert resp.status_code == 200
+        features = resp.json()["features"]
+        ours = [f for f in features if f["properties"]["slug"] == hut.slug]
+        assert len(ours) == 1
+        assert ours[0]["properties"]["id"] == hut.id
+        assert ours[0]["properties"]["data"][0]["free"] == 4
