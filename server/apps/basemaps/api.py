@@ -39,19 +39,23 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from functools import wraps
 from http import HTTPStatus
 from typing import Any
-from urllib.parse import urlencode
 
 import pydantic
-from dmr import NewHeader, Path, Query, modify
+from dmr import Path, Query, modify
 from dmr.routing import external_path, path
 from pydantic import Field
 
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 
-from server.apps.api.controller import ApiController, raise_not_found
+from server.apps.api.controller import (
+    REVALIDATE_CACHE_CONTROL,
+    ApiController,
+    etag_page,
+    raise_not_found,
+    revalidate_headers,
+)
 from server.apps.api.error_codes import ErrorCode
 from server.apps.api.query import dump_sparse, dump_sparse_list, sparse_fields_query
 from server.apps.translations import LanguageQuery, override
@@ -72,11 +76,6 @@ from .resolution import resolve_style, style_endpoint_url, substitute_env
 
 logger = logging.getLogger(__name__)
 
-#: Revalidate-always caching for evolving documents (api-conventions):
-#: stored, but revalidated on every use — one online reload is fresh;
-#: offline/origin-down may serve the stored copy for a day.
-REVALIDATE_CACHE_CONTROL = "public, max-age=0, must-revalidate, stale-if-error=604800"
-
 #: Memo window for the exact catalog version aggregate. The bound is a
 #: freshness delay only — an edit becomes visible on reload once the
 #: memo expires (next-reload semantics, never a longer window).
@@ -89,11 +88,6 @@ CATALOG_VERSION_CACHE_KEY = "basemaps:catalog-version"
 #: asset-version digest) so entries fall out of reach on every edit; the
 #: TTL merely bounds stranded entries from version churn.
 STYLE_CACHE_TTL = 7 * 24 * 3600
-
-
-def revalidate_headers() -> dict[str, NewHeader]:
-    """``Cache-Control`` header spec for ``@modify(headers=...)``."""
-    return {"Cache-Control": NewHeader(value=REVALIDATE_CACHE_CONTROL)}
 
 
 # ── Query models ───────────────────────────────────────────────────────
@@ -275,57 +269,6 @@ def _layer_version(slug: str) -> str:
 
     modified = MapLayer.objects.filter(slug=slug).aggregate(m=Max("modified")).get("m")
     return modified.isoformat() if modified else ""
-
-
-def etag_page(version_fn: Any) -> Any:
-    """Conditional-request wrapper for dmr collection/detail views.
-
-    Computes a strong ETag from the version function plus every query
-    parameter and the resolved API version (the versioning middleware
-    may transform pinned responses — its ``Vary`` header keeps shared
-    caches honest). ``If-None-Match`` answers 304 without rendering;
-    otherwise the rendered body is cached keyed by the ETag
-    (version-keyed ⇒ self-busting — no time-based page cache).
-    """
-
-    def decorator(view: Any) -> Any:
-        @wraps(view)
-        def wrapped(request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
-            version = version_fn(request, **kwargs)
-            vary = "|".join(
-                (
-                    request.path,
-                    version,
-                    urlencode(sorted(request.GET.items())),
-                    getattr(request, "api_version", "") or "",
-                )
-            )
-            etag = f'"{hashlib.sha256(vary.encode()).hexdigest()[:20]}"'
-            match = request.headers.get("If-None-Match") == etag
-            if match:
-                response = HttpResponse(status=HTTPStatus.NOT_MODIFIED)
-            else:
-                from django.core.cache import cache
-
-                body = cache.get(f"basemaps:doc:{etag}")
-                if body is None:
-                    response = view(request, *args, **kwargs)
-                    if response.status_code == HTTPStatus.OK:
-                        cache.set(
-                            f"basemaps:doc:{etag}",
-                            response.content,
-                            timeout=24 * 60 * 60,
-                        )
-                else:
-                    response = HttpResponse(body, content_type="application/json")
-            if match or response.status_code == HTTPStatus.OK:
-                response.headers["ETag"] = etag
-                response.headers["Cache-Control"] = REVALIDATE_CACHE_CONTROL
-            return response
-
-        return wrapped
-
-    return decorator
 
 
 def _collection_version(request: HttpRequest, **_: Any) -> str:
