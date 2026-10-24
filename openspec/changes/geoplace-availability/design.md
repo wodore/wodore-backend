@@ -107,6 +107,21 @@ events. Status rows are backfilled in the data migration too (preserves
 last_checked/last_success/consecutive_failures so the cadence does not
 reset).
 
+History move rules (id and ordering): never copy hut PKs — fresh
+auto-increment ids that carry no meaning; never order or filter history by
+id — ordering is exclusively `(availability_date, first_checked)` with the
+composite index as sort key; dedupe by natural key
+`(geo_place, availability_date, first_checked)`, so out-of-order inserts
+(backfill chunks landing after live dual-write rows) are always safe. If
+Phase C deploys while the history move still runs, the same change event may
+arrive from both paths with identical values and `first_checked` and
+collapses via the natural key. Accepted residual risk: two real events for
+the same (place, date) within one clock instant would dedupe to one —
+impossible at the current per-hut serialized update cadence. UUID PKs were
+considered and rejected: no house precedent, no distributed-ID problem to
+solve (ids are never copied), and wider indexes on the highest-volume table
+for no benefit — history row ids are never externally exposed.
+
 ### D7 — Phased rollout with dual-write window
 
 - **A** — new models + migrations, inert
@@ -128,7 +143,11 @@ association has no `link` field), and the tile SQL keeps joining `huts_hut`
 for the `dN_type` standard/reduced classification (`hut_type_open_id` /
 `hut_type_closed_id` — GeoPlace gains type FKs only via the separate capacity
 change). The Hut admin availability inline likewise keeps reading hut models
-until E — do not migrate it in D.
+until E — do not migrate it in D. Same for the GeoJSON controller's feature
+`id` (`F("hut_id")` today): D keeps it hut-side via the reverse join for
+byte-identical output; switching it to the place id happens at E and MUST
+be assessed against the API versioning runbook then (value change for
+clients keying features by id).
 
 Each phase is independently deployable and reversible (E is irreversible but
 gated on zero unmatched huts in the B report and D verified in prod).

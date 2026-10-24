@@ -33,7 +33,8 @@
   `GeoPlaceAvailabilityStatus` through the join
 - [ ] 2.3 `move_availability_history` command: idempotent (natural key
   `(geo_place, availability_date, first_checked)`), resumable (id-range
-  cursor), chunked via django-q, `--dry-run`
+  cursor), chunked via django-q, `--dry-run`; never copies hut PKs, never
+  orders by id
 - [ ] 2.4 Backfill report listing unmatched huts (gate artifact for Phase E)
 - [ ] 2.5 Tests: join resolution, copy fidelity (field-for-field), idempotent
   re-runs, interrupted-run resume, unmatched reporting
@@ -69,12 +70,14 @@
   tables; the Hut admin availability inline keeps reading hut models until
   Phase E
 - [ ] 4.4 Contract tests pinning tile feature properties (`slug`, `dN_*`,
-  `capacity`, `days`) and booking responses/ETags — identical before/after
+  `capacity`, `days`) and booking responses/ETags — identical before/after;
+  the GeoJSON feature `id` stays hut-side until Phase E
 
 ## 5. Hut model removal (Phase E)
 
 - [ ] 5.1 Gate check: backfill unmatched report empty and Phase D verified in
-  prod
+  prod; assess the GeoJSON feature `id` switch (hut id → place id) against
+  the API versioning runbook
 - [ ] 5.2 Removal migration + code cleanup: drop `AvailabilityStatus`,
   `HutAvailability`, `HutAvailabilityHistory`, admin surfaces, old write
   path, and the dual-write path
