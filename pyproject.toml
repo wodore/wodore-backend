@@ -363,6 +363,21 @@ bad-override = true
 method-assign = true
 
 [[tool.pyrefly.sub-config]]
+# Strict-typing ratchet for the manager app (admin base classes): new code
+# must be fully annotated.
+matches = "server/apps/manager/**"
+
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = true
+implicit-any-type-argument = true
+implicit-any-lambda = true
+implicit-any-empty-container = true
+implicit-any-attribute = true
+missing-override-decorator = true
+bad-override = true
+method-assign = true
+
+[[tool.pyrefly.sub-config]]
 # Strict-typing ratchet: licenses app — annotation-completeness rules the
 # default preset does not enforce; only this subtree is affected.
 matches = "server/apps/licenses/**"
@@ -415,6 +430,23 @@ method-assign = true
 # to annotation-completeness rules the default preset does not enforce.
 # Only this subtree is affected; strictness is ratcheted app by app.
 matches = "server/apps/external_links/**"
+
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = true
+implicit-any-type-argument = true
+implicit-any-lambda = true
+implicit-any-empty-container = true
+implicit-any-attribute = true
+missing-override-decorator = true
+bad-override = true
+method-assign = true
+
+
+[[tool.pyrefly.sub-config]]
+# Strict-typing ratchet: the djjmt app is fully owned, so it is held to
+# annotation-completeness rules the default preset does not enforce.
+# Only this subtree is affected; strictness is ratcheted app by app.
+matches = "server/apps/djjmt/**"
 
 [tool.pyrefly.sub-config.errors]
 implicit-any-parameter = true
