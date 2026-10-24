@@ -115,6 +115,8 @@ postgres:
       # Points overzoom fine beyond maxzoom; no need for z17-20 tile generation
       # minzoom 5 (not 7): full-country views (e.g. all of New Zealand sit
       # around z5-6) must serve hut tiles - the frontend hut overlay floor is
+      # also z5 (OVERLAY_MIN_ZOOM).
+      minzoom: 5
       # Cap generation at z9: hut symbols overzoom cleanly from z9 tiles
       # (same pattern as wd-bookings) — deeper zooms request zero new tiles,
       # so hut icon updates on zoom are pure placement re-runs (instant)
