@@ -1,4 +1,5 @@
 import json
+from typing import Any, override
 
 from django.contrib import admin
 
@@ -10,12 +11,13 @@ from django.views.generic.detail import DetailView
 from .models import Organization
 
 
-class OrganizationDetailView(PermissionRequiredMixin, DetailView):
+class OrganizationDetailView(PermissionRequiredMixin, DetailView[Organization]):
     permission_required = "organiations.view_organization"
     template_name = "organizations/detail.html"
     model = Organization
 
-    def get_context_data(self, **kwargs):
+    @override
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = {
             **super().get_context_data(**kwargs),
             **admin.site.each_context(self.request),
