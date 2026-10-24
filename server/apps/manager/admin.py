@@ -1,8 +1,12 @@
+from collections.abc import Iterator
+from typing import Any, TypeVar, cast, override
+
 from colorfield.fields import ColorWidget
 from jsonsuit.widgets import JSONSuit, ReadonlyJSONSuit
 
 # Register your models here.
 from django.contrib import admin
+from django.contrib.admin.views.main import ChangeList
 from django.contrib.auth.admin import (  # shadowed below (Django admin idiom)
     GroupAdmin,
     UserAdmin,
@@ -10,6 +14,8 @@ from django.contrib.auth.admin import (  # shadowed below (Django admin idiom)
 from django.contrib.auth.models import Group
 from django.contrib.gis.admin import GISModelAdmin
 from django.db import models
+from django.forms import ModelForm
+from django.http import HttpRequest
 
 from unfold.admin import ModelAdmin as UnfoldModelAdmin
 from unfold.contrib.filters.admin import RelatedCheckboxFilter
@@ -22,21 +28,36 @@ from server.apps.accounts.models import User as AccountsUser
 
 from .widgets import UnfoldJSONSuit, UnfoldReadonlyJSONSuit
 
+# Generic over the admin's model: subscripted usages (``UserAdmin[AccountsUser]``
+# below) pin it precisely. The ``Any`` default preserves the pre-ratchet
+# behavior of bare subclassers in other apps (model parameter unsolved).
+# Do NOT switch to ``default=models.Model``: it narrows ``obj`` params and
+# attribute access for bare subclassers and fails 8 checks in
+# external_geonames/images (outside this app's ratchet scope).
+_ModelT = TypeVar("_ModelT", bound=models.Model, default=Any)
 
-class ModelAdmin(GISModelAdmin, UnfoldModelAdmin):
+
+class ModelAdmin(GISModelAdmin[_ModelT], UnfoldModelAdmin):
     # Display submit button in filters
     list_filter_submit = False
     formfield_overrides = {models.JSONField: {"widget": UnfoldJSONSuit}}
     # gis_widget_kwargs = {"width": 600, "height": 400}
 
-    def get_form(self, request, obj=None, change=False, **kwargs):
+    @override
+    def get_form(
+        self,
+        request: HttpRequest,
+        obj: _ModelT | None = None,
+        change: bool = False,
+        **kwargs: Any,
+    ) -> type[ModelForm[_ModelT]]:
         form = super().get_form(request, obj, change, **kwargs)
-        for key, model in form.base_fields.items():
-            if isinstance(model.widget, ColorWidget):
+        for key, field in form.base_fields.items():
+            if isinstance(field.widget, ColorWidget):
                 form.base_fields[key].widget = UnfoldAdminColorInputWidget()
-            if isinstance(model.widget, JSONSuit):
+            if isinstance(field.widget, JSONSuit):
                 form.base_fields[key].widget = UnfoldJSONSuit()
-            if isinstance(model.widget, ReadonlyJSONSuit):
+            if isinstance(field.widget, ReadonlyJSONSuit):
                 form.base_fields[key].widget = UnfoldReadonlyJSONSuit()
             # if isinstance(model, JSONFormField):
             #    schema = {
@@ -92,7 +113,7 @@ for model, admin_model in new_registry_items.items():
 
 
 @admin.register(AccountsUser)
-class UserAdmin(UserAdmin, ModelAdmin):
+class UserAdmin(UserAdmin[AccountsUser], ModelAdmin[AccountsUser]):
     form = UserChangeForm
     add_form = UserCreationForm
     change_password_form = AdminPasswordChangeForm
@@ -135,7 +156,7 @@ admin.site.unregister(Group)
 
 
 @admin.register(Group)
-class GroupAdmin(GroupAdmin, ModelAdmin):
+class GroupAdmin(GroupAdmin, ModelAdmin[Group]):
     pass
 
 
@@ -162,7 +183,7 @@ for _model in [Schedule, Success, Failure, OrmQ]:
 
 
 @admin.register(Schedule)
-class CustomScheduleAdmin(QScheduleAdmin, ModelAdmin):
+class CustomScheduleAdmin(QScheduleAdmin, ModelAdmin[Schedule]):
     """Schedule admin with a func dropdown listing registered commands."""
 
     fieldsets = (
@@ -199,7 +220,14 @@ class CustomScheduleAdmin(QScheduleAdmin, ModelAdmin):
         "cron": "schedule_type == 'C'",
     }
 
-    def get_form(self, request, obj=None, change=False, **kwargs):
+    @override
+    def get_form(
+        self,
+        request: HttpRequest,
+        obj: Schedule | None = None,
+        change: bool = False,
+        **kwargs: Any,
+    ) -> type[ModelForm[Schedule]]:
         from django_admin_runner.registry import _registry
 
         form_class = super().get_form(request, obj, change=change, **kwargs)
@@ -223,17 +251,17 @@ class CustomScheduleAdmin(QScheduleAdmin, ModelAdmin):
 
 
 @admin.register(Success)
-class UnfoldSuccessAdmin(QTaskAdmin, ModelAdmin):
+class UnfoldSuccessAdmin(QTaskAdmin, ModelAdmin[Success]):
     pass
 
 
 @admin.register(Failure)
-class UnfoldFailureAdmin(QFailAdmin, ModelAdmin):
+class UnfoldFailureAdmin(QFailAdmin, ModelAdmin[Failure]):
     pass
 
 
 @admin.register(OrmQ)
-class UnfoldQueueAdmin(QQueueAdmin, ModelAdmin):
+class UnfoldQueueAdmin(QQueueAdmin, ModelAdmin[OrmQ]):
     pass
 
 
@@ -249,6 +277,19 @@ class RelatedOnlyCheckboxFilter(MultiValueMixin, admin.RelatedOnlyFieldListFilte
 
     template = "unfold/filters/filters_field.html"
     form_class = CheckboxForm
-    # reuse unfold's checkbox rendering; `lookup_choices` comes from the
-    # RelatedOnly base class (only values in use).
-    choices = RelatedCheckboxFilter.choices
+
+    @override
+    def choices(self, changelist: ChangeList) -> Iterator[Any]:
+        """Render checkbox forms for the related values actually in use.
+
+        Delegates to unfold's ``RelatedCheckboxFilter.choices`` rendering.
+        The ``cast`` is safe: both filters share the MultiValueMixin +
+        RelatedFieldListFilter interface — ``lookup_choices`` and the facet
+        machinery come from the ``RelatedOnlyFieldListFilter`` base, so
+        ``self`` satisfies everything unfold's method touches.
+        Yields unfold's ``{"form": ...}`` dicts, not the choice dicts of the
+        stock admin filter (the stub's shape is private and does not fit).
+        """
+        yield from RelatedCheckboxFilter.choices(
+            cast(RelatedCheckboxFilter, self), changelist
+        )
