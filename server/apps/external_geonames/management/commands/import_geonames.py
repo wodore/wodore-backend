@@ -499,7 +499,7 @@ class Command(BaseCommand):
         allowed_languages = set(settings.LANGUAGE_CODES)
 
         # Collect alternate name records
-        altname_records = []
+        altname_records: list[dict[str, Any]] = []
 
         try:
             csv_file = open(filepath, "r", encoding="utf-8")
@@ -570,8 +570,8 @@ class Command(BaseCommand):
         )
 
         # Separate into create and update batches
-        to_create = []
-        to_update = []
+        to_create: list[dict[str, Any]] = []
+        to_update: list[dict[str, Any]] = []
 
         for record in valid_records:
             if record["alternatename_id"] in existing_altname_ids:
