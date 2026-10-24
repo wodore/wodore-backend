@@ -1,5 +1,4 @@
-# type: ignore
-# TODO: add types
+# type: ignore  # TODO: add types
 import sys
 import typing as t
 
