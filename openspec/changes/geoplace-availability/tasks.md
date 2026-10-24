@@ -25,20 +25,20 @@
 
 ## 2. Backfill (Phase B)
 
-- [ ] 2.1 Hut→place join helper: resolve a hut to its place via the source
+- [x] 2.1 Hut→place join helper: resolve a hut to its place via the source
   association `(organization "wodore", source_id = hut.slug)`; expose the
   unmatched-hut set
-- [ ] 2.2 Data migration: straight copy of `HutAvailability` →
+- [x] 2.2 Data migration: straight copy of `HutAvailability` →
   `GeoPlaceAvailability` and `AvailabilityStatus` →
   `GeoPlaceAvailabilityStatus` through the join
-- [ ] 2.3 `move_availability_history` command: idempotent (natural key
+- [x] 2.3 `move_availability_history` command: idempotent (natural key
   `(geo_place, availability_date, first_checked)`), resumable (id-range
   cursor over source `HutAvailabilityHistory` ids; snapshot max source id
   at start and skip `first_checked` ≥ start so it never touches post-start
   events), chunked via django-q, `--dry-run`; never copies hut PKs, never
   orders by id
-- [ ] 2.4 Backfill report listing unmatched huts (gate artifact for Phase E)
-- [ ] 2.5 Tests: join resolution, copy fidelity (field-for-field), idempotent
+- [x] 2.4 Backfill report listing unmatched huts (gate artifact for Phase E)
+- [x] 2.5 Tests: join resolution, copy fidelity (field-for-field), idempotent
   re-runs, interrupted-run resume, unmatched reporting
 
 ## 3. Write-path retarget (Phase C)
