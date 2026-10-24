@@ -95,8 +95,8 @@ dev = [
   "django-querycount==0.8.*",      # https://pypi.org/project/django-querycount/
   "django-migration-linter==5.*",  # https://pypi.org/project/django-migration-linter/
   "django-extra-checks==0.*",      # https://pypi.org/project/django-extra-checks/
-  "django-stubs-ext==5.*",         # https://pypi.org/project/django-stubs-ext/
-  "django-stubs==5.*",             # https://pypi.org/project/django-stubs/
+  "django-stubs-ext==6.*",         # https://pypi.org/project/django-stubs-ext/ (6.x tracks Django 6.x)
+  "django-stubs==6.*",             # https://pypi.org/project/django-stubs/ — type vocabulary for pyrefly's Django ORM inference
   "wemake-python-styleguide==1.*", # https://pypi.org/project/wemake-python-styleguide/
   "flake8-pytest-style==2.*",      # https://pypi.org/project/flake8-pytest-style/
   "flake8-django==1.*",            # https://pypi.org/project/flake8-django/
@@ -111,7 +111,7 @@ dev = [
   "pytest-timeout==2.*",           # https://pypi.org/project/pytest-timeout/
   "django-test-migrations==1.*",   # https://pypi.org/project/django-test-migrations/
   "hypothesis==6.*",               # https://pypi.org/project/hypothesis/
-  "mypy==1.*",                     # https://pypi.org/project/mypy/
+  "pyrefly==1.4.0",                # https://pypi.org/project/pyrefly/ — type checker + LSP, exact pin (diagnostics move between minors)
   "types-requests==2.*",           # https://pypi.org/project/types-requests/
   "typing-extensions==4.*",        # https://pypi.org/project/typing-extensions/
   "black>=24.10",
@@ -324,23 +324,13 @@ DEP004 = [
 DEP003 = ["server"] # transitive dependencies
 
 
-[tool.mypy]
-files = ["server"]
-disallow_untyped_defs = "False"
-disallow_any_unimported = "False"
-check_untyped_defs = "False"
-warn_return_any = "True"
-warn_unused_ignores = "True"
-show_error_codes = "True"
-no_implicit_optional = "False"
-ignore_errors = "True"
-#ignore_errors = [
-#     "var-annotated",
-# ]
-
-[[tool.mypy.overrides]]
-module = ["parse", "parse_type"]
-ignore_missing_imports = true
+[tool.pyrefly]
+# One engine for CLI, CI and editor LSP — see openspec change `pyrefly-type-checking`.
+project-includes = ["server", "tests"]
+project-excludes = ["**/migrations/**"]
+search-path = ["."]
+python-interpreter-path = ".venv/bin/python"
+baseline = "pyrefly-baseline.json" # ratchet: suppresses pre-existing findings; only NEW type errors fail
 
 
 [build-system]
