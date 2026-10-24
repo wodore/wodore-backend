@@ -81,9 +81,13 @@ class AvailabilityStatus(TimeStampedModel):
         self.consecutive_failures = 0
         self.save()
 
-    def mark_failure(self):
-        """Mark failed or empty data fetch"""
-        self.last_checked = timezone.now()
+    def mark_failure(self, now=None):
+        """Mark failed or empty data fetch
+
+        ``now`` (optional) lets callers share one timestamp across the
+        hut/place dual-write so the place-driven cadence stays in step.
+        """
+        self.last_checked = now or timezone.now()
         self.consecutive_failures += 1
         self.save()
 
@@ -525,9 +529,13 @@ class GeoPlaceAvailabilityStatus(TimeStampedModel):
         self.consecutive_failures = 0
         self.save()
 
-    def mark_failure(self):
-        """Mark failed or empty data fetch"""
-        self.last_checked = timezone.now()
+    def mark_failure(self, now=None):
+        """Mark failed or empty data fetch
+
+        ``now`` (optional) lets callers share one timestamp across the
+        hut/place dual-write so the place-driven cadence stays in step.
+        """
+        self.last_checked = now or timezone.now()
         self.consecutive_failures += 1
         self.save()
 

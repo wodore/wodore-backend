@@ -45,7 +45,7 @@ from .models import (
     HutAvailability,
     HutAvailabilityHistory,
 )
-from .place_dualwrite import mirror_status
+from .place_dualwrite import mirror_mark_failure, mirror_status
 from .place_link import (
     WODORE_ORG_SLUG,
     hut_slug_to_place_ids,
@@ -1002,6 +1002,7 @@ def _fake_booking(
     *,
     free=5,
     total=10,
+    free_tolerance=0,
     hut_type=None,
     status="medium",
     reservation="possible",
@@ -1011,7 +1012,7 @@ def _fake_booking(
         date=date,
         free=free,
         total=total,
-        free_tolerance=0,
+        free_tolerance=free_tolerance,
         occupancy_percent=50.0,
         occupancy_steps=50,
         occupancy_status=status,
@@ -1224,6 +1225,78 @@ class TestDualWrite:
         st.refresh_from_db()
         assert st.consecutive_failures == 0
         assert st.last_success == t3
+
+    def test_free_tolerance_persists_both_sides(
+        self, hut, hut_types, place, place_org, wodore_org
+    ):
+        """Phase C review: ``free_tolerance`` was in the changed-check but
+        missing from both bulk_update field lists — the value was never
+        persisted (spurious history entries every run)."""
+        _link(hut, place, wodore_org)
+        hut_avail, place_avail = _seed_both_sides(hut, place, place_org)
+        batch = [
+            (
+                hut,
+                _fake_hut_booking(
+                    hut,
+                    [_fake_booking(TODAY, free=5, total=10, free_tolerance=3)],
+                    source=place_org.slug,
+                ),
+            )
+        ]
+        AvailabilityService._process_huts_batch(batch=batch, now=timezone.now())
+        hut_avail.refresh_from_db()
+        place_avail.refresh_from_db()
+        assert hut_avail.free_tolerance == 3
+        assert place_avail.free_tolerance == 3
+
+    def test_queued_new_dedupe_one_place_date(
+        self, hut, hut_types, place, place_org, wodore_org
+    ):
+        """Two bookings sharing (place, date) in one payload collapse to one
+        row per side — latest values win (unique constraint holds)."""
+        _link(hut, place, wodore_org)
+        tomorrow = TODAY + datetime.timedelta(days=1)
+        batch = [
+            (
+                hut,
+                _fake_hut_booking(
+                    hut,
+                    [
+                        _fake_booking(tomorrow, free=4, total=10),
+                        _fake_booking(tomorrow, free=6, total=12),
+                    ],
+                    source=place_org.slug,
+                ),
+            )
+        ]
+        results = AvailabilityService._process_huts_batch(
+            batch=batch, now=timezone.now()
+        )
+        assert results[0].success
+        assert results[0].records_created == 1
+        hut_row = HutAvailability.objects.get(hut=hut, availability_date=tomorrow)
+        place_row = GeoPlaceAvailability.objects.get(
+            geo_place=place, availability_date=tomorrow
+        )
+        assert hut_row.free == 6 and hut_row.total == 12
+        assert place_row.free == 6 and place_row.total == 12
+
+    def test_mirror_mark_failure_shared_timestamp(self, hut, place, wodore_org):
+        """Phase C review F1: the mirror stamps the SAME timestamp the hut
+        side used — place-driven cadence stays in step."""
+        _link(hut, place, wodore_org)
+        t1 = timezone.now() - datetime.timedelta(minutes=5)
+        mirror_mark_failure([hut], t1)
+        st = GeoPlaceAvailabilityStatus.objects.get(geo_place=place)
+        assert st.last_checked == t1
+        assert st.consecutive_failures == 1
+
+        t2 = t1 + datetime.timedelta(minutes=1)
+        mirror_mark_failure([hut], t2)
+        st.refresh_from_db()
+        assert st.last_checked == t2
+        assert st.consecutive_failures == 2
 
 
 @pytest.mark.django_db

@@ -52,18 +52,22 @@ def mirror_batch(
     batch: list[tuple[Any, Any]],
     now: datetime.datetime | None = None,
     update_history_last_checked: bool = False,
+    mapping: dict[str, int] | None = None,
 ) -> dict:
     """Mirror one ``(hut, hut_booking)`` batch onto the place tables.
 
     Must run inside the caller's transaction (atomic with the hut-side
-    writes — a failure rolls back both sides). Returns counters:
+    writes — a failure rolls back both sides). ``mapping`` may be passed
+    in when a caller processes several batches (review N1: one
+    association read per run instead of per batch). Returns counters:
     ``created``/``updated``/``unchanged`` place rows, ``history`` entries,
     and ``unmatched`` hut slugs that were skipped.
     """
     if now is None:
         now = timezone.now()
 
-    mapping = hut_slug_to_place_ids()
+    if mapping is None:
+        mapping = hut_slug_to_place_ids()
     linked = [
         (hut, hut_booking, mapping[hut.slug])
         for hut, hut_booking in batch
@@ -86,6 +90,9 @@ def mirror_batch(
     if not linked:
         return stats
 
+    # Defensive savepoint (review N2): callers wrap us in their own
+    # transaction (the batch atomic block); the nested atomic keeps a bare
+    # future caller from writing place rows outside a transaction.
     with transaction.atomic():
         with connection.cursor() as cursor:
             cursor.execute(
@@ -268,6 +275,7 @@ def mirror_batch(
                 fields=[
                     "free",
                     "total",
+                    "free_tolerance",
                     "occupancy_percent",
                     "occupancy_steps",
                     "occupancy_status",
@@ -391,13 +399,16 @@ def mirror_status(
 
 
 def mirror_mark_failure(huts: list[Any], now: datetime.datetime) -> None:
-    """Mirror the per-hut fetch-failure ``mark_failure`` onto place status."""
+    """Mirror the per-hut fetch-failure ``mark_failure`` onto place status.
+
+    ``now`` must be the same timestamp the hut side used (Phase C review
+    F1) — the shared invariant keeps the place-driven cadence in step
+    with the hut side's expectations.
+    """
     mapping = hut_slug_to_place_ids()
     place_ids = [mapping[hut.slug] for hut in huts if hut.slug in mapping]
     for place_id in place_ids:
         status, _ = GeoPlaceAvailabilityStatus.objects.get_or_create(
             geo_place_id=place_id, defaults={"last_checked": now}
         )
-        status.last_checked = now
-        status.consecutive_failures += 1
-        status.save()
+        status.mark_failure(now=now)

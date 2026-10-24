@@ -21,6 +21,7 @@ from server.apps.organizations.models import Organization
 
 from .models import AvailabilityStatus, HutAvailability, HutAvailabilityHistory
 from .place_dualwrite import mirror_batch, mirror_mark_failure, mirror_status
+from .place_link import hut_slug_to_place_ids
 
 SERVICES: dict = settings.SERVICES
 
@@ -315,6 +316,9 @@ class AvailabilityService:
         successful_huts = []
         failed_huts = []
         now = timezone.now()
+        # One association read per run, shared by every batch's place
+        # mirror (Phase C review N1)
+        place_mapping = hut_slug_to_place_ids()
 
         # Process huts in batches: fetch batch → process batch → repeat
         for i in range(0, len(huts), batch_size):
@@ -331,12 +335,15 @@ class AvailabilityService:
                     progress_callback=fetch_progress_callback,
                 )
             except Exception as fetch_error:
-                # If fetch fails for this batch, mark all batch huts as failed
+                # If fetch fails for this batch, mark all batch huts as failed.
+                # One shared timestamp for hut AND place side (Phase C
+                # review F1: keeps the place-driven cadence in step).
+                failure_time = timezone.now()
                 for hut in batch_huts:
                     status, _ = AvailabilityStatus.objects.get_or_create(
-                        hut=hut, defaults={"last_checked": now}
+                        hut=hut, defaults={"last_checked": failure_time}
                     )
-                    status.mark_failure()
+                    status.mark_failure(now=failure_time)
                     failed_huts.append(hut)
                     results.append(
                         UpdateResult(
@@ -349,7 +356,7 @@ class AvailabilityService:
                     if process_progress_callback is not None:
                         process_progress_callback()
                 # Dual-write: mirror the fetch failures (Phase C)
-                mirror_mark_failure(batch_huts, now)
+                mirror_mark_failure(batch_huts, failure_time)
                 # Continue with next batch
                 continue
 
@@ -383,6 +390,7 @@ class AvailabilityService:
                         batch=batch_huts_with_data,
                         now=now,
                         update_history_last_checked=update_history_last_checked,
+                        place_mapping=place_mapping,
                     )
 
                     for result in batch_results:
@@ -505,6 +513,7 @@ class AvailabilityService:
         batch: list[tuple[Hut, Any]],
         now: datetime.datetime | None = None,
         update_history_last_checked: bool = False,
+        place_mapping: dict[str, int] | None = None,
     ) -> list[UpdateResult]:
         """
         Process multiple huts in a single transaction for better performance.
@@ -757,6 +766,7 @@ class AvailabilityService:
                     fields=[
                         "free",
                         "total",
+                        "free_tolerance",
                         "occupancy_percent",
                         "occupancy_steps",
                         "occupancy_status",
@@ -836,6 +846,7 @@ class AvailabilityService:
                 batch=batch,
                 now=now,
                 update_history_last_checked=update_history_last_checked,
+                mapping=place_mapping,
             )
 
         return results
