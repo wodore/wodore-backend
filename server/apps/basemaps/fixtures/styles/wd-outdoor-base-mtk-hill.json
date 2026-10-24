@@ -2157,14 +2157,6 @@
       "url": "https://tiles.maptoolkit.org/rocks.json",
       "tileSize": 360
     },
-    "bathymetry": {
-      "type": "raster-dem",
-      "url": "https://tiles.maptoolkit.org/raster_bathymetry.json",
-      "minzoom": 0,
-      "maxzoom": 9,
-      "tileSize": 512,
-      "encoding": "terrarium"
-    },
     "rgb-tiles": {
       "type": "raster-dem",
       "url": "https://tiles.maptoolkit.org/terrainrgb.json",
@@ -2246,42 +2238,6 @@
           "hsla(206, 54%, 80%, 1)",
           9,
           "hsla(207, 56%, 70%, 1)"
-        ]
-      }
-    },
-    {
-      "id": "water_bathymetry",
-      "type": "color-relief",
-      "metadata": {
-        "maptoolkit:legend": {
-          "hidden": true
-        }
-      },
-      "source": "bathymetry",
-      "minzoom": 8,
-      "maxzoom": 23,
-      "layout": {
-        "visibility": "visible"
-      },
-      "paint": {
-        "color-relief-color": [
-          "interpolate",
-          ["linear"],
-          ["elevation"],
-          -1000,
-          "hsla(203, 70%, 85%, 1)",
-          -500,
-          "hsla(203, 70%, 85%, 1)",
-          -250,
-          "hsla(203, 70%, 85%, 1)",
-          -100,
-          "hsla(203, 70%, 85%, 1)",
-          -30,
-          "hsla(203, 70%, 85%, 1)",
-          -0.1,
-          "hsla(203, 70%, 85%, 1)",
-          0,
-          "hsla(203, 70%, 85%, 0)"
         ]
       }
     },
@@ -3080,21 +3036,21 @@
           "interpolate",
           ["linear"],
           ["zoom"],
-          2,
-          0.7,
-          6,
+          2.05,
+          0.75,
+          6.05,
+          0.6000000000000001,
+          10.05,
           0.55,
-          10,
-          0.5,
-          13.2,
-          0.5,
-          16,
-          0.5
+          13.25,
+          0.55,
+          16.05,
+          0.55
         ],
         "hillshade-highlight-color": "hsla(45, 60%, 97%, 0.4)",
         "hillshade-illumination-anchor": "viewport",
         "hillshade-illumination-direction": 315,
-        "hillshade-shadow-color": "hsla(210, 18%, 32%, 0.55)"
+        "hillshade-shadow-color": "hsla(210, 18%, 28%, 0.65)"
       }
     },
     {

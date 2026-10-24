@@ -2163,14 +2163,6 @@
       "maxzoom": 15,
       "tileSize": 512,
       "attribution": "<a href='https://registry.opendata.aws/terrain-tiles/'>AWS Terrain Tiles</a>"
-    },
-    "bathymetry": {
-      "type": "raster-dem",
-      "url": "https://tiles.maptoolkit.org/raster_bathymetry.json",
-      "minzoom": 0,
-      "maxzoom": 9,
-      "tileSize": 512,
-      "encoding": "terrarium"
     }
   },
   "layers": [
@@ -2249,65 +2241,6 @@
           9,
           "hsla(207, 56%, 70%, 1)"
         ]
-      }
-    },
-    {
-      "id": "water_bathymetry",
-      "type": "color-relief",
-      "metadata": {
-        "maptoolkit:legend": {
-          "hidden": true
-        }
-      },
-      "source": "bathymetry",
-      "minzoom": 8,
-      "maxzoom": 23,
-      "layout": {
-        "visibility": "visible"
-      },
-      "paint": {
-        "color-relief-color": [
-          "interpolate",
-          ["linear"],
-          ["elevation"],
-          -1000,
-          "hsla(203, 70%, 85%, 1)",
-          -500,
-          "hsla(203, 70%, 85%, 1)",
-          -250,
-          "hsla(203, 70%, 85%, 1)",
-          -100,
-          "hsla(203, 70%, 85%, 1)",
-          -30,
-          "hsla(203, 70%, 85%, 1)",
-          -0.1,
-          "hsla(203, 70%, 85%, 1)",
-          0,
-          "hsla(203, 70%, 85%, 0)"
-        ]
-      }
-    },
-    {
-      "id": "relief_hillshade_server",
-      "type": "raster",
-      "source": "hillshade-server",
-      "minzoom": 2,
-      "paint": {
-        "raster-brightness-min": 0.4,
-        "raster-opacity": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          5,
-          0.5,
-          9,
-          0.55,
-          12,
-          0.58,
-          15,
-          0.62
-        ],
-        "raster-resampling": "linear"
       }
     },
     {
@@ -3091,6 +3024,29 @@
             0
           ]
         ]
+      }
+    },
+    {
+      "id": "relief_hillshade_server",
+      "type": "raster",
+      "source": "hillshade-server",
+      "minzoom": 2,
+      "paint": {
+        "raster-brightness-min": 0.4,
+        "raster-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          5,
+          0.5,
+          9,
+          0.55,
+          12,
+          0.58,
+          15,
+          0.62
+        ],
+        "raster-resampling": "linear"
       }
     },
     {
