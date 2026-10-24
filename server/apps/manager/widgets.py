@@ -1,13 +1,25 @@
+from typing import Any, override
+
 from jsonsuit.widgets import JSONSuit, ReadonlyJSONSuit
 
+from django.forms.renderers import BaseRenderer
 from django.template.loader import render_to_string
+from django.utils.safestring import SafeString
 
 from unfold.widgets import BASE_INPUT_CLASSES
 
 
 class UnfoldJSONSuit(JSONSuit):
-    def render(self, name, value, attrs={}, renderer=None):
+    @override
+    def render(
+        self,
+        name: str,
+        value: Any,
+        attrs: dict[str, Any] | None = None,
+        renderer: BaseRenderer | None = None,
+    ) -> SafeString:
         klass = " ".join(BASE_INPUT_CLASSES)
+        attrs = attrs or {}
         attrs.update({"class": "hidden " + klass})
 
         textarea = super(JSONSuit, self).render(name, value, attrs)
@@ -23,7 +35,14 @@ class UnfoldJSONSuit(JSONSuit):
 
 
 class UnfoldReadonlyJSONSuit(ReadonlyJSONSuit):
-    def render(self, name, value, attrs=None, renderer=None):
+    @override
+    def render(
+        self,
+        name: str,
+        value: Any,
+        attrs: dict[str, Any] | None = None,
+        renderer: BaseRenderer | None = None,
+    ) -> SafeString:
         klass = " ".join(BASE_INPUT_CLASSES)
         attrs = attrs or {}
         attrs.update({"class": "hidden " + klass})
