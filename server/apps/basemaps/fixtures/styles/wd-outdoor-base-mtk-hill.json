@@ -3096,21 +3096,11 @@
           10,
           0.5,
           13.2,
-          0.48,
+          0.5,
           16,
-          0.45
+          0.5
         ],
-        "hillshade-shadow-color": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          2,
-          "hsla(210, 18%, 32%, 0.55)",
-          12.8,
-          "hsla(210, 18%, 32%, 0.55)",
-          14,
-          "hsla(210, 18%, 32%, 0.38)"
-        ],
+        "hillshade-shadow-color": "hsla(210, 18%, 32%, 0.55)",
         "hillshade-highlight-color": "hsla(45, 60%, 97%, 0.4)",
         "hillshade-accent-color": "hsla(0, 0%, 0%, 0)"
       }
