@@ -412,7 +412,8 @@ method-assign = true
 
 
 [[tool.pyrefly.sub-config]]
-# Strict-typing ratchet for the owners app: new code must be fully annotated.
+# Strict-typing ratchet for the owners app: new and changed code must be
+# fully annotated (same ruleset as the contacts and envvars ratchets).
 matches = "server/apps/owners/**"
 
 [tool.pyrefly.sub-config.errors]
