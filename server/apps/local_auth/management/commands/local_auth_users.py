@@ -6,7 +6,7 @@ client so scripts and tests can fetch tokens with a simple POST (parity with
 the retired hand-rolled provider).
 """
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, cast, override
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -40,6 +40,7 @@ class Command(BaseCommand):
         "are reset on every run."
     )
 
+    @override
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--admin-password",
@@ -52,13 +53,10 @@ class Command(BaseCommand):
             help="Password for the editor user (default: editor-dev)",
         )
 
-    def handle(
-        self,
-        admin_password: str,
-        editor_password: str,
-        *args: Any,
-        **options: Any,
-    ) -> None:
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
+        admin_password: str = options["admin_password"]
+        editor_password: str = options["editor_password"]
         admin_group, _ = Group.objects.get_or_create(name="admin")
         editor_group, _ = Group.objects.get_or_create(name="editor")
         for extra in ("root", "viewer"):
