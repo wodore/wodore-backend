@@ -21,7 +21,6 @@ def activate(language: str | None) -> str | None:
 
 def deactivate() -> None:
     _LANG = None
-    return _LANG
 
 
 def get_language() -> str | None:
