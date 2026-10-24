@@ -904,6 +904,12 @@ class GeoPlaceAvailabilityHistory(TimeStampedModel):
             models.Index(fields=["availability_date", "first_checked"]),
         ]
         constraints = [
+            # Natural key of a change event — hardens the history-move
+            # idempotency guarantee at the DB level (A–C review nit)
+            models.UniqueConstraint(
+                fields=["geo_place", "availability_date", "first_checked"],
+                name="unique_place_date_first_checked",
+            ),
             models.CheckConstraint(
                 name="%(app_label)s_%(class)s_occupancy_status_valid",
                 condition=models.Q(

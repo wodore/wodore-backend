@@ -136,6 +136,10 @@ class Migration(migrations.Migration):
             model_name='geoplaceavailabilityhistory',
             constraint=models.CheckConstraint(condition=models.Q(('reservation_status__in', ['unknown', 'possible', 'not_possible', 'not_online'])), name='availability_geoplaceavailabilityhistory_reservation_status_valid'),
         ),
+        migrations.AddConstraint(
+            model_name='geoplaceavailabilityhistory',
+            constraint=models.UniqueConstraint(fields=('geo_place', 'availability_date', 'first_checked'), name='unique_place_date_first_checked'),
+        ),
         pgtrigger.migrations.AddTrigger(
             model_name='geoplaceavailabilityhistory',
             trigger=pgtrigger.compiler.Trigger(name='upd_mod_1a32ca1f', sql=pgtrigger.compiler.UpsertTriggerSql(func='NEW.modified = NOW(); RETURN NEW;', hash='3b7ac4d55ef815c6f1c1300212f58ac445a11251', operation='UPDATE', pgid='pgtrigger_upd_mod_1a32ca1f_8fb5b', table='availability_geoplaceavailabilityhistory', when='BEFORE')),

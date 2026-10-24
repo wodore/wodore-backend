@@ -54,6 +54,11 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         dry_run = options["dry_run"]
+        # --dry-run implies --sync (A–C review nit): enqueuing no-op
+        # django-q workers would report nothing to the console.
+        if dry_run and not options["sync"]:
+            options["sync"] = True
+            self.stdout.write("--dry-run implies --sync (no tasks are enqueued)")
         max_id, started_at = snapshot()
         if max_id == 0:
             self.stdout.write("No hut availability history rows — nothing to move.")

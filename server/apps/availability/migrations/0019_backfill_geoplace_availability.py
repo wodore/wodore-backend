@@ -76,13 +76,16 @@ def backfill(apps, schema_editor):
 
     status_copied = 0
     status_to_create = []
+    existing_status_places = set(
+        GeoPlaceAvailabilityStatus.objects.values_list("geo_place_id", flat=True)
+    )
     for row in AvailabilityStatus.objects.select_related("hut").iterator(
         chunk_size=BATCH_SIZE
     ):
         place_id = mapping.get(row.hut.slug)
         if place_id is None:
             continue
-        if GeoPlaceAvailabilityStatus.objects.filter(geo_place_id=place_id).exists():
+        if place_id in existing_status_places:
             continue
         status_to_create.append(
             GeoPlaceAvailabilityStatus(
@@ -93,6 +96,7 @@ def backfill(apps, schema_editor):
                 consecutive_failures=row.consecutive_failures,
             )
         )
+        existing_status_places.add(place_id)
         status_copied += 1
         if len(status_to_create) >= BATCH_SIZE:
             GeoPlaceAvailabilityStatus.objects.bulk_create(status_to_create)
@@ -122,6 +126,12 @@ def remove_backfill(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    # Non-atomic on purpose (review S1): with associations present this
+    # copies ~138k rows + status rows; batched bulk_creates then commit
+    # independently instead of one giant transaction. Partial failures
+    # resume safely via the existing-row skip.
+    atomic = False
+
     dependencies = [
         (
             "availability",
