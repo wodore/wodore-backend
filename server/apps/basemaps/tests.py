@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn, override
 
 import pytest
+from pytest_django.fixtures import SettingsWrapper
 
 from django.conf import settings
 from django.db import IntegrityError
@@ -148,7 +149,7 @@ class TestResolution:
         resolved = resolve_tokens({"data": "{{date}}"}, {"date": None})
         assert resolved["data"] == "{{date}}"
 
-    def test_env_substitution(self, monkeypatch):
+    def test_env_substitution(self, monkeypatch: pytest.MonkeyPatch):
         _env_row()  # registered, empty value → env fallback
         monkeypatch.setenv("WODORE_TEST_KEY", "abc123")
         assert (
@@ -156,7 +157,7 @@ class TestResolution:
             == "https://x/?key=abc123"
         )
 
-    def test_env_registry_strict_allowlist(self, monkeypatch):
+    def test_env_registry_strict_allowlist(self, monkeypatch: pytest.MonkeyPatch):
         """Unregistered names never resolve — the process environment is
         never consulted for names outside the admin registry."""
         monkeypatch.setenv("WODORE_TEST_KEY", "from-env")
@@ -165,7 +166,7 @@ class TestResolution:
             == "https://x/?key={{env:WODORE_TEST_KEY}}"
         )
 
-    def test_missing_env_names(self, monkeypatch):
+    def test_missing_env_names(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.delenv("WODORE_TEST_KEY", raising=False)
         monkeypatch.setattr(settings, "WODORE_TEST_KEY", "", raising=False)
         _env_row()
@@ -174,7 +175,9 @@ class TestResolution:
         }
         assert missing_env_names(document) == {"WODORE_TEST_KEY"}
 
-    def test_missing_env_names_resolvable_and_absent(self, monkeypatch):
+    def test_missing_env_names_resolvable_and_absent(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         _env_row()
         monkeypatch.setenv("WODORE_TEST_KEY", "k")
         url = "https://x/?key={{env:WODORE_TEST_KEY}}"
@@ -185,7 +188,7 @@ class TestResolution:
         monkeypatch.setenv("WODORE_TEST_KEY", "")
         assert missing_env_names(url) == {"WODORE_TEST_KEY"}
 
-    def test_missing_env_names_pinned_empty(self, monkeypatch):
+    def test_missing_env_names_pinned_empty(self, monkeypatch: pytest.MonkeyPatch):
         _env_row(env_fallback=False)
         monkeypatch.setenv("WODORE_TEST_KEY", "from-env")
         url = "https://x/?key={{env:WODORE_TEST_KEY}}"
@@ -280,7 +283,7 @@ class TestAuthoredOverrideOrder:
 
 @pytest.mark.django_db
 class TestSeed:
-    def test_basemap_picker_visibility(self, django_db_setup):
+    def test_basemap_picker_visibility(self, django_db_setup: None):
         """Only product basemaps are pickable — internal variants and
         automatic fallbacks stay hidden but active (fallback chains,
         saved selections and spec variants keep resolving)."""
@@ -315,7 +318,7 @@ class TestSeed:
         assert not rows.filter(show=True).exists()
         assert rows.filter(is_active=True).exists()  # hidden ≠ inactive
 
-    def test_seed_idempotent(self, django_db_setup):
+    def test_seed_idempotent(self, django_db_setup: None):
         from django.core.management import call_command
 
         call_command("map_seed", verbosity=0)
@@ -609,7 +612,7 @@ class TestStyleEndpoint:
         second = client.get("/v1/map/styles/huts.json", HTTP_IF_NONE_MATCH=etag)
         assert second.status_code == 304
 
-    def test_external_style_redirects_with_env(self, monkeypatch):
+    def test_external_style_redirects_with_env(self, monkeypatch: pytest.MonkeyPatch):
         self._seed()
         monkeypatch.setenv("WODORE_MAPTILER_API_KEY", "k1")
         client = Client()
@@ -642,12 +645,14 @@ class TestEnvGatedLayers:
         call_command("map_seed", verbosity=0)
 
     @staticmethod
-    def _make_unavailable(monkeypatch):
+    def _make_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
         """Deterministically unset the MapTiler key (env ∪ settings)."""
         monkeypatch.delenv("WODORE_MAPTILER_API_KEY", raising=False)
         monkeypatch.setattr(settings, "WODORE_MAPTILER_API_KEY", "", raising=False)
 
-    def test_hidden_from_layers_catalog_and_detail(self, monkeypatch):
+    def test_hidden_from_layers_catalog_and_detail(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         from django.core.cache import cache
 
         self._seed()
@@ -661,7 +666,9 @@ class TestEnvGatedLayers:
         detail = client.get("/v1/map/layers/maptiler-hybrid", {"lang": "en"})
         assert detail.status_code == 404
 
-    def test_style_endpoint_names_the_unset_variable(self, monkeypatch):
+    def test_style_endpoint_names_the_unset_variable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         self._seed()
         self._make_unavailable(monkeypatch)
         response = Client().get("/v1/map/styles/maptiler-hybrid.json")
@@ -670,7 +677,7 @@ class TestEnvGatedLayers:
         assert payload["code"] == "not_found"
         assert "WODORE_MAPTILER_API_KEY" in payload["detail"]
 
-    def test_served_when_env_set(self, monkeypatch):
+    def test_served_when_env_set(self, monkeypatch: pytest.MonkeyPatch):
         from django.core.cache import cache
 
         self._seed()
@@ -683,7 +690,9 @@ class TestEnvGatedLayers:
         catalog = client.get("/v1/map/catalog", {"lang": "en"}).json()
         assert catalog["styles"]["maptiler-hybrid"]["path"].endswith("key=k1")
 
-    def test_inactive_registry_row_forbids_even_with_env(self, monkeypatch):
+    def test_inactive_registry_row_forbids_even_with_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         """is_active=False is the operator kill switch — the layer is
         gated even when the process environment still has the key."""
         from django.core.cache import cache
@@ -700,7 +709,7 @@ class TestEnvGatedLayers:
         assert not any(l["slug"] == "maptiler-hybrid" for l in layers["data"])
         assert client.get("/v1/map/styles/maptiler-hybrid.json").status_code == 404
 
-    def test_admin_value_wins_over_env(self, monkeypatch):
+    def test_admin_value_wins_over_env(self, monkeypatch: pytest.MonkeyPatch):
         from django.core.cache import cache
 
         from server.apps.envvars.models import EnvVar
@@ -717,7 +726,7 @@ class TestEnvGatedLayers:
         assert redirect.status_code == 302
         assert redirect["Location"].endswith("key=from-admin")
 
-    def test_pinned_empty_value_serves_empty_key(self, monkeypatch):
+    def test_pinned_empty_value_serves_empty_key(self, monkeypatch: pytest.MonkeyPatch):
         """env_fallback=False + empty value = deliberately empty — the
         layer serves with the empty substitution (operator intent)."""
         from django.core.cache import cache
@@ -732,7 +741,9 @@ class TestEnvGatedLayers:
         assert redirect.status_code == 302
         assert redirect["Location"].endswith("key=")
 
-    def test_catalog_etag_rotates_on_registry_edit(self, monkeypatch):
+    def test_catalog_etag_rotates_on_registry_edit(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         from django.core.cache import cache
 
         from server.apps.envvars.models import EnvVar
@@ -953,7 +964,9 @@ class TestEnvResolutionScoping:
 
         assert collect_env_names(tree) == {"A_KEY", "B_KEY"}
 
-    def test_build_env_resolves_only_requested_names(self, monkeypatch):
+    def test_build_env_resolves_only_requested_names(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         from server.apps.basemaps.resolution import build_env
 
         _env_row()  # registered, empty value → env fallback
@@ -961,7 +974,7 @@ class TestEnvResolutionScoping:
         env = build_env({"WODORE_TEST_KEY"})
         assert env == {"WODORE_TEST_KEY": "v1"}
 
-    def test_tree_substitution_single_pass(self, monkeypatch):
+    def test_tree_substitution_single_pass(self, monkeypatch: pytest.MonkeyPatch):
         from server.apps.basemaps.resolution import substitute_env_tree
 
         _env_row()
@@ -1066,7 +1079,7 @@ class TestAssetVersionInjection:
         versions.update(overrides)
         return versions
 
-    def test_sprite_glyphs_and_huts_tiles_get_versions(self, settings):
+    def test_sprite_glyphs_and_huts_tiles_get_versions(self, settings: SettingsWrapper):
         settings.MARTIN_TILE_URL = "https://tiles.example.org"
         style = {
             "sprite": [
@@ -1091,7 +1104,7 @@ class TestAssetVersionInjection:
             "https://tiles.example.org/huts/{z}/{x}/{y}?v=hutv"
         )
 
-    def test_external_registry_urls_versioned(self, settings):
+    def test_external_registry_urls_versioned(self, settings: SettingsWrapper):
         settings.MARTIN_TILE_URL = "https://tiles.example.org"
         style = {
             "sprite": [{"id": "mtk", "url": "https://icons.example.org/sprite"}],
@@ -1099,7 +1112,9 @@ class TestAssetVersionInjection:
         out = inject_asset_versions(style, self._versions())
         assert out["sprite"][0]["url"] == "https://icons.example.org/sprite?v=extv"
 
-    def test_static_terrain_routes_and_tilejson_urls_versioned(self, settings):
+    def test_static_terrain_routes_and_tilejson_urls_versioned(
+        self, settings: SettingsWrapper
+    ):
         settings.MARTIN_TILE_URL = "https://tiles.example.org"
         style = {
             "sources": {
@@ -1139,7 +1154,7 @@ class TestAssetVersionInjection:
         assert used["tiles"] == {"hillshade": "hillv", "contours": "contv"}
         assert used["external"] == {"https://tiles.maptoolkit.org/mtk.json": "mtkv"}
 
-    def test_urls_with_query_or_param_tokens_untouched(self, settings):
+    def test_urls_with_query_or_param_tokens_untouched(self, settings: SettingsWrapper):
         settings.MARTIN_TILE_URL = "https://tiles.example.org"
         style = {
             "sources": {
@@ -1166,7 +1181,9 @@ class TestAssetVersionInjection:
             "https://tiles.example.org/raster/{z}/{x}/{y}.webp?v=2"
         )
 
-    def test_unregistered_sources_and_empty_registry_untouched(self, settings):
+    def test_unregistered_sources_and_empty_registry_untouched(
+        self, settings: SettingsWrapper
+    ):
         settings.MARTIN_TILE_URL = "https://tiles.example.org"
         style = {
             "sprite": [
@@ -1179,7 +1196,12 @@ class TestAssetVersionInjection:
                 },
             },
         }
-        empty = {"sprites": None, "fonts": None, "tiles": {}, "external": {}}
+        empty: dict[str, Any] = {
+            "sprites": None,
+            "fonts": None,
+            "tiles": {},
+            "external": {},
+        }
         assert inject_asset_versions(style, empty) == style
         out = inject_asset_versions(style, self._versions())
         # geoplaces is not registered → no version
@@ -1343,7 +1365,8 @@ class TestFetchSemantics:
                     self.end_headers()
                     self.wfile.write(body)
 
-            def log_message(self, format, *args):
+            @override
+            def log_message(self, format: str, *args: Any) -> None:
                 pass
 
         server = HTTPServer(("127.0.0.1", 0), Handler)
@@ -1367,7 +1390,9 @@ class TestFetchSemantics:
 class TestExternalVerifierHttpShapes:
     """Verifier behavior when the bare key 404s (the maptoolkit shape)."""
 
-    def test_404_variant_skipped_and_json_png_publish(self, monkeypatch):
+    def test_404_variant_skipped_and_json_png_publish(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         from django.core.cache import cache
 
         from server.apps.basemaps.models import TileAssetVersion
@@ -1389,7 +1414,9 @@ class TestExternalVerifierHttpShapes:
         )
         cache.clear()
 
-        def fetch(url, nonce, headers=None):
+        def fetch(
+            url: str, nonce: str, headers: dict[str, str] | None = None
+        ) -> tuple[int, bytes, dict[str, str]]:
             if url.endswith(".json"):
                 return 200, b"index", {"ETag": '"j"'}
             if url.endswith(".png"):
@@ -1406,7 +1433,9 @@ class TestExternalVerifierHttpShapes:
         stats2 = run_external_verifier()
         assert _no_otm(stats2["unchanged"]) == ["https://icons.example.org/sprite"]
 
-    def test_mixed_304_and_changed_png_is_detected(self, monkeypatch):
+    def test_mixed_304_and_changed_png_is_detected(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         """M1 regression: a .json 304 must not mask a changed .png."""
         from django.core.cache import cache
 
@@ -1431,7 +1460,9 @@ class TestExternalVerifierHttpShapes:
         )
         cache.clear()
 
-        def fetch(url, nonce, headers=None):
+        def fetch(
+            url: str, nonce: str, headers: dict[str, str] | None = None
+        ) -> tuple[int, bytes, dict[str, str]]:
             if url.endswith(".json"):
                 # Unchanged index: honors the stored validator.
                 assert headers and headers.get("If-None-Match") == '"j"'
@@ -1480,7 +1511,7 @@ class TestPerStyleDigest:
         assert basemap_after.headers["ETag"] == basemap_before.headers["ETag"]
         assert huts_after.headers["ETag"] != huts_before.headers["ETag"]
 
-    def test_consumed_versions_mirror_injection(self, settings):
+    def test_consumed_versions_mirror_injection(self, settings: SettingsWrapper):
         settings.MARTIN_TILE_URL = "https://tiles.example.org"
         from server.apps.basemaps.tile_assets import consumed_versions
 
@@ -1594,7 +1625,9 @@ class TestDateRotation:
     """M2 regression: resolved styles with date params re-key at
     midnight; styles without them keep their ETag."""
 
-    def test_date_change_rotates_huts_but_not_basemap(self, monkeypatch):
+    def test_date_change_rotates_huts_but_not_basemap(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         from django.core.cache import cache
         from django.core.management import call_command
         from django.utils import timezone
@@ -1624,7 +1657,9 @@ class TestMartinWatcher:
 
         call_command("map_seed", verbosity=0)
 
-    def test_publishes_observed_hash_and_is_content_gated(self, monkeypatch):
+    def test_publishes_observed_hash_and_is_content_gated(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         from django.core.cache import cache
 
         from server.apps.basemaps.models import TileAssetVersion
@@ -1632,7 +1667,9 @@ class TestMartinWatcher:
         self._seed()
         calls: list[str] = []
 
-        def fake_fetch(url, nonce, headers=None):
+        def fake_fetch(
+            url: str, nonce: str, headers: dict[str, str] | None = None
+        ) -> tuple[int, bytes, dict[str, str]]:
             calls.append(url)
             assert nonce  # _fetch appends it as ?_wd_watch=…
             return 200, b"bytes-v1", {}
@@ -1648,17 +1685,22 @@ class TestMartinWatcher:
         assert "sprites" in stats2["kept"]
         assert "fonts" in stats2["kept"]
         assert TileAssetVersion.objects.get(key="sprites").version == v1
+
         # New served bytes → new version
-        monkeypatch.setattr(
-            "server.apps.basemaps.tile_assets._fetch",
-            lambda url, nonce, headers=None: (200, b"bytes-v2", {}),
-        )
+        def fetch_v2(
+            url: str, nonce: str, headers: dict[str, str] | None = None
+        ) -> tuple[int, bytes, dict[str, str]]:
+            return 200, b"bytes-v2", {}
+
+        monkeypatch.setattr("server.apps.basemaps.tile_assets._fetch", fetch_v2)
         stats3 = run_martin_watcher()
         assert "sprites" in stats3["published"]
         assert "fonts" in stats3["published"]
         assert TileAssetVersion.objects.get(key="sprites").version != v1
 
-    def test_font_probes_encode_spaces_and_skip_unknown_stacks(self, monkeypatch):
+    def test_font_probes_encode_spaces_and_skip_unknown_stacks(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         """Staging round 1: font names contain spaces (raw URLs are
         invalid for urllib) and expression keywords scraped from
         data-driven text-font arrays 404 — those are skipped, real
@@ -1677,7 +1719,9 @@ class TestMartinWatcher:
             assert " " not in url, url  # percent-encoded
         statuses: dict[str, int] = {}
 
-        def fetch(url, nonce, headers=None):
+        def fetch(
+            url: str, nonce: str, headers: dict[str, str] | None = None
+        ) -> tuple[int, bytes, dict[str, str]]:
             status = statuses.get(url, 200)
             return status, b"x" if status == 200 else b"", {}
 
@@ -1707,7 +1751,7 @@ class TestMartinWatcher:
         assert "fonts" in stats2["published"]
         assert "tiles:hillshade" in stats2["published"]
 
-    def test_probe_failure_keeps_stored_version(self, monkeypatch):
+    def test_probe_failure_keeps_stored_version(self, monkeypatch: pytest.MonkeyPatch):
         from django.core.cache import cache
 
         from server.apps.basemaps.models import TileAssetVersion
@@ -1718,7 +1762,9 @@ class TestMartinWatcher:
         )
         cache.clear()
 
-        def failing_fetch(url, nonce, headers=None):
+        def failing_fetch(
+            url: str, nonce: str, headers: dict[str, str] | None = None
+        ) -> NoReturn:
             raise OSError("martin down")
 
         monkeypatch.setattr("server.apps.basemaps.tile_assets._fetch", failing_fetch)
@@ -1731,14 +1777,14 @@ class TestMartinWatcher:
 OTM_KEY = "https://tile.opentopomap.org/10/540/357.png"
 
 
-def _no_otm(items: list) -> list:
+def _no_otm(items: list[Any]) -> list[Any]:
     """Filter the always-verified OTM entry out of verifier stats lists."""
     return [i for i in items if i != OTM_KEY]
 
 
 @pytest.mark.django_db
 class TestExternalVerifier:
-    def test_304_keeps_version_200_bumps(self, monkeypatch):
+    def test_304_keeps_version_200_bumps(self, monkeypatch: pytest.MonkeyPatch):
         from django.core.cache import cache
 
         from server.apps.basemaps.models import TileAssetVersion
@@ -1763,7 +1809,9 @@ class TestExternalVerifier:
         )
         cache.clear()
 
-        def fetch_304(url, nonce, headers=None):
+        def fetch_304(
+            url: str, nonce: str, headers: dict[str, str] | None = None
+        ) -> tuple[int, bytes, dict[str, str]]:
             assert headers and headers.get("If-None-Match") == '"abc"'
             return 304, b"", {}
 
@@ -1775,7 +1823,9 @@ class TestExternalVerifier:
             == "old"
         )
 
-        def fetch_200(url, nonce, headers=None):
+        def fetch_200(
+            url: str, nonce: str, headers: dict[str, str] | None = None
+        ) -> tuple[int, bytes, dict[str, str]]:
             return 200, b"new-bytes", {"ETag": '"def"'}
 
         monkeypatch.setattr("server.apps.basemaps.tile_assets._fetch", fetch_200)
@@ -1785,7 +1835,7 @@ class TestExternalVerifier:
         assert row.version != "old"
         assert row.etag == '"def"'
 
-    def test_unreferenced_entries_skipped(self, monkeypatch):
+    def test_unreferenced_entries_skipped(self, monkeypatch: pytest.MonkeyPatch):
         from django.core.cache import cache
 
         from server.apps.basemaps.models import TileAssetVersion
@@ -1828,7 +1878,7 @@ class TestOgMapMaintenance:
     """OG static cards: basemap content rotates the cache key; old
     cards are cleaned up daily."""
 
-    def test_cache_key_includes_otm_version(self, db):
+    def test_cache_key_includes_otm_version(self, db: None):
         from server.apps.api.ogmap import static_map_cache_key
 
         base = {

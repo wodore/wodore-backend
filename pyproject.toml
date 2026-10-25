@@ -474,6 +474,21 @@ implicit-any-attribute = true
 missing-override-decorator = true
 bad-override = true
 method-assign = true
+[[tool.pyrefly.sub-config]]
+# Strict-typing ratchet: the basemaps app (WEP010 map layers) is held to
+# annotation-completeness rules the default preset does not enforce.
+# Only this subtree is affected; strictness is ratcheted app by app.
+matches = "server/apps/basemaps/**"
+
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = true
+implicit-any-type-argument = true
+implicit-any-lambda = true
+implicit-any-empty-container = true
+implicit-any-attribute = true
+missing-override-decorator = true
+bad-override = true
+method-assign = true
 
 [[tool.pyrefly.sub-config]]
 # Strict-typing ratchet: the external_geonames app is fully owned, so it is
@@ -564,6 +579,23 @@ method-assign = true
 # Strict-typing ratchet for the availability app. New code must be fully
 # annotated; only this subtree is affected; strictness is ratcheted app by app.
 matches = "server/apps/availability/**"
+
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = true
+implicit-any-type-argument = true
+implicit-any-lambda = true
+implicit-any-empty-container = true
+implicit-any-attribute = true
+missing-override-decorator = true
+bad-override = true
+method-assign = true
+
+
+[[tool.pyrefly.sub-config]]
+# Strict-typing ratchet for the apiversions app (API contract versioning:
+# registry, middleware, transforms). New code must be fully annotated; only
+# this subtree is affected; strictness is ratcheted app by app.
+matches = "server/apps/apiversions/**"
 
 [tool.pyrefly.sub-config.errors]
 implicit-any-parameter = true
