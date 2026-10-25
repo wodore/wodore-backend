@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Any, override
 
 from colorfield.fields import ColorField
 from django_cleanup import cleanup
@@ -156,7 +157,8 @@ class Organization(TimeStampedModel):
             return 0
         return highest_order.get("order", 0) + 1
 
-    def save(self, *args, **kwargs):
+    @override
+    def save(self, *args: Any, **kwargs: Any) -> None:
         if self.order == 0 or self.order is None:
             self.order = Organization.get_next_order_number()
         super().save(*args, **kwargs)
