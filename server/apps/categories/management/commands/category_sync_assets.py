@@ -1,19 +1,24 @@
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, override
 
 from django_admin_runner import register_command
 
 from django.core.files import File
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandParser
 
 from server.apps.licenses.models import License
 from server.apps.symbols.models import Symbol
+
+if TYPE_CHECKING:
+    from server.apps.categories.models import Category
 
 
 @register_command(group="Categories")
 class Command(BaseCommand):
     help = "Sync category symbols from optimized assets directory to database. Reads from assets/ and creates/updates Symbol records."
 
-    def add_arguments(self, parser):
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--ignore",
             action="append",
@@ -44,7 +49,8 @@ class Command(BaseCommand):
             "Auto adds parent prefix for generic slugs (unknown, default, generic, etc).",
         )
 
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         from server.apps.categories.models import Category
 
         ignore_patterns = options.get("ignore") or []
@@ -207,7 +213,7 @@ class Command(BaseCommand):
         self.stdout.write(f"  Categories ignored:  {stats['categories_ignored']}")
         self.stdout.write("=" * 60)
 
-    def _should_ignore(self, category, ignore_patterns):
+    def _should_ignore(self, category: "Category", ignore_patterns: list[str]) -> bool:
         """Check if category should be ignored based on ignore patterns."""
         if not ignore_patterns:
             return False
@@ -228,13 +234,15 @@ class Command(BaseCommand):
 
         return False
 
-    def _get_category_identifier(self, category):
+    def _get_category_identifier(self, category: "Category") -> str:
         """Get category identifier (parent.slug or slug for root categories)."""
         if category.parent:
             return f"{category.parent.slug}.{category.slug}"
         return category.slug
 
-    def _get_expected_slug(self, category, symbol_prefix="auto"):
+    def _get_expected_slug(
+        self, category: "Category", symbol_prefix: str = "auto"
+    ) -> str:
         """
         Get expected symbol slug for a category.
 
@@ -283,7 +291,9 @@ class Command(BaseCommand):
             return f"{prefix}_{category_slug}"
         return category_slug
 
-    def _find_symbol_file(self, category, style, base_path):
+    def _find_symbol_file(
+        self, category: "Category", style: str, base_path: Path
+    ) -> Path | None:
         """
         Find the SVG file for a category and style.
 
@@ -320,8 +330,14 @@ class Command(BaseCommand):
         return None
 
     def _get_or_create_symbol(
-        self, svg_path, style, slug, license, dry_run, force=False
-    ):
+        self,
+        svg_path: Path,
+        style: str,
+        slug: str,
+        license: License | None,
+        dry_run: bool,
+        force: bool = False,
+    ) -> tuple[Symbol | None, bool]:
         """
         Get or create a Symbol for a given SVG file path.
 
