@@ -157,8 +157,9 @@ REGISTRY: list[VersionChange] = [
         description=(
             "Harmonize response narrowing: replace include_X=no|slug|all "
             "with JSON:API sparse fieldsets (fields[TYPE]) on all search "
-            "endpoints (search_huts, search/nearby_geoplaces, get_amenity, "
-            "get_weather_codes/get_weather_code). Shape change: slug "
+            "endpoints (search_huts, search/nearby_geoplaces, the place "
+            "detail route, get_weather_codes/get_weather_code). Shape "
+            "change: slug "
             "shorthand lists become objects (sources=[{slug: sac}] not "
             "[sac]). include_X senders get 400. Also rename the image "
             "endpoints' fallback parameter to static_map_fallback and "
@@ -182,7 +183,18 @@ REGISTRY: list[VersionChange] = [
             "exists) additively — code/detail and the application/json "
             "media type are unchanged; additive, so no downgrade and "
             "every version (pinned included) receives the enriched bodies "
-            "(openspec: error-api-problem-details)."
+            "(openspec: error-api-problem-details). ALSO: the places "
+            "family goes slug-only (openspec: place-detail-endpoint): "
+            "search/nearby_geoplaces and the new unified detail route "
+            "get_place (GET /v1/geo/places/{slug}) identify places by "
+            "their unique slug and no longer expose the numeric id; "
+            "the amenity-scoped route places/amenity/{place_id} "
+            "(get_amenity) is removed — pre-release surface, zero "
+            "consumers, sunset window 0. The slug grammar (lowercase "
+            "slug chars with at least one - or _) is enforced by a "
+            "database check constraint and the <geoplace:slug> path "
+            "converter. No downgrade: no consumer of the old shapes "
+            "exists outside our own frontend."
         ),
         responses={
             "images_for_hut": _strip_static_map_fallback,

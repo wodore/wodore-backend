@@ -39,10 +39,10 @@ from ._input import (
 )
 from ._output import (
     AmenityDetailSchema,
-    AmenitySchema,
     CategoryPlaceTypeSchema,
     CategorySchema,
     GeoPlaceBaseSchema,
+    GeoPlaceDetailSchema,
     GeoPlaceNearbySchema,
     GeoPlaceSearchSchema,
     PhoneSchema,
@@ -53,7 +53,6 @@ from ._output import (
 __all__ = [
     "DEFAULT_THUMBHASHES",
     "AmenityDetailSchema",
-    "AmenitySchema",
     "BrandInput",
     "CategoryPlaceTypeSchema",
     "CategorySchema",
@@ -64,6 +63,7 @@ __all__ = [
     "GeoPlaceAmenityInput",
     "GeoPlaceBaseInput",
     "GeoPlaceBaseSchema",
+    "GeoPlaceDetailSchema",
     "GeoPlaceNaturalInput",
     "GeoPlaceNearbySchema",
     "GeoPlaceSearchSchema",

@@ -16,6 +16,7 @@ from server.apps.geometries.presenters import (
     annotate_sources,
     apply_type_filters,
     base_result,
+    build_amenity_detail,
     build_categories_data,
     build_sources,
     prefetch_categories,
@@ -24,9 +25,10 @@ from server.apps.geometries.schemas import CategoryPlaceTypeSchema as CategorySc
 from server.apps.organizations.schema import OrganizationSourceIdSlugSchema
 from server.apps.translations import LanguageQuery
 
+from .converters import GeoPlaceSlugConverter  # noqa: F401  # registers <geoplace:slug>
 from .models import GeoPlace
 from .schemas import (
-    AmenitySchema,
+    GeoPlaceDetailSchema,
     GeoPlaceNearbySchema,
     GeoPlaceSearchSchema,
 )
@@ -112,14 +114,14 @@ class GeoNearbyQuery(_GeoSearchQuery):
     min_importance: int = Field(0, description="Minimum importance score (0-100)")
 
 
-class AmenityQuery(LanguageQuery, GeoPlaceFields):
-    """Query parameters for the amenity detail endpoint."""
+class PlaceQuery(LanguageQuery, GeoPlaceFields):
+    """Query parameters for the unified place detail endpoint."""
 
 
-class AmenityPath(pydantic.BaseModel):
-    """Amenity place id path parameter."""
+class PlacePath(pydantic.BaseModel):
+    """Place slug path parameter (grammar-checked by the converter)."""
 
-    place_id: int = Field(description="GeoPlace id")
+    slug: str = Field(description="GeoPlace slug")
 
 
 # ---------------------------------------------------------------------------
@@ -241,7 +243,7 @@ class GeoSearchController(ApiController):
         default_language = settings.LANGUAGE_CODE
 
         queryset = GeoPlace.objects.filter(is_active=True, is_public=True).only(
-            "id",
+            "slug",
             "name",
             "i18n",
             "location",
@@ -430,7 +432,7 @@ class GeoNearbyController(ApiController):
             is_public=True,
             location__distance_lte=(point, D(m=query.radius)),
         ).only(
-            "id",
+            "slug",
             "name",
             "i18n",
             "location",
@@ -490,70 +492,98 @@ class GeoNearbyController(ApiController):
         return results  # type: ignore  # serialized dicts match schema shape at runtime
 
 
-class AmenityController(ApiController):
-    """Amenity place details (opening hours, websites, phones)."""
+_DETAIL_REQUIRED_FIELDS = frozenset(
+    {"slug", "name", "detail_type", "location", "importance"}
+)
+
+#: fields[TYPE] → result member for nested narrowing on the detail route.
+_DETAIL_NESTED_FIELDS = {"categories": "categories", "sources": "sources"}
+
+
+def _narrow_place_detail(result: dict[str, Any], parsed: PlaceQuery) -> dict[str, Any]:
+    """Apply ``fields[TYPE]`` selections to a place-detail result dict.
+
+    Variant of :func:`server.apps.api.projection.project_fields` whose
+    top-level selection validates against the endpoint's declared
+    members and always keeps the required ones: ``amenity_detail`` is
+    seeded ``None`` for places without a block, so selecting it is
+    valid on every place type — a place of another type answers 200
+    with the member absent, not a 400 (place-detail-endpoint).
+    """
+    from server.apps.api.projection import _narrow_item
+    from server.apps.api.query import _parse
+
+    fields_map = parsed.fields or {}
+    top_spec = fields_map.get("places")
+    if top_spec is not None:
+        names = set(_parse(top_spec, list(result.keys())))
+        names |= _DETAIL_REQUIRED_FIELDS
+        result = {key: value for key, value in result.items() if key in names}
+    for type_name, spec in fields_map.items():
+        if type_name == "places":
+            continue
+        field_name = _DETAIL_NESTED_FIELDS.get(type_name)
+        if field_name is None or field_name not in result:
+            continue
+        value = result[field_name]
+        if isinstance(value, list):
+            result[field_name] = [_narrow_item(item, spec, type_name) for item in value]
+    if result.get("amenity_detail") is None:
+        result.pop("amenity_detail", None)
+    return result
+
+
+class PlaceController(ApiController):
+    """Unified place detail — every GeoPlace, keyed by slug."""
 
     @modify(
-        operation_id="get_amenity",
+        operation_id="get_place",
         headers=cache_headers(60),
     )
     def get(
         self,
-        parsed_path: Path[AmenityPath],
-        parsed_query: Query[AmenityQuery],
-    ) -> AmenitySchema:
-        """Get an amenity place.
+        parsed_path: Path[PlacePath],
+        parsed_query: Query[PlaceQuery],
+    ) -> GeoPlaceDetailSchema:
+        """Get a place.
 
-        Returns detailed information base GeoPlace fields plus amenity-specific information
-        like operating status, opening hours, websites, and phone numbers.
+        Unified detail for every place regardless of detail type (amenity, transport,
+        admin, natural, none): base place fields plus optional members (categories,
+        sources, amenity_detail) under the `fields[places]` sparse-fieldset selection.
+        Places are identified by slug; the numeric id is never exposed.
         """
 
         request = self.request
+        query = parsed_query
+
+        # Skip the DB cost when the field isn't in the selection —
+        # same field_selected gating as search/nearby.
+        wants_amenity = field_selected(query, "places", "amenity_detail")
+        wants_categories = field_selected(query, "places", "categories")
+        wants_sources = field_selected(query, "places", "sources")
+
+        queryset = GeoPlace.objects.filter(
+            is_active=True,
+            is_public=True,
+            slug=parsed_path.slug,
+        )
+        if wants_amenity:
+            # select_related: the block access below is then safe on
+            # places without a detail row (cached None, no exception).
+            queryset = queryset.select_related("amenity_detail")
+        if wants_categories:
+            queryset = prefetch_categories(queryset)
+        if wants_sources:
+            queryset = annotate_sources(queryset)
+
+        place = queryset.first()
+        if place is None:
+            raise_not_found("Place not found")
 
         # Count the visit once we know the place exists (best-effort).
         from server.apps.visits.models import record_visit
 
-        visit_place = (
-            GeoPlace.objects.filter(id=parsed_path.place_id, is_active=True)
-            .only("id")
-            .first()
-        )
-        if visit_place is not None:
-            record_visit(request, visit_place)
-
-        try:
-            place = (
-                GeoPlace.objects.filter(
-                    id=parsed_path.place_id,
-                    is_active=True,
-                    detail_type="amenity",
-                )
-                .select_related(
-                    "amenity_detail",
-                )
-                .prefetch_related(
-                    "categories",
-                    "categories__parent",
-                    "categories__symbol_color",
-                    "categories__symbol_primitive",
-                    "categories__symbol_mono",
-                )
-                .only(
-                    "id",
-                    "name",
-                    "i18n",
-                    "description",
-                    "location",
-                    "elevation",
-                    "importance",
-                    "country_code",
-                    "detail_type",
-                    "review_status",
-                )
-                .get()
-            )
-        except GeoPlace.DoesNotExist:
-            raise_not_found("Amenity not found")
+        record_visit(request, place)
 
         from django.conf import settings as dj_settings
 
@@ -561,73 +591,41 @@ class AmenityController(ApiController):
         if not media_url.startswith("http"):
             media_url = request.build_absolute_uri(media_url)
 
-        # Add source data (annotations must run on a queryset; the old
-        # code annotated the instance which crashed for include_sources).
-        if True:  # Always fetch — narrowing happens at projection
-            from django.contrib.postgres.aggregates import JSONBAgg
-            from django.db.models import F
-            from django.db.models.functions import JSONObject
-
-            if False:  # slug mode handled by projection
-                annotated = (
-                    GeoPlace.objects.filter(id=place.id)
-                    .annotate(
-                        source_slugs=JSONBAgg(F("source_set__slug"), distinct=True),
-                        source_ids=JSONBAgg(
-                            F("source_associations__source_id"), distinct=True
-                        ),
-                    )
-                    .first()
-                )
-            else:
-                annotated = (
-                    GeoPlace.objects.filter(id=place.id)
-                    .annotate(
-                        sources_data=JSONBAgg(
-                            JSONObject(
-                                slug="source_set__slug",
-                                name="source_set__name_i18n",
-                                logo="source_set__logo",
-                                source_id="source_associations__source_id",
-                            ),
-                            distinct=True,
-                        ),
-                    )
-                    .first()
-                )
-            if annotated is not None:
-                place.source_slugs = getattr(annotated, "source_slugs", None)  # type: ignore  # dynamic attr: plugin-less inference gap
-                place.source_ids = getattr(annotated, "source_ids", None)  # type: ignore  # dynamic attr: plugin-less inference gap
-                place.sources_data = getattr(annotated, "sources_data", None)  # type: ignore  # dynamic attr: plugin-less inference gap
-
         result = base_result(place, media_url)
         result["description"] = place.description_i18n  # noqa: WPS308
         result["detail_type"] = place.detail_type
         result["review_status"] = place.review_status
 
-        categories_data = build_categories_data(place, request)
-        if categories_data:
-            result["categories"] = categories_data
+        # Always seed the block member so it stays a valid selection
+        # name for every place type; absent blocks narrow to "member
+        # missing", never a 400 (see _narrow_place_detail).
+        result["amenity_detail"] = (
+            build_amenity_detail(place)
+            if wants_amenity and place.detail_type == "amenity"
+            else None
+        )
 
-        if place.amenity_detail:  # type: ignore  # dynamic attr: plugin-less inference gap
-            result["amenity_detail"] = {
-                "operating_status": place.amenity_detail.operating_status,  # type: ignore  # dynamic attr: plugin-less inference gap
-                "opening_months": place.amenity_detail.opening_months or {},  # type: ignore  # dynamic attr: plugin-less inference gap
-                "opening_hours": place.amenity_detail.opening_hours or {},  # type: ignore  # dynamic attr: plugin-less inference gap
-                "websites": place.amenity_detail.websites or [],  # type: ignore  # dynamic attr: plugin-less inference gap
-                "phones": place.amenity_detail.phones or [],  # type: ignore  # dynamic attr: plugin-less inference gap
-                "extra": place.amenity_detail.extra or {},  # type: ignore  # dynamic attr: plugin-less inference gap
-            }
+        if wants_categories:
+            categories_data = build_categories_data(place, request)
+            if categories_data:
+                result["categories"] = categories_data
 
-        build_sources(result, place, media_url)
+        if wants_sources:
+            build_sources(result, place, media_url)
 
-        return AmenitySchema(**result)
+        return GeoPlaceDetailSchema(**_narrow_place_detail(result, query))
 
 
 # Server-side page caching parity with the former ninja decorators
 # (cache_page 300/60/60/60 + the per-endpoint Cache-Control headers).
 # SEO/LLM surface (place meta + Markdown) and the generic static-map
 # endpoint — appended after the core geo paths.
+#
+# Path grammar rule (place-detail-endpoint): fixed collection segments
+# under places/ (search, nearby, overlays) are single lowercase words —
+# the <geoplace:slug> converter grammar (at least one `-` or `_`)
+# makes item and fixed paths structurally disjoint, so ordering of the
+# entries below never affects resolution.
 from . import api_map, api_seo  # end-of-module: avoids import cycle
 
 paths = [
@@ -649,8 +647,8 @@ paths = [
         name="nearby_geoplaces",
     ),
     path(
-        "places/amenity/<int:place_id>",
-        cache_page(60)(AmenityController.as_view()),
-        name="get_amenity",
+        "places/<geoplace:slug>",
+        cache_page(60)(PlaceController.as_view()),
+        name="get_place",
     ),
 ]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sys
 import threading
 from collections import OrderedDict
@@ -13,6 +14,7 @@ from django.conf import settings
 from django.contrib.gis.db import models
 from django.contrib.gis.geos import Point
 from django.contrib.postgres.indexes import GinIndex, GistIndex
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db.models import Q
 from django.db.models.functions import Lower
@@ -25,6 +27,8 @@ from server.apps.translations import activate
 from server.apps.translations.detect import detect_main_language
 from server.core.models import TimeStampedModel
 from server.core.utils import UpdateCreateStatus
+
+from ..converters import RESERVED_URL_SEGMENTS, SLUG_GRAMMAR_RE
 
 if TYPE_CHECKING:
     from server.apps.geometries.schemas import (
@@ -132,7 +136,6 @@ class GeoPlace(TimeStampedModel):
         db_index=True,
         verbose_name=_("Slug"),
         help_text=_("Unique URL identifier (max 15 chars)"),
-        null=True,  # Temporarily nullable for migration
         blank=True,
     )
 
@@ -344,6 +347,10 @@ class GeoPlace(TimeStampedModel):
                 ),
             ),
             models.CheckConstraint(
+                name="%(app_label)s_%(class)s_slug_grammar_valid",
+                condition=models.Q(slug__regex=f"^{SLUG_GRAMMAR_RE}$"),
+            ),
+            models.CheckConstraint(
                 name="%(app_label)s_%(class)s_review_status_valid",
                 condition=models.Q(review_status__in=_ReviewStatusChoices.values),
             ),
@@ -364,6 +371,39 @@ class GeoPlace(TimeStampedModel):
         first_category = self.categories.order_by("order", "slug").first()
         category_slug = first_category.slug if first_category else "uncategorized"
         return f"{self.name_i18n} ({category_slug})"
+
+    def clean_slug(self) -> None:
+        """Enforce the URL slug grammar (openspec: place-detail-endpoint).
+
+        Slugs must match the path converter grammar — lowercase slug
+        characters with at least one ``-`` or ``_`` — so an item route
+        can never shadow (or be shadowed by) a fixed collection
+        segment (``search``, ``nearby``, ``overlays``). The database
+        check constraint mirrors this for write paths that skip
+        ``full_clean()`` (``save()`` does not run ``clean()``).
+        """
+        if not self.slug:
+            return  # save() mints one at creation
+        if self.slug in RESERVED_URL_SEGMENTS:
+            msg = (
+                f"'{self.slug}' is a reserved URL segment and cannot be "
+                f"used as a slug. Reserved: "
+                f"{', '.join(sorted(RESERVED_URL_SEGMENTS))}."
+            )
+            raise ValidationError({"slug": msg})
+        if re.fullmatch(SLUG_GRAMMAR_RE, self.slug) is None:
+            msg = (
+                "Slug must be lowercase letters, digits, hyphens or "
+                "underscores and contain at least one '-' or '_' (it is "
+                "used as a URL path segment that must stay distinct from "
+                "fixed routes like 'search')."
+            )
+            raise ValidationError({"slug": msg})
+
+    @override
+    def clean(self) -> None:
+        super().clean()
+        self.clean_slug()
 
     @override
     def save(

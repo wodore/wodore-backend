@@ -46,140 +46,6 @@
         "title": "AmenityDetailSchema",
         "type": "object"
       },
-      "AmenitySchema": {
-        "description": "Schema for amenity places with full details.",
-        "properties": {
-          "amenity_detail": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/AmenityDetailSchema"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
-          },
-          "categories": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "items": {
-                  "$ref": "#/components/schemas/CategoryPlaceTypeSchema"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Categories"
-          },
-          "country_code": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Country Code"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Description"
-          },
-          "detail_type": {
-            "title": "Detail Type",
-            "type": "string"
-          },
-          "elevation": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Elevation"
-          },
-          "id": {
-            "title": "Id",
-            "type": "integer"
-          },
-          "importance": {
-            "title": "Importance",
-            "type": "integer"
-          },
-          "location": {
-            "$ref": "#/components/schemas/LocationSchema"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "review_status": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Review Status"
-          },
-          "sources": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/OrganizationSourceIdSlugSchema"
-                },
-                "type": "array"
-              },
-              {
-                "items": {
-                  "$ref": "#/components/schemas/OrganizationSourceIdDetailSchema"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Sources"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "country_code",
-          "elevation",
-          "importance",
-          "location",
-          "detail_type"
-        ],
-        "title": "AmenitySchema",
-        "type": "object"
-      },
       "AnswerEnum": {
         "description": "Anser enum.\n\n'yesish' and 'noish' means it is likely to be 'yes' or 'no'.\n'maybe' means is is either 'yes' or 'no'.",
         "enum": ["yes", "yesish", "maybe", "noish", "no", "unknown"],
@@ -1952,6 +1818,134 @@
         "title": "FeedbackCreate",
         "type": "object"
       },
+      "GeoPlaceDetailSchema": {
+        "description": "Unified place detail (place-detail-endpoint).\n\nRequired members: ``slug``, ``name``, ``detail_type`` (the type\ndiscriminator clients switch on), ``location``, ``importance``.\nEverything else is an optional member under the ``fields[places]``\nsparse-fieldset selection; detail blocks (``amenity_detail`` now,\nadmin/transport/natural later) appear only for places whose\n``detail_type`` matches and only when a detail row exists.",
+        "properties": {
+          "amenity_detail": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AmenityDetailSchema"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "categories": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CategoryPlaceTypeSchema"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Categories"
+          },
+          "country_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Country Code"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "detail_type": {
+            "title": "Detail Type",
+            "type": "string"
+          },
+          "elevation": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Elevation"
+          },
+          "importance": {
+            "title": "Importance",
+            "type": "integer"
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationSchema"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "review_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Review Status"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/OrganizationSourceIdSlugSchema"
+                },
+                "type": "array"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/OrganizationSourceIdDetailSchema"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sources"
+          }
+        },
+        "required": ["slug", "name", "importance", "location", "detail_type"],
+        "title": "GeoPlaceDetailSchema",
+        "type": "object"
+      },
       "GeoPlaceNearbySchema": {
         "description": "Schema for nearby places with distance information.",
         "properties": {
@@ -2010,10 +2004,6 @@
             ],
             "title": "Elevation"
           },
-          "id": {
-            "title": "Id",
-            "type": "integer"
-          },
           "importance": {
             "title": "Importance",
             "type": "integer"
@@ -2023,6 +2013,10 @@
           },
           "name": {
             "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
             "type": "string"
           },
           "sources": {
@@ -2048,7 +2042,7 @@
           }
         },
         "required": [
-          "id",
+          "slug",
           "name",
           "country_code",
           "elevation",
@@ -2104,10 +2098,6 @@
             ],
             "title": "Elevation"
           },
-          "id": {
-            "title": "Id",
-            "type": "integer"
-          },
           "importance": {
             "title": "Importance",
             "type": "integer"
@@ -2130,6 +2120,10 @@
             ],
             "default": null,
             "title": "Score"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
           },
           "sources": {
             "anyOf": [
@@ -2154,7 +2148,7 @@
           }
         },
         "required": [
-          "id",
+          "slug",
           "name",
           "country_code",
           "elevation",
@@ -7069,123 +7063,6 @@
       },
       "summary": "Images for a specific GeoPlace from multiple sources."
     },
-    "/v1/geo/places/amenity/{place_id}": {
-      "get": {
-        "description": "Returns detailed information base GeoPlace fields plus amenity-specific information\nlike operating status, opening hours, websites, and phone numbers.",
-        "operationId": "get_amenity",
-        "parameters": [
-          {
-            "description": "GeoPlace id",
-            "in": "path",
-            "name": "place_id",
-            "required": true,
-            "schema": {
-              "description": "GeoPlace id",
-              "title": "Place Id",
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Sparse fieldsets (JSON:API): `fields[TYPE]=name1,name2` narrows the response to the selected fields (`__all__` = every field). Valid TYPEs: places, categories, sources.",
-            "explode": true,
-            "in": "query",
-            "name": "fields",
-            "schema": {
-              "anyOf": [
-                {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "type": "object"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Sparse fieldsets (JSON:API): `fields[TYPE]=name1,name2` narrows the response to the selected fields (`__all__` = every field). Valid TYPEs: places, categories, sources.",
-              "title": "Fields"
-            },
-            "style": "deepObject"
-          },
-          {
-            "description": "Select language code: de, en, fr, it.",
-            "in": "query",
-            "name": "lang",
-            "schema": {
-              "default": "en",
-              "description": "Select language code: de, en, fr, it.",
-              "pattern": "(de|en|fr|it)",
-              "title": "Lang",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AmenitySchema"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "Cache-Control": {
-                "required": true,
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            },
-            "description": "Raised when request components cannot be parsed"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            },
-            "description": "Raised when path parameters do not match"
-          },
-          "406": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            },
-            "description": "Raised when provided `Accept` header cannot be satisfied"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            },
-            "description": "Raised when returned response does not match the response schema"
-          }
-        },
-        "summary": "get_amenity \u2014 Get an amenity place.",
-        "tags": ["geometries"]
-      },
-      "summary": "Amenity place details (opening hours, websites, phones)."
-    },
     "/v1/geo/places/nearby": {
       "get": {
         "operationId": "nearby_geoplaces",
@@ -7694,6 +7571,123 @@
         "tags": ["geometries"]
       },
       "summary": "Fuzzy place search across all language fields."
+    },
+    "/v1/geo/places/{slug}": {
+      "get": {
+        "description": "Unified detail for every place regardless of detail type (amenity, transport,\nadmin, natural, none): base place fields plus optional members (categories,\nsources, amenity_detail) under the `fields[places]` sparse-fieldset selection.\nPlaces are identified by slug; the numeric id is never exposed.",
+        "operationId": "get_place",
+        "parameters": [
+          {
+            "description": "GeoPlace slug",
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "description": "GeoPlace slug",
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sparse fieldsets (JSON:API): `fields[TYPE]=name1,name2` narrows the response to the selected fields (`__all__` = every field). Valid TYPEs: places, categories, sources.",
+            "explode": true,
+            "in": "query",
+            "name": "fields",
+            "schema": {
+              "anyOf": [
+                {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Sparse fieldsets (JSON:API): `fields[TYPE]=name1,name2` narrows the response to the selected fields (`__all__` = every field). Valid TYPEs: places, categories, sources.",
+              "title": "Fields"
+            },
+            "style": "deepObject"
+          },
+          {
+            "description": "Select language code: de, en, fr, it.",
+            "in": "query",
+            "name": "lang",
+            "schema": {
+              "default": "en",
+              "description": "Select language code: de, en, fr, it.",
+              "pattern": "(de|en|fr|it)",
+              "title": "Lang",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeoPlaceDetailSchema"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Raised when request components cannot be parsed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Raised when path parameters do not match"
+          },
+          "406": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Raised when provided `Accept` header cannot be satisfied"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Raised when returned response does not match the response schema"
+          }
+        },
+        "summary": "get_place \u2014 Get a place.",
+        "tags": ["geometries"]
+      },
+      "summary": "Unified place detail \u2014 every GeoPlace, keyed by slug."
     },
     "/v1/geo/places/{slug}/meta": {
       "get": {
@@ -10499,15 +10493,7 @@
                 }
               }
             },
-            "description": "OK",
-            "headers": {
-              "Cache-Control": {
-                "required": true,
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
+            "description": "OK"
           },
           "400": {
             "content": {

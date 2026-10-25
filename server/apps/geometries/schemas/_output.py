@@ -87,7 +87,7 @@ class CategoryPlaceTypeSchema(pydantic.BaseModel):
 class GeoPlaceBaseSchema(pydantic.BaseModel):
     """Base schema for GeoPlace with common fields."""
 
-    id: int
+    slug: str
     name: str
     country_code: str | None
     elevation: int | None
@@ -147,10 +147,22 @@ class AmenityDetailSchema(pydantic.BaseModel):
     extra: dict[str, Any] = Field(default_factory=dict)
 
 
-class AmenitySchema(GeoPlaceBaseSchema):
-    """Schema for amenity places with full details."""
+class GeoPlaceDetailSchema(GeoPlaceBaseSchema):
+    """Unified place detail (place-detail-endpoint).
+
+    Required members: ``slug``, ``name``, ``detail_type`` (the type
+    discriminator clients switch on), ``location``, ``importance``.
+    Everything else is an optional member under the ``fields[places]``
+    sparse-fieldset selection; detail blocks (``amenity_detail`` now,
+    admin/transport/natural later) appear only for places whose
+    ``detail_type`` matches and only when a detail row exists.
+    """
 
     description: str | None = None
-    detail_type: str
     review_status: str | None = None
+    detail_type: str
     amenity_detail: AmenityDetailSchema | None = None
+    # Required-but-nullable on the list schemas; optional members on
+    # the detail endpoint — excludable via fields[places] selection.
+    country_code: str | None = None
+    elevation: int | None = None
