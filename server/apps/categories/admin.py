@@ -1,12 +1,12 @@
 import contextlib
-from typing import Any, ClassVar, override
+from typing import ClassVar, override
 
 from django.conf import settings
 from django.contrib import admin
 from django.db.models import Q, QuerySet
 from django.db.models.functions import Lower
 from django.http import HttpRequest
-from django.urls import reverse
+from django.urls import URLPattern, reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
@@ -50,7 +50,7 @@ class ChildCategoryInline(admin.TabularInline[Category, Category]):
     autocomplete_fields = ("symbol_color", "symbol_primitive", "symbol_mono")
 
     @override
-    def get_queryset(self, request: HttpRequest):
+    def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         """Optimize queryset for inline display."""
         qs = super().get_queryset(request)
         return qs.select_related(
@@ -189,7 +189,7 @@ class CategoryAdmin(ModelAdmin):
 
     # Add custom views for symbol management
     @override
-    def get_urls(self) -> list[Any]:
+    def get_urls(self) -> list[URLPattern]:
         """Add custom URL for symbols view."""
         from django.urls import path
 

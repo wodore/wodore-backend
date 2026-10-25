@@ -132,7 +132,7 @@ class CategoryManager(BaseMutlilingualManager):
     """Custom manager for Category model."""
 
     @override
-    def get_queryset(self):
+    def get_queryset(self) -> "CategoryQuerySet":
         """Return custom queryset with optimized parent and symbol relationships."""
         return CategoryQuerySet(self.model, using=self._db).select_related(
             "parent",
