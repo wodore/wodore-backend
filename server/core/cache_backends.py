@@ -61,7 +61,7 @@ class SampledCullDatabaseCache(DatabaseCache):
     _table: str
     _cull: Callable[[str, Any, datetime, int], None]
 
-    def __init__(self, table, params):
+    def __init__(self, table: str, params: dict[str, Any]) -> None:
         super().__init__(table, params)
         options = params.get("OPTIONS", {})
         try:
@@ -69,7 +69,13 @@ class SampledCullDatabaseCache(DatabaseCache):
         except (TypeError, ValueError):
             self._cull_probability = 0.1
 
-    def _base_set(self, mode, key, value, timeout=DEFAULT_TIMEOUT):
+    def _base_set(
+        self,
+        mode: str,
+        key: str,
+        value: Any,
+        timeout: float | None = DEFAULT_TIMEOUT,
+    ) -> bool:
         timeout = self.get_backend_timeout(timeout)
         db = router.db_for_write(self.cache_model_class)
         connection = connections[db]
