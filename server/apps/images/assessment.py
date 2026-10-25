@@ -286,9 +286,11 @@ def assess_place_pins(place: Hut | GeoPlace, *, force: bool = False) -> dict[str
     # served set could differ, so the next visitor recomputes instead of
     # hitting the pre-assessment cache entry.
     if assessed or markers_changed:
-        # GeoPlace.slug is temporarily nullable (migration) — a degenerate
-        # None flows into bump_version exactly as before, not skipped.
-        invalidate(place.slug)  # type: ignore  # slug: str | None (migration-nullable); None passes through unchanged
+        # GeoPlace.slug is temporarily nullable (migration); a degenerate None
+        # slug merely formats into the cache version key (f-string in
+        # _version_key) and bump_version's ValueError→set fallback turns it
+        # into a harmless no-op write — verified, not assumed.
+        invalidate(place.slug)  # type: ignore  # slug: str | None (migration-nullable); None-safe per comment above
 
     stats = {"assessed": assessed, "duplicates": duplicates, "pins": len(hashed)}
     logger.info(
