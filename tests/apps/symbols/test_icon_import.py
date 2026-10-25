@@ -323,8 +323,12 @@ class TestRerunPreservesCuration:
 
 class TestDryRun:
     def test_dry_run_writes_nothing(self, emoji_fixture: Path):
+        # Migrations ship curated baseline symbols (the uri.* kind
+        # icons — external-link-uris 0010); dry-run writes nothing =
+        # the symbol count stays at that baseline.
+        symbols_before = Symbol.objects.count()
         _run_all(emoji_fixture, extra=("--dry-run",))
         assert Icon.objects.count() == 0
-        assert Symbol.objects.count() == 0
+        assert Symbol.objects.count() == symbols_before
         assert IconKeyword.objects.count() == 0
         assert SymbolCollection.objects.count() == 0

@@ -9,7 +9,8 @@ Disallow: /
 
 # Well-behaved AI crawlers and agents: public, read-only hut data is
 # explicitly allowed (hut JSON + Markdown, categories, geo, sitemap,
-# llms.txt in every language variant). Everything else (admin, auth,
+# llms.txt in every language variant — the Allow lines loop over the
+# languages from settings.LANGUAGES). Everything else (admin, auth,
 # media) stays disallowed.
 User-agent: GPTBot
 User-agent: OAI-SearchBot
@@ -27,10 +28,8 @@ Allow: /v1/categories/
 Allow: /v1/geo/
 Allow: /v1/sitemap.xml
 Allow: /llms.txt
-Allow: /llms.de.txt
-Allow: /llms.fr.txt
-Allow: /llms.it.txt
-Disallow: /
+{% for llms_path in llms_variant_paths %}Allow: {{ llms_path }}
+{% endfor %}Disallow: /
 {% else %}
 # Non-production environment: keep everything out.
 User-agent: *

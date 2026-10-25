@@ -72,12 +72,13 @@ INSTANCE_SCOPED_CODES: typing.Final[frozenset[ErrorCode]] = frozenset(
 def problem_type_uri(code: ErrorCode) -> str:
     """Stable problem-type URI (RFC 9457 ``type`` member) for a code.
 
-    ``django.conf`` is imported lazily so this module stays importable
-    under bare python3 (the CI registry-check step has no django).
+    The envvars registry (and ``django.conf`` under it) is imported
+    lazily so this module stays importable under bare python3 (the CI
+    registry-check step has no django).
     """
-    from django.conf import settings
+    from server.apps.envvars.registry import resolve_setting
 
-    origin = settings.BACKEND_DOMAIN.rstrip("/")
+    origin = resolve_setting("BACKEND_DOMAIN").rstrip("/")
     return f"{origin}/errors/{code.value}"
 
 

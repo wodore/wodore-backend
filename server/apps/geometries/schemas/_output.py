@@ -134,18 +134,12 @@ class GeoPlaceNearbySchema(GeoPlaceBaseSchema):
 # Amenity schemas
 
 
-class PhoneSchema(pydantic.BaseModel):
-    """Schema for phone number with optional label."""
-
-    number: str
-    label: str | None = None
-
-
 class AmenityDetailSchema(pydantic.BaseModel):
     """Schema for amenity detailed information.
 
     Websites/links live at the place level (external links), overflow
-    data on ``GeoPlace.extra`` — neither belongs on this block.
+    data on ``GeoPlace.extra``, phone numbers as ``uri.phone`` links
+    (external-link-uris) — none of them belong on this block.
     """
 
     operating_status: str
@@ -157,7 +151,15 @@ class AmenityDetailSchema(pydantic.BaseModel):
         default_factory=dict,
         description="Structured weekly hours per weekday + public holidays",
     )
-    phones: list[PhoneSchema] = Field(default_factory=list)
+
+
+class LinkSchema(pydantic.BaseModel):
+    """One typed external link on a place (external-link-uris)."""
+
+    uri: str
+    url: str
+    label: str | None = None
+    symbol: dict[str, str] | None = None
 
 
 class GeoPlaceDetailSchema(GeoPlaceBaseSchema):
@@ -176,6 +178,7 @@ class GeoPlaceDetailSchema(GeoPlaceBaseSchema):
     review_status: str | None = None
     detail_type: str
     amenity: AmenityDetailSchema | None = None
+    links: list[LinkSchema] | None = None
     # Required-but-nullable on the list schemas; optional members on
     # the detail endpoint — excludable via fields[places] selection.
     country_code: str | None = None

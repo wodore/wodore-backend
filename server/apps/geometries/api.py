@@ -18,9 +18,11 @@ from server.apps.geometries.presenters import (
     base_result,
     build_amenity_detail,
     build_categories_data,
+    build_links_data,
     build_parties_data,
     build_sources,
     prefetch_categories,
+    prefetch_links,
     prefetch_parties,
 )
 from server.apps.geometries.schemas import CategoryPlaceTypeSchema as CategorySchema
@@ -33,6 +35,7 @@ from .schemas import (
     GeoPlaceDetailSchema,
     GeoPlaceNearbySchema,
     GeoPlaceSearchSchema,
+    LinkSchema,
     PartySchema,
 )
 
@@ -56,6 +59,7 @@ PlaceDetailFields = sparse_fields_query(
     categories=CategorySchema,
     sources=OrganizationSourceIdSlugSchema,
     parties=PartySchema,
+    links=LinkSchema,
 )
 
 
@@ -525,7 +529,7 @@ class GeoNearbyController(ApiController):
 #: Optional members seeded in every detail result so selection
 #: validity never depends on the row's data — absent data narrows to
 #: "member missing", never a 400 (review finding #1).
-_DETAIL_OPTIONAL_MEMBERS = ("amenity", "categories", "sources", "parties")
+_DETAIL_OPTIONAL_MEMBERS = ("amenity", "categories", "sources", "parties", "links")
 
 
 def _narrow_place_detail(result: dict[str, Any], parsed: PlaceQuery) -> dict[str, Any]:
@@ -546,7 +550,12 @@ def _narrow_place_detail(result: dict[str, Any], parsed: PlaceQuery) -> dict[str
         result,
         parsed,
         "places",
-        {"categories": "categories", "sources": "sources", "parties": "parties"},
+        {
+            "categories": "categories",
+            "sources": "sources",
+            "parties": "parties",
+            "links": "links",
+        },
     )
     for member in _DETAIL_OPTIONAL_MEMBERS:
         if result.get(member) is None:
@@ -583,6 +592,7 @@ class PlaceController(ApiController):
         wants_categories = field_selected(query, "places", "categories")
         wants_sources = field_selected(query, "places", "sources")
         wants_parties = field_selected(query, "places", "parties")
+        wants_links = field_selected(query, "places", "links")
 
         queryset = GeoPlace.objects.filter(
             is_active=True,
@@ -599,6 +609,8 @@ class PlaceController(ApiController):
             queryset = annotate_sources(queryset)
         if wants_parties:
             queryset = prefetch_parties(queryset)
+        if wants_links:
+            queryset = prefetch_links(queryset)
 
         place = queryset.first()
         if place is None:
@@ -647,6 +659,11 @@ class PlaceController(ApiController):
                 parties_data = build_parties_data(place, request)
                 if parties_data:
                     result["parties"] = parties_data
+
+            if wants_links:
+                links_data = build_links_data(place, request)
+                if links_data:
+                    result["links"] = links_data
 
         return GeoPlaceDetailSchema(**_narrow_place_detail(result, query))
 

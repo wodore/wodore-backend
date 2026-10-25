@@ -84,9 +84,24 @@ CATALOG_VERSION_TTL = 10
 #: Cache key of the memoized catalog version (tests clear it after edits).
 CATALOG_VERSION_CACHE_KEY = "basemaps:catalog-version"
 
+#: Render epoch of cached style bodies — derived from the env
+#: registry's content and memoized: registry values are baked into
+#: rendered bodies (``{{env:...}}`` tokens via substitution, including
+#: the tile origin's ``{{env:MARTIN_TILE_URL}}``), so every registry
+#: change must re-key them. DB-derived on purpose — the default cache is
+#: process-local (LocMemCache), so a signal bump would never reach the
+#: other gunicorn workers; every worker derives the same value from
+#: the DB and converges within the memo window.
+STYLE_BODIES_EPOCH_KEY = "basemaps:style-bodies-epoch"
+
+#: Freshness bound of the epoch memo — same bound as the registry row
+#: snapshot (``envvars.registry.SNAPSHOT_TTL``).
+STYLE_BODIES_EPOCH_TTL = 10
+
 #: Rendered-style body retention. Keys are version-keyed (modified +
-#: asset-version digest) so entries fall out of reach on every edit; the
-#: TTL merely bounds stranded entries from version churn.
+#: asset-version digest + registry epoch) so entries fall out of reach
+#: on every edit; the TTL merely bounds stranded entries from version
+#: churn.
 STYLE_CACHE_TTL = 7 * 24 * 3600
 
 
@@ -479,17 +494,22 @@ def _env_servable(layers: list[MapLayer]) -> list[MapLayer]:
 
 
 def _registry_changed(*_: object, **_kwargs: object) -> None:
-    """Env registry edit: availability and catalog payloads may change.
+    """Env registry edit: availability, catalog and style bodies change.
 
     Signal receiver wired in ``BasemapsConfig.ready()`` (post_save /
     post_delete on ``envvars.EnvVar``); the registry row snapshot is
-    invalidated by ``envvars.registry`` itself.
+    invalidated by ``envvars.registry`` itself. Signals are in-process
+    only — the style-body epoch is DB-derived (see
+    ``_style_bodies_epoch``), so the other workers re-key within the
+    memo window on their own; deleting the epoch memo here just makes
+    the editing worker immediate.
     """
     from django.core.cache import cache
 
     global _env_gated_warned
     _env_gated_warned = set()
     cache.delete(CATALOG_VERSION_CACHE_KEY)
+    cache.delete(STYLE_BODIES_EPOCH_KEY)
 
 
 def _prefetched_layers(**filters: Any) -> list[MapLayer]:
@@ -717,7 +737,11 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
             consumed = {**consumed, "date": _tz.localdate().isoformat()}
     digest = version_digest(consumed)
 
-    cached = _style_cache_get(layer, tokenized, digest)
+    # One epoch per request: a registry edit landing between the cache
+    # lookup and the store must not file a pre-edit body under the
+    # post-edit epoch (it would survive the full STYLE_CACHE_TTL).
+    epoch = _style_bodies_epoch()
+    cached = _style_cache_get(layer, tokenized, digest, epoch=epoch)
     if cached is not None:
         body, etag = cached
         if request.headers.get("If-None-Match") == etag:
@@ -775,7 +799,7 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
         response = HttpResponse(status=HTTPStatus.NOT_MODIFIED)
     else:
         response = HttpResponse(body, content_type="application/json")
-        _style_cache_set(layer, tokenized, body, etag, digest)
+        _style_cache_set(layer, tokenized, body, etag, digest, epoch=epoch)
     response.headers["ETag"] = etag
     response.headers["Cache-Control"] = REVALIDATE_CACHE_CONTROL
     response.headers["X-Map-Spec"] = layer.spec
@@ -794,23 +818,61 @@ def _inject_serving_metadata(
     return payload
 
 
-def _style_cache_key(layer: MapLayer, tokenized: bool, digest: str = "") -> str:
-    """Render cache key — version-bumped by ``modified`` and the
+def _style_bodies_epoch() -> str:
+    """Current render epoch of style bodies, derived from the registry.
+
+    Digest over every row's ``(name, value, is_active, env_fallback)``
+    plus the row count, memoized — any conceivable registry edit changes
+    it, every worker derives the identical value from the DB, and no
+    cross-process signal is needed. Content-derived on purpose:
+    ``modified`` timestamps proved unreliable as a change signal in
+    this stack (observed regressing to the creation instant on
+    ``update_or_create``), while a value edit is exactly what must
+    re-key the bodies. Empty table → digest of the empty tuple.
+    """
+    from django.core.cache import cache
+
+    epoch: str | None = cache.get(STYLE_BODIES_EPOCH_KEY)
+    if epoch is None:
+        from server.apps.envvars.models import EnvVar
+
+        rows = list(
+            EnvVar.objects.values_list(
+                "name", "value", "is_active", "env_fallback"
+            ).order_by("name")
+        )
+        digest = hashlib.sha256(repr(rows).encode()).hexdigest()[:16]
+        epoch = f"{digest}:{len(rows)}"
+        cache.set(STYLE_BODIES_EPOCH_KEY, epoch, STYLE_BODIES_EPOCH_TTL)
+    return epoch
+
+
+def _style_cache_key(
+    layer: MapLayer, tokenized: bool, digest: str = "", epoch: str | None = None
+) -> str:
+    """Render cache key — version-bumped by ``modified``, the
     asset-version digest (a published sprite/font/tile version change
-    re-renders even when the layer row is untouched)."""
+    re-renders even when the layer row is untouched) and the registry
+    epoch (registry values are baked into bodies at render time).
+
+    ``epoch`` pins the epoch for one request (read once, reused for
+    the cache get *and* set) — a registry edit landing mid-request
+    must not file a pre-edit body under the post-edit epoch.
+    """
+    resolved = _style_bodies_epoch() if epoch is None else epoch
     return (
         f"basemaps:style:{layer.pk}:{layer.spec}:"
         f"{'tokenized' if tokenized else 'resolved'}:"
-        f"{layer.modified.isoformat()}:{digest}"
+        f"{layer.modified.isoformat()}:{digest}:{resolved}"
     )
 
 
 def _style_cache_get(
-    layer: MapLayer, tokenized: bool, digest: str = ""
+    layer: MapLayer, tokenized: bool, digest: str = "", *, epoch: str | None = None
 ) -> tuple[str, str] | None:
     from django.core.cache import cache
 
-    return cache.get(_style_cache_key(layer, tokenized, digest))
+    return cache.get(_style_cache_key(layer, tokenized, digest, epoch))
 
 
 def _style_cache_set(
@@ -819,15 +881,17 @@ def _style_cache_set(
     body: str,
     etag: str,
     digest: str = "",
+    *,
+    epoch: str | None = None,
 ) -> None:
     from django.core.cache import cache
 
     # No unbounded retention: the key embeds ``modified`` + the per-style
-    # asset-version digest — any style/parameter/asset-version edit
-    # changes the key — and a generous TTL bounds stranded entries from
-    # version churn.
+    # asset-version digest + the registry epoch — any style/parameter/
+    # asset-version/registry edit changes the key — and a generous TTL
+    # bounds stranded entries from version churn.
     cache.set(
-        _style_cache_key(layer, tokenized, digest),
+        _style_cache_key(layer, tokenized, digest, epoch),
         (body, etag),
         timeout=STYLE_CACHE_TTL,
     )

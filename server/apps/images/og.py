@@ -34,6 +34,8 @@ from typing import TYPE_CHECKING
 from django.conf import settings
 from django.http import HttpRequest
 
+from server.apps.envvars.registry import resolve_setting
+
 from .transfomer import ImagorImage
 
 if TYPE_CHECKING:
@@ -136,7 +138,7 @@ def watermark_url(request: HttpRequest | None = None) -> str:
     if request is not None:
         base = request.build_absolute_uri(path)
     else:
-        base = f"{settings.BACKEND_DOMAIN.rstrip('/')}{path}"
+        base = f"{resolve_setting('BACKEND_DOMAIN').rstrip('/')}{path}"
     return f"{base}?v={logo_version()}"
 
 
