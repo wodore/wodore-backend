@@ -3,6 +3,10 @@
 robots.txt is environment-aware: production additionally allows
 well-behaved AI crawlers on the public read-only endpoints, every other
 environment (staging/preview/test) denies everything.
+
+llms.txt is environment-aware as well: production serves the full
+document built from the request host, while staging leads with a notice
+pointing LLM readers at production and advertises production URLs only.
 """
 
 import pytest
@@ -45,6 +49,35 @@ class TestLlmsTxt:
         # Built from the request host, not hardcoded — staging serves
         # staging links.
         assert "http://testserver/v1/huts/huts" in body
+
+    def test_llms_txt_staging_leads_with_notice_and_advertises_production_only(
+        self,
+        client: Client,
+        settings: SettingsWrapper,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        # A staging deploy has a staging FRONTEND_DOMAIN and receives
+        # staging request hosts — llms.txt must advertise neither.
+        settings.FRONTEND_DOMAIN = "https://stg.wodore.com"
+        settings.ALLOWED_HOSTS = ["*"]
+        monkeypatch.setenv("DJANGO_ENV", "staging")
+        response = client.get("/llms.txt", headers={"host": "stg-api.wodore.com"})
+        assert response.status_code == 200
+        assert response.headers["Content-Type"].startswith("text/plain")
+        body = response.content.decode()
+        # Leads with the staging notice pointing LLM readers at
+        # production and its llms.txt.
+        assert body.startswith("# Wodore (staging)")
+        assert "incomplete" in body
+        assert "https://wodore.com/llms.txt" in body
+        # The document body survives, but every advertised URL is the
+        # production one — API links included.
+        assert "https://wodore.com/v1/huts/huts" in body
+        assert "https://wodore.com/hut/{slug}.md" in body
+        assert "https://wodore.com/sitemap.xml" in body
+        # Never a staging URL: not the request host, not FRONTEND_DOMAIN.
+        assert "stg.wodore.com" not in body
+        assert "stg-api.wodore.com" not in body
 
 
 class TestRobotsTxt:

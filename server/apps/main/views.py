@@ -4,6 +4,10 @@ from django.conf import settings
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 
+# Canonical production origin — the one every environment must advertise
+# to LLM agents (see llms_txt below and the robots.txt template default).
+_PRODUCTION_URL = "https://wodore.com"
+
 
 def index(request: HttpRequest) -> HttpResponse:
     """
@@ -48,13 +52,27 @@ def llms_txt(request: HttpRequest) -> HttpResponse:
 
     The frontend proxies wodore.com/llms.txt here. Absolute links are
     built from the request host (API) and ``FRONTEND_DOMAIN`` (web app).
+
+    Staging is different on purpose: staging hosts must never be
+    advertised to LLM agents (robots.txt already disallows everything
+    there), so the document leads with a notice pointing at production
+    and every advertised URL — API links included — is the production
+    one, regardless of request host or ``FRONTEND_DOMAIN``.
     """
+    # Same env-detection as robots_txt: DJANGO_ENV is the plain env var
+    # the settings loader keys on (see server/settings/__init__.py).
+    is_staging = environ.get("DJANGO_ENV", "development") == "staging"
     return render(
         request,
         "txt/llms.txt",
         {
-            "api_base": request.build_absolute_uri("/").rstrip("/"),
-            "frontend_url": settings.FRONTEND_DOMAIN.rstrip("/"),
+            "is_staging": is_staging,
+            "api_base": _PRODUCTION_URL
+            if is_staging
+            else request.build_absolute_uri("/").rstrip("/"),
+            "frontend_url": _PRODUCTION_URL
+            if is_staging
+            else settings.FRONTEND_DOMAIN.rstrip("/"),
         },
         content_type="text/plain; charset=utf-8",
     )
