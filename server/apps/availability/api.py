@@ -8,9 +8,10 @@ which the huts ``paths`` assembly guarantees.
 """
 
 import datetime
+from http import HTTPStatus
 
 import pydantic
-from dmr import Path, Query, modify
+from dmr import APIError, Path, Query, modify
 from dmr.routing import path
 from pydantic import Field
 
@@ -20,6 +21,7 @@ from django.db.models import Case, F, Max, Q, Value, When
 from django.db.models.functions import Coalesce, JSONObject
 
 from server.apps.api.controller import ApiController, cache_headers, raise_not_found
+from server.apps.api.error_codes import ErrorCode
 from server.apps.api.query import BboxQuery, bbox_polygon
 from server.apps.api.throttling import AVAILABILITY_THROTTLES
 from server.apps.translations import LanguageQuery, activate
@@ -48,6 +50,27 @@ class DatePathParamTrend(pydantic.BaseModel):
     """Path parameter for trend endpoint."""
 
     date: str = Field(description=_DATE_HELP)
+
+
+def _parse_date_param(raw: str) -> datetime.datetime:
+    """Parse a ``{date}`` path parameter, mapping garbage input to 400.
+
+    ``parse_availability_date`` raises a bare ``ValueError`` that no
+    handler maps — an unparseable date (e.g. the literal ``{date}``
+    OpenAPI template a client may request, Sentry BACKEND-DJANGO-5)
+    used to surface as an unhandled 500. Same 400 contract as the
+    categories/meteo param validation instead.
+    """
+    try:
+        return parse_availability_date(raw)
+    except ValueError as exc:
+        raise APIError(
+            {
+                "code": ErrorCode.validation_error,
+                "detail": str(exc),
+            },
+            status_code=HTTPStatus.BAD_REQUEST,
+        ) from exc
 
 
 class AvailabilityGeoJSONQuery(LanguageQuery, BboxQuery):
@@ -138,7 +161,7 @@ class HutAvailabilityGeojsonController(ApiController):
         # join types for zero queries saved. Hand-tuned on purpose.
         activate(parsed_query.lang)
 
-        start_datetime = parse_availability_date(parsed_path.date)
+        start_datetime = _parse_date_param(parsed_path.date)
         start_date = start_datetime.date()
 
         qs = HutAvailability.objects.filter(
@@ -295,7 +318,7 @@ class HutAvailabilityCurrentController(ApiController):
         except Hut.DoesNotExist:
             raise_not_found(f"Hut with slug '{slug}' not found")
 
-        start_datetime = parse_availability_date(date_raw)
+        start_datetime = _parse_date_param(date_raw)
         start_date = start_datetime.date()
 
         availabilities = (
@@ -419,7 +442,7 @@ class HutAvailabilityTrendController(ApiController):
             raise_not_found(f"Hut with slug '{slug}' not found")
 
         date_raw = parsed_path.date
-        target_datetime = parse_availability_date(date_raw)
+        target_datetime = _parse_date_param(date_raw)
         target_date = target_datetime.date()
 
         period_start = target_datetime - datetime.timedelta(days=parsed_query.limit)

@@ -121,3 +121,36 @@ class TestAvailabilityApi:
         assert response.status_code in (200, 404)
         if response.status_code == 200:
             assert isinstance(response.json(), (dict, list))
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "/v1/huts/availability/{date}.geojson",  # the incident URL
+            "/v1/huts/availability/not-a-date.geojson",
+        ],
+    )
+    def test_availability_geojson_invalid_date_is_400(self, url: str, client: Client):
+        """BACKEND-DJANGO-5: an unparseable ``{date}`` path segment (e.g.
+        the literal OpenAPI template a bot requests) is a 400 contract
+        error, never an unhandled 500."""
+        response = client.get(url)
+        assert response.status_code == 400
+        data = response.json()
+        assert data["code"] == "validation_error"
+        assert "Supported formats" in data["detail"]
+
+    def test_hut_availability_current_invalid_date_is_400(
+        self, hut_with_availability: tuple[Hut, datetime.date], client: Client
+    ):
+        hut, _ = hut_with_availability
+        response = client.get(f"/v1/huts/{hut.slug}/availability/{{date}}")
+        assert response.status_code == 400
+        assert response.json()["code"] == "validation_error"
+
+    def test_hut_availability_trend_invalid_date_is_400(
+        self, hut_with_availability: tuple[Hut, datetime.date], client: Client
+    ):
+        hut, _ = hut_with_availability
+        response = client.get(f"/v1/huts/{hut.slug}/availability/{{date}}/trend")
+        assert response.status_code == 400
+        assert response.json()["code"] == "validation_error"
