@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import datetime
 import logging
-from typing import Any
+from typing import Any, TypedDict
 
 from django.db import connection, transaction
 from django.utils import timezone
@@ -48,12 +48,22 @@ BULK_WRITE_BATCH_SIZE = 500
 BATCH_STATEMENT_TIMEOUT_MS = 120_000
 
 
+class MirrorBatchStats(TypedDict):
+    """Counters for one mirrored batch (see :func:`mirror_batch`)."""
+
+    created: int
+    updated: int
+    unchanged: int
+    history: int
+    unmatched: list[str]
+
+
 def mirror_batch(
     batch: list[tuple[Any, Any]],
     now: datetime.datetime | None = None,
     update_history_last_checked: bool = False,
     mapping: dict[str, int] | None = None,
-) -> dict:
+) -> MirrorBatchStats:
     """Mirror one ``(hut, hut_booking)`` batch onto the place tables.
 
     Must run inside the caller's transaction (atomic with the hut-side

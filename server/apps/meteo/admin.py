@@ -3,10 +3,12 @@ import contextlib
 with contextlib.suppress(ModuleNotFoundError):
     from django_stubs_ext import QuerySetAny
 
+from typing import override
+
 from django.contrib import admin
 from django.db import models
 from django.http import HttpRequest
-from django.utils.safestring import mark_safe
+from django.utils.safestring import SafeString, mark_safe
 from django.utils.translation import gettext_lazy as _
 
 from unfold.admin import TabularInline
@@ -39,6 +41,7 @@ class WeatherCodeSymbolInline(TabularInline):
     can_delete = False
     show_change_link = True
 
+    @override
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request)
         # Optimize with select_related to avoid N+1 queries
@@ -50,21 +53,21 @@ class WeatherCodeSymbolInline(TabularInline):
         )
 
     @display(description=_("Collection"))
-    def collection_display(self, obj):
+    def collection_display(self, obj: WeatherCodeSymbol) -> str:
         """Display collection slug."""
         if obj.collection:
             return obj.collection.slug
         return "-"
 
     @display(description=_("Weather Code"))
-    def weather_code_display(self, obj):
+    def weather_code_display(self, obj: WeatherCodeSymbol) -> str:
         """Display weather code."""
         if obj.weather_code:
             return f"WMO {obj.weather_code.code}"
         return "-"
 
     @display(description=_("Day"))
-    def symbol_day_preview(self, obj):
+    def symbol_day_preview(self, obj: WeatherCodeSymbol) -> SafeString:
         """Show day symbol preview."""
         try:
             if obj.symbol_day and obj.symbol_day.svg_file:
@@ -77,7 +80,7 @@ class WeatherCodeSymbolInline(TabularInline):
         return mark_safe('<span style="color:#999;">-</span>')
 
     @display(description=_("Night"))
-    def symbol_night_preview(self, obj):
+    def symbol_night_preview(self, obj: WeatherCodeSymbol) -> SafeString:
         """Show night symbol preview."""
         try:
             if obj.symbol_night and obj.symbol_night.svg_file:
@@ -171,6 +174,7 @@ class WeatherCodeAdmin(ModelAdmin):
         ),
     )
 
+    @override
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request)
         qs = qs.select_related("category")
@@ -190,7 +194,7 @@ class WeatherCodeAdmin(ModelAdmin):
         return qs
 
     @display(description=_("Category"))
-    def category_display(self, obj):
+    def category_display(self, obj: WeatherCode) -> str:
         """Display category."""
         if obj.category and obj.category.parent:
             return f"{obj.category.parent.slug}.{obj.category.slug}"
@@ -199,7 +203,7 @@ class WeatherCodeAdmin(ModelAdmin):
         return "-"
 
     @display(description=_("Day"))
-    def symbol_preview_day(self, obj):
+    def symbol_preview_day(self, obj: WeatherCode) -> SafeString:
         """Show day symbol preview from weather-icons-filled collection."""
         try:
             # Use prefetched symbols to avoid extra queries
@@ -219,7 +223,7 @@ class WeatherCodeAdmin(ModelAdmin):
         return mark_safe('<span style="color:#999;">-</span>')
 
     @display(description=_("Night"))
-    def symbol_preview_night(self, obj):
+    def symbol_preview_night(self, obj: WeatherCode) -> SafeString:
         """Show night symbol preview from weather-icons-filled collection."""
         try:
             # Use prefetched symbols to avoid extra queries
@@ -236,7 +240,7 @@ class WeatherCodeAdmin(ModelAdmin):
         return mark_safe('<span style="color:#999;">-</span>')
 
     @display(description=_("Day Description"))
-    def description_preview_day(self, obj):
+    def description_preview_day(self, obj: WeatherCode) -> str:
         """Show truncated day description."""
         if obj.description_day:
             desc = obj.description_day
@@ -315,6 +319,7 @@ class WeatherCodeSymbolCollectionAdmin(ModelAdmin):
         ),
     )
 
+    @override
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request)
         qs = qs.select_related("source_org")
@@ -324,14 +329,14 @@ class WeatherCodeSymbolCollectionAdmin(ModelAdmin):
         return qs
 
     @display(description=_("Organization"))
-    def source_org_display(self, obj):
+    def source_org_display(self, obj: WeatherCodeSymbolCollection) -> str:
         """Display source organization."""
         if obj.source_org:
             return obj.source_org.name or obj.source_org.slug
         return "-"
 
     @display(description=_("Symbol Count"))
-    def symbol_count(self, obj):
+    def symbol_count(self, obj: WeatherCodeSymbolCollection) -> int:
         """Display number of symbols in collection."""
         # Use annotated count if available, otherwise fall back to query
         return getattr(obj, "symbols_count", obj.symbols.count() if obj.pk else 0)
@@ -395,6 +400,7 @@ class WeatherCodeSymbolAdmin(ModelAdmin):
         ),
     )
 
+    @override
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request)
         return qs.select_related(
@@ -405,21 +411,21 @@ class WeatherCodeSymbolAdmin(ModelAdmin):
         )
 
     @display(description=_("Weather Code"))
-    def weather_code_display(self, obj):
+    def weather_code_display(self, obj: WeatherCodeSymbol) -> str:
         """Display weather code."""
         if obj.weather_code:
             return f"WMO {obj.weather_code.code} ({obj.weather_code.slug})"
         return "-"
 
     @display(description=_("Collection"))
-    def collection_display(self, obj):
+    def collection_display(self, obj: WeatherCodeSymbol) -> str:
         """Display collection."""
         if obj.collection:
             return obj.collection.slug
         return "-"
 
     @display(description=_("Day Symbol"))
-    def symbol_preview_day(self, obj):
+    def symbol_preview_day(self, obj: WeatherCodeSymbol) -> SafeString:
         """Show day symbol preview."""
         try:
             if obj.symbol_day and obj.symbol_day.svg_file:
@@ -432,7 +438,7 @@ class WeatherCodeSymbolAdmin(ModelAdmin):
         return mark_safe('<span style="color:#999;">-</span>')
 
     @display(description=_("Night Symbol"))
-    def symbol_preview_night(self, obj):
+    def symbol_preview_night(self, obj: WeatherCodeSymbol) -> SafeString:
         """Show night symbol preview."""
         try:
             if obj.symbol_night and obj.symbol_night.svg_file:
