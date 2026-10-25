@@ -24,6 +24,7 @@ from django.http import Http404, HttpRequest, HttpResponse
 from server.apps.api.controller import ApiController, cache_headers
 from server.apps.images.og import og_map_card_url, og_photo_url
 
+from . import converters as _converters  # noqa: F401  # <geoplace:slug> registration
 from .models import GeoPlace
 
 CACHE_TTL = 60 * 60
@@ -276,12 +277,12 @@ Data: [Wodore]({settings.FRONTEND_DOMAIN.rstrip("/")}) · JSON: {page_url} · La
 
 paths = [
     path(
-        "places/<str:slug>/meta",
+        "places/<geoplace:slug>/meta",
         PlaceMetaController.as_view(),
         name="get_place_meta",
     ),
     external_path(
-        "places/<str:slug>.md",
+        "places/<geoplace:slug>.md",
         get_place_markdown,
         openapi=None,
         name="get_place_markdown",

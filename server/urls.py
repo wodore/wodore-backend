@@ -89,7 +89,13 @@ urlpatterns = [
     *api_v1_module.urlpatterns,
     # Text and xml static files:
     path("robots.txt", main_views.robots_txt),
+    # llms.txt: the bare root is ALWAYS English (the conventional LLM
+    # entry point, no Accept-Language negotiation); German, French and
+    # Italian live at stable /llms.<lang>.txt variants beside it.
     path("llms.txt", main_views.llms_txt),
+    path("llms.de.txt", main_views.llms_txt, {"lang": "de"}),
+    path("llms.fr.txt", main_views.llms_txt, {"lang": "fr"}),
+    path("llms.it.txt", main_views.llms_txt, {"lang": "it"}),
     # Backend-served brand assets (og/imagor pipeline references —
     # e.g. the watermark composited onto og photos). No frontend
     # dependency: the files are bundled in server/apps/api/assets/.
