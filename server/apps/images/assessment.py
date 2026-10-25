@@ -155,8 +155,7 @@ def _meta_url(image: Image) -> str | None:
     with ``thumbhash`` — the pixel decoding happens in imagor, which has
     the source cached anyway.
     """
-    from django.conf import settings
-
+    from server.apps.envvars.registry import resolve_setting
     from server.apps.images.transfomer import ImagorImage
 
     source = image.image if getattr(image, "image", None) else image.source_url_raw
@@ -167,7 +166,7 @@ def _meta_url(image: Image) -> str | None:
         f"{ImagorImage.url_quote(str(source).strip('/'), quote='yes')}"
     )
     signature = ImagorImage.sign_path(path) or "unsafe"
-    return f"{settings.IMAGOR_URL}/{signature}/{path}"
+    return f"{resolve_setting('IMAGOR_URL')}/{signature}/{path}"
 
 
 def _fetch_thumbhash(image: Image) -> str | None:
@@ -446,8 +445,7 @@ def _focal_crop_params(image: Image) -> _FocalCropParams:
 def _variant_meta_urls(image: Image) -> dict[str, str]:
     """Signed imagor metadata URLs computing the thumbhash per variant."""
 
-    from django.conf import settings
-
+    from server.apps.envvars.registry import resolve_setting
     from server.apps.geometries.providers.base import _calculate_constrained_size
     from server.apps.images.transfomer import ImagorImage
 
@@ -485,7 +483,7 @@ def _variant_meta_urls(image: Image) -> dict[str, str]:
         )
         full = f"meta/{ops}"
         signature = ImagorImage.sign_path(full) or "unsafe"
-        return f"{settings.IMAGOR_URL}/{signature}/{full}"
+        return f"{resolve_setting('IMAGOR_URL')}/{signature}/{full}"
 
     urls = {}
     for name, (tw, th, focal_crop) in THUMBHASH_VARIANT_SIZES.items():

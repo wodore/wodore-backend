@@ -26,7 +26,7 @@ from copy import deepcopy
 from typing import Any
 from urllib.parse import urljoin
 
-from django.conf import settings
+from server.apps.envvars.registry import resolve_setting
 
 from .validation import ENV_TOKEN_RE, TOKEN_RE
 
@@ -201,7 +201,7 @@ def resolve_style(
     resolved = substitute_env_tree(resolved)
     if not tokenized:
         resolved = resolve_tokens(resolved, parameter_values)
-    tile_server_url = getattr(settings, "MARTIN_TILE_URL", "") or ""
+    tile_server_url = resolve_setting("MARTIN_TILE_URL")
     resolved = absolutize_urls(resolved, tile_server_url, api_url=api_url)
     return resolved
 

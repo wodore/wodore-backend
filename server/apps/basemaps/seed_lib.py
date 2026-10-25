@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from django.conf import settings
+from server.apps.envvars.registry import resolve_setting
 
 # Canonical Martin glyph route, extension-less ON PURPOSE: Martin 301s
 # `/font/{stack}/{range}.pbf` to this route while DROPPING the query
@@ -733,4 +733,4 @@ def swisstopo_pixelkarte_style() -> dict[str, Any]:
 
 def tile_server_url() -> str:
     """The Martin origin used for placeholder resolution at serve time."""
-    return getattr(settings, "MARTIN_TILE_URL", "") or ""
+    return resolve_setting("MARTIN_TILE_URL")

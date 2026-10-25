@@ -10,6 +10,7 @@ from django.conf import settings
 from django.db.models.fields.files import ImageFieldFile
 from django.utils.html import format_html
 
+from server.apps.envvars.registry import resolve_setting
 from server.core.utils import get_redirect_url
 
 # https://github.com/cshum/imagor
@@ -245,7 +246,7 @@ class ImagorImage:
             signature = self.sign_path(path, key=self._key)
 
         # Full URL
-        imagor_url = self._url or settings.IMAGOR_URL
+        imagor_url = self._url or resolve_setting("IMAGOR_URL")
         url = f"{imagor_url}/{signature}/{path}"
         return TransformedImage(url)
 

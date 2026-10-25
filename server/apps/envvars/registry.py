@@ -113,6 +113,37 @@ def usable(name: str, snapshot: dict[str, Row] | None = None) -> bool:
     return bool(resolve(name, snap))
 
 
+def resolve_setting(name: str, default: str = "") -> str:
+    """Runtime value for a Django-settings-backed name (URL origins).
+
+    Lets operators override deploy-time URL settings —
+    ``MARTIN_TILE_URL``, ``IMAGOR_URL``, ``BACKEND_DOMAIN`` — from the
+    admin without a redeploy. Precedence:
+
+    * active row with a stored value → the stored value
+    * active row, empty, ``env_fallback=False`` → pinned empty (``""``)
+    * everything else (no row, inactive row, empty + fallback) → the
+      Django setting itself, else ``default``
+
+    Unlike :func:`resolve` the process environment is not consulted
+    directly: decouple loads ``.env``/infisical values onto the
+    *setting* at boot, and reading ``os.environ`` here would make
+    ``override_settings`` in tests (and decouple-loaded config) lose
+    against a stray shell export of the same name.
+    """
+    snap = rows()
+    row = snap.get(name)
+    if row is not None:
+        value, active, env_fallback = row
+        if active:
+            if value:
+                return value
+            if not env_fallback:
+                return ""  # pinned empty
+    setting_value: object = getattr(settings, name, default)
+    return default if setting_value is None else str(setting_value)
+
+
 def invalidate(*_: object, **_kwargs: object) -> None:
     """Drop the row snapshot (signal receiver on every registry edit)."""
     cache.delete(CACHE_KEY)

@@ -41,10 +41,11 @@ from urllib.parse import quote, urlsplit
 
 import structlog
 
-from django.conf import settings
 from django.core.files.storage import default_storage
 from django.db.models import Count, Max
 from django.utils.timezone import now
+
+from server.apps.envvars.registry import resolve_setting
 
 from .models import MapLayer, TileAssetVersion
 
@@ -184,7 +185,7 @@ def version_digest(versions: dict[str, Any]) -> str:
 
 
 def _tile_origin() -> str:
-    return (getattr(settings, "MARTIN_TILE_URL", "") or "").rstrip("/")
+    return resolve_setting("MARTIN_TILE_URL").rstrip("/")
 
 
 def _versionable(url: str) -> bool:

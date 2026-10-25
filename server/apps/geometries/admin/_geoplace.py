@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any, ClassVar, override
 from django_admin_runner.admin import CommandRunnerModelAdminMixin
 
 from django import forms
-from django.conf import settings
 from django.contrib import admin
 from django.db import models as db_models
 from django.db.models.functions import Lower
@@ -26,6 +25,7 @@ from unfold.contrib.filters.admin import (
 )
 from unfold.decorators import display
 
+from server.apps.envvars.registry import resolve_setting
 from server.apps.manager.admin import ModelAdmin
 from server.apps.manager.widgets import UnfoldReadonlyJSONSuit
 from server.apps.translations.admin_helpers import (
@@ -359,8 +359,8 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             "title": _("Tile Map"),
             "has_permission": True,
             "overlay_categories_json": json.dumps(overlay_categories),
-            "martin_tile_url": getattr(
-                settings, "MARTIN_TILE_URL", "http://localhost:8075"
+            "martin_tile_url": resolve_setting(
+                "MARTIN_TILE_URL", "http://localhost:8075"
             ),
             "is_fullwidth": "1",
         }
