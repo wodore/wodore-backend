@@ -8,6 +8,14 @@ requires-python = "<4.0,>=3.12"
 
 dependencies = [
   "Django[argon2]==6.*",              # https://pypi.org/project/Django/
+  "django-stubs-ext==6.*",         # https://pypi.org/project/django-stubs-ext/ (6.x tracks Django 6.x)
+  # ^ RUNTIME dependency, not dev tooling: server/settings/__init__.py
+  #   monkeypatches Django's generics with it, and typed model classes
+  #   (e.g. server.core.models._AutoCreatedField) subclass parametrized
+  #   fields at import time. Without it in the prod image, Django startup
+  #   dies with "type 'DateTimeField' is not subscriptable" (Build Docker
+  #   broken on every merge since #400). The stub vocabulary (django-stubs)
+  #   itself stays dev-only.
   "django-split-settings==1.*",       # https://pypi.org/project/django-split-settings/
   "django-axes==8.*",                 # https://pypi.org/project/django-axes/
   "django-csp==4.*",                  # https://pypi.org/project/django-csp/
@@ -95,8 +103,7 @@ dev = [
   "django-querycount==0.8.*",      # https://pypi.org/project/django-querycount/
   "django-migration-linter==5.*",  # https://pypi.org/project/django-migration-linter/
   "django-extra-checks==0.*",      # https://pypi.org/project/django-extra-checks/
-  "django-stubs-ext==6.*",         # https://pypi.org/project/django-stubs-ext/ (6.x tracks Django 6.x)
-  "django-stubs==6.*",             # https://pypi.org/project/django-stubs/ — type vocabulary for pyrefly's Django ORM inference
+  "django-stubs==6.*",             # https://pypi.org/project/django-stubs/ — type vocabulary for pyrefly's Django ORM inference (runtime half = django-stubs-ext, a prod dep)
   "wemake-python-styleguide==1.*", # https://pypi.org/project/wemake-python-styleguide/
   "flake8-pytest-style==2.*",      # https://pypi.org/project/flake8-pytest-style/
   "flake8-django==1.*",            # https://pypi.org/project/flake8-django/
