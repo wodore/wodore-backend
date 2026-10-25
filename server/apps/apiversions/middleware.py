@@ -129,7 +129,7 @@ def resolve_version(
 
 
 class ApiVersionMiddleware:
-    def __init__(self, get_response):
+    def __init__(self, get_response: t.Callable[[HttpRequest], HttpResponse]) -> None:
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
