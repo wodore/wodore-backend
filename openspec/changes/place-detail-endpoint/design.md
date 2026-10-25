@@ -3,63 +3,47 @@
 ## Context
 
 Current surface under `/v1/geo/` (dmr controllers in
-`server/apps/geometries/api.py`):
+`server/apps/geometries/api.py`, mounted via `Router("geo/", …)` —
+most-specific-prefix-first, see `api_v1.py`):
 
-- `places/search`, `places/nearby` — list endpoints. Responses carry
-  `id` (no `slug` member anywhere in `GeoPlaceBaseSchema`) with
-  optional `categories`/`sources` members under `fields[places]`
-  selection (`field_selected` gating skips DB work).
-- `places/overlays` — category registry.
-- `places/amenity/<int:place_id>` (`get_amenity`) — the ONLY detail
-  endpoint: filters `detail_type="amenity"` (404 for anything else),
-  `is_active=True` but **not** `is_public` (inconsistent with search
-  and the SEO surface). Returns `AmenitySchema`; accepts `lang` and
-  `fields[TYPE]` but does not narrow the response.
-- Content surfaces are slug-keyed: `places/<str:slug>/meta` and
-  `places/<str:slug>.md` (`api_seo.py`), images at `place/<str:slug>`
-  (`api_images.py`); the frontend's place pages use
-  `PLACE_URL_PATTERN = place/{slug}`.
+- `places/search`, `places/nearby` — list endpoints; responses carry
+  numeric `id`, no slug member; optional `categories`/`sources` under
+  `fields[places]`.
+- `places/overlays` — category registry (fixed segment).
+- `places/amenity/<int:place_id>` (`get_amenity`) — the only detail
+  endpoint, amenity-scoped, `is_active` but not `is_public`.
+- `places/<str:slug>/meta` + `places/<str:slug>.md` (SEO/LLM,
+  slug-keyed) — item paths at the same position as the fixed segments,
+  using Django's permissive default `str` converter.
+- `geo/images/nearby` (fixed) + `geo/images/place/<str:place_slug>` +
+`geo/images/hut/<str:hut_slug>` — items namespaced under fixed
+prefixes (the existing collision-avoidance precedent).
 
-So machine surface = int id, content/URL surface = slug — the
-inconsistency this change must resolve for the unified detail endpoint.
+Identifier facts (verified against migrations and the dev-snapshot
+lane DB):
 
-GeoPlace facts that drive the keying decision:
-
-- `id`: bigint PK — stable across OSM re-imports, dedupe merges and
-  renames; never re-minted, never moves between rows.
-- `slug`: `SlugField(max_length=15, unique, db_index, null=True,
-  blank=True)` — born nullable in migration 0012 (2026-03-09, PR #103
-  "Add amenities as geoplace"), whose own backfill populated every
-  existing row; the `null=True` is vestigial model debt, never flipped
-  back. De facto mandatory ever since: `save()` auto-mints when empty,
-  imports mint at creation and never rewrite (verified: every slug
-  assignment outside `save()` is a creation path), and the lane DB
-  shows **441,940/441,940 rows with a slug, 0 NULL**. Format is
-  `{4–11-char base}-{5–8 random chars}` (`bern-26xo40q9`,
-  `liechtenst-dne4`) — a stable but *opaque* URL key, not a
-  human-readable name; 0 purely numeric slugs exist and the random
-  suffix makes them impossible. **Not returned by any geo list or
-  detail response today.** This change cleans the debt up (D8).
-
-Routing constraint: the `places/` namespace has fixed siblings
-(`search`, `nearby`, `overlays`). A `<str:key>` converter at
-`places/{key}` matches them (resolution becomes order-dependent; a
-place whose slug is literally `search` becomes unreachable). An `<int:
-place_id>` converter cannot match any of them — zero collision, no
-ordering games.
-
-Dependency assumption: the pending `geoplace-parties` change adds the
-`parties` member on GeoPlace responses under `fields[places]` (nested
-`fields[parties]` narrowing), the nested projection required-fields
-fix, and the Party/role machinery. This change composes with it and
-does not re-specify it. Landing order is flexible (see Migration Plan).
-
-House-standard tension: the `api-conventions` capability requires slug
-identifiers and no PK exposure for new endpoints — but its Purpose
-grandfathers existing shapes "until meaningfully modified", and the
-entire geo places family (search/nearby/amenity) is id-keyed and
-exposes `id` in every payload. Decision 6 resolves this in the specs,
-not just in this doc.
+- `id`: plain `AutoField` → int4; no UUID anywhere.
+- `slug`: born `null=True` in migration 0012 (2026-03-09, PR #103)
+  whose own backfill populated every row — **441,940/441,940 non-null,
+  0 NULL**; minted exactly once at creation (`{base}-{5-8 random
+  chars}`, e.g. `bern-26xo40q9`) and never rewritten (all `.slug =`
+  assignments are creation paths); **0 purely-numeric and 0 pure-word
+  slugs** — every slug contains at least one `-` or `_`. Legacy shapes
+  exist and stay: 20% have short suffixes or underscore bases
+  (`information-5h9`, `vending_machine`), 8,260 have a trailing hyphen
+  (`drinking_water-`).
+- Owner decision (this change): the places family goes **slug-only** —
+  slug in every response, no numeric id, item routes keyed by slug.
+  Geoplaces are pre-release, so the family can break its old contract
+  freely.
+- Version registry: one *unreleased* current version (the
+  sparse-fieldsets harmonization, already touching `get_amenity`) —
+  the runbook requires amending breaking changes into it, never
+  stacking. Precedent for no-consumer removals: 2026-10-02
+  (`include`/`exclude` removed, sunset window 0).
+- Dependency assumption: pending `geoplace-parties` adds the
+  `parties` member under `fields[places]` and the nested projection
+  fix; this change composes with it, landing order flexible.
 
 ## Goals / Non-Goals
 
@@ -67,181 +51,160 @@ Goals:
 
 - One detail endpoint that serves every place regardless of
   `detail_type` — places without a detail block are first-class.
-- Detail blocks and shared members (`categories`, `sources`, `parties`)
-  optional via the existing `fields[places]` selection, with DB-cost
-  gating parity.
-- A reasoned, recorded id-vs-slug path-keying decision with explicit
-  resolution rules.
-- Alias + deprecation lifecycle for the amenity path per
-  `docs/api-versioning.md`.
+- Slug-only identifiers in the places family; routing that is
+  structurally safe (order-independent, collision-proof by grammar).
+- Detail blocks and shared members optional via `fields[places]`,
+  with DB-cost gating parity.
+- A clean breaking transition: amended into the unreleased version,
+  amenity route removed, snapshot regenerated.
 
 Non-Goals:
 
-- No hut endpoints, no huts app changes (owner constraint: geometries
-  only, general).
-- No `admin_detail`/`transport_detail`/`natural_detail` blocks here —
-  later changes; only the extension pattern is fixed.
-- No type/category filter parameters on the detail route (the place IS
-  its type; filtering belongs to `search`/`nearby`).
-- No slug-quality workstream (readable/longer slugs, slug exposure in
-  list responses). The NOT NULL cleanup (D8) is in scope; readability
-  is not — the random-suffix format is a deliberate URL-key design.
-- No ETag machinery (hut-style ETags may come later; the family tier is
-  time-based today).
+- No hut endpoints, no huts app changes (owner constraint).
+- No `admin_detail`/`transport_detail`/`natural_detail` blocks here.
+- No type/category filter parameters on the detail route.
+- No slug normalization of legacy shapes (`information-5h9`,
+  `vending_machine`, `drinking_water-` stay — they satisfy the
+  grammar; churn buys nothing pre-release).
+- No ETag machinery (family tier is time-based today).
 
 ## Decisions
 
-1. **Path keying: numeric id — `GET /v1/geo/places/{place_id}`, int
-   path converter.** The owner-flagged open point, resolved against
-   three options:
+1. **Slug-only identifiers (owner decision, supersedes the earlier
+   id-keyed recommendation).** Every places-family response —
+   `search`, `nearby`, the new detail route — carries `slug` as the
+   required identifier member and no numeric `id`. The blockers that
+   argued for id are each resolved: navigation (lists now return the
+   key clients need — slug), family consistency (the whole family
+   migrates in one pre-release stroke instead of a new endpoint
+   diverging from its lists), api-conventions (now compliant — no
+   carve-out delta needed), and routing (D2). The earlier "slug is
+   opaque" observation stands but stops mattering: the value of the
+   slug is URL stability and one identifier across user-facing pages,
+   SEO surface and API — not readability. PKs stay internal.
 
-   | Criterion | A: id-only | B: slug-only | C: dual id-or-slug |
-   |---|---|---|---|
-   | List→detail navigation | native (search/nearby return `id`) | blocked — lists return no slug; requires a prerequisite change exposing it everywhere | works for id callers; slug callers still need exposure |
-   | Identifier stability | minted once, never edited | equal in practice: minted once at creation, never rewritten; dies with the row on merge/dedupe exactly like the id; residual delta: slug is admin-editable in principle, id never | same as slug for the slug half |
-   | Routing | zero collision (`<int>` can't match `search`/`nearby`/`overlays`) | `<str:key>` collides with fixed siblings → needs `by-slug/` prefix or fragile ordering | same collision |
-   | Ambiguity | none | none | none in practice — the mandatory random suffix (`base-xxxxx`) makes purely numeric slugs impossible (0 in 441,940 rows); the case against dual-key is complexity (two cache/404 key namespaces, type sniffing), not ambiguity |
-   | Cache/404 semantics | one key namespace | one | two key namespaces per resource; 404 debugging muddied (miss-by-id vs miss-by-slug) |
-   | URL friendliness | poor | best | mixed |
-   | api-conventions | deviates (family-consistent) | compliant | deviates |
-   | Versioning cost later | alias retirement is the only breaking step | migrating lists to slug = family-wide breaking | retiring either half = breaking |
+2. **Routing safety by grammar, not by ordering — the registered
+   `GeoPlaceSlugConverter`.** The current path creation is fragile:
+   item-shaped routes use Django's default `str` converter, which
+   matches any non-slash segment, so coexisting item and fixed routes
+   (`places/{slug}` vs `places/search`) can only be told apart by
+   list order, and a place whose slug equals a fixed segment would be
+   unreachable. The fix makes the two grammars provably disjoint:
 
-   **Recommendation: A.** With nullability off the table (slug is de
-   facto mandatory, D8 makes it de jure) and stability at parity
-   (both keys are minted once and die with the row), the decision
-   rests on four remaining factors, all pointing to id: (1) navigation
-   — search/nearby return `id` and no slug member exists in any geo
-   response, so a slug-keyed detail endpoint is unreachable from the
-   lists clients consume without a prerequisite change; (2) routing —
-   `<int>` cannot collide with the fixed `places/search|nearby|
-   overlays` siblings, `<str:key>` would; (3) family consistency —
-   the geo family is id-keyed end to end and grandfathered as such by
-   api-conventions (D6); (4) opacity — a `bern-26xo40q9`-style slug
-   is a second opaque key, not a human-readable identifier, so
-   slug-keying the machine API buys no readability. api-conventions'
-   "stable, human-readable slugs" precondition is not met by
-   GeoPlace.slug *as designed* — by deliberate format choice, not by
-   accident. Dual-key is rejected on complexity/YAGNI grounds, not
-   ambiguity (see the table).
+   - Converter grammar: `[a-z0-9_-]*[-_][a-z0-9_-]*` — slug charset
+     (lowercase, digits, hyphen, underscore) containing at least one
+     `-` or `_`. Verified: all 441,940 production slugs match; the
+     grammar tolerates the legacy shapes (underscore bases, trailing
+     hyphens).
+   - Fixed-segment rule: fixed collection segments under `places/`
+     (`search`, `nearby`, `overlays`) are single lowercase words —
+     they contain neither `-` nor `_` and thus can *never* match the
+     converter. URL resolution becomes order-independent: "routing
+     works in any case".
+   - Registered via `django.urls.register_converter`, used as
+     `places/<geoplace:slug>` (dmr's `path()` passes route strings
+     through to Django). The SEO siblings adopt it too
+     (`places/<geoplace:slug>/meta`, `places/<geoplace:slug>.md`) —
+     the `.md`/`/meta` suffixes and the dot-free grammar keep those
+     disjoint from the item route.
+   - Model-layer validation makes the grammar a data invariant:
+     `GeoPlace.clean_slug` rejects slugs without `-`/`_` (and a
+     reserved-name blacklist: `search`, `nearby`, `overlays`, `meta`,
+     `amenity`) — mint paths already comply, so this only constrains
+     manual/admin edits. A one-time migration re-mints any historical
+     exception (expected: none — 0 pure-word slugs in the snapshot).
+   - Alternatives rejected: namespacing items under a fixed prefix
+     (`places/detail/{slug}` — the images precedent) because it
+     breaks URL parity with the existing slug-keyed SEO surface;
+     relying on path-list ordering (the fragility being fixed);
+     normalizing legacy slugs (churn, no consumer).
 
-   Mitigations: the response carries `slug`, so clients build
-   `place/{slug}` URLs from a detail fetch; the convention deviation is
-   recorded in the specs (D6); the revisit trigger is explicit — a
-   concrete consumer needing slug→full-detail deep links plus a slug-
-   quality workstream, at which point slug addressing can be added
-   additively (e.g. `places/by-slug/{slug}`).
+3. **Unified endpoint shape.** `GET /v1/geo/places/{slug}`
+   (`get_place`, URL name `get_place`) returns the bare place object:
+   required members `slug`, `name`, `detail_type` (the discriminator),
+   `location`, `importance`; optional members `country_code`,
+   `elevation`, `description`, `review_status`, `categories`,
+   `sources`, `amenity_detail`, `parties` (per `geoplace-parties`).
+   Optional members follow the `fields[places]` selection exactly
+   like `nearby` (dict-level `project_fields`; required members and
+   i18n companions kept — assumes the parties-change projection fix).
+   Without a selection: everything present. `field_selected` gating
+   skips DB work for unselected members. A detail block is present
+   iff `detail_type` matches, the row exists, and the member is not
+   deselected — never fabricated, never a 400 for another type's
+   block; not-yet-existing block names 400 as unknown field names
+   naming valid values (each future block adds its name additively).
 
-2. **One implementation, amenity-scoped alias delegates.** New
-   `PlaceController` (`get_place`, URL name `get_place`) at
-   `places/<int:place_id>`. `AmenityController` keeps its identity
-   (`get_amenity`) and becomes a thin alias delegating to the same
-   shared presenter, adding the `detail_type="amenity"` scope so its
-   observable 404-for-non-amenity semantics are preserved exactly (a
-   natural place 404s on the alias, 200s on the unified route). The
-   alias response is the unified body — a strict superset of today's
-   `AmenitySchema` (adds `slug`; `parties` per `geoplace-parties`) —
-   hence additive. Accepted alias delta: resolution adds
-   `is_public=True` (today the amenity route can serve non-public
-   places — a bug against search/SEO parity; zero consumers, bugfix
-   grade). Both routes keep the visit-counting hook
-   (`place-visit-counter` unchanged — counting happens once per
-   successful detail fetch).
+4. **Breaking transition: amend the unreleased version, remove
+   `get_amenity`.** Removing `id` from search/nearby/amenity and
+   deleting the amenity route are breaking per the runbook, but the
+   registry has exactly one *unreleased* version — the runbook
+   mandates amending it (a version no client ever received must not
+   become its own contract boundary) and CI rejects stacking. Follow
+   the 2026-10-02 precedent for no-consumer removals: document the
+   removal in the `VersionChange` description (sunset window 0, zero
+   consumers — the frontend client declares `get_amenity` but has no
+   call sites; the four latent crash bugs prove no working consumer).
+   No alias: a deprecated alias would preserve the id-keyed contract
+   this change exists to retire, for an audience of zero. Steps:
+   extend the unreleased `VersionChange` (description; no downgrade
+   transforms needed for removals with sunset window 0), regenerate
+   and commit the snapshot, label `api:breaking` + `type:feature`,
+   regenerate the frontend client.
 
-3. **Response shape and projection.** `GeoPlaceDetailSchema`
-   (`GeoPlaceBaseSchema` + `description`, `review_status`,
-   `detail_type`, `amenity_detail`, `slug`, and `parties` per the
-   parties change). Required members: `id`, `name`, `detail_type` (the
-   discriminator clients switch on), `location`, `importance` —
-   mirroring the base schema's required set. Optional members follow
-   the `fields[places]` selection exactly like `nearby` (dict-level
-   `project_fields` narrowing; required members and i18n companions
-   kept — assumes the `geoplace-parties` projection fix). Without a
-   selection: the full response, every member that has data. With a
-   selection: only selected + required members. `field_selected`
-   gating skips `select_related`/`prefetch_related`/annotations for
-   unselected members (search/nearby pattern). A detail block is
-   present iff `detail_type` matches, the detail row exists, and the
-   member is not deselected — never fabricated for other types and
-   never a 400. Not-yet-existing block names (`admin_detail`, …)
-   400 as unknown field names naming the valid values — correct
-   allowlist behavior, and each future block change adds its name
-   additively.
+5. **Visibility, 404, caching, visits.** Resolution filters
+   `is_active=True, is_public=True` (search/SEO parity). Unknown,
+   inactive or non-public slugs answer 404 via `raise_not_found` —
+   the single error contract (`{"code": "not_found", …}` + RFC 9457
+   members, `instance` included), no existence oracle. Both cache
+   tiers stay family-parity: `Cache-Control: public, max-age=60` +
+   `cache_page(60)`; `cache_page` keys on the full URL so `lang`/
+   `fields` variants cache separately. `record_visit` after
+   existence is known (`place-visit-counter` unchanged).
 
-4. **Visibility and the 404 contract.** Resolution filters
-   `is_active=True, is_public=True` — parity with search and the SEO
-   surface. Unknown, inactive or non-public ids answer 404 via
-   `raise_not_found(...)` — the single error contract
-   (`api-conventions`): `{"code": "not_found", "detail": …}` plus the
-   RFC 9457 members (`type`, `title`, `status`, `instance`), with no
-   distinction between "does not exist" and "not public" (no existence
-   oracle).
-
-5. **Caching parity.** `@modify(headers=cache_headers(60))` plus
-   server-side `cache_page(60)` on both routes — the places-family
-   tier (search/nearby/amenity/overlays all 60; the SEO surface's
-   3600 tier stays where it is). The evolving-document ETag tier does
-   not apply to detail views today. `cache_page` keys on the full URL,
-   so `lang` and `fields` variants cache as distinct entries for free.
-
-6. **api-conventions amendment — id-keyed-family carve-out.** The
-   spec delta MODIFIES "Slug identifiers and ISO modified timestamps":
-   new endpoints in a resource family that is id-keyed end to end (the
-   geo places family) follow the family's identifier convention —
-   integer path key, `id` in payloads — instead of introducing a
-   parallel slug key; a family migrates to slugs, if ever, as one
-   coordinated breaking change. Recorded in the specs so the set stays
-   self-consistent instead of silently contradicting the new endpoint.
+6. **Slug invariant (de jure).** `AlterField` to `null=False`
+   (0 NULL rows; `blank=True` stays — forms may submit empty because
+   `save()` mints one, category-based fallback for nameless places),
+   plus the grammar/reserved-name validation from D2. The endpoint's
+   required `slug` member is then guaranteed at the storage layer.
 
 7. **Extension pattern for future detail blocks.** One optional
    sibling member per detail model (`admin_detail`,
-   `transport_detail`, `natural_detail`), each gated on `detail_type`
-   match + row existence + field selection, added additively in its
-   own change. Deliberately no wrapper object (`"details": {...}`):
-   sparse fieldsets select flat members, and per-type blocks arrive
-   independently — a wrapper would couple their releases and break the
-   one-nesting-level projection model.
-
-8. **Slug de jure mandatory (`null=False`).** Owner-confirmed intent:
-   the slug was always meant to be mandatory; `null=True` is leftover
-   from the field's introducing migration (0012), which backfilled
-   every row itself. One `AlterField` to `null=False`, keeping
-   `blank=True` — admin/forms may submit an empty slug because
-   `save()` mints one (category-based fallback for nameless places);
-   the database invariant then guarantees the endpoint's always-
-   present `slug` member at the storage layer. Safe to land: 0 NULL
-   rows in production data (441,940/441,940 on the dev snapshot).
-   The endpoint does not depend on the cleanup ordering — `slug`
-   remains an optional *member* under sparse fieldsets either way;
-   only its value is never null.
+   `transport_detail`, `natural_detail`), gated on `detail_type` +
+   row presence + selection, added additively in its own change. No
+   wrapper object — sparse fieldsets select flat members and blocks
+   arrive independently.
 
 ## Risks / Trade-offs
 
-- **Deviating from the slug-identifier convention** — mitigated by the
-  MODIFIED requirement recording the family rule (D6) and the explicit
-  revisit trigger (D1). The alternative (slug here, id everywhere
-  else) strands the endpoint from its own list results.
-- **Alias tightening (`is_public`)** — behavior delta on an existing
-  route, but bugfix-grade (serving non-public places publicly), with
-  evidence of zero consumers; flagged in the PR description for the
-  `api:added` label review.
-- **60s `cache_page` staleness** — same exposure as the family; detail
-  edits propagate within a minute. If editors ever need instant
-  visibility, the evolving-document ETag tier is the documented path.
-- **`fields[places]=admin_detail` 400s today** — correct allowlist
-  behavior (the error names the valid values); each future block
-  change widens it additively.
+- **Breaking the released geo contract** — accepted by the owner
+  (pre-release, zero consumers); mitigated by the registry amendment
+  (one clean boundary) and client regeneration.
+- **Legacy slug shapes in URLs** (`drinking_water-`, `vending_machine`)
+  — stable, grammar-conforming, slightly ugly; normalization rejected
+  as churn (revisit only if pretty URLs become a product need).
+- **Converter grammar drift** — a future generator change that emits
+  pure-word slugs would break the disjointness invariant; guarded by
+  the model-layer validation (D2), which rejects such slugs at save
+  time.
+- **Reserved names grow** — the blacklist is a safety net behind the
+  structural rule; the fixed-segment rule (no `-`/`_` in fixed
+  segments) is the actual contract, documented in the spec.
 
 ## Migration Plan
 
-One schema cleanup: the slug `null=False` `AlterField` (D8) — no other
-DB changes. Sequencing: land after (or together with)
-`geoplace-parties` so the `parties` member and the projection fix
-are in place; landing before is also valid — the parties change
-already requires the member on GeoPlace responses and would add it
-to the detail route when it lands.
+1. Schema: slug `null=False` `AlterField` + validation; re-mint
+   migration for grammar exceptions (expected none).
+2. Routing: register the converter, add `places/<geoplace:slug>`,
+   switch the SEO siblings, remove `places/amenity/<int:place_id>`.
+3. Registry: amend the unreleased `VersionChange`, regenerate the
+   snapshot, commit both in the PR.
+4. Sequencing vs `geoplace-parties`: either order works; landing
+   after (or with) it picks up the parties member and projection fix
+   for free.
 
 ## Open Questions
 
-None. Path keying is resolved (D1: id, with slug as a response field).
-The rollout order of later blocks (admin is the natural next — its
-model exists) is a per-change decision outside this spec.
+None. Identifier policy, routing grammar and the breaking-change
+process are all decided; block rollout order (admin next — the model
+exists) is a per-change decision.

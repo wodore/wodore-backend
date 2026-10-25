@@ -1,74 +1,95 @@
 # Tasks: place-detail-endpoint
 
-## 1. Schema & response shape
+## 1. Slug invariant & grammar (model + migration)
 
-- [ ] 1.1 `GeoPlaceDetailSchema` in `server/apps/geometries/schemas/
-      _output.py`: `GeoPlaceBaseSchema` + `description`,
-      `review_status`, `detail_type`, `amenity_detail`, `slug`
-      (optional); required members `id`, `name`, `detail_type`,
-      `location`, `importance`; keep the `WodoreSerializer`
-      exclude-unset semantics for optional members
-- [ ] 1.2 Confirm the `GeoPlaceFields` sparse-fieldset registration
-      covers the endpoint (`places`, `categories`, `sources`, plus
-      `parties` once `geoplace-parties` has landed)
+- [ ] 1.1 `AlterField` on `GeoPlace.slug` to `null=False` (keep
+      `blank=True` — `save()` auto-mints, forms stay permissive);
+      safe — production data has 0 NULL slugs
+- [ ] 1.2 Slug grammar validation in `GeoPlace.clean()`: charset
+      `[a-z0-9_-]` with at least one `-` or `_`, plus reserved-name
+      blacklist (`search`, `nearby`, `overlays`, `meta`, `amenity`);
+      unit tests (valid legacy shapes pass, pure words and reserved
+      names rejected)
+- [ ] 1.3 One-time data migration re-minting any slug that violates
+      the grammar (expected: none — 0 pure-word slugs in the
+      snapshot; assert count in the migration log)
 
-- [ ] 1.3 Slug NOT NULL cleanup: `AlterField` on `GeoPlace.slug` to
-      `null=False` (keep `blank=True` — `save()` auto-mints, forms
-      stay permissive); safe — production data has 0 NULL slugs; test
-      that a row without a slug is rejected at the database level
+## 2. Converter & routing
 
-## 2. Presenter & controllers
+- [ ] 2.1 `GeoPlaceSlugConverter` (regex `[a-z0-9_-]*[-_][a-z0-9_-]*`)
+      registered via `register_converter`; module home near the geo
+      routing code, importable without app-loading side effects
+- [ ] 2.2 New route `places/<geoplace:slug>` (`name="get_place"`);
+      SEO siblings switch to `places/<geoplace:slug>/meta` and
+      `places/<geoplace:slug>.md`; fixed-segment rule (single
+      lowercase words, no `-`/`_`) documented next to the paths list
+- [ ] 2.3 Remove `places/amenity/<int:place_id>` and the
+      `AmenityController` (route + controller + schema exports);
+      startup checks E003/E004 stay green (`name=` == operation id
+      on every route)
 
-- [ ] 2.1 Extract a shared detail presenter into
-      `server/apps/geometries/presenters.py` (base fields via
-      `base_result` + `description`/`review_status`/`detail_type`/
-      `slug` + the `amenity_detail` block + `categories`/`sources`
-      via `build_categories_data`/`annotate_sources`/`build_sources`);
-      `record_visit` hook after existence is known
-- [ ] 2.2 New `PlaceController` (`get_place`) at
-      `places/<int:place_id>` with `name="get_place"`,
-      `cache_headers(60)` + `cache_page(60)`; resolution
-      `is_active=True, is_public=True`; `raise_not_found` on miss
-      (no existence oracle)
-- [ ] 2.3 Convert `AmenityController` into the deprecated alias: keep
-      operation id/URL name `get_amenity`, delegate to the shared
-      presenter with the `detail_type="amenity"` scope (non-amenity
-      404 preserved), same response body and cache headers; mark
-      deprecated in the OpenAPI description pointing to `get_place`
-      (dmr `@modify` — check `deprecated` support, else description
-      text); note the accepted `is_public` tightening in the PR body
-- [ ] 2.4 `field_selected` gating for `amenity_detail` (skip
-      `select_related`), `categories` (skip prefetch) and `sources`
-      (skip annotation) when not selected
+## 3. Schemas, presenter & controllers
 
-## 3. Projection & narrowing
+- [ ] 3.1 Identifier swap family-wide: `GeoPlaceBaseSchema` drops
+      `id`, gains required `slug`; `base_result` carries `slug`;
+      search/nearby controllers updated (visit hook stays on detail)
+- [ ] 3.2 `GeoPlaceDetailSchema` in `schemas/_output.py`:
+      required `slug`, `name`, `detail_type`, `location`,
+      `importance`; optional `country_code`, `elevation`,
+      `description`, `review_status`, `amenity_detail`, `categories`,
+      `sources` (+ `parties` once `geoplace-parties` has landed)
+- [ ] 3.3 Shared detail presenter in `presenters.py` (reuse
+      `base_result`, `build_categories_data`, `annotate_sources`,
+      `build_sources`); resolution `is_active=True, is_public=True`;
+      `raise_not_found` on miss (no existence oracle); `record_visit`
+      after existence is known
+- [ ] 3.4 `PlaceController.get_place` with `cache_headers(60)` +
+      `cache_page(60)`; `field_selected` gating for `amenity_detail`
+      (skip `select_related`), `categories` (skip prefetch),
+      `sources` (skip annotation)
+- [ ] 3.5 `fields[places]` narrowing via dict-level `project_fields`
+      (the `nearby` pattern; required members + i18n companions kept —
+      assumes the `geoplace-parties` projection fix)
 
-- [ ] 3.1 Apply `fields[places]` narrowing on the detail response via
-      dict-level `project_fields` (the `nearby` pattern): required
-      members + i18n companions always kept — assumes the
-      `geoplace-parties` required-fields projection fix
+## 4. Version registry & snapshot
 
-## 4. Tests
+- [ ] 4.1 Amend the *unreleased* `VersionChange` in
+      `server/apps/apiversions/registry.py`: extend the description
+      with the slug-only identifier switch and the `get_amenity`
+      removal (sunset window 0, zero consumers — 2026-10-02
+      precedent); no downgrade transforms needed for removals
+- [ ] 4.2 Regenerate and commit the OpenAPI snapshot (`app
+      api_snapshot`); `python3 -m server.apps.apiversions.
+      registry_check` passes (no stacking)
 
-- [ ] 4.1 Per-detail-type coverage: amenity with block, natural/admin/
+## 5. Tests
+
+- [ ] 5.1 Routing disjointness: `/v1/geo/places/search|nearby|
+      overlays` resolve to the fixed endpoints with the item route
+      registered in any order; item fetch works for legacy slug
+      shapes (`vending_machine`, `drinking_water-`, `information-5h9`)
+- [ ] 5.2 Identifier policy: search/nearby/detail responses carry
+      `slug` and no `id`; old amenity path 404s from the router
+- [ ] 5.3 Per-detail-type coverage: amenity with block, natural/admin/
       none without; 404s (unknown, inactive, non-public — identical
-      body per the single error contract); `slug` always present
-      (never-null invariant)
-- [ ] 4.2 Selection: default full response;
-      `?fields[places]=id,name,amenity_detail` narrowing; block of
+      body per the single error contract incl. RFC 9457 members)
+- [ ] 5.4 Selection: default full response;
+      `?fields[places]=slug,name,amenity_detail` narrowing; block of
       another type absent (200, no error); unknown block name → 400
-      naming valid values; nested `fields[parties]` once the parties
-      change has landed; `lang` localization of `name`/`description`
-- [ ] 4.3 Alias: parity with `get_place` for amenity ids, non-amenity
-      404, deprecation marking, cache headers on both routes
-- [ ] 4.4 Contract: regenerate the OpenAPI snapshot if the
-      api-registry CI step requires; additive — assert no
-      `VersionChange` is registered
+      naming valid values; `lang` localization
+- [ ] 5.5 Caching: `Cache-Control: public, max-age=60` on the detail
+      route; `lang`/`fields` variants cache separately
+- [ ] 5.6 Contract: snapshot matches registry; pinned-old-version
+      behavior matches the amended `VersionChange` description
 
-## 5. Changelog & verification
+## 6. Changelog, client & verification
 
-- [ ] 5.1 PR labels `type:feature` + `api:added` (both changelogs per
-      the `api-changelog` capability — no manual changelog entries)
-- [ ] 5.2 Full lane test suite
+- [ ] 6.1 PR labels `type:feature` + `api:breaking` (both changelogs
+      per the `api-changelog` capability — no manual changelog
+      entries)
+- [ ] 6.2 Frontend: regenerate the API client (wodore_v1.d.ts) and
+      drop the now-removed `get_amenity` operation from any local
+      stubs (no call sites exist)
+- [ ] 6.3 Full lane test suite
       (`scripts/lane-run.sh .venv/bin/pytest`) and a work doc under
       `_work/`

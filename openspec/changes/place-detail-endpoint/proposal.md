@@ -8,75 +8,74 @@ The public geo API has exactly one per-place detail route —
 transport, admin, natural, none), `AdminDetail` exists with no endpoint,
 and transport/natural have neither model nor route. A per-type URL space
 would multiply endpoints as detail blocks arrive, while the large
-majority of places (every peak, pass, lake and village — no amenity
-detail) have no detail route at all: the frontend cannot build a place
-page from search/map context for them.
+majority of places (every peak, pass, lake and village) have no detail
+route at all.
 
-Evidence the surface is greenfield: the amenity endpoint shipped with
-four latent crash bugs and zero test coverage (fixed in the pending
-`geoplace-parties` change) — no working consumer exists; the generated
-frontend client declares it but has no call sites. Unifying now is
-cheap; unifying after consumers bind to per-type URLs is not.
+The geo surface is pre-release (owner: "geoplaces are not live and we
+can change as much as we want"; the amenity endpoint shipped four latent
+crash bugs with zero test coverage and no call sites), so this is the
+cheap moment to also fix its identifier story: owner decision — the
+places family goes **slug-only**. Slugs are de facto mandatory (0 NULL
+in 441,940 rows, minted once at creation, never rewritten), every
+user-facing surface is already slug-keyed, and api-conventions demands
+slugs without PKs. The numeric `id` leaves the responses, and the item
+route keys by slug.
 
 ## What Changes
 
-- Add `GET /v1/geo/places/{place_id}` — one unified detail endpoint for
+- Add `GET /v1/geo/places/{slug}` — one unified detail endpoint for
   **every** active, public GeoPlace regardless of `detail_type`. The
-  type is a response field (`detail_type`), not a path segment.
-- Response: base place fields (`id`, `slug`, localized `name`,
-  `country_code`, `elevation`, `importance`, `location`, `description`,
+  type is a response field, not a path segment.
+- **Slug-only identifiers family-wide**: `search`, `nearby` and the
+  detail route carry `slug` and no numeric `id` (breaking; see below).
+- Response: base fields (`slug`, localized `name`, `country_code`,
+  `elevation`, `importance`, `location`, `description`,
   `review_status`, `detail_type`) plus optional members `categories`,
   `sources`, `amenity_detail`, `parties` (per `geoplace-parties`) under
   the existing `fields[places]` sparse-fieldset selection.
-- Path keyed by the stable numeric GeoPlace id (int path converter),
-  resolving the open id-vs-slug design point (reasoned decision in
-  design.md D1); the response carries `slug` so clients can build
-  `place/{slug}` frontend URLs.
+- **Routing that works in any case**: a registered slug path converter
+  whose grammar (slug chars with at least one `-` or `_` — true for
+  441,940/441,940 rows by construction) structurally cannot match the
+  fixed collection segments (`search`, `nearby`, `overlays`); item
+  routing becomes order-independent. Model-layer validation makes the
+  grammar a data invariant; the SEO siblings (`{slug}/meta`,
+  `{slug}.md`) adopt the same converter.
 - `amenity_detail` is the first detail block; admin/transport/natural
-  follow later as sibling optional members (one additive change each —
-  the extension pattern is fixed here, the blocks are not).
-- The old `places/amenity/{place_id}` route stays as a deprecated alias
-  delegating to the unified implementation (amenity-scoped 404
-  semantics preserved); retiring it later is an `api:breaking` version
-  bump per `docs/api-versioning.md`.
-- Amend `api-conventions`' slug-identifier requirement with a
-  family-consistency clause (the geo places family is id-keyed).
-- Drop the vestigial `null=True` on `GeoPlace.slug`: the field has
-  been de facto mandatory since its introducing migration backfilled
-  every row — now enforced NOT NULL (D8; `blank=True` stays, `save()`
-  mints).
-
-Additive only — new endpoint, new optional response members — no API
-contract version bump.
+  follow later as sibling optional members (extension pattern fixed
+  here, blocks not).
+- **`places/amenity/{place_id}` is removed** (no alias — pre-release,
+  zero consumers) in the same breaking version.
+- Breaking changes are amended into the current *unreleased* API
+  version per the runbook (no client ever received it; precedent: the
+  2026-10-02 no-consumer removal with sunset window 0).
+- Drop the vestigial `null=True` on `GeoPlace.slug` (de jure NOT NULL).
 
 ## Capabilities
 
 ### New Capabilities
 
-- `place-detail-api`: the unified place detail endpoint — path keying
-  and resolution rules, response shape, sparse-fieldset selection of
-  optional members incl. the detail-block extension pattern, the
-  deprecated amenity alias and its retirement lifecycle, caching
-  parity, and the 404 contract.
-
-### Modified Capabilities
-
-- `api-conventions`: the "Slug identifiers and ISO modified timestamps"
-  requirement gains an id-keyed-family carve-out — new endpoints in an
-  id-keyed family follow the family's identifier convention instead of
-  introducing a parallel slug key.
+- `place-detail-api`: the unified slug-keyed place detail endpoint —
+  slug-only identifiers across the places family, the slug path
+  grammar/converter and routing-safety rules, response shape and
+  sparse-fieldset selection incl. the detail-block extension pattern,
+  the amenity route removal and breaking-version lifecycle, the slug
+  invariant, caching parity, and the 404 contract.
 
 ## Impact
 
 - `server/apps/geometries/api.py` — new `get_place` controller + route;
-  `AmenityController` becomes a thin deprecated alias
-- `server/apps/geometries/presenters.py` — shared detail presenter
-  (reuses `base_result`, `build_categories_data`, `annotate_sources`,
-  `build_sources`)
-- `server/apps/geometries/schemas/_output.py` — `GeoPlaceDetailSchema`
-- `server/apps/geometries/models/_geoplace.py` + migration — slug
-  `null=False` cleanup
-- tests for the endpoint/alias contract; OpenAPI snapshot regeneration
-- Composes with pending `geoplace-parties` (parties member, nested
-  projection fix) — dependency assumption, not duplicated here
-- No hut endpoints, no huts app changes; no DB migrations
+  `get_amenity` route and controller removed; SEO paths adopt the
+  converter
+- `server/apps/api/` (or geometries) — `GeoPlaceSlugConverter`,
+  registered for `<geoplace:slug>`
+- `server/apps/geometries/presenters.py`, `schemas/_output.py` —
+  slug-for-id swap, `GeoPlaceDetailSchema`
+- `server/apps/geometries/models/_geoplace.py` + migrations — slug
+  `null=False`, grammar/reserved-name validation
+- `server/apps/apiversions/registry.py` — amend the unreleased
+  `VersionChange`; snapshot regenerated
+- Frontend: regenerate the API client (geo operations change shape;
+  no call sites exist for the removed route)
+- Composes with pending `geoplace-parties` (parties member, projection
+  fix) — dependency assumption, not duplicated
+- No hut endpoints; the huts family is untouched
