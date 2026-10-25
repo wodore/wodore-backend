@@ -1,14 +1,24 @@
-"""Images migration 0033 + runtime tolerance — the 155850205 regression.
+"""Images migrations 0033/0034 + runtime tolerance — two Sentry regressions.
 
-Legacy bug: ``source_ident`` had no unique constraint, so concurrent syncs
-(request write-through vs. django-q2 refresh vs. ``geoimages_pin`` sweeps)
-could mint twin ``Image`` rows — every later sync then crashed with
-``MultipleObjectsReturned`` ("get() returned more than one Image -- it
-returned 2!", Sentry 155850205, hut cedullo). Migration 0033 merges the
-twins and adds the partial unique constraint; the pin runtime resolves the
-canonical (oldest) row either way.
+Legacy bug (155850205): ``source_ident`` had no unique constraint, so
+concurrent syncs (request write-through vs. django-q2 refresh vs.
+``geoimages_pin`` sweeps) could mint twin ``Image`` rows — every later
+sync then crashed with ``MultipleObjectsReturned`` ("get() returned more
+than one Image -- it returned 2!", hut cedullo). Migration 0033 merges
+the twins; migration 0034 adds the partial unique constraint. The pin
+runtime resolves the canonical (oldest) row either way.
 
-The twins are minted by dropping 0033's constraint for the whole module.
+Deploy bug (BACKEND-DJANGO-8): 0033 as shipped also added the constraint
+— DML + ``CREATE UNIQUE INDEX`` in one atomic migration (one
+transaction). Postgres refuses index builds while the transaction has
+pending deferred trigger events (Django FKs are ``DEFERRABLE INITIALLY
+DEFERRED``), so the staging migrate job died with ``cannot CREATE INDEX
+"images_image" because it has pending trigger events``. The constraint
+now lives in its own migration; ``test_source_ident_migration_atomicity``
+pins that arrangement by driving 0033 + 0034 through the real
+MigrationExecutor with twins present.
+
+The twins are minted by dropping 0034's constraint for the whole module.
 DDL must live outside the per-test transactions — Postgres refuses CREATE
 INDEX while the ``TimeStampedModel`` modified-trigger has pending events
 in the open transaction — and ``django_db(transaction=True)`` would flush

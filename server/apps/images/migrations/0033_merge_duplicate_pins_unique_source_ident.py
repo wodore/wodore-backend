@@ -1,4 +1,4 @@
-"""Merge duplicate Image rows sharing a source_ident, then make it unique.
+"""Merge duplicate Image rows sharing a source_ident.
 
 ``source_ident`` is the dedupe key for pinned provider images
 ("<provider>:<source_id>", server.apps.geometries.pinning) but had no
@@ -12,13 +12,24 @@ This merges existing duplicates: the oldest row per ident wins (matching
 ``Image.Meta.ordering`` and the runtime's canonical-row resolution in
 ``_get_or_create_pin``), hut/geoplace associations are re-pointed to the
 keeper (links the keeper already has are dropped), the local file is
-adopted if only a duplicate carries one, and finally the partial unique
-constraint lands (empty/NULL idents stay unconstrained — uploads without
-a source ident legitimately repeat).
+adopted if only a duplicate carries one.
+
+The partial unique constraint (empty/NULL idents stay unconstrained —
+uploads without a source ident legitimately repeat) lives in the follow-up
+migration ``0034_image_source_ident_unique`` — deliberately NOT here:
+migrations are atomic (one transaction), and Postgres refuses
+``CREATE INDEX``/``ADD CONSTRAINT`` while the transaction still has pending
+deferred trigger events. Django creates foreign keys as ``DEFERRABLE
+INITIALLY DEFERRED``, so this data migration's DML queues FK-check trigger
+events that only fire at COMMIT — a same-transaction constraint build
+died with ``cannot CREATE INDEX "images_image" because it has pending
+trigger events`` on staging (Sentry BACKEND-DJANGO-8, release d3bdc2bc,
+wd-backend-migrate job). Keep data and constraint in separate migrations;
+see also Django ticket #31106.
 """
 
 from django.conf import settings
-from django.db import migrations, models
+from django.db import migrations
 from django.db.models import Count
 
 
@@ -80,12 +91,4 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.RunPython(merge_duplicate_pins, migrations.RunPython.noop),
-        migrations.AddConstraint(
-            model_name="image",
-            constraint=models.UniqueConstraint(
-                condition=models.Q(("source_ident__gt", "")),
-                fields=("source_ident",),
-                name="images_image_source_ident_unique",
-            ),
-        ),
     ]
