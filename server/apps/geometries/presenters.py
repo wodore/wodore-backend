@@ -5,8 +5,23 @@ one implementation of type filtering, source annotation and the
 place-dict projection.
 """
 
+from __future__ import annotations
 
-def apply_type_filters(queryset, types, categories):
+from typing import TYPE_CHECKING, Any
+
+from django.db.models import QuerySet
+
+if TYPE_CHECKING:
+    from django.http import HttpRequest
+
+    from .models import GeoPlace
+
+
+def apply_type_filters(
+    queryset: QuerySet[GeoPlace],
+    types: list[str] | None,
+    categories: list[str] | None,
+) -> QuerySet[GeoPlace]:
     if categories:
         queryset = queryset.filter(categories__parent__slug__in=categories)
     if types:
@@ -30,7 +45,7 @@ def apply_type_filters(queryset, types, categories):
     return queryset
 
 
-def prefetch_categories(queryset):
+def prefetch_categories(queryset: QuerySet[GeoPlace]) -> QuerySet[GeoPlace]:
     return queryset.prefetch_related(
         "categories",
         "categories__parent",
@@ -40,7 +55,7 @@ def prefetch_categories(queryset):
     )
 
 
-def annotate_sources(queryset):
+def annotate_sources(queryset: QuerySet[GeoPlace]) -> QuerySet[GeoPlace]:
     from django.contrib.postgres.aggregates import JSONBAgg
     from django.db.models.functions import JSONObject
 
@@ -59,12 +74,14 @@ def annotate_sources(queryset):
     return queryset
 
 
-def build_categories_data(place, request):
+def build_categories_data(
+    place: GeoPlace, request: HttpRequest
+) -> list[dict[str, Any]]:
     from server.apps.symbols.utils import resolve_symbol_urls
 
     categories_data = []
     for category in place.categories.all():
-        category_data = {
+        category_data: dict[str, Any] = {
             "slug": category.slug,
             "name": category.name_i18n,  # noqa: WPS308  # modeltranslation
             "description": category.description_i18n,  # noqa: WPS308
@@ -76,13 +93,15 @@ def build_categories_data(place, request):
     return categories_data
 
 
-def build_sources(result: dict, place, media_url: str) -> None:
+def build_sources(result: dict[str, Any], place: GeoPlace, media_url: str) -> None:
     from server.apps.organizations.schema import (
         OrganizationSourceIdDetailSchema,
     )
 
     sources = []
-    for src in place.sources_data or []:
+    # sources_data is a queryset annotation (annotate_sources), not a model
+    # field — django-stubs cannot model .annotate() attributes.
+    for src in place.sources_data or []:  # type: ignore  # annotated attr (JSONBAgg sources_data), not a GeoPlace field
         if src.get("slug") is not None:
             org_data = {
                 "slug": src["slug"],
@@ -100,7 +119,7 @@ def build_sources(result: dict, place, media_url: str) -> None:
         result["sources"] = sources
 
 
-def base_result(place, media_url: str) -> dict:
+def base_result(place: GeoPlace, media_url: str) -> dict[str, Any]:
     return {
         "name": place.name_i18n,  # noqa: WPS308  # modeltranslation
         "country_code": str(place.country_code) if place.country_code else None,

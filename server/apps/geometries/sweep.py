@@ -6,10 +6,14 @@ also written to *stderr*, which the admin runner surfaces as a separate
 stream — a rolling error list that survives command success.
 """
 
-from collections import deque
-from contextlib import nullcontext
+from __future__ import annotations
 
-from rich.console import Group
+from collections import deque
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import nullcontext
+from typing import TYPE_CHECKING, TextIO
+
+from rich.console import Console, ConsoleOptions, Group
 from rich.live import Live
 from rich.markup import escape
 from rich.progress import (
@@ -36,22 +40,32 @@ class _RecentResults:
     def add(self, message: str, ok: bool) -> None:
         self.lines.append((message, ok))
 
-    def __rich_console__(self, console, options):
+    def __rich_console__(
+        self, console: Console, options: ConsoleOptions
+    ) -> Iterator[Table]:
         table = Table.grid(padding=(0, 1))
         for message, ok in self.lines:
             table.add_row(Text(escape(message), style="" if ok else "red"))
         yield table
 
 
+if TYPE_CHECKING:
+    from server.apps.geometries.models import GeoPlace
+    from server.apps.huts.models import Hut
+
+    #: Union alias for the two place models the sweeps walk.
+    Place = Hut | GeoPlace
+
+
 def run_sweep(
-    targets,
+    targets: Sequence[tuple[str, Place]],
     *,
     mode: str,
     verb: str,
     no_progress: bool,
-    stdout,
-    stderr,
-    work,
+    stdout: TextIO,
+    stderr: TextIO,
+    work: Callable[[str, Place, Callable[[str, bool], None]], bool],
 ) -> tuple[int, int]:
     """Run *work* for every target behind a rich progress display.
 
