@@ -129,7 +129,12 @@ class TestPlaceDetailContent:
         data = client.get(f"/v1/geo/places/{place.slug}").json()
         assert data["detail_type"] == "amenity"
         assert data["amenity_detail"]["operating_status"] == "open"
-        assert data["amenity_detail"]["websites"] == []  # model gap, not a crash
+        assert set(data["amenity_detail"]) == {
+            "operating_status",
+            "opening_months",
+            "opening_hours",
+            "phones",
+        }
         assert data["description"] == ""
         assert data["review_status"] in {"new", "review", "rework", "done"}
 

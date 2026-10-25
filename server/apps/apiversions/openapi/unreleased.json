@@ -2,13 +2,8 @@
   "components": {
     "schemas": {
       "AmenityDetailSchema": {
-        "description": "Schema for amenity detailed information.",
+        "description": "Schema for amenity detailed information.\n\nWebsites/links live at the place level (external links), overflow\ndata on ``GeoPlace.extra`` \u2014 neither belongs on this block.",
         "properties": {
-          "extra": {
-            "additionalProperties": true,
-            "title": "Extra",
-            "type": "object"
-          },
           "opening_hours": {
             "additionalProperties": true,
             "description": "Structured weekly hours per weekday + public holidays",
@@ -32,13 +27,6 @@
               "$ref": "#/components/schemas/PhoneSchema"
             },
             "title": "Phones",
-            "type": "array"
-          },
-          "websites": {
-            "items": {
-              "$ref": "#/components/schemas/WebsiteSchema"
-            },
-            "title": "Websites",
             "type": "array"
           }
         },
@@ -5768,30 +5756,6 @@
         },
         "required": ["code", "slug"],
         "title": "WeatherCodeValue",
-        "type": "object"
-      },
-      "WebsiteSchema": {
-        "description": "Schema for website with optional label.",
-        "properties": {
-          "label": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Label"
-          },
-          "url": {
-            "title": "Url",
-            "type": "string"
-          }
-        },
-        "required": ["url"],
-        "title": "WebsiteSchema",
         "type": "object"
       }
     }

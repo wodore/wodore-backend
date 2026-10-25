@@ -47,7 +47,6 @@ from ._output import (
     GeoPlaceSearchSchema,
     PhoneSchema,
     SymbolSchema,
-    WebsiteSchema,
 )
 
 __all__ = [
@@ -83,5 +82,4 @@ __all__ = [
     "SourceInput",
     "SymbolSchema",
     "UpdatePolicyEnum",
-    "WebsiteSchema",
 ]

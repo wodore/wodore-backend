@@ -145,15 +145,11 @@ def build_amenity_detail(place: GeoPlace) -> dict[str, Any] | None:
     detail = getattr(place, "amenity_detail", None)  # plugin-less inference gap
     if detail is None:
         return None
+    # Websites/links live at the place level (external links), overflow
+    # data on GeoPlace.extra — neither is part of this block.
     return {
         "operating_status": detail.operating_status,
         "opening_months": detail.opening_months or {},
         "opening_hours": detail.opening_hours or {},
-        # The wire schema declares websites/extra for forward-compat, but
-        # AmenityDetail has neither field yet — two of the latent
-        # amenity-endpoint crash bugs (place-detail-endpoint): serve
-        # []/{} instead of AttributeError.
-        "websites": getattr(detail, "websites", None) or [],
         "phones": detail.phones or [],
-        "extra": getattr(detail, "extra", None) or {},
     }
