@@ -116,8 +116,31 @@ Non-Goals:
    - Alternatives rejected: namespacing items under a fixed prefix
      (`places/detail/{slug}` — the images precedent) because it
      breaks URL parity with the existing slug-keyed SEO surface;
-     relying on path-list ordering (the fragility being fixed);
-     normalizing legacy slugs (churn, no consumer).
+     `places/by_slug/{slug}` — in industry usage that shape marks a
+     *secondary/alternate-key* lookup (Microsoft Graph's
+     alternate-key pattern, `users/by-email/{email}` style), i.e. it
+     signals "the canonical key is something else"; ours is the
+     primary key, so it would mislead clients and add permanent
+     noise while solving nothing the grammar doesn't; a singular
+     `place/{slug}` — splits one resource across two nouns
+     (`places/search` vs `place/{slug}`) against the plural-collection
+     convention (Google AIP-122 resource names, Zalando "MUST
+     pluralize", Microsoft guidelines; singular is for singletons/
+     controllers like `/me`, `/search`) — the images API's `place/`
+     prefix is a collision workaround, not a pattern to spread;
+     moving the query endpoints up (`geo/search`, `geo/nearby`) to
+     leave `places/` a pure collection — the REST purist's answer and
+     the only alternative with a real design argument, but it breaks
+     two live endpoints for churn where the grammar achieves the same
+     guarantee additively; relying on path-list ordering (the
+     fragility being fixed); normalizing legacy slugs (churn, no
+     consumer). The chosen shape is the industry standard carried to
+     its conclusion: Stripe serves `/v1/customers/search` and
+     `/v1/customers/{cus_X}` on the same collection, disambiguated
+     purely by the id grammar (`cus_` prefixes) — our slug grammar is
+     the same mechanism; Google AIP-122's resource names are exactly
+     `collection/{id}`; and the repo's own hut family already serves
+     `huts/{slug}` item-on-collection.
 
 3. **Unified endpoint shape.** `GET /v1/geo/places/{slug}`
    (`get_place`, URL name `get_place`) returns the bare place object:
