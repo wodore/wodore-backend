@@ -15,6 +15,7 @@ id (the id range is only a scan cursor).
 from __future__ import annotations
 
 import datetime
+from typing import TypedDict
 
 from django.db import models
 from django.utils import timezone
@@ -27,6 +28,15 @@ from .models import (
 from .place_link import hut_slug_to_place_ids
 
 DEFAULT_BATCH_SIZE = 5000
+
+
+class MoveChunkStats(TypedDict):
+    """Counters for one moved chunk (see :func:`move_chunk`)."""
+
+    moved: int
+    skipped_existing: int
+    unmatched: list[str]
+    availability_missing: int
 
 
 def snapshot() -> tuple[int, datetime.datetime]:
@@ -54,7 +64,7 @@ def move_chunk(
     started_at: datetime.datetime,
     *,
     dry_run: bool = False,
-) -> dict:
+) -> MoveChunkStats:
     """Move one ``(lo, hi]`` source-id range into the place history table.
 
     Returns counters: ``moved``, ``skipped_existing``, ``unmatched`` (slugs),
@@ -66,10 +76,11 @@ def move_chunk(
             id__gt=id_from, id__lte=id_to, first_checked__lt=started_at
         )
     )
+    unmatched: list[str] = []
     stats = {
         "moved": 0,
         "skipped_existing": 0,
-        "unmatched": [],
+        "unmatched": unmatched,
         "availability_missing": 0,
     }
     if not rows:
@@ -133,7 +144,7 @@ def move_chunk(
 
 def run_chunk(
     id_from: int, id_to: int, started_at_iso: str, dry_run: bool = False
-) -> dict:
+) -> MoveChunkStats:
     """django-q entry point — plain serializable args, delegates to
     :func:`move_chunk`."""
     return move_chunk(

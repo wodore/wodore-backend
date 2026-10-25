@@ -27,7 +27,7 @@ import pytest
 from django.apps import apps
 from django.contrib.gis.geos import Point
 from django.core.management import call_command
-from django.db import IntegrityError, connection, transaction
+from django.db import IntegrityError, connection, models, transaction
 from django.utils import timezone
 
 from server.apps.availability.tiles import AvailabilityTileCache
@@ -165,7 +165,7 @@ def decode_mvt(tile: bytes) -> list[dict[str, Any]]:
     return layers
 
 
-def fetch_tile(z: int, x: int, y: int, params: dict | None = None) -> bytes:
+def fetch_tile(z: int, x: int, y: int, params: dict[str, Any] | None = None) -> bytes:
     with connection.cursor() as cur:
         cur.execute(
             "SELECT get_availability_for_tiles(%s, %s, %s, %s::jsonb)",
@@ -200,7 +200,7 @@ def hut_types():
 
 
 @pytest.fixture
-def hut(hut_types):
+def hut(hut_types: tuple[Category, Category]) -> Hut:
     open_type, closed_type = hut_types
     return Hut.objects.create(
         slug="test-hut",
@@ -214,7 +214,7 @@ def hut(hut_types):
     )
 
 
-def _reset_pk_sequence(model) -> None:
+def _reset_pk_sequence(model: type[models.Model]) -> None:
     """Sync a table's ``id`` sequence with ``MAX(id)``.
 
     Test databases cloned from the dev/template data contain rows
@@ -231,7 +231,15 @@ def _reset_pk_sequence(model) -> None:
         )
 
 
-def _add_availability(hut, day_offset, *, free, total, hut_type, status="medium"):
+def _add_availability(
+    hut: Hut,
+    day_offset: int,
+    *,
+    free: int,
+    total: int,
+    hut_type: Category | None,
+    status: str = "medium",
+) -> HutAvailability:
     now = timezone.now()
     _reset_pk_sequence(Organization)
     return HutAvailability.objects.create(
@@ -256,7 +264,9 @@ def _add_availability(hut, day_offset, *, free, total, hut_type, status="medium"
 
 @pytest.mark.django_db
 class TestAvailabilityTiles:
-    def test_flattened_day_properties(self, hut, hut_types):
+    def test_flattened_day_properties(
+        self, hut: Hut, hut_types: tuple[Category, Category]
+    ) -> None:
         """A hut with two days of data yields d0/d1 props incl. hut type."""
         open_type, _ = hut_types
         _add_availability(hut, 0, free=5, total=20, hut_type=open_type)
@@ -284,7 +294,9 @@ class TestAvailabilityTiles:
         # days beyond the hut's data carry no props at all
         assert "d2_status" not in props
 
-    def test_reduced_type_discriminator(self, hut, hut_types):
+    def test_reduced_type_discriminator(
+        self, hut: Hut, hut_types: tuple[Category, Category]
+    ) -> None:
         """hut_type == hut.hut_type_closed → 'reduced'."""
         _, closed_type = hut_types
         _add_availability(hut, 0, free=3, total=10, hut_type=closed_type)
@@ -297,7 +309,7 @@ class TestAvailabilityTiles:
         assert props["d0_type"] == "reduced"
         assert props["d0_type_color"] == "#961A17"
 
-    def test_null_hut_type_omits_type_props(self, hut):
+    def test_null_hut_type_omits_type_props(self, hut: Hut) -> None:
         """Availability rows without hut_type still render the day."""
         _add_availability(hut, 0, free=1, total=2, hut_type=None)
 
@@ -310,7 +322,9 @@ class TestAvailabilityTiles:
         for key in ("d0_type", "d0_type_identifier", "d0_type_color"):
             assert key not in props
 
-    def test_days_max_zoom_clamps_to_one_day(self, hut, hut_types):
+    def test_days_max_zoom_clamps_to_one_day(
+        self, hut: Hut, hut_types: tuple[Category, Category]
+    ) -> None:
         """Below days_max_zoom (default 7) only day 0 is served."""
         open_type, _ = hut_types
         for day in range(4):
@@ -334,7 +348,9 @@ class TestAvailabilityTiles:
         assert props["days"] == 4
         assert "d3_status" in props
 
-    def test_days_parameter(self, hut, hut_types):
+    def test_days_parameter(
+        self, hut: Hut, hut_types: tuple[Category, Category]
+    ) -> None:
         """days=2 at z9 → exactly two day columns."""
         open_type, _ = hut_types
         for day in range(4):
@@ -350,7 +366,9 @@ class TestAvailabilityTiles:
         assert "d1_status" in props
         assert "d2_status" not in props
 
-    def test_date_window_filters_rows(self, hut, hut_types):
+    def test_date_window_filters_rows(
+        self, hut: Hut, hut_types: tuple[Category, Category]
+    ) -> None:
         """Availability outside the requested window is not in the tile."""
         open_type, _ = hut_types
         _add_availability(hut, 3, free=7, total=10, hut_type=open_type)
@@ -371,15 +389,18 @@ class TestAvailabilityTiles:
         assert props["d3_free"] == 7
         assert "d0_free" not in props
 
-    def test_missing_or_invalid_date_returns_empty_tile(self, hut, hut_types):
+    def test_missing_or_invalid_date_returns_empty_tile(
+        self, hut: Hut, hut_types: tuple[Category, Category]
+    ) -> None:
         """date is required: missing/garbage dates yield empty tiles, not
         a "today" default ("now" logic belongs to the client)."""
         open_type, _ = hut_types
         _add_availability(hut, 0, free=1, total=4, hut_type=open_type)
 
         x, y = _tile_for(HUT_LON, HUT_LAT, 9)
+        no_params: dict[str, str] = {}
         for params in (
-            {},  # no date at all
+            no_params,  # no date at all
             {"date": ""},  # empty
             {"date": "garbage"},  # not a date
             {"date": "21.10.2026"},  # wrong format (European style)
@@ -388,7 +409,9 @@ class TestAvailabilityTiles:
             tile = fetch_tile(9, x, y, {**params, "cache_ttl": 0})
             assert tile == b"", f"expected empty tile for {params}"
 
-    def test_days_param_clamped_to_range(self, hut, hut_types):
+    def test_days_param_clamped_to_range(
+        self, hut: Hut, hut_types: tuple[Category, Category]
+    ) -> None:
         """days=99 clamps to 8 — valid date still serves data."""
         open_type, _ = hut_types
         for day in range(8):
@@ -404,7 +427,9 @@ class TestAvailabilityTiles:
         assert props["days"] == 8
         assert "d7_status" in props
 
-    def test_inactive_or_private_huts_excluded(self, hut, hut_types):
+    def test_inactive_or_private_huts_excluded(
+        self, hut: Hut, hut_types: tuple[Category, Category]
+    ) -> None:
         open_type, _ = hut_types
         _add_availability(hut, 0, free=1, total=4, hut_type=open_type)
         Hut.objects.filter(pk=hut.pk).update(is_public=False)
@@ -428,7 +453,9 @@ class TestAvailabilityTileCache:
     def _z9(self) -> tuple[int, int]:
         return _tile_for(HUT_LON, HUT_LAT, 9)
 
-    def test_second_call_hits_cache(self, hut, hut_types):
+    def test_second_call_hits_cache(
+        self, hut: Hut, hut_types: tuple[Category, Category]
+    ) -> None:
         open_type, _ = hut_types
         _add_availability(hut, 0, free=5, total=20, hut_type=open_type)
 
@@ -442,7 +469,9 @@ class TestAvailabilityTileCache:
         assert row.hits == 1
         assert row.expires_at > timezone.now()
 
-    def test_cache_ttl_zero_bypasses_cache(self, hut, hut_types):
+    def test_cache_ttl_zero_bypasses_cache(
+        self, hut: Hut, hut_types: tuple[Category, Category]
+    ) -> None:
         open_type, _ = hut_types
         _add_availability(hut, 0, free=5, total=20, hut_type=open_type)
 
@@ -450,7 +479,9 @@ class TestAvailabilityTileCache:
         fetch_tile(9, x, y, {"date": TODAY.isoformat(), "cache_ttl": 0})
         assert not AvailabilityTileCache.objects.exists()
 
-    def test_different_params_cache_separately(self, hut, hut_types):
+    def test_different_params_cache_separately(
+        self, hut: Hut, hut_types: tuple[Category, Category]
+    ) -> None:
         """cache_ttl is not part of the key; days is."""
         open_type, _ = hut_types
         _add_availability(hut, 0, free=5, total=20, hut_type=open_type)
@@ -463,7 +494,9 @@ class TestAvailabilityTileCache:
 
         assert AvailabilityTileCache.objects.count() == 2
 
-    def test_expired_entry_is_regenerated(self, hut, hut_types):
+    def test_expired_entry_is_regenerated(
+        self, hut: Hut, hut_types: tuple[Category, Category]
+    ) -> None:
         open_type, _ = hut_types
         _add_availability(hut, 0, free=5, total=20, hut_type=open_type)
 
@@ -483,7 +516,9 @@ class TestAvailabilityTileCache:
 
 
 @pytest.mark.django_db
-def test_cleanup_removes_all_entries(hut, hut_types):
+def test_cleanup_removes_all_entries(
+    hut: Hut, hut_types: tuple[Category, Category]
+) -> None:
     """cleanup_availability_tile_cache(0) empties the cache table."""
     open_type, _ = hut_types
     _add_availability(hut, 0, free=5, total=20, hut_type=open_type)
@@ -505,7 +540,7 @@ def test_cleanup_removes_all_entries(hut, hut_types):
 
 
 @pytest.fixture
-def place():
+def place() -> GeoPlace:
     return GeoPlace.objects.create(
         slug="place-1",
         name="Test Place",
@@ -515,12 +550,17 @@ def place():
 
 
 @pytest.fixture
-def place_org():
+def place_org() -> Organization:
     _reset_pk_sequence(Organization)
     return Organization.objects.create(slug="place-org")
 
 
-def _place_availability(place, org, day_offset=0, **overrides):
+def _place_availability(
+    place: GeoPlace,
+    org: Organization,
+    day_offset: int = 0,
+    **overrides: Any,
+) -> GeoPlaceAvailability:
     """Create a GeoPlaceAvailability row with sensible defaults."""
     now = timezone.now()
     defaults = dict(
@@ -541,13 +581,17 @@ def _place_availability(place, org, day_offset=0, **overrides):
 
 @pytest.mark.django_db
 class TestGeoPlaceAvailability:
-    def test_single_row_per_place_and_date(self, place, place_org):
+    def test_single_row_per_place_and_date(
+        self, place: GeoPlace, place_org: Organization
+    ) -> None:
         """Spec: one row per place per date — a second row is rejected."""
         _place_availability(place, place_org)
         with pytest.raises(IntegrityError):
             _place_availability(place, place_org)
 
-    def test_invalid_occupancy_status_rejected(self, place, place_org):
+    def test_invalid_occupancy_status_rejected(
+        self, place: GeoPlace, place_org: Organization
+    ) -> None:
         """Spec: check constraints guard the status enums."""
         with pytest.raises(IntegrityError):
             with transaction.atomic():
@@ -556,7 +600,9 @@ class TestGeoPlaceAvailability:
             with transaction.atomic():
                 _place_availability(place, place_org, reservation_status="nope")
 
-    def test_change_detection_records_history_only_on_change(self, place, place_org):
+    def test_change_detection_records_history_only_on_change(
+        self, place: GeoPlace, place_org: Organization
+    ) -> None:
         avail = _place_availability(place, place_org, free=5, total=10)
         hour_ago = timezone.now() - datetime.timedelta(hours=1)
 
@@ -602,7 +648,9 @@ class TestGeoPlaceAvailability:
         assert history.last_checked > hour_ago
         assert history.duration_seconds >= 7000  # first_checked two hours back
 
-    def test_needing_update_priority_buckets(self, place, place_org):
+    def test_needing_update_priority_buckets(
+        self, place: GeoPlace, place_org: Organization
+    ) -> None:
         two_hours_ago = timezone.now() - datetime.timedelta(hours=2)
         ten_min_ago = timezone.now() - datetime.timedelta(minutes=10)
         # 'full' last checked 2h ago → high priority bucket → included
@@ -627,7 +675,12 @@ class TestGeoPlaceAvailability:
         assert needing.count() == 1
         assert needing.get().occupancy_status == "full"
 
-    def test_for_date_range_filters(self, place, place_org, hut_types):
+    def test_for_date_range_filters(
+        self,
+        place: GeoPlace,
+        place_org: Organization,
+        hut_types: tuple[Category, Category],
+    ) -> None:
         open_type, _ = hut_types
         _place_availability(place, place_org, day_offset=0)
         _place_availability(place, place_org, day_offset=3, hut_type=open_type)
@@ -643,7 +696,7 @@ class TestGeoPlaceAvailability:
 
 @pytest.mark.django_db
 class TestGeoPlaceAvailabilityStatus:
-    def test_mark_success_and_failure_transitions(self, place):
+    def test_mark_success_and_failure_transitions(self, place: GeoPlace) -> None:
         status = GeoPlaceAvailabilityStatus.objects.create(
             geo_place=place,
             last_checked=timezone.now() - datetime.timedelta(hours=1),
@@ -668,7 +721,9 @@ class TestGeoPlaceAvailabilityStatus:
 
 @pytest.mark.django_db
 class TestGeoPlaceAvailabilityHistory:
-    def test_for_trend_orders_out_of_order_inserts(self, place, place_org):
+    def test_for_trend_orders_out_of_order_inserts(
+        self, place: GeoPlace, place_org: Organization
+    ) -> None:
         """Spec: ordering is exclusively first_checked-based — an older row
         inserted after a newer one still sorts correctly."""
         avail = _place_availability(place, place_org)
@@ -707,20 +762,22 @@ class TestGeoPlaceAvailabilityHistory:
 
 
 @pytest.fixture
-def wodore_org():
+def wodore_org() -> Organization:
     # The template-cloned test DB already contains the real wodore org
     _reset_pk_sequence(Organization)
     org, _ = Organization.objects.get_or_create(slug=WODORE_ORG_SLUG)
     return org
 
 
-def _link(hut, place, wodore_org):
+def _link(
+    hut: Hut, place: GeoPlace, wodore_org: Organization
+) -> GeoPlaceSourceAssociation:
     return GeoPlaceSourceAssociation.objects.create(
         organization=wodore_org, geo_place=place, source_id=hut.slug
     )
 
 
-def _second_hut(hut_types, slug="other-hut"):
+def _second_hut(hut_types: tuple[Category, Category], slug: str = "other-hut") -> Hut:
     open_type, closed_type = hut_types
     return Hut.objects.create(
         slug=slug,
@@ -734,7 +791,12 @@ def _second_hut(hut_types, slug="other-hut"):
     )
 
 
-def _hut_history(hut_avail, first_checked, *, free=5):
+def _hut_history(
+    hut_avail: HutAvailability,
+    first_checked: datetime.datetime,
+    *,
+    free: int = 5,
+) -> HutAvailabilityHistory:
     return HutAvailabilityHistory.objects.create(
         availability=hut_avail,
         hut=hut_avail.hut,
@@ -752,7 +814,9 @@ def _hut_history(hut_avail, first_checked, *, free=5):
 
 @pytest.mark.django_db
 class TestPlaceLink:
-    def test_join_resolution_via_wodore_association(self, hut, place, wodore_org):
+    def test_join_resolution_via_wodore_association(
+        self, hut: Hut, place: GeoPlace, wodore_org: Organization
+    ) -> None:
         assert hut_slug_to_place_ids() == {}
         assert resolve_place(hut) is None
         _link(hut, place, wodore_org)
@@ -760,8 +824,12 @@ class TestPlaceLink:
         assert resolve_place(hut) == place
 
     def test_unmatched_huts_only_lists_unlinked_with_availability(
-        self, hut, hut_types, place, wodore_org
-    ):
+        self,
+        hut: Hut,
+        hut_types: tuple[Category, Category],
+        place: GeoPlace,
+        wodore_org: Organization,
+    ) -> None:
         open_type, _ = hut_types
         _link(hut, place, wodore_org)
         _add_availability(hut, 0, free=1, total=10, hut_type=open_type)  # linked
@@ -779,13 +847,19 @@ class TestPlaceLink:
 
 @pytest.mark.django_db
 class TestBackfillMigration:
-    def _run(self, *, reverse=False):
+    def _run(self, *, reverse: bool = False) -> None:
         mig = import_module(
             "server.apps.availability.migrations.0019_backfill_geoplace_availability"
         )
         (mig.remove_backfill if reverse else mig.backfill)(apps, None)
 
-    def test_field_fidelity_and_status_copy(self, hut, hut_types, place, wodore_org):
+    def test_field_fidelity_and_status_copy(
+        self,
+        hut: Hut,
+        hut_types: tuple[Category, Category],
+        place: GeoPlace,
+        wodore_org: Organization,
+    ) -> None:
         open_type, _ = hut_types
         _link(hut, place, wodore_org)
         src = _add_availability(hut, 0, free=3, total=12, hut_type=open_type)
@@ -830,7 +904,13 @@ class TestBackfillMigration:
         ):
             assert getattr(st, field) == getattr(status, field), field
 
-    def test_reverse_restores_empty_state(self, hut, hut_types, place, wodore_org):
+    def test_reverse_restores_empty_state(
+        self,
+        hut: Hut,
+        hut_types: tuple[Category, Category],
+        place: GeoPlace,
+        wodore_org: Organization,
+    ) -> None:
         open_type, _ = hut_types
         _link(hut, place, wodore_org)
         _add_availability(hut, 0, free=3, total=12, hut_type=open_type)
@@ -841,8 +921,12 @@ class TestBackfillMigration:
         assert GeoPlaceAvailabilityStatus.objects.count() == 0
 
     def test_rerun_skips_existing_and_unmatched_stays_out(
-        self, hut, hut_types, place, wodore_org
-    ):
+        self,
+        hut: Hut,
+        hut_types: tuple[Category, Category],
+        place: GeoPlace,
+        wodore_org: Organization,
+    ) -> None:
         open_type, _ = hut_types
         _link(hut, place, wodore_org)
         src = _add_availability(hut, 0, free=3, total=12, hut_type=open_type)
@@ -856,7 +940,13 @@ class TestBackfillMigration:
         assert copied.source_id == src.source_id
 
 
-def _setup_move(hut, hut_types, place, place_org, wodore_org):
+def _setup_move(
+    hut: Hut,
+    hut_types: tuple[Category, Category],
+    place: GeoPlace,
+    place_org: Organization,
+    wodore_org: Organization,
+) -> HutAvailability:
     """Link hut↔place and seed one hut + one place availability row (TODAY)."""
     open_type, _ = hut_types
     _link(hut, place, wodore_org)
@@ -868,8 +958,13 @@ def _setup_move(hut, hut_types, place, place_org, wodore_org):
 @pytest.mark.django_db
 class TestHistoryMove:
     def test_idempotent_rerun_epoch_cap_and_dry_run(
-        self, hut, hut_types, place, place_org, wodore_org
-    ):
+        self,
+        hut: Hut,
+        hut_types: tuple[Category, Category],
+        place: GeoPlace,
+        place_org: Organization,
+        wodore_org: Organization,
+    ) -> None:
         src = _setup_move(hut, hut_types, place, place_org, wodore_org)
         lo, _ = snapshot()  # template data below this id is not ours
         _hut_history(src, timezone.now() - datetime.timedelta(hours=2), free=8)
@@ -902,8 +997,13 @@ class TestHistoryMove:
         assert extra.free == 9  # sanity
 
     def test_unmatched_and_missing_availability_counters(
-        self, hut, hut_types, place, place_org, wodore_org
-    ):
+        self,
+        hut: Hut,
+        hut_types: tuple[Category, Category],
+        place: GeoPlace,
+        place_org: Organization,
+        wodore_org: Organization,
+    ) -> None:
         open_type, _ = hut_types
         orphan = _second_hut(hut_types)
         orphan_src = _add_availability(orphan, 0, free=4, total=8, hut_type=open_type)
@@ -942,8 +1042,13 @@ class TestHistoryMove:
 @pytest.mark.django_db
 class TestPhaseBCommands:
     def test_move_command_sync_resumes_after_partial(
-        self, hut, hut_types, place, place_org, wodore_org
-    ):
+        self,
+        hut: Hut,
+        hut_types: tuple[Category, Category],
+        place: GeoPlace,
+        place_org: Organization,
+        wodore_org: Organization,
+    ) -> None:
         src = _setup_move(hut, hut_types, place, place_org, wodore_org)
         lo, _ = snapshot()
         h1 = _hut_history(src, timezone.now() - datetime.timedelta(hours=3), free=9)
@@ -977,7 +1082,13 @@ class TestPhaseBCommands:
         )
         assert len(keys) == len(set(keys))
 
-    def test_report_command_gate_states(self, hut, hut_types, place, wodore_org):
+    def test_report_command_gate_states(
+        self,
+        hut: Hut,
+        hut_types: tuple[Category, Category],
+        place: GeoPlace,
+        wodore_org: Organization,
+    ) -> None:
         open_type, _ = hut_types
         _link(hut, place, wodore_org)
         _add_availability(hut, 0, free=3, total=12, hut_type=open_type)
@@ -998,16 +1109,16 @@ class TestPhaseBCommands:
 
 
 def _fake_booking(
-    date,
+    date: datetime.date,
     *,
-    free=5,
-    total=10,
-    free_tolerance=0,
-    hut_type=None,
-    status="medium",
-    reservation="possible",
-    link="",
-):
+    free: int = 5,
+    total: int = 10,
+    free_tolerance: int = 0,
+    hut_type: Category | None = None,
+    status: str = "medium",
+    reservation: str = "possible",
+    link: str = "",
+) -> SimpleNamespace:
     return SimpleNamespace(
         date=date,
         free=free,
@@ -1022,13 +1133,22 @@ def _fake_booking(
     )
 
 
-def _fake_hut_booking(hut, bookings, source):
+def _fake_hut_booking(
+    hut: Hut, bookings: list[SimpleNamespace], source: str
+) -> SimpleNamespace:
     return SimpleNamespace(
         slug=hut.slug, source=source, source_id="src-1", bookings=bookings
     )
 
 
-def _seed_both_sides(hut, place, place_org, *, free=5, total=10):
+def _seed_both_sides(
+    hut: Hut,
+    place: GeoPlace,
+    place_org: Organization,
+    *,
+    free: int = 5,
+    total: int = 10,
+) -> tuple[HutAvailability, GeoPlaceAvailability]:
     """Seed matching current-state rows on both sides for TODAY."""
     aged = timezone.now() - datetime.timedelta(hours=2)
     hut_avail = HutAvailability.objects.create(
@@ -1071,8 +1191,13 @@ def _seed_both_sides(hut, place, place_org, *, free=5, total=10):
 @pytest.mark.django_db
 class TestDualWrite:
     def test_batch_writes_both_sides_identically(
-        self, hut, hut_types, place, place_org, wodore_org
-    ):
+        self,
+        hut: Hut,
+        hut_types: tuple[Category, Category],
+        place: GeoPlace,
+        place_org: Organization,
+        wodore_org: Organization,
+    ) -> None:
         _link(hut, place, wodore_org)
         hut_avail, place_avail = _seed_both_sides(hut, place, place_org)
         now = timezone.now()
@@ -1137,8 +1262,13 @@ class TestDualWrite:
             assert getattr(ph, field) == getattr(hh, field), field
 
     def test_unchanged_run_advances_last_checked_both_sides(
-        self, hut, hut_types, place, place_org, wodore_org
-    ):
+        self,
+        hut: Hut,
+        hut_types: tuple[Category, Category],
+        place: GeoPlace,
+        place_org: Organization,
+        wodore_org: Organization,
+    ) -> None:
         _link(hut, place, wodore_org)
         hut_avail, place_avail = _seed_both_sides(hut, place, place_org)
         aged = timezone.now() - datetime.timedelta(hours=3)
@@ -1189,7 +1319,9 @@ class TestDualWrite:
         assert HutAvailabilityHistory.objects.filter(hut=hut).count() == 1
         assert GeoPlaceAvailabilityHistory.objects.filter(geo_place=place).count() == 1
 
-    def test_unmatched_hut_writes_hut_side_only(self, hut, hut_types, place_org):
+    def test_unmatched_hut_writes_hut_side_only(
+        self, hut: Hut, hut_types: tuple[Category, Category], place_org: Organization
+    ) -> None:
         before = GeoPlaceAvailability.objects.count()
         now = timezone.now()
         tomorrow = TODAY + datetime.timedelta(days=1)
@@ -1206,7 +1338,9 @@ class TestDualWrite:
         assert HutAvailability.objects.filter(hut=hut).count() == 1
         assert GeoPlaceAvailability.objects.count() == before  # place side skipped
 
-    def test_mirror_status_lifecycle(self, hut, place, wodore_org):
+    def test_mirror_status_lifecycle(
+        self, hut: Hut, place: GeoPlace, wodore_org: Organization
+    ) -> None:
         _link(hut, place, wodore_org)
         t1 = timezone.now()
         mirror_status([hut], [], t1)
@@ -1227,8 +1361,13 @@ class TestDualWrite:
         assert st.last_success == t3
 
     def test_free_tolerance_persists_both_sides(
-        self, hut, hut_types, place, place_org, wodore_org
-    ):
+        self,
+        hut: Hut,
+        hut_types: tuple[Category, Category],
+        place: GeoPlace,
+        place_org: Organization,
+        wodore_org: Organization,
+    ) -> None:
         """Phase C review: ``free_tolerance`` was in the changed-check but
         missing from both bulk_update field lists — the value was never
         persisted (spurious history entries every run)."""
@@ -1251,8 +1390,13 @@ class TestDualWrite:
         assert place_avail.free_tolerance == 3
 
     def test_queued_new_dedupe_one_place_date(
-        self, hut, hut_types, place, place_org, wodore_org
-    ):
+        self,
+        hut: Hut,
+        hut_types: tuple[Category, Category],
+        place: GeoPlace,
+        place_org: Organization,
+        wodore_org: Organization,
+    ) -> None:
         """Two bookings sharing (place, date) in one payload collapse to one
         row per side — latest values win (unique constraint holds)."""
         _link(hut, place, wodore_org)
@@ -1282,7 +1426,9 @@ class TestDualWrite:
         assert hut_row.free == 6 and hut_row.total == 12
         assert place_row.free == 6 and place_row.total == 12
 
-    def test_mirror_mark_failure_shared_timestamp(self, hut, place, wodore_org):
+    def test_mirror_mark_failure_shared_timestamp(
+        self, hut: Hut, place: GeoPlace, wodore_org: Organization
+    ) -> None:
         """Phase C review F1: the mirror stamps the SAME timestamp the hut
         side used — place-driven cadence stays in step."""
         _link(hut, place, wodore_org)
@@ -1302,8 +1448,13 @@ class TestDualWrite:
 @pytest.mark.django_db
 class TestPlaceDrivenCadence:
     def test_discovery_covers_all_three_branches(
-        self, hut, hut_types, place, place_org, wodore_org
-    ):
+        self,
+        hut: Hut,
+        hut_types: tuple[Category, Category],
+        place: GeoPlace,
+        place_org: Organization,
+        wodore_org: Organization,
+    ) -> None:
         # Branch 1: linked hut with a stale high-priority place row
         _link(hut, place, wodore_org)
         Hut.objects.filter(pk=hut.pk).update(availability_source_ref=place_org)

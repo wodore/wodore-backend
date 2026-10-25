@@ -53,7 +53,7 @@ def mirror_batch(
     now: datetime.datetime | None = None,
     update_history_last_checked: bool = False,
     mapping: dict[str, int] | None = None,
-) -> dict:
+) -> dict[str, int | list[str]]:
     """Mirror one ``(hut, hut_booking)`` batch onto the place tables.
 
     Must run inside the caller's transaction (atomic with the hut-side

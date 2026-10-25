@@ -11,7 +11,9 @@ max source id + epoch start so events at/after the start are never moved.
     python manage.py move_availability_history            # django-q chunks
 """
 
-from django.core.management.base import BaseCommand
+from typing import Any, override
+
+from django.core.management.base import BaseCommand, CommandParser
 
 from ...history_move import DEFAULT_BATCH_SIZE, chunk_ranges, move_chunk, snapshot
 
@@ -22,7 +24,8 @@ class Command(BaseCommand):
         "(idempotent, resumable; see geoplace-availability design D6)"
     )
 
-    def add_arguments(self, parser):
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--dry-run",
             action="store_true",
@@ -52,7 +55,8 @@ class Command(BaseCommand):
             help="Run chunks inline instead of enqueueing django-q tasks",
         )
 
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         dry_run = options["dry_run"]
         # --dry-run implies --sync (A–C review nit): enqueuing no-op
         # django-q workers would report nothing to the console.
@@ -80,8 +84,9 @@ class Command(BaseCommand):
             unmatched: list[str] = []
             for lo, hi in ranges:
                 stats = move_chunk(lo, hi, started_at, dry_run=dry_run)
-                for key in totals:
-                    totals[key] += stats[key]
+                totals["moved"] += stats["moved"]
+                totals["skipped_existing"] += stats["skipped_existing"]
+                totals["availability_missing"] += stats["availability_missing"]
                 for slug in stats["unmatched"]:
                     if slug not in unmatched:
                         unmatched.append(slug)

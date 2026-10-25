@@ -1,9 +1,9 @@
-# NOTE: description=_(...) is the project-wide lazy-gettext idiom (i18n-safe);
-# per-line pyright ignores below suppress the unfold-stub str-typing mismatch.
 import datetime
+from typing import Any, override
 
 from django.conf import settings
 from django.contrib import admin
+from django.contrib.admin import ModelAdmin as DjangoModelAdmin
 from django.contrib.admin import SimpleListFilter
 from django.db.models import QuerySet
 from django.db.models.functions import Lower
@@ -21,6 +21,7 @@ from unfold.contrib.filters.admin import (
 )
 from unfold.decorators import display
 
+from server.apps.huts.models import Hut
 from server.apps.manager.admin import ModelAdmin, RelatedOnlyCheckboxFilter
 
 from .models import AvailabilityStatus, HutAvailability, HutAvailabilityHistory
@@ -32,7 +33,8 @@ class AvailabilityDateFilter(SimpleListFilter):
     title = _("availability date range")
     parameter_name = "date_range"
 
-    def lookups(self, request, model_admin):
+    @override
+    def lookups(self, request: HttpRequest, model_admin: DjangoModelAdmin[Any]):
         return (
             ("1day", _("Next 1 day")),
             ("7days", _("Next 7 days")),
@@ -40,7 +42,10 @@ class AvailabilityDateFilter(SimpleListFilter):
             ("all", _("All dates")),
         )
 
-    def queryset(self, request, queryset):
+    @override
+    def queryset(
+        self, request: HttpRequest, queryset: QuerySet[Any]
+    ) -> QuerySet[Any] | None:
         today = timezone.now().date()
         if self.value() == "1day":
             return queryset.filter(
@@ -132,7 +137,9 @@ def get_occupancy_progress_bar(
     )
 
 
-class HutAvailabilityHistoryInline(admin.TabularInline):
+class HutAvailabilityHistoryInline(
+    admin.TabularInline[HutAvailabilityHistory, HutAvailability]
+):
     model = HutAvailabilityHistory
     extra = 0
     fields = (
@@ -160,7 +167,7 @@ class HutAvailabilityHistoryInline(admin.TabularInline):
     can_delete = False
 
     @display(description=_("Duration"))
-    def duration_display(self, obj):
+    def duration_display(self, obj: HutAvailabilityHistory) -> str:
         if obj.pk:
             seconds = obj.duration_seconds
             if seconds < 3600:
@@ -231,34 +238,39 @@ class AvailabilityStatusAdmin(ModelAdmin):
         ),
     )
 
-    def get_queryset(self, request: HttpRequest) -> QuerySet:
+    @override
+    def get_queryset(self, request: HttpRequest) -> QuerySet[AvailabilityStatus]:
         """Optimize queryset with select_related"""
         qs = super().get_queryset(request)
         return qs.select_related("hut")
 
-    def has_add_permission(self, request):
+    @override
+    def has_add_permission(self, request: HttpRequest) -> bool:
         return False
 
-    def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
+    @override
+    def has_delete_permission(
+        self, request: HttpRequest, obj: AvailabilityStatus | None = None
+    ) -> bool:
+        return request.user.is_superuser  # type: ignore  # dynamic attr: plugin-less inference gap
 
     @display(header=True, description=_("Hut"), ordering=Lower("hut__name"))
-    def hut_header(self, obj):
+    def hut_header(self, obj: AvailabilityStatus) -> tuple[str, str]:
         """Display hut name and slug as header with link"""
         return (obj.hut.name, obj.hut.slug)
 
     @display(description=_("Has Data"), ordering="has_data", boolean=True)
-    def has_data_display(self, obj):
+    def has_data_display(self, obj: AvailabilityStatus) -> bool:
         """Display has_data field with custom label"""
         return obj.has_data
 
     @display(description=_("Failures"), ordering="consecutive_failures")
-    def consecutive_failures_display(self, obj):
+    def consecutive_failures_display(self, obj: AvailabilityStatus) -> int:
         """Display consecutive_failures field with custom label"""
         return obj.consecutive_failures
 
     @display(description=_("Failing Since"))
-    def failing_since(self, obj):
+    def failing_since(self, obj: AvailabilityStatus):
         """Calculate and display when the hut started failing (if currently failing)"""
         if obj.consecutive_failures == 0:
             return "-"
@@ -267,7 +279,7 @@ class AvailabilityStatusAdmin(ModelAdmin):
         return obj.last_success
 
 
-class HutAvailabilityViewInline(admin.TabularInline):
+class HutAvailabilityViewInline(admin.TabularInline[HutAvailability, Hut]):
     """Inline to show availability data in Hut admin"""
 
     model = HutAvailability
@@ -298,7 +310,8 @@ class HutAvailabilityViewInline(admin.TabularInline):
     verbose_name = _("Availability")
     verbose_name_plural = _("Availability (Next 14 Days)")
 
-    def get_queryset(self, request: HttpRequest) -> QuerySet:
+    @override
+    def get_queryset(self, request: HttpRequest) -> QuerySet[HutAvailability]:
         """Show only next 14 days of availability"""
         import datetime
 
@@ -314,11 +327,12 @@ class HutAvailabilityViewInline(admin.TabularInline):
             .order_by("availability_date")
         )
 
-    def has_add_permission(self, request: HttpRequest, obj=None) -> bool:
+    @override
+    def has_add_permission(self, request: HttpRequest, obj: Hut | None = None) -> bool:
         return False
 
     @display(description=_("Free/Total"))
-    def places_display(self, obj):
+    def places_display(self, obj: HutAvailability) -> str:
         free = "–" if obj.free is None else obj.free
         total = "–" if obj.total is None else obj.total
         tolerance = obj.free_tolerance or 0
@@ -326,7 +340,7 @@ class HutAvailabilityViewInline(admin.TabularInline):
         return f"{free_text}/{total}"
 
     @display(description=_("Occupancy"), label=True)
-    def occupancy_progress(self, obj):
+    def occupancy_progress(self, obj: HutAvailability) -> str:
         return mark_safe(
             get_occupancy_progress_bar(
                 obj.occupancy_percent, active=obj.occupancy_status != "unknown"
@@ -334,11 +348,11 @@ class HutAvailabilityViewInline(admin.TabularInline):
         )
 
     @display(description="")
-    def status_icon(self, obj):
+    def status_icon(self, obj: HutAvailability) -> str:
         return mark_safe(get_occupancy_icon_html(obj.occupancy_status, show_text=True))
 
     @display(description=_("Type"))
-    def hut_type_icon(self, obj):
+    def hut_type_icon(self, obj: HutAvailability) -> str:
         if (
             obj.hut_type
             and obj.hut_type.symbol_primitive
@@ -350,7 +364,7 @@ class HutAvailabilityViewInline(admin.TabularInline):
         return "-"
 
     @display(description=_("View"))
-    def view_link(self, obj):
+    def view_link(self, obj: HutAvailability) -> str:
         if obj.pk:
             url = reverse("admin:availability_hutavailability_change", args=[obj.pk])
             return format_html('<a href="{}">View</a>', url)
@@ -432,19 +446,24 @@ class HutAvailabilityAdmin(ModelAdmin):
 
     inlines = (HutAvailabilityHistoryInline,)
 
-    def get_queryset(self, request: HttpRequest) -> QuerySet:
+    @override
+    def get_queryset(self, request: HttpRequest) -> QuerySet[HutAvailability]:
         """Optimize queryset with select_related"""
         qs = super().get_queryset(request)
         return qs.select_related("hut", "source_organization", "hut_type")
 
-    def has_add_permission(self, request):
+    @override
+    def has_add_permission(self, request: HttpRequest) -> bool:
         return False
 
-    def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
+    @override
+    def has_delete_permission(
+        self, request: HttpRequest, obj: HutAvailability | None = None
+    ) -> bool:
+        return request.user.is_superuser  # type: ignore  # dynamic attr: plugin-less inference gap
 
     @display(description=_("Free/Total"))
-    def places_display(self, obj):
+    def places_display(self, obj: HutAvailability) -> str:
         free = "–" if obj.free is None else obj.free
         total = "–" if obj.total is None else obj.total
         tolerance = obj.free_tolerance or 0
@@ -452,7 +471,7 @@ class HutAvailabilityAdmin(ModelAdmin):
         return f"{free_text}/{total}"
 
     @display(description=_("Occupancy"), label=True)
-    def occupancy_progress(self, obj):
+    def occupancy_progress(self, obj: HutAvailability) -> str:
         return mark_safe(
             get_occupancy_progress_bar(
                 obj.occupancy_percent, active=obj.occupancy_status != "unknown"
@@ -460,16 +479,16 @@ class HutAvailabilityAdmin(ModelAdmin):
         )
 
     @display(description="")
-    def status_icon(self, obj):
+    def status_icon(self, obj: HutAvailability) -> str:
         return mark_safe(get_occupancy_icon_html(obj.occupancy_status, show_text=True))
 
     @display(header=True, description=_("Hut"), ordering=Lower("hut__name"))
-    def hut_header(self, obj):
+    def hut_header(self, obj: HutAvailability) -> tuple[str, str]:
         """Display hut name and slug as header with link"""
         return (obj.hut.name, obj.hut.slug)
 
     @display(description=_("Type"))
-    def hut_type_icon(self, obj):
+    def hut_type_icon(self, obj: HutAvailability) -> str:
         if (
             obj.hut_type
             and obj.hut_type.symbol_primitive
@@ -481,12 +500,12 @@ class HutAvailabilityAdmin(ModelAdmin):
         return "-"
 
     @display(description=_("Reservation"), label=True)
-    def reservation_status_label(self, obj):
+    def reservation_status_label(self, obj: HutAvailability) -> str:
         """Display reservation status as a styled label"""
         return obj.reservation_status
 
     @display(description=_("Source"))
-    def source_display(self, obj):
+    def source_display(self, obj: HutAvailability) -> str:
         """Display source organization with logo and clickable source_id link"""
         if obj.source_organization:
             org_url = reverse(
@@ -595,24 +614,29 @@ class HutAvailabilityHistoryAdmin(ModelAdmin):
         ),
     )
 
-    def get_queryset(self, request: HttpRequest) -> QuerySet:
+    @override
+    def get_queryset(self, request: HttpRequest) -> QuerySet[HutAvailabilityHistory]:
         """Optimize queryset with select_related"""
         qs = super().get_queryset(request)
         return qs.select_related("hut", "availability", "hut_type")
 
     @display(header=True, description=_("Hut"), ordering=Lower("hut__name"))
-    def hut_header(self, obj):
+    def hut_header(self, obj: HutAvailabilityHistory) -> tuple[str, str]:
         """Display hut name and slug as header with link"""
         return (obj.hut.name, obj.hut.slug)
 
-    def has_add_permission(self, request):
+    @override
+    def has_add_permission(self, request: HttpRequest) -> bool:
         return False
 
-    def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
+    @override
+    def has_delete_permission(
+        self, request: HttpRequest, obj: HutAvailabilityHistory | None = None
+    ) -> bool:
+        return request.user.is_superuser  # type: ignore  # dynamic attr: plugin-less inference gap
 
     @display(description=_("Free/Total"))
-    def places_display(self, obj):
+    def places_display(self, obj: HutAvailabilityHistory) -> str:
         free = "–" if obj.free is None else obj.free
         total = "–" if obj.total is None else obj.total
         tolerance = obj.free_tolerance or 0
@@ -620,7 +644,7 @@ class HutAvailabilityHistoryAdmin(ModelAdmin):
         return f"{free_text}/{total}"
 
     @display(description=_("Occupancy"), label=True)
-    def occupancy_progress(self, obj):
+    def occupancy_progress(self, obj: HutAvailabilityHistory) -> str:
         return mark_safe(
             get_occupancy_progress_bar(
                 obj.occupancy_percent, active=obj.occupancy_status != "unknown"
@@ -628,11 +652,11 @@ class HutAvailabilityHistoryAdmin(ModelAdmin):
         )
 
     @display(description="")
-    def status_icon(self, obj):
+    def status_icon(self, obj: HutAvailabilityHistory) -> str:
         return mark_safe(get_occupancy_icon_html(obj.occupancy_status, show_text=True))
 
     @display(description=_("Type"))
-    def hut_type_icon(self, obj):
+    def hut_type_icon(self, obj: HutAvailabilityHistory) -> str:
         if (
             obj.hut_type
             and obj.hut_type.symbol_primitive
@@ -644,7 +668,7 @@ class HutAvailabilityHistoryAdmin(ModelAdmin):
         return "-"
 
     @display(description=_("Duration"))
-    def duration_display(self, obj):
+    def duration_display(self, obj: HutAvailabilityHistory) -> str:
         if obj.pk:
             seconds = obj.duration_seconds
             if seconds < 3600:
