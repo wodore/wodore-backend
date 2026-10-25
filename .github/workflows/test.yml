@@ -97,10 +97,10 @@ jobs:
           # --- Install GDAL in background ---
           (
             sudo apt-get install -y --no-install-recommends \
-              gdal-bin 2>/tmp/gdal-err.log || \
+              gdal-bin gettext 2>/tmp/gdal-err.log || \
               (sudo apt-get update && \
                 sudo apt-get install -y --no-install-recommends \
-                gdal-bin)
+                gdal-bin gettext)
             echo "GDAL install complete"
           ) &
 
@@ -146,8 +146,8 @@ jobs:
       - name: Compile translations
         # The per-language llms.txt variants render through the django
         # catalog ({% translate %} in server/templates/txt/llms.txt);
-        # .mo files are gitignored and compiled here (gettext's msgfmt is
-        # preinstalled on ubuntu runners).
+        # .mo files are gitignored and compiled here (gettext's msgfmt
+        # rides along with the GDAL install above).
         run: uv run python manage.py compilemessages
 
       # ── Run tests ───────────────────────────────────────────────────────
