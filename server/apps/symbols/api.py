@@ -1,6 +1,11 @@
 """Symbol endpoints on dmr."""
 
+import contextlib
 from http import HTTPStatus
+from typing import Any
+
+with contextlib.suppress(ModuleNotFoundError):
+    from django_stubs_ext import QuerySetAny
 
 import pydantic
 from django_readers import specs
@@ -34,7 +39,7 @@ _SYMBOL_SPEC = spec_from_schema(
 _SYMBOL_PREPARE, _ = specs.process(_SYMBOL_SPEC)
 
 
-def _prepared_symbols(base_qs):
+def _prepared_symbols(base_qs: "QuerySetAny") -> "QuerySetAny":
     """Base queryset with schema-derived relation loading.
 
     relations_only: the serializer validates the full wire schema off
@@ -87,7 +92,7 @@ class SymbolsController(ApiController):
     def get(
         self,
         parsed_query: Query[SymbolQuery],
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """List symbols.
 
         By default only returns active symbols."""
@@ -112,7 +117,7 @@ class SymbolByIdController(ApiController):
         self,
         parsed_path: Path[SymbolIdPath],
         parsed_query: Query[SymbolQuery],
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Get a single symbol by UUID."""
         symbol = _prepared_symbols(
             Symbol.objects.filter(id=parsed_path.id, is_active=parsed_query.is_active)
@@ -137,7 +142,7 @@ class SymbolsBySlugController(ApiController):
         self,
         parsed_path: Path[SymbolSlugPath],
         parsed_query: Query[SymbolBySlugQuery],
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Get all style variants for a symbol by slug.
 
         By default only returns active symbols.
@@ -213,7 +218,7 @@ class SymbolByStyleController(ApiController):
         self,
         parsed_path: Path[SymbolStylePath],
         parsed_query: Query[SymbolQuery],
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Get a single symbol by style and slug.
 
         Returns the same schema as the by-id endpoint.
