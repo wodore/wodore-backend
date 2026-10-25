@@ -72,6 +72,9 @@ def _format_callsite(
 class CustomConsoleRenderer(structlog.dev.ConsoleRenderer):
     """Custom console renderer that shows callsite at the end in brackets."""
 
+    # No @override here on purpose: structlog's stubs don't model
+    # ConsoleRenderer.__call__ precisely enough — adding the decorator
+    # would trip bad-override instead of satisfying it.
     def __call__(
         self, logger: Any, name: str, event_dict: structlog.types.EventDict
     ) -> str:
