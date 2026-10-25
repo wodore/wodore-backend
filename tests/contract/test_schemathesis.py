@@ -23,6 +23,7 @@ throttled) - those keep their targeted tests.
 from __future__ import annotations
 
 import os
+from typing import Any
 
 import pytest
 
@@ -82,7 +83,7 @@ def test_contract_holds_for_safe_operations():
             deadline=None,
             suppress_health_check=list(HealthCheck),
         )
-        def run_cases(case):
+        def run_cases(case: Any) -> None:
             case.call_and_validate()
 
         try:

@@ -8,6 +8,8 @@ https://docs.djangoproject.com/en/4.2/howto/deployment/asgi/
 """
 
 import os
+from collections.abc import Awaitable, Callable, Mapping
+from typing import Any
 
 from django.core.asgi import get_asgi_application
 
@@ -16,7 +18,11 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "server.settings")
 django_application = get_asgi_application()
 
 
-async def application(scope, receive, send):
+async def application(
+    scope: dict[str, Any],
+    receive: Callable[[], Awaitable[Mapping[str, Any]]],
+    send: Callable[[Mapping[str, Any]], Awaitable[None]],
+):
     """ASGI entrypoint that answers the lifespan protocol (Sentry 154469278).
 
     Django's ``ASGIHandler`` serves ``http`` scopes only and raises

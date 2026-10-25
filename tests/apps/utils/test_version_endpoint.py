@@ -13,6 +13,8 @@ import datetime
 
 import pytest
 
+from django.test import Client
+
 from server.apps.apiversions import registry
 
 pytestmark = [pytest.mark.django_db]
@@ -22,7 +24,7 @@ pytestmark = [pytest.mark.django_db]
 BUSYBOX_GARBAGE = "2026-10-06T06:57:53.   %6NZ"
 
 
-def test_version_endpoint_returns_200(client):
+def test_version_endpoint_returns_200(client: Client):
     """Happy path: the discovery endpoint answers with all sections."""
     response = client.get("/v1/version")
 
@@ -35,7 +37,9 @@ def test_version_endpoint_returns_200(client):
     assert body["environment"] in {"development", "test", "staging", "production"}
 
 
-def test_version_endpoint_tolerates_unparseable_build_timestamp(client, monkeypatch):
+def test_version_endpoint_tolerates_unparseable_build_timestamp(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+):
     """A garbage BUILD_TIMESTAMP must not turn the endpoint into a 500.
 
     Staging bug: the entrypoint exported the BusyBox date artifact
@@ -56,7 +60,9 @@ def test_version_endpoint_tolerates_unparseable_build_timestamp(client, monkeypa
     datetime.datetime.fromisoformat(body["timestamp"])
 
 
-def test_version_endpoint_parses_utc_build_timestamp(client, monkeypatch):
+def test_version_endpoint_parses_utc_build_timestamp(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+):
     """Z-suffixed (or offset) build timestamps parse and round-trip.
 
     The debian/ubuntu images emit GNU date output with a trailing Z;

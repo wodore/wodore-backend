@@ -4,18 +4,22 @@ All pixel fixtures are generated with PIL/numpy — no network, no models.
 """
 
 import io
+from typing import Any
 
 import pytest
 from PIL import Image as PILImage
+from pytest_django.fixtures import SettingsWrapper
 
 from tests.apps.geometries.test_image_pinning import _result
 
 from django.contrib.gis.geos import Point
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.test import Client
 
 from server.apps.geometries import image_response_cache as irc
 from server.apps.geometries.pinning import pin_place_images
+from server.apps.huts.models import Hut
 from server.apps.images.assessment import (
     DUPLICATE_HAMMING_DISTANCE,
     assess_image,
@@ -82,7 +86,7 @@ class TestPrimitives:
 
 
 @pytest.fixture
-def hut(seed_data):
+def hut(seed_data: dict[str, int]):
     from server.apps.huts.models import Hut, HutImageAssociation
 
     hut = Hut.objects.filter(is_active=True, is_public=True).first()
@@ -92,7 +96,7 @@ def hut(seed_data):
 
 
 @pytest.fixture(autouse=True)
-def _isolated_response_cache(monkeypatch):
+def _isolated_response_cache(monkeypatch: pytest.MonkeyPatch):
     """Private locmem response cache (the persistent DB cache is shared)."""
     from uuid import uuid4
 
@@ -102,7 +106,7 @@ def _isolated_response_cache(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _imagor(settings, monkeypatch):
+def _imagor(settings: SettingsWrapper, monkeypatch: pytest.MonkeyPatch):
     """Deterministic imagor URLs; pixel bytes served by a fake requests.get."""
     from server.apps.images import assessment
 
@@ -116,14 +120,14 @@ def _imagor(settings, monkeypatch):
         def raise_for_status(self):
             return None
 
-        def json(self):
+        def json(self) -> dict[str, Any]:
             if "/meta/" in self.url:
                 return {"thumbhash": "F/gJNQJXh493Z4lneYqHd4ZwZAk2"}
             return {}
 
         url = ""
 
-    def _get(url, timeout=None):
+    def _get(url: str, timeout: float | None = None):
         resp = _Resp()
         resp.url = url
         return resp
@@ -177,7 +181,9 @@ class TestAssessImage:
 
 
 class TestCommand:
-    def test_default_assesses_pinned_places(self, hut, capsys):
+    def test_default_assesses_pinned_places(
+        self, hut: Hut, capsys: pytest.CaptureFixture[str]
+    ):
         """Default (no args) sweeps every place that has pins."""
         pin_place_images(hut, [_result(score=80)])
         call_command("geoimages_assess", no_progress=True)
@@ -185,12 +191,19 @@ class TestCommand:
         assert f"assessed hut:{hut.slug}" in out
         assert "(all pinned places)" in out
 
-    def test_no_pins_reports_nothing_to_do(self, hut, capsys):
+    def test_no_pins_reports_nothing_to_do(
+        self, hut: Hut, capsys: pytest.CaptureFixture[str]
+    ):
         call_command("geoimages_assess")
         out = capsys.readouterr().out
         assert "Nothing to do" in out
 
-    def test_bbox_filters_targets(self, hut, monkeypatch, capsys):
+    def test_bbox_filters_targets(
+        self,
+        hut: Hut,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ):
         """A tiny bbox elsewhere on the globe excludes the pinned place."""
         pin_place_images(hut, [_result(score=80)])
         # hut is in the Alps; a bbox in the Pacific matches nothing.
@@ -207,11 +220,11 @@ class TestCommand:
         with pytest.raises(CommandError):
             call_command("geoimages_assess", bbox="not,a,bbox")
 
-    def test_dry_run(self, hut, capsys):
+    def test_dry_run(self, hut: Hut, capsys: pytest.CaptureFixture[str]):
         call_command("geoimages_assess", place=hut.slug, dry_run=True)
         assert "would assess" in capsys.readouterr().out
 
-    def test_assesses_place(self, hut):
+    def test_assesses_place(self, hut: Hut):
         pin_place_images(hut, [_result(score=80)])
         call_command("geoimages_assess", place=hut.slug)
         image = Image.objects.get(source_ident="wikicommons:File:Test.jpg")
@@ -266,7 +279,12 @@ class TestThumbCropPrecedence:
 
 
 class TestAdminSaveHook:
-    def test_save_triggers_reassessment(self, admin_client, settings, monkeypatch):
+    def test_save_triggers_reassessment(
+        self,
+        admin_client: Client,
+        settings: SettingsWrapper,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
         from unittest.mock import patch
 
         from django.conf import settings as dj_settings
@@ -303,7 +321,9 @@ class TestAdminSaveHook:
 
 
 class TestAssessPlace:
-    def test_duplicates_marked_weaker_twin(self, hut, monkeypatch):
+    def test_duplicates_marked_weaker_twin(
+        self, hut: Hut, monkeypatch: pytest.MonkeyPatch
+    ):
         # Two pins whose fetch returns the same pixels, plus one smooth
         # gradient (guaranteed far from noise in dhash space).
         import numpy as np
@@ -322,7 +342,7 @@ class TestAssessPlace:
         ]
         calls = {"n": 0}
 
-        def _fake_get(url, timeout=None):
+        def _fake_get(url: str, timeout: float | None = None):
             if "/meta/" in url:  # thumbhash metadata request
 
                 class _Meta:
@@ -331,7 +351,7 @@ class TestAssessPlace:
                     def raise_for_status(self):
                         return None
 
-                    def json(self):
+                    def json(self) -> dict[str, Any]:
                         return {"thumbhash": "F/gJNQJXh493Z4lneYqHd4ZwZAk2"}
 
                 return _Meta()
@@ -377,7 +397,9 @@ class TestAssessPlace:
         distinct = Image.objects.get(source_ident="wikicommons:File:Distinct.jpg")
         assert not distinct.image_meta.get("duplicate_of")
 
-    def test_assessment_invalidates_response_cache(self, hut, monkeypatch):
+    def test_assessment_invalidates_response_cache(
+        self, hut: Hut, monkeypatch: pytest.MonkeyPatch
+    ):
         """Serving depends on assessment output — the place's cached
         response must not outlive a run that changed anything."""
         from uuid import uuid4
@@ -396,7 +418,9 @@ class TestAssessPlace:
         assert stats["assessed"] == 1
         assert irc.get_version("hut", hut.slug) != before
 
-    def test_unchanged_reassessment_keeps_cache(self, hut, monkeypatch):
+    def test_unchanged_reassessment_keeps_cache(
+        self, hut: Hut, monkeypatch: pytest.MonkeyPatch
+    ):
         """A re-run that assesses nothing and moves no markers must not
         churn the response-cache version (fresh entries stay reachable)."""
         from uuid import uuid4
@@ -419,7 +443,7 @@ class TestAssessmentEnqueue:
     into the pins fast path)."""
 
     @pytest.fixture(autouse=True)
-    def _pin_cache(self, monkeypatch):
+    def _pin_cache(self, monkeypatch: pytest.MonkeyPatch):
         """One stable debounce cache per test (a fresh store per call would
         never see the debounce marker)."""
         from uuid import uuid4
@@ -432,16 +456,18 @@ class TestAssessmentEnqueue:
 
         monkeypatch.setattr(pinning, "_pin_cache", lambda: cache)
 
-    def _spy(self, monkeypatch):
+    def _spy(self, monkeypatch: pytest.MonkeyPatch):
         calls = []
 
-        def _fake_async_task(func, *args, **kwargs):
+        def _fake_async_task(func: Any, *args: Any, **kwargs: Any):
             calls.append((func, args))
 
         monkeypatch.setattr("django_q.tasks.async_task", _fake_async_task)
         return calls
 
-    def test_unassessed_pins_enqueue_once_then_debounce(self, hut, monkeypatch):
+    def test_unassessed_pins_enqueue_once_then_debounce(
+        self, hut: Hut, monkeypatch: pytest.MonkeyPatch
+    ):
         calls = self._spy(monkeypatch)
         pin_place_images(hut, [_result(score=80)])
         assert maybe_enqueue_place_assessment(hut) is True
@@ -453,7 +479,9 @@ class TestAssessmentEnqueue:
             )
         ]
 
-    def test_assessed_pins_do_not_enqueue(self, hut, monkeypatch):
+    def test_assessed_pins_do_not_enqueue(
+        self, hut: Hut, monkeypatch: pytest.MonkeyPatch
+    ):
         calls = self._spy(monkeypatch)
         pin_place_images(hut, [_result(score=80)])
         Image.objects.filter(source_ident="wikicommons:File:Test.jpg").update(
@@ -462,7 +490,9 @@ class TestAssessmentEnqueue:
         assert maybe_enqueue_place_assessment(hut) is False
         assert calls == []
 
-    def test_half_assessed_pin_enqueues(self, hut, monkeypatch):
+    def test_half_assessed_pin_enqueues(
+        self, hut: Hut, monkeypatch: pytest.MonkeyPatch
+    ):
         """phash without quality_score is still an unassessed pin."""
         calls = self._spy(monkeypatch)
         pin_place_images(hut, [_result(score=80)])
@@ -472,13 +502,15 @@ class TestAssessmentEnqueue:
         assert maybe_enqueue_place_assessment(hut) is True
         assert len(calls) == 1
 
-    def test_no_pins_no_enqueue(self, hut, monkeypatch):
+    def test_no_pins_no_enqueue(self, hut: Hut, monkeypatch: pytest.MonkeyPatch):
         calls = self._spy(monkeypatch)
         assert maybe_enqueue_place_assessment(hut) is False
         assert calls == []
 
-    def test_enqueue_failure_never_raises(self, hut, monkeypatch):
-        def _boom(*args, **kwargs):
+    def test_enqueue_failure_never_raises(
+        self, hut: Hut, monkeypatch: pytest.MonkeyPatch
+    ):
+        def _boom(*args: Any, **kwargs: Any):
             raise RuntimeError("q2 down")
 
         monkeypatch.setattr("django_q.tasks.async_task", _boom)
@@ -487,7 +519,7 @@ class TestAssessmentEnqueue:
 
 
 class TestResponsePassthrough:
-    def test_thumbhashes_in_features(self, hut, monkeypatch):
+    def test_thumbhashes_in_features(self, hut: Hut, monkeypatch: pytest.MonkeyPatch):
         from tests.helpers import PrefixedClient as TestClient
 
         pin_place_images(hut, [_result(score=80)])

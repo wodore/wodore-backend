@@ -20,8 +20,9 @@ import importlib
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from pytest_django.plugin import DjangoDbBlocker
 
-from server.apps.geometries.models import GeoPlaceImageAssociation
+from server.apps.geometries.models import GeoPlace, GeoPlaceImageAssociation
 from server.apps.huts.models import Hut, HutImageAssociation
 from server.apps.images.models import Image, ImageTag
 from server.apps.licenses.models import License
@@ -39,7 +40,7 @@ class _RealApps:
     """Migrations get a historical registry; the merge logic only calls
     ``get_model()``, so the live registry exercises the same code path."""
 
-    def get_model(self, app_label, model_name):
+    def get_model(self, app_label: str, model_name: str):
         from django.apps import apps
 
         return apps.get_model(app_label, model_name)
@@ -54,7 +55,7 @@ def _constraint():
 
 
 @pytest.fixture(scope="module", autouse=True)
-def legacy_schema(django_db_setup, django_db_blocker):
+def legacy_schema(django_db_setup: None, django_db_blocker: DjangoDbBlocker):
     """Pre-0033 schema for the whole module: no source_ident uniqueness."""
     from django.db import connection
 
@@ -92,7 +93,9 @@ def place():
 
 
 class TestMergeDuplicatePins:
-    def test_merges_twins_and_repoints_associations(self, license_obj, hut, place):
+    def test_merges_twins_and_repoints_associations(
+        self, license_obj: License, hut: Hut, place: GeoPlace
+    ):
         keeper = Image.objects.create(
             source_ident=IDENT,
             license=license_obj,
@@ -128,7 +131,7 @@ class TestMergeDuplicatePins:
         assert place_assoc.image_id == keeper.id
         assert place_assoc.score == 7  # the keeper's link won, not the twin's
 
-    def test_merges_triples_and_adopts_tags(self, license_obj, hut):
+    def test_merges_triples_and_adopts_tags(self, license_obj: License, hut: Hut):
         """N > 2 twins per ident: every duplicate collapses into the oldest
         row, and tags carried only by dupes survive on the keeper (review
         N-3/N-4 coverage)."""
@@ -167,7 +170,7 @@ class TestMergeDuplicatePins:
             "dupe-tag",
         }
 
-    def test_unique_idents_untouched(self, license_obj, hut):
+    def test_unique_idents_untouched(self, license_obj: License, hut: Hut):
         pin = Image.objects.create(
             source_ident=IDENT,
             license=license_obj,
@@ -187,7 +190,7 @@ class TestMergeDuplicatePins:
         assert Image.objects.count() == 2
         assert HutImageAssociation.objects.filter(hut=hut).count() == 2
 
-    def test_identless_rows_never_merged(self, license_obj):
+    def test_identless_rows_never_merged(self, license_obj: License):
         """Empty idents are not a dedupe group — every identless upload
         survives (the constraint ignores them, and so must the merge)."""
         for _ in range(3):
@@ -204,7 +207,7 @@ class TestPinningWithLegacyTwins:
     must refresh the canonical (oldest) image instead of raising
     ``MultipleObjectsReturned`` (the exact cedullo crash)."""
 
-    def test_sync_refreshes_canonical_row(self, hut, license_obj):
+    def test_sync_refreshes_canonical_row(self, hut: Hut, license_obj: License):
         from tests.apps.geometries.test_image_pinning import _result
 
         from server.apps.geometries.pinning import pin_place_images

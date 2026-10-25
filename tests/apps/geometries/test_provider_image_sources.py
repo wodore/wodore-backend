@@ -6,7 +6,7 @@ sources via ``ImageResult.url_medium`` / ``url_large``, and post-processing
 builds each display variant from the smallest suitable source.
 """
 
-from typing import Any
+from typing import Any, cast
 from urllib.parse import quote
 
 import pytest
@@ -64,7 +64,7 @@ def _image_result(**overrides: Any) -> ImageResult:
     return ImageResult(**defaults)
 
 
-def _img_data(**overrides) -> dict:
+def _img_data(**overrides: Any) -> dict[str, Any]:
     defaults = dict(
         url=ORIGINAL_URL,
         thumb_url=THUMB_500_URL,
@@ -80,7 +80,7 @@ def _img_data(**overrides) -> dict:
         license_url="https://creativecommons.org/licenses/by-sa/4.0",
         description="A hut",
         date_taken="2023-08-15 12:00:00",
-        categories=[],
+        categories=cast("list[Any]", []),
         is_featured=False,
         is_quality=False,
     )
@@ -88,32 +88,46 @@ def _img_data(**overrides) -> dict:
     return defaults
 
 
+def _no_provider_info(*args: Any, **kwargs: Any) -> dict[str, Any]:
+    return {}
+
+
+def _no_license_info(*args: Any, **kwargs: Any) -> dict[str, Any]:
+    return {}
+
+
 class TestCreateImageResultSources:
     @pytest.fixture
     def provider(self):
         return WikimediaCommonsProvider()
 
-    def _create(self, provider, **overrides):
-        return provider._create_image_result(
+    def _create(
+        self, provider: WikimediaCommonsProvider, **overrides: Any
+    ) -> ImageResult:
+        result = provider._create_image_result(
             "File:Huette.jpg", _image_result_data(**overrides), None, 50, 46.5, 7.5
         )
+        assert result is not None, "provider must produce a result for test data"
+        return result
 
-    def test_medium_is_thumb_bucket(self, provider):
+    def test_medium_is_thumb_bucket(self, provider: WikimediaCommonsProvider):
         result = self._create(provider)
         assert result.url_medium == THUMB_500_URL
 
-    def test_large_prefers_largest_thumb(self, provider):
+    def test_large_prefers_largest_thumb(self, provider: WikimediaCommonsProvider):
         """Originals >= 3840px get the top $wgThumbnailSteps bucket."""
         result = self._create(provider)  # original 4000px wide
         assert result.url_large == THUMB_3840_URL
 
-    def test_mid_original_falls_back_to_1920_thumb(self, provider):
+    def test_mid_original_falls_back_to_1920_thumb(
+        self, provider: WikimediaCommonsProvider
+    ):
         """Originals between the steps: the 3840 pass returns the original
         URL (not a thumb) and the 1920 thumb wins."""
         result = self._create(provider, thumb_url_largest=ORIGINAL_URL)
         assert result.url_large == THUMB_1920_URL
 
-    def test_mid_size_raster_uses_original(self, provider):
+    def test_mid_size_raster_uses_original(self, provider: WikimediaCommonsProvider):
         """Raster originals <= 1920px: every bucket pass returns the
         original URL — a reasonably sized file, best quality."""
         result = self._create(
@@ -124,7 +138,7 @@ class TestCreateImageResultSources:
         )
         assert result.url_large == ORIGINAL_URL
 
-    def test_tiff_prefers_thumb_over_original(self, provider):
+    def test_tiff_prefers_thumb_over_original(self, provider: WikimediaCommonsProvider):
         """TIFF originals between the steps must not fall back to the
         original file (heavy decode, unrenderable in browsers)."""
         result = self._create(
@@ -132,7 +146,7 @@ class TestCreateImageResultSources:
         )
         assert result.url_large == THUMB_1920_URL
 
-    def test_small_tiff_uses_medium_thumb(self, provider):
+    def test_small_tiff_uses_medium_thumb(self, provider: WikimediaCommonsProvider):
         """TIFF <= 1920px: bucket passes return the original — prefer the
         500px rendered thumb over the original TIFF."""
         result = self._create(
@@ -144,13 +158,17 @@ class TestCreateImageResultSources:
         )
         assert result.url_large == THUMB_500_URL
 
-    def test_bucket_passes_missing_raster_falls_back_to_original(self, provider):
+    def test_bucket_passes_missing_raster_falls_back_to_original(
+        self, provider: WikimediaCommonsProvider
+    ):
         """Degraded case (both bucket passes failed): rasters fall back to
         the original file — quality over the tiny 500px thumb."""
         result = self._create(provider, thumb_url_largest="", thumb_url_large="")
         assert result.url_large == ORIGINAL_URL
 
-    def test_bucket_passes_missing_tiff_falls_back_to_medium_thumb(self, provider):
+    def test_bucket_passes_missing_tiff_falls_back_to_medium_thumb(
+        self, provider: WikimediaCommonsProvider
+    ):
         """Degraded case for TIFF: never the original file — the 500px
         rendered thumb wins."""
         result = self._create(
@@ -158,14 +176,16 @@ class TestCreateImageResultSources:
         )
         assert result.url_large == THUMB_500_URL
 
-    def test_large_falls_back_to_original_without_thumbs(self, provider):
+    def test_large_falls_back_to_original_without_thumbs(
+        self, provider: WikimediaCommonsProvider
+    ):
         result = self._create(
             provider, thumb_url_largest="", thumb_url_large="", thumb_url=""
         )
         assert result.url_large == ORIGINAL_URL
         assert result.url_medium == ORIGINAL_URL
 
-    def test_small_original_served_directly(self, provider):
+    def test_small_original_served_directly(self, provider: WikimediaCommonsProvider):
         """Originals not larger than the buckets: the API returns the
         original URL as thumburl in every pass — served directly."""
         result = self._create(
@@ -178,16 +198,16 @@ class TestCreateImageResultSources:
         assert result.url_large == ORIGINAL_URL
         assert result.url_medium == ORIGINAL_URL
 
-    def test_dimensions_stay_true_original(self, provider):
+    def test_dimensions_stay_true_original(self, provider: WikimediaCommonsProvider):
         result = self._create(provider)
         assert (result.width, result.height) == (4000, 3000)
 
-    def test_original_url_preserved_in_extra(self, provider):
+    def test_original_url_preserved_in_extra(self, provider: WikimediaCommonsProvider):
         result = self._create(provider)
-        assert result.extra["original_url"] == ORIGINAL_URL
+        assert (result.extra or {})["original_url"] == ORIGINAL_URL
 
 
-def _image_result_data(**overrides) -> dict:
+def _image_result_data(**overrides: Any) -> dict[str, Any]:
     return _img_data(**overrides)
 
 
@@ -196,14 +216,14 @@ def _quoted(url: str) -> str:
 
 
 @pytest.fixture
-def patched_lookups(monkeypatch):
+def patched_lookups(monkeypatch: pytest.MonkeyPatch):
     """Keep post-processing off the database (pure URL-mapping assertions)."""
-    monkeypatch.setattr(providers_base, "_get_provider_info", lambda *a, **k: {})
-    monkeypatch.setattr(providers_base, "_get_license_info", lambda *a, **k: {})
+    monkeypatch.setattr(providers_base, "_get_provider_info", _no_provider_info)
+    monkeypatch.setattr(providers_base, "_get_license_info", _no_license_info)
 
 
 class TestPostProcessSourceSelection:
-    def test_small_variants_use_medium_source(self, patched_lookups):
+    def test_small_variants_use_medium_source(self, patched_lookups: None):
         result = _image_result(url_medium=THUMB_500_URL)
         [feature] = post_process_images([result])
         urls = feature["properties"]["urls"]
@@ -216,7 +236,7 @@ class TestPostProcessSourceSelection:
         ):
             assert _quoted(THUMB_500_URL) in variant
 
-    def test_large_variants_use_large_source(self, patched_lookups):
+    def test_large_variants_use_large_source(self, patched_lookups: None):
         result = _image_result(url_medium=THUMB_500_URL)
         [feature] = post_process_images([result])
         urls = feature["properties"]["urls"]
@@ -230,7 +250,7 @@ class TestPostProcessSourceSelection:
         # original.raw is the direct source URL (not through imagor)
         assert urls["original"]["raw"] == ORIGINAL_URL
 
-    def test_constrained_not_nominal_size_selects_source(self, patched_lookups):
+    def test_constrained_not_nominal_size_selects_source(self, patched_lookups: None):
         """Discriminator: selection must use the CONSTRAINED target size.
 
         Square "medium" is nominally 1000x1000 (> 500 → large source under a
@@ -244,14 +264,16 @@ class TestPostProcessSourceSelection:
         assert _calculate_constrained_size(1000, 1000, 800, 460) == (460, 460)
         assert _quoted(THUMB_500_URL) in urls["square"]["lg"]
 
-    def test_original_raw_is_large_source_not_true_original(self, patched_lookups):
+    def test_original_raw_is_large_source_not_true_original(
+        self, patched_lookups: None
+    ):
         """For Wikimedia the provider already points url_large at a thumb."""
         result = _image_result(url_large=THUMB_1920_URL, url_medium=THUMB_500_URL)
         [feature] = post_process_images([result])
         original = feature["properties"]["urls"]["original"]
         assert original["raw"] == THUMB_1920_URL
 
-    def test_without_url_medium_all_variants_use_large(self, patched_lookups):
+    def test_without_url_medium_all_variants_use_large(self, patched_lookups: None):
         """Providers that do not set url_medium keep their previous URLs."""
         result = _image_result()
         [feature] = post_process_images([result])
@@ -266,7 +288,7 @@ class TestPostProcessSourceSelection:
             for name, variant in urls[orientation].items():
                 assert _quoted(ORIGINAL_URL) in variant, (orientation, name)
 
-    def test_threshold_is_constrained_target(self, patched_lookups):
+    def test_threshold_is_constrained_target(self, patched_lookups: None):
         """500px max dimension is the cut: preview@2x (800px) leaves medium."""
         result = _image_result(url_medium=THUMB_500_URL)
         [feature] = post_process_images([result])
@@ -296,7 +318,7 @@ class TestTrueDistances:
     def provider(self):
         return WikimediaCommonsProvider()
 
-    def test_distance_from_geotag(self, provider):
+    def test_distance_from_geotag(self, provider: WikimediaCommonsProvider):
         result = provider._create_image_result(
             "File:Huette.jpg",
             _img_data(lat=46.501, lon=7.5),  # ~111 m north of the query point
@@ -308,7 +330,7 @@ class TestTrueDistances:
         assert result is not None
         assert 90 < result.distance_m < 130
 
-    def test_distance_zero_without_geotag(self, provider):
+    def test_distance_zero_without_geotag(self, provider: WikimediaCommonsProvider):
         result = provider._create_image_result(
             "File:Huette.jpg", _img_data(), None, 50, 46.5, 7.5
         )

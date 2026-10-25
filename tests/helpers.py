@@ -1,5 +1,7 @@
 """Shared test helpers for the dmr-based API."""
 
+from typing import Any
+
 from django.test import Client
 
 __test__ = False
@@ -13,7 +15,7 @@ class PrefixedClient(Client):
     tests use the full-stack Django client with the router's prefix.
     """
 
-    def __init__(self, prefix: str = "", **kwargs):
+    def __init__(self, prefix: str = "", **kwargs: Any):
         super().__init__(**kwargs)
         self.prefix = prefix
 
@@ -22,7 +24,7 @@ class PrefixedClient(Client):
             return url
         return self._prefix_url(url)
 
-    def _prefix_url(self, url):
+    def _prefix_url(self, url: str):
         return f"{self.prefix}{url}"
 
     def get(self, path, data=None, **kwargs):  # type: ignore  # test client signature drift

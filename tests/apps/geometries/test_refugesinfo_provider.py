@@ -11,6 +11,7 @@ the vignette, missing ``?`` before ``md=``) and are ignored.
 
 import asyncio
 from datetime import timedelta
+from typing import Any, override
 from uuid import uuid4
 
 import pytest
@@ -27,7 +28,7 @@ CANONICAL_LIEN = f"{API}/point/3760/cabane-non-gardee/cabane-test/"
 
 
 @pytest.fixture(autouse=True)
-def _isolated_persistent_cache(monkeypatch):
+def _isolated_persistent_cache(monkeypatch: pytest.MonkeyPatch):
     """Locmem stand-in for the persistent cache (the provider caches the
     canonical point URL there — no database in these tests)."""
     cache = LocMemCache(f"test-refuges-{uuid4().hex}", {})
@@ -47,7 +48,7 @@ def _place() -> GeoPlaceSchema:
     )
 
 
-def _comment(comment_id: int, *, with_photo: bool = True) -> dict:
+def _comment(comment_id: int, *, with_photo: bool = True) -> dict[str, Any]:
     comment = {
         "id_point": 3760,
         "id_commentaire": comment_id,
@@ -68,7 +69,7 @@ def _comment(comment_id: int, *, with_photo: bool = True) -> dict:
 
 
 class _FakeResponse:
-    def __init__(self, payload):
+    def __init__(self, payload: dict[str, Any]):
         self._payload = payload
 
     def raise_for_status(self):
@@ -79,16 +80,16 @@ class _FakeResponse:
 
 
 class _FakeClient:
-    def __init__(self, routes: dict):
+    def __init__(self, routes: dict[str, Any]):
         self.routes = routes
-        self.calls: list[tuple[str, dict | None]] = []
+        self.calls: list[tuple[str, dict[str, Any] | None]] = []
 
-    async def get(self, url, params=None):
+    async def get(self, url: str, params: dict[str, Any] | None = None):
         self.calls.append((url, params))
         return _FakeResponse(self.routes[url])
 
 
-def _routes(comments: dict) -> dict:
+def _routes(comments: dict[str, Any]) -> dict[str, Any]:
     return {
         f"{API}/api/commentaires": comments,
         f"{API}/api/point": {"features": [{"properties": {"lien": CANONICAL_LIEN}}]},
@@ -149,7 +150,8 @@ class TestFetchRefugesImages:
         provider = RefugesInfoProvider()
 
         class _BrokenClient(_FakeClient):
-            async def get(self, url, params=None):
+            @override
+            async def get(self, url: str, params: dict[str, Any] | None = None):
                 if "/api/point" in url:
                     raise RuntimeError("boom")
                 return _FakeResponse(self.routes[url])

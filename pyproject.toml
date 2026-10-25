@@ -708,6 +708,82 @@ bad-override = true
 method-assign = true
 
 
+[[tool.pyrefly.sub-config]]
+# Strict-typing ratchet for the whole test tree (fixtures, factories, helpers):
+# tests must be fully annotated like the code they cover. This is the final
+# ratchet before strict typing covers the entire project.
+matches = "tests/**"
+
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = true
+implicit-any-type-argument = true
+implicit-any-lambda = true
+implicit-any-empty-container = true
+implicit-any-attribute = true
+missing-override-decorator = true
+bad-override = true
+method-assign = true
+
+
+[[tool.pyrefly.sub-config]]
+# Strict-typing ratchet for root-level server modules (asgi/wsgi/urls entry
+# points). Only these files are affected; server/apps/** and
+# server/settings/** are ratcheted separately. NOTE: explicit per-file
+# entries because glob `*` in matches crosses `/` (fnmatch semantics).
+matches = "server/asgi.py"
+
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = true
+implicit-any-type-argument = true
+implicit-any-lambda = true
+implicit-any-empty-container = true
+implicit-any-attribute = true
+missing-override-decorator = true
+bad-override = true
+method-assign = true
+
+[[tool.pyrefly.sub-config]]
+# see server/asgi.py above
+matches = "server/urls.py"
+
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = true
+implicit-any-type-argument = true
+implicit-any-lambda = true
+implicit-any-empty-container = true
+implicit-any-attribute = true
+missing-override-decorator = true
+bad-override = true
+method-assign = true
+
+[[tool.pyrefly.sub-config]]
+# see server/asgi.py above
+matches = "server/wsgi.py"
+
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = true
+implicit-any-type-argument = true
+implicit-any-lambda = true
+implicit-any-empty-container = true
+implicit-any-attribute = true
+missing-override-decorator = true
+bad-override = true
+method-assign = true
+
+[[tool.pyrefly.sub-config]]
+# see server/asgi.py above
+matches = "server/__init__.py"
+
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = true
+implicit-any-type-argument = true
+implicit-any-lambda = true
+implicit-any-empty-container = true
+implicit-any-attribute = true
+missing-override-decorator = true
+bad-override = true
+method-assign = true
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

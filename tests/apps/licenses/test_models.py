@@ -7,7 +7,7 @@ runs its *default* ``validate_slug`` (dots rejected). ``LicenseSlugField``
 replaces the defaults; these tests pin that.
 """
 
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
@@ -27,14 +27,14 @@ def test_slug_with_dot_is_valid():
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize("slug", ["cc by 4.0", "cc/by", "cc!by"])
-def test_slug_with_invalid_chars_is_rejected(slug):
+def test_slug_with_invalid_chars_is_rejected(slug: str):
     with pytest.raises(ValidationError):
         License(slug=slug).full_clean()
 
 
 def test_default_slug_validator_is_replaced():
     """Django's dot-rejecting ``validate_slug`` must not run for the slug."""
-    field = cast(models.SlugField, License._meta.get_field("slug"))
+    field = cast("models.SlugField[Any, Any]", License._meta.get_field("slug"))
     assert validate_slug not in field.validators
     validator = cast(RegexValidator, field.validators[0])
     assert "dot" in validator.message.lower()

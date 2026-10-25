@@ -1,6 +1,11 @@
 """HTTP-level tests for the lean hut meta endpoint (/v1/huts/{slug}/meta)."""
 
+from typing import Any
+
 import pytest
+from pytest_django.fixtures import SettingsWrapper
+
+from django.test import Client
 
 from server.apps.huts.models import Hut
 
@@ -8,12 +13,12 @@ pytestmark = [pytest.mark.django_db]
 
 
 @pytest.fixture(autouse=True)
-def _frontend_domain(settings):
+def _frontend_domain(settings: SettingsWrapper):
     settings.FRONTEND_DOMAIN = "https://wodore.com"
 
 
 class TestHutMeta:
-    def test_meta_detail(self, seed_data, client):
+    def test_meta_detail(self, seed_data: dict[str, int], client: Client):
         hut = Hut.objects.filter(is_active=True, is_public=True).first()
         assert hut is not None
         response = client.get(f"/v1/huts/{hut.slug}/meta")
@@ -41,7 +46,9 @@ class TestHutMeta:
                 hut.location.y, abs=1e-5
             )
 
-    def test_meta_title_is_name_dot_owner(self, seed_data, client):
+    def test_meta_title_is_name_dot_owner(
+        self, seed_data: dict[str, int], client: Client
+    ):
         hut = Hut.objects.filter(is_active=True, is_public=True).first()
         assert hut is not None
         data = client.get(f"/v1/huts/{hut.slug}/meta").json()
@@ -50,7 +57,9 @@ class TestHutMeta:
             assert "·" in data["title"]
             assert hut.hut_owner.name in data["title"]
 
-    def test_meta_description_is_fact_sentences(self, seed_data, client):
+    def test_meta_description_is_fact_sentences(
+        self, seed_data: dict[str, int], client: Client
+    ):
         hut = Hut.objects.filter(is_active=True, is_public=True).first()
         assert hut is not None
         data = client.get(f"/v1/huts/{hut.slug}/meta").json()
@@ -62,7 +71,9 @@ class TestHutMeta:
         if hut.elevation:
             assert f"{int(hut.elevation)} m" in data["description"]
 
-    def test_meta_description_localized(self, seed_data, client):
+    def test_meta_description_localized(
+        self, seed_data: dict[str, int], client: Client
+    ):
         hut = Hut.objects.filter(
             is_active=True, is_public=True, capacity_open__gt=0
         ).first()
@@ -82,7 +93,9 @@ class TestHutMeta:
         assert "places" in fr
         assert "posti" in it
 
-    def test_meta_description_closed_hut(self, seed_data, client):
+    def test_meta_description_closed_hut(
+        self, seed_data: dict[str, int], client: Client
+    ):
         hut = Hut.objects.filter(
             is_active=True, is_public=True, hut_type_open__slug="closed"
         ).first()
@@ -94,17 +107,19 @@ class TestHutMeta:
         data = client.get(f"/v1/huts/{hut.slug}/meta").json()
         assert data["description"].startswith("Currently closed.")
 
-    def test_meta_lang_param_falls_back(self, seed_data, client):
+    def test_meta_lang_param_falls_back(
+        self, seed_data: dict[str, int], client: Client
+    ):
         hut = Hut.objects.filter(is_active=True, is_public=True).first()
         assert hut is not None
         response = client.get(f"/v1/huts/{hut.slug}/meta", {"lang": "en"})
         assert response.status_code == 200
         assert response.json()["lang"] == "en"
 
-    def test_meta_unknown_slug_is_404(self, seed_data, client):
+    def test_meta_unknown_slug_is_404(self, seed_data: dict[str, int], client: Client):
         assert client.get("/v1/huts/does-not-exist-xyz/meta").status_code == 404
 
-    def test_meta_hidden_hut_is_404(self, seed_data, client):
+    def test_meta_hidden_hut_is_404(self, seed_data: dict[str, int], client: Client):
         hut = Hut.objects.filter(is_active=True, is_public=True).first()
         assert hut is not None
         hut.is_public = False
@@ -119,7 +134,7 @@ class TestHutMetaOgSources:
     business. The only fallback is the static-map card."""
 
     @pytest.fixture(autouse=True)
-    def _isolated_cache(self, monkeypatch):
+    def _isolated_cache(self, monkeypatch: pytest.MonkeyPatch):
         from uuid import uuid4
 
         from django.core.cache.backends.locmem import LocMemCache
@@ -130,13 +145,13 @@ class TestHutMetaOgSources:
         monkeypatch.setattr(irc, "_cache", lambda: cache)
 
     @pytest.fixture
-    def hut(self, seed_data):
+    def hut(self, seed_data: dict[str, int]):
         hut = Hut.objects.filter(is_active=True, is_public=True).first()
         assert hut is not None
         return hut
 
     @staticmethod
-    def _gallery_response(hut, top_raw: str):
+    def _gallery_response(hut: Hut, top_raw: str):
         """ImageCollectionResponse built exactly like the endpoint: a
         camptocamp ImageResult through post_process_images."""
         from django.contrib.gis.geos import Point
@@ -180,7 +195,7 @@ class TestHutMetaOgSources:
         )
 
     @staticmethod
-    def _warm_gallery_cache(hut, response, *, lang="en") -> None:
+    def _warm_gallery_cache(hut: Hut, response: Any, *, lang: str = "en") -> None:
         from server.apps.geometries import image_response_cache as irc
         from server.apps.geometries.api_images import GALLERY_QUERY_SHAPE
 
@@ -189,7 +204,7 @@ class TestHutMetaOgSources:
             response,
         )
 
-    def test_gallery_top_image_is_og_image(self, hut, client):
+    def test_gallery_top_image_is_og_image(self, hut: Hut, client: Client):
         """The og:image is the top image of the cached images-by-hut
         response — the same photo the frontend gallery shows first."""
         from urllib.parse import quote
@@ -210,7 +225,7 @@ class TestHutMetaOgSources:
         # free space), 220px raster.
         assert ",0.42,bottom-10,0)" in data["image"]
 
-    def test_gallery_cached_in_other_language_is_used(self, hut, client):
+    def test_gallery_cached_in_other_language_is_used(self, hut: Hut, client: Client):
         """The gallery is language-independent imagery — a response cached
         under any UI language serves the og lookup."""
         from urllib.parse import quote
@@ -223,7 +238,7 @@ class TestHutMetaOgSources:
         data = client.get(f"/v1/huts/{hut.slug}/meta", {"lang": "de"}).json()
         assert quote("media.camptocamp.org/anylang.jpg", safe="") in data["image"]
 
-    def test_deprecated_photos_field_is_ignored(self, hut, client):
+    def test_deprecated_photos_field_is_ignored(self, hut: Hut, client: Client):
         """hut.services `photos` is deprecated — it never becomes the
         og:image, warm gallery or not."""
         from urllib.parse import quote
@@ -238,7 +253,7 @@ class TestHutMetaOgSources:
         assert quote("media.camptocamp.org/top.jpg", safe="") in data["image"]
         assert "sac-cas.ch" not in data["image"]
 
-    def test_cold_gallery_cache_uses_service_fallback(self, hut, client):
+    def test_cold_gallery_cache_uses_service_fallback(self, hut: Hut, client: Client):
         """No cached gallery response (nobody opened the page yet) → the
         image service's static-map fallback feature — never the
         deprecated photos field."""
@@ -252,7 +267,7 @@ class TestHutMetaOgSources:
         assert "marker_scale%3D0.56" in data["image"]
         assert "sac-cas.ch" not in data["image"]
 
-    def test_fallback_feature_is_imagor_composed(self, hut, client):
+    def test_fallback_feature_is_imagor_composed(self, hut: Hut, client: Client):
         """A cached response whose only feature is the service's
         static-map fallback (is_fallback=true) goes through imagor
         (watermark composited, backend-served logo) — never raw."""
@@ -298,7 +313,9 @@ class TestHutMetaOgSources:
         assert quote("/v1/geo/map/static", safe="") in data["image"]
         assert "effect%3Dspotlight" in data["image"]
 
-    def test_meta_does_not_disturb_other_hut_routes(self, seed_data, client):
+    def test_meta_does_not_disturb_other_hut_routes(
+        self, seed_data: dict[str, int], client: Client
+    ):
         """/{slug} catch-all and the .md variant keep working alongside."""
         hut = Hut.objects.filter(is_active=True, is_public=True).first()
         assert hut is not None

@@ -1,5 +1,7 @@
 """Tests for the shared LLM admin actions (LLMAdminMixin)."""
 
+from typing import Any
+
 import pytest
 
 from tests.apps.translations.conftest import FakeTranslationClient
@@ -7,13 +9,18 @@ from tests.factories.geometries import GeoPlaceFactory
 from tests.factories.huts import HutFactory
 
 from django.contrib import admin as django_admin
+from django.contrib.admin import ModelAdmin
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.exceptions import PermissionDenied
+from django.http import HttpRequest, HttpResponseRedirect
 from django.test import RequestFactory, override_settings
 
+from server.apps.accounts.models import User
+from server.apps.geometries.admin._geoplace import GeoPlaceAdmin
 from server.apps.geometries.models import GeoPlace
+from server.apps.huts.admin._hut import HutsAdmin
 from server.apps.huts.models import Hut
 from server.apps.translations.admin_helpers import LLMAdminMixin
 
@@ -28,11 +35,11 @@ EMPTY_API_SETTINGS = dict(
 )
 
 
-def patch_admin_client(monkeypatch, fake):
+def patch_admin_client(monkeypatch: pytest.MonkeyPatch, fake: Any):
     monkeypatch.setattr(f"{ADMIN_HELPERS}.TranslationClient", lambda: fake)
 
 
-def make_request(method: str = "post", user=None):
+def make_request(method: str = "post", user: User | None = None):
     request = getattr(RequestFactory(), method)("/")
     request.user = user
     request.session = "session"
@@ -40,19 +47,19 @@ def make_request(method: str = "post", user=None):
     return request
 
 
-def messages_text(request) -> list[str]:
+def messages_text(request: HttpRequest) -> list[str]:
     return [str(m) for m in get_messages(request)]
 
 
 @pytest.fixture
-def superuser(db):
+def superuser(db: None):
     return get_user_model().objects.create_superuser(  # type: ignore  # custom manager/queryset inference gap
         email="admin-lane@test.local", password="x"
     )
 
 
 @pytest.fixture
-def staff_user(db):
+def staff_user(db: None):
     return get_user_model().objects.create_user(  # type: ignore  # custom manager/queryset inference gap
         email="editor-lane@test.local", is_staff=True
     )
@@ -68,13 +75,15 @@ def geoplace_admin():
     return django_admin.site._registry[GeoPlace]
 
 
-def _hut(**kwargs) -> Hut:
+def _hut(**kwargs: Any) -> Hut:
     """DB-loaded hut (from_db sets _orig_* attrs Hut.save() needs)."""
     hut = HutFactory(**kwargs)
     return Hut.objects.get(pk=hut.pk)
 
 
-def test_translate_action_fills_missing(monkeypatch, hut_admin, superuser):
+def test_translate_action_fills_missing(
+    monkeypatch: pytest.MonkeyPatch, hut_admin: HutsAdmin, superuser: User
+):
     hut = _hut(name="Adminhütte", description="Schöne Hütte.")
     fake = FakeTranslationClient()
     patch_admin_client(monkeypatch, fake)
@@ -87,7 +96,7 @@ def test_translate_action_fills_missing(monkeypatch, hut_admin, superuser):
     assert any("translated" in m for m in messages_text(request))
 
 
-def test_translate_action_unconfigured(hut_admin, superuser):
+def test_translate_action_unconfigured(hut_admin: HutsAdmin, superuser: User):
     hut = _hut(name="Ohne API")
     request = make_request(user=superuser)
 
@@ -101,7 +110,9 @@ def test_translate_action_unconfigured(hut_admin, superuser):
     assert not any("translated" in m for m in texts)
 
 
-def test_assess_action_scores_and_reworks(monkeypatch, hut_admin, superuser):
+def test_assess_action_scores_and_reworks(
+    monkeypatch: pytest.MonkeyPatch, hut_admin: HutsAdmin, superuser: User
+):
     hut = _hut(name="Redaktionshütte", description="Kurzer Text.")
     Hut.objects.filter(pk=hut.pk).update(review_status="done")
     fake = FakeTranslationClient(assess_result={"score": 4, "summary": "Too thin."})
@@ -116,7 +127,9 @@ def test_assess_action_scores_and_reworks(monkeypatch, hut_admin, superuser):
     assert any("4/10" in m for m in messages_text(request))
 
 
-def test_assess_action_reports_skips(monkeypatch, hut_admin, superuser):
+def test_assess_action_reports_skips(
+    monkeypatch: pytest.MonkeyPatch, hut_admin: HutsAdmin, superuser: User
+):
     hut = _hut(name="Leerhütte", description="")
     fake = FakeTranslationClient()
     patch_admin_client(monkeypatch, fake)
@@ -128,7 +141,9 @@ def test_assess_action_reports_skips(monkeypatch, hut_admin, superuser):
     assert fake.calls == []  # no API call for empty descriptions
 
 
-def test_assess_action_on_geoplace(monkeypatch, geoplace_admin, superuser):
+def test_assess_action_on_geoplace(
+    monkeypatch: pytest.MonkeyPatch, geoplace_admin: GeoPlaceAdmin, superuser: User
+):
     place = GeoPlaceFactory(name="Admin Ort", description="Ein beschriebener Ort.")
     GeoPlace.objects.filter(pk=place.pk).update(review_status="done")
     fake = FakeTranslationClient(assess_result={"score": 3, "summary": "Bad."})
@@ -142,7 +157,9 @@ def test_assess_action_on_geoplace(monkeypatch, geoplace_admin, superuser):
     assert place.review_status == "rework"
 
 
-def test_button_view_post_redirects(monkeypatch, hut_admin, superuser):
+def test_button_view_post_redirects(
+    monkeypatch: pytest.MonkeyPatch, hut_admin: HutsAdmin, superuser: User
+):
     hut = _hut(name="Buttonhütte", description="Text.")
     fake = FakeTranslationClient()
     patch_admin_client(monkeypatch, fake)
@@ -151,24 +168,27 @@ def test_button_view_post_redirects(monkeypatch, hut_admin, superuser):
     response = hut_admin.llm_translate_view(request, hut.pk)
 
     assert response.status_code == 302
+    assert isinstance(response, HttpResponseRedirect)
     assert f"/{hut.pk}/change/" in response.url
     hut.refresh_from_db()
     assert hut.i18n["name_fr"] == "Buttonhütte-fr"
 
 
-def test_button_view_get_not_allowed(hut_admin, superuser):
+def test_button_view_get_not_allowed(hut_admin: HutsAdmin, superuser: User):
     request = make_request(method="get", user=superuser)
     response = hut_admin.llm_translate_view(request, 1)
     assert response.status_code == 405
 
 
-def test_button_view_requires_change_permission(hut_admin, staff_user):
+def test_button_view_requires_change_permission(hut_admin: HutsAdmin, staff_user: User):
     request = make_request(user=staff_user)
     with pytest.raises(PermissionDenied):
         hut_admin.llm_assess_view(request, 1)
 
 
-def test_mixin_registered_on_both_admins(hut_admin, geoplace_admin):
+def test_mixin_registered_on_both_admins(
+    hut_admin: HutsAdmin, geoplace_admin: GeoPlaceAdmin
+):
     assert isinstance(hut_admin, LLMAdminMixin)
     assert isinstance(geoplace_admin, LLMAdminMixin)
     assert "description_quality_display" in hut_admin.list_display
@@ -176,12 +196,12 @@ def test_mixin_registered_on_both_admins(hut_admin, geoplace_admin):
 
 
 def test_changelist_actions_registered_with_change_permission(
-    hut_admin, geoplace_admin
+    hut_admin: HutsAdmin, geoplace_admin: GeoPlaceAdmin
 ):
     """Both bulk actions must actually appear in the changelist dropdown."""
     for model_admin in (hut_admin, geoplace_admin):
-        assert "translate_selected" in model_admin.actions
-        assert "assess_selected" in model_admin.actions
+        assert "translate_selected" in (model_admin.actions or ())
+        assert "assess_selected" in (model_admin.actions or ())
     # View-only staff must not be able to run them (Django filters
     # changelist actions by allowed_permissions). The unfold @action
     # decorator's return typing hides the attribute (runtime-set).
@@ -204,7 +224,7 @@ def _runner_registry():
     return registry._registry
 
 
-def test_actions_hidden_when_api_unconfigured(hut_admin, superuser):
+def test_actions_hidden_when_api_unconfigured(hut_admin: HutsAdmin, superuser: User):
     with override_settings(**EMPTY_API_SETTINGS):
         actions = hut_admin.get_actions(make_request(user=superuser))
     assert "translate_selected" not in actions
@@ -213,27 +233,29 @@ def test_actions_hidden_when_api_unconfigured(hut_admin, superuser):
     assert "delete_selected" in actions
 
 
-def test_actions_listed_when_api_configured(hut_admin, superuser):
+def test_actions_listed_when_api_configured(hut_admin: HutsAdmin, superuser: User):
     with override_settings(**ENABLED_API_SETTINGS):
         actions = hut_admin.get_actions(make_request(user=superuser))
     assert "translate_selected" in actions
     assert "assess_selected" in actions
 
 
-def test_llm_button_urls_absent_when_unconfigured(hut_admin):
+def test_llm_button_urls_absent_when_unconfigured(hut_admin: HutsAdmin):
     with override_settings(**EMPTY_API_SETTINGS):
-        names = [p.name for p in hut_admin.get_urls() if p.name]
+        names = [name for p in hut_admin.get_urls() if (name := p.name)]
     assert not any("llm" in name for name in names)
 
 
-def test_llm_button_urls_present_when_configured(hut_admin):
+def test_llm_button_urls_present_when_configured(hut_admin: HutsAdmin):
     with override_settings(**ENABLED_API_SETTINGS):
-        names = [p.name for p in hut_admin.get_urls()]
+        names = [name for p in hut_admin.get_urls() if (name := p.name)]
     assert any("llm_translate" in name for name in names)
     assert any("llm_assess" in name for name in names)
 
 
-def _captured_change_form_context(monkeypatch, model_admin, obj):
+def _captured_change_form_context(
+    monkeypatch: pytest.MonkeyPatch, model_admin: ModelAdmin[Any], obj: Hut | GeoPlace
+):
     """Run render_change_form with the real chain but a stub base render.
 
     Full-page admin renders require the debug-toolbar context, which the
@@ -241,9 +263,14 @@ def _captured_change_form_context(monkeypatch, model_admin, obj):
     """
     from django.contrib import admin as django_model_admin
 
-    captured: dict = {}
+    captured: dict[str, Any] = {}
 
-    def fake_render(self, request, context, **kwargs):
+    def fake_render(
+        self: ModelAdmin[Any],
+        request: HttpRequest,
+        context: dict[str, Any],
+        **kwargs: Any,
+    ):
         captured.update(context)
         return "ok"
 
@@ -254,7 +281,9 @@ def _captured_change_form_context(monkeypatch, model_admin, obj):
     return captured
 
 
-def test_change_form_buttons_hidden_when_unconfigured(monkeypatch, hut_admin):
+def test_change_form_buttons_hidden_when_unconfigured(
+    monkeypatch: pytest.MonkeyPatch, hut_admin: HutsAdmin
+):
     hut = _hut(name="Gatedhütte A")
     with override_settings(**EMPTY_API_SETTINGS):
         context = _captured_change_form_context(monkeypatch, hut_admin, hut)
@@ -262,13 +291,19 @@ def test_change_form_buttons_hidden_when_unconfigured(monkeypatch, hut_admin):
     assert "llm_assess_url" not in context
 
 
-def test_change_form_buttons_shown_when_configured(monkeypatch, hut_admin):
+def test_change_form_buttons_shown_when_configured(
+    monkeypatch: pytest.MonkeyPatch, hut_admin: HutsAdmin
+):
     hut = _hut(name="Gatedhütte B")
+
     # URL registration is covered by the get_urls() tests above; here we
     # assert the gating branch sets the context (reverse stubbed — the
     # root urlconf materializes admin URLs at import, so live reverse
     # can't react to override_settings).
-    monkeypatch.setattr(f"{ADMIN_HELPERS}.reverse", lambda *a, **k: "/stub")
+    def _stub_reverse(*args: Any, **kwargs: Any) -> str:
+        return "/stub"
+
+    monkeypatch.setattr(f"{ADMIN_HELPERS}.reverse", _stub_reverse)
     with override_settings(**ENABLED_API_SETTINGS):
         context = _captured_change_form_context(monkeypatch, hut_admin, hut)
     assert context.get("llm_translate_url") == "/stub"

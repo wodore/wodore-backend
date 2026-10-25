@@ -1,6 +1,9 @@
 """HTTP-level tests for the place SEO surface (meta + Markdown)."""
 
 import pytest
+from pytest_django.fixtures import SettingsWrapper
+
+from django.test import Client
 
 from server.apps.geometries.models import GeoPlace
 
@@ -8,12 +11,12 @@ pytestmark = [pytest.mark.django_db]
 
 
 @pytest.fixture(autouse=True)
-def _frontend_domain(settings):
+def _frontend_domain(settings: SettingsWrapper):
     settings.FRONTEND_DOMAIN = "https://wodore.com"
 
 
 class TestPlaceMeta:
-    def test_meta_detail(self, seed_data, client):
+    def test_meta_detail(self, seed_data: dict[str, int], client: Client):
         place = GeoPlace.objects.filter(
             is_active=True, is_public=True, name__gt=""
         ).first()
@@ -30,7 +33,7 @@ class TestPlaceMeta:
         assert data["jsonld"]["name"] == place.name
 
     @pytest.fixture(autouse=True)
-    def _isolated_cache(self, monkeypatch):
+    def _isolated_cache(self, monkeypatch: pytest.MonkeyPatch):
         from uuid import uuid4
 
         from django.core.cache.backends.locmem import LocMemCache
@@ -40,7 +43,7 @@ class TestPlaceMeta:
         cache = LocMemCache(f"test-{uuid4().hex}", {})
         monkeypatch.setattr(irc, "_cache", lambda: cache)
 
-    def test_meta_always_has_image(self, seed_data, client):
+    def test_meta_always_has_image(self, seed_data: dict[str, int], client: Client):
         """No photo -> the image service's static-map fallback feature
         (direct card URL, og dimensions, spotlight, marker)."""
         place = GeoPlace.objects.filter(
@@ -54,10 +57,10 @@ class TestPlaceMeta:
         assert "marker_scale%3D0.56" in data["image"]
         assert "zoom%3D15" in data["image"]
 
-    def test_meta_unknown_slug_is_404(self, seed_data, client):
+    def test_meta_unknown_slug_is_404(self, seed_data: dict[str, int], client: Client):
         assert client.get("/v1/geo/places/does-not-exist/meta").status_code == 404
 
-    def test_meta_hidden_place_is_404(self, seed_data, client):
+    def test_meta_hidden_place_is_404(self, seed_data: dict[str, int], client: Client):
         place = GeoPlace.objects.filter(is_active=True, is_public=True).first()
         assert place is not None
         place.is_public = False
@@ -66,7 +69,7 @@ class TestPlaceMeta:
 
 
 class TestPlaceMarkdown:
-    def test_markdown_detail(self, seed_data, client):
+    def test_markdown_detail(self, seed_data: dict[str, int], client: Client):
         place = GeoPlace.objects.filter(
             is_active=True, is_public=True, name__gt=""
         ).first()
@@ -80,13 +83,15 @@ class TestPlaceMarkdown:
         assert "## Description" in body
         assert "Data: [Wodore]" in body
 
-    def test_markdown_unknown_slug_is_404(self, seed_data, client):
+    def test_markdown_unknown_slug_is_404(
+        self, seed_data: dict[str, int], client: Client
+    ):
         assert client.get("/v1/geo/places/does-not-exist.md").status_code == 404
 
 
 class TestHutOgCardFallback:
     @pytest.fixture(autouse=True)
-    def _isolated_cache(self, monkeypatch):
+    def _isolated_cache(self, monkeypatch: pytest.MonkeyPatch):
         from uuid import uuid4
 
         from django.core.cache.backends.locmem import LocMemCache
@@ -96,7 +101,9 @@ class TestHutOgCardFallback:
         cache = LocMemCache(f"test-{uuid4().hex}", {})
         monkeypatch.setattr(irc, "_cache", lambda: cache)
 
-    def test_hut_meta_image_falls_back_to_static_map(self, seed_data, client):
+    def test_hut_meta_image_falls_back_to_static_map(
+        self, seed_data: dict[str, int], client: Client
+    ):
         """Huts without a photo get the image service's static-map
         fallback feature — its card URL is the og:image, as-is (direct
         URL, og dimensions, spotlight, marker)."""
@@ -120,7 +127,7 @@ class TestPlaceOgPinnedImage:
     ``source_url_raw``)."""
 
     @pytest.fixture(autouse=True)
-    def _isolated_cache(self, monkeypatch):
+    def _isolated_cache(self, monkeypatch: pytest.MonkeyPatch):
         from uuid import uuid4
 
         from django.core.cache.backends.locmem import LocMemCache
@@ -130,7 +137,9 @@ class TestPlaceOgPinnedImage:
         cache = LocMemCache(f"test-{uuid4().hex}", {})
         monkeypatch.setattr(irc, "_cache", lambda: cache)
 
-    def test_pinned_only_images_are_not_consulted(self, seed_data, client):
+    def test_pinned_only_images_are_not_consulted(
+        self, seed_data: dict[str, int], client: Client
+    ):
         """Pinned rows are the image service's business — the place og
         reads only the cached gallery response, so a pins-only place
         (no cached response) serves the static-map card."""
@@ -170,7 +179,9 @@ class TestPlaceOgPinnedImage:
         assert "map%2Fstatic" in data["image"]
         assert "effect%3Dspotlight" in data["image"]
 
-    def test_gallery_top_image_beats_pins(self, seed_data, client):
+    def test_gallery_top_image_beats_pins(
+        self, seed_data: dict[str, int], client: Client
+    ):
         """The place og:image follows the gallery first: a cached
         images-for-place response wins over pinned rows (the same order
         as the hut meta endpoint)."""
@@ -259,7 +270,7 @@ class TestPlaceOgPinnedImage:
 
 class TestCategoriesMarkdown:
     def test_categories_index_lists_sitemap_categories_with_counts(
-        self, seed_data, client
+        self, seed_data: dict[str, int], client: Client
     ):
         """Only seo_sitemap-include categories, with public place counts."""
         from server.apps.categories.models import Category
@@ -290,7 +301,9 @@ class TestCategoriesMarkdown:
             peak.seo_sitemap = None
             peak.save()
 
-    def test_categories_index_inherits_parent_policy(self, seed_data, client):
+    def test_categories_index_inherits_parent_policy(
+        self, seed_data: dict[str, int], client: Client
+    ):
         """Children inherit the include policy from their parent."""
         from server.apps.categories.models import Category
 

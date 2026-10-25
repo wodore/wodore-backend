@@ -19,7 +19,7 @@ pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture
-def hut(seed_data):
+def hut(seed_data: dict[str, int]):
     hut = Hut.objects.filter(is_active=True, is_public=True).first()
     assert hut is not None
     HutImageAssociation.objects.filter(hut=hut).delete()
@@ -73,7 +73,7 @@ class TestGetImageTag:
 
 
 class TestHutImagesTab:
-    def test_renders_pinned_hut_without_error(self, admin, hut):
+    def test_renders_pinned_hut_without_error(self, admin: HutsAdmin, hut: Hut):
         _pin(hut, "camptocamp:waypoint_1_a.jpg")
         _pin(hut, "wikicommons:File:Test.jpg", score=40)
         html = str(admin.hut_images(hut))
@@ -86,12 +86,12 @@ class TestHutImagesTab:
         assert "admin:images_image_change" not in html  # reversed URL, not literal
         assert "/admin/images/image/" in html
 
-    def test_caps_listing_with_more_note(self, admin, hut):
+    def test_caps_listing_with_more_note(self, admin: HutsAdmin, hut: Hut):
         for i in range(35):
             _pin(hut, f"camptocamp:photo_{i}.jpg", score=89 - (i % 89))
         html = str(admin.hut_images(hut))
         assert "and 5 more" in html
         assert "details__hut" in html  # deep link into the image changelist
 
-    def test_empty_hut_renders_empty_div(self, admin, hut):
+    def test_empty_hut_renders_empty_div(self, admin: HutsAdmin, hut: Hut):
         assert str(admin.hut_images(hut)) == "<div></div>"

@@ -11,6 +11,7 @@ import datetime
 import pytest
 
 from django.contrib.gis.geos import Point
+from django.test import Client
 from django.utils import timezone
 
 from server.apps.api.query import bbox_polygon
@@ -40,7 +41,7 @@ class TestBboxPolygon:
 
 
 class TestBboxValidation:
-    def test_invalid_bbox_is_rejected(self, seed_data, client):
+    def test_invalid_bbox_is_rejected(self, seed_data: dict[str, int], client: Client):
         invalid = [
             "7.0",  # too few values
             "7.0,45.5,8.0",  # too few values
@@ -55,7 +56,9 @@ class TestBboxValidation:
             response = client.get("/v1/huts/huts.geojson", {"bbox": bad})
             assert response.status_code == 400, bad
 
-    def test_validation_applies_to_place_search_too(self, seed_data, client):
+    def test_validation_applies_to_place_search_too(
+        self, seed_data: dict[str, int], client: Client
+    ):
         response = client.get(
             "/v1/geo/places/search", {"q": "Dammastock", "bbox": "1,2,3"}
         )
@@ -63,7 +66,7 @@ class TestBboxValidation:
 
 
 class TestHutsGeojsonBbox:
-    def test_bbox_filters_features(self, seed_data, client):
+    def test_bbox_filters_features(self, seed_data: dict[str, int], client: Client):
         full = client.get("/v1/huts/huts.geojson").json()
         east = client.get("/v1/huts/huts.geojson", {"bbox": EAST_BBOX}).json()
         west = client.get("/v1/huts/huts.geojson", {"bbox": WEST_BBOX}).json()
@@ -71,20 +74,20 @@ class TestHutsGeojsonBbox:
         assert len(east["features"]) == 4
         assert len(west["features"]) == 6
 
-    def test_etag_varies_with_bbox(self, seed_data, client):
+    def test_etag_varies_with_bbox(self, seed_data: dict[str, int], client: Client):
         east = client.get("/v1/huts/huts.geojson", {"bbox": EAST_BBOX})
         west = client.get("/v1/huts/huts.geojson", {"bbox": WEST_BBOX})
         assert east.headers["ETag"]
         assert east.headers["ETag"] != west.headers["ETag"]
 
-    def test_etag_stable_for_same_bbox(self, seed_data, client):
+    def test_etag_stable_for_same_bbox(self, seed_data: dict[str, int], client: Client):
         first = client.get("/v1/huts/huts.geojson", {"bbox": EAST_BBOX})
         second = client.get("/v1/huts/huts.geojson", {"bbox": EAST_BBOX})
         assert first.headers["ETag"] == second.headers["ETag"]
 
 
 class TestHutsListBbox:
-    def test_bbox_filters_list(self, seed_data, client):
+    def test_bbox_filters_list(self, seed_data: dict[str, int], client: Client):
         full = client.get("/v1/huts/huts").json()
         east = client.get("/v1/huts/huts", {"bbox": EAST_BBOX}).json()
         assert len(full) == 10
@@ -92,7 +95,7 @@ class TestHutsListBbox:
 
 
 class TestHutSearchBbox:
-    def test_bbox_narrows_name_search(self, seed_data, client):
+    def test_bbox_narrows_name_search(self, seed_data: dict[str, int], client: Client):
         full = client.get("/v1/huts/search", {"q": "Testhütte"}).json()
         east = client.get(
             "/v1/huts/search", {"q": "Testhütte", "bbox": EAST_BBOX}
@@ -102,7 +105,7 @@ class TestHutSearchBbox:
 
 
 class TestAvailabilityGeojsonBbox:
-    def test_bbox_filters_availability(self, seed_data, client):
+    def test_bbox_filters_availability(self, seed_data: dict[str, int], client: Client):
         org = Organization.objects.first()
         assert org is not None
         east_hut = next(h for h in Hut.objects.all() if h.location.x >= 8.9)
@@ -137,7 +140,9 @@ class TestAvailabilityGeojsonBbox:
 
 
 class TestPlacesSearchBbox:
-    def test_bbox_includes_matching_place(self, seed_data, client):
+    def test_bbox_includes_matching_place(
+        self, seed_data: dict[str, int], client: Client
+    ):
         # Tight box around the Dammastock seed peak (8.45, 46.6333).
         # lang=de: seeds carry no i18n names, the similarity degrades
         # below the default threshold for non-default languages.
@@ -151,18 +156,22 @@ class TestPlacesSearchBbox:
         assert results
         assert {r["name"] for r in results} == {"Test Peak Dammastock"}
 
-    def test_bbox_excluding_place_empties_results(self, seed_data, client):
+    def test_bbox_excluding_place_empties_results(
+        self, seed_data: dict[str, int], client: Client
+    ):
         results = client.get(
             "/v1/geo/places/search",
             {"q": "Dammastock", "lang": "de", "bbox": WEST_BBOX},
         ).json()
         assert results == []
 
-    def test_nearby_keeps_center_radius_semantics(self, seed_data, client):
+    def test_nearby_keeps_center_radius_semantics(
+        self, seed_data: dict[str, int], client: Client
+    ):
         """No bbox on nearby: the unknown parameter is ignored."""
         response = client.get(
             "/v1/geo/places/nearby",
-            {"lat": 46.6333, "lon": 8.45, "radius": 5000, "bbox": "0,0,1,1"},
+            {"lat": "46.6333", "lon": "8.45", "radius": 5000, "bbox": "0,0,1,1"},
         )
         assert response.status_code == 200
         results = response.json()

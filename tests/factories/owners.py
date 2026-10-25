@@ -2,10 +2,12 @@ import factory
 
 from server.apps.owners.models import Owner
 
+from . import _fmt_seq
 
-class OwnerFactory(factory.django.DjangoModelFactory):
+
+class OwnerFactory(factory.django.DjangoModelFactory[Owner]):
     class Meta:
         model = Owner
 
-    slug = factory.Sequence(lambda n: f"owner-{n}")
-    name = factory.Sequence(lambda n: f"Owner {n}")
+    slug = factory.Sequence(_fmt_seq("owner-"))
+    name = factory.Sequence(_fmt_seq("Owner "))

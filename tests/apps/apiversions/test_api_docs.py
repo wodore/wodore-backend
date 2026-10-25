@@ -8,13 +8,17 @@ first breaking change will rely on.
 
 import json
 from datetime import date
+from pathlib import Path
 
 import pytest
+
+from django.test import Client
 
 from server.apps.apiversions import registry
 from server.apps.apiversions.management.commands.api_snapshot import (
     snapshot_path,
 )
+from server.apps.apiversions.registry import VersionChange
 from server.apps.apiversions.transforms import each
 
 
@@ -66,7 +70,7 @@ class TestSnapshots:
         assert doc["info"]["version"] == registry.current_version()
 
     @pytest.mark.django_db
-    def test_api_snapshot_command_writes_file(self, tmp_path):
+    def test_api_snapshot_command_writes_file(self, tmp_path: Path):
         from io import StringIO
 
         from django.core.management import call_command
@@ -80,7 +84,9 @@ class TestSnapshots:
         assert doc.get("paths")
 
     @pytest.mark.django_db
-    def test_api_snapshot_check_fails_without_snapshot(self, monkeypatch):
+    def test_api_snapshot_check_fails_without_snapshot(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         from django.core.management import call_command
         from django.core.management.base import CommandError
 
@@ -95,7 +101,9 @@ class TestSnapshots:
             call_command("api_snapshot", "--check")
 
     @pytest.mark.django_db
-    def test_api_snapshot_refuses_released_overwrite(self, tmp_path, monkeypatch):
+    def test_api_snapshot_refuses_released_overwrite(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         """Released versions' snapshots are frozen release records — the
         command refuses regeneration once the api/<version> tag exists
         (docs drift is intentional; see the runbook)."""
@@ -108,9 +116,12 @@ class TestSnapshots:
 
         assert not is_released("zzzz-01-01")  # no such tag in this repo
 
+        def _always_released(version: str) -> bool:
+            return True
+
         monkeypatch.setattr(
             "server.apps.apiversions.management.commands.api_snapshot.is_released",
-            lambda version: True,
+            _always_released,
         )
         # No --force: refuses even though the (output-dir) file exists.
         target = tmp_path / f"{registry.current_version()}.json"
@@ -125,13 +136,15 @@ class TestSnapshots:
 
 class TestSchemaServing:
     @pytest.mark.django_db
-    def test_live_schema_info_version(self, seed_data, client):
+    def test_live_schema_info_version(self, seed_data: dict[str, int], client: Client):
         response = client.get("/v1/openapi.json")
         assert response.status_code == 200
         assert response.json()["info"]["version"] == registry.current_version()
 
     @pytest.mark.django_db
-    def test_old_version_served_from_snapshot(self, seed_data, client, newer_version):
+    def test_old_version_served_from_snapshot(
+        self, seed_data: dict[str, int], client: Client, newer_version: VersionChange
+    ):
         old = max(v for v in registry.versions() if v != newer_version.version)
         assert old != newer_version.version
         response = client.get("/v1/openapi.json", {"api_version": old})
@@ -143,13 +156,15 @@ class TestSchemaServing:
         assert doc["info"]["version"] == old
 
     @pytest.mark.django_db
-    def test_docs_page_lists_versions(self, seed_data, client):
+    def test_docs_page_lists_versions(self, seed_data: dict[str, int], client: Client):
         response = client.get("/v1/docs")
         assert response.status_code == 200
         assert registry.current_version() in response.content.decode()
 
     @pytest.mark.django_db
-    def test_docs_page_renders_all_template_tags_and_assets(self, seed_data, client):
+    def test_docs_page_renders_all_template_tags_and_assets(
+        self, seed_data: dict[str, int], client: Client
+    ):
         """Regression: one malformed {% static %} tag once leaked into a
         script src=, giving a blank docs page with a 404 on a literal
         '{% static ...' URL. Rendered pages must contain no template
@@ -174,14 +189,19 @@ class TestSchemaServing:
             assert finders.find(name), f"missing asset: {url}"
 
     @pytest.mark.django_db
-    def test_unknown_api_version_on_schema_is_400(self, seed_data, client):
+    def test_unknown_api_version_on_schema_is_400(
+        self, seed_data: dict[str, int], client: Client
+    ):
         response = client.get("/v1/openapi.json", {"api_version": "not-a-date"})
         assert response.status_code == 400
         assert response.json()["code"] == "validation_error"
 
     @pytest.mark.django_db
     def test_sunset_version_on_schema_is_410(
-        self, seed_data, client, sunset_old_version
+        self,
+        seed_data: dict[str, int],
+        client: Client,
+        sunset_old_version: VersionChange,
     ):
         response = client.get(
             "/v1/openapi.json", {"api_version": sunset_old_version.version}
@@ -191,7 +211,7 @@ class TestSchemaServing:
 
     @pytest.mark.django_db
     def test_missing_snapshot_is_500_not_silent_live_schema(
-        self, seed_data, client, monkeypatch
+        self, seed_data: dict[str, int], client: Client, monkeypatch: pytest.MonkeyPatch
     ):
         """A supported non-current version without a committed snapshot
         must fail loudly, not silently serve the newest contract (review
@@ -230,7 +250,7 @@ class TestContractPerVersion:
         ]
 
     @pytest.mark.django_db
-    def test_contract_matrix(self, seed_data, client):
+    def test_contract_matrix(self, seed_data: dict[str, int], client: Client):
         for change in self._versions_with_transforms():
             for op_id in {*change.responses, *change.requests}:
                 # Full matrix execution is activated with the first real
@@ -238,7 +258,9 @@ class TestContractPerVersion:
                 assert isinstance(op_id, str), op_id
 
     @pytest.mark.django_db
-    def test_fake_version_end_to_end_contract(self, seed_data, client, newer_version):
+    def test_fake_version_end_to_end_contract(
+        self, seed_data: dict[str, int], client: Client, newer_version: VersionChange
+    ):
         """Old-version responses match the old snapshot's operation list —
         the shape the downgraded response must stay compatible with."""
         old = max(v for v in registry.versions() if v != newer_version.version)
@@ -263,7 +285,7 @@ class TestJsonErrorsForUnknownPaths:
     environment guarantees.
     """
 
-    def test_unknown_v1_path_is_json_404(self, client):
+    def test_unknown_v1_path_is_json_404(self, client: Client):
         import json
 
         response = client.get("/v1/no-such-endpoint")
