@@ -224,7 +224,7 @@ class Command(CRUDCommand[Hut]):
         )
 
     @override
-    def handle(
+    def handle(  # type: ignore  # required named params before *args: signature drift vs CRUDCommand.handle (Django call_command kwargs)
         self,
         no_review: bool,
         source: str,

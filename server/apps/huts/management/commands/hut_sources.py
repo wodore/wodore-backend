@@ -202,9 +202,9 @@ class Command(CRUDCommand[HutSource]):
         )
 
     @override
-    def handle(
+    def handle(  # type: ignore  # required named params before *args: signature drift vs CRUDCommand.handle (Django call_command kwargs)
         self, sources: str, lang: str, with_minisite: bool, *args: Any, **options: Any
-    ) -> None:  # type: ignore[override]  # required named params before *args: signature drift vs CRUDCommand.handle (Django call_command kwargs)
+    ) -> None:
         if sources.lower().strip() == "all":
             org_list = list(settings.SERVICES.keys())
         else:

@@ -2,6 +2,8 @@
 Middleware for adding environment and SEO-related headers.
 """
 
+import typing as t
+
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse
 
@@ -14,7 +16,7 @@ class EnvironmentHeadersMiddleware:
         X-Environment: production|staging|development - Identify the environment
     """
 
-    def __init__(self, get_response):
+    def __init__(self, get_response: t.Callable[[HttpRequest], HttpResponse]) -> None:
         """
         Initialize the middleware.
 
@@ -53,7 +55,7 @@ class RobotsTagMiddleware:
     accidental indexing. Can also be used in production for API-only backends.
     """
 
-    def __init__(self, get_response):
+    def __init__(self, get_response: t.Callable[[HttpRequest], HttpResponse]) -> None:
         """
         Initialize the middleware.
 
