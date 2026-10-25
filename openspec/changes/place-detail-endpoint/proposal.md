@@ -31,7 +31,7 @@ route keys by slug.
 - Response: base fields (`slug`, localized `name`, `country_code`,
   `elevation`, `importance`, `location`, `description`,
   `review_status`, `detail_type`) plus optional members `categories`,
-  `sources`, `amenity_detail`, `parties` (per `geoplace-parties`) under
+  `sources`, `amenity`, `parties` (per `geoplace-parties`) under
   the existing `fields[places]` sparse-fieldset selection.
 - **Routing that works in any case**: a registered slug path converter
   whose grammar (slug chars with at least one `-` or `_` — true for
@@ -40,7 +40,7 @@ route keys by slug.
   routing becomes order-independent. Model-layer validation makes the
   grammar a data invariant; the SEO siblings (`{slug}/meta`,
   `{slug}.md`) adopt the same converter.
-- `amenity_detail` is the first detail block; admin/transport/natural
+- `amenity` is the first detail block; admin/transport/natural
   follow later as sibling optional members (extension pattern fixed
   here, blocks not).
 - **`places/amenity/{place_id}` is removed** (no alias — pre-release,

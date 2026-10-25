@@ -128,8 +128,8 @@ class TestPlaceDetailContent:
         AmenityDetail.objects.create(geo_place=place, operating_status="open")
         data = client.get(f"/v1/geo/places/{place.slug}").json()
         assert data["detail_type"] == "amenity"
-        assert data["amenity_detail"]["operating_status"] == "open"
-        assert set(data["amenity_detail"]) == {
+        assert data["amenity"]["operating_status"] == "open"
+        assert set(data["amenity"]) == {
             "operating_status",
             "opening_months",
             "opening_hours",
@@ -141,13 +141,13 @@ class TestPlaceDetailContent:
     def test_amenity_type_without_detail_row_has_no_block(self, client: Client):
         place = make_place(detail_type="amenity")
         data = client.get(f"/v1/geo/places/{place.slug}").json()
-        assert "amenity_detail" not in data
+        assert "amenity" not in data
 
     def test_place_without_detail_model_is_first_class(self, client: Client):
         place = make_place(detail_type="natural")
         data = client.get(f"/v1/geo/places/{place.slug}").json()
         assert data["detail_type"] == "natural"
-        assert "amenity_detail" not in data
+        assert "amenity" not in data
 
     def test_default_response_carries_categories(
         self, seed_data: dict[str, int], client: Client
@@ -166,37 +166,37 @@ class TestPlaceDetailContent:
         AmenityDetail.objects.create(geo_place=place, operating_status="open")
         data = client.get(
             f"/v1/geo/places/{place.slug}",
-            {"fields[places]": "slug,name,amenity_detail"},
+            {"fields[places]": "slug,name,amenity"},
         ).json()
         # Selected + required members only.
         assert set(data) == {
             "slug",
             "name",
-            "amenity_detail",
+            "amenity",
             "detail_type",
             "location",
             "importance",
         }
-        assert data["amenity_detail"]["operating_status"] == "open"
+        assert data["amenity"]["operating_status"] == "open"
 
     def test_block_of_another_type_absent_not_error(self, client: Client):
         place = make_place(detail_type="natural")
         response = client.get(
             f"/v1/geo/places/{place.slug}",
-            {"fields[places]": "slug,name,amenity_detail"},
+            {"fields[places]": "slug,name,amenity"},
         )
         assert response.status_code == 200
-        assert "amenity_detail" not in response.json()
+        assert "amenity" not in response.json()
 
     def test_unknown_block_name_400_naming_valid_fields(self, client: Client):
         place = make_place()
         response = client.get(
-            f"/v1/geo/places/{place.slug}", {"fields[places]": "admin_detail"}
+            f"/v1/geo/places/{place.slug}", {"fields[places]": "admin"}
         )
         assert response.status_code == 400
         body = response.json()
         assert body["code"] == "validation_error"
-        assert "amenity_detail" in body["detail"]  # valid names listed
+        assert "amenity" in body["detail"]  # valid names listed
 
 
 class TestSlugOnlyIdentifiers:

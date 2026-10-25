@@ -523,7 +523,8 @@ def _narrow_place_detail(result: dict[str, Any], parsed: PlaceQuery) -> dict[str
 
     Variant of :func:`server.apps.api.projection.project_fields` whose
     top-level selection validates against the endpoint's declared
-    members and always keeps the required ones: ``amenity_detail`` is
+    members and always keeps the required ones: the ``amenity`` block
+    member is
     seeded ``None`` for places without a block, so selecting it is
     valid on every place type — a place of another type answers 200
     with the member absent, not a 400 (place-detail-endpoint).
@@ -546,8 +547,8 @@ def _narrow_place_detail(result: dict[str, Any], parsed: PlaceQuery) -> dict[str
         value = result[field_name]
         if isinstance(value, list):
             result[field_name] = [_narrow_item(item, spec, type_name) for item in value]
-    if result.get("amenity_detail") is None:
-        result.pop("amenity_detail", None)
+    if result.get("amenity") is None:
+        result.pop("amenity", None)
     return result
 
 
@@ -567,7 +568,7 @@ class PlaceController(ApiController):
 
         Unified detail for every place regardless of detail type (amenity, transport,
         admin, natural, none): base place fields plus optional members (categories,
-        sources, amenity_detail) under the `fields[places]` sparse-fieldset selection.
+        sources, amenity) under the `fields[places]` sparse-fieldset selection.
         Places are identified by slug; the numeric id is never exposed.
         """
 
@@ -576,7 +577,7 @@ class PlaceController(ApiController):
 
         # Skip the DB cost when the field isn't in the selection —
         # same field_selected gating as search/nearby.
-        wants_amenity = field_selected(query, "places", "amenity_detail")
+        wants_amenity = field_selected(query, "places", "amenity")
         wants_categories = field_selected(query, "places", "categories")
         wants_sources = field_selected(query, "places", "sources")
         wants_parties = field_selected(query, "places", "parties")
@@ -622,7 +623,7 @@ class PlaceController(ApiController):
         # Always seed the block member so it stays a valid selection
         # name for every place type; absent blocks narrow to "member
         # missing", never a 400 (see _narrow_place_detail).
-        result["amenity_detail"] = (
+        result["amenity"] = (
             build_amenity_detail(place)
             if wants_amenity and place.detail_type == "amenity"
             else None

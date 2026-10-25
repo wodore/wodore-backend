@@ -166,15 +166,16 @@ class GeoPlaceDetailSchema(GeoPlaceBaseSchema):
     Required members: ``slug``, ``name``, ``detail_type`` (the type
     discriminator clients switch on), ``location``, ``importance``.
     Everything else is an optional member under the ``fields[places]``
-    sparse-fieldset selection; detail blocks (``amenity_detail`` now,
-    admin/transport/natural later) appear only for places whose
-    ``detail_type`` matches and only when a detail row exists.
+    sparse-fieldset selection; detail blocks appear as sibling members
+    named exactly after their ``detail_type`` value (``amenity`` now,
+    ``admin``/``transport``/``natural`` later) and only for places of
+    that type with a detail row.
     """
 
     description: str | None = None
     review_status: str | None = None
     detail_type: str
-    amenity_detail: AmenityDetailSchema | None = None
+    amenity: AmenityDetailSchema | None = None
     # Required-but-nullable on the list schemas; optional members on
     # the detail endpoint — excludable via fields[places] selection.
     country_code: str | None = None

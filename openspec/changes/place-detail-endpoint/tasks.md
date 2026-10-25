@@ -43,7 +43,7 @@
 - [x] 3.2 `GeoPlaceDetailSchema` in `schemas/_output.py`:
       required `slug`, `name`, `detail_type`, `location`,
       `importance`; optional `country_code`, `elevation`,
-      `description`, `review_status`, `amenity_detail`, `categories`,
+      `description`, `review_status`, `amenity`, `categories`,
       `sources` (+ `parties` once `geoplace-parties` has landed)
 - [x] 3.3 Shared detail presenter in `presenters.py` (reuse
       `base_result`, `build_categories_data`, `annotate_sources`,
@@ -51,7 +51,7 @@
       `raise_not_found` on miss (no existence oracle); `record_visit`
       after existence is known
 - [x] 3.4 `PlaceController.get_place` with `cache_headers(60)` +
-      `cache_page(60)`; `field_selected` gating for `amenity_detail`
+      `cache_page(60)`; `field_selected` gating for `amenity`
       (skip `select_related`), `categories` (skip prefetch),
       `sources` (skip annotation)
 - [x] 3.5 `fields[places]` narrowing via dict-level projection with
@@ -83,7 +83,7 @@
       none without; 404s (unknown, inactive, non-public — identical
       body per the single error contract incl. RFC 9457 members)
 - [x] 5.4 Selection: default full response;
-      `?fields[places]=slug,name,amenity_detail` narrowing; block of
+      `?fields[places]=slug,name,amenity` narrowing; block of
       another type absent (200, no error); unknown block name → 400
       naming valid values; `lang` localization
 - [x] 5.5 Caching: `Cache-Control: public, max-age=60` on the detail

@@ -61,7 +61,7 @@ Goals:
 Non-Goals:
 
 - No hut endpoints, no huts app changes (owner constraint).
-- No `admin_detail`/`transport_detail`/`natural_detail` blocks here.
+- No `admin`/`transport`/`natural` blocks here.
 - No type/category filter parameters on the detail route.
 - No slug normalization of legacy shapes (`information-5h9`,
   `vending_machine`, `drinking_water-` stay — they satisfy the
@@ -154,7 +154,7 @@ Non-Goals:
    required members `slug`, `name`, `detail_type` (the discriminator),
    `location`, `importance`; optional members `country_code`,
    `elevation`, `description`, `review_status`, `categories`,
-   `sources`, `amenity_detail`, `parties` (per `geoplace-parties`).
+   `sources`, `amenity`, `parties` (per `geoplace-parties`).
    Optional members follow the `fields[places]` selection exactly
    like `nearby` (dict-level `project_fields`; required members and
    i18n companions kept — assumes the parties-change projection fix).
@@ -199,8 +199,8 @@ Non-Goals:
    required `slug` member is then guaranteed at the storage layer.
 
 7. **Extension pattern for future detail blocks.** One optional
-   sibling member per detail model (`admin_detail`,
-   `transport_detail`, `natural_detail`), gated on `detail_type` +
+   sibling member per detail model (`admin`,
+   `transport`, `natural`), gated on `detail_type` +
    row presence + selection, added additively in its own change. No
    wrapper object — sparse fieldsets select flat members and blocks
    arrive independently.

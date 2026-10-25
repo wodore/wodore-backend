@@ -26,7 +26,7 @@ change SHALL be registered in the API changelog per the
 - **WHEN** a client fetches an active, public amenity place by slug
 - **THEN** the response is the bare place object with
   `detail_type="amenity"` and, when a detail row exists, the
-  `amenity_detail` member
+  `amenity` member
 
 #### Scenario: Place without a detail model is first-class
 
@@ -144,7 +144,7 @@ existing row.
 
 ### Requirement: Optional members under sparse fieldset selection
 Optional response members SHALL follow the `fields[places]`
-sparse-fieldset selection: `categories`, `sources`, `amenity_detail`
+sparse-fieldset selection: `categories`, `sources`, `amenity`
 and `parties` (per the `geoplace-parties` capability — when this
 change lands before that capability in any environment, the member
 is absent from the response and not a valid `fields[places]` name,
@@ -167,27 +167,27 @@ this same rule; no wrapper object SHALL bundle the blocks.
 - **WHEN** a client fetches an amenity place without a `fields`
   selection
 - **THEN** the response carries every member that has data — base
-  fields, `categories`, `sources`, `amenity_detail` and `parties`
+  fields, `categories`, `sources`, `amenity` and `parties`
   (when associations exist)
 
 #### Scenario: Narrowed selection
 
-- **WHEN** a client sends `?fields[places]=slug,name,amenity_detail`
+- **WHEN** a client sends `?fields[places]=slug,name,amenity`
 - **THEN** the response carries only `slug`, `name` (plus the other
-  required members) and `amenity_detail`, and category/source/party
+  required members) and `amenity`, and category/source/party
   queries are not executed
 
 #### Scenario: Block of another type is absent, not an error
 
 - **WHEN** a client fetches a `natural` place with
-  `?fields[places]=slug,name,amenity_detail`
+  `?fields[places]=slug,name,amenity`
 - **THEN** the response is 200 with the requested members and no
-  `amenity_detail` member — the place's own type governs which blocks
+  `amenity` member — the place's own type governs which blocks
   can exist
 
 #### Scenario: Unknown block names 400 per the allowlist
 
-- **WHEN** a client sends `?fields[places]=admin_detail` before an
+- **WHEN** a client sends `?fields[places]=admin` before an
   admin block change has landed
 - **THEN** the response is 400 `invalid_field_name` naming the valid
   field names, per the sparse-fieldsets conventions

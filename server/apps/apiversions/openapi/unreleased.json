@@ -1807,9 +1807,9 @@
         "type": "object"
       },
       "GeoPlaceDetailSchema": {
-        "description": "Unified place detail (place-detail-endpoint).\n\nRequired members: ``slug``, ``name``, ``detail_type`` (the type\ndiscriminator clients switch on), ``location``, ``importance``.\nEverything else is an optional member under the ``fields[places]``\nsparse-fieldset selection; detail blocks (``amenity_detail`` now,\nadmin/transport/natural later) appear only for places whose\n``detail_type`` matches and only when a detail row exists.",
+        "description": "Unified place detail (place-detail-endpoint).\n\nRequired members: ``slug``, ``name``, ``detail_type`` (the type\ndiscriminator clients switch on), ``location``, ``importance``.\nEverything else is an optional member under the ``fields[places]``\nsparse-fieldset selection; detail blocks appear as sibling members\nnamed exactly after their ``detail_type`` value (``amenity`` now,\n``admin``/``transport``/``natural`` later) and only for places of\nthat type with a detail row.",
         "properties": {
-          "amenity_detail": {
+          "amenity": {
             "anyOf": [
               {
                 "$ref": "#/components/schemas/AmenityDetailSchema"
@@ -1891,6 +1891,21 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "parties": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PartySchema"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parties"
           },
           "review_status": {
             "anyOf": [
@@ -2003,6 +2018,21 @@
             "title": "Name",
             "type": "string"
           },
+          "parties": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PartySchema"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parties"
+          },
           "slug": {
             "title": "Slug",
             "type": "string"
@@ -2096,6 +2126,21 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "parties": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PartySchema"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parties"
           },
           "score": {
             "anyOf": [
@@ -5229,6 +5274,80 @@
         "title": "OwnerSchema",
         "type": "object"
       },
+      "PartyLinkSchema": {
+        "description": "Schema for a party link (label + url).",
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Label"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": ["url"],
+        "title": "PartyLinkSchema",
+        "type": "object"
+      },
+      "PartySchema": {
+        "description": "Schema for role-classified party associations (geoplace-parties).",
+        "properties": {
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/PartyLinkSchema"
+            },
+            "title": "Links",
+            "type": "array"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Symbol"
+          }
+        },
+        "required": ["role", "slug"],
+        "title": "PartySchema",
+        "type": "object"
+      },
       "PhoneSchema": {
         "description": "Schema for phone number with optional label.",
         "properties": {
@@ -7032,7 +7151,7 @@
         "operationId": "nearby_geoplaces",
         "parameters": [
           {
-            "description": "Sparse fieldsets (JSON:API): `fields[TYPE]=name1,name2` narrows the response to the selected fields (`__all__` = every field). Valid TYPEs: places, categories, sources.",
+            "description": "Sparse fieldsets (JSON:API): `fields[TYPE]=name1,name2` narrows the response to the selected fields (`__all__` = every field). Valid TYPEs: places, categories, sources, parties.",
             "explode": true,
             "in": "query",
             "name": "fields",
@@ -7049,7 +7168,7 @@
                 }
               ],
               "default": null,
-              "description": "Sparse fieldsets (JSON:API): `fields[TYPE]=name1,name2` narrows the response to the selected fields (`__all__` = every field). Valid TYPEs: places, categories, sources.",
+              "description": "Sparse fieldsets (JSON:API): `fields[TYPE]=name1,name2` narrows the response to the selected fields (`__all__` = every field). Valid TYPEs: places, categories, sources, parties.",
               "title": "Fields"
             },
             "style": "deepObject"
@@ -7313,7 +7432,7 @@
             }
           },
           {
-            "description": "Sparse fieldsets (JSON:API): `fields[TYPE]=name1,name2` narrows the response to the selected fields (`__all__` = every field). Valid TYPEs: places, categories, sources.",
+            "description": "Sparse fieldsets (JSON:API): `fields[TYPE]=name1,name2` narrows the response to the selected fields (`__all__` = every field). Valid TYPEs: places, categories, sources, parties.",
             "explode": true,
             "in": "query",
             "name": "fields",
@@ -7330,7 +7449,7 @@
                 }
               ],
               "default": null,
-              "description": "Sparse fieldsets (JSON:API): `fields[TYPE]=name1,name2` narrows the response to the selected fields (`__all__` = every field). Valid TYPEs: places, categories, sources.",
+              "description": "Sparse fieldsets (JSON:API): `fields[TYPE]=name1,name2` narrows the response to the selected fields (`__all__` = every field). Valid TYPEs: places, categories, sources, parties.",
               "title": "Fields"
             },
             "style": "deepObject"
@@ -7538,7 +7657,7 @@
     },
     "/v1/geo/places/{slug}": {
       "get": {
-        "description": "Unified detail for every place regardless of detail type (amenity, transport,\nadmin, natural, none): base place fields plus optional members (categories,\nsources, amenity_detail) under the `fields[places]` sparse-fieldset selection.\nPlaces are identified by slug; the numeric id is never exposed.",
+        "description": "Unified detail for every place regardless of detail type (amenity, transport,\nadmin, natural, none): base place fields plus optional members (categories,\nsources, amenity) under the `fields[places]` sparse-fieldset selection.\nPlaces are identified by slug; the numeric id is never exposed.",
         "operationId": "get_place",
         "parameters": [
           {
@@ -7553,7 +7672,7 @@
             }
           },
           {
-            "description": "Sparse fieldsets (JSON:API): `fields[TYPE]=name1,name2` narrows the response to the selected fields (`__all__` = every field). Valid TYPEs: places, categories, sources.",
+            "description": "Sparse fieldsets (JSON:API): `fields[TYPE]=name1,name2` narrows the response to the selected fields (`__all__` = every field). Valid TYPEs: places, categories, sources, parties.",
             "explode": true,
             "in": "query",
             "name": "fields",
@@ -7570,7 +7689,7 @@
                 }
               ],
               "default": null,
-              "description": "Sparse fieldsets (JSON:API): `fields[TYPE]=name1,name2` narrows the response to the selected fields (`__all__` = every field). Valid TYPEs: places, categories, sources.",
+              "description": "Sparse fieldsets (JSON:API): `fields[TYPE]=name1,name2` narrows the response to the selected fields (`__all__` = every field). Valid TYPEs: places, categories, sources, parties.",
               "title": "Fields"
             },
             "style": "deepObject"
