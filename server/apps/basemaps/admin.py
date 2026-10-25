@@ -8,12 +8,12 @@ live style preview (MapLibre GL, resolved mode) via ``<id>/preview/``.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import override
 
 from django.contrib import admin
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, render
-from django.urls import path
+from django.urls import URLPattern, path
 from django.utils.translation import gettext_lazy as _
 
 from unfold.decorators import display
@@ -37,7 +37,7 @@ from .models import (
 from .resolution import style_endpoint_url
 
 
-class MapLayerParameterInline(admin.TabularInline):
+class MapLayerParameterInline(admin.TabularInline[MapLayerParameter, MapLayer]):
     """Parameter links with per-layer default override."""
 
     model = MapLayerParameter
@@ -46,7 +46,7 @@ class MapLayerParameterInline(admin.TabularInline):
     autocomplete_fields = ("parameter",)
 
 
-class MapLayerCategoryInline(admin.TabularInline):
+class MapLayerCategoryInline(admin.TabularInline[MapLayerCategory, MapLayer]):
     """Category links (filters/legends)."""
 
     model = MapLayerCategory
@@ -55,7 +55,7 @@ class MapLayerCategoryInline(admin.TabularInline):
     autocomplete_fields = ("category",)
 
 
-class MapLayerAttributionInline(admin.TabularInline):
+class MapLayerAttributionInline(admin.TabularInline[MapLayerAttribution, MapLayer]):
     """Ordered attribution links to organizations."""
 
     model = MapLayerAttribution
@@ -64,7 +64,7 @@ class MapLayerAttributionInline(admin.TabularInline):
     autocomplete_fields = ("organization",)
 
 
-class MapLegendItemInline(admin.TabularInline):
+class MapLegendItemInline(admin.TabularInline[MapLegendItem, MapLegendSection]):
     """Static legend items (colors/widths may hold parameter tokens)."""
 
     model = MapLegendItem
@@ -72,7 +72,7 @@ class MapLegendItemInline(admin.TabularInline):
     extra = 0
 
 
-class MapLegendSectionInline(admin.TabularInline):
+class MapLegendSectionInline(admin.TabularInline[MapLegendSection, MapLegend]):
     """Legend sections on the legend admin."""
 
     model = MapLegendSection
@@ -82,7 +82,7 @@ class MapLegendSectionInline(admin.TabularInline):
     show_change_link = True
 
 
-class MapLegendLinkInline(admin.TabularInline):
+class MapLegendLinkInline(admin.TabularInline[MapLegendLink, MapLegend]):
     """Ordered external links on the legend admin."""
 
     model = MapLegendLink
@@ -235,7 +235,8 @@ class MapLayerAdmin(ModelAdmin):
     def style_kind(self, obj: MapLayer) -> bool:
         return obj.style is not None
 
-    def get_urls(self) -> list[Any]:
+    @override
+    def get_urls(self) -> list[URLPattern]:
         urls = super().get_urls()
         custom = [
             path(
@@ -286,7 +287,10 @@ class TileAssetVersionAdmin(ModelAdmin):
     search_fields = ("key", "version")
     ordering = ("origin", "key")
 
-    def get_readonly_fields(self, request, obj=None):
+    @override
+    def get_readonly_fields(
+        self, request: HttpRequest, obj: TileAssetVersion | None = None
+    ) -> list[str] | tuple[str, ...]:
         base = ("created", "modified", "last_checked")
         if obj is None:
             # Add form: key/origin/version editable (manual external
