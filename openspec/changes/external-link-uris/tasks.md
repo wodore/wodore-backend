@@ -26,25 +26,35 @@
       → `URLValidator`; `tel:` → RFC 3966 format; `mailto:` → address
       check); applied to every i18n URL variant; `AlterField`
       migration (same column type/width — no data rewrite)
-- [ ] 2.2 Add nullable `uri_kind` FK → Category (RESTRICT), scoped to
+- [ ] 2.2 Add `uri_kind` FK → Category (RESTRICT), scoped to
       the `uri` parent in `clean()` and the admin (the `role` scoping
-      precedent); migration + index
-- [ ] 2.3 `ExternalLink.clean()`: per-language scheme ∈
-      `uri_kind.extra["schemes"]` consistency + URI well-formedness;
-      null kind ⇒ website (http/https). Mirror the check in the schema/
-      import write paths (the `GeoPlaceParty.clean()` +
-      `_write_party_associations` precedent — `save()` skips `clean()`)
-- [ ] 2.4 Gate `save()`'s web-only auto-behaviours
+      precedent); migration + index; introduced nullable — the NOT
+      NULL `AlterField` follows the 2.6 backfill
+- [ ] 2.3 Derive `uri_kind` in the model save path: when a URL value
+      is entered or changed, set/update the kind to the vocabulary
+      kind whose accepted schemes contain the URL's scheme; unknown
+      scheme → validation error; manual override honored only within
+      the kind's accepted schemes (covers admin forms, imports and
+      schema write paths uniformly — no endpoint or signal)
+- [ ] 2.4 `ExternalLink.clean()`: per-language scheme ∈
+      `uri_kind.extra["schemes"]` consistency + URI well-formedness
+      (a kind whose schemes exclude a populated URL is rejected — no
+      null case). Mirror the check in the schema/import write paths
+      (the `GeoPlaceParty.clean()` + `_write_party_associations`
+      precedent — `save()` skips `clean()`)
+- [ ] 2.5 Gate `save()`'s web-only auto-behaviours
       (`_auto_detect_source`, `_auto_extract_title`, `check_health`)
       behind an http(s) check so `tel:`/`mailto:` saves do no network
       I/O; `check_health()` refuses non-web URLs defensively
-- [ ] 2.5 Data migration backfilling existing http(s) links to
-      `uri_kind=uri.website` (expected: all ~92k; assert the count and
-      that none violate the scheme rule before relying on the
-      null-is-website default)
-- [ ] 2.6 Unit tests: tel/mailto storable; scheme↔kind mismatch
-      rejected; null-kind legacy link valid; non-web save performs no
-      network I/O
+- [ ] 2.6 Data migration backfilling the existing http(s) links to
+      `uri_kind=uri.website` (expected: all ~92k; assert the count),
+      then an `AlterField` making `uri_kind` NOT NULL — backfill
+      first, constraint second (the place-detail-endpoint
+      slug-invariant pattern)
+- [ ] 2.7 Unit tests: tel/mailto storable; scheme↔kind mismatch
+      rejected; unknown scheme rejected; derivation sets the kind on
+      enter and re-derives it on URL change; kindless save rejected
+      (NOT NULL); non-web save performs no network I/O
 
 ## 3. Health-check policy
 
@@ -79,12 +89,12 @@
       identifier, symbol via `resolve_symbol_urls` over the `uri_kind`
       category); active/public/review-`done` only — mirroring
       `prefetch_parties`/`build_parties_data`
-- [ ] 5.2 `LinkSchema` + `links: list[LinkSchema] | None` on
-      `GeoPlaceDetailSchema` under `fields[places]`, sibling of
-      `categories`/`sources`/`parties`; nested `fields[links]`
-      narrowing; `field_selected` gating skips the prefetch when
-      unselected (assumes the `place-detail-endpoint` projection
-      pattern; member becomes a valid field name additively)
+- [ ] 5.2 `LinkSchema` + `links: list[LinkSchema] | None` on the
+      merged `GeoPlaceDetailSchema` (PR #418) under `fields[places]`,
+      sibling of `categories`/`sources`/`parties`; nested
+      `fields[links]` narrowing; `field_selected` gating skips the
+      prefetch when unselected — the member joins the schema's
+      `fields[places]` allowlist additively
 - [ ] 5.3 Remove the amenity `phones` member: drop `phones` from
       `AmenityDetailSchema`, `build_amenity_detail`, the amenity input
       schema, and `AmenityDetail._trackable_fields`; stop writing

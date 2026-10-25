@@ -21,20 +21,48 @@ The system SHALL provide a `uri` parent category with children `uri.phone` (sche
 - **THEN** both classifications are retained independently — the purpose vocabulary is untouched by the URI dimension
 
 ### Requirement: Scheme-aware link URL storage
-`ExternalLink.url` SHALL store URLs for any scheme accepted by its URI kind — `http`, `https`, `tel` or `mailto` — replacing the http(s)-only `URLField` with a character field validated by scheme-specific validators, and SHALL expose a nullable `uri_kind` foreign key to a category under the `uri` parent. All per-language i18n URL variants SHALL be validated by the same scheme rules. A `tel:` or `mailto:` URL that the former `URLField` rejected at the field layer SHALL now be storable.
+`ExternalLink.url` SHALL store URLs for any scheme accepted by its URI kind — `http`, `https`, `tel` or `mailto` — replacing the http(s)-only `URLField` with a character field validated by scheme-specific validators, and SHALL carry a `uri_kind` foreign key to a category under the `uri` parent on every row: a data migration backfills the existing http(s) links to `uri.website` first, then an `AlterField` makes the column NOT NULL (backfill first, constraint second). All per-language i18n URL variants SHALL be validated by the same scheme rules. A `tel:` or `mailto:` URL that the former `URLField` rejected at the field layer SHALL now be storable.
 
 #### Scenario: A phone URI is storable
 
 - **WHEN** an `ExternalLink` is saved with `uri_kind=uri.phone` and `url="tel:+4233702323"`
 - **THEN** the save succeeds (the scheme-aware field accepts `tel:`), whereas the former `URLField` would have rejected it
 
+#### Scenario: Every link carries a URI kind
+
+- **WHEN** the backfill and NOT NULL migrations run against production data
+- **THEN** the backfill assigns `uri.website` to every existing http(s) link, the NOT NULL constraint succeeds, and subsequent saves without a URI kind are rejected
+
 #### Scenario: A malformed URI is rejected
 
 - **WHEN** an `ExternalLink` is saved with a URL whose scheme is unsupported or whose value is malformed for its scheme (e.g. a bare phone number with no `tel:` scheme)
 - **THEN** the save is rejected with a validation error
 
+### Requirement: URI kind derived from the URL
+The system SHALL derive an `ExternalLink`'s `uri_kind` automatically from the URL: when a URL value is entered or changed, the model save path SHALL set or update `uri_kind` to the vocabulary kind whose accepted schemes contain the URL's scheme — no manual pick is needed, and admin forms, imports and schema write paths are covered uniformly by this one derivation step (no separate endpoint or signal). A URL whose scheme matches no vocabulary kind SHALL be rejected with a validation error. Manual override SHALL remain possible only within the chosen kind's accepted schemes.
+
+#### Scenario: Entering a phone URL derives the kind
+
+- **WHEN** an `ExternalLink` is saved with `url="tel:+4137123456"` and no kind manually chosen
+- **THEN** `uri_kind` is set to `uri.phone` automatically
+
+#### Scenario: Changing the URL re-derives the kind
+
+- **WHEN** a `uri.phone` link's URL is changed to `https://example.org` and saved
+- **THEN** `uri_kind` is re-derived to `uri.website`
+
+#### Scenario: Unknown scheme is rejected
+
+- **WHEN** a link is saved with `url="ftp://example.org/file"` and no vocabulary kind accepts `ftp`
+- **THEN** the save is rejected with a validation error
+
+#### Scenario: Manual override stays within the kind's schemes
+
+- **WHEN** an admin explicitly sets `uri_kind=uri.website` on a link whose URL is `https://example.org`
+- **THEN** the explicit kind is respected (its schemes contain the URL's scheme)
+
 ### Requirement: Scheme and URI-kind consistency validation
-An `ExternalLink` SHALL validate, in `clean()` and in every schema/import write path, that each populated URL's scheme is among its URI kind's accepted schemes — `tel:` ⇔ `uri.phone`, `mailto:` ⇔ `uri.email`, `http(s)` ⇔ `uri.website` — and that the URI is well-formed for that scheme; a link with no URI kind SHALL be treated as a website (http/https required). The web-only auto-behaviours in `save()` — source-organization detection, title extraction and health checking — SHALL run only for `http`/`https` URLs, so saving a `tel:` or `mailto:` link performs no network I/O.
+An `ExternalLink` SHALL validate, in `clean()` and in every schema/import write path, that each populated URL's scheme is among its URI kind's accepted schemes — `tel:` ⇔ `uri.phone`, `mailto:` ⇔ `uri.email`, `http(s)` ⇔ `uri.website` — and that the URI is well-formed for that scheme; a link whose kind's accepted schemes exclude a populated URL's scheme SHALL be rejected with a validation error. The web-only auto-behaviours in `save()` — source-organization detection, title extraction and health checking — SHALL run only for `http`/`https` URLs, so saving a `tel:` or `mailto:` link performs no network I/O.
 
 #### Scenario: Scheme mismatched to kind is rejected
 
@@ -50,11 +78,6 @@ An `ExternalLink` SHALL validate, in `clean()` and in every schema/import write 
 
 - **WHEN** a `tel:` link is saved
 - **THEN** no source auto-detection, title extraction or HTTP health check is performed
-
-#### Scenario: Legacy link without a URI kind stays valid
-
-- **WHEN** an existing `http(s)` link has `uri_kind` null (pre-backfill)
-- **THEN** it validates as a website (http/https required) and is not rejected
 
 ### Requirement: Per-URI-kind health-check policy
 Link health checking SHALL be governed per URI kind: web links (`uri.website` / http(s)) are HTTP-checked as today (updating `last_checked`, `response_code`, `failure_count` and the review-status transitions), while non-web kinds (`tel:`, `mailto:`) are exempt and SHALL NOT be network-checked. The health-check selector SHALL skip exempt kinds, the per-link `run_health_check` flag SHALL remain an override, and the existing `response_code_valid` check constraint SHALL continue to hold (exempt links keep `response_code` null).
@@ -93,7 +116,7 @@ Phone numbers SHALL be normalized to international E.164 form (`+<countrycode><n
 - **THEN** it is recorded for review (and/or logged by the migration) rather than discarded, so no data is lost
 
 ### Requirement: Place links exposed on the detail response
-The GeoPlace detail response (`place-detail-api`, PR #418) SHALL include a `links` member — an ordered list of the place's associated external links as `[{uri, url, label, symbol}]`, where `uri` is the URI-kind identifier (e.g. `uri.phone`), `url` the localized URL, `label` the localized label, and `symbol` the resolved color/mono URLs of the URI kind — as an optional member under the `fields[places]` sparse-fieldset selection, a sibling of `categories`, `sources` and `parties`, with nested narrowing via `fields[links]`. Only active, public, review-`done` links SHALL be surfaced, and database work SHALL be skipped when the member is not selected. Because `place-detail-api` owns the `fields[places]` allowlist and its unknown-field-name rule, the member SHALL become a valid `fields[places]` name additively when both changes are present; when `external-link-uris` lands first, the member is absent and not yet a valid `fields[places]` name. The additive change SHALL be registered in the API changelog automatically at release (label-driven, no manual entry).
+The GeoPlace detail response (`place-detail-api`, merged in PR #418) SHALL include a `links` member — an ordered list of the place's associated external links as `[{uri, url, label, symbol}]`, where `uri` is the URI-kind identifier (e.g. `uri.phone`), `url` the localized URL, `label` the localized label, and `symbol` the resolved color/mono URLs of the URI kind — as an optional member under the `fields[places]` sparse-fieldset selection, a sibling of `categories`, `sources` and `parties`, with nested narrowing via `fields[links]`. Only active, public, review-`done` links SHALL be surfaced, and database work SHALL be skipped when the member is not selected. Because `place-detail-api` is merged (the `fields[places]` allowlist and its unknown-field-name rule live on main), this change SHALL add the `links` member to the merged `GeoPlaceDetailSchema` additively — it becomes a valid `fields[places]` name with no other contract change. The additive change SHALL be registered in the API changelog automatically at release (label-driven, no manual entry).
 
 #### Scenario: Detail carries links
 
