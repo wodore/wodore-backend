@@ -142,7 +142,7 @@ def watermark_url(request: HttpRequest | None = None) -> str:
 
 def og_photo_url(
     image_url: str,
-    focal: dict | None = None,
+    focal: dict[str, float] | None = None,
     *,
     request: HttpRequest | None = None,
 ) -> str:

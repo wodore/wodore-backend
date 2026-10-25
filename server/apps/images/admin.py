@@ -1,6 +1,6 @@
 # Models
 import contextlib
-from typing import ClassVar
+from typing import Any, ClassVar, override
 
 # from cloudinary import CloudinaryImage
 with contextlib.suppress(ModuleNotFoundError):
@@ -9,9 +9,10 @@ with contextlib.suppress(ModuleNotFoundError):
 # from tinymce.widgets import TinyMCE
 # from simplemde.widgets import SimpleMDEEditor
 from django.contrib import admin
-from django.http import HttpRequest
-from django.urls import reverse
-from django.utils.safestring import mark_safe
+from django.db.models import QuerySet
+from django.http import HttpRequest, HttpResponse
+from django.urls import URLPattern, reverse
+from django.utils.safestring import SafeString, mark_safe
 from django.utils.translation import gettext_lazy as _
 
 from unfold.contrib.filters.admin import (
@@ -39,7 +40,7 @@ from .transfomer import ImagorImage
 
 @admin.register(ImageTag)
 # class OrganizationAdmin(ActiveLanguageMixin, admin.ModelAdmin[Organization]):
-class ImageTagAdmin(ModelAdmin):
+class ImageTagAdmin(ModelAdmin[ImageTag]):
     """Admin panel example for ``BlogPost`` model."""
 
     form = required_i18n_fields_form_factory("name")
@@ -53,19 +54,21 @@ class ImageTagAdmin(ModelAdmin):
         # "image_meta",
     )
 
-    def show_color(self, value, width=32, height=16, radius=4):
+    def show_color(
+        self, value: str, width: int = 32, height: int = 16, radius: int = 4
+    ) -> SafeString:
         return mark_safe(
             f'<div style="background-color:{value};border-radius:{radius}px;min-height:{height}px;min-width:{width}px;max-height:{height}px;max-width:{width}px"></div>'
         )
 
     @display(description=_("Color"))
-    def color_tag(self, obj):
+    def color_tag(self, obj: ImageTag) -> SafeString:
         return self.show_color(obj.color)
 
 
 @admin.register(Image)
 # class OrganizationAdmin(ActiveLanguageMixin, admin.ModelAdmin[Organization]):
-class ImageAdmin(ModelAdmin):
+class ImageAdmin(ModelAdmin[Image]):
     """Admin panel example for ``BlogPost`` model."""
 
     form = required_i18n_fields_form_factory("caption")
@@ -122,7 +125,7 @@ class ImageAdmin(ModelAdmin):
     #: Display labels for the serving states.
     SERVING_LABELS = {"local": "local", "external": "extern", "none": "none"}
 
-    def _serving_html(self, obj) -> str:
+    def _serving_html(self, obj: Image) -> str:
         """Serving pill (unfold markup) + inline download button when external."""
         from django.urls import reverse as _reverse
         from django.utils.safestring import mark_safe
@@ -149,13 +152,16 @@ class ImageAdmin(ModelAdmin):
         return mark_safe(f'<div class="mfu-inline">{pill}</div>')
 
     @display(description=_("Serving"))
-    def serving(self, obj):
+    def serving(self, obj: Image) -> str:
         """Where the pixels come from: local file or external pin."""
         return self._serving_html(obj)
 
-    def save_model(self, request, obj, form, change):
+    @override
+    def save_model(  # type: ignore  # unfold's ActionModelAdminMixin pins obj: Model (non-generic); django-stubs' ModelAdmin[_ModelT] allows Image
+        self, request: HttpRequest, obj: Image, form: Any, change: bool
+    ) -> None:
         if not obj.uploaded_by_user:
-            obj.uploaded_by_user = request.user
+            obj.uploaded_by_user = request.user  # type: ignore  # FK typed via get_user_model() class; admin request.user is the concrete User instance
         super().save_model(request, obj, form, change)
         if change:
             # Manual edits (file swap, focal/crop, URLs) change the pixels or
@@ -169,7 +175,7 @@ class ImageAdmin(ModelAdmin):
                 self.message_user(request, f"Re-assessment failed: {e}", "warning")
 
     @display(description=_("ThumbHashes"))
-    def thumbhash_preview(self, obj):
+    def thumbhash_preview(self, obj: Image) -> str:
         """Decoded ThumbHash placeholders: primary + one per variant."""
         import base64
         import io as _io
@@ -234,7 +240,8 @@ class ImageAdmin(ModelAdmin):
         "assess_selected_images",
     )
 
-    def get_urls(self):
+    @override
+    def get_urls(self) -> list[URLPattern]:
         from django.urls import path
 
         urls = super().get_urls()
@@ -257,7 +264,9 @@ class ImageAdmin(ModelAdmin):
         ]
         return custom + urls
 
-    def _redirect_back(self, request, fallback="admin:images_image_changelist"):
+    def _redirect_back(
+        self, request: HttpRequest, fallback: str = "admin:images_image_changelist"
+    ) -> HttpResponse:
         """Back to the list (or the page the quick-action was clicked from)."""
         from django.shortcuts import redirect
 
@@ -283,7 +292,7 @@ class ImageAdmin(ModelAdmin):
             raise ValueError("Image too large.")
         return content, upstream.headers.get("Content-Type", "image/jpeg")
 
-    def _store_local_file(self, obj, content: bytes, raw_url: str) -> str:
+    def _store_local_file(self, obj: Image, content: bytes, raw_url: str) -> str:
         """Attach downloaded bytes as the image's local file; returns name."""
         from django.core.files.base import ContentFile
 
@@ -297,7 +306,9 @@ class ImageAdmin(ModelAdmin):
     def _is_ajax(request: HttpRequest) -> bool:
         return request.headers.get("x-requested-with") == "XMLHttpRequest"
 
-    def download_raw_row_view(self, request: HttpRequest, object_id):
+    def download_raw_row_view(
+        self, request: HttpRequest, object_id: str
+    ) -> HttpResponse:
         """Quick action: download an external pin's raw image and store it.
 
         AJAX requests get JSON (the changelist updates in place); regular
@@ -306,7 +317,7 @@ class ImageAdmin(ModelAdmin):
         from django.contrib import messages
         from django.http import JsonResponse
 
-        def _json(payload, status=200):
+        def _json(payload: dict[str, object], status: int = 200) -> HttpResponse:
             return JsonResponse(payload, status=status)
 
         ajax = self._is_ajax(request)
@@ -344,7 +355,9 @@ class ImageAdmin(ModelAdmin):
         messages.success(request, f"{obj}: stored '{name}' locally.")
         return self._redirect_back(request)
 
-    def set_review_view(self, request: HttpRequest, object_id, status: str):
+    def set_review_view(
+        self, request: HttpRequest, object_id: str, status: str
+    ) -> HttpResponse:
         """Quick action: set the review status from the changelist."""
         from django.contrib import messages
         from django.http import JsonResponse
@@ -377,29 +390,37 @@ class ImageAdmin(ModelAdmin):
         description=_("Quality"),
         ordering="quality_score",
     )
-    def quality_display(self, obj):
+    def quality_display(self, obj: Image) -> str | int:
         """Technical quality score from assessment (sortable)."""
         if obj.quality_score is None:
             return "—"
         return obj.quality_score
 
     @admin.action(description=_("Approve selected images"))
-    def approve_selected_images(self, request, queryset):
+    def approve_selected_images(
+        self, request: HttpRequest, queryset: QuerySet[Image]
+    ) -> None:
         updated = queryset.update(review_status=Image.ReviewStatusChoices.approved)
         self.message_user(request, f"Approved {updated} images.")
 
     @admin.action(description=_("Disable selected images"))
-    def disable_selected_images(self, request, queryset):
+    def disable_selected_images(
+        self, request: HttpRequest, queryset: QuerySet[Image]
+    ) -> None:
         updated = queryset.update(review_status=Image.ReviewStatusChoices.disabled)
         self.message_user(request, f"Disabled {updated} images.")
 
     @admin.action(description=_("Reject selected images"))
-    def reject_selected_images(self, request, queryset):
+    def reject_selected_images(
+        self, request: HttpRequest, queryset: QuerySet[Image]
+    ) -> None:
         updated = queryset.update(review_status=Image.ReviewStatusChoices.rejected)
         self.message_user(request, f"Rejected {updated} images.")
 
     @admin.action(description=_("Download raw for selected images"))
-    def download_raw_selected_images(self, request, queryset):
+    def download_raw_selected_images(
+        self, request: HttpRequest, queryset: QuerySet[Image]
+    ) -> None:
         done = failed = skipped = 0
         for obj in queryset:
             if obj.image or not obj.source_url_raw:
@@ -417,7 +438,9 @@ class ImageAdmin(ModelAdmin):
         )
 
     @admin.action(description=_("Assess selected images (quality, phash, thumbhash)"))
-    def assess_selected_images(self, request, queryset):
+    def assess_selected_images(
+        self, request: HttpRequest, queryset: QuerySet[Image]
+    ) -> None:
         from server.apps.images.assessment import assess_image
 
         assessed = skipped = failed = 0
@@ -488,23 +511,24 @@ class ImageAdmin(ModelAdmin):
             for addr in addresses
         )
 
+    @override
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request).prefetch_related("tags", "huts")
         return qs.select_related("license", "source_org")
 
     @display(description="license", header=True)
-    def license_summary(self, obj):
+    def license_summary(self, obj: Image) -> tuple[SafeString, SafeString]:
         return mark_safe(
             f'<a href={obj.license.url_i18n} target="_blank">{obj.license.name_i18n}</a>'
         ), text_shorten_html(obj.license.fullname_i18n, textsize="xs", width=60)
 
     @display(description="Tags", header=False)
-    def tag_list(self, obj):
+    def tag_list(self, obj: Image) -> SafeString:
         tags = ", ".join([o.slug for o in obj.tags.all()])
         return text_shorten_html(tags, textsize="xs", width=60)
 
     @display(description="Source", header=True)
-    def source(self, obj):
+    def source(self, obj: Image) -> tuple[SafeString, SafeString]:
         src = []
         if obj.author:
             src.append(obj.author)
@@ -519,18 +543,23 @@ class ImageAdmin(ModelAdmin):
         return mark_safe(", ".join(src)), mark_safe(link)
 
     @display(description="Caption")
-    def caption_short(self, obj):
+    def caption_short(self, obj: Image) -> SafeString:
         return text_shorten_html(
             obj.caption_i18n, textsize="xs", width=60, on_word=True
         )
 
-    def thumb(self, obj):  # new
+    def thumb(self, obj: Image) -> str:  # new
         try:
             # obj.image.url  # does not work if removed?
             # img = f'<img width=120 heigh=60 src="{obj.image.url}"/>'
             # Pinned external images have no local file — fall back to the
             # raw source URL so the list thumbnail works for pins too.
             source = obj.image if getattr(obj, "image", None) else obj.source_url_raw
+            if source is None:
+                # Pin without a raw URL — same fallback as any failure below
+                # (previously surfaced as the swallowed AttributeError from
+                # ImagorImage(None)); keep the rendered result identical.
+                return mark_safe("Missing")
             focal = obj.image_meta.get("focal") if obj.image_meta else None
             if focal:
                 focal_str = f"{focal.get('x1', 0)}x{focal.get('y1', 0)}:{focal.get('x2', 1)}x{focal.get('y2', 1)}"
@@ -566,7 +595,7 @@ class ImageAdmin(ModelAdmin):
         description=_("Status"),
         ordering="review_status",
     )
-    def review_tag(self, obj):
+    def review_tag(self, obj: Image) -> str:
         """Status pill (unfold markup) + review quick buttons below it."""
         return self._review_tag_html(obj)
 
@@ -578,7 +607,7 @@ class ImageAdmin(ModelAdmin):
         "rejected": "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400",
     }
 
-    def _review_tag_html(self, obj) -> str:
+    def _review_tag_html(self, obj: Image) -> str:
         from django.urls import reverse as _reverse
         from django.utils.safestring import mark_safe
 
@@ -606,9 +635,9 @@ class ImageAdmin(ModelAdmin):
         )
 
     @display(description=_("Huts"))
-    def show_huts(self, obj):
+    def show_huts(self, obj: Image) -> SafeString:
         huts = []
-        for hut in obj.huts.all():
+        for hut in obj.huts.all():  # type: ignore  # reverse M2M (Hut.image_set related_name) — runtime-only, invisible to stubs
             hut_url = reverse("admin:huts_hut_change", args=[hut.pk])
             huts.append(f'<small><a href="{hut_url}">{hut.name_i18n}</a></small>')
         huts_str = ", ".join(huts)
