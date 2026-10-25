@@ -29,12 +29,13 @@ import tarfile
 import tempfile
 import urllib.request
 from pathlib import Path
+from typing import Any, override
 
 from django_admin_runner import register_command
 
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand, CommandError, CommandParser
 from django.db import transaction
 
 from server.apps.categories.models import Category
@@ -46,7 +47,7 @@ from server.apps.symbols.icon_data import (
     fold_keyword,
     normalize_hexcode,
 )
-from server.apps.symbols.icon_sources import SOURCES, IconSource
+from server.apps.symbols.icon_sources import SOURCES, IconSource, SourceSpec
 from server.apps.symbols.icon_sources.base import slugify
 from server.apps.symbols.models import Icon, IconKeyword, Symbol, SymbolCollection
 
@@ -65,7 +66,8 @@ class Command(BaseCommand):
         "into the icon library (openspec: icon-library)."
     )
 
-    def add_arguments(self, parser):
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--source",
             required=True,
@@ -106,7 +108,8 @@ class Command(BaseCommand):
     # Entry point
     # ------------------------------------------------------------------
 
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         self.dry_run = options["dry_run"]
         self.source: IconSource = SOURCES[options["source"]]
         spec = self.source.spec
@@ -137,7 +140,7 @@ class Command(BaseCommand):
         if self.dry_run:
             self.stdout.write(self.style.WARNING("DRY RUN — no changes"))
 
-        self.entries: dict[str, dict] = {}
+        self.entries: dict[str, dict[str, Any]] = {}
         if spec.needs_emojibase:
             self.entries = self._load_emojibase(emojibase_dir)
             self.stdout.write(
@@ -231,7 +234,7 @@ class Command(BaseCommand):
     # emojibase parsing
     # ------------------------------------------------------------------
 
-    def _load_emojibase(self, emojibase_dir: Path) -> dict[str, dict]:
+    def _load_emojibase(self, emojibase_dir: Path) -> dict[str, dict[str, Any]]:
         """Parse emojibase-data into hexcode-joined entries.
 
         Returns ``{normalized_hexcode: {...}}`` where each entry carries
@@ -249,7 +252,7 @@ class Command(BaseCommand):
             (int(idx) for idx, slug in meta["groups"].items() if slug == "component"),
             None,
         )
-        entries: dict[str, dict] = {}
+        entries: dict[str, dict[str, Any]] = {}
         for locale in ordered:
             data = _read_json(emojibase_dir / locale / "data.json")
             for item in data:
@@ -268,7 +271,7 @@ class Command(BaseCommand):
                         "group": item.get("group"),
                         "subgroup": item.get("subgroup"),
                         "order": item.get("order", 0),
-                        "keywords": {},
+                        "keywords": dict[str, list[str]](),
                     }
                 entry["keywords"][locale] = [  # type: ignore  # icon config row mutation
                     text
@@ -281,7 +284,7 @@ class Command(BaseCommand):
     # Packs / orgs / licenses
     # ------------------------------------------------------------------
 
-    def _get_or_create_license(self, lic: dict) -> License:
+    def _get_or_create_license(self, lic: dict[str, str]) -> License:
         license_obj = License.objects.filter(slug=lic["slug"]).first()
         if license_obj is not None or self.dry_run:
             return license_obj or License(slug=lic["slug"], name=lic["name"])
@@ -296,7 +299,7 @@ class Command(BaseCommand):
         )
         return license_obj
 
-    def _get_or_create_pack(self, spec) -> SymbolCollection:
+    def _get_or_create_pack(self, spec: SourceSpec) -> SymbolCollection:
         organization = Organization.objects.filter(slug=spec.org_slug).first()
         if organization is None and not self.dry_run:
             organization = Organization.objects.create(
@@ -345,7 +348,7 @@ class Command(BaseCommand):
             for locale in self.locales
         }
 
-        def localized(kind: str, key: str, english: str) -> tuple[str, dict]:
+        def localized(kind: str, key: str, english: str) -> tuple[str, dict[str, str]]:
             """(default-language name, {name_<locale>: ...} i18n dict)."""
             i18n: dict[str, str] = {}
             name = english
@@ -402,7 +405,7 @@ class Command(BaseCommand):
         parent: Category | None,
         order: int,
         name: str,
-        i18n: dict,
+        i18n: dict[str, str],
     ) -> Category:
         # A detached (dry-run) parent cannot take part in a lookup.
         if parent is not None and parent.pk is None:
@@ -474,7 +477,7 @@ class Command(BaseCommand):
         self,
         pack: SymbolCollection,
         slug: str,
-        entry: dict | None,
+        entry: dict[str, Any] | None,
         unicode_hex: str | None,
         fallback_name: str,
     ) -> Icon | None:
@@ -585,7 +588,7 @@ class Command(BaseCommand):
         except (FileNotFoundError, NotADirectoryError, OSError):
             return False
 
-    def _sync_keywords(self, icon: Icon, entry: dict) -> None:
+    def _sync_keywords(self, icon: Icon, entry: dict[str, Any]) -> None:
         """Sync ``IconKeyword`` rows for this icon from emojibase data."""
         wanted: dict[tuple[str, str], str] = {}
         for locale, keywords in entry["keywords"].items():
