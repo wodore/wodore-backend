@@ -80,6 +80,7 @@ dependencies = [
   "uvicorn[standard]>=0.54.0",  # uvloop + httptools for the ASGI runtime (ASGI_ENABLED=1)
   "uvicorn-worker>=0.4.0",
   "sentry-sdk>=2.72,<3",        # https://github.com/getsentry/sentry-python — error tracking (Sentry protocol; DSN-gated, openspec: add-error-tracking)
+  "phonenumbers>=8.13.55",
 ]
 
 

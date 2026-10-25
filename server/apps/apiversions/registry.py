@@ -195,6 +195,19 @@ REGISTRY: list[VersionChange] = [
             "database check constraint and the <geoplace:slug> path "
             "converter. No downgrade: no consumer of the old shapes "
             "exists outside our own frontend."
+            " ALSO: external links go typed-URI "
+            "(openspec: external-link-uris): links accept tel:/mailto:/"
+            "http(s) through a migration-seeded uri.* category "
+            "vocabulary (kinds carry schemes + health policy + icons; "
+            "uri_kind is NOT NULL and derived from the URL's scheme on "
+            "save); health checks exempt non-web kinds; the 58k "
+            "amenity phones JSON migrates to normalized E.164 uri.phone "
+            "links (phonenumbers) attached to places; the place detail "
+            "response gains a links member ([{uri, url, label, "
+            "symbol}], fields[places]-selectable); and the amenity "
+            "block's phones member is REMOVED (phones are served only "
+            "as uri.phone links) — zero consumers, sunset window 0, "
+            "same doctrine."
         ),
         responses={
             "images_for_hut": _strip_static_map_fallback,

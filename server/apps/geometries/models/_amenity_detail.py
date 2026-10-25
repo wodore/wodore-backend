@@ -46,7 +46,6 @@ class AmenityDetail(GeoPlaceDetailBase):
         "operating_status",
         "opening_months",
         "opening_hours",
-        "phones",
     ]
 
     # OneToOne relationship to GeoPlace
@@ -290,16 +289,8 @@ class AmenityDetail(GeoPlaceDetailBase):
                 update_fields.append("opening_hours")
                 updated = True
 
-        # Update phones
-        if "phones" not in protected and schema.phones:
-            new_phones = [
-                p.model_dump() if hasattr(p, "model_dump") else p for p in schema.phones
-            ]
-            if detail.phones != new_phones:
-                detail.phones = new_phones
-                update_fields.append("phones")
-                updated = True
-
+        # phones retired (external-link-uris): written as uri.phone
+        # external links on the place — no detail-row write path
         # Update party associations (place-level; replaces the former
         # brand FK — parties attach to the place, not the detail row)
         if "parties" not in protected and schema.parties:

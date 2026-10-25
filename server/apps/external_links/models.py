@@ -5,12 +5,15 @@ from typing import Any, override
 from modeltrans.fields import TranslationField
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from server.apps.categories.models import Category
 from server.apps.organizations.models import Organization
 from server.core.models import TimeStampedModel
+
+from .uri import is_web_url, scheme_of, validate_url_for_scheme
 
 
 class ReviewStatus(models.TextChoices):
@@ -39,11 +42,14 @@ class ExternalLink(TimeStampedModel):
         help_text=_("Short unique identifier (6 characters)"),
     )
 
-    url = models.URLField(
+    url = models.CharField(
+        max_length=200,
         db_index=True,
+        validators=[validate_url_for_scheme],
         verbose_name=_("URL"),
         help_text=_(
-            "The URL of the external link (translatable - defaults to first language)"
+            "The URL of the external link (translatable - defaults to first "
+            "language). Any scheme its URI kind accepts: http(s), tel:, mailto:"
         ),
     )
 
@@ -67,6 +73,23 @@ class ExternalLink(TimeStampedModel):
         related_name="external_links",
         verbose_name=_("Link Type"),
         help_text=_("Type of link (e.g., social, website, api, document)"),
+    )
+
+    # Typed URIs (external-link-uris): the transport kind — a second,
+    # independent dimension next to the loose link_type purposes.
+    uri_kind = models.ForeignKey(
+        Category,
+        on_delete=models.RESTRICT,
+        null=False,  # introduced nullable, backfilled, then NOT NULL (0010)
+        blank=True,  # forms may leave it empty — save() derives from the URL
+        db_index=True,
+        related_name="+",
+        limit_choices_to={"parent__slug": "uri"},
+        verbose_name=_("URI Kind"),
+        help_text=_(
+            "Transport kind of the URL (uri.phone / uri.email / uri.website); "
+            "derived from the URL's scheme on save"
+        ),
     )
 
     # Translatable content
@@ -209,6 +232,11 @@ class ExternalLink(TimeStampedModel):
         if not self.identifier:
             self.identifier = self.generate_unique_identifier()
 
+        # Typed URIs (external-link-uris): the kind follows the URL —
+        # one derivation step covers admin forms, imports and API
+        # writes alike (no endpoint or signal).
+        self._derive_uri_kind()
+
         # Auto-detect template from URL pattern
         if self.url and "{" in self.url and "}" in self.url:
             self.is_template = True
@@ -216,11 +244,23 @@ class ExternalLink(TimeStampedModel):
             self.is_template = False
 
         # Auto-detect source organization from URL domain if not set
-        if not self.source and self.url and not self.is_template:
+        # (web-only behaviour — tel:/mailto: URLs never hit the network)
+        if (
+            not self.source
+            and self.url
+            and not self.is_template
+            and is_web_url(self.url)
+        ):
             self.source = self._auto_detect_source()
 
         # Auto-extract title from webpage if label is not provided
-        if not self.label and self.url and not self.is_template:
+        # (web-only behaviour)
+        if (
+            not self.label
+            and self.url
+            and not self.is_template
+            and is_web_url(self.url)
+        ):
             self._auto_extract_title()
 
         # Only run health check if enabled and either:
@@ -229,6 +269,7 @@ class ExternalLink(TimeStampedModel):
         should_check = (
             self.run_health_check
             and self.url
+            and is_web_url(self.url)
             and not skip_health_check
             and (not self.is_template or self.template_vars)
         )
@@ -237,6 +278,89 @@ class ExternalLink(TimeStampedModel):
             self.check_health()
 
         super().save(*args, **kwargs)
+
+    def _uri_kind_schemes(self) -> set[str]:
+        """Schemes the current ``uri_kind`` accepts (empty set if unset)."""
+        if self.uri_kind_id is None:
+            return set()
+        extra = getattr(self.uri_kind, "extra", None) or {}
+        return {str(s).lower() for s in extra.get("schemes", [])}
+
+    @classmethod
+    def derive_uri_kind_for_url(cls, url: str) -> Category | None:
+        """Vocabulary kind whose accepted schemes contain the URL's scheme."""
+        scheme = scheme_of(url)
+        if scheme is None:
+            return None
+        return Category.objects.filter(
+            parent__slug="uri",
+            is_active=True,
+            extra__schemes__contains=scheme,
+        ).first()
+
+    def _derive_uri_kind(self) -> None:
+        """Make the URI kind follow the URL (external-link-uris).
+
+        Re-derives whenever the URL's scheme falls outside the current
+        kind's accepted schemes (enter or change); a manual override
+        within the kind's schemes is honored; an unknown scheme is
+        rejected. ``save()`` calls this — the derivation is the reason
+        kindless saves cannot happen once the column is NOT NULL.
+        """
+        if not self.url:
+            return
+        scheme = scheme_of(self.url)
+        if scheme is None:
+            msg = f"'{self.url}' has no URL scheme."
+            raise ValidationError({"url": msg})
+        if scheme in self._uri_kind_schemes():
+            return  # entered/overridden within the kind's schemes
+        derived = self.derive_uri_kind_for_url(self.url)
+        if derived is None:
+            msg = (
+                f"URL scheme '{scheme}:' matches no URI kind "
+                "(vocabulary: uri.phone/uri.email/uri.website)."
+            )
+            raise ValidationError({"url": msg})
+        self.uri_kind = derived
+
+    @override
+    def clean(self) -> None:
+        """Scheme↔kind consistency + URI well-formedness (external-link-uris).
+
+        ``save()`` skips ``clean()`` — the save-path derivation is the
+        primary guard; this mirrors it for form validation.
+        """
+        super().clean()
+        kind = self.uri_kind
+        if kind is not None:
+            parent_slug = (
+                Category.objects.filter(pk=kind.parent_id)
+                .values_list("slug", flat=True)
+                .first()
+            )
+            if parent_slug != "uri":
+                msg = "URI kind must be a category under the 'uri' parent."
+                raise ValidationError({"uri_kind": msg})
+        self._validate_urls_against_kind()
+
+    def _validate_urls_against_kind(self) -> None:
+        """Validate every populated URL variant (default + languages)."""
+        accepted = self._uri_kind_schemes()
+        variants: list[str] = [self.url] if self.url else []
+        for code in settings.LANGUAGE_CODES:
+            value = getattr(self, f"url_{code}", None)
+            if value:
+                variants.append(value)
+        for value in variants:
+            validate_url_for_scheme(value)
+            scheme = scheme_of(value)
+            if accepted and scheme not in accepted:
+                msg = (
+                    f"URL scheme '{scheme}:' is not accepted by URI kind "
+                    f"'{self.uri_kind}'."
+                )
+                raise ValidationError({"url": msg})
 
     def _auto_extract_title(self) -> None:
         """
@@ -456,6 +580,16 @@ class ExternalLink(TimeStampedModel):
         Returns:
             Dictionary with health check results for all languages
         """
+        # Non-web kinds (tel:, mailto:) are exempt by policy — never
+        # network-check them (external-link-uris; defensive: the
+        # selector and save() gate already skip them).
+        if not is_web_url(self.url):
+            return {
+                "success": True,
+                "skipped": True,
+                "error": "Non-web URI kind - health check skipped",
+            }
+
         import requests
 
         from django.utils import timezone

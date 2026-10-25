@@ -15,7 +15,6 @@ from pydantic import BaseModel, Field
 from server.apps.translations.schema import TranslationSchema
 
 from ..models import OperatingStatus
-from ._output import PhoneSchema  # direct sibling import: avoids package circularity
 
 
 # Enums for type safety
@@ -133,7 +132,8 @@ class GeoPlaceBaseInput(BaseModel):
     operating_status: OperatingStatus | None = None
     opening_months: dict[str, str] = Field(default_factory=dict)
     opening_hours: dict[str, Any] = Field(default_factory=dict)
-    phones: list[PhoneSchema] = Field(default_factory=list)
+    # phones retired (external-link-uris): numbers live as uri.phone
+    # external links on the place, not on the detail input
     parties: list[PartyInput] = Field(default_factory=list)
 
     # Admin-specific fields (flattened)

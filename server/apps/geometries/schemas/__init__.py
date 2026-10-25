@@ -45,9 +45,9 @@ from ._output import (
     GeoPlaceDetailSchema,
     GeoPlaceNearbySchema,
     GeoPlaceSearchSchema,
+    LinkSchema,
     PartyLinkSchema,
     PartySchema,
-    PhoneSchema,
     SymbolSchema,
 )
 
@@ -81,7 +81,7 @@ __all__ = [
     "PartyInput",
     "PartyLinkSchema",
     "PartySchema",
-    "PhoneSchema",
+    "LinkSchema",
     "ReviewStatus",
     "SourceInput",
     "SymbolSchema",

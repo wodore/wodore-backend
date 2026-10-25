@@ -135,8 +135,8 @@ class TestPlaceDetailContent:
             "operating_status",
             "opening_months",
             "opening_hours",
-            "phones",
         }
+        assert "phones" not in data["amenity"]  # retired: uri.phone links
         assert data["description"] == ""
         assert data["review_status"] in {"new", "review", "rework", "done"}
 
@@ -257,6 +257,67 @@ class TestPlaceDetailContent:
         assert default.json()["name"] == "Test Berg"
         assert french.json()["name"] == "Test Montagne"
         assert default_again.json()["name"] == "Test Berg"
+
+
+class TestPlaceLinks:
+    """The links member (external-link-uris): typed external links on
+    the place detail response, sibling of categories/sources/parties."""
+
+    def _link_place(self, place: GeoPlace) -> None:
+        from server.apps.external_links.models import ExternalLink
+        from server.apps.geometries.models import GeoPlaceExternalLink
+
+        link = ExternalLink(url="tel:+41441234567", label="Reception")
+        link.save()  # derives uri.phone
+        GeoPlaceExternalLink.objects.create(
+            geo_place=place, external_link=link, order=0
+        )
+
+    def test_detail_carries_links(self, client: Client):
+        place = make_place()
+        self._link_place(place)
+        data = client.get(f"/v1/geo/places/{place.slug}").json()
+        assert len(data["links"]) == 1
+        link = data["links"][0]
+        assert link["uri"] == "uri.phone"
+        assert link["url"] == "tel:+41441234567"
+        assert link["label"] == "Reception"
+        assert link["symbol"]  # kind icon resolves
+
+    def test_phones_served_under_links_not_block(self, client: Client):
+        place = make_place(detail_type="amenity")
+        AmenityDetail.objects.create(geo_place=place, operating_status="open")
+        self._link_place(place)
+        data = client.get(f"/v1/geo/places/{place.slug}").json()
+        assert "phones" not in data["amenity"]
+        assert data["links"][0]["uri"] == "uri.phone"
+
+    def test_narrowed_selection_skips_links(self, client: Client):
+        place = make_place()
+        self._link_place(place)
+        data = client.get(
+            f"/v1/geo/places/{place.slug}", {"fields[places]": "slug,name"}
+        ).json()
+        assert "links" not in data
+
+    def test_nested_links_narrowing_keeps_required(self, client: Client):
+        place = make_place()
+        self._link_place(place)
+        data = client.get(
+            f"/v1/geo/places/{place.slug}",
+            {"fields[places]": "slug,links", "fields[links]": "uri"},
+        ).json()
+        link = data["links"][0]
+        assert "uri" in link and "url" in link  # url is required, kept
+
+    def test_selecting_links_on_linkless_place_is_200(self, client: Client):
+        place = make_place()
+        response = client.get(
+            f"/v1/geo/places/{place.slug}",
+            {"fields[places]": "slug,name,links"},
+        )
+        assert response.status_code == 200
+        assert "links" not in response.json()
 
 
 class TestSlugOnlyIdentifiers:
