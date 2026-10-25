@@ -16,6 +16,7 @@ Usage:
 """
 
 from .osm_automotive import AUTOMOTIVE
+from .osm_base import CategoryMappings, OSMMapping
 from .osm_finance import FINANCE
 from .osm_groceries import GROCERIES
 from .osm_health_and_emergency import HEALTH_AND_EMERGENCY
@@ -84,7 +85,7 @@ def get_all_categories():
     return CATEGORY_REGISTRY
 
 
-def get_osm_filters(category_names: list[str]) -> list[str]:
+def get_osm_filters(category_names: list[str]) -> list[str | tuple[str, ...]]:
     """
     Get all OSM tag filters for given categories.
 
@@ -101,7 +102,9 @@ def get_osm_filters(category_names: list[str]) -> list[str]:
     return filters
 
 
-def match_tags_to_category(tags: dict, category_names: list[str] | None = None):
+def match_tags_to_category(
+    tags: dict[str, str], category_names: list[str] | None = None
+) -> tuple[str, OSMMapping, CategoryMappings] | None:
     """
     Match OSM tags to a category slug.
 

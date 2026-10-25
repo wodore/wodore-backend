@@ -11,6 +11,7 @@ Usage:
 
 import time
 from dataclasses import dataclass
+from typing import Any, override
 
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point, Polygon
@@ -35,6 +36,7 @@ class TestResult:
 class Command(BaseCommand):
     help = "Test OSM import performance optimizations"
 
+    @override
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--test",
@@ -73,7 +75,8 @@ class Command(BaseCommand):
             help="Comma-separated batch sizes to test (for batch-sizes test)",
         )
 
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         test_type = options["test"]
         iterations = options["iterations"]
         cleanup = options["cleanup"]

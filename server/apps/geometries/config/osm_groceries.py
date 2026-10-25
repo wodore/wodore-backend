@@ -6,7 +6,7 @@ See: https://wiki.openstreetmap.org/wiki/Key:shop
 from .osm_base import CategoryMappings, OSMMapping
 
 
-def _vending_machine_condition(tags: dict) -> bool:
+def _vending_machine_condition(tags: dict[str, str]) -> bool:
     """Only accept food/drink vending machines."""
     vending = tags.get("vending", "")
     return vending in ["food", "drinks", "sweets", "coffee", "cigarettes", "snacks"]

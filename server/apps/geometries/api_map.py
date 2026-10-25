@@ -51,7 +51,7 @@ CACHE_SECONDS = 60 * 60
 BASEMAPS = ("opentopomap",)
 
 
-def _entity_symbol(entity, request: HttpRequest) -> str | None:
+def _entity_symbol(entity: Hut | GeoPlace, request: HttpRequest) -> str | None:
     """Detailed type-symbol URL for a hut (type) or geoplace (category)."""
     if isinstance(entity, Hut):
         if entity.hut_type_open is None:

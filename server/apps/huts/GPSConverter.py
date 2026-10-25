@@ -44,7 +44,7 @@ class GPSConverter:
     """
 
     # Convert CH y/x/h to WGS height
-    def CHtoWGSheight(self, y, x, h):
+    def CHtoWGSheight(self, y: float, x: float, h: float) -> float:
         # Axiliary values (% Bern)
         y_aux = (y - 600000) / 1000000
         x_aux = (x - 200000) / 1000000
@@ -52,7 +52,7 @@ class GPSConverter:
         return h
 
     # Convert CH y/x to WGS lat
-    def CHtoWGSlat(self, y, x):
+    def CHtoWGSlat(self, y: float, x: float) -> float:
         # Axiliary values (% Bern)
         y_aux = (y - 600000) / 1000000
         x_aux = (x - 200000) / 1000000
@@ -68,7 +68,7 @@ class GPSConverter:
         return lat
 
     # Convert CH y/x to WGS long
-    def CHtoWGSlng(self, y, x):
+    def CHtoWGSlng(self, y: float, x: float) -> float:
         # Axiliary values (% Bern)
         y_aux = (y - 600000) / 1000000
         x_aux = (x - 200000) / 1000000
@@ -83,14 +83,14 @@ class GPSConverter:
         return lng
 
     # Convert decimal angle (° dec) to sexagesimal angle (dd.mmss,ss)
-    def DecToSexAngle(self, dec):
+    def DecToSexAngle(self, dec: float) -> float:
         degree = int(math.floor(dec))
         minute = int(math.floor((dec - degree) * 60))
         second = (((dec - degree) * 60) - minute) * 60
         return degree + (float(minute) / 100) + (second / 10000)
 
     # Convert sexagesimal angle (dd.mmss,ss) to seconds
-    def SexAngleToSeconds(self, dms):
+    def SexAngleToSeconds(self, dms: float) -> float:
         degree = 0
         minute = 0
         second = 0
@@ -100,7 +100,7 @@ class GPSConverter:
         return second + (minute * 60) + (degree * 3600)
 
     # Convert sexagesimal angle (dd.mmss) to decimal angle (degrees)
-    def SexToDecAngle(self, dms):
+    def SexToDecAngle(self, dms: float) -> float:
         degree = 0
         minute = 0
         second = 0
@@ -110,7 +110,7 @@ class GPSConverter:
         return degree + (minute / 60) + (second / 3600)
 
     # Convert WGS lat/long (° dec) and height to CH h
-    def WGStoCHh(self, lat, lng, h):
+    def WGStoCHh(self, lat: float, lng: float, h: float) -> float:
         lat = self.DecToSexAngle(lat)
         lng = self.DecToSexAngle(lng)
         lat = self.SexAngleToSeconds(lat)
@@ -122,7 +122,7 @@ class GPSConverter:
         return h
 
     # Convert WGS lat/long (° dec) to CH x
-    def WGStoCHx(self, lat, lng):
+    def WGStoCHx(self, lat: float, lng: float) -> float:
         lat = self.DecToSexAngle(lat)
         lng = self.DecToSexAngle(lng)
         lat = self.SexAngleToSeconds(lat)
@@ -142,7 +142,7 @@ class GPSConverter:
         return x
 
     # Convert WGS lat/long (° dec) to CH y
-    def WGStoCHy(self, lat, lng):
+    def WGStoCHy(self, lat: float, lng: float) -> float:
         lat = self.DecToSexAngle(lat)
         lng = self.DecToSexAngle(lng)
         lat = self.SexAngleToSeconds(lat)
@@ -158,23 +158,25 @@ class GPSConverter:
         )
         return y
 
-    def LV03toWGS84(self, east, north, height):
+    def LV03toWGS84(self, east: float, north: float, height: float) -> list[float]:
         """
         Convert LV03 to WGS84 Return a array of double that contain lat, long,
         and height
         """
-        d = []
+        d: list[float] = []
         d.append(self.CHtoWGSlat(east, north))
         d.append(self.CHtoWGSlng(east, north))
         d.append(self.CHtoWGSheight(east, north, height))
         return d
 
-    def WGS84toLV03(self, latitude, longitude, ellHeight):
+    def WGS84toLV03(
+        self, latitude: float, longitude: float, ellHeight: float
+    ) -> list[float]:
         """
         Convert WGS84 to LV03 Return an array of double that contaign east,
         north, and height
         """
-        d = []
+        d: list[float] = []
         d.append(self.WGStoCHy(latitude, longitude))
         d.append(self.WGStoCHx(latitude, longitude))
         d.append(self.WGStoCHh(latitude, longitude, ellHeight))
@@ -356,7 +358,7 @@ if __name__ == "__main__":
 
     # Coordinates
     wgs84 = [46.95108, 7.438637, 0]
-    lv03 = []
+    lv03: list[float] = []
 
     # Convert WGS84 to LV03 coordinates
     lv03 = converter.WGS84toLV03(wgs84[0], wgs84[1], wgs84[2])

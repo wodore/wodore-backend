@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
 from django.utils.translation import gettext_lazy as _
@@ -23,7 +25,7 @@ class WebsitesValidator:
     def __init__(self):
         self.url_validator = URLValidator()
 
-    def __call__(self, value: list) -> None:
+    def __call__(self, value: list[dict[str, Any]]) -> None:
         """
         Validate the websites JSON structure.
 
@@ -101,7 +103,7 @@ class WebsitesValidator:
     def __eq__(self, other: object) -> bool:
         return isinstance(other, WebsitesValidator)
 
-    def deconstruct(self):
+    def deconstruct(self) -> tuple[str, tuple[Any, ...], dict[str, Any]]:
         """
         Return a 3-tuple of class import path, positional arguments,
         and keyword arguments that can be used to reconstruct this validator.

@@ -1,7 +1,7 @@
 # NOTE: description=_(...) is the project-wide lazy-gettext idiom (i18n-safe);
 # per-line pyright ignores below suppress the unfold-stub str-typing mismatch.
 import contextlib
-from typing import ClassVar
+from typing import Any, ClassVar, override
 
 with contextlib.suppress(ModuleNotFoundError):
     from django_stubs_ext import QuerySetAny
@@ -11,9 +11,12 @@ from django_admin_runner.admin import CommandRunnerModelAdminMixin
 
 from django.conf import settings
 from django.contrib import admin
+from django.contrib.admin.options import InlineModelAdmin
 from django.contrib.postgres.aggregates import JSONBAgg
+from django.db import models
 from django.db.models import F
 from django.db.models.functions import JSONObject, Lower
+from django.forms import Field
 from django.http import HttpRequest
 from django.shortcuts import redirect
 from django.urls import reverse, reverse_lazy
@@ -117,7 +120,10 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
     )
     list_per_page = 50
 
-    def get_inlines(self, request, obj):
+    @override
+    def get_inlines(
+        self, request: HttpRequest, obj: Hut | None
+    ) -> list[type[InlineModelAdmin[Any, Any]]]:
         """Dynamically add availability inline if app is installed"""
         inlines = [
             HutImageAssociationEditInline,
@@ -128,9 +134,12 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         ]
         if HutAvailabilityViewInline is not None:
             inlines.append(HutAvailabilityViewInline)  # type: ignore  # argument typing drift vs stubs
-        return inlines
+        return inlines  # type: ignore  # unfold inlines lack py.typed: class drift vs django-stubs
 
-    def formfield_for_dbfield(self, db_field, request, **kwargs):
+    @override
+    def formfield_for_dbfield(
+        self, db_field: models.Field[Any, Any], request: HttpRequest, **kwargs: Any
+    ) -> Field | None:
         """Customize FK querysets and the `open_monthly` widget.
 
         The plain Category/Organization querysets contain thousands of OSM
@@ -153,6 +162,7 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             )
         return super().formfield_for_dbfield(db_field, request, **kwargs)
 
+    @override
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         from server.apps.visits.models import visit_window_annotation
 
@@ -173,14 +183,14 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         )
 
     @display(description=_("Visits 30d"), ordering="visits_30d")
-    def visits_30d(self, obj):
+    def visits_30d(self, obj: Hut):
         """Visit sum over the last 30 days (openspec: place-visit-counter)."""
-        return obj.visits_30d
+        return obj.visits_30d  # type: ignore  # dynamic attr: plugin-less inference gap
 
     @display(description=_("Visits 1y"), ordering="visits_365d")
-    def visits_365d(self, obj):
+    def visits_365d(self, obj: Hut):
         """Visit sum over the last year (openspec: place-visit-counter)."""
-        return obj.visits_365d
+        return obj.visits_365d  # type: ignore  # dynamic attr: plugin-less inference gap
 
     @display(
         description=_("Status"),
@@ -192,11 +202,11 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             Hut.ReviewStatusChoices.rework: "danger",
         },
     )
-    def review_tag(self, obj):
+    def review_tag(self, obj: Hut):
         return obj.review_status
 
     @display(header=True, ordering=Lower("name"))
-    def title(self, obj):
+    def title(self, obj: Hut):
         # if obj.hut_owner:
         #    owner = textwrap.shorten(obj.hut_owner.name, width=30, placeholder="...")
         # else:
@@ -204,7 +214,7 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         return (obj.name_i18n, obj.slug)  # self.icon_thumb(obj.type.icon_simple.url))
 
     @display(header=True, description=_("Type"))
-    def hut_type(self, obj):
+    def hut_type(self, obj: Hut):
         opened = mark_safe(f'<span class = "text-xs">{obj.hut_type_open.slug}</span>')
         closed = mark_safe(
             f'<span class = "text-xs">{obj.hut_type_closed.slug if obj.hut_type_closed else "-"}</span>'
@@ -212,14 +222,14 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         return (opened, closed)
 
     @display(header=True, description=_("Location"))
-    def location_coords(self, obj):
+    def location_coords(self, obj: Hut):
         return (
             f"{obj.location.y:.3f}/{obj.location.x:.3f}",
             f"{obj.elevation}m" if obj.elevation else "-",
         )
 
     @display(description="")
-    def symbol_img(self, obj):  # new
+    def symbol_img(self, obj: Hut):  # new
         if obj.hut_type_open.symbol_color and obj.hut_type_open.symbol_color.svg_file:
             return mark_safe(
                 f'<img src="{obj.hut_type_open.symbol_color.svg_file.url}" width="50px"/>'
@@ -252,7 +262,7 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         )
 
     @display(description=_("Photos"))
-    def hut_images(self, obj):  # new
+    def hut_images(self, obj: Hut):  # new
         img_html = "<div>"
         # Bound the tab: huts with dozens of pins rendered dozens of imagor
         # transforms (each a cold origin fetch) and made the change page crawl.
@@ -331,7 +341,7 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         return mark_safe(img_html)
 
     @display(description=_("Photo"))
-    def hut_thumb(self, obj):  # new
+    def hut_thumb(self, obj: Hut):  # new
         if obj.photos:  # old style, show if available
             return (
                 ImagorImage(obj.photos)

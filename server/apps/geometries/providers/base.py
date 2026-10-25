@@ -3,11 +3,14 @@
 Base classes and utilities for image providers.
 """
 
+from __future__ import annotations
+
 import asyncio
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Coroutine
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, TypeVar, cast
 
 import structlog
 from asgiref.sync import async_to_sync, sync_to_async
@@ -34,7 +37,16 @@ CACHE_VERY_SHORT = 3600  # 1 hours
 CACHE_KEY_PREFIX = "geoimages"
 
 
-def run_async(async_fn, /, *args, release_db: bool = True, **kwargs):
+_T = TypeVar("_T")
+
+
+def run_async(
+    async_fn: Callable[..., Coroutine[Any, Any, _T]],
+    /,
+    *args: Any,
+    release_db: bool = True,
+    **kwargs: Any,
+) -> _T:
     """Run an async callable (e.g. ``fetch_images_from_providers``) from
     sync code under any server topology.
 
@@ -805,7 +817,7 @@ def _build_attribution(
     source_url: str | None = None,
     provider_icon: str | None = None,
     license_icons: dict[str, str] | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """
     Build comprehensive attribution information for an image.
 
@@ -1106,7 +1118,9 @@ async def fetch_images_for_place(
     return results, place_info  # type: ignore  # provider place_info union drift
 
 
-def _build_sizes(result, get_size_fn) -> dict:
+def _build_sizes(
+    result: ImageResult, get_size_fn: Callable[[int, int], str]
+) -> dict[str, dict[str, int]]:
     """Per-variant pixel dimensions for the image's own orientation."""
     if not result.width or not result.height:
         return {"raw": {"width": 0, "height": 0}}
@@ -1130,7 +1144,7 @@ def _build_sizes(result, get_size_fn) -> dict:
 def post_process_images(
     results: list[ImageResult],
     force_provider_refresh: bool = False,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """
     Post-process image results to generate final output format.
 
@@ -1232,7 +1246,7 @@ def post_process_images(
                 return f"{cw}x{ch}"
 
             def transform_for(
-                target_w: int, target_h: int, **kwargs
+                target_w: int, target_h: int, **kwargs: Any
             ) -> TransformedImage:
                 """Transform from the smallest suitable source URL."""
                 return get_source(target_w, target_h).transform(
@@ -1462,7 +1476,7 @@ class ProviderRegistry:
     Singleton pattern for global access.
     """
 
-    _instance = None
+    _instance: ProviderRegistry | None = None
     _providers: dict[str, ImageProvider] = {}
 
     def __new__(cls):
@@ -1779,7 +1793,7 @@ def _deduplicate_by_datetime(results: list[ImageResult]) -> list[ImageResult]:
 
     # Normalize all datetimes to timezone-aware UTC for comparison
     # This prevents errors when comparing naive and aware datetimes
-    def normalize_datetime(dt):
+    def normalize_datetime(dt: datetime) -> datetime:
         """Convert datetime to UTC timezone-aware if naive, or keep as-is if aware."""
         if dt.tzinfo is None:
             # Naive datetime - assume UTC
@@ -1789,7 +1803,9 @@ def _deduplicate_by_datetime(results: list[ImageResult]) -> list[ImageResult]:
             return dt.astimezone(timezone.utc)
 
     # Sort by captured_at for efficient comparison
-    with_captures.sort(key=lambda r: normalize_datetime(r.captured_at))
+    with_captures.sort(
+        key=lambda r: normalize_datetime(cast("datetime", r.captured_at))
+    )
 
     # Time window for considering images as duplicates (6 hours)
     TIME_WINDOW = timedelta(hours=6)
@@ -1810,9 +1826,9 @@ def _deduplicate_by_datetime(results: list[ImageResult]) -> list[ImageResult]:
                 continue
 
             # Stop if time difference exceeds window (use normalized datetimes)
-            time_diff = normalize_datetime(img2.captured_at) - normalize_datetime(
-                img1.captured_at
-            )
+            time_diff = normalize_datetime(
+                cast("datetime", img2.captured_at)
+            ) - normalize_datetime(cast("datetime", img1.captured_at))
             if time_diff > TIME_WINDOW:
                 break
 

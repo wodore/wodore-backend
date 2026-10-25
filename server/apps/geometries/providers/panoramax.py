@@ -212,7 +212,7 @@ class PanoramaxProvider(ImageProvider):
 
     def _parse_stac_item(
         self,
-        feature: dict,
+        feature: dict[str, Any],
         query_lat: float,
         query_lon: float,
     ) -> ImageResult | None:
@@ -243,7 +243,9 @@ class PanoramaxProvider(ImageProvider):
             # Calculate distance
             from math import asin, cos, radians, sin, sqrt
 
-            def haversine_distance(lat1, lon1, lat2, lon2):
+            def haversine_distance(
+                lat1: float, lon1: float, lat2: float, lon2: float
+            ) -> float:
                 """Calculate distance between two points in meters."""
                 R = 6371000  # Earth radius in meters
 
@@ -482,7 +484,10 @@ class PanoramaxProvider(ImageProvider):
         return None
 
     def _score_panoramax_image(
-        self, feature: dict, properties: dict, assets: dict
+        self,
+        feature: dict[str, Any],
+        properties: dict[str, Any],
+        assets: dict[str, Any],
     ) -> int:
         """
         Score Panoramax image (0-100).

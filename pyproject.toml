@@ -690,12 +690,63 @@ missing-override-decorator = true
 bad-override = true
 method-assign = true
 
+[[tool.pyrefly.sub-config]]
+# Strict-typing ratchet for the huts app — the largest app (hut models,
+# hut_manager, admin, API, schemas, tiles). New code must be fully
+# annotated; only this subtree is affected; strictness is ratcheted app by
+# app.
+matches = "server/apps/huts/**"
+
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = true
+implicit-any-type-argument = true
+implicit-any-lambda = true
+implicit-any-empty-container = true
+implicit-any-attribute = true
+missing-override-decorator = true
+bad-override = true
+method-assign = true
+
 
 [[tool.pyrefly.sub-config]]
 # Strict-typing ratchet for the images app (image models, admin, assessment,
 # views). New code must be fully annotated; only this subtree is affected;
 # strictness is ratcheted app by app.
 matches = "server/apps/images/**"
+
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = true
+implicit-any-type-argument = true
+implicit-any-lambda = true
+implicit-any-empty-container = true
+implicit-any-attribute = true
+missing-override-decorator = true
+bad-override = true
+method-assign = true
+
+
+[[tool.pyrefly.sub-config]]
+# Strict-typing ratchet for the geometries app (geoplaces, providers, tiles,
+# admin/API surface — the largest app). New code must be fully annotated; only
+# this subtree is affected; strictness is ratcheted app by app.
+matches = "server/apps/geometries/**"
+
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = true
+implicit-any-type-argument = true
+implicit-any-lambda = true
+implicit-any-empty-container = true
+implicit-any-attribute = true
+missing-override-decorator = true
+bad-override = true
+method-assign = true
+
+
+[[tool.pyrefly.sub-config]]
+# Strict-typing ratchet for the settings components (django-split-settings
+# composition). New code must be fully annotated; only this subtree is
+# affected; strictness is ratcheted subtree by subtree.
+matches = "server/settings/**"
 
 [tool.pyrefly.sub-config.errors]
 implicit-any-parameter = true
@@ -726,10 +777,10 @@ method-assign = true
 
 
 [[tool.pyrefly.sub-config]]
-# Strict-typing ratchet for root-level server modules (asgi/wsgi/urls entry
-# points). Only these files are affected; server/apps/** and
+# Strict-typing ratchet for root-level server modules (asgi/wsgi/urls
+# entry points). Only these files are affected; server/apps/** and
 # server/settings/** are ratcheted separately. NOTE: explicit per-file
-# entries because glob `*` in matches crosses `/` (fnmatch semantics).
+# entries because glob `*` in `matches` crosses `/` (fnmatch semantics).
 matches = "server/asgi.py"
 
 [tool.pyrefly.sub-config.errors]
@@ -741,6 +792,7 @@ implicit-any-attribute = true
 missing-override-decorator = true
 bad-override = true
 method-assign = true
+
 
 [[tool.pyrefly.sub-config]]
 # see server/asgi.py above
@@ -756,6 +808,7 @@ missing-override-decorator = true
 bad-override = true
 method-assign = true
 
+
 [[tool.pyrefly.sub-config]]
 # see server/asgi.py above
 matches = "server/wsgi.py"
@@ -770,6 +823,7 @@ missing-override-decorator = true
 bad-override = true
 method-assign = true
 
+
 [[tool.pyrefly.sub-config]]
 # see server/asgi.py above
 matches = "server/__init__.py"
@@ -783,6 +837,7 @@ implicit-any-attribute = true
 missing-override-decorator = true
 bad-override = true
 method-assign = true
+
 
 [build-system]
 requires = ["hatchling"]
