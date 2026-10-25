@@ -13,8 +13,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, override
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand, CommandError, CommandParser
 
 from server.apps.apiversions import registry
 from server.apps.apiversions.releases import is_released
@@ -26,7 +27,7 @@ def snapshot_path(version: str) -> Path:
     return SNAPSHOT_DIR / f"{version}.json"
 
 
-def load_snapshot(version: str) -> dict | None:
+def load_snapshot(version: str) -> dict[str, Any] | None:
     path = snapshot_path(version)
     if not path.exists():
         return None
@@ -36,7 +37,8 @@ def load_snapshot(version: str) -> dict | None:
 class Command(BaseCommand):
     help = "Write a frozen OpenAPI snapshot for the current API version."
 
-    def add_arguments(self, parser) -> None:
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--check",
             action="store_true",
@@ -55,7 +57,8 @@ class Command(BaseCommand):
             help="Write snapshots to this directory instead of the app dir.",
         )
 
-    def handle(self, *args, **options) -> None:
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         from server.apps.api.api_v1 import get_openapi_schema
 
         version = registry.current_version()

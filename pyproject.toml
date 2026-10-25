@@ -575,6 +575,23 @@ bad-override = true
 method-assign = true
 
 
+[[tool.pyrefly.sub-config]]
+# Strict-typing ratchet for the apiversions app (API contract versioning:
+# registry, middleware, transforms). New code must be fully annotated; only
+# this subtree is affected; strictness is ratcheted app by app.
+matches = "server/apps/apiversions/**"
+
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = true
+implicit-any-type-argument = true
+implicit-any-lambda = true
+implicit-any-empty-container = true
+implicit-any-attribute = true
+missing-override-decorator = true
+bad-override = true
+method-assign = true
+
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
