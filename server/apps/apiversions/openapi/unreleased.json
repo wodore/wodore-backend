@@ -2,7 +2,7 @@
   "components": {
     "schemas": {
       "AmenityDetailSchema": {
-        "description": "Schema for amenity detailed information.\n\nWebsites/links live at the place level (external links), overflow\ndata on ``GeoPlace.extra`` \u2014 neither belongs on this block.",
+        "description": "Schema for amenity detailed information.\n\nWebsites/links live at the place level (external links), overflow\ndata on ``GeoPlace.extra``, phone numbers as ``uri.phone`` links\n(external-link-uris) \u2014 none of them belong on this block.",
         "properties": {
           "opening_hours": {
             "additionalProperties": true,
@@ -21,13 +21,6 @@
           "operating_status": {
             "title": "Operating Status",
             "type": "string"
-          },
-          "phones": {
-            "items": {
-              "$ref": "#/components/schemas/PhoneSchema"
-            },
-            "title": "Phones",
-            "type": "array"
           }
         },
         "required": ["operating_status"],
@@ -1884,6 +1877,21 @@
           "importance": {
             "title": "Importance",
             "type": "integer"
+          },
+          "links": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/LinkSchema"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Links"
           },
           "location": {
             "$ref": "#/components/schemas/LocationSchema"
@@ -4675,6 +4683,49 @@
         "title": "LineString",
         "type": "object"
       },
+      "LinkSchema": {
+        "description": "One typed external link on a place (external-link-uris).",
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Label"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Symbol"
+          },
+          "uri": {
+            "title": "Uri",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": ["uri", "url"],
+        "title": "LinkSchema",
+        "type": "object"
+      },
       "LocationSchema": {
         "description": "Location with longitude, latitude and optional elevation in WSG84.\n\nAttributes:\n    lon: Longitude (x).\n    lat: Latitude (y).\n    ele: Elevation in meter.",
         "properties": {
@@ -5346,30 +5397,6 @@
         },
         "required": ["role", "slug"],
         "title": "PartySchema",
-        "type": "object"
-      },
-      "PhoneSchema": {
-        "description": "Schema for phone number with optional label.",
-        "properties": {
-          "label": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Label"
-          },
-          "number": {
-            "title": "Number",
-            "type": "string"
-          }
-        },
-        "required": ["number"],
-        "title": "PhoneSchema",
         "type": "object"
       },
       "PlaceMetaSchema": {
@@ -7672,7 +7699,7 @@
             }
           },
           {
-            "description": "Sparse fieldsets (JSON:API): `fields[TYPE]=name1,name2` narrows the response to the selected fields (`__all__` = every field). Valid TYPEs: places, categories, sources, parties.",
+            "description": "Sparse fieldsets (JSON:API): `fields[TYPE]=name1,name2` narrows the response to the selected fields (`__all__` = every field). Valid TYPEs: places, categories, sources, parties, links.",
             "explode": true,
             "in": "query",
             "name": "fields",
@@ -7689,7 +7716,7 @@
                 }
               ],
               "default": null,
-              "description": "Sparse fieldsets (JSON:API): `fields[TYPE]=name1,name2` narrows the response to the selected fields (`__all__` = every field). Valid TYPEs: places, categories, sources, parties.",
+              "description": "Sparse fieldsets (JSON:API): `fields[TYPE]=name1,name2` narrows the response to the selected fields (`__all__` = every field). Valid TYPEs: places, categories, sources, parties, links.",
               "title": "Fields"
             },
             "style": "deepObject"

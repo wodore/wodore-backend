@@ -148,13 +148,67 @@ def build_amenity_detail(place: GeoPlace) -> dict[str, Any] | None:
     if detail is None:
         return None
     # Websites/links live at the place level (external links), overflow
-    # data on GeoPlace.extra — neither is part of this block.
+    # data on GeoPlace.extra, phone numbers as uri.phone links
+    # (external-link-uris) — none are part of this block.
     return {
         "operating_status": detail.operating_status,
         "opening_months": detail.opening_months or {},
         "opening_hours": detail.opening_hours or {},
-        "phones": detail.phones or [],
     }
+
+
+def prefetch_links(queryset: QuerySet[GeoPlace]) -> QuerySet[GeoPlace]:
+    """Prefetch public, review-done external links with kind + symbols."""
+    from django.db.models import Prefetch
+
+    from .models import GeoPlaceExternalLink
+
+    return queryset.prefetch_related(
+        Prefetch(
+            "link_associations",
+            queryset=GeoPlaceExternalLink.objects.filter(
+                external_link__is_active=True,
+                external_link__is_public=True,
+                external_link__review_status="done",
+            )
+            .select_related(
+                "external_link__uri_kind",
+                "external_link__uri_kind__symbol_color",
+                "external_link__uri_kind__symbol_mono",
+            )
+            .order_by("order"),
+        )
+    )
+
+
+def build_links_data(place: GeoPlace, request: HttpRequest) -> list[dict[str, Any]]:
+    """Serialize the place's links as ``[{uri, url, label, symbol}]``.
+
+    Mirrors ``build_parties_data``: ``uri`` is the URI-kind identifier
+    (e.g. ``uri.phone``), ``symbol`` the kind's resolved color/mono
+    URLs (external-link-uris).
+    """
+    from server.apps.symbols.utils import resolve_symbol_urls
+
+    out: list[dict[str, Any]] = []
+    # link_associations is the reverse through-model accessor
+    # (GeoPlaceExternalLink.geo_place related_name) — plugin-less
+    # inference gap, same class as amenity_detail/party_associations.
+    for association in place.link_associations.all():  # type: ignore  # reverse through-model accessor
+        link = association.external_link
+        kind = link.uri_kind
+        if kind is None:
+            continue  # not expected after the backfill; defensive
+        item: dict[str, Any] = {
+            "uri": kind.identifier or "uri.website",
+            "url": link.url_i18n,
+            "label": link.label_i18n or None,
+        }
+        symbol = resolve_symbol_urls(kind, {"request": request})
+        if symbol:
+            item["symbol"] = symbol
+        out.append(item)
+    return out
 
 
 def prefetch_parties(queryset: QuerySet[GeoPlace]) -> QuerySet[GeoPlace]:

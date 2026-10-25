@@ -30,6 +30,7 @@ class ExternalLinkAdmin(ModelAdmin):
         "identifier_code",
         "label_and_url",
         "link_type",
+        "uri_kind",
         "source_logo",
         "health_status_display",
         "review_tag",
@@ -41,6 +42,7 @@ class ExternalLinkAdmin(ModelAdmin):
         "is_public",
         "is_active",
         "link_type",
+        "uri_kind",
         "source",
         "last_checked",
     ]
