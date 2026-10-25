@@ -1,11 +1,13 @@
 import sys
 import typing as t
+from typing import Any, override
 
 import click
 from django_admin_runner import register_command
 
 from django.conf import settings
 from django.core.management import call_command
+from django.core.management.base import CommandParser
 from django.db import IntegrityError
 
 from server.apps.organizations.models import Organization
@@ -89,8 +91,14 @@ def init_huts_db(
 
 
 def add_huts_function(
-    obj: "Command", offset, limit, update, force, selected_organization, **kwargs
-):
+    obj: "Command",
+    offset: int = 0,
+    limit: int = 0,
+    update: bool = False,
+    force: bool = False,
+    selected_organization: str | None = None,
+    **kwargs: Any,
+) -> None:
     force_overwrite = kwargs.get("force_overwrite", False)
     force_overwrite_include = kwargs.get("force_overwrite_include", [])
     force_overwrite_exclude = kwargs.get("force_overwrite_exclude", [])
@@ -154,19 +162,20 @@ def add_huts_function(
 
 
 @register_command(group="Huts")
-class Command(CRUDCommand):
+class Command(CRUDCommand[Hut]):
     # help = ""
-    model = Hut
+    model = Hut  # type: ignore  # argument typing drift vs stubs
     model_names = "huts"
     add_function = add_huts_function  # type: ignore  # CRUDCommand handler typing drift
     use_limit_arg = True
     use_offset_arg = True
     use_update_arg = True
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
 
-    def add_arguments(self, parser):
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         super().add_arguments(parser)
         parser.add_argument(
             "-r",
@@ -214,7 +223,8 @@ class Command(CRUDCommand):
             help="adds everything (huts, owners, contacts), limits and offset are not used!",
         )
 
-    def handle(
+    @override
+    def handle(  # type: ignore  # required named params before *args: signature drift vs CRUDCommand.handle (Django call_command kwargs)
         self,
         no_review: bool,
         source: str,
@@ -224,9 +234,9 @@ class Command(CRUDCommand):
         set_none: bool,
         delete_all: bool,
         add_all: bool,
-        *args,
-        **options,
-    ):
+        *args: Any,
+        **options: Any,
+    ) -> None:
         force_overwrite_include = [f.strip() for f in include.split(",") if include]
         force_overwrite_exclude = [f.strip() for f in exclude.split(",") if exclude]
         if force_overwrite_exclude or force_overwrite_include:

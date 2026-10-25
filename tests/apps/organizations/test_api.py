@@ -4,11 +4,13 @@ import pytest
 
 from tests.factories import OrganizationFactory
 
+from django.test import Client
+
 pytestmark = pytest.mark.django_db
 
 
 class TestOrganizationsApi:
-    def test_organizations_list(self, seed_data, client):
+    def test_organizations_list(self, seed_data: dict[str, int], client: Client):
         response = client.get("/v1/organizations/")
         assert response.status_code == 200
         data = response.json()
@@ -16,7 +18,7 @@ class TestOrganizationsApi:
         for org in data:
             assert org["slug"]
 
-    def test_organization_detail(self, seed_data, client):
+    def test_organization_detail(self, seed_data: dict[str, int], client: Client):
         # Pick a listed organization instead of factory-making one:
         # fixture-loaded rows leave pk sequences behind and factory
         # inserts collide with existing ids. Being listed also proves
@@ -28,7 +30,9 @@ class TestOrganizationsApi:
         assert response.status_code == 200
         assert response.json()["slug"] == slug
 
-    def test_organization_factory_after_seeded_fixtures(self, seed_data):
+    def test_organization_factory_after_seeded_fixtures(
+        self, seed_data: dict[str, int]
+    ):
         # Regression: fixture-loaded organizations carry explicit pks and
         # left the pk sequence behind, so factory inserts collided with
         # existing ids (duplicate key violations). conftest resets the

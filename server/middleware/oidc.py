@@ -5,12 +5,19 @@ ready by then) - never from settings components.
 """
 
 import time
+import typing as t
+from typing import Any, override
 from urllib.parse import urlencode
 
 from mozilla_django_oidc.middleware import SessionRefresh
 
 from django.contrib.auth.mixins import AccessMixin
-from django.http import HttpResponseRedirect, JsonResponse
+from django.http import (
+    HttpRequest,
+    HttpResponse,
+    HttpResponseRedirect,
+    JsonResponse,
+)
 from django.urls import reverse
 
 
@@ -64,13 +71,14 @@ class AsyncSafeSessionRefresh(SessionRefresh):
 
     async_capable = False
 
-    def process_request(self, request):
+    @override
+    def process_request(self, request: HttpRequest) -> None:
         # Neutralized: upstream decides by PATH here, before routing. We
         # decide by VIEW in process_view instead (see class docstring).
         return None
 
     @staticmethod
-    def _view_uses_login_session(view_func) -> bool:
+    def _view_uses_login_session(view_func: t.Callable[..., Any]) -> bool:
         """Whether the resolved view renders for an authenticated
         Django session (the only surface an id_token renewal serves)."""
         # AdminSite.admin_view() tags every admin view:
@@ -80,7 +88,13 @@ class AsyncSafeSessionRefresh(SessionRefresh):
         view_class = getattr(view_func, "view_class", None)
         return isinstance(view_class, type) and issubclass(view_class, AccessMixin)
 
-    def process_view(self, request, view_func, view_args, view_kwargs):
+    def process_view(
+        self,
+        request: HttpRequest,
+        view_func: t.Callable[..., Any],
+        view_args: list[Any],
+        view_kwargs: dict[str, Any],
+    ) -> HttpResponse | None:
         if request.method != "GET" or not self._view_uses_login_session(view_func):
             return None
         # Authenticated OIDC session + not an explicitly exempt path

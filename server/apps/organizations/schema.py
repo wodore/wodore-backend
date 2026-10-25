@@ -70,8 +70,8 @@ class OrganizationOptional(pydantic.BaseModel):
     is_public: bool | None = None
     color_light: str | None = None
     color_dark: str | None = None
-    config: dict | None = None
-    props_schema: dict | None = None
+    config: dict[str, Any] | None = None
+    props_schema: dict[str, Any] | None = None
     order: int | None = None
 
     class Meta:

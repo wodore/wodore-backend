@@ -1,4 +1,5 @@
 import contextlib
+from typing import override
 
 from django.conf import settings
 from django.db.models.functions import Lower
@@ -13,6 +14,7 @@ from django.db import models
 
 from unfold.decorators import display
 
+from server.apps.categories.models import Category
 from server.apps.manager.admin import ModelAdmin
 from server.apps.translations.forms import required_i18n_fields_form_factory
 
@@ -53,6 +55,7 @@ class HutTypesAdmin(ModelAdmin):
         ),
     )
 
+    @override
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request)
         return qs.annotate(
@@ -61,7 +64,7 @@ class HutTypesAdmin(ModelAdmin):
         )
 
     def _get_url_str(
-        self, obj: "QuerySetAny", closed: bool = False, klass: str = "font-semibold"
+        self, obj: Category, closed: bool = False, klass: str = "font-semibold"
     ) -> str:
         number = obj.number_huts_closed if closed else obj.number_huts_open  # type: ignore  # custom manager/queryset inference gap
         type_id = obj.id  # type: ignore  # custom manager/queryset inference gap
@@ -74,7 +77,7 @@ class HutTypesAdmin(ModelAdmin):
         return f'<a class="{klass}" title="{help_text}" href={url}>{number}</a>'
 
     @display(description=_("Huts"), ordering="number_huts")
-    def show_numbers_huts(self, obj: "QuerySetAny") -> str:
+    def show_numbers_huts(self, obj: Category) -> str:
         open_url = self._get_url_str(obj, closed=False)
         # return mark_safe(f"{open_url}")
         closed_url = self._get_url_str(obj, closed=True, klass="")
@@ -83,27 +86,27 @@ class HutTypesAdmin(ModelAdmin):
     @display(
         header=True, description=_("Name and Description"), ordering=Lower("name_i18n")
     )
-    def title(self, obj):
+    def title(self, obj: Category):
         avatar = ""
         if obj.symbol_primitive and obj.symbol_primitive.svg_file:
             avatar = self.avatar(obj.symbol_primitive.svg_file.url)
         return (obj.name_i18n, obj.description_i18n, avatar)
 
     @display(description=_("Symbol"))
-    def symbol_img(self, obj):  # new
+    def symbol_img(self, obj: Category):  # new
         if obj.symbol_color and obj.symbol_color.svg_file:
             return mark_safe(f'<img src="{obj.symbol_color.svg_file.url}" width="34"/>')
         return "-"
 
     @display(description=_("Icon"))
-    def icon_img(self, obj):  # new
+    def icon_img(self, obj: Category):  # new
         if obj.symbol_mono and obj.symbol_mono.svg_file:
             return mark_safe(f'<img src="{obj.symbol_mono.svg_file.url}" width="16"/>')
         return "-"
 
-    def avatar(self, url):  # new
+    def avatar(self, url: str) -> str:  # new
         return mark_safe(f'<img src = "{url}" width = "20"/>')
 
     @display(description=_("Order"), ordering="order")
-    def comfort(self, obj):  # new
+    def comfort(self, obj: Category):  # new
         return mark_safe(f"<small>{obj.order}</small>")

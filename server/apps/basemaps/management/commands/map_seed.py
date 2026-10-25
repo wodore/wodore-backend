@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 
 from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.core.management.base import BaseCommand
@@ -303,9 +303,12 @@ def _fixture_style(name: str) -> dict[str, Any]:
     return json.loads((FIXTURES / f"{name}.json").read_text())
 
 
-def _links_legend(title: str, description: str, links: list[dict[str, str]]):
+def _links_legend(
+    title: str, description: str, links: list[dict[str, str]]
+) -> dict[str, Any]:
+    items: list[dict[str, Any]] = []
     return {
-        "sections": [{"title": title, "description": description, "items": []}],
+        "sections": [{"title": title, "description": description, "items": items}],
         "links": links,
     }
 
@@ -564,6 +567,25 @@ LAYERS: list[dict[str, Any]] = [
         "attributions": ["maptoolkit"],
     },
     {
+        # A/B pair of the product basemap: identical style except the
+        # hillshading — martin server-baked raster (AWS normals) instead
+        # of the client GPU hillshade. Hidden from the picker (show=False)
+        # but active: mapcompare + fallback chains resolve it. Re-added
+        # for the hillshade A/B decision (PR #375 lane).
+        "slug": "wd-outdoor-base-mtk",
+        "role": MapLayer.Role.basemap,
+        "name": "Wodore Outdoor (server relief)",
+        "description": (
+            "Outdoor basemap with the martin server-baked hillshade "
+            "(lighter on the client, coarser source DEM)."
+        ),
+        "spec": MapLayer.Spec.high,
+        "order": 1,
+        "show": False,  # A/B variant — not a picker product
+        "style": _fixture_style("wd-outdoor-base-mtk"),
+        "attributions": ["maptoolkit"],
+    },
+    {
         "slug": "wd-outdoor-base-ofm-hill",
         "role": MapLayer.Role.basemap,
         "name": "Wodore Outdoor (OpenFreeMap, client relief)",
@@ -716,6 +738,7 @@ class Command(BaseCommand):
 
     help = "Seed map slots, parameters, layers and links (frontend parity)."
 
+    @override
     def handle(self, *args: Any, **options: Any) -> None:
         created = updated = 0
 

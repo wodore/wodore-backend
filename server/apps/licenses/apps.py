@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, override
 
 from django.apps import AppConfig
 from django.core.management import call_command
@@ -17,5 +17,6 @@ class HutsConfig(AppConfig):
     name = "server.apps.licenses"
     verbose_name = _("Licenses")
 
+    @override
     def ready(self) -> None:
         post_migrate.connect(_create_licenses, sender=self)

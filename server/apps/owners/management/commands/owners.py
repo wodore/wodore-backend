@@ -1,4 +1,5 @@
 import random
+from typing import Any
 
 from django.db import IntegrityError
 from django.utils.text import slugify
@@ -8,7 +9,7 @@ from server.core.management import CRUDCommand
 from ...models import Owner  # , Contact
 
 
-def add_owner_function(parser, limit, **kwargs):
+def add_owner_function(parser: "CRUDCommand[Owner]", limit: int, **kwargs: Any) -> None:
     from faker import Faker
 
     fake = Faker(["de", "fr", "it"])
@@ -36,9 +37,9 @@ def add_owner_function(parser, limit, **kwargs):
     parser.stdout.write(parser.style.SUCCESS(f"Successfully added {added} new owners"))
 
 
-class Command(CRUDCommand):
+class Command(CRUDCommand[Owner]):
     help = "Add random owners."
     use_limit_arg = True
-    model = Owner
+    model = Owner  # type: ignore  # argument typing drift vs stubs
     model_names = "owners"
     add_function = add_owner_function  # type: ignore  # CRUDCommand hook typing drift

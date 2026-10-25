@@ -6,7 +6,12 @@ the version middleware all produce the enriched shape), and the
 pinned-version behavior (additive only — nothing stripped).
 """
 
+from typing import Any
+
 import pytest
+from pytest_django.fixtures import SettingsWrapper
+
+from django.test import Client
 
 from server.apps.api.error_codes import (
     INSTANCE_SCOPED_CODES,
@@ -24,7 +29,9 @@ pytestmark = pytest.mark.django_db
 ALWAYS_MEMBERS = ("type", "title", "status")
 
 
-def assert_problem_members(body, *, status, code, instance=None):
+def assert_problem_members(
+    body: dict[str, Any], *, status: int, code: str, instance: str | None = None
+):
     """Assert the full api-errors contract on an error body."""
     assert body["code"] == code  # preserved verbatim
     assert body["detail"]  # preserved verbatim
@@ -125,7 +132,9 @@ class TestProblemRegistry:
 class TestEndpointsShareEnrichment:
     """api-errors spec: shared machinery inheritance (dmr + GeoJSON)."""
 
-    def test_hut_detail_404_carries_instance(self, seed_data, client):
+    def test_hut_detail_404_carries_instance(
+        self, seed_data: dict[str, int], client: Client
+    ):
         """Spec scenario: enriched not-found carries instance."""
         response = client.get("/v1/huts/does-not-exist")
         assert response.status_code == 404
@@ -136,19 +145,25 @@ class TestEndpointsShareEnrichment:
             instance="/v1/huts/does-not-exist",
         )
 
-    def test_validation_error_400_omits_instance(self, seed_data, client):
+    def test_validation_error_400_omits_instance(
+        self, seed_data: dict[str, int], client: Client
+    ):
         """Spec scenario: validation error shape."""
         response = client.get("/v1/organizations/", {"include": "slug"})
         assert response.status_code == 400
         assert_problem_members(response.json(), status=400, code="validation_error")
 
-    def test_geojson_controller_validation_is_enriched(self, seed_data, client):
+    def test_geojson_controller_validation_is_enriched(
+        self, seed_data: dict[str, int], client: Client
+    ):
         """Spec scenario: GeoJSON endpoint inheritance (direct-write)."""
         response = client.get("/v1/huts/huts.geojson", {"bbox": "1,2,3"})
         assert response.status_code == 400
         assert_problem_members(response.json(), status=400, code="validation_error")
 
-    def test_availability_404_is_enriched(self, seed_data, client):
+    def test_availability_404_is_enriched(
+        self, seed_data: dict[str, int], client: Client
+    ):
         """raise_not_found from a plain availability handler."""
         response = client.get("/v1/huts/nope/availability/2026-01-01")
         assert response.status_code == 404
@@ -159,7 +174,9 @@ class TestEndpointsShareEnrichment:
             instance="/v1/huts/nope/availability/2026-01-01",
         )
 
-    def test_method_not_allowed_405_is_enriched(self, seed_data, client):
+    def test_method_not_allowed_405_is_enriched(
+        self, seed_data: dict[str, int], client: Client
+    ):
         """Review finding #2: 405s must share the contract too.
 
         dmr's base ``handle_method_not_allowed`` bypasses ``to_error``;
@@ -170,7 +187,9 @@ class TestEndpointsShareEnrichment:
         assert response.headers["Allow"] == "GET"
         assert_problem_members(response.json(), status=405, code="validation_error")
 
-    def test_openapi_error_schema_documents_problem_members(self, seed_data, client):
+    def test_openapi_error_schema_documents_problem_members(
+        self, seed_data: dict[str, int], client: Client
+    ):
         """api-errors spec: OpenAPI error model documents the members."""
         schema = client.get("/v1/openapi.json").json()
         error_detail = schema["components"]["schemas"]["ErrorDetail"]
@@ -188,7 +207,9 @@ class TestEndpointsShareEnrichment:
 class TestPinnedVersionClients:
     """api-errors spec: enrichment applies to all versions, nothing stripped."""
 
-    def test_pinned_client_receives_additive_fields(self, seed_data, client):
+    def test_pinned_client_receives_additive_fields(
+        self, seed_data: dict[str, int], client: Client
+    ):
         pinned = "2026-10-02"
         response = client.get(
             "/v1/organizations/",
@@ -198,7 +219,9 @@ class TestPinnedVersionClients:
         assert response.status_code == 400
         assert_problem_members(response.json(), status=400, code="validation_error")
 
-    def test_pinned_client_404_enriched(self, seed_data, client):
+    def test_pinned_client_404_enriched(
+        self, seed_data: dict[str, int], client: Client
+    ):
         response = client.get(
             "/v1/huts/does-not-exist", headers={"Api-Version": "2026-10-02"}
         )
@@ -211,7 +234,9 @@ class TestPinnedVersionClients:
             instance="/v1/huts/does-not-exist",
         )
 
-    def test_endpoint_sunset_410_gone_is_enriched(self, seed_data, client, monkeypatch):
+    def test_endpoint_sunset_410_gone_is_enriched(
+        self, seed_data: dict[str, int], client: Client, monkeypatch: pytest.MonkeyPatch
+    ):
         """Review finding #4: ``gone`` is instance-scoped — a 410 from
         the endpoint-sunset guard carries ``instance``."""
         from datetime import date as date_cls
@@ -236,7 +261,7 @@ class TestPinnedVersionClients:
             instance="/v1/huts/bookings",
         )
 
-    def test_auth_401_is_enriched(self, settings):
+    def test_auth_401_is_enriched(self, settings: SettingsWrapper):
         """Review finding #5: the auth handler's 401 body is enriched."""
         import json as _json
 
@@ -274,7 +299,9 @@ class TestPinnedVersionClients:
 class TestVersionMiddlewareErrors:
     """api-errors spec: middleware version errors share the contract."""
 
-    def test_header_query_conflict_is_enriched(self, seed_data, client):
+    def test_header_query_conflict_is_enriched(
+        self, seed_data: dict[str, int], client: Client
+    ):
         response = client.get(
             "/v1/huts/huts",
             {"api_version": "2098-01-01"},
@@ -283,12 +310,16 @@ class TestVersionMiddlewareErrors:
         assert response.status_code == 400
         assert_problem_members(response.json(), status=400, code="validation_error")
 
-    def test_unknown_version_is_enriched(self, seed_data, client):
+    def test_unknown_version_is_enriched(
+        self, seed_data: dict[str, int], client: Client
+    ):
         response = client.get("/v1/huts/huts", headers={"Api-Version": "not-a-date"})
         assert response.status_code == 400
         assert_problem_members(response.json(), status=400, code="validation_error")
 
-    def test_sunset_version_is_enriched(self, seed_data, client):
+    def test_sunset_version_is_enriched(
+        self, seed_data: dict[str, int], client: Client
+    ):
         from datetime import date
 
         from server.apps.apiversions import registry

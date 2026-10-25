@@ -17,11 +17,17 @@ from django.db.models.functions import Cast
 from django.utils import timezone
 
 from server.apps.huts.models import Hut, HutTypeHelper
+from server.apps.huts.schemas_booking import HutBookingsSchema
 from server.apps.organizations.models import Organization
 
 from .models import AvailabilityStatus, HutAvailability, HutAvailabilityHistory
+from .place_dualwrite import mirror_batch, mirror_mark_failure, mirror_status
+from .place_link import hut_slug_to_place_ids
 
-SERVICES: dict = settings.SERVICES
+# Values are hut-services ``BaseService`` instances (plus private-service
+# subclasses merged in settings); typed as ``Any`` because the installed
+# library stubs lag the runtime signature (progress_callback/cached).
+SERVICES: dict[str, Any] = settings.SERVICES
 
 #: Per-statement timeout (ms) for availability batch writes. The global
 #: ``statement_timeout`` (15 s) protects API traffic but is too tight for
@@ -37,7 +43,7 @@ BATCH_STATEMENT_TIMEOUT_MS = 120_000
 BULK_WRITE_BATCH_SIZE = 500
 
 
-def _sanitize_negative_free(bookings: dict) -> None:  # type: ignore[type-arg]
+def _sanitize_negative_free(bookings: dict[int, Any]) -> None:
     """Clamp negative ``places.free`` sentinels to ``None`` (in place).
 
     Some sources report unknown free counts as negative numbers — DOC's
@@ -94,7 +100,7 @@ class AvailabilityService:
         days: int = 365,
         request_interval: float = 0.1,
         progress_callback: Callable[[], None] | None = None,
-    ) -> list:
+    ) -> list[HutBookingsSchema]:
         """
         Fetch booking data from external services (original Hut.get_bookings logic).
 
@@ -118,10 +124,8 @@ class AvailabilityService:
             TotalFallback,
         )
 
-        from server.apps.huts.schemas_booking import HutBookingsSchema
-
         bookings: dict[int, HutServiceBookingSchema] = {}
-        huts = []
+        huts: list[dict[str, Any]] = []
 
         # Build base queryset with prefetch to avoid N+1 queries
         obj = Hut.objects.prefetch_related(
@@ -215,7 +219,9 @@ class AvailabilityService:
             # source_id from DB is a string (CharField), but external service may use int keys
             # Try both string and int lookup for compatibility
             source_id_str = h.get("source_id")
-            booking = bookings.get(source_id_str)  # Try string key first
+            booking = (
+                bookings.get(source_id_str) if source_id_str is not None else None
+            )  # Try string key first
             if booking is None and source_id_str:
                 # Try converting to int if string lookup failed
                 try:
@@ -314,6 +320,9 @@ class AvailabilityService:
         successful_huts = []
         failed_huts = []
         now = timezone.now()
+        # One association read per run, shared by every batch's place
+        # mirror (Phase C review N1)
+        place_mapping = hut_slug_to_place_ids()
 
         # Process huts in batches: fetch batch → process batch → repeat
         for i in range(0, len(huts), batch_size):
@@ -330,12 +339,15 @@ class AvailabilityService:
                     progress_callback=fetch_progress_callback,
                 )
             except Exception as fetch_error:
-                # If fetch fails for this batch, mark all batch huts as failed
+                # If fetch fails for this batch, mark all batch huts as failed.
+                # One shared timestamp for hut AND place side (Phase C
+                # review F1: keeps the place-driven cadence in step).
+                failure_time = timezone.now()
                 for hut in batch_huts:
                     status, _ = AvailabilityStatus.objects.get_or_create(
-                        hut=hut, defaults={"last_checked": now}
+                        hut=hut, defaults={"last_checked": failure_time}
                     )
-                    status.mark_failure()
+                    status.mark_failure(now=failure_time)
                     failed_huts.append(hut)
                     results.append(
                         UpdateResult(
@@ -347,6 +359,8 @@ class AvailabilityService:
                     )
                     if process_progress_callback is not None:
                         process_progress_callback()
+                # Dual-write: mirror the fetch failures (Phase C)
+                mirror_mark_failure(batch_huts, failure_time)
                 # Continue with next batch
                 continue
 
@@ -380,6 +394,7 @@ class AvailabilityService:
                         batch=batch_huts_with_data,
                         now=now,
                         update_history_last_checked=update_history_last_checked,
+                        place_mapping=place_mapping,
                     )
 
                     for result in batch_results:
@@ -483,6 +498,10 @@ class AvailabilityService:
                     ],
                 )
 
+            # Dual-write: mirror fetch health onto the place status
+            # (Phase C)
+            mirror_status(successful_huts, failed_huts, now)
+
         successful = sum(1 for r in results if r.success)
         failed = sum(1 for r in results if not r.success)
 
@@ -498,6 +517,7 @@ class AvailabilityService:
         batch: list[tuple[Hut, Any]],
         now: datetime.datetime | None = None,
         update_history_last_checked: bool = False,
+        place_mapping: dict[str, int] | None = None,
     ) -> list[UpdateResult]:
         """
         Process multiple huts in a single transaction for better performance.
@@ -574,7 +594,7 @@ class AvailabilityService:
             all_unchanged_availability_ids = []
             # (hut_id, date) of rows already queued for creation — see the
             # create branch below.
-            queued_new: dict[tuple, HutAvailability] = {}
+            queued_new: dict[tuple[int, datetime.date], HutAvailability] = {}
 
             # Process each hut in the batch
             for hut, hut_booking in batch:
@@ -746,6 +766,7 @@ class AvailabilityService:
                     fields=[
                         "free",
                         "total",
+                        "free_tolerance",
                         "occupancy_percent",
                         "occupancy_steps",
                         "occupancy_status",
@@ -818,11 +839,21 @@ class AvailabilityService:
                         ],
                     )
 
+            # Dual-write: mirror the batch onto the place tables (Phase C
+            # of the geoplace-availability change, design D7) — same
+            # transaction, same ``now``; unmatched huts are logged inside.
+            mirror_batch(
+                batch=batch,
+                now=now,
+                update_history_last_checked=update_history_last_checked,
+                mapping=place_mapping,
+            )
+
         return results
 
     @staticmethod
     def _process_hut_bookings(
-        hut: Hut, hut_booking, now: datetime.datetime | None = None
+        hut: Hut, hut_booking: HutBookingsSchema, now: datetime.datetime | None = None
     ) -> UpdateResult:
         """
         Process booking data for a single hut and store in database.

@@ -208,4 +208,4 @@ class HutsForTilesView(PostgresViewModel):
             """
 
             # Return tuple of (SQL, params) - no params needed for this query
-            return (sql.strip(), [])
+            return (sql.strip(), [])  # type: ignore  # empty params tuple for SQL placeholder list

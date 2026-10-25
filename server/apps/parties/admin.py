@@ -1,4 +1,5 @@
 import contextlib
+from typing import override
 
 from django.conf import settings
 from django.contrib import admin
@@ -75,16 +76,17 @@ class PartyAdmin(ModelAdmin):
         ),
     )
 
+    @override
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request)
         return qs.annotate(number_links=models.Count("link_associations"))
 
     @display(description=_("Links"), ordering="number_links")
-    def show_numbers_links(self, obj):
-        return obj.number_links
+    def show_numbers_links(self, obj: Party):
+        return getattr(obj, "number_links", 0)
 
     @display(header=True, description=_("Name"), ordering=Lower("name_i18n"))
-    def name_slug(self, obj):
+    def name_slug(self, obj: Party):
         return obj.name_i18n, obj.slug
 
 

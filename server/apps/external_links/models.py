@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any, override
+
 from modeltrans.fields import TranslationField
 
 from django.conf import settings
@@ -191,7 +193,13 @@ class ExternalLink(TimeStampedModel):
             ),
         ]
 
-    def save(self, *args, skip_health_check=False, **kwargs):
+    @override
+    def save(
+        self,
+        *args: Any,
+        skip_health_check: bool = False,
+        **kwargs: Any,
+    ) -> None:
         """
         Auto-generate identifier if not provided and run health check.
 
@@ -430,7 +438,7 @@ class ExternalLink(TimeStampedModel):
 
         return None
 
-    def check_health(self) -> dict:
+    def check_health(self) -> dict[str, Any]:
         """
         Check the health of all translated URLs by making HEAD requests.
 
@@ -642,7 +650,7 @@ class ExternalLink(TimeStampedModel):
         """Check if an identifier already exists in the database."""
         return cls.objects.filter(identifier=identifier).exists()
 
-    def render_url(self, lang: str | None = None, **kwargs) -> str:
+    def render_url(self, lang: str | None = None, **kwargs: str) -> str:
         """
         Render template URL with provided variables.
 

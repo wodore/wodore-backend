@@ -1,7 +1,7 @@
 """Category endpoints on dmr (tree/list/map + symbol SVG redirects)."""
 
 from http import HTTPStatus
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pydantic
 from dmr import APIError, Path, Query, RedirectTo, ResponseSpec, modify
@@ -22,6 +22,9 @@ from server.apps.api.controller import (
 from server.apps.api.error_codes import ErrorCode
 from server.apps.translations import LanguageQuery, activate, override
 
+if TYPE_CHECKING:
+    from server.apps.symbols.models import Symbol
+
 from .models import Category
 from .schemas import (
     CategoryListItemSchema,
@@ -35,7 +38,7 @@ CACHE_MAX_AGE = 7 * 24 * 60 * 60  # 7 days in seconds
 
 
 def resolve_media_url(
-    request: HttpRequest, symbol, mode: MediaUrlModeEnum
+    request: HttpRequest, symbol: "Symbol | None", mode: MediaUrlModeEnum
 ) -> str | None:
     """Resolve media URL based on mode."""
     if not symbol or mode == MediaUrlModeEnum.no:
@@ -56,7 +59,7 @@ def build_category_dict(
     request: HttpRequest,
     media_mode: MediaUrlModeEnum,
     base_level: int = 0,
-) -> dict:
+) -> dict[str, Any]:
     """Build category dict with common fields."""
     data = {
         "slug": category.slug,
@@ -110,7 +113,9 @@ def _load_category_tree(is_active: bool):
     return nodes, children
 
 
-def _has_children(children_map, category: Category) -> bool:
+def _has_children(
+    children_map: dict[int | None, list[Category]], category: Category
+) -> bool:
     return bool(children_map.get(category.id))
 
 
@@ -121,8 +126,8 @@ def get_descendants_tree(
     is_active: bool,
     media_mode: MediaUrlModeEnum,
     base_level: int,
-    children_map: dict,
-) -> dict:
+    children_map: dict[int | None, list[Category]],
+) -> dict[str, Any]:
     """Recursively build tree with level limit (in-memory traversal)."""
     current_level = category.get_level() - base_level
 
@@ -157,9 +162,9 @@ def get_descendants_flat(
     is_active: bool,
     media_mode: MediaUrlModeEnum,
     base_level: int,
-    children_map: dict,
+    children_map: dict[int | None, list[Category]],
     include_self: bool = False,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Get flat list of descendants (in-memory traversal)."""
     result = []
     current_level = category.get_level() - base_level
@@ -196,18 +201,18 @@ def get_descendants_map(
     is_active: bool,
     media_mode: MediaUrlModeEnum,
     base_level: int,
-    tree_children: dict,
-) -> dict:
+    tree_children: dict[int | None, list[Category]],
+) -> dict[str, Any]:
     """Recursively build map with slug keys (in-memory traversal)."""
     current_level = category.get_level() - base_level
 
     if max_level is not None and current_level >= max_level:
         result = build_category_dict(category, request, media_mode, base_level)
-        result["children"] = {}
+        result["children"] = dict[str, Any]()
         result["children_count"] = 0
         return result
 
-    children_map = {}
+    children_map: dict[str, Any] = {}
     for child in tree_children.get(category.id, []):
         children_map[child.slug] = get_descendants_map(
             child, request, max_level, is_active, media_mode, base_level, tree_children

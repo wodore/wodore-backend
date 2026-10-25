@@ -9,14 +9,14 @@ from server.apps.huts.models import Hut
 class TestSeedFixture:
     """Verify seed data is loaded and accessible."""
 
-    def test_huts_exist_in_db(self, seed_data):
+    def test_huts_exist_in_db(self, seed_data: dict[str, int]):
         """Seed data should be loaded and huts should be present."""
         assert Hut.objects.exists(), "No huts found — seed data may not have loaded"
         assert Hut.objects.count() >= 5, (
             f"Expected >= 5 huts, got {Hut.objects.count()}"
         )
 
-    def test_hut_has_required_fields(self, seed_data):
+    def test_hut_has_required_fields(self, seed_data: dict[str, int]):
         """Each seeded hut should have name, location, elevation, etc."""
         hut = Hut.objects.first()
         assert hut is not None, "No hut found — seed data may not have loaded"
@@ -26,7 +26,7 @@ class TestSeedFixture:
         assert hut.country_field, "Hut should have a country"
         assert hut.hut_type_open, "Hut should have hut_type_open"
 
-    def test_hut_has_organizations(self, seed_data):
+    def test_hut_has_organizations(self, seed_data: dict[str, int]):
         """Seeded huts should have organization associations."""
         huts_with_orgs = 0
         for hut in Hut.objects.all():
@@ -34,7 +34,7 @@ class TestSeedFixture:
                 huts_with_orgs += 1
         assert huts_with_orgs > 0, "Expected at least some huts with organizations"
 
-    def test_hut_slug_is_unique(self, seed_data):
+    def test_hut_slug_is_unique(self, seed_data: dict[str, int]):
         """All hut slugs should be unique."""
         slugs = list(Hut.objects.values_list("slug", flat=True))
         assert len(slugs) == len(set(slugs)), "Duplicate slugs found"
@@ -44,7 +44,7 @@ class TestSeedFixture:
 class TestTransactionRollback:
     """Verify transaction rollback provides test isolation."""
 
-    def test_delete_hut(self, seed_data):
+    def test_delete_hut(self, seed_data: dict[str, int]):
         """Delete a hut within this test — it should be gone here."""
         hut = Hut.objects.first()
         assert hut is not None
@@ -52,6 +52,6 @@ class TestTransactionRollback:
         hut.delete()
         assert not Hut.objects.filter(id=hut_id).exists()
 
-    def test_hut_is_back(self, seed_data):
+    def test_hut_is_back(self, seed_data: dict[str, int]):
         """After previous test deleted a hut, it should be back (rollback)."""
         assert Hut.objects.exists(), "Huts should be back after transaction rollback"

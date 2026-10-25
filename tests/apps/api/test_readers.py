@@ -1,5 +1,7 @@
 """Unit tests for pydantic→spec derivation (OpenSpec phase 1.3)."""
 
+from typing import Any
+
 import pytest
 from pydantic import AliasChoices, BaseModel, Field
 
@@ -12,7 +14,7 @@ from server.apps.categories.models import Category
 from server.apps.huts.models import Hut
 
 
-def make_hut(**kwargs):
+def make_hut(**kwargs: Any):
     """Create a minimal Hut (required fields: slug/name/description/
     country/location/hut_type_open)."""
     kwargs.setdefault("description", "")
@@ -118,10 +120,10 @@ class TestSpecShape:
         assert "hut_owner" in spec[1]
 
     def test_override_used_verbatim(self):
-        def prepare(qs):
+        def prepare(qs: Any):
             return qs
 
-        def project(obj):
+        def project(obj: Hut):
             return obj.slug
 
         spec = spec_from_schema(

@@ -110,7 +110,7 @@ class ImagorImage:
         cls,
         path: str,
         quote: Literal["auto", "yes", "no", True, False] = "auto",
-        safe="",
+        safe: str = "",
     ) -> str:
         if quote == "auto":
             if path.startswith(("https://", "http://")):

@@ -3,7 +3,7 @@ import shutil
 import sys
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Generic, Protocol, TypeVar
+from typing import Any, Generic, Protocol, TypeVar, override
 
 import click
 import yaml
@@ -23,7 +23,7 @@ from django.db.models.deletion import RestrictedError
 
 
 def add_fixture_function(
-    obj: "CRUDCommand", force: bool, model: models.Model, **kwargs: Any
+    obj: "CRUDCommand[Any]", force: bool, model: models.Model, **kwargs: Any
 ) -> None:
     """
     Load data from fixture file into database.
@@ -259,7 +259,7 @@ def add_fixture_function(
 
 
 def dump_fixture_function(
-    obj: "CRUDCommand", force: bool, model: models.Model, **kwargs: Any
+    obj: "CRUDCommand[Any]", force: bool, model: models.Model, **kwargs: Any
 ) -> None:
     fixture_name = getattr(obj, "fixture_name", "")
     fixture_path = obj.get_app_path() / "fixtures" / f"{fixture_name}.yaml"
@@ -313,7 +313,7 @@ def dump_fixture_function(
 
 
 def default_drop_function(
-    obj: "CRUDCommand", force: bool, model: models.Model, **kwargs: None
+    obj: "CRUDCommand[Any]", force: bool, model: models.Model, **kwargs: None
 ) -> None:
     limit = kwargs.get("limit")
     offset = kwargs.get("offset")
@@ -481,6 +481,7 @@ class CRUDCommand(BaseCommand, Generic[TModel]):
         ) or self.use_media_args:
             self.set_media_paths()
 
+    @override
     def add_arguments(self, parser: CommandParser) -> None:
         if self.drop_function:
             parser.add_argument(
@@ -538,14 +539,14 @@ class CRUDCommand(BaseCommand, Generic[TModel]):
         # elif add:
         return 100000  # all
 
+    @override
     def handle(
         self,
-        force: bool,
-        # init: bool,
-        kwargs_add: dict | None = None,
-        kwargs_drop: dict | None = None,
-        kwargs_dump: dict | None = None,
         *args: Any,
+        force: bool = False,
+        kwargs_add: dict[str, Any] | None = None,
+        kwargs_drop: dict[str, Any] | None = None,
+        kwargs_dump: dict[str, Any] | None = None,
         **options: Any,
     ) -> None:
         ##   defaults

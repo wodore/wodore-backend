@@ -1,3 +1,5 @@
+from typing import Any, override
+
 from modeltrans.fields import TranslationField
 
 from django.db import models
@@ -61,7 +63,8 @@ class WeatherCode(TimeStampedModel):
     def __str__(self) -> str:
         return f"WMO {self.code} ({self.slug}) - {self.description_day}"
 
-    def save(self, *args, **kwargs):
+    @override
+    def save(self, *args: Any, **kwargs: Any) -> None:
         """Auto-generate slug if not set"""
         if not self.slug:
             self.slug = self._generate_slug()

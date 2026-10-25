@@ -4,24 +4,29 @@ Core base models for wodore-backend.
 This module provides base model classes that should be used throughout the project.
 """
 
+import datetime
+from typing import Any
+
 from django.db import models
 from django.utils.timezone import now
 from django.utils.translation import gettext_lazy as _
 
 
-class _AutoCreatedField(models.DateTimeField):
+class _AutoCreatedField(models.DateTimeField[datetime.datetime, datetime.datetime]):
     """
     A DateTimeField that automatically populates itself at object creation.
     By default, sets editable=False, default=now.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         kwargs.setdefault("editable", False)
         kwargs.setdefault("default", now)
         super().__init__(*args, **kwargs)
 
 
-class _AutoLastModifiedField(models.DateTimeField):
+class _AutoLastModifiedField(
+    models.DateTimeField[datetime.datetime, datetime.datetime]
+):
     """
     A DateTimeField for tracking last modification time.
 
@@ -38,7 +43,7 @@ class _AutoLastModifiedField(models.DateTimeField):
     The trigger is defined at the model level (TimeStampedModel.Meta.triggers).
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         kwargs.setdefault("editable", False)
         kwargs.setdefault("default", now)
         super().__init__(*args, **kwargs)

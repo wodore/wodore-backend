@@ -2,6 +2,8 @@
 
 import pytest
 
+from django.test import Client
+
 from server.apps.api.query import (
     dump_sparse,
     dump_sparse_list,
@@ -117,7 +119,9 @@ class TestDump:
 
 
 class TestEndpoints:
-    def test_organizations_fields_narrows(self, seed_data, client):
+    def test_organizations_fields_narrows(
+        self, seed_data: dict[str, int], client: Client
+    ):
         listed = client.get("/v1/organizations/").json()
         assert listed, "seed data missing"
         response = client.get("/v1/organizations/", {"fields[organizations]": "slug"})
@@ -125,36 +129,36 @@ class TestEndpoints:
         first = response.json()[0]
         assert set(first) <= {"slug", "name", "slug_i18n", "name_i18n"}
 
-    def test_organizations_detail_all(self, seed_data, client):
+    def test_organizations_detail_all(self, seed_data: dict[str, int], client: Client):
         listed = client.get("/v1/organizations/").json()
         slug = listed[0]["slug"]
         response = client.get(f"/v1/organizations/{slug}")
         assert response.status_code == 200
         assert len(response.json()) > 5  # __all__ default
 
-    def test_include_parameter_removed(self, seed_data, client):
+    def test_include_parameter_removed(self, seed_data: dict[str, int], client: Client):
         response = client.get("/v1/organizations/", {"include": "slug"})
         assert response.status_code == 400
         body = response.json()
         assert body["code"] == "validation_error"
 
-    def test_exclude_parameter_removed(self, seed_data, client):
+    def test_exclude_parameter_removed(self, seed_data: dict[str, int], client: Client):
         response = client.get("/v1/organizations/", {"exclude": "slug"})
         assert response.status_code == 400
         assert response.json()["code"] == "validation_error"
 
-    def test_unknown_type_on_endpoint(self, seed_data, client):
+    def test_unknown_type_on_endpoint(self, seed_data: dict[str, int], client: Client):
         response = client.get("/v1/organizations/", {"fields[huts]": "slug"})
         assert response.status_code == 400
         assert response.json()["code"] == "validation_error"
 
-    def test_symbols_fields(self, seed_data, client):
+    def test_symbols_fields(self, seed_data: dict[str, int], client: Client):
         response = client.get("/v1/symbols/", {"fields[symbols]": "slug,style"})
         assert response.status_code == 200
         if response.json():
             assert set(response.json()[0]) <= {"slug", "style", "slug_i18n"}
 
-    def test_hut_detail_nested_sources(self, seed_data, client):
+    def test_hut_detail_nested_sources(self, seed_data: dict[str, int], client: Client):
         from server.apps.huts.models import Hut
 
         hut = Hut.objects.filter(is_active=True, is_public=True).first()

@@ -1,5 +1,7 @@
 import datetime
 import typing as t
+from collections.abc import Collection
+from typing import Any, override
 
 from easydict import EasyDict
 from hut_services import (
@@ -23,6 +25,7 @@ from django.contrib.postgres.indexes import GinIndex
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import transaction
 from django.db.models import F, Q, Value
+from django.db.models.fetch_modes import FetchMode
 from django.db.models.functions import Concat, Lower
 from django.utils import timezone
 from django.utils.translation import get_language
@@ -52,10 +55,10 @@ from server.apps.categories.models import Category
 
 from ._hut_type import HutTypeHelper
 
-SERVICES: dict[str, BaseService] = settings.SERVICES
+SERVICES: dict[str, BaseService[Any]] = settings.SERVICES
 
 
-def primary_name(i18n_fields: dict) -> str | None:
+def primary_name(i18n_fields: dict[str, Any]) -> str | None:
     """Primary (base language) name from the translated name fields."""
     for code in ("de", "en", "fr", "it"):
         if i18n_fields.get(f"name_{code}"):
@@ -344,7 +347,15 @@ class Hut(TimeStampedModel):
         return self.name_i18n
 
     @classmethod
-    def from_db(cls, db, field_names, values, fetch_mode=None):
+    @override
+    def from_db(
+        cls,
+        db: str | None,
+        field_names: Collection[str],
+        values: Collection[Any],
+        *,
+        fetch_mode: FetchMode | None = None,
+    ) -> "Hut":
         instance = super().from_db(db, field_names, values, fetch_mode=fetch_mode)
 
         # save original values, when model is loaded from database,
@@ -354,7 +365,8 @@ class Hut(TimeStampedModel):
         instance._orig_review_status = values.get("review_status")  # type: ignore
         return instance
 
-    def save(self, *args, **kwargs):
+    @override
+    def save(self, *args: Any, **kwargs: Any) -> None:
         if not self.slug:
             self.slug = self.create_unique_slug_name(self.name_i18n)
         # if updated
@@ -414,13 +426,15 @@ class Hut(TimeStampedModel):
     @classmethod
     def _convert_source(cls, hut_source: HutSource) -> HutSchema:
         org = hut_source.organization.slug
-        service: BaseService | None = SERVICES.get(org)
+        service: BaseService[Any] | None = SERVICES.get(org)
         if service is None:
             err_msg = f"No service for organization '{org}' found."
             raise NotImplementedError(err_msg)
         return service.convert(hut_source)
 
-    def add_organization(self, hut_source, add_to_source=True):
+    def add_organization(
+        self, hut_source: HutSource, add_to_source: bool = True
+    ) -> None:
         new_org = HutOrganizationAssociation(
             hut=self,
             organization=hut_source.organization,
@@ -713,7 +727,7 @@ class Hut(TimeStampedModel):
         #    updates["photos_attribution"] = hut_schema.photos[0].attribution if hut_schema.photos else ""
         if "photos" in updates:
             del updates["photos"]
-            updates["images"] = []
+            updates["images"] = list[t.Any]()  # type: ignore  # heterogenous update payload accumulator
             for p in hut_schema.photos:
                 img = Image.create_image_from_schema(
                     p,
@@ -1091,8 +1105,10 @@ class Hut(TimeStampedModel):
         return results
 
     def organizations_query(
-        self, organization: str | Organization | None = None, annotate=True
-    ):
+        self,
+        organization: str | Organization | None = None,
+        annotate: bool = True,
+    ) -> models.QuerySet[Organization]:
         if isinstance(organization, Organization):
             organization = organization.slug
         org_q = self.org_set

@@ -1,9 +1,11 @@
+from typing import override
+
 from django.contrib import admin
 
 # Models
-from django.urls import path, reverse
+from django.urls import URLPattern, path, reverse
 from django.utils.html import format_html
-from django.utils.safestring import mark_safe
+from django.utils.safestring import SafeString, mark_safe
 
 from unfold.decorators import display
 
@@ -53,7 +55,8 @@ class OrganizationAdmin(ModelAdmin):
 
     # formfield_overrides = {models.JSONField: {"widget": UnfoldJSONSuit}}
 
-    def get_urls(self):
+    @override
+    def get_urls(self) -> list[URLPattern]:
         return [
             path(
                 "<pk>/detail",
@@ -72,33 +75,35 @@ class OrganizationAdmin(ModelAdmin):
         return format_html("{}", mark_safe(view + edit))
 
     @display(header=True)
-    def organization(self, obj):
+    def organization(self, obj: Organization) -> tuple[str, str, SafeString]:
         """
         Third argument is short text which will appear as prefix in circle
         """
         return (obj.name_i18n, obj.fullname_i18n, self.logo_thumb(obj))
 
     @display(description="#", ordering=None)
-    def order_small(self, obj):
+    def order_small(self, obj: Organization) -> SafeString:
         return mark_safe(f"<small>{obj.order}</small>")
 
-    def show_color(self, value, width=32, height=16, radius=4):
+    def show_color(
+        self, value: str, width: int = 32, height: int = 16, radius: int = 4
+    ) -> SafeString:
         return mark_safe(
             f'<div style="background-color:{value};border-radius:{radius}px;min-height:{height}px;min-width:{width}px;max-height:{height}px;max-width:{width}px"></div>'
         )
 
-    def light(self, obj):
+    def light(self, obj: Organization) -> SafeString:
         return self.show_color(obj.color_light)
 
-    def dark(self, obj):
+    def dark(self, obj: Organization) -> SafeString:
         return self.show_color(obj.color_dark)
 
     @display(description="Description")
-    def description_t(self, obj):
+    def description_t(self, obj: Organization) -> str:
         return obj.description_i18n
 
     @display(description="URL", header=True)
-    def url_link(self, obj):
+    def url_link(self, obj: Organization) -> tuple[SafeString, SafeString]:
         icon = '<span class="material-symbols-outlined" style="font-size:x-small">open_in_new</span>'
         return mark_safe(
             f'<a class="text-sm" target="_blank" href="{obj.url_i18n}"/>{obj.url_i18n} {icon}</a>'
@@ -106,8 +111,8 @@ class OrganizationAdmin(ModelAdmin):
             obj.link_hut_pattern, textsize="xs", width=60, on_word=False
         )
 
-    def logo_thumb(self, obj):  # new
+    def logo_thumb(self, obj: Organization) -> SafeString:  # new
         return mark_safe(f'<img src = "{obj.logo.url}" width = "20"/>')
 
-    def logo_preview(self, obj):  # new
+    def logo_preview(self, obj: Organization) -> SafeString:  # new
         return mark_safe(f'<img src = "{obj.logo.url}" width = "50"/>')

@@ -6,6 +6,8 @@ cache, so the cache is cleared first (the pin covers the cache-miss path
 that fires once per hour in production).
 """
 
+import datetime
+
 import pytest
 
 from django.core.cache import cache
@@ -13,6 +15,8 @@ from django.db import connection
 from django.test import Client
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
+
+from server.apps.huts.models import Hut
 
 SYMBOLS_LIST_PIN = 1
 CATEGORIES_COLD_PIN = 1
@@ -47,7 +51,7 @@ class TestCategoriesQueryCount:
             ("/v1/categories/map/root",),
         ],
     )
-    def test_cold_build_single_query(self, url):
+    def test_cold_build_single_query(self, url: str):
         cache.clear()  # page cache: pin the cache-miss path
         client = Client()
         with CaptureQueriesContext(connection) as ctx:
@@ -69,7 +73,7 @@ class TestCategoriesQueryCount:
 
 
 @pytest.fixture()
-def availability_hut(db):
+def availability_hut(db: None):
     """A public hut with type FKs set, availability rows, and one history entry."""
     import datetime
 
@@ -110,7 +114,7 @@ class TestAvailabilityQueryCount:
     already minimal.
     """
 
-    def test_current_pinned(self, availability_hut):
+    def test_current_pinned(self, availability_hut: tuple[Hut, datetime.date]):
         hut, date = availability_hut
         client = Client()
         with CaptureQueriesContext(connection) as ctx:
@@ -124,7 +128,7 @@ class TestAvailabilityQueryCount:
             "along with the hut fetch; no lazy loads."
         )
 
-    def test_trend_pinned(self, availability_hut):
+    def test_trend_pinned(self, availability_hut: tuple[Hut, datetime.date]):
         hut, date = availability_hut
         client = Client()
         with CaptureQueriesContext(connection) as ctx:
@@ -137,7 +141,7 @@ class TestAvailabilityQueryCount:
             f"(pin: {AVAILABILITY_TREND_PIN})."
         )
 
-    def test_geojson_pinned(self, availability_hut):
+    def test_geojson_pinned(self, availability_hut: tuple[Hut, datetime.date]):
         _hut, date = availability_hut
         client = Client()
         with CaptureQueriesContext(connection) as ctx:

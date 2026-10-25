@@ -29,7 +29,7 @@ import io
 import math
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.request import Request, urlopen
 
 import httpx
@@ -135,8 +135,12 @@ def _fetch_tiles(zoom: int, coords: list[tuple[int, int]]) -> list[Image.Image]:
 
     if len(coords) == 1:
         return [_fetch_tile_retry(zoom, *coords[0])]
+
+    def _fetch(coord: tuple[int, int]) -> Image.Image:
+        return _fetch_tile_retry(zoom, *coord)
+
     with ThreadPoolExecutor(max_workers=min(TILE_WORKERS, len(coords))) as pool:
-        return list(pool.map(lambda c: _fetch_tile_retry(zoom, *c), coords))
+        return list(pool.map(_fetch, coords))
 
 
 def _fetch_url(url: str) -> Image.Image | None:
@@ -316,7 +320,7 @@ def _plan_tiles(
     offset_x: int,
     offset_y: int,
     has_marker: bool,
-) -> dict:
+) -> dict[str, Any]:
     """EXACT tile range covering the crop window — no centering slack
     (the grid formula fetched ~35 tiles; ~15-20 are actually needed).
     The marker sits right of center (MARKER_X) — shift the map view
@@ -340,14 +344,14 @@ def _plan_tiles(
     nx, ny = x1 - x0 + 1, y1 - y0 + 1
 
     coords = [(x0 + dx, y0 + dy) for dx in range(nx) for dy in range(ny)]
-    left = int(round(abs_left)) - x0 * TILE_SIZE
-    top = int(round(abs_top)) - y0 * TILE_SIZE
+    left = round(abs_left) - x0 * TILE_SIZE
+    top = round(abs_top) - y0 * TILE_SIZE
     return {"coords": coords, "nx": nx, "ny": ny, "left": left, "top": top}
 
 
 def _composite_card(
     tiles: list[Image.Image],
-    plan: dict,
+    plan: dict[str, Any],
     marker: Image.Image | None,
     width: int,
     height: int,
@@ -421,7 +425,7 @@ def _composite_card(
     return buffer.getvalue()
 
 
-def static_map_cache_key(params: dict) -> str:
+def static_map_cache_key(params: dict[str, Any]) -> str:
     """Stable storage key for a parameter set (any change re-renders).
 
     The renderer version is folded in: a rendering change (effect,
@@ -563,7 +567,7 @@ async def render_static_map_async(
 def _decode_and_composite(
     tiles_bytes: list[bytes],
     marker_bytes: bytes | None,
-    plan: dict,
+    plan: dict[str, Any],
     width: int,
     height: int,
     effect: str,

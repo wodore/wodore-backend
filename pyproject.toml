@@ -326,11 +326,13 @@ DEP003 = ["server"] # transitive dependencies
 
 [tool.pyrefly]
 # One engine for CLI, CI and editor LSP — see openspec change `pyrefly-type-checking`.
+# Strict typing is now project-wide: the per-app ratchet sub-configs were
+# removed once every app had been ratcheted (27 merged ratchet PRs).
+preset = "strict"
 project-includes = ["server", "tests"]
 project-excludes = ["**/migrations/**"]
 search-path = ["."]
 python-interpreter-path = ".venv/bin/python"
-
 
 [build-system]
 requires = ["hatchling"]
