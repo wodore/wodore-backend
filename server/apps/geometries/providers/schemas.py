@@ -29,7 +29,7 @@ class Source:
 
     slug: str
     source_id: str | None = None
-    source_data: dict | None = None
+    source_data: dict[str, Any] | None = None
     priority: int = 10
 
     def __repr__(self) -> str:
@@ -225,7 +225,7 @@ def hut_to_schema(hut: Any) -> GeoPlaceSchema:
     if hasattr(hut, "hut_sources"):
         for hut_source in hut.hut_sources.all():
             # Build source_data dict
-            source_data = {}
+            source_data: dict[str, Any] = {}
             if hut_source.source_data:
                 source_data = hut_source.source_data
             if hut_source.source_properties:

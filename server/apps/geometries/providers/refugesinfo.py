@@ -25,8 +25,11 @@ the ``md`` cache-buster are simply dropped. Verified against photos from
 #   https://www.refuges.info/point/6069/cabane-non-gardee/abri-de-Beauregard
 #   http://192.168.1.50:8000/v1/geo/images/hut/beauregard?lang=de&radius=50&limit=20
 
+from __future__ import annotations
+
 import html
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 import structlog
 from asgiref.sync import sync_to_async
@@ -45,6 +48,9 @@ from .scoring import (
     calculate_age_penalty,
     score_metadata_completeness,
 )
+
+if TYPE_CHECKING:
+    from httpx import AsyncClient
 
 logger = structlog.get_logger()
 
@@ -189,7 +195,7 @@ class RefugesInfoProvider(ImageProvider):
 
     async def _fetch_refuges_images(
         self,
-        client,
+        client: AsyncClient,
         source_id: str,
         place: GeoPlaceSchema,
     ) -> list[ImageResult]:
@@ -312,7 +318,9 @@ class RefugesInfoProvider(ImageProvider):
             )
             return []
 
-    async def _canonical_point_url(self, client, source_id: str) -> str | None:
+    async def _canonical_point_url(
+        self, client: AsyncClient, source_id: str
+    ) -> str | None:
         """The point's canonical page URL (``properties.lien`` of /api/point).
 
         Cached long-term per point id — lien only changes when the site

@@ -10,9 +10,12 @@ and usage signals. Images matching the GeoPlace's QID get a significant
 score boost.
 """
 
+from __future__ import annotations
+
 import re
 from datetime import datetime, timezone
-from typing import Any
+from types import ModuleType
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -27,6 +30,9 @@ from .scoring import (
     score_qid_match,
     score_technical_quality,
 )
+
+if TYPE_CHECKING:
+    from httpx import AsyncClient
 
 logger = structlog.get_logger()
 
@@ -87,7 +93,7 @@ def _select_large_source(
     return original_url or thumb_url_large or thumb_url or thumb_url
 
 
-def _raise_on_mediawiki_error(data: dict, context: str) -> None:
+def _raise_on_mediawiki_error(data: dict[str, Any], context: str) -> None:
     """Raise when a MediaWiki API response carries an ``error`` document.
 
     The MediaWiki Action API reports bad parameters (e.g. non-integer
@@ -284,7 +290,7 @@ class WikimediaCommonsProvider(ImageProvider):
         radius: float,
         limit: int,
         place_qids: set[str],
-        httpx,
+        httpx: ModuleType,
     ) -> list[ImageResult]:
         """
         Fetch images via Wikidata SPARQL spatial query.
@@ -390,7 +396,7 @@ class WikimediaCommonsProvider(ImageProvider):
         lat: float,
         lon: float,
         limit: int,
-        httpx,
+        httpx: ModuleType,
     ) -> list[ImageResult]:
         """
         Fetch images via Wikidata SPARQL using QIDs.
@@ -536,7 +542,7 @@ class WikimediaCommonsProvider(ImageProvider):
         radius: float,
         limit: int,
         place_qids: set[str],
-        httpx,
+        httpx: ModuleType,
     ) -> list[ImageResult]:
         """
         Fetch images via Commons geosearch API.
@@ -636,7 +642,7 @@ class WikimediaCommonsProvider(ImageProvider):
             return results
 
     async def _fetch_thumb_bucket(
-        self, client, params: dict, width: int
+        self, client: AsyncClient, params: dict[str, Any], width: int
     ) -> dict[str, str]:
         """Fetch servable thumburls for one bucket width, keyed by page title.
 
@@ -666,7 +672,7 @@ class WikimediaCommonsProvider(ImageProvider):
         return thumbs
 
     async def _fetch_commons_metadata(
-        self, commons_title: str, client
+        self, commons_title: str, client: AsyncClient
     ) -> dict[str, Any] | None:
         """
         Fetch detailed metadata for a Commons image.
@@ -729,7 +735,7 @@ class WikimediaCommonsProvider(ImageProvider):
         lat: float,
         lon: float,
         limit: int,
-        httpx,
+        httpx: ModuleType,
     ) -> list[ImageResult]:
         """
         Fetch images from a Wikimedia Commons category.
@@ -839,7 +845,7 @@ class WikimediaCommonsProvider(ImageProvider):
             logger.debug("commons_category_query_complete", image_count=len(results))
             return results
 
-    def _parse_commons_api_response(self, page_data: dict) -> dict[str, Any]:
+    def _parse_commons_api_response(self, page_data: dict[str, Any]) -> dict[str, Any]:
         """
         Parse Wikimedia Commons API response into metadata dict.
 
@@ -964,7 +970,7 @@ class WikimediaCommonsProvider(ImageProvider):
 
     def _score_commons_image(
         self,
-        img_data: dict,
+        img_data: dict[str, Any],
         source_type: str,
         has_qid: bool,
         matches_place_qid: bool,
@@ -1071,7 +1077,7 @@ class WikimediaCommonsProvider(ImageProvider):
     def _create_image_result(
         self,
         commons_title: str,
-        img_data: dict,
+        img_data: dict[str, Any],
         qid: str | None,
         score: int,
         query_lat: float,
