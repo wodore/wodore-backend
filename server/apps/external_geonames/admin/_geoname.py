@@ -1,4 +1,10 @@
+from __future__ import annotations
+
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Any, override
+
 from django.contrib import admin
+from django.db.models import QuerySet
 from django.http import HttpRequest
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
@@ -9,6 +15,11 @@ from unfold.decorators import display
 from server.apps.manager.admin import ModelAdmin
 
 from ..models import AlternativeName, GeoName
+
+if TYPE_CHECKING:
+    # Stub-only alias (str | lazy proxy) used verbatim in the lookups signature
+    # to stay assignable to SimpleListFilter.lookups.
+    from django.utils.functional import _StrOrPromise
 
 
 class AlternativeNameInline(TabularInline):
@@ -28,7 +39,10 @@ class AlternativeNameInline(TabularInline):
     )
     readonly_fields = fields
 
-    def has_add_permission(self, request, obj=None):
+    @override
+    def has_add_permission(
+        self, request: HttpRequest, obj: GeoName | None = None
+    ) -> bool:
         return False
 
 
@@ -48,7 +62,10 @@ class ChildGeoNameInline(TabularInline):
     )
     readonly_fields = fields
 
-    def has_add_permission(self, request, obj=None):
+    @override
+    def has_add_permission(
+        self, request: HttpRequest, obj: GeoName | None = None
+    ) -> bool:
         return False
 
 
@@ -58,14 +75,20 @@ class ImportanceRangeFilter(admin.SimpleListFilter):
     title = _("feature importance")
     parameter_name = "importance_range"
 
-    def lookups(self, request, model_admin):
+    @override
+    def lookups(
+        self, request: HttpRequest, model_admin: admin.ModelAdmin[Any]
+    ) -> Iterable[tuple[str, _StrOrPromise]] | None:
         return (
             ("high", _("High (80-100)")),
             ("medium", _("Medium (50-79)")),
             ("low", _("Low (0-49)")),
         )
 
-    def queryset(self, request, queryset):
+    @override
+    def queryset(
+        self, request: HttpRequest, queryset: QuerySet[Any]
+    ) -> QuerySet[Any] | None:
         if self.value() == "high":
             return queryset.filter(feature__importance__gte=80)
         elif self.value() == "medium":
@@ -192,11 +215,11 @@ class GeoNameAdmin(ModelAdmin):
     )
 
     @display(header=True, description=_("Name"), ordering="name")
-    def name_display(self, obj: GeoName) -> tuple:
+    def name_display(self, obj: GeoName) -> tuple[str, int]:
         return (obj.name, obj.geoname_id)
 
     @display(header=True, description=_("Admin"), ordering="name")
-    def admin_display(self, obj: GeoName) -> tuple:
+    def admin_display(self, obj: GeoName) -> tuple[str, str]:
         admin_codes = []
         if obj.admin2_code:
             admin_codes.append(obj.admin2_code)
@@ -214,13 +237,13 @@ class GeoNameAdmin(ModelAdmin):
         return mark_safe(f"<large>{obj.feature.id}</large>")
 
     @display(header=True, description=_("Parent"), ordering="parent__name")
-    def parent_display(self, obj: GeoName) -> tuple:
+    def parent_display(self, obj: GeoName) -> tuple[str, str]:
         if obj.parent:
             return (obj.hierarchy_type, obj.parent.name)
         return ("", "")
 
     @display(header=True, description=_("Location"))
-    def location_coords(self, obj):
+    def location_coords(self, obj: GeoName) -> tuple[str, str]:
         return (
             f"{obj.location.y:.3f}/{obj.location.x:.3f}",
             f"{obj.elevation}m" if obj.elevation else "-",
@@ -234,10 +257,12 @@ class GeoNameAdmin(ModelAdmin):
     def feature_importance(self, obj: GeoName) -> int:
         return obj.feature.importance
 
+    @override
     def has_add_permission(self, request: HttpRequest) -> bool:
         """Disable manual creation - data is imported via command."""
         return False
 
+    @override
     def has_delete_permission(
         self, request: HttpRequest, obj: GeoName | None = None
     ) -> bool:
