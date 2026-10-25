@@ -1,4 +1,5 @@
 import uuid
+from typing import override
 
 from model_utils.fields import MonitorField
 from modeltrans.fields import TranslationField
@@ -384,6 +385,7 @@ class Icon(TimeStampedModel):
     def __str__(self) -> str:
         return f"{self.pack.slug}:{self.slug}"
 
+    @override
     def clean(self):
         """Reject root categories (subgroups only, see design D4)."""
         super().clean()

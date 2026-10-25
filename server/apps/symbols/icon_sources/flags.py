@@ -19,6 +19,7 @@ equivalent (``es-ct``, ``us-*`` states, ``language/*`` …) are skipped.
 import re
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from server.apps.symbols.icon_sources.base import IconCandidate
 
@@ -56,7 +57,7 @@ def flag_hexcode(code: str) -> str | None:
 def flag_candidate(
     code: str,
     styles: dict[str, Path],
-    entries: dict[str, dict],
+    entries: dict[str, Any],
     unique_slug: Callable[[str], str],
     slug_suffix: str = "",
     name_suffix: str = "",

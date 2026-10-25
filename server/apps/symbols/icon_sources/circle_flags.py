@@ -9,7 +9,7 @@ also carries subdivisions, historical variants and language flags.
 
 from collections.abc import Iterator
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar, override
 
 from server.apps.symbols.icon_sources.base import (
     IconCandidate,
@@ -40,11 +40,13 @@ class CircleFlagsSource(IconSource):
 
     spec: ClassVar[SourceSpec] = CIRCLE_FLAGS_SPEC
 
+    @override
     def source_dir(self, base_dir: Path) -> Path:
         return base_dir / "circle-flags" / "flags"
 
+    @override
     def iter_candidates(
-        self, source_dir: Path, entries: dict[str, dict]
+        self, source_dir: Path, entries: dict[str, Any]
     ) -> Iterator[IconCandidate]:
         self.reset()
         # Non-recursive: ``language/`` and other subdirectories exist

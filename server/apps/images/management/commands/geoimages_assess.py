@@ -20,10 +20,16 @@ Examples:
     manage.py geoimages_assess --type=hut --no-progress
 """
 
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, override
+
 from django_admin_runner import register_command
 from django_admin_runner.forms import _hidden_aware_argparse
 
-from django.core.management.base import BaseCommand, CommandError
+from django.contrib.gis.geos import GEOSGeometry
+from django.core.management.base import BaseCommand, CommandError, CommandParser
 
 from server.apps.geometries.bbox import parse_bbox
 from server.apps.geometries.pinning import GeoPlaceImageAssociation
@@ -31,8 +37,14 @@ from server.apps.geometries.sweep import run_sweep
 from server.apps.geometries.widgets import BBoxWidget
 from server.apps.images.assessment import assess_place_pins
 
+if TYPE_CHECKING:
+    from server.apps.geometries.models import GeoPlace
+    from server.apps.huts.models import Hut
 
-def _sweep_targets(place_type: str, bbox=None):
+
+def _sweep_targets(
+    place_type: str, bbox: GEOSGeometry | None = None
+) -> list[tuple[str, Hut | GeoPlace]]:
     """Materialized targets: every place that has pins.
 
     Filtered by place type and (optionally) a WGS84 bbox polygon. No
@@ -69,7 +81,8 @@ def _sweep_targets(place_type: str, bbox=None):
 class Command(BaseCommand):
     help = __doc__ or ""
 
-    def add_arguments(self, parser):
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--place", metavar="SLUG", help="Assess a single place by slug."
         )
@@ -112,7 +125,8 @@ class Command(BaseCommand):
             "(useful for cron jobs).",
         )
 
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         force = bool(options["force_recompute"])
         dry_run = bool(options["dry_run"])
         no_progress = bool(options["no_progress"])
@@ -145,7 +159,11 @@ class Command(BaseCommand):
             )
             return
 
-        def work(place_type, place, report) -> bool:
+        def work(
+            place_type: str,
+            place: Hut | GeoPlace,
+            report: Callable[[str, bool], None],
+        ) -> bool:
             label = f"{place_type}:{place.slug}"
             try:
                 stats = assess_place_pins(place, force=force)

@@ -34,6 +34,7 @@ from server.apps.api.query import (
     dump_sparse,
     sparse_fields_query,
 )
+from server.apps.categories.models import Category
 from server.apps.huts.schemas._hut import ImageMetaSchema
 from server.apps.translations import LanguageQuery, activate
 
@@ -97,7 +98,9 @@ class HutSearchQuery(LanguageQuery, HutSearchFields, BboxQuery):
     )
 
 
-def _hut_type_symbol_block(request: HttpRequest, hut_type) -> dict:
+def _hut_type_symbol_block(
+    request: HttpRequest, hut_type: Category
+) -> dict[str, str | None]:
     return {
         "mono": request.build_absolute_uri(hut_type.symbol_mono.svg_file.url)
         if hut_type.symbol_mono
@@ -125,7 +128,7 @@ class HutSearchController(ApiController):
         operation_id="search_huts",
         headers=cache_headers(60),
     )
-    def get(self, parsed_query: Query[HutSearchQuery]) -> list[dict]:
+    def get(self, parsed_query: Query[HutSearchQuery]) -> list[dict[str, Any]]:
         """Search huts.
 
         Fuzzy text search across all language fields."""
@@ -382,9 +385,9 @@ class HutsController(ApiController):
         )
         for hut_db in huts_db:
             if len(hut_db.sources) and hut_db.sources[0]["slug"] is None:
-                hut_db.sources = []
+                hut_db.sources = list[dict[str, Any]]()
             if len(hut_db.images) and hut_db.images[0]["image"] is None:
-                hut_db.images = []
+                hut_db.images = list[dict[str, Any]]()
         if query.limit is not None:
             huts_db = huts_db[query.offset : query.offset + query.limit]
 
@@ -731,16 +734,16 @@ class HutDetailController(ApiController):
         if hut_db is None:
             msg = f"Could not find '{slug}'."
             raise_not_found(msg)
-        if len(hut_db.sources) and hut_db.sources[0]["slug"] is None:
-            hut_db.sources = []
+        if len(hut_db.sources) and hut_db.sources[0]["slug"] is None:  # type: ignore  # dynamic attr: plugin-less inference gap
+            hut_db.sources = []  # type: ignore  # dynamic attr: plugin-less inference gap
         else:
             # ordering should be done in DB, but somehow it does not work
             # with 'distinct'
-            hut_db.sources = sorted(hut_db.sources, key=lambda x: x["order"])
-        if len(hut_db.images) and hut_db.images[0]["image"] is None:
-            hut_db.images = []
+            hut_db.sources = sorted(hut_db.sources, key=lambda x: x["order"])  # type: ignore  # dynamic attr: plugin-less inference gap
+        if len(hut_db.images) and hut_db.images[0]["image"] is None:  # type: ignore  # dynamic attr: plugin-less inference gap
+            hut_db.images = []  # type: ignore  # dynamic attr: plugin-less inference gap
         updated_images = []
-        for img in hut_db.images:
+        for img in hut_db.images:  # type: ignore  # dynamic attr: plugin-less inference gap
             if img.get("review_status", "disabled") != "approved" or img.get(
                 "license", {}
             ).get("no_publication", True):
@@ -776,7 +779,7 @@ class HutDetailController(ApiController):
 
             img["attribution"] = attribution
             updated_images.append(img)
-        hut_db.images = updated_images
+        hut_db.images = updated_images  # type: ignore  # dynamic attr: plugin-less inference gap
         if hut_db.photos:
             old_photo = ImageInfoSchema(
                 image=hut_db.photos,
@@ -786,9 +789,9 @@ class HutDetailController(ApiController):
                 ),
                 attribution=hut_db.photos_attribution,
             )
-            hut_db.images = [old_photo.model_dump(), *hut_db.images]
+            hut_db.images = [old_photo.model_dump(), *hut_db.images]  # type: ignore  # dynamic attr: plugin-less inference gap
         link = reverse_lazy("admin:huts_hut_change", args=[hut_db.pk])
-        hut_db.edit_link = request.build_absolute_uri(str(link))
+        hut_db.edit_link = request.build_absolute_uri(str(link))  # type: ignore  # dynamic attr: plugin-less inference gap
 
         # Get modified timestamp from ETag calculation
         modified_timestamp = get_last_modified_timestamp(
