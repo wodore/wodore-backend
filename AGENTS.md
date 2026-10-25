@@ -25,6 +25,17 @@ app update_availability --all
 # `app createsuperuser` would hang with invisible prompts)
 ```
 
+## Changelog
+
+Both changelogs are auto-generated on release — never edit them by hand
+and never ship changelog entries inside PRs:
+
+- `CHANGELOG.md`: built by `inv release` from merged PR titles (PR
+  titles must be changelog-ready — imperative, capitalized, no
+  conventional-commit tags).
+- `CHANGELOG_API.md`: the same release step regenerates it from PRs
+  labeled `api:*` (see "API Versioning").
+
 ## Authentication Modes
 
 Two feature flags (see `server/settings/components/oidc.py`):

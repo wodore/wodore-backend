@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 import re
-import sys
-import threading
-from collections import OrderedDict
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, override
 
@@ -39,41 +36,6 @@ if TYPE_CHECKING:
 
     from ._associations import GeoPlaceSourceAssociation
 
-
-class _LRUCacheBytes:
-    def __init__(self, max_bytes: int) -> None:
-        self._max_bytes = max_bytes
-        self._cache: OrderedDict[str, tuple[object, int]] = OrderedDict()
-        self._size_bytes = 0
-
-    def _estimate_size(self, key: str, value: object) -> int:
-        return sys.getsizeof(key) + sys.getsizeof(value)
-
-    def get(self, key: str) -> object | None:
-        item = self._cache.pop(key, None)
-        if item is None:
-            return None
-        value, size_bytes = item
-        self._cache[key] = (value, size_bytes)
-        return value
-
-    def set(self, key: str, value: object) -> None:
-        size_bytes = self._estimate_size(key, value)
-        if size_bytes > self._max_bytes:
-            return
-        existing = self._cache.pop(key, None)
-        if existing is not None:
-            self._size_bytes -= existing[1]
-        self._cache[key] = (value, size_bytes)
-        self._size_bytes += size_bytes
-        while self._size_bytes > self._max_bytes and self._cache:
-            _, evicted = self._cache.popitem(last=False)
-            self._size_bytes -= evicted[1]
-
-
-_BRAND_CATEGORY_CACHE = _LRUCacheBytes(max_bytes=50 * 1024 * 1024)
-_BRAND_CATEGORY_CACHE_LOCK = threading.Lock()
-_BRAND_CATEGORY_CACHE_MISS = object()
 
 # Substrings of database errors that are worth retrying (locks, deadlocks).
 RETRYABLE_DB_MESSAGES = (
@@ -790,7 +752,7 @@ class GeoPlace(TimeStampedModel):
                 country_code="CH",
                 place_type_identifiers=["shop.bakery"],
                 operating_status=OperatingStatus.OPEN,
-                brand=BrandInput(slug="volg"),
+                parties=[PartyInput(slug="volg", role="role.brand")],
             )
 
             place, status = GeoPlace.update_or_create(
@@ -945,14 +907,25 @@ class GeoPlace(TimeStampedModel):
 
             nearby = nearby.annotate(distance=Distance("location", location)).distinct()
 
-            # Filter by brand if enabled and provided
-            if dedup_options.check_brand and schema.brand:
-                brand_cat = cls._get_brand_category_by_slug(schema.brand.slug)
-                if brand_cat:
-                    nearby = nearby.filter(amenity_detail__brand=brand_cat)
+            # Filter by brand party if enabled and provided
+            if dedup_options.check_brand and schema.parties:
+                brand_slugs = [p.slug for p in schema.parties if p.role == "role.brand"]
+                if brand_slugs:
+                    nearby = nearby.filter(
+                        party_associations__party__slug__in=brand_slugs,
+                        party_associations__role__identifier="role.brand",
+                    )
+                else:
+                    # Brand check on but no brand entry - only match places
+                    # without a brand party association
+                    nearby = nearby.exclude(
+                        party_associations__role__identifier="role.brand"
+                    )
             elif dedup_options.check_brand:
-                # No brand specified - only match places without brand
-                nearby = nearby.filter(amenity_detail__brand__isnull=True)
+                # No brand specified - only match places without a brand party
+                nearby = nearby.exclude(
+                    party_associations__role__identifier="role.brand"
+                )
 
             # CRITICAL FIX: Use first() instead of list() to avoid memory leak
             # list() creates temporary list objects that aren't garbage collected
@@ -966,26 +939,6 @@ class GeoPlace(TimeStampedModel):
     @lru_cache(maxsize=32)
     def _get_organization_by_slug(slug: str) -> Organization:
         return Organization.objects.get(slug=slug)
-
-    @classmethod
-    def _get_brand_category_by_slug(cls, slug: str) -> Category | None:
-        with _BRAND_CATEGORY_CACHE_LOCK:
-            cached = _BRAND_CATEGORY_CACHE.get(slug)
-        if cached is _BRAND_CATEGORY_CACHE_MISS:
-            return None
-        if cached is not None:
-            return cached  # type: ignore[return-value]
-
-        try:
-            category = Category.objects.get(slug=slug)
-        except Category.DoesNotExist:
-            with _BRAND_CATEGORY_CACHE_LOCK:
-                _BRAND_CATEGORY_CACHE.set(slug, _BRAND_CATEGORY_CACHE_MISS)
-            return None
-
-        with _BRAND_CATEGORY_CACHE_LOCK:
-            _BRAND_CATEGORY_CACHE.set(slug, category)
-        return category
 
     @staticmethod
     @lru_cache(maxsize=512)
@@ -1132,13 +1085,10 @@ class GeoPlace(TimeStampedModel):
                     for p in schema.phones
                 ],
             }
-            # Add brand if provided
-            if schema.brand:
-                try:
-                    brand = Category.objects.get(slug=schema.brand.slug)
-                    amenity_kwargs["brand"] = brand
-                except Category.DoesNotExist:
-                    pass
+            # Party associations are place-level (replaces the former
+            # brand FK on the detail row)
+            if schema.parties:
+                AmenityDetail._write_party_associations(place, schema.parties)
 
             AmenityDetail.objects.create(**amenity_kwargs)
 
@@ -1233,7 +1183,11 @@ class GeoPlace(TimeStampedModel):
                     respect_protected = True
 
         if respect_protected:
-            pass  # TODO do something with it
+            # Policy-level enforcement deferred (pre-existing TODO): the
+            # per-field ``protected`` checks below already honor protected
+            # fields uniformly; MERGE vs AUTO_PROTECT currently behave the
+            # same here.
+            pass
 
         # Track if anything was updated
         place_updated = False
@@ -1379,14 +1333,8 @@ class GeoPlace(TimeStampedModel):
                     update_fields.append("phones")
                     detail_updated = True
 
-            if "brand" not in protected and schema.brand:
-                try:
-                    brand = Category.objects.get(slug=schema.brand.slug)
-                except Category.DoesNotExist:
-                    brand = None
-                if brand and amenity_detail.brand != brand:
-                    amenity_detail.brand = brand
-                    update_fields.append("brand")
+            if "parties" not in protected and schema.parties:
+                if AmenityDetail._write_party_associations(place, schema.parties):
                     detail_updated = True
 
             if is_new:

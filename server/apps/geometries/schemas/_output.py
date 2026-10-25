@@ -84,6 +84,23 @@ class CategoryPlaceTypeSchema(pydantic.BaseModel):
     symbol: dict[str, str] | None = None
 
 
+class PartyLinkSchema(pydantic.BaseModel):
+    """Schema for a party link (label + url)."""
+
+    url: str
+    label: str | None = None
+
+
+class PartySchema(pydantic.BaseModel):
+    """Schema for role-classified party associations (geoplace-parties)."""
+
+    role: str  # role category identifier, e.g. "role.operator"
+    slug: str
+    name: str | None = Field(None, validation_alias="name_i18n")
+    links: list[PartyLinkSchema] = Field(default_factory=list)
+    symbol: dict[str, str] | None = None  # resolved color/mono URLs
+
+
 class GeoPlaceBaseSchema(pydantic.BaseModel):
     """Base schema for GeoPlace with common fields."""
 
@@ -99,6 +116,7 @@ class GeoPlaceBaseSchema(pydantic.BaseModel):
         | list[OrganizationSourceIdDetailSchema]
         | None
     ) = None
+    parties: list[PartySchema] | None = None
 
 
 class GeoPlaceSearchSchema(GeoPlaceBaseSchema):

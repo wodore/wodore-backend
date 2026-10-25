@@ -40,6 +40,7 @@ from ..models import (
     GeoPlace,
     GeoPlaceCategory,
     GeoPlaceExternalLink,
+    GeoPlaceParty,
     GeoPlaceSourceAssociation,
 )
 from ..utils import get_progress_bar
@@ -199,6 +200,34 @@ class GeoPlaceCategoryInline(unfold_admin.TabularInline):
         return True
 
 
+class GeoPlacePartyInline(unfold_admin.TabularInline):
+    """GeoPlace party association inline (role-classified)."""
+
+    model = GeoPlaceParty
+    tab = True
+    fields = ("party", "role", "order")
+    autocomplete_fields = ("party", "role")
+    extra = 0
+    show_change_link = True
+    verbose_name = _("Party")
+
+    @override
+    def formfield_for_foreignkey(
+        self,
+        db_field: db_models.ForeignKey[Any, Any],
+        request: HttpRequest,
+        **kwargs: Any,
+    ):
+        """Scope the role autocomplete to the role.* subtree."""
+        from server.apps.categories.models import Category
+
+        if db_field.name == "role":
+            kwargs["queryset"] = Category.objects.filter(parent__slug="role").order_by(
+                "order"
+            )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
 ## ADMIN
 
 
@@ -314,7 +343,36 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             GeoPlaceCategoryInline,
             GeoPlaceSourceAssociationInline,
             GeoPlaceExternalLinkInline,
+            GeoPlacePartyInline,
         ]
+
+    @override
+    def save_formset(
+        self,
+        request: HttpRequest,
+        form: Any,
+        formset: Any,
+        change: bool,
+    ) -> None:
+        """Manual party edits protect the place from import overwrites.
+
+        OpenSpec geoplace-parties decision 7: associations carry no
+        automatic tracking, so the inline formset save explicitly marks
+        the place ``is_modified`` and records ``parties`` in
+        ``protected_fields``.
+        """
+        if formset.model is GeoPlaceParty and formset.has_changed():
+            place = form.instance
+            place.is_modified = True
+            protected = list(place.protected_fields or [])
+            if "parties" not in protected:
+                protected.append("parties")
+                place.protected_fields = protected
+                place.save(update_fields=["is_modified", "protected_fields"])
+            else:
+                place.save(update_fields=["is_modified"])
+
+        super().save_formset(request, form, formset, change)
 
     @override
     def get_urls(self) -> list[Any]:
@@ -508,14 +566,13 @@ class AmenityDetailAdmin(ModelAdmin):
     Admin interface for AmenityDetail model.
 
     Provides management of amenity-specific details like opening hours,
-    operating status, and brand information.
+    operating status, and contact information.
     """
 
     list_display = (
         "place_name",
         "place_categories",
         "operating_status",
-        "brand",
         "has_opening_hours",
         "has_phones",
         "created",
@@ -526,8 +583,6 @@ class AmenityDetailAdmin(ModelAdmin):
 
     list_filter = (
         "operating_status",
-        "brand__parent",
-        "brand",
         "geo_place__categories__parent",
         "geo_place__categories",
         "geo_place__country_code",
@@ -541,34 +596,7 @@ class AmenityDetailAdmin(ModelAdmin):
         "geo_place__categories__slug",
     )
 
-    autocomplete_fields = ("geo_place", "brand")
-
-    @override
-    def formfield_for_foreignkey(
-        self,
-        db_field: db_models.ForeignKey[Any, Any],
-        request: HttpRequest,
-        **kwargs: Any,
-    ):
-        """Filter FK choices based on field type."""
-        if db_field.name == "brand":
-            # Only show categories that are children of 'brands' parent
-            # or adjust this filter based on your category structure
-            from server.apps.categories.models import Category
-
-            # Try to get brands parent category
-            brands_parent = Category.objects.filter(identifier="root.brand").first()
-            if brands_parent:
-                kwargs["queryset"] = Category.objects.filter(
-                    parent=brands_parent
-                ).order_by("name")
-            else:
-                # Fallback: show all categories (or implement different logic)
-                kwargs["queryset"] = Category.objects.filter(
-                    parent__isnull=False
-                ).order_by("parent__name", "name")
-
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    autocomplete_fields = ("geo_place",)
 
     readonly_fields = (
         "created",
@@ -589,14 +617,6 @@ class AmenityDetailAdmin(ModelAdmin):
             {
                 "fields": [
                     "operating_status",
-                ],
-            },
-        ),
-        (
-            _("Brand"),
-            {
-                "fields": [
-                    "brand",
                 ],
             },
         ),

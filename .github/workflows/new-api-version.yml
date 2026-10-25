@@ -35,16 +35,22 @@ jobs:
           echo "Current API version: $VERSION"
           echo "version=$VERSION" >> $GITHUB_ENV
 
-      - name: Guard never tag unreleased
+      - name: Skip tagging while the current version is unreleased
+        # 'unreleased' is the normal staging-iteration state (registry.py
+        # UNRELEASED placeholder — unfrozen in #318, amended in #329): the
+        # version only gets its release date and its api/ tag at release
+        # time ('inv release', see docs/api-versioning.md). Until then a
+        # green build has nothing to tag — notice + no-op, never an error
+        # (the registry invariants are guarded by registry_check above).
         if: env.version == 'unreleased'
         run: |
-          echo "::error::Cannot tag 'unreleased' as an API version."
-          echo "Run 'inv api-freeze' (or 'inv release') to assign the real"
-          echo "date before deploying. The freeze step replaces 'unreleased'"
-          echo "with the actual release date in registry.py."
-          exit 1
+          echo "::notice::Current API version is 'unreleased' (staging"
+          echo "iteration): nothing to tag. The version is frozen to its"
+          echo "release date and tagged at release time ('inv release',"
+          echo "see docs/api-versioning.md)."
 
       - name: Check snapshot is committed
+        if: env.version != 'unreleased'
         run: |
           SNAPSHOT="server/apps/apiversions/openapi/${{ env.version }}.json"
           if [ ! -f "$SNAPSHOT" ]; then
@@ -54,6 +60,7 @@ jobs:
           echo "Snapshot present: $SNAPSHOT"
 
       - name: Check if tag exists
+        if: env.version != 'unreleased'
         uses: mukunku/tag-exists-action@v1.7.0
         id: check-tag
         with:

@@ -18,8 +18,10 @@ from server.apps.geometries.presenters import (
     base_result,
     build_amenity_detail,
     build_categories_data,
+    build_parties_data,
     build_sources,
     prefetch_categories,
+    prefetch_parties,
 )
 from server.apps.geometries.schemas import CategoryPlaceTypeSchema as CategorySchema
 from server.apps.organizations.schema import OrganizationSourceIdSlugSchema
@@ -31,6 +33,7 @@ from .schemas import (
     GeoPlaceDetailSchema,
     GeoPlaceNearbySchema,
     GeoPlaceSearchSchema,
+    PartySchema,
 )
 
 __all__ = ["paths"]
@@ -40,6 +43,7 @@ GeoPlaceFields = sparse_fields_query(
     places=GeoPlaceSearchSchema,
     categories=CategorySchema,
     sources=OrganizationSourceIdSlugSchema,
+    parties=PartySchema,
 )
 
 
@@ -273,10 +277,13 @@ class GeoSearchController(ApiController):
         # fields the wire schema does not declare. Hand-tuned on purpose.
         wants_categories = field_selected(query, "places", "categories")
         wants_sources = field_selected(query, "places", "sources")
+        wants_parties = field_selected(query, "places", "parties")
         if wants_categories:
             queryset = prefetch_categories(queryset)
         if wants_sources:
             queryset = annotate_sources(queryset)
+        if wants_parties:
+            queryset = prefetch_parties(queryset)
 
         # Fuzzy search using trigram similarity
         requested_language = query.lang
@@ -403,6 +410,8 @@ class GeoSearchController(ApiController):
                 result["categories"] = build_categories_data(place, request) or []
             if wants_sources:
                 build_sources(result, place, media_url)
+            if wants_parties:
+                result["parties"] = build_parties_data(place, request) or []
             results.append(result)
 
         return results  # type: ignore  # serialized dicts match schema shape at runtime
@@ -453,10 +462,13 @@ class GeoNearbyController(ApiController):
         # purpose, same reasoning as search_geoplaces.
         wants_categories = field_selected(query, "places", "categories")
         wants_sources = field_selected(query, "places", "sources")
+        wants_parties = field_selected(query, "places", "parties")
         if wants_categories:
             queryset = prefetch_categories(queryset)
         if wants_sources:
             queryset = annotate_sources(queryset)
+        if wants_parties:
+            queryset = prefetch_parties(queryset)
 
         queryset = queryset.annotate(distance=Distance("location", point)).order_by(
             "distance"
@@ -480,12 +492,18 @@ class GeoNearbyController(ApiController):
 
             result["categories"] = build_categories_data(place, request) or []
             build_sources(result, place, media_url)
+            if wants_parties:
+                result["parties"] = build_parties_data(place, request) or []
             results.append(
                 project_fields(
                     result,
                     query,
                     "places",
-                    {"categories": "categories", "sources": "sources"},
+                    {
+                        "categories": "categories",
+                        "sources": "sources",
+                        "parties": "parties",
+                    },
                 )
             )
 
@@ -561,6 +579,7 @@ class PlaceController(ApiController):
         wants_amenity = field_selected(query, "places", "amenity_detail")
         wants_categories = field_selected(query, "places", "categories")
         wants_sources = field_selected(query, "places", "sources")
+        wants_parties = field_selected(query, "places", "parties")
 
         queryset = GeoPlace.objects.filter(
             is_active=True,
@@ -575,6 +594,8 @@ class PlaceController(ApiController):
             queryset = prefetch_categories(queryset)
         if wants_sources:
             queryset = annotate_sources(queryset)
+        if wants_parties:
+            queryset = prefetch_parties(queryset)
 
         place = queryset.first()
         if place is None:
@@ -582,6 +603,8 @@ class PlaceController(ApiController):
 
         # Count the visit once we know the place exists (best-effort).
         from server.apps.visits.models import record_visit
+
+        # Count the visit once we know the place exists (best-effort).
 
         record_visit(request, place)
 
@@ -612,6 +635,11 @@ class PlaceController(ApiController):
 
         if wants_sources:
             build_sources(result, place, media_url)
+
+        if wants_parties:
+            parties_data = build_parties_data(place, request)
+            if parties_data:
+                result["parties"] = parties_data
 
         return GeoPlaceDetailSchema(**_narrow_place_detail(result, query))
 
