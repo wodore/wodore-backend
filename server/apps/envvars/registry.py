@@ -55,12 +55,31 @@ def rows() -> dict[str, Row]:
     return snapshot
 
 
+def _setting_or_env(name: str) -> str | None:
+    """Boot-config fallback: the Django setting when defined, else env.
+
+    The setting is decouple's boot-time snapshot of the process
+    environment plus ``.env`` files and wins on purpose: infisical-
+    injected values land on the setting at boot anyway, and
+    ``override_settings`` in tests must not lose to a stray shell
+    export of the same name. Names that are not Django settings
+    (operational API keys) resolve from the live process environment.
+    """
+    if hasattr(settings, name):
+        return str(getattr(settings, name))
+    if name in os.environ:
+        return os.environ[name]
+    return None
+
+
 def resolve(name: str, snapshot: dict[str, Row] | None = None) -> str | None:
     """Resolve one name per the precedence matrix.
 
     Returns ``None`` when the name does not resolve (unregistered,
-    inactive, or empty-with-fallback and no environment value); ``""``
-    when an explicitly pinned empty value resolves.
+    inactive, or empty-with-fallback and no setting/environment value);
+    ``""`` when an explicitly pinned empty value resolves. The fallback
+    reads the Django setting first, then the process environment (see
+    ``_setting_or_env``).
     """
     snap = rows() if snapshot is None else snapshot
     row = snap.get(name)
@@ -73,11 +92,7 @@ def resolve(name: str, snapshot: dict[str, Row] | None = None) -> str | None:
         return value
     if not env_fallback:
         return ""  # pinned empty
-    if name in os.environ:
-        return os.environ[name]
-    if hasattr(settings, name):
-        return str(getattr(settings, name))
-    return None
+    return _setting_or_env(name)
 
 
 def resolve_many(

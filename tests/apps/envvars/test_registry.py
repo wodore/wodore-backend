@@ -84,6 +84,28 @@ class TestResolveSetting:
     def test_unknown_name_uses_default(self):
         assert resolve_setting("NOT_A_DJANGO_SETTING", "fallback") == "fallback"
 
+    def test_settings_backed_name_prefers_setting_over_env_export(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        """``resolve()`` reads the Django setting first for
+        settings-backed names (decouple's boot snapshot) — a stray shell
+        export must not win, or ``override_settings`` breaks."""
+        from server.apps.envvars.registry import resolve
+
+        monkeypatch.setenv(NAME, "https://stray-export.example")
+        _row()  # empty + env fallback
+        with override_settings(IMAGOR_URL="https://img.example.org"):
+            assert resolve("IMAGOR_URL") == "https://img.example.org"
+
+    def test_non_setting_name_resolves_from_env(self, monkeypatch: pytest.MonkeyPatch):
+        """Operational API keys are not Django settings — they resolve
+        from the live process environment, as before."""
+        from server.apps.envvars.registry import resolve
+
+        monkeypatch.setenv("WODORE_TEST_KEY", "from-env")
+        _row(name="WODORE_TEST_KEY")
+        assert resolve("WODORE_TEST_KEY") == "from-env"
+
 
 @pytest.mark.django_db
 class TestUrlOriginSeed:
@@ -149,9 +171,12 @@ class NoDatabaseDegradation(SimpleTestCase):
 @pytest.mark.django_db
 class TestStyleResolutionUsesRegistry:
     def test_registry_value_flows_into_style_resolution(self):
-        """End-to-end: a DB override changes the served tile origin."""
+        """End-to-end: a DB override changes the served tile origin
+        through the authored ``{{env:MARTIN_TILE_URL}}`` token."""
         _row(name="MARTIN_TILE_URL", value="https://tiles.cdn.example.org")
-        style = {"sources": {"huts": {"tiles": ["{TILE_SERVER_URL}/huts/{z}/{x}/{y}"]}}}
+        style = {
+            "sources": {"huts": {"tiles": ["{{env:MARTIN_TILE_URL}}/huts/{z}/{x}/{y}"]}}
+        }
         resolved = resolve_style(style, {})
         assert resolved["sources"]["huts"]["tiles"] == [
             "https://tiles.cdn.example.org/huts/{z}/{x}/{y}"

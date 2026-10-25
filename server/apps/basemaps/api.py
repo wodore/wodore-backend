@@ -86,9 +86,10 @@ CATALOG_VERSION_CACHE_KEY = "basemaps:catalog-version"
 
 #: Render epoch of cached style bodies — derived from the env registry
 #: (EnvVar count + max(modified)) and memoized: registry values are
-#: baked into rendered bodies (the tile origin via ``{TILE_SERVER_URL}``,
-#: ``{{env:...}}`` tokens via substitution), so every registry change
-#: must re-key them. DB-derived on purpose — the default cache is
+#: baked into rendered bodies (the tile origin via the
+#: ``{{env:MARTIN_TILE_URL}}`` token — legacy ``{TILE_SERVER_URL}``
+#: alias — and every other ``{{env:...}}`` token via substitution), so
+#: every registry change must re-key them. DB-derived on purpose — the default cache is
 #: process-local (LocMemCache), so a signal bump would never reach the
 #: other gunicorn workers; every worker derives the same value from
 #: the DB and converges within the memo window.
@@ -821,23 +822,28 @@ def _inject_serving_metadata(
 def _style_bodies_epoch() -> str:
     """Current render epoch of style bodies, derived from the registry.
 
-    ``f"{max(EnvVar.modified)}:{count}"``, memoized — registry edits
-    change the aggregate, every worker derives the identical value
-    from the DB, and no cross-process signal is needed. Empty table →
-    ``":0"`` (still a valid epoch; changes on the first row).
+    Digest over every row's ``(name, value, is_active, env_fallback)``
+    plus the row count, memoized — any conceivable registry edit changes
+    it, every worker derives the identical value from the DB, and no
+    cross-process signal is needed. Content-derived on purpose:
+    ``modified`` timestamps proved unreliable as a change signal in
+    this stack (observed regressing to the creation instant on
+    ``update_or_create``), while a value edit is exactly what must
+    re-key the bodies. Empty table → digest of the empty tuple.
     """
     from django.core.cache import cache
-    from django.db.models import Count, Max
 
     epoch: str | None = cache.get(STYLE_BODIES_EPOCH_KEY)
     if epoch is None:
         from server.apps.envvars.models import EnvVar
 
-        aggregate = EnvVar.objects.aggregate(latest=Max("modified"), total=Count("*"))
-        latest = aggregate["latest"]
-        epoch = (
-            f"{latest.isoformat() if latest is not None else ''}:{aggregate['total']}"
+        rows = list(
+            EnvVar.objects.values_list(
+                "name", "value", "is_active", "env_fallback"
+            ).order_by("name")
         )
+        digest = hashlib.sha256(repr(rows).encode()).hexdigest()[:16]
+        epoch = f"{digest}:{len(rows)}"
         cache.set(STYLE_BODIES_EPOCH_KEY, epoch, STYLE_BODIES_EPOCH_TTL)
     return epoch
 

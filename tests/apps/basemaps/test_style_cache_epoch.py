@@ -37,13 +37,15 @@ from server.apps.envvars.models import EnvVar
 
 @pytest.fixture(autouse=True)
 def _clean_epoch():
-    """Fresh epoch + no seeded rows.
+    """Fresh epoch + a resolvable tile-origin row.
 
-    The default cache is database-backed in tests, and migration 0004
-    seeds the URL-origin rows — wipe them (the signals fire, hence the
-    memo reset afterwards).
+    The default cache is database-backed in tests, and the huts overlay
+    resolves its tile origin through the registry token — wipe the
+    seeded rows, then keep exactly one empty MARTIN_TILE_URL row so
+    token-based rendering stays serveable in every test.
     """
     EnvVar.objects.all().delete()
+    EnvVar.objects.create(name="MARTIN_TILE_URL", description="tile origin")
     cache.delete(STYLE_BODIES_EPOCH_KEY)
     yield
     cache.delete(STYLE_BODIES_EPOCH_KEY)
@@ -85,7 +87,7 @@ class TestDerivedEpoch:
     def test_envvar_save_fires_signal_and_clears_memo(self):
         """The real wiring: post_save on EnvVar → ``_registry_changed``."""
         cache.set(STYLE_BODIES_EPOCH_KEY, "stale-memo")
-        EnvVar.objects.create(name="MARTIN_TILE_URL", value="https://cdn.example.org")
+        EnvVar.objects.create(name="SIGNAL_TEST_KEY", value="x")
         assert cache.get(STYLE_BODIES_EPOCH_KEY) is None
 
 
@@ -96,7 +98,9 @@ class TestKeyRotation:
         _style_cache_set(layer, tokenized=False, body="[]", etag='"x"', digest="d")
         assert _style_cache_get(layer, tokenized=False, digest="d") == ("[]", '"x"')
 
-        EnvVar.objects.create(name="MARTIN_TILE_URL", value="https://cdn.example.org")
+        EnvVar.objects.update_or_create(
+            name="MARTIN_TILE_URL", defaults={"value": "https://cdn.example.org"}
+        )
 
         # Signal cleared the memo; the next derivation sees the new DB
         # state → old entry unreachable, the next render re-bakes.

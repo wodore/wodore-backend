@@ -48,6 +48,7 @@ from django.utils.timezone import now
 from server.apps.envvars.registry import resolve_setting
 
 from .models import MapLayer, TileAssetVersion
+from .resolution import replace_tile_origin
 
 logger = structlog.get_logger("server.apps.basemaps")
 
@@ -189,8 +190,14 @@ def _tile_origin() -> str:
 
 
 def _versionable(url: str) -> bool:
-    """A URL may get a ``?v=`` only if it self-manages no cache key."""
-    return not ("?" in url or "{{" in url)
+    """A URL may get a ``?v=`` only if it self-manages no cache key.
+
+    Tile-origin tokens are server-side substitutes, not client
+    parameter tokens — they manage no cache key and must not suppress
+    versioning (authored env-token URLs contain ``{{``).
+    """
+    stripped = replace_tile_origin(url, "")
+    return not ("?" in stripped or "{{" in stripped)
 
 
 def _append_param(url: str, value: str) -> str:
@@ -200,13 +207,14 @@ def _append_param(url: str, value: str) -> str:
 def _normalize_probe_url(url: str, origin: str) -> tuple[str, bool]:
     """(path, is_martin) for an authored OR resolved asset URL.
 
-    Accepts the three authored shapes — ``{TILE_SERVER_URL}/…``
-    placeholder, root-relative ``/…`` (Martin) and absolute URLs — plus
-    the resolved absolute ones. Martin URLs are identified by the
-    placeholder/root-relative forms or an absolute URL on the tile
-    origin; other absolute URLs are external candidates.
+    Accepts the authored shapes — ``{{env:MARTIN_TILE_URL}}/…`` env
+    token (the convention), the legacy ``{TILE_SERVER_URL}/…``
+    placeholder, root-relative ``/…`` (Martin) and absolute URLs —
+    plus the resolved absolute ones. Martin URLs are identified by the
+    token/placeholder/root-relative forms or an absolute URL on the
+    tile origin; other absolute URLs are external candidates.
     """
-    url = url.replace("{TILE_SERVER_URL}", origin)
+    url = replace_tile_origin(url, origin)
     if url.startswith("/"):
         return url, True
     split = urlsplit(url)
@@ -491,7 +499,7 @@ def collect_martin_probes() -> tuple[list[str], list[str], dict[str, list[str]]]
 
     def to_martin_url(url: str) -> str | None:
         """Absolutize and keep only tile-origin URLs; None = external."""
-        url = url.replace("{TILE_SERVER_URL}", origin)
+        url = replace_tile_origin(url, origin)
         if url.startswith("/"):
             return f"{origin}{url}"
         if origin and url.startswith(origin):
@@ -558,7 +566,7 @@ def collect_martin_probes() -> tuple[list[str], list[str], dict[str, list[str]]]
                 route = segments[0]
                 if route not in STATIC_TERRAIN_TILE_ROUTES:
                     continue
-                base = to_martin_url(tile) or tile.replace("{TILE_SERVER_URL}", origin)
+                base = to_martin_url(tile) or replace_tile_origin(tile, origin)
                 concrete = base
                 for token, value in (
                     ("{z}", str(z)),

@@ -13,8 +13,9 @@ DEFAULTS: tuple[tuple[str, str], ...] = (
     (
         "MARTIN_TILE_URL",
         (
-            "Public tile origin (tile-router/Martin; CDN in staging/prod) "
-            "— replaces {TILE_SERVER_URL} in served map styles"
+            "Tile origin (tile-router/Martin; CDN in staging/prod) — "
+            "resolves {{env:MARTIN_TILE_URL}} style tokens (legacy "
+            "{TILE_SERVER_URL} placeholder kept as alias)"
         ),
     ),
     (

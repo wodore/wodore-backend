@@ -21,7 +21,7 @@ from server.apps.envvars.registry import resolve_setting
 # request — an extra redirect round-trip per fontstack/range and a
 # cache key that never rotates on font changes. The canonical route
 # answers 200 directly with the query intact.
-GLYPHS = "{TILE_SERVER_URL}/font/{fontstack}/{range}"
+GLYPHS = "{{env:MARTIN_TILE_URL}}/font/{fontstack}/{range}"
 
 SWISSTOPO_HOSTS = tuple(f"wmts{i}.geo.admin.ch" for i in range(10))
 
@@ -334,7 +334,7 @@ HUTS_STYLE: dict[str, Any] = {
             # conversion, `convert_to_mlt` in martin.yaml) plus the
             # MapLibre decoder marker. Pairing contract (tested): a
             # .mlt tiles template always ships with ``encoding: mlt``.
-            "tiles": ["{TILE_SERVER_URL}/huts/{z}/{x}/{y}.mlt"],
+            "tiles": ["{{env:MARTIN_TILE_URL}}/huts/{z}/{x}/{y}.mlt"],
             "encoding": "mlt",
             "minzoom": 5,
             # Overzoom cap (matches the Martin table): symbols re-place
@@ -354,7 +354,7 @@ HUTS_STYLE: dict[str, Any] = {
             # tiles client-side (no further requests).
             "type": "vector",
             "tiles": [
-                "{TILE_SERVER_URL}/availability/{z}/{x}/{y}?date={{date}}&days=4"
+                "{{env:MARTIN_TILE_URL}}/availability/{z}/{x}/{y}?date={{date}}&days=4"
             ],
             "promoteId": "slug",
             "minzoom": 5,
@@ -365,8 +365,11 @@ HUTS_STYLE: dict[str, Any] = {
         # Martin serves the DB-synced category sprites; the combined URL
         # merges accommodation + availability under the "wd" id, and the
         # SDF variant carries runtime-tintable mono silhouettes.
-        {"id": "wd", "url": "{TILE_SERVER_URL}/sprite/accommodation,availability"},
-        {"id": "wd-sdf", "url": "{TILE_SERVER_URL}/sdf_sprite/accommodation"},
+        {
+            "id": "wd",
+            "url": "{{env:MARTIN_TILE_URL}}/sprite/accommodation,availability",
+        },
+        {"id": "wd-sdf", "url": "{{env:MARTIN_TILE_URL}}/sdf_sprite/accommodation"},
     ],
     "glyphs": GLYPHS,
     "layers": [
