@@ -1,10 +1,12 @@
 {% if is_staging %}# Wodore (staging)
 
+> Other languages: {{ language_links }}
 > Staging environment: content may be incomplete or experimental.
 > Use production https://wodore.com and its llms.txt
 > https://wodore.com/llms.txt instead. Every URL in this document
 > points to production.
 {% else %}# Wodore
+> Other languages: {{ language_links }}
 {% endif %}
 > Wodore is the international hut directory: an interactive map with
 > opening seasons, capacities, availability and booking sources for
