@@ -1,11 +1,15 @@
+import typing as t
+from typing import override
+
 from django.conf import settings
 from django.forms import ModelForm, ValidationError
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
 
-def required_i18n_fields_form_factory(*fields):
-    class TransForm(ModelForm):
+def required_i18n_fields_form_factory(*fields: str) -> type[ModelForm[t.Any]]:
+    class TransForm(ModelForm[t.Any]):
+        @override
         def clean(self):
             for field in fields:
                 translations = [

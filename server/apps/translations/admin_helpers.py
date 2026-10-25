@@ -7,12 +7,14 @@ service (`assess_instance`) on any model with an ``i18n`` TranslationField.
 """
 
 import typing as t
+from typing import override
 
 from django.contrib import admin, messages
 from django.core.exceptions import ImproperlyConfigured, PermissionDenied
+from django.db.models import QuerySet
 from django.http import HttpRequest, HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect
-from django.urls import path, reverse
+from django.urls import URLPattern, path, reverse
 from django.utils.translation import gettext_lazy as _
 
 from unfold.decorators import action, display
@@ -34,7 +36,10 @@ class DescriptionQualityFilter(admin.SimpleListFilter):
     title = _("description quality")
     parameter_name = "description_quality_range"
 
-    def lookups(self, request, model_admin):
+    @override
+    def lookups(
+        self, request: HttpRequest, model_admin: admin.ModelAdmin[t.Any]
+    ) -> tuple[tuple[str, t.Any], ...]:
         return (
             ("low", _("low (1-3)")),
             ("mid", _("adequate (4-6)")),
@@ -42,7 +47,10 @@ class DescriptionQualityFilter(admin.SimpleListFilter):
             ("none", _("unscored")),
         )
 
-    def queryset(self, request, queryset):
+    @override
+    def queryset(
+        self, request: HttpRequest, queryset: QuerySet[t.Any]
+    ) -> QuerySet[t.Any] | None:
         value = self.value()
         if value == "low":
             return queryset.filter(description_quality__lte=3)
@@ -57,7 +65,7 @@ class DescriptionQualityFilter(admin.SimpleListFilter):
         return queryset
 
 
-class LLMAdminMixin(admin.ModelAdmin):
+class LLMAdminMixin(admin.ModelAdmin[t.Any]):
     """Changelist actions + change-form buttons for LLM translate/assess.
 
     Mix into a concrete ModelAdmin (e.g. ``class HutsAdmin(LLMAdminMixin,
@@ -83,7 +91,7 @@ class LLMAdminMixin(admin.ModelAdmin):
             for score in range(1, 11)
         },
     )
-    def description_quality_display(self, obj):
+    def description_quality_display(self, obj: t.Any) -> str:
         if obj.description_quality is None:
             return "–"
         return str(obj.description_quality)
@@ -106,19 +114,22 @@ class LLMAdminMixin(admin.ModelAdmin):
         description=_("Translate missing languages (AI)"),
         permissions=["change"],
     )
-    def translate_selected(self, request: HttpRequest, queryset) -> None:
+    def translate_selected(
+        self, request: HttpRequest, queryset: QuerySet[t.Any]
+    ) -> None:
         self._run_llm(request, queryset, mode="translate")
 
     @action(
         description=_("Assess description (AI)"),
         permissions=["change"],
     )
-    def assess_selected(self, request: HttpRequest, queryset) -> None:
+    def assess_selected(self, request: HttpRequest, queryset: QuerySet[t.Any]) -> None:
         self._run_llm(request, queryset, mode="assess")
 
     # -- change-form buttons -----------------------------------------------
 
-    def get_urls(self):
+    @override
+    def get_urls(self) -> list[URLPattern]:
         if not translations_api_enabled():
             return super().get_urls()
         info = (self.model._meta.app_label, self.model._meta.model_name)
@@ -157,8 +168,15 @@ class LLMAdminMixin(admin.ModelAdmin):
                 self._message_stats(request, obj, stats, mode)
         return self._redirect_to_change(obj)
 
+    @override
     def render_change_form(
-        self, request, context, add=False, change=False, form_url="", obj=None
+        self,
+        request: HttpRequest,
+        context: dict[str, t.Any],
+        add: bool = False,
+        change: bool = False,
+        form_url: str = "",
+        obj: t.Any = None,
     ):
         context = context or {}
         obj = context.get("original") or obj
@@ -183,12 +201,16 @@ class LLMAdminMixin(admin.ModelAdmin):
             messages.error(request, str(error))
             return None
 
-    def _call(self, obj, client, mode: str) -> dict[str, t.Any]:
+    def _call(
+        self, obj: t.Any, client: TranslationClient, mode: str
+    ) -> dict[str, t.Any]:
         if mode == "translate":
             return translate_instance(obj, client=client)
         return assess_instance(obj, client=client)
 
-    def _run_llm(self, request: HttpRequest, queryset, mode: str) -> None:
+    def _run_llm(
+        self, request: HttpRequest, queryset: QuerySet[t.Any], mode: str
+    ) -> None:
         client = self._build_client(request)
         if client is None:
             return
@@ -210,7 +232,7 @@ class LLMAdminMixin(admin.ModelAdmin):
                 done.append(self._describe(obj, stats, mode))
         self._message_batch(request, mode, done, skipped, errors)
 
-    def _describe(self, obj, stats: dict[str, t.Any], mode: str) -> str:
+    def _describe(self, obj: t.Any, stats: dict[str, t.Any], mode: str) -> str:
         if mode == "translate":
             fields = sum(len(v) for v in stats.get("translated", {}).values())
             return f"{obj}: {fields} field(s)"
@@ -220,7 +242,7 @@ class LLMAdminMixin(admin.ModelAdmin):
         return line
 
     def _message_stats(
-        self, request: HttpRequest, obj, stats: dict[str, t.Any], mode: str
+        self, request: HttpRequest, obj: t.Any, stats: dict[str, t.Any], mode: str
     ) -> None:
         skipped_reason = stats.get("skipped")
         if skipped_reason:
@@ -259,7 +281,7 @@ class LLMAdminMixin(admin.ModelAdmin):
                 messages.ERROR,
             )
 
-    def _redirect_to_change(self, obj):
+    def _redirect_to_change(self, obj: t.Any):
         info = (self.model._meta.app_label, self.model._meta.model_name)
         return redirect("admin:%s_%s_change" % info, obj.pk)
 

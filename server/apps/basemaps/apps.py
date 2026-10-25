@@ -1,5 +1,7 @@
 """App configuration for basemaps."""
 
+from typing import override
+
 from django.apps import AppConfig
 
 
@@ -10,6 +12,7 @@ class BasemapsConfig(AppConfig):
     name = "server.apps.basemaps"
     verbose_name = "Basemaps & Overlays"
 
+    @override
     def ready(self) -> None:
         """Env-registry edits flip layer availability at runtime.
 

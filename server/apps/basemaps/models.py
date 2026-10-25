@@ -17,7 +17,7 @@ Key invariants enforced here:
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, override
 
 from modeltrans.fields import TranslationField
 
@@ -712,6 +712,7 @@ class MapLayer(TimeStampedModel):
 
     # ── Validation ────────────────────────────────────────────────────────
 
+    @override
     def clean(self) -> None:
         """Structural + token + attribution validation (admin & factory)."""
         super().clean()

@@ -7,6 +7,8 @@ can point at it directly.
 
 from __future__ import annotations
 
+from typing import Any, override
+
 from django.core.management.base import BaseCommand
 
 from server.apps.basemaps.tile_assets import run_external_verifier
@@ -19,7 +21,8 @@ class Command(BaseCommand):
         "back to body hashing) and bump their registry versions on change."
     )
 
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         stats = run_external_verifier()
         self.stdout.write(
             f"changed={stats['changed']} unchanged={stats['unchanged']} "
