@@ -5,7 +5,7 @@ import unicodedata
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
 
 def slugify(value: str) -> str:
@@ -30,7 +30,7 @@ class SourceSpec:
     pack_slug: str
     org_slug: str
     org_name: str
-    license: dict  # {"slug", "name", "fullname", "url"}
+    license: dict[str, str]  # {"slug", "name", "fullname", "url"}
     repo_url: str  # tarball template with {ref}
     web_url: str  # browsable tree template with {ref}
     extract_marker: str  # top-level dir that must exist post-extraction
@@ -52,7 +52,7 @@ class IconCandidate:
     fallback_name: str
     hexcode: str | None
     styles: dict[str, Path] = field(default_factory=dict)
-    entry: dict | None = None
+    entry: dict[str, Any] | None = None
 
 
 class IconSource:
@@ -72,7 +72,7 @@ class IconSource:
         raise NotImplementedError
 
     def iter_candidates(
-        self, source_dir: Path, entries: dict[str, dict]
+        self, source_dir: Path, entries: dict[str, Any]
     ) -> Iterator[IconCandidate]:
         """Yield one candidate per upstream icon.
 

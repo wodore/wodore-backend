@@ -12,7 +12,7 @@ Only codes with a Unicode emoji equivalent are imported (see
 
 from collections.abc import Iterator
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar, override
 
 from server.apps.symbols.icon_sources.base import (
     IconCandidate,
@@ -51,11 +51,13 @@ class FlagIconsSource(IconSource):
 
     spec: ClassVar[SourceSpec] = FLAG_ICONS_SPEC
 
+    @override
     def source_dir(self, base_dir: Path) -> Path:
         return base_dir / "flag-icons" / "flags"
 
+    @override
     def iter_candidates(
-        self, source_dir: Path, entries: dict[str, dict]
+        self, source_dir: Path, entries: dict[str, Any]
     ) -> Iterator[IconCandidate]:
         self.reset()
         for ratio, slug_suffix, name_suffix in FLAG_ICONS_VARIANTS:

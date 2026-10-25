@@ -16,7 +16,7 @@ already served by the ``flag-icons`` pack and is not imported.
 
 from collections.abc import Iterator
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar, override
 
 from server.apps.symbols.icon_data import normalize_hexcode
 from server.apps.symbols.icon_sources.base import (
@@ -48,11 +48,13 @@ class NotoSource(IconSource):
 
     spec: ClassVar[SourceSpec] = NOTO_SPEC
 
+    @override
     def source_dir(self, base_dir: Path) -> Path:
         return base_dir / "noto" / "2D" / "svg"
 
+    @override
     def iter_candidates(
-        self, source_dir: Path, entries: dict[str, dict]
+        self, source_dir: Path, entries: dict[str, Any]
     ) -> Iterator[IconCandidate]:
         self.reset()
         for svg_path in sorted(source_dir.glob("emoji_u*.svg")):
@@ -63,7 +65,7 @@ class NotoSource(IconSource):
             for svg_path in sorted(flags_dir.glob("emoji_u*.svg")):
                 yield self._candidate(svg_path, entries)
 
-    def _candidate(self, svg_path: Path, entries: dict[str, dict]) -> IconCandidate:
+    def _candidate(self, svg_path: Path, entries: dict[str, Any]) -> IconCandidate:
         codepoints = svg_path.stem[len("emoji_u") :].split("_")
         hexcode = normalize_hexcode("-".join(codepoints))
         entry = entries.get(hexcode)
