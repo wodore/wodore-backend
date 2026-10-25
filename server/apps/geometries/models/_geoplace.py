@@ -1080,10 +1080,8 @@ class GeoPlace(TimeStampedModel):
                 "operating_status": schema.operating_status.value,
                 "opening_months": schema.opening_months,
                 "opening_hours": schema.opening_hours,
-                "phones": [
-                    p.model_dump() if hasattr(p, "model_dump") else p
-                    for p in schema.phones
-                ],
+                # phones retired (external-link-uris): numbers live as
+                # uri.phone external links on the place
             }
             # Party associations are place-level (replaces the former
             # brand FK on the detail row)
@@ -1323,15 +1321,8 @@ class GeoPlace(TimeStampedModel):
                     update_fields.append("opening_hours")
                     detail_updated = True
 
-            if "phones" not in protected and schema.phones:
-                new_phones = [
-                    p.model_dump() if hasattr(p, "model_dump") else p
-                    for p in schema.phones
-                ]
-                if amenity_detail.phones != new_phones:
-                    amenity_detail.phones = new_phones
-                    update_fields.append("phones")
-                    detail_updated = True
+            # phones retired (external-link-uris): uri.phone links at the
+            # place level — no detail-row write path
 
             if "parties" not in protected and schema.parties:
                 if AmenityDetail._write_party_associations(place, schema.parties):

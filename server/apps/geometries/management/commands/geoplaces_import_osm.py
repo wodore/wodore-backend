@@ -1043,7 +1043,6 @@ class Command(BaseCommand):
             DedupOptions,
             GeoPlaceAmenityInput,
             PartyInput,
-            PhoneSchema,
             SourceInput,
         )
         from server.apps.translations.schema import TranslationSchema
@@ -1066,11 +1065,8 @@ class Command(BaseCommand):
         # Parse opening hours
         opening_hours_data = self._parse_opening_hours(data.get("opening_hours"))
 
-        # Build phones list
-        phones: list[Any] = []
-        if data.get("phone"):
-            phone_numbers = self._format_phones(data.get("phone"))
-            phones = [PhoneSchema(**p) for p in phone_numbers]
+        # phones retired (external-link-uris): phone tags stay in
+        # osm_tags; numbers are served as uri.phone external links.
 
         # Get category identifiers
         category_slugs = self._get_category_slugs(data)
@@ -1122,7 +1118,6 @@ class Command(BaseCommand):
             # Amenity fields (flattened)
             operating_status=OperatingStatus.OPEN,
             opening_hours=opening_hours_data,
-            phones=phones,
             parties=party_inputs,
         )
 
@@ -3866,7 +3861,6 @@ class Command(BaseCommand):
                     detail = AmenityDetail(
                         operating_status="open",
                         opening_hours=data.get("opening_hours"),
-                        phones=self._format_phones(data.get("phone")),
                     )
                     amenity_details_to_create.append(detail)
 
@@ -3936,8 +3930,6 @@ class Command(BaseCommand):
                     if detail:
                         if data.get("opening_hours"):
                             detail.opening_hours = data["opening_hours"]
-                        if data.get("phone"):
-                            detail.phones = self._format_phones(data["phone"])
                         details_to_update.append(detail)
 
                 # Bulk update
@@ -3948,7 +3940,7 @@ class Command(BaseCommand):
 
                 if details_to_update:
                     AmenityDetail.objects.bulk_update(
-                        details_to_update, ["opening_hours", "phones"]
+                        details_to_update, ["opening_hours"]
                     )
 
                 updated_count += len(existing_places)

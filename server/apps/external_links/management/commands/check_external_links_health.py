@@ -49,6 +49,10 @@ class Command(BaseCommand):
         # Build queryset
         queryset = ExternalLink.objects.filter(is_active=True)
 
+        # Per-URI-kind policy (external-link-uris): non-web kinds
+        # (tel:/mailto:) are exempt — never network-check them.
+        queryset = queryset.exclude(uri_kind__extra__health_check=False)
+
         if not check_all:
             cutoff = timezone.now() - timedelta(days=days)
             queryset = queryset.filter(

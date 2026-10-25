@@ -37,6 +37,22 @@ class TestHutMarkdown:
         # Last-updated footer from the modified timestamp.
         assert f"Last updated: {hut.modified:%Y-%m-%d}" in body
 
+    def test_markdown_varies_on_accept(self, seed_data: dict[str, int], client: Client):
+        """The document carries Vary: Accept (cache-poisoning defense).
+
+        The frontend serves this document under the bare /hut/{slug} URL
+        for Accept: text/markdown clients; if a shared cache ever stores
+        it under that URL again (the 2026-10-25 CDN poisoning), Vary:
+        Accept keeps Accept-honoring caches from feeding the Markdown to
+        browsers on the same URL.
+        """
+        hut = Hut.objects.filter(is_active=True, is_public=True).first()
+        assert hut is not None
+        response = client.get(f"/v1/huts/{hut.slug}.md")
+        assert response.status_code == 200
+        vary = {value.strip() for value in response.headers.get("Vary", "").split(",")}
+        assert "Accept" in vary
+
     def test_markdown_keeps_attribution(
         self, seed_data: dict[str, int], client: Client
     ):

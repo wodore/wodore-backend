@@ -824,9 +824,6 @@ class Command(BaseCommand):
                         geo_place=place,  # Will be set after bulk create
                         operating_status=schema.operating_status.value,  # type: ignore  # dynamic attr: plugin-less inference gap
                         opening_hours=schema.opening_hours,
-                        phones=[p.model_dump() for p in schema.phones]
-                        if schema.phones
-                        else [],
                     )
                     amenity_details_to_create.append(detail)
 
@@ -1039,9 +1036,6 @@ class Command(BaseCommand):
                             geo_place=place,
                             operating_status=schema.operating_status.value,  # type: ignore  # dynamic attr: plugin-less inference gap
                             opening_hours=schema.opening_hours,
-                            phones=[p.model_dump() for p in schema.phones]
-                            if schema.phones
-                            else [],
                         )
                         amenity_details_to_create.append(detail)
 
