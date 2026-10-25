@@ -839,6 +839,21 @@ bad-override = true
 method-assign = true
 
 
+[[tool.pyrefly.sub-config]]
+# Strict-typing ratchet for the owners app: new and changed code must be
+# fully annotated (same ruleset as the contacts and envvars ratchets).
+matches = "server/apps/owners/**"
+
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = true
+implicit-any-type-argument = true
+implicit-any-lambda = true
+implicit-any-empty-container = true
+implicit-any-attribute = true
+missing-override-decorator = true
+bad-override = true
+method-assign = true
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
