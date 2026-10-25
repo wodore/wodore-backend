@@ -642,6 +642,7 @@ missing-override-decorator = true
 bad-override = true
 method-assign = true
 
+
 [[tool.pyrefly.sub-config]]
 # Strict-typing ratchet for the meteo app (weather forecasts, symbols,
 # import commands). New code must be fully annotated; only this subtree is
