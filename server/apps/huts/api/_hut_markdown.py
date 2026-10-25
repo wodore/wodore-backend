@@ -24,6 +24,7 @@ from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
 from django.http import Http404, HttpRequest, HttpResponse
+from django.utils.cache import patch_vary_headers
 from django.utils.html import strip_tags
 
 from server.apps.translations import activate
@@ -284,4 +285,15 @@ def get_hut_markdown(request: HttpRequest, slug: str, lang: str = "de") -> HttpR
         _hut_markdown(request, hut), content_type="text/markdown; charset=utf-8"
     )
     response["Cache-Control"] = f"public, max-age={CACHE_TTL}"
+    # Defense-in-depth against CDN cache poisoning: the frontend serves
+    # this document under the bare /hut/{slug} URL for Accept:
+    # text/markdown clients (via a no-store 308 to {slug}.md since the
+    # 2026-10-25 poisoning incident). If a future change ever serves it
+    # inline under the bare URL again, Vary: Accept keeps Accept-honoring
+    # caches from reusing the Markdown representation for browsers on
+    # the same URL — the CDN in front ignores Vary, which is why the
+    # frontend redirects instead of negotiating inline; this header is
+    # the belt to those braces. Merged, never overwritten: the API
+    # version middleware may already vary on the version header.
+    patch_vary_headers(response, ("Accept",))
     return response
