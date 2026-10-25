@@ -82,12 +82,16 @@ converter whose slug grammar — slug-charset characters containing at
 least one hyphen or underscore — structurally excludes every fixed
 collection segment, so URL resolution SHALL NOT depend on path
 registration order. Fixed collection segments under `places/` SHALL
-be single lowercase words without hyphens or underscores. Slugs SHALL
-be validated at the model layer to that grammar plus a reserved-name
-blacklist (`search`, `nearby`, `overlays`, `meta`, `amenity`), and a
-one-time migration SHALL re-mint any pre-existing violating slug. The
-slug-keyed SEO siblings (`places/{slug}/meta`, `places/{slug}.md`)
-SHALL use the same converter.
+be single lowercase words without hyphens or underscores. The slug
+grammar SHALL be enforced at the database level (a check constraint
+on the slug column matching the converter regex, so every write path
+— admin forms, imports, raw SQL — is covered, not only those calling
+full model validation) and mirrored by model-layer `clean()`
+validation with a reserved-name blacklist (`search`, `nearby`,
+`overlays`, `meta`, `amenity`) for friendly admin errors. A one-time
+migration SHALL re-mint any pre-existing violating slug before the
+constraint is added. The slug-keyed SEO siblings (`places/{slug}/meta`,
+`places/{slug}.md`) SHALL use the same converter.
 
 #### Scenario: Fixed segment is never captured as a slug
 
@@ -108,8 +112,10 @@ SHALL use the same converter.
 
 - **WHEN** an admin saves a place with a slug lacking both `-` and
   `_` (e.g. `zermatt`) or equal to a reserved name
-- **THEN** validation rejects the save, keeping the routing invariant
-  a property of the data
+- **THEN** model validation rejects the save with a friendly error,
+  and any write path that bypasses validation (direct `.save()`, raw
+  SQL) is rejected by the database check constraint — the routing
+  invariant is a property of the data, enforced at storage level
 
 ### Requirement: Place slug invariant
 Every GeoPlace row SHALL have a unique, non-null slug, enforced at

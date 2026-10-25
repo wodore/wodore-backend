@@ -107,12 +107,19 @@ Non-Goals:
      (`places/<geoplace:slug>/meta`, `places/<geoplace:slug>.md`) —
      the `.md`/`/meta` suffixes and the dot-free grammar keep those
      disjoint from the item route.
-   - Model-layer validation makes the grammar a data invariant:
-     `GeoPlace.clean_slug` rejects slugs without `-`/`_` (and a
-     reserved-name blacklist: `search`, `nearby`, `overlays`, `meta`,
-     `amenity`) — mint paths already comply, so this only constrains
-     manual/admin edits. A one-time migration re-mints any historical
-     exception (expected: none — 0 pure-word slugs in the snapshot).
+   - Database-level enforcement makes the grammar a data invariant:
+     a `CheckConstraint` on the slug column matching the converter
+     regex (`^[a-z0-9_-]*[-_][a-z0-9_-]*$`, sibling of the existing
+     `detail_type_valid`/`review_status_valid` constraints) covers
+     every write path — Django `save()` does not run `clean()`, so a
+     validator alone would be advisory only. `GeoPlace.clean()`/
+     `clean_slug` mirrors the constraint plus a reserved-name
+     blacklist (`search`, `nearby`, `overlays`, `meta`, `amenity`)
+     for friendly admin errors; mint paths already comply (the
+     generator always emits `{base}-{suffix}`), so this only
+     constrains manual edits. Verified: 0 of 441,940 production
+     slugs violate the regex — the constraint applies with no data
+     changes.
    - Alternatives rejected: namespacing items under a fixed prefix
      (`places/detail/{slug}` — the images precedent) because it
      breaks URL parity with the existing slug-keyed SEO surface;

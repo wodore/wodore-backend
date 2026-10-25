@@ -5,14 +5,21 @@
 - [ ] 1.1 `AlterField` on `GeoPlace.slug` to `null=False` (keep
       `blank=True` — `save()` auto-mints, forms stay permissive);
       safe — production data has 0 NULL slugs
-- [ ] 1.2 Slug grammar validation in `GeoPlace.clean()`: charset
-      `[a-z0-9_-]` with at least one `-` or `_`, plus reserved-name
-      blacklist (`search`, `nearby`, `overlays`, `meta`, `amenity`);
-      unit tests (valid legacy shapes pass, pure words and reserved
-      names rejected)
-- [ ] 1.3 One-time data migration re-minting any slug that violates
-      the grammar (expected: none — 0 pure-word slugs in the
-      snapshot; assert count in the migration log)
+- [ ] 1.2 Slug grammar enforcement, two layers: (a) `CheckConstraint`
+      on `GeoPlace.slug` matching the converter regex
+      (`^[a-z0-9_-]*[-_][a-z0-9_-]*$`, sibling of the existing
+      `detail_type_valid` constraint) — `save()` does not run
+      `clean()`, so the constraint is the real guarantee; (b)
+      `GeoPlace.clean_slug` mirroring it plus the reserved-name
+      blacklist (`search`, `nearby`, `overlays`, `meta`, `amenity`)
+      for friendly admin errors; unit tests for both layers (valid
+      legacy shapes pass; pure words, uppercase, and reserved names
+      rejected)
+- [ ] 1.3 One-time data migration: re-mint any slug violating the
+      grammar (expected: none — 0 of 441,940 fail the regex on the
+      dev snapshot; assert count in the migration log), then add the
+      check constraint in the same migration (re-mint first,
+      constraint second)
 
 ## 2. Converter & routing
 
