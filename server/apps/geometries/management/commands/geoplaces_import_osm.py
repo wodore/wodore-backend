@@ -40,7 +40,7 @@ from server.apps.geometries.config.osm_categories import (
 )
 from server.apps.geometries.models import AmenityDetail, GeoPlace
 from server.apps.organizations.models import Organization
-from server.apps.parties.models import Party
+from server.apps.parties.services import resolve_party_by_name
 
 if TYPE_CHECKING:
     from rich.console import Console
@@ -1518,20 +1518,14 @@ class Command(BaseCommand):
 
         # Pre-create parties. Operator names are minted first with
         # review status — a name appearing as both brand and operator
-        # stays in the conservative review state (the write path's
-        # get_or_create ignores defaults once the row exists). Dedup is
-        # by normalized name; slugs mint once on creation
-        # (OpenSpec ``party-slug-minting``).
+        # stays in the conservative review state. Dedup is by the
+        # normalized name (``extra.osm_name``, same-named manual
+        # parties adopted); slugs mint once on creation (OpenSpec
+        # ``party-slug-minting``).
         for name in operator_names:
-            Party.objects.get_or_create(
-                dedup_key=Party.normalize_key(name),
-                defaults={"name": name, "review_status": "review"},
-            )
+            resolve_party_by_name(name, review_status="review")
         for name in party_names:
-            Party.objects.get_or_create(
-                dedup_key=Party.normalize_key(name),
-                defaults={"name": name},
-            )
+            resolve_party_by_name(name)
 
         self.stdout.write(
             f"Cached {len(category_cache)} categories and "
@@ -2943,20 +2937,14 @@ class Command(BaseCommand):
 
         # Pre-create parties (operator names first — they mint into
         # review; a name that is both brand and operator stays in the
-        # conservative state). The write path's get_or_create ignores
-        # defaults once the row exists, so this is idempotent. Dedup is
-        # by normalized name; slugs mint once on creation (OpenSpec
+        # conservative state). Idempotent: the resolver dedups by the
+        # normalized name (``extra.osm_name``, same-named manual
+        # parties adopted) and slugs mint once on creation (OpenSpec
         # ``party-slug-minting``).
         for name in operator_names:
-            Party.objects.get_or_create(
-                dedup_key=Party.normalize_key(name),
-                defaults={"name": name, "review_status": "review"},
-            )
+            resolve_party_by_name(name, review_status="review")
         for name in party_names:
-            Party.objects.get_or_create(
-                dedup_key=Party.normalize_key(name),
-                defaults={"name": name},
-            )
+            resolve_party_by_name(name)
 
     def _preload_place_cache(
         self, amenities: list[dict[str, Any]], osm_org: Organization
@@ -3515,7 +3503,15 @@ class Command(BaseCommand):
         source_org: Organization | None = None,
         place_name: str | None = None,
     ):
-        """Add external link to place via ExternalLink model."""
+        """Add external link to place via ExternalLink model.
+
+        Manual link edits are shielded: ``"links"`` in the place's
+        ``protected_fields`` (set by the admin's external-link inline)
+        skips import link writes entirely.
+        """
+        if "links" in (place.protected_fields or []):
+            return
+
         from server.apps.external_links.models import ExternalLink
 
         # Get or create parent category (link_type)

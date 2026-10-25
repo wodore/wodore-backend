@@ -42,7 +42,7 @@ class Command(BaseCommand):
         for owner in owners.iterator(chunk_size=500):
             if dry_run:
                 if Party.objects.filter(
-                    dedup_key=Party.normalize_key(owner.slug)
+                    extra__osm_name=Party.normalize_key(owner.slug)
                 ).exists():
                     existing += 1
                 else:

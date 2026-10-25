@@ -182,7 +182,11 @@ class AmenityDetail(GeoPlaceDetailBase):
 
     @classmethod
     def _write_party_associations(
-        cls, place: GeoPlace, parties: list[PartyInput]
+        cls,
+        place: GeoPlace,
+        parties: list[PartyInput],
+        *,
+        respect_protection: bool = False,
     ) -> bool:
         """Write schema party associations onto the place (idempotent).
 
@@ -191,14 +195,32 @@ class AmenityDetail(GeoPlaceDetailBase):
         silently dropped. Returns True when a new association was
         created. Shared by ``update_or_create`` and the GeoPlace-level
         schema create/update paths.
+
+        With ``respect_protection`` (update paths), role-scoped party
+        protection applies: entries whose role identifier is protected
+        (``GeoPlace.protected_party_roles`` — ``{"parties":
+        ["role.brand"]}`` entries in ``protected_fields``) are skipped,
+        so a manually edited brand never blocks other roles from being
+        written. The legacy flat ``"parties"`` string (all roles) is
+        handled by the callers' gates before this runs.
         """
         from server.apps.categories.models import Category
         from server.apps.parties.models import Party
+        from server.apps.parties.services import resolve_party_by_name
 
         from . import GeoPlaceParty
 
+        entries: list[PartyInput] = parties
+        if respect_protection:
+            if "parties" in (place.protected_fields or []):
+                # Legacy flat entry: all roles protected.
+                entries = []
+            else:
+                protected_roles = place.protected_party_roles()
+                entries = [e for e in parties if e.role not in protected_roles]
+
         created_any = False
-        for entry in parties:
+        for entry in entries:
             role = Category.objects.filter(identifier=entry.role).first()
             if role is None or role.parent_id is None or role.parent.slug != "role":
                 raise ValueError(f"Invalid party role identifier: {entry.role}")
@@ -215,12 +237,12 @@ class AmenityDetail(GeoPlaceDetailBase):
                     slug=entry.slug, defaults=party_defaults
                 )
             elif entry.name:
-                # Name-only: dedup by the normalized name; the slug is
-                # minted once on creation (Party.save()).
-                party_defaults["name"] = entry.name
-                party, _created = Party.objects.get_or_create(
-                    dedup_key=Party.normalize_key(entry.name),
-                    defaults=party_defaults,
+                # Name-only: dedup by the normalized name (the
+                # ``extra.osm_name`` import identity — same-named manual
+                # parties are adopted); the slug is minted once on
+                # creation (Party.save()).
+                party, _created = resolve_party_by_name(
+                    entry.name, review_status=entry.review_status
                 )
             else:
                 raise ValueError("PartyInput needs a slug or a name")
@@ -317,7 +339,9 @@ class AmenityDetail(GeoPlaceDetailBase):
         # Update party associations (place-level; replaces the former
         # brand FK — parties attach to the place, not the detail row)
         if "parties" not in protected and schema.parties:
-            if cls._write_party_associations(place, schema.parties):
+            if cls._write_party_associations(
+                place, schema.parties, respect_protection=True
+            ):
                 updated = True
 
         # Save the detail (without tracking modifications - this is an import)

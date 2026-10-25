@@ -38,8 +38,7 @@ class PartyAdmin(ModelAdmin):
 
     form = required_i18n_fields_form_factory("name")
 
-    search_fields = ("slug", "dedup_key", "name", "name_de")
-    readonly_fields = ("dedup_key",)
+    search_fields = ("slug", "name", "name_de")
     list_display = (
         "name_slug",
         "is_active",
@@ -58,7 +57,6 @@ class PartyAdmin(ModelAdmin):
             {
                 "fields": (
                     ("slug", "name_i18n"),
-                    "dedup_key",
                     ("is_active", "is_public"),
                     "review_status",
                     ("symbol_color", "symbol_mono"),

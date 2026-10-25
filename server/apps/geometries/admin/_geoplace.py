@@ -354,23 +354,64 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         formset: Any,
         change: bool,
     ) -> None:
-        """Manual party edits protect the place from import overwrites.
+        """Manual association edits protect the place from import overwrites.
 
         OpenSpec geoplace-parties decision 7: associations carry no
         automatic tracking, so the inline formset save explicitly marks
-        the place ``is_modified`` and records ``parties`` in
-        ``protected_fields``.
+        the place ``is_modified`` and records the association in
+        ``protected_fields`` — parties role-scoped
+        (``{"parties": ["role.brand"]}``, recording the roles the edit
+        touched), links and categories flat (``"links"`` /
+        ``"categories"`` — no scoping axis needed yet).
         """
-        if formset.model is GeoPlaceParty and formset.has_changed():
+        protected_inline_models = (
+            GeoPlaceParty,
+            GeoPlaceExternalLink,
+            GeoPlaceCategory,
+        )
+        if formset.has_changed() and formset.model in protected_inline_models:
             place = form.instance
             place.is_modified = True
             protected = list(place.protected_fields or [])
-            if "parties" not in protected:
-                protected.append("parties")
-                place.protected_fields = protected
-                place.save(update_fields=["is_modified", "protected_fields"])
+
+            if formset.model is GeoPlaceParty:
+                # Role-scoped: record the roles this edit touched. A
+                # legacy flat "parties" entry (all roles) is kept —
+                # protection never narrows silently.
+                if "parties" in protected:
+                    place.save(update_fields=["is_modified"])
+                else:
+                    changed_roles: set[str] = set()
+                    for obj, _data in formset.changed_objects:
+                        if obj.role_id:
+                            changed_roles.add(obj.role.identifier)
+                    for obj in (*formset.new_objects, *formset.deleted_objects):
+                        if obj.role_id:
+                            changed_roles.add(obj.role.identifier)
+                    scoped: set[str] = set()
+                    for entry in protected:
+                        if isinstance(entry, dict) and isinstance(
+                            entry.get("parties"), list
+                        ):
+                            scoped.update(str(role) for role in entry["parties"])
+                    protected = [
+                        entry
+                        for entry in protected
+                        if not (isinstance(entry, dict) and "parties" in entry)
+                    ]
+                    protected.append({"parties": sorted(scoped | changed_roles)})
+                    place.protected_fields = protected
+                    place.save(update_fields=["is_modified", "protected_fields"])
             else:
-                place.save(update_fields=["is_modified"])
+                field_name = (
+                    "links" if formset.model is GeoPlaceExternalLink else "categories"
+                )
+                if field_name not in protected:
+                    protected.append(field_name)
+                    place.protected_fields = protected
+                    place.save(update_fields=["is_modified", "protected_fields"])
+                else:
+                    place.save(update_fields=["is_modified"])
 
         super().save_formset(request, form, formset, change)
 

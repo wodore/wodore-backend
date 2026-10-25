@@ -24,9 +24,7 @@ def remove_brand_categories(apps: Any, _schema_editor: Any) -> None:
     Category = apps.get_model("categories", "Category")
     GeoPlaceCategory = apps.get_model("geometries", "GeoPlaceCategory")
 
-    root = (
-        Category.objects.filter(identifier="root.brand").order_by("pk").first()
-    )
+    root = Category.objects.filter(identifier="root.brand").order_by("pk").first()
     if root is None:
         return  # already cleaned / fresh database
 
@@ -34,9 +32,7 @@ def remove_brand_categories(apps: Any, _schema_editor: Any) -> None:
     # associations from 0053) — includes associations to the root
     # itself, which would otherwise RESTRICT the delete below.
     category_ids = list(root.children.values_list("id", flat=True)) + [root.id]
-    deleted, _ = GeoPlaceCategory.objects.filter(
-        category_id__in=category_ids
-    ).delete()
+    deleted, _ = GeoPlaceCategory.objects.filter(category_id__in=category_ids).delete()
 
     root.delete()  # children cascade via Category.parent
 
@@ -51,7 +47,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ("categories", "0021_category_created_category_modified_and_more"),
         ("geometries", "0054_alter_geoplace_slug_and_more"),
-        ("parties", "0003_party_dedup_key_and_slug_remint"),
+        ("parties", "0003_party_extra_and_slug_remint"),
     ]
 
     operations = [

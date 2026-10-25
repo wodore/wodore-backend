@@ -39,7 +39,7 @@ class TestPrecacheDataParties:
     def test_brand_tag_mints_brand_party(self):
         _command()._precache_data([_amenity(brand="Volg")])
 
-        party = Party.objects.get(dedup_key="volg")
+        party = Party.objects.get(extra__osm_name="volg")
         assert party.name == "Volg"
         assert party.review_status == "done"
         assert MINTED.fullmatch(party.slug)  # short minted identifier
@@ -47,38 +47,38 @@ class TestPrecacheDataParties:
     def test_single_operator_tag_mints_into_review(self):
         _command()._precache_data([_amenity(operator="SAC Bern")])
 
-        party = Party.objects.get(dedup_key="sac_bern")
+        party = Party.objects.get(extra__osm_name="sac_bern")
         assert party.name == "SAC Bern"
         assert party.review_status == "review"
 
     def test_multi_value_tags_skipped(self):
-        before = set(Party.objects.values_list("dedup_key", flat=True))
+        before = set(Party.objects.values_list("extra__osm_name", flat=True))
 
         _command()._precache_data([_amenity(brand="A; B", operator="C; D")])
 
-        assert set(Party.objects.values_list("dedup_key", flat=True)) == before
+        assert set(Party.objects.values_list("extra__osm_name", flat=True)) == before
 
     def test_idempotent_rerun_keeps_slug(self):
         cmd = _command()
         cmd._precache_data([_amenity(brand="Volg")])
-        slug = Party.objects.get(dedup_key="volg").slug
+        slug = Party.objects.get(extra__osm_name="volg").slug
         cmd._precache_data([_amenity(brand="Volg")])
 
-        assert Party.objects.filter(dedup_key="volg").count() == 1
+        assert Party.objects.filter(extra__osm_name="volg").count() == 1
         # Minted once — the re-run resolves through the dedup key.
-        assert Party.objects.get(dedup_key="volg").slug == slug
+        assert Party.objects.get(extra__osm_name="volg").slug == slug
 
 
 class TestPrecacheMappingDataParties:
     def test_operator_minting_on_mapping_path(self):
         _command()._precache_mapping_data([_amenity(brand="Volg", operator="SAC Bern")])
 
-        assert Party.objects.get(dedup_key="volg").review_status == "done"
-        assert Party.objects.get(dedup_key="sac_bern").review_status == "review"
+        assert Party.objects.get(extra__osm_name="volg").review_status == "done"
+        assert Party.objects.get(extra__osm_name="sac_bern").review_status == "review"
 
     def test_idempotent_rerun(self):
         cmd = _command()
         cmd._precache_mapping_data([_amenity(brand="Volg")])
         cmd._precache_mapping_data([_amenity(brand="Volg")])
 
-        assert Party.objects.filter(dedup_key="volg").count() == 1
+        assert Party.objects.filter(extra__osm_name="volg").count() == 1

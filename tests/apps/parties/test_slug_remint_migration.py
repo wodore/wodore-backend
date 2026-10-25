@@ -3,7 +3,7 @@
 The re-mint streams ``.only()`` rows, mints the 0054 shape
 (``{base<=9}-{5 alnum}``), keeps the collision domain in a set and is
 re-runnable: rows already matching the minted shape are excluded, so a
-retried run finds nothing left to change. ``dedup_key`` values must
+retried run finds nothing left to change. ``extra.osm_name`` values must
 never move — they are the import identity.
 """
 
@@ -21,8 +21,8 @@ from server.apps.parties.models import Party
 
 pytestmark = pytest.mark.django_db
 
-MIGRATION = "server.apps.parties.migrations.0003_party_dedup_key_and_slug_remint"
-MINTED = re.compile(r"^[a-z0-9]{1,9}-[a-z0-9]{5}$")
+MIGRATION = "server.apps.parties.migrations.0003_party_extra_and_slug_remint"
+MINTED = re.compile(r"^[a-z0-9]{1,9}-[a-z0-9]{5,8}$")
 
 
 def _migration() -> Any:
@@ -49,8 +49,12 @@ class TestReMintSlugs:
         # Legacy-style slug (normalized name, underscore separator) that
         # still fits the post-migration varchar(15) column — the re-mint
         # logic is the unit under test, not Postgres length enforcement.
-        party = PartyFactory(slug="legacy_volg1", name="Coop Supermarkt")
-        key = party.dedup_key
+        # ``extra.osm_name`` mirrors the post-backfill state.
+        party = PartyFactory(
+            slug="legacy_volg1",
+            name="Coop Supermarkt",
+            extra={"osm_name": "coop_supermarkt"},
+        )
         assert not MINTED.fullmatch(party.slug)  # the legacy value
 
         _run_remint()
@@ -59,7 +63,7 @@ class TestReMintSlugs:
         assert MINTED.fullmatch(party.slug)
         assert len(party.slug) <= 15
         assert party.slug.startswith("coopsupe-") or party.slug.split("-")[0]
-        assert party.dedup_key == key  # the identity never moves
+        assert party.extra["osm_name"] == "coop_supermarkt"  # never moves
 
     def test_all_slugs_unique_after_re_mint(self):
         for name in ("Volg", "Volg Zentrum", "Migros", "SAC Bern", "Denner"):
@@ -82,12 +86,22 @@ class TestReMintSlugs:
         party.refresh_from_db()
         assert party.slug == slug
 
-    def test_backfill_is_noop_when_keys_present(self):
-        # The test database ran 0003 at --create-db time (keys are NOT
-        # NULL); the backfill filter must select nothing.
-        party = PartyFactory(name="Volg")
+    def test_backfill_sets_osm_name_from_legacy_slug(self):
+        # A row the migration state produces after the schema change:
+        # legacy slug, empty extra (the factory default). The backfill
+        # maps the slug — which WAS the normalized-name identity — into
+        # ``extra.osm_name``.
+        party = PartyFactory(slug="legacy_volg1", name="Coop Supermarkt")
 
-        _migration().backfill_dedup_keys(_RealApps(), None)
+        _migration().backfill_extra(_RealApps(), None)
 
         party.refresh_from_db()
-        assert party.dedup_key == "volg"
+        assert party.extra["osm_name"] == "legacy_volg1"
+
+    def test_backfill_is_noop_when_identity_present(self):
+        party = PartyFactory(name="Volg", extra={"osm_name": "volg"})
+
+        _migration().backfill_extra(_RealApps(), None)
+
+        party.refresh_from_db()
+        assert party.extra == {"osm_name": "volg"}

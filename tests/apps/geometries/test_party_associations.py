@@ -155,7 +155,7 @@ class TestAmenityWritePath:
         assert association.party.slug == "volg"
         assert association.party.name == "Volg"
 
-    def test_name_only_write_resolves_by_dedup_key(self):
+    def test_name_only_write_resolves_by_extra_identity(self):
         place = GeoPlaceFactory()
 
         _detail, _status = AmenityDetail.update_or_create(
@@ -163,7 +163,7 @@ class TestAmenityWritePath:
             schema=self._schema({"name": "SAC Bern", "role": "role.operator"}),
         )
 
-        party = Party.objects.get(dedup_key="sac_bern")
+        party = Party.objects.get(extra__osm_name="sac_bern")
         assert party.name == "SAC Bern"
         assert place.party_associations.get().party == party  # type: ignore  # reverse FK
 
@@ -175,7 +175,7 @@ class TestAmenityWritePath:
             schema=self._schema({"name": "Coop Supermarkt", "role": "role.brand"}),
         )
 
-        party = Party.objects.get(dedup_key="coop_supermarkt")
+        party = Party.objects.get(extra__osm_name="coop_supermarkt")
         assert len(party.slug) <= 15
         assert re.fullmatch(r"[a-z0-9]{1,9}-[a-z0-9]{5,8}", party.slug)
 
@@ -193,7 +193,7 @@ class TestAmenityWritePath:
 
         association = place.party_associations.get()  # type: ignore  # reverse FK
         assert association.party == existing
-        assert Party.objects.filter(dedup_key="completely_different").count() == 0
+        assert Party.objects.filter(extra__osm_name="completely_different").count() == 0
 
     def test_name_only_reuses_existing_party(self):
         """Name-only input dedups through the key — no duplicate row."""
@@ -205,7 +205,7 @@ class TestAmenityWritePath:
             schema=self._schema({"name": "Volg", "role": "role.brand"}),
         )
 
-        assert Party.objects.filter(dedup_key="volg").count() == 1
+        assert Party.objects.filter(extra__osm_name="volg").count() == 1
         association = place.party_associations.get()  # type: ignore  # reverse FK
         assert association.party == existing
         assert existing.slug  # untouched minted slug
@@ -243,7 +243,7 @@ class TestAmenityWritePath:
             ),
         )
 
-        party = Party.objects.get(dedup_key="sac_bern")
+        party = Party.objects.get(extra__osm_name="sac_bern")
         assert party.review_status == "review"
 
     def test_unknown_role_identifier_rejected(self):
@@ -278,3 +278,92 @@ class TestAmenityWritePath:
         )
 
         assert place.party_associations.count() == 0  # type: ignore  # reverse FK
+
+
+class TestRoleScopedPartyProtection:
+    """``{"parties": ["role.brand"]}`` in ``protected_fields`` shields
+    only the listed roles (OpenSpec ``party-slug-minting``); the legacy
+    flat ``"parties"`` string shields all roles."""
+
+    @staticmethod
+    def _schema(*entries: dict[str, Any]) -> GeoPlaceAmenityInput:
+        return GeoPlaceAmenityInput(
+            name="Test Place",
+            location=LocationSchema(lon=7.7343, lat=46.0234),
+            country_code="CH",
+            place_type_identifiers=[],
+            parties=[PartyInput(**entry) for entry in entries],
+        )
+
+    @staticmethod
+    def _protect(place: Any, protected_fields: list[Any]) -> None:
+        place.protected_fields = protected_fields
+        place.save(update_fields=["protected_fields"])
+
+    def test_scoped_protection_skips_only_protected_roles(self):
+        place = GeoPlaceFactory()
+        self._protect(place, [{"parties": ["role.brand"]}])
+
+        AmenityDetail.update_or_create(
+            place=place,
+            schema=self._schema(
+                {"name": "Volg", "role": "role.brand"},
+                {"name": "SAC Bern", "role": "role.operator"},
+            ),
+        )
+
+        roles = {
+            association.role.identifier
+            for association in place.party_associations.all()  # type: ignore  # reverse FK
+        }
+        assert roles == {"role.operator"}  # brand skipped, operator added
+
+    def test_scoped_protection_union_blocks_both(self):
+        place = GeoPlaceFactory()
+        self._protect(place, [{"parties": ["role.brand", "role.operator"]}])
+
+        AmenityDetail.update_or_create(
+            place=place,
+            schema=self._schema(
+                {"name": "Volg", "role": "role.brand"},
+                {"name": "SAC Bern", "role": "role.operator"},
+            ),
+        )
+
+        assert place.party_associations.count() == 0  # type: ignore  # reverse FK
+
+    def test_legacy_flat_protection_blocks_all_roles(self):
+        place = GeoPlaceFactory()
+        self._protect(place, ["parties"])
+
+        AmenityDetail.update_or_create(
+            place=place,
+            schema=self._schema(
+                {"name": "Volg", "role": "role.brand"},
+                {"name": "SAC Bern", "role": "role.operator"},
+            ),
+        )
+
+        assert place.party_associations.count() == 0  # type: ignore  # reverse FK
+
+    def test_unprotected_place_writes_all_roles(self):
+        place = GeoPlaceFactory()
+
+        AmenityDetail.update_or_create(
+            place=place,
+            schema=self._schema(
+                {"name": "Volg", "role": "role.brand"},
+                {"name": "SAC Bern", "role": "role.operator"},
+            ),
+        )
+
+        assert place.party_associations.count() == 2  # type: ignore  # reverse FK
+
+    def test_resolver_reads_only_scoped_entries(self):
+        place = GeoPlaceFactory(protected_fields=[{"parties": ["role.brand"]}])
+        assert place.protected_party_roles() == {"role.brand"}
+
+        # The flat string stays the gates' job — the resolver ignores it.
+        place.protected_fields = ["name_de", "parties"]
+        place.save(update_fields=["protected_fields"])
+        assert place.protected_party_roles() == set()

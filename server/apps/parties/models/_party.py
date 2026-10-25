@@ -42,14 +42,6 @@ class Party(TimeStampedModel):
         verbose_name=_("Slug"),
         help_text=_("Short public identifier; minted from the name when left blank"),
     )
-    dedup_key = models.SlugField(
-        max_length=50,
-        unique=True,
-        db_index=True,
-        blank=True,
-        verbose_name=_("Dedup key"),
-        help_text=_("Normalized name - the import identity (auto-derived when blank)"),
-    )
     name = models.CharField(
         max_length=100,
         null=True,
@@ -86,6 +78,16 @@ class Party(TimeStampedModel):
         verbose_name=_("Review Status"),
         help_text=_("Editorial state - imported/minted parties start in 'review'"),
     )
+    # Additional attributes (JSONB, GIN-indexed) - the same pattern as
+    # GeoPlace.extra / GeoPlaceSource.extra. Carries the import
+    # identity ``osm_name`` (normalized source name; owner slugs ride
+    # the same key) and any future source-specific provenance.
+    extra = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name=_("Extra"),
+        help_text=_("Additional attributes (import identity, provenance, ...)"),
+    )
 
     links = models.ManyToManyField(
         "external_links.ExternalLink",
@@ -121,7 +123,7 @@ class Party(TimeStampedModel):
     class Meta:
         verbose_name = _("Party")
         verbose_name_plural = _("Parties")
-        indexes = (GinIndex(fields=["i18n"]),)
+        indexes = (GinIndex(fields=["i18n"]), GinIndex(fields=["extra"]))
         constraints = [
             models.CheckConstraint(
                 name="%(app_label)s_%(class)s_review_status_valid",
@@ -132,7 +134,7 @@ class Party(TimeStampedModel):
 
     @staticmethod
     def normalize_key(value: str) -> str:
-        """Normalize a name to the import dedup key.
+        """Normalize a name to the import identity (``extra.osm_name``).
 
         Verbatim the OSM import's former ``_normalize_party_slug``
         (itself kept identical to the pre-parties ``_normalize_brand_slug``
@@ -142,21 +144,19 @@ class Party(TimeStampedModel):
 
     @override
     def save(self, *args: Any, **kwargs: Any) -> None:
-        """Mint the short slug and derive the dedup key when blank.
+        """Mint the short slug when blank (once, never re-derived).
 
-        The slug is minted once at creation and never re-derived - the
-        dedup key is the stable import identity (OpenSpec change
+        The base prefers the name and falls back to the ``osm_name``
+        import identity in ``extra`` (OpenSpec change
         ``party-slug-minting``).
         """
         if not self.slug:
             base = (
                 self.name
                 if self.name and len(self.name.strip()) >= 2
-                else self.dedup_key or ""
+                else str((self.extra or {}).get("osm_name", ""))
             )
             self.slug = mint_short_slug(base, fallback="party")
-        if not self.dedup_key:
-            self.dedup_key = Party.normalize_key(self.name if self.name else self.slug)
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:

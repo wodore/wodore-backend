@@ -9,18 +9,26 @@ identifier is a long machine string in underscore style, exposed via
 `parties[].slug`. GeoPlace solved the same tension years ago:
 `GeoPlace.generate_unique_slug` builds `{base}-{random}` (≤15 chars,
 suffix 5–8 `[a-z0-9]`, base ~9 chars from up to 3 filtered words) and
-dedups through a *separate* identity (source organization + source_id).
-Migration 0054 (place-detail-endpoint) just re-minted ~187k geoplace
-slugs chunked under a 512 Mi migrate budget — the pattern to copy.
+dedups through a separate identity. Migration 0054 re-minted ~187k
+geoplace slugs chunked under a 512 Mi migrate budget — the pattern to
+copy.
+
+Second thread: manual association edits. Only the party inline wired
+protection (`save_formset` marks `is_modified` + flat `"parties"` in
+`protected_fields`), and that flat entry blocks *all* party writes for
+the place. Links and categories inlines marked nothing, and the OSM
+import wrote links unconditionally.
 
 Stakeholders: OSM import (idempotence), wodore hut import (owner
-merge), admin (creation UX), public API (`parties[].slug` consumers).
+merge), admin (creation/protection UX), public API (`parties[].slug`).
 
 ## Goals / Non-Goals
 
 - Goals: one generic mint helper shared by both models; short readable
-  party slugs; import idempotence preserved bit-for-bit; single re-mint
-  migration, done before clients cache party slugs.
+  party slugs; import idempotence preserved without a dedicated
+  identity column; role-scoped party protection; links/categories
+  shielded on manual edits; single re-mint migration, before clients
+  cache party slugs.
 - Non-Goals: changing geoplace slugs (behavior-preserving refactor
   only); a source/identity association table for parties; renaming
   anything in the public API contract.
@@ -28,93 +36,82 @@ merge), admin (creation UX), public API (`parties[].slug` consumers).
 ## Decisions
 
 1. **Helper in `server/core/utils.py`, name-derived base + sized
-   random suffix, no DB access.**
+   random suffix, no DB access.** `mint_short_slug(name, *,
+   fallback, ignore_words=(), max_length=15)`; extraction verbatim
+   from `GeoPlace.generate_unique_slug`, which stays as a wrapper
+   passing the geoplace specifics (`SLUG_IGNORE_WORDS` amenity words,
+   category fallback, `"place"`). Alternatives: keep two
+   implementations (the duplication this removes); `shortuuid` (new
+   dependency, lookalikes, whole-id random).
 
-   `mint_short_slug(name, *, fallback, ignore_words=(), max_length=15)`
-   → `{base}-{suffix}`; base via slugify + ignore-word filter + ≤3-word
-   smart split (~9-char target) or `fallback` when the name is empty;
-   suffix length `max(5, min(8, max_length - len(base) - 1))` from
-   `secrets.choice` over `[a-z0-9]`; result clamped to `max_length`.
-   Extraction is verbatim from `GeoPlace.generate_unique_slug`; the
-   classmethod stays as a wrapper passing the geoplace specifics
-   (`SLUG_IGNORE` amenity words, category fallback, `"place"`) so every
-   existing call site and output distribution is unchanged.
+2. **Identity in `Party.extra` JSONB (`osm_name`), not a column.**
+   `extra` follows the `GeoPlace.extra` / `GeoPlaceSource.extra`
+   pattern (default dict + GIN index). `osm_name` = the normalized
+   name (verbatim the OSM import's former `_normalize_party_slug`) —
+   owner slugs ride the same key (already normalized). No unique
+   constraint on the JSONB path: imports are single-process, and the
+   resolver (decision 3) makes cross-writes converge. Alternatives: a
+   unique `dedup_key` column (worked, but the explicit ask was slug +
+   extras only); name lookup without an identity (racy, i18n-messy).
 
-   Alternatives: keep two implementations (the duplication this change
-   removes); `shortuuid` (new dependency, base57 includes lookalikes,
-   and we want the base readable, not the whole id random).
+3. **Shared resolver with name adoption** —
+   `parties.services.resolve_party_by_name(name, *, review_status)`:
+   resolve by `extra.osm_name`; on miss, adopt an exactly-matching
+   base-`name` row by stamping the identity onto it; else create with
+   minted slug. Manual parties therefore dedupe with imports on first
+   touch (the semantics the auto-derived `dedup_key` had). The OSM
+   import (both precache paths), `_write_party_associations`
+   (name-only `PartyInput`), and the owner merge (keyed by
+   `normalize_key(owner.slug)`) all resolve through it/keys.
 
-2. **Identity: unique `Party.dedup_key`, normalization unchanged.**
+4. **Slug minted once, at creation, never re-derived.** `Party.save()`
+   mints when blank (base: name → `extra.osm_name` fallback →
+   `"party"`); collisions are probabilistic (≥36⁵ suffix space) — same
+   posture as geoplace runtime minting.
 
-   `dedup_key = _normalize_party_slug(name)` (lower, spaces→`_`,
-   `[:50]`) — exactly the slug derivation today, so 0053-migrated,
-   owner-merged, and OSM-minted rows keep matching on re-import. Owner
-   merge keys by `owner.slug` as today (already normalized) so the
-   provisioning migration's earlier runs stay idempotent. Uniqueness:
-   same-entity collision is the status quo (normalized name *was* the
-   unique slug); distinct parties sharing a name were already merged
-   before this change.
+5. **Role-scoped party protection in `protected_fields`.** Entries may
+   be structured: `{"parties": ["role.brand"]}` shields exactly those
+   roles; the legacy flat `"parties"` string still shields all (never
+   narrowed silently — kept when present). `GeoPlace.
+   protected_party_roles()` resolves the scoped entries;
+   `_write_party_associations(..., respect_protection=True)` filters
+   per role (and honors a flat entry directly). The admin party inline
+   records the union of roles touched (changed + new + deleted rows).
 
-   Alternatives: lookup by `name` without a key (racy `get_or_create`,
-   i18n fields, no index); a `GeoPlaceSource`-style association table
-   (parties are source-agnostic — one brand row is written by OSM and
-   referenced by huts alike; a per-source key table would fragment
-   dedup instead of centralizing it).
+6. **Links/categories: flat marking + an import gate.** The
+   `save_formset` wiring extends to the external-link and category
+   inlines (flat `"links"` / `"categories"` — no scoping axis yet);
+   the OSM import's `_add_external_link` returns early for
+   `"links"`-protected places. The bulk link-reconciliation DELETE is
+   *not* gated (pre-existing behavior, separate follow-up if wanted).
 
-3. **Slug minted once, at creation, never re-derived.**
-
-   `Party.save()` mints when `slug` is blank (covers admin creation and
-   any forgotten path); write sites `get_or_create(dedup_key=…,
-   defaults={"slug": mint_short_slug(name)})`. Re-imports hit the key
-   and leave the slug alone. Minted slugs use hyphens (base and
-   separator), matching the geoplace public style.
-
-   Collisions: no DB check in the helper (same as geoplace); 36⁵ ≈ 60M
-   suffix space against ~10³ parties ≈ 10⁻⁵ — and creation sites can
-   simply retry on `IntegrityError`. Not worth a probe query in the hot
-   path.
-
-4. **`PartyInput.slug` optional; resolution order slug → key → mint.**
-
-   Callers that know a party pass its slug (stable reference); OSM just
-   passes `name` (+ role). `_write_party_associations` resolves:
-   existing slug match → existing `dedup_key(normalize(name))` → create
-   with minted slug. `import_parties` and the provisioning migration
-   get the same key-based get_or_create via `parties.services`.
-
-5. **One migration chain: add column → backfill → re-mint.**
-
-   `dedup_key` nullable-unique-added, backfilled `dedup_key = slug`
-   (identity for all existing rows — today slug *is* the key), then
-   enforced unique; slugs re-minted from the best available name
-   (`name` or key title-cased as 0053 did), chunked at 2 000 rows
-   (parties are ~10²–10³, but the shape matches 0054 and costs
-   nothing). Reverse: restore `dedup_key = slug` … slugs are not
-   recoverable → reverse is a no-op with the mapping retained in git
-   history (same call as the geoplace re-mint).
+7. **One migration chain: add `extra` → backfill identity → re-mint →
+   shrink.** `parties.0003`: backfill `extra.osm_name = slug` (the
+   slug *was* the identity), re-mint via the helper (chunked 2 000,
+   collision-domain set, re-runnable exclude of already-minted
+   `^[a-z0-9]{1,9}-[a-z0-9]{5,8}$`), then `ALTER` slug to varchar(15)
+   — order matters, legacy slugs are up to 50 chars. Reverse: noop
+   (re-minted slugs not recoverable; same call as the geoplace
+   re-mint).
 
 ## Risks / Trade-offs
 
 - [Public `parties[].slug` values change once] → Mitigation: #415 is
-  days old, no released client caches party slugs; re-mint now and
-  never again (minted-once rule).
-- [Two parties legitimately share a name (two local clubs)] →
-  Mitigation: pre-existing condition (they shared a slug before);
-  editors split them in the admin — `dedup_key` edit is admin-only,
-  `slug` stays free.
-- [Admin saves a party with a hand-typed slug that collides] →
-  Mitigation: unique constraint surfaces as a validation error, same as
-  today.
-- [Helper extraction subtly changes geoplace slugs] → Mitigation:
-  wrapper is verbatim-pass-through; existing `generate_unique_slug`
-  tests must stay green untouched, plus property-style checks that
-  outputs match the documented examples.
+  days old, no released client caches party slugs; minted-once rule
+  means never again.
+- [No DB-enforced uniqueness on `extra.osm_name`] → Mitigation:
+  single-process imports + the adoption resolver; a duplicate would
+  need two concurrent writers. A unique expression index can be added
+  later without schema churn if this ever bites.
+- [Name adoption merges two genuinely distinct same-named parties] →
+  Mitigation: pre-existing condition (normalized-name identity always
+  collapsed them); editors split in the admin.
+- [Wodore hut import still bails on coarse `is_modified`] → known
+  inconsistency, pre-existing source policy, out of scope here.
 
 ## Migration Plan
 
-1. `parties.0003`: add nullable `dedup_key` (+ backfill + unique
-   enforcement) and re-mint slugs — one migration, ordered operations.
-2. Deploy: migration runs before the new code serves traffic (standard
-   migrate-then-release), so key-based lookups find backfilled rows.
-3. Follow-ups in the same release: OSM import / write path / admin
-   switch to key-based dedup.
+1. `parties.0003` runs on deploy (add → backfill → re-mint → shrink).
+2. New code resolves parties by identity; admin marks scoped
+   protection on manual edits.
+3. Tests: full suite green (984 passed), pyrefly strict 0 errors.

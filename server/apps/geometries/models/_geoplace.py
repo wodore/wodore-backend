@@ -540,6 +540,21 @@ class GeoPlace(TimeStampedModel):
             if self.review_status == "new":
                 self.review_status = "done"
 
+    def protected_party_roles(self) -> set[str]:
+        """Role identifiers with role-scoped party protection.
+
+        Reads ``{"parties": ["role.brand", ...]}`` entries from
+        ``protected_fields`` (manual admin edits record the roles they
+        touched, OpenSpec ``party-slug-minting``). The legacy flat
+        ``"parties"`` string means *all* roles protected and is
+        handled by the update-path gates before this resolver runs.
+        """
+        roles: set[str] = set()
+        for entry in self.protected_fields or []:
+            if isinstance(entry, dict) and isinstance(entry.get("parties"), list):
+                roles.update(str(role) for role in entry["parties"])
+        return roles
+
     #: Amenity-type words that carry no identity in a place name -
     #: filtered from the minted base slug (geoplace-specific vocabulary
     #: for the generic ``mint_short_slug`` helper).
@@ -1287,7 +1302,9 @@ class GeoPlace(TimeStampedModel):
                     detail_updated = True
 
             if "parties" not in protected and schema.parties:
-                if AmenityDetail._write_party_associations(place, schema.parties):
+                if AmenityDetail._write_party_associations(
+                    place, schema.parties, respect_protection=True
+                ):
                     detail_updated = True
 
             if is_new:

@@ -2,7 +2,7 @@
 
 OpenSpec change ``party-slug-minting`` (task 2.1): ``slug`` is a short
 public identifier minted once at creation (blank on save -> minted),
-``dedup_key`` is the normalized-name import identity, auto-derived when
+``extra.osm_name`` is the normalized-name import identity (written by the
 blank. Both are unique; neither is ever re-derived once set.
 """
 
@@ -42,38 +42,36 @@ class TestSaveMinting:
         party = Party.objects.create(name="SAC Bern")
         assert MINTED.fullmatch(party.slug)
         assert len(party.slug) <= 15
-        assert party.dedup_key == "sac_bern"
+        assert party.extra == {}  # save() never invents the import identity
 
     def test_explicit_slug_preserved(self):
         party = Party.objects.create(slug="volg", name="Volg")
         assert party.slug == "volg"
-        assert party.dedup_key == "volg"
+        assert party.extra == {}
 
-    def test_dedup_key_derived_from_name(self):
-        party = Party.objects.create(name="Coop Supermarkt")
-        assert party.dedup_key == "coop_supermarkt"
+    def test_import_identity_rides_extra(self):
+        # The identity is written by the import paths, not by save().
+        party = Party.objects.create(
+            name="Coop Supermarkt", extra={"osm_name": "coop_supermarkt"}
+        )
+        assert party.extra["osm_name"] == "coop_supermarkt"
         assert MINTED.fullmatch(party.slug)
 
-    def test_nameless_party_mints_from_key(self):
-        # No name, no slug: the dedup key drives the base, "party" is
-        # the last resort fallback.
-        party = Party.objects.create(dedup_key="xyz_club")
+    def test_nameless_party_mints_from_extra(self):
+        # No name, no slug: the ``extra.osm_name`` identity drives the
+        # base, "party" is the last resort fallback.
+        party = Party.objects.create(extra={"osm_name": "xyz_club"})
         assert party.slug.startswith("xyzclub-")
 
-    def test_slug_and_key_stable_on_resave(self):
+    def test_slug_and_extra_stable_on_resave(self):
         party = PartyFactory(name="Migros")
-        slug, key = party.slug, party.dedup_key
+        slug, extra = party.slug, party.extra
 
         party.name = "Migros City"
         party.save()
 
         assert party.slug == slug  # minted once, never re-derived
-        assert party.dedup_key == key  # the identity never moves
-
-    def test_duplicate_dedup_key_rejected(self):
-        Party.objects.create(name="Volg")
-        with pytest.raises(IntegrityError):
-            Party.objects.create(name="Volg")
+        assert party.extra == extra  # the identity never moves
 
     def test_duplicate_slug_rejected(self):
         Party.objects.create(slug="volg", name="First")
