@@ -2,6 +2,8 @@
 Core app configuration.
 """
 
+from typing import override
+
 import pgtrigger
 import structlog
 
@@ -16,7 +18,8 @@ class CoreConfig(AppConfig):
     name = "server.core"
     verbose_name = "Core"
 
-    def ready(self):
+    @override
+    def ready(self) -> None:
         """
         Register PostgreSQL triggers for all TimeStampedModel subclasses.
 

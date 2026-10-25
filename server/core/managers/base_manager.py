@@ -1,11 +1,15 @@
+from typing import Any, TypeVar, override
+
 from modeltrans.manager import MultilingualManager
 
 from django.db import models
 
+_M = TypeVar("_M", bound=models.Model, default=Any)
 
-class BaseQuerySet(models.QuerySet):
+
+class BaseQuerySet(models.QuerySet[_M, _M]):
     def drop(
-        self, limit: int | None = None, offset: int | None = 0, **kwargs
+        self, limit: int | None = None, offset: int | None = 0, **kwargs: Any
     ) -> tuple[int, dict[str, int]]:
         """Drops data from database table, same as delete but let you five a limit and offset argument."""
         offset = offset or 0
@@ -22,12 +26,13 @@ class BaseQuerySet(models.QuerySet):
         return qs.delete(**kwargs)
 
 
-class BaseManager(models.Manager):
-    def get_queryset(self) -> "BaseQuerySet":
+class BaseManager(models.Manager[_M]):
+    @override
+    def get_queryset(self) -> BaseQuerySet[_M]:
         return BaseQuerySet(self.model, using=self._db)  # Important!
 
     def drop(
-        self, limit: int | None = None, offset: int | None = 0, **kwargs
+        self, limit: int | None = None, offset: int | None = 0, **kwargs: Any
     ) -> tuple[int, dict[str, int]]:
         """Drops data from database table, same as delete but let you five a limit and offset argument."""
         return self.get_queryset().drop(limit=limit, offset=offset, **kwargs)
