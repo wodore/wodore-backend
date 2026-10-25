@@ -14,11 +14,14 @@ Plain Django view (non-JSON), wired via ``external_path`` with
 from __future__ import annotations
 
 import re
+from decimal import Decimal
 from html import unescape
+from typing import Any
 from urllib.parse import quote
 
 from django.conf import settings
 from django.contrib.gis.db.models.functions import Distance
+from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
 from django.http import Http404, HttpRequest, HttpResponse
 from django.utils.html import strip_tags
@@ -69,13 +72,13 @@ def _attribution_as_markdown(value: str) -> str:
     return unescape(text).strip()
 
 
-def _fmt_elevation(elevation) -> str | None:
+def _fmt_elevation(elevation: Decimal | None) -> str | None:
     if elevation is None:
         return None
     return f"{int(elevation)} m"
 
 
-def _fmt_coordinates(point) -> str | None:
+def _fmt_coordinates(point: Point | None) -> str | None:
     if point is None:
         return None
     return f"{point.y:.6f}, {point.x:.6f}"
@@ -87,7 +90,7 @@ _MONTH_LEGEND = (
 )
 
 
-def _months_row(open_monthly: dict | None) -> str:
+def _months_row(open_monthly: dict[str, Any] | None) -> str:
     values = []
     for month in range(1, 13):
         value = (open_monthly or {}).get(f"month_{month:02d}", "unknown")
@@ -95,7 +98,7 @@ def _months_row(open_monthly: dict | None) -> str:
     return "| " + " | ".join(values) + " |"
 
 
-def _reduced_months_row(open_monthly: dict | None) -> str:
+def _reduced_months_row(open_monthly: dict[str, Any] | None) -> str:
     """Months of the reduced (winter) operation, derived from the
     standard-operation series: when the staffed operation is closed the
     reduced service (e.g. the unstaffed winter room) is typically
