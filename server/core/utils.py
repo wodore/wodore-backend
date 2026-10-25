@@ -1,12 +1,13 @@
 import textwrap
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 
 import requests
 
 from django.conf import settings
 from django.core.cache import caches
-from django.utils.safestring import mark_safe
+from django.http import HttpRequest
+from django.utils.safestring import SafeString, mark_safe
 from django.utils.translation import gettext_lazy as _
 
 
@@ -53,14 +54,14 @@ def get_redirect_url(url: str) -> str:
 
 
 def text_shorten_html(
-    text,
-    width=100,
+    text: str,
+    width: int = 100,
     textsize: Literal["xs", "sm", "base", "lg"] = "xs",
-    klass="text-gray-500",
-    on_word=True,
-    placeholder="...",
-    **kwargs,
-):
+    klass: str = "text-gray-500",
+    on_word: bool = True,
+    placeholder: str = "...",
+    **kwargs: Any,
+) -> SafeString:
     """Returns a shortened html text (uses textwrap.shortend)"""
     if on_word:
         text = textwrap.shorten(text, width=width, placeholder=placeholder, **kwargs)
@@ -70,7 +71,7 @@ def text_shorten_html(
     return mark_safe(f'<span class="{klass} text-{textsize}">{text}<span/>')
 
 
-def environment_callback(request):
+def environment_callback(request: HttpRequest) -> list[str]:
     """
     Callback has to return a list of two values represeting text value and the color
     type of the label displayed in top right corner.

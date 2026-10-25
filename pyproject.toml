@@ -560,6 +560,24 @@ bad-override = true
 method-assign = true
 
 
+[[tool.pyrefly.sub-config]]
+# Strict-typing ratchet for core (shared infrastructure: managers, management
+# base, oidc_permission, email backends, models) used by every app. New code
+# must be fully annotated; only this subtree is affected; strictness is
+# ratcheted module by module.
+matches = "server/core/**"
+
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = true
+implicit-any-type-argument = true
+implicit-any-lambda = true
+implicit-any-empty-container = true
+implicit-any-attribute = true
+missing-override-decorator = true
+bad-override = true
+method-assign = true
+
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

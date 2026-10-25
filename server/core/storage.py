@@ -26,7 +26,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
-from typing import Any
+from typing import Any, override
 
 from django.core.files.base import ContentFile
 from django.core.files.storage import Storage, default_storage
@@ -71,6 +71,7 @@ class ContentHashedStorage(Storage):
         return self._explicit_inner if self._explicit_inner else default_storage
 
     # ── the actual point of this class ────────────────────────────────
+    @override
     def save(self, name: str | None, content: Any, max_length: Any = None) -> str:
         if name is None:
             # No name to derive a hash from — plain delegation.
@@ -83,27 +84,35 @@ class ContentHashedStorage(Storage):
         return self._inner.save(target, content, max_length)
 
     # ── everything else delegates to the configured default storage ──
+    @override
     def exists(self, name: str) -> bool:
         return self._inner.exists(name)
 
+    @override
     def delete(self, name: str) -> None:
         self._inner.delete(name)
 
+    @override
     def url(self, name: str | None) -> str:
         return self._inner.url(name)
 
+    @override
     def size(self, name: str) -> int:
         return self._inner.size(name)
 
+    @override
     def listdir(self, path: str) -> tuple[list[str], list[str]]:
         return self._inner.listdir(path)
 
+    @override
     def get_available_name(self, name: str, max_length: Any = None) -> str:
         return self._inner.get_available_name(name, max_length)
 
+    @override
     def path(self, name: str) -> str:
         return self._inner.path(name)
 
+    @override
     def open(self, name: str, mode: str = "rb") -> Any:
         return self._inner.open(name, mode)
 
