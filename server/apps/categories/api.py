@@ -99,7 +99,7 @@ def _load_category_tree(is_active: bool):
         "symbol_mono",
     )
     if is_active:
-        qs = qs.active()
+        qs = qs.active()  # type: ignore  # from_queryset chain: django-stubs filter() returns base QuerySet
 
     nodes = list(qs)
     children: dict[int | None, list[Category]] = {}
