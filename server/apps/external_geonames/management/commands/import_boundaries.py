@@ -16,6 +16,7 @@ Usage:
 import json
 import urllib.error
 import urllib.request
+from typing import Any, override
 
 from django_admin_runner import register_command
 
@@ -34,6 +35,7 @@ class Command(BaseCommand):
     # GeoNames shapes URL (tab-separated: geonameId, geoJson)
     SHAPES_URL = "https://download.geonames.org/export/dump/shapes_all_low.zip"
 
+    @override
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "-c",
@@ -60,7 +62,8 @@ class Command(BaseCommand):
             help="Import only specific admin level (0=country, 1-4=subdivisions)",
         )
 
-    def handle(self, *args, **options) -> None:
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         countries = None
         if options["countries"]:
             countries = expand_countries(options["countries"])
