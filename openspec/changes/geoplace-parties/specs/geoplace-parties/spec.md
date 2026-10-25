@@ -30,7 +30,7 @@ mono; the map-styling primitive variant is not used for parties).
 ### Requirement: Role category vocabulary
 
 The system SHALL provide a `role` parent category with children
-`operator`, `brand`, `owner`, and `source`, created by data migration
+`operator`, `brand`, and `source`, created by data migration
 and manageable in the category admin. Additional role children MAY be
 added later via migration and spec delta.
 
@@ -49,11 +49,11 @@ roles for the same place–party pair SHALL be expressed as multiple
 association rows. Role and party references SHALL NOT be deletable
 while in use (RESTRICT).
 
-#### Scenario: Hut owned by a club
+#### Scenario: Hut run by a club
 - **WHEN** a hut-derived geoplace is linked to party "sac-bern" with
-  role `role.owner`
+  role `role.operator`
 - **THEN** the association exists exactly once and API/admin consumers
-  see role `role.owner`
+  see role `role.operator`
 
 #### Scenario: Party on a non-amenity place
 - **WHEN** a transport geoplace (e.g. a cable car) is linked to its
@@ -123,7 +123,7 @@ huts app is removed.
 - **WHEN** the wodore hut import processes a hut with `hut_owner` and
   the merge has run
 - **THEN** the resulting GeoPlace carries a party association with role
-  `role.owner` referencing the merged party
+  `role.operator` referencing the merged party
 
 ### Requirement: API exposes place parties
 

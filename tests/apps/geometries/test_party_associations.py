@@ -40,7 +40,7 @@ class TestRoleVocabulary:
         children = list(
             parent.children.order_by("order").values_list("slug", flat=True)
         )
-        assert children == ["operator", "brand", "owner", "source"]
+        assert children == ["operator", "brand", "source"]
 
         # The computed ``identifier`` column must be populated — data
         # migrations create rows through historical models, so
@@ -79,12 +79,12 @@ class TestGeoPlaceParty:
     def test_duplicate_place_party_role_rejected(self):
         place = GeoPlaceFactory()
         party = PartyFactory()
-        GeoPlaceParty.objects.create(geo_place=place, party=party, role=role("owner"))
+        GeoPlaceParty.objects.create(geo_place=place, party=party, role=role("source"))
 
         with pytest.raises(IntegrityError):
             with transaction.atomic():
                 GeoPlaceParty.objects.create(
-                    geo_place=place, party=party, role=role("owner")
+                    geo_place=place, party=party, role=role("source")
                 )
 
     def test_clean_rejects_role_parent_itself(self):

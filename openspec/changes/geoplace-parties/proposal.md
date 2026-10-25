@@ -26,10 +26,15 @@ GeoPlace through a **role category** (`role.*`), mirroring the
   (color and mono; parties are not map features, so the map-styling
   primitive variant is omitted).
 - New `role` category vocabulary (parent + children `operator`, `brand`,
-  `owner`, `source`; `authority` on demand) created by data migration,
-  extensible in the category admin — same shape as the `season`
-  vocabulary. `source` seeds the vocabulary for the future Organization
-  convergence (portals become parties; no data uses it yet).
+  `source`; `authority`, `owner`, or `lessee` on demand) created by
+  data migration, extensible in the category admin — same shape as the
+  `season` vocabulary. `source` seeds the vocabulary for the future
+  Organization convergence (portals become parties; no data uses it
+  yet). The owner/operator distinction is deliberately dropped: OSM's
+  `operator` tag is defined as "owned or maintained by", hut-services'
+  OSM import already maps it into `owner` — the field carries the
+  owning-or-operating organisation and one `operator` role expresses
+  it faithfully.
 - New `GeoPlaceParty` through model (geometries) — **place-level:
   applies to every geoplace regardless of `detail_type`** (amenity,
   transport, admin, natural, none), like the category and link
@@ -49,7 +54,7 @@ GeoPlace through a **role category** (`role.*`), mirroring the
   (slug, name, note preserved; url → ExternalLink); the wodore hut
   import (schema-path rewrite from
   `geoplace-capacity-and-types-via-categories`) links `hut_owner` →
-  association with role `role.owner`. The `Owner` model itself stays
+  association with role `role.operator`. The `Owner` model itself stays
   for `Hut` until the huts app is removed.
 - Source-role link templates (contract recorded here, implementation
   deferred to the Organization convergence): a source-role Party carries

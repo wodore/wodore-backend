@@ -3,8 +3,9 @@
 ## 1. Party model, links & role vocabulary
 
 - [x] 1.1 Data migration creating the `role` parent category with
-      children `operator`, `brand`, `owner`, `source` (active, ordered,
-      slug-stable; idempotent rerun)
+      children `operator`, `brand`, `source` (active, ordered,
+      slug-stable; idempotent rerun; `owner` dropped from the seed —
+      operator covers owning-or-operating per OSM semantics)
 - [x] 1.2 Create `parties` app: `Party` (slug unique, `name` i18n via
       modeltrans, `note` i18n optional, `is_active`, `is_public`,
       `review_status`, optional `symbol_color`/`symbol_mono` FKs) +
@@ -44,12 +45,17 @@
 
 ## 3. Owner merge & hut import
 
-- [ ] 3.1 `import_parties` management command: Owner → Party by slug
+- [x] 3.1 `import_parties` management command: Owner → Party by slug
       (name/note i18n, url → ExternalLink), `--dry-run`, idempotent
-      re-runs; tests
-- [ ] 3.2 Extend the wodore hut import (schema-path rewrite from the
-      capacity change) to write party associations from `hut_owner`
-      (role `role.owner`); import test
+      re-runs; tests (shared `parties.services.merge_owner`; new links
+      get an explicit label + skip_health_check so the merge never
+      does network I/O)
+- [x] 3.2 Extend the wodore hut import to write party associations
+      from `hut_owner` (role `role.operator`); import test
+      (`_ensure_hut_party` on create + on unprotected updates; merges
+      the owner on the fly so a prior `import_parties` run is not
+      required; the capacity change's schema-path rewrite keeps the
+      same helper)
 
 ## 4. API & admin
 

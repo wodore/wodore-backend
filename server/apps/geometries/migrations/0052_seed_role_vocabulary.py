@@ -1,7 +1,7 @@
 """Seed the ``role`` category vocabulary for party associations.
 
 Creates the ``role`` parent category with children ``operator``,
-``brand``, ``owner``, and ``source`` — active, ordered, slug-stable.
+``brand``, and ``source`` — active, ordered, slug-stable.
 Idempotent: re-running (or re-applying on a partially seeded database)
 get_or_creates and changes nothing.
 
@@ -21,8 +21,7 @@ ROLE_CHILDREN = [
     # slug, name (de, modeltrans source language), name_en, order
     ("operator", "Betreiber", "Operator", 10),
     ("brand", "Marke", "Brand", 20),
-    ("owner", "Eigentümer", "Owner", 30),
-    ("source", "Quelle", "Source", 40),
+    ("source", "Quelle", "Source", 30),
 ]
 ROLE_SLUGS = [slug for slug, _, _, _ in ROLE_CHILDREN]
 

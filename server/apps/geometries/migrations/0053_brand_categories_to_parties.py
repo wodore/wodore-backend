@@ -51,7 +51,6 @@ def convert_brand_to_party(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("geometries", "0052_seed_role_vocabulary"),
         ("parties", "0001_initial"),

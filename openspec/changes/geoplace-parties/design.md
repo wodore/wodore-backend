@@ -96,8 +96,8 @@ entity is neutral, the *relation* carries the semantics. "Relation"/
    `GeoPlaceExternalLink` — every geoplace regardless of `detail_type`,
    replacing the amenity-scoped `brand` FK. It carries `role` FK →
    Category under parent `role` (children seeded: `operator`, `brand`,
-   `owner`, `source` — `authority` on demand, per the open-question
-   resolution),
+   `source` — `authority`, `owner`, or `lessee` on demand, per the
+   open-question resolution),
    unique per `(geo_place, party, role)`;
    multiple roles = multiple rows, one classifier per row — mirroring
    how `season` classifiers work on category associations. Validation
@@ -121,13 +121,16 @@ entity is neutral, the *relation* carries the semantics. "Relation"/
 
 5. **Owner merge via management command** (`import_parties`):
    Owner → Party by slug (name/note carried over, url → ExternalLink),
-   idempotent, dry-run capable. The wodore hut import rewrite (capacity
-   change) then creates associations from `hut_owner` with role
-   `role.owner` (the field means the legal owner; clubs that also
-   operate get a second `role.operator` row from editors or a later
-   mapping refinement). Command — not data migration — because Owner
-   rows keep arriving from hut imports until cutover; re-runnable sync
-   beats a one-shot migration.
+   idempotent, dry-run capable. The wodore hut import then creates
+   associations from `hut_owner` with role `role.operator` — the
+   owner/operator distinction is dropped: OSM's `operator` tag is
+   defined as "owned or maintained by", hut-services' OSM import
+   already maps it into `owner`, so the field carries the
+   owning-or-operating organisation and a single operator role
+   expresses it faithfully (`owner` returns on demand if a true
+   legal-owner source ever appears). Command — not data migration —
+   because Owner rows keep arriving from hut imports until cutover;
+   re-runnable sync beats a one-shot migration.
 
 6. **API: additive `parties` on place responses** under the
    `fields[places]` sparse-fieldset selection (nested narrowing via
@@ -195,7 +198,7 @@ entity is neutral, the *relation* carries the semantics. "Relation"/
    updates: `BrandInput` → `PartyInput`).
 4. OSM import mapping switch (`brand`/`operator` tags).
 5. `import_parties` merge command (Owner → Party), then extend the
-   wodore hut import to write party associations (role `role.owner`).
+   wodore hut import to write party associations (role `role.operator`).
 6. API `parties` field + changelog entry; tests; lane-DB dry-runs of
    the data migrations and both imports.
 7. Rollback: steps are additive except the brand FK removal — the FK
@@ -205,10 +208,10 @@ entity is neutral, the *relation* carries the semantics. "Relation"/
 ## Open Questions
 
 - Initial role vocabulary beyond the seeded children (`operator`,
-  `brand`, `owner`, `source`) — e.g. `authority` (national park
+  `brand`, `source`) — e.g. `authority` (national park
   service approving a hut) now or when a source needs it? Lean: seed
   only what has data today or a recorded convergence contract
-  (`source`), add `authority` on demand.
+  (`source`), add `authority`, `owner`, or `lessee` on demand.
 - Party `review_status` lifecycle for OSM-minted parties: who reviews,
   and does the admin surface them like external links? Lean: same
   pattern as ExternalLink's review workflow.

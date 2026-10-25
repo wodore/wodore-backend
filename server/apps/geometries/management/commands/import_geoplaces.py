@@ -757,6 +757,29 @@ class Command(BaseCommand):
             return True
         return False
 
+    def _ensure_hut_party(self, place: GeoPlace, hut: Hut) -> None:
+        """Write the hut's owning/operating party as a role.operator
+        association (OpenSpec geoplace-parties task 3.2).
+
+        Idempotent: get_or_create on both the merged party and the
+        association. Owners are merged into parties on the fly so the
+        import works with or without a prior ``import_parties`` run.
+        """
+        from server.apps.categories.models import Category
+        from server.apps.geometries.models import GeoPlaceParty
+        from server.apps.parties.services import merge_owner
+
+        if not hut.hut_owner:
+            return
+
+        role = getattr(self, "_operator_role", None)
+        if role is None:
+            role = Category.objects.get(identifier="role.operator")
+            self._operator_role = role  # type: ignore[attr-defined]  # per-run cache
+
+        party, _created, _linked = merge_owner(hut.hut_owner)
+        GeoPlaceParty.objects.get_or_create(geo_place=place, party=party, role=role)
+
     def _create_place_from_hut(self, hut: Hut, importance: int) -> GeoPlace:
         place = GeoPlace.create_with_source(
             source="wodore",
@@ -772,6 +795,7 @@ class Command(BaseCommand):
         )
         if hut.hut_type_open:
             place.categories.add(hut.hut_type_open)
+        self._ensure_hut_party(place, hut)
         return place
 
     def _update_place_from_hut(
@@ -781,6 +805,8 @@ class Command(BaseCommand):
             return False
 
         place.add_source(source="wodore", source_id=hut.slug)
+
+        self._ensure_hut_party(place, hut)
 
         changed = False
         if place.name != hut.name:
