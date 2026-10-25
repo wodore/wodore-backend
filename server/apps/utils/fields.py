@@ -1,8 +1,15 @@
+import datetime
+from collections.abc import Sequence
+from typing import Any, override
+
 from django.db import models
+from django.db.models import Model
 from django.utils.timezone import now
 
 
-class MonitorFields(models.DateTimeField):
+class MonitorFields(
+    models.DateTimeField[datetime.datetime | None, datetime.datetime | None]
+):
     """
     A DateTimeField that monitors other fields on the same model and
     sets itself to the current date/time whenever the monitored field
@@ -10,7 +17,7 @@ class MonitorFields(models.DateTimeField):
 
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         kwargs.setdefault("default", None)
         kwargs.setdefault("blank", True)
         kwargs.setdefault("null", True)
@@ -29,10 +36,12 @@ class MonitorFields(models.DateTimeField):
         models.signals.post_init.connect(self._save_initial, sender=cls)
         super().contribute_to_class(cls, name)
 
-    def get_monitored_value(self, monitor, instance):
+    def get_monitored_value(self, monitor: str, instance: Model) -> Any:
         return getattr(instance, monitor)
 
-    def _save_initial(self, sender, instance, **kwargs):
+    def _save_initial(
+        self, sender: type[Model], instance: Model, **kwargs: Any
+    ) -> None:
         for i, m in enumerate(self.monitors):
             attrname = self.monitors_attname[i]
             if m in instance.get_deferred_fields():
@@ -44,7 +53,8 @@ class MonitorFields(models.DateTimeField):
                 self.get_monitored_value(monitor=m, instance=instance),
             )
 
-    def pre_save(self, model_instance, add):
+    @override
+    def pre_save(self, model_instance: Model, add: bool) -> Any:
         value = now()
         currents = []
         update = False
@@ -64,7 +74,8 @@ class MonitorFields(models.DateTimeField):
             self._save_initial(model_instance.__class__, model_instance)
         return super().pre_save(model_instance, add)
 
-    def deconstruct(self):
+    @override
+    def deconstruct(self) -> tuple[str, str, Sequence[Any], dict[str, Any]]:
         name, path, args, kwargs = super().deconstruct()
         kwargs["monitors"] = self.monitors
         return name, path, args, kwargs
