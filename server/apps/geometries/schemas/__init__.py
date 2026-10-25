@@ -39,23 +39,21 @@ from ._input import (
 )
 from ._output import (
     AmenityDetailSchema,
-    AmenitySchema,
     CategoryPlaceTypeSchema,
     CategorySchema,
     GeoPlaceBaseSchema,
+    GeoPlaceDetailSchema,
     GeoPlaceNearbySchema,
     GeoPlaceSearchSchema,
     PartyLinkSchema,
     PartySchema,
     PhoneSchema,
     SymbolSchema,
-    WebsiteSchema,
 )
 
 __all__ = [
     "DEFAULT_THUMBHASHES",
     "AmenityDetailSchema",
-    "AmenitySchema",
     "CategoryPlaceTypeSchema",
     "CategorySchema",
     "DedupOptions",
@@ -65,6 +63,7 @@ __all__ = [
     "GeoPlaceAmenityInput",
     "GeoPlaceBaseInput",
     "GeoPlaceBaseSchema",
+    "GeoPlaceDetailSchema",
     "GeoPlaceNaturalInput",
     "GeoPlaceNearbySchema",
     "GeoPlaceSearchSchema",
@@ -87,5 +86,4 @@ __all__ = [
     "SourceInput",
     "SymbolSchema",
     "UpdatePolicyEnum",
-    "WebsiteSchema",
 ]

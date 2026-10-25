@@ -125,13 +125,35 @@ def base_result(place: GeoPlace, media_url: str) -> dict[str, Any]:
     return {
         "name": place.name_i18n,  # noqa: WPS308  # modeltranslation
         "country_code": str(place.country_code) if place.country_code else None,
-        "id": place.id,
+        "slug": place.slug,
         "elevation": place.elevation,
         "importance": place.importance,
         "location": {
             "lat": place.location.y if place.location else None,
             "lon": place.location.x if place.location else None,
         },
+    }
+
+
+def build_amenity_detail(place: GeoPlace) -> dict[str, Any] | None:
+    """Serialize the place's ``AmenityDetail`` into the wire block.
+
+    Returns ``None`` when the place has no detail row (callers seed
+    the member anyway so it stays a valid field-selection name) —
+    the amenity endpoint's former crash-prone inline mapping, moved
+    here once (place-detail-endpoint). Requires ``select_related``
+    when called (cached ``None`` on absent rows, no exception).
+    """
+    detail = getattr(place, "amenity_detail", None)  # plugin-less inference gap
+    if detail is None:
+        return None
+    # Websites/links live at the place level (external links), overflow
+    # data on GeoPlace.extra — neither is part of this block.
+    return {
+        "operating_status": detail.operating_status,
+        "opening_months": detail.opening_months or {},
+        "opening_hours": detail.opening_hours or {},
+        "phones": detail.phones or [],
     }
 
 

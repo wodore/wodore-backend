@@ -81,7 +81,7 @@ class TestSearchPartiesField:
                 "lat": str(place.location.y),
                 "lon": str(place.location.x),
                 "radius": "1000",
-                "fields[places]": "id,parties",
+                "fields[places]": "slug,parties",
                 "fields[parties]": "slug",
             },
         )
@@ -89,15 +89,15 @@ class TestSearchPartiesField:
         assert response.status_code == 200, f"nearby failed: {response.content}"
 
 
-class TestAmenityPartiesField:
-    def test_amenity_detail_includes_parties(self, client: Client) -> None:
+class TestPlaceDetailPartiesField:
+    def test_place_detail_includes_parties(self, client: Client) -> None:
         from server.apps.geometries.models import AmenityDetail
 
         place = GeoPlaceFactory(name="Volg Zermatt", detail_type="amenity")
         AmenityDetail.objects.create(geo_place=place)
         _link_party(place, slug="volg", url="https://volg.example.com")
 
-        response = client.get(f"/v1/geo/places/amenity/{place.pk}")
+        response = client.get(f"/v1/geo/places/{place.slug}")
 
         assert response.status_code == 200
         parties = response.json()["parties"]
