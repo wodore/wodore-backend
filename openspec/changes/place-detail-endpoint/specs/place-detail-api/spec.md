@@ -9,7 +9,11 @@ regardless of `detail_type` (amenity, transport, admin, natural, none)
 — places without a detail model are first-class. The response SHALL
 carry the base fields `slug`, `name` (localized per `lang`),
 `country_code`, `elevation`, `importance`, `location`, `description`,
-`detail_type` and `review_status`. The endpoint SHALL accept the
+`detail_type` and `review_status`. No `modified` timestamp is exposed
+at this time — freshness is governed by the `Cache-Control: public,
+max-age=60` tier (see Path resolution and caching parity); exposing
+`modified` is revisited when ETag caching is adopted for the places
+family. The endpoint SHALL accept the
 shared `lang` and `fields[TYPE]` query parameters and SHALL NOT accept
 type or category filter parameters — type filtering belongs to the
 list endpoints (`search`, `nearby`). The route SHALL set `name=` equal
@@ -37,9 +41,9 @@ change SHALL be registered in the API changelog per the
 
 - **WHEN** a client sends `?types=peak` or `?categories=terrain` to
   the detail endpoint
-- **THEN** the parameters are ignored per the shared query-model
-  extras policy — filtering lives on `places/search` and
-  `places/nearby` only
+- **THEN** the parameters are ignored silently (unrecognized query
+  parameters are passed through without error) — filtering lives on
+  `places/search` and `places/nearby` only
 
 ### Requirement: Slug-only identifiers in the places family
 Places SHALL be identified by their unique slug in every
@@ -141,7 +145,10 @@ existing row.
 ### Requirement: Optional members under sparse fieldset selection
 Optional response members SHALL follow the `fields[places]`
 sparse-fieldset selection: `categories`, `sources`, `amenity_detail`
-and `parties` (per the `geoplace-parties` capability). Without a
+and `parties` (per the `geoplace-parties` capability — when this
+change lands before that capability in any environment, the member
+is absent from the response and not a valid `fields[places]` name,
+becoming valid additively when that change lands). Without a
 selection the response SHALL include every member that has data; with
 a selection only the selected (plus required) members SHALL be
 returned, with nested narrowing via `fields[parties]`,
@@ -190,11 +197,21 @@ The `{slug}` path parameter SHALL resolve against active, public
 places only, and unknown, inactive or non-public slugs SHALL answer
 404 with the single error contract body (`{"code": "not_found",
 "detail": …}` plus the RFC 9457 members) with no distinction between
-the cases. The detail route SHALL be served with `Cache-Control:
+the cases. Unlike the removed `get_amenity` route, which filtered
+only `is_active`, this endpoint additionally enforces `is_public` —
+parity with `places/search`, `places/nearby` and the SEO surface
+(bugfix-grade correction; the old route had zero consumers). A
+successful fetch records a place visit per the visit-counter
+behavior (best-effort, once existence is known). The detail route
+SHALL be served with `Cache-Control:
 public, max-age=60` and server-side response caching (`cache_page(60)`)
 matching the `places/search` and `places/nearby` endpoints; language
 and sparse-fieldset variants SHALL cache as distinct variants (the
-cache keys on the full request URL).
+cache keys on the full request URL). The endpoint is a singleton
+resource, not a catalog/index document, so the time-based family
+tier applies (`api-conventions`' evolving-document rule governs
+catalog endpoints); a future ETag upgrade for the places family
+would revisit this.
 
 #### Scenario: Unknown slug answers the standard 404
 
