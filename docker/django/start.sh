@@ -24,8 +24,10 @@ set -o pipefail
 #                     `--no-control-socket` is appended by entrypoint.sh
 #   ASGI_ENABLED=1    uvicorn workers on server.asgi (see gunicorn_config.py)
 #
-# Note: `compilemessages` is NOT run (neither here nor in the image build):
-# locale/ is currently empty, there is nothing to compile.
+# Note: `compilemessages` is NOT run here — translations are compiled
+# in the image build (Dockerfile.*: `manage.py compilemessages` next to
+# collectstatic), so this start path needs no gettext and no writable
+# locale/ tree.
 
 # Check that $DJANGO_ENV is a serve-safe environment. Wodore serves from
 # two: "production" and "staging" (server/settings/environments/); the

@@ -181,6 +181,7 @@ COPY --chown=web:web ./docker/django/start.sh /code/docker/django/start.sh
 COPY --chown=web:web ./docker/django/gunicorn_config.py /code/docker/django/gunicorn_config.py
 COPY --chown=web:web ./pyproject.toml /code/
 COPY --chown=web:web ./manage.py /code/
+COPY --chown=web:web ./locale /code/locale
 COPY --chown=web:web server /code/server
 # TODO: collectstatic in build process and copy from there!
 #COPY --chown=web:web static /code/static
@@ -208,6 +209,10 @@ chmod +x '/docker-entrypoint.sh'
 # builtin (no Zitadel discovery fetch) and the committed dev signing key
 # is allowed (required when AUTH_PROVIDER=builtin).
 # (Was OIDC_ENABLED=false before the auth modernization, #183.)
+# Translations (.po -> .mo, gettext msgfmt is in this image's apk list):
+# the per-language llms.txt variants render through the django catalog,
+# so the image must carry compiled messages (locale/*.mo is gitignored).
+DJANGO_ENV=test python manage.py compilemessages
 DJANGO_ENV=test python manage.py collectstatic --noinput
 # Regression guard (staging /demos/mapcompare/ vendor 404s, 2025-10):
 # apps conditionally registered in a runtime environment but missing

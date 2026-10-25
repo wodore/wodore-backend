@@ -2,10 +2,18 @@
 Middleware for adding environment and SEO-related headers.
 """
 
+import re
 import typing as t
 
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse
+
+# The whole llms.txt family: the bare root, every settings-driven
+# /llms.<lang>.txt variant, AND the permanent-redirect responses for
+# unknown spellings (server/urls.py routes the catch-all to
+# llms_txt_redirect) — all of them are language-fixed per URL, so none
+# of them may carry a negotiation Vary.
+_LLMS_PATH_RE = re.compile(r"^/llms(?:\.[^/]+)?\.txt$")
 
 
 class EnvironmentHeadersMiddleware:
@@ -61,7 +69,8 @@ class LlmsTxtCacheMiddleware:
     the llms.txt paths — every other response keeps it.
 
     Headers affected:
-        Vary - removed on /llms.txt and its per-language variants
+        Vary - removed on /llms.txt, its per-language variants and
+        their unknown-spelling redirects
     """
 
     def __init__(self, get_response: t.Callable[[HttpRequest], HttpResponse]) -> None:
@@ -85,11 +94,7 @@ class LlmsTxtCacheMiddleware:
         """
         response = self.get_response(request)
 
-        # Local import: the middleware module must stay importable from
-        # the settings components without dragging the app in early.
-        from server.apps.main.views import LLMS_TXT_PATHS
-
-        if request.path in LLMS_TXT_PATHS:
+        if _LLMS_PATH_RE.fullmatch(request.path):
             response.headers.pop("Vary", None)
 
         return response

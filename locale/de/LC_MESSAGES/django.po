@@ -1,0 +1,4132 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: wodore-backend\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-25 21:18+0100\n"
+"PO-Revision-Date: +00:00\n"
+"Last-Translator: wodore <tb@wodore.com>\n"
+"Language-Team: wodore <tb@wodore.com>\n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+#: server/apps/availability/admin.py:34
+msgid "availability date range"
+msgstr ""
+
+#: server/apps/availability/admin.py:40
+msgid "Next 1 day"
+msgstr ""
+
+#: server/apps/availability/admin.py:41
+msgid "Next 7 days"
+msgstr ""
+
+#: server/apps/availability/admin.py:42
+msgid "Next 1 month"
+msgstr ""
+
+#: server/apps/availability/admin.py:43
+msgid "All dates"
+msgstr ""
+
+#: server/apps/availability/admin.py:170 server/apps/availability/admin.py:673
+msgid "Duration"
+msgstr ""
+
+#: server/apps/availability/admin.py:216 server/apps/availability/admin.py:258
+#: server/apps/availability/admin.py:488 server/apps/availability/admin.py:626
+#: server/apps/availability/models.py:44 server/apps/availability/models.py:110
+#: server/apps/availability/models.py:380
+#: server/apps/contacts/admin/_contact.py:26
+#: server/apps/huts/admin/_associations.py:93
+#: server/apps/huts/models/_hut.py:309
+#: server/apps/huts/models/_hut_source.py:100
+#: server/apps/owners/admin/_associations.py:75
+#: server/apps/owners/admin/_owner.py:45
+msgid "Hut"
+msgstr ""
+
+#: server/apps/availability/admin.py:220 server/apps/feedbacks/admin.py:62
+#: server/apps/geometries/admin/_geoplace.py:616
+#: server/apps/huts/admin/_hut.py:196 server/apps/huts/admin/_hut_source.py:111
+#: server/apps/images/admin.py:595 server/apps/organizations/forms.py:52
+#: server/apps/owners/admin/_associations.py:90
+#: server/apps/symbols/admin.py:152 server/settings/components/unfold.py:465
+msgid "Status"
+msgstr ""
+
+#: server/apps/availability/admin.py:230 server/apps/availability/admin.py:445
+#: server/apps/availability/admin.py:607
+#: server/apps/external_links/admin.py:109 server/apps/feedbacks/admin.py:38
+#: server/apps/geometries/admin/_geoplace.py:641
+#: server/apps/geometries/forms.py:66 server/apps/huts/forms.py:94
+#: server/apps/images/forms.py:82 server/apps/organizations/forms.py:79
+msgid "Timestamps"
+msgstr ""
+
+#: server/apps/availability/admin.py:263
+msgid "Has Data"
+msgstr ""
+
+#: server/apps/availability/admin.py:268
+msgid "Failures"
+msgstr ""
+
+#: server/apps/availability/admin.py:273
+msgid "Failing Since"
+msgstr ""
+
+#: server/apps/availability/admin.py:281
+msgid "always"
+msgstr ""
+
+#: server/apps/availability/admin.py:313 server/apps/availability/models.py:374
+#: server/apps/availability/models.py:829
+#: server/settings/components/unfold.py:129
+#: server/settings/components/unfold.py:447
+msgid "Availability"
+msgstr ""
+
+#: server/apps/availability/admin.py:314
+msgid "Availability (Next 14 Days)"
+msgstr ""
+
+#: server/apps/availability/admin.py:337 server/apps/availability/admin.py:468
+#: server/apps/availability/admin.py:641
+msgid "Free/Total"
+msgstr ""
+
+#: server/apps/availability/admin.py:345 server/apps/availability/admin.py:476
+#: server/apps/availability/admin.py:649
+msgid "Occupancy"
+msgstr ""
+
+#: server/apps/availability/admin.py:357 server/apps/availability/admin.py:493
+#: server/apps/availability/admin.py:661 server/apps/huts/admin/_hut.py:216
+msgid "Type"
+msgstr ""
+
+#: server/apps/availability/admin.py:369 server/apps/categories/admin.py:73
+msgid "View"
+msgstr ""
+
+#: server/apps/availability/admin.py:429
+msgid "Hut Information"
+msgstr ""
+
+#: server/apps/availability/admin.py:505
+msgid "Reservation"
+msgstr ""
+
+#: server/apps/availability/admin.py:510
+#: server/apps/external_links/admin.py:156
+#: server/apps/external_links/models.py:56
+#: server/apps/geometries/admin/_geoplace.py:110
+#: server/apps/huts/admin/_associations.py:145 server/apps/symbols/admin.py:134
+#: server/apps/symbols/forms.py:27
+msgid "Source"
+msgstr ""
+
+#: server/apps/availability/admin.py:585
+msgid "Reference"
+msgstr ""
+
+#: server/apps/availability/admin.py:595
+msgid "Snapshot Data"
+msgstr ""
+
+#: server/apps/availability/models.py:48 server/apps/availability/models.py:208
+#: server/apps/availability/models.py:441
+#: server/apps/availability/models.py:496
+#: server/apps/availability/models.py:658
+#: server/apps/availability/models.py:896
+#: server/apps/external_links/models.py:108
+msgid "Last Checked"
+msgstr ""
+
+#: server/apps/availability/models.py:49
+msgid "When availability was last fetched for this hut"
+msgstr ""
+
+#: server/apps/availability/models.py:55 server/apps/availability/models.py:503
+msgid "Last Successful Fetch"
+msgstr ""
+
+#: server/apps/availability/models.py:56 server/apps/availability/models.py:504
+msgid "When availability data was last successfully retrieved"
+msgstr ""
+
+#: server/apps/availability/models.py:60 server/apps/availability/models.py:508
+msgid "Has Availability Data"
+msgstr ""
+
+#: server/apps/availability/models.py:61
+msgid "Whether this hut has ever returned availability data"
+msgstr ""
+
+#: server/apps/availability/models.py:65 server/apps/availability/models.py:513
+msgid "Consecutive Failures"
+msgstr ""
+
+#: server/apps/availability/models.py:66 server/apps/availability/models.py:514
+msgid "Number of consecutive times the fetch returned no data or failed"
+msgstr ""
+
+#: server/apps/availability/models.py:70
+msgid "Availability Status"
+msgstr ""
+
+#: server/apps/availability/models.py:71
+msgid "Availability Statuses"
+msgstr ""
+
+#: server/apps/availability/models.py:117
+#: server/apps/availability/models.py:567 server/apps/images/models.py:196
+#: server/apps/meteo/models.py:212 server/apps/symbols/models.py:132
+#: server/apps/symbols/models.py:250
+msgid "Source Organization"
+msgstr ""
+
+#: server/apps/availability/models.py:118
+#: server/apps/availability/models.py:568
+msgid "Organization providing the booking data"
+msgstr ""
+
+#: server/apps/availability/models.py:123
+#: server/apps/availability/models.py:573
+#: server/apps/huts/models/_hut_source.py:42
+msgid "Source ID"
+msgstr ""
+
+#: server/apps/availability/models.py:124
+msgid "Hut ID in the source organization's system"
+msgstr ""
+
+#: server/apps/availability/models.py:127
+#: server/apps/availability/models.py:384
+#: server/apps/availability/models.py:577
+#: server/apps/availability/models.py:839
+msgid "Availability Date"
+msgstr ""
+
+#: server/apps/availability/models.py:128
+#: server/apps/availability/models.py:578
+msgid "Date for which this availability data applies"
+msgstr ""
+
+#: server/apps/availability/models.py:137
+#: server/apps/availability/models.py:392
+#: server/apps/availability/models.py:587
+#: server/apps/availability/models.py:847
+msgid "Free Places"
+msgstr ""
+
+#: server/apps/availability/models.py:138
+#: server/apps/availability/models.py:588
+msgid "Number of available places (null = not published by source)"
+msgstr ""
+
+#: server/apps/availability/models.py:143
+#: server/apps/availability/models.py:396
+#: server/apps/availability/models.py:593
+#: server/apps/availability/models.py:851
+msgid "Total Places"
+msgstr ""
+
+#: server/apps/availability/models.py:144
+#: server/apps/availability/models.py:594
+msgid "Total number of places (null = not published by source)"
+msgstr ""
+
+#: server/apps/availability/models.py:150
+#: server/apps/availability/models.py:401
+#: server/apps/availability/models.py:600
+#: server/apps/availability/models.py:856
+msgid "Free Places Tolerance"
+msgstr ""
+
+#: server/apps/availability/models.py:152
+#: server/apps/availability/models.py:602
+msgid ""
+"Plus/minus uncertainty on free places (0 = exact, null = unknown); estimated "
+"sources report free ± tolerance"
+msgstr ""
+
+#: server/apps/availability/models.py:161
+#: server/apps/availability/models.py:407
+#: server/apps/availability/models.py:611
+#: server/apps/availability/models.py:862
+msgid "Occupancy Percent"
+msgstr ""
+
+#: server/apps/availability/models.py:162
+#: server/apps/availability/models.py:612
+msgid "Occupancy percentage (0-100), null if not computable"
+msgstr ""
+
+#: server/apps/availability/models.py:167
+#: server/apps/availability/models.py:617
+msgid "Occupancy Steps"
+msgstr ""
+
+#: server/apps/availability/models.py:168
+#: server/apps/availability/models.py:618
+msgid "Occupancy in discrete steps (0-100, increments of 10)"
+msgstr ""
+
+#: server/apps/availability/models.py:173
+#: server/apps/availability/models.py:412
+#: server/apps/availability/models.py:623
+#: server/apps/availability/models.py:867
+msgid "Occupancy Status"
+msgstr ""
+
+#: server/apps/availability/models.py:174
+#: server/apps/availability/models.py:413
+#: server/apps/availability/models.py:624
+#: server/apps/availability/models.py:868
+msgid "Status: empty, low, medium, high, full, free_unknown, unknown"
+msgstr ""
+
+#: server/apps/availability/models.py:179
+#: server/apps/availability/models.py:418
+#: server/apps/availability/models.py:629
+#: server/apps/availability/models.py:873
+msgid "Reservation Status"
+msgstr ""
+
+#: server/apps/availability/models.py:180
+#: server/apps/availability/models.py:419
+#: server/apps/availability/models.py:630
+#: server/apps/availability/models.py:874
+msgid "Status: unknown, possible, not_possible, not_online"
+msgstr ""
+
+#: server/apps/availability/models.py:188
+#: server/apps/availability/models.py:638
+msgid "Booking Link"
+msgstr ""
+
+#: server/apps/availability/models.py:196
+#: server/apps/availability/models.py:429
+#: server/apps/availability/models.py:884
+msgid "Hut Type"
+msgstr ""
+
+#: server/apps/availability/models.py:197
+#: server/apps/availability/models.py:430
+#: server/apps/availability/models.py:647
+#: server/apps/availability/models.py:885
+msgid "Hut type on this date (open/closed)"
+msgstr ""
+
+#: server/apps/availability/models.py:203
+#: server/apps/availability/models.py:436
+#: server/apps/availability/models.py:653
+#: server/apps/availability/models.py:891
+msgid "First Checked"
+msgstr ""
+
+#: server/apps/availability/models.py:204
+#: server/apps/availability/models.py:654
+msgid "When this availability was first recorded"
+msgstr ""
+
+#: server/apps/availability/models.py:209
+msgid "When this hut was last queried"
+msgstr ""
+
+#: server/apps/availability/models.py:214
+msgid "Hut Availability"
+msgstr ""
+
+#: server/apps/availability/models.py:215
+msgid "Hut Availabilities"
+msgstr ""
+
+#: server/apps/availability/models.py:385
+#: server/apps/availability/models.py:840
+msgid "Target date this availability applies to"
+msgstr ""
+
+#: server/apps/availability/models.py:437
+#: server/apps/availability/models.py:892
+msgid "When this state was first observed"
+msgstr ""
+
+#: server/apps/availability/models.py:442
+#: server/apps/availability/models.py:897
+msgid "When this state was last confirmed (updated on every check)"
+msgstr ""
+
+#: server/apps/availability/models.py:446
+msgid "Hut Availability History"
+msgstr ""
+
+#: server/apps/availability/models.py:447
+msgid "Hut Availability Histories"
+msgstr ""
+
+#: server/apps/availability/models.py:492
+#: server/apps/availability/models.py:560
+#: server/apps/availability/models.py:835
+#: server/apps/geometries/admin/_geoplace.py:608
+msgid "Place"
+msgstr ""
+
+#: server/apps/availability/models.py:497
+msgid "When availability was last fetched for this place"
+msgstr ""
+
+#: server/apps/availability/models.py:509
+msgid "Whether this place has ever returned availability data"
+msgstr ""
+
+#: server/apps/availability/models.py:518
+msgid "Place Availability Status"
+msgstr ""
+
+#: server/apps/availability/models.py:519
+msgid "Place Availability Statuses"
+msgstr ""
+
+#: server/apps/availability/models.py:574
+msgid "Place ID in the source organization's system"
+msgstr ""
+
+#: server/apps/availability/models.py:646
+msgid "Type of the Day"
+msgstr ""
+
+#: server/apps/availability/models.py:659
+msgid "When this place was last queried"
+msgstr ""
+
+#: server/apps/availability/models.py:664
+msgid "Place Availability"
+msgstr ""
+
+#: server/apps/availability/models.py:665
+msgid "Place Availabilities"
+msgstr ""
+
+#: server/apps/availability/models.py:901
+msgid "Place Availability History"
+msgstr ""
+
+#: server/apps/availability/models.py:902
+msgid "Place Availability Histories"
+msgstr ""
+
+#: server/apps/basemaps/admin.py:105
+msgid "Sections"
+msgstr ""
+
+#: server/apps/basemaps/admin.py:109
+msgid "Layers"
+msgstr ""
+
+#: server/apps/basemaps/admin.py:141
+msgid "Default"
+msgstr ""
+
+#: server/apps/basemaps/admin.py:155
+msgid "Bbox (W,S,E,N)"
+msgstr ""
+
+#: server/apps/basemaps/admin.py:212 server/apps/basemaps/admin.py:234
+#: server/apps/symbols/models.py:63
+msgid "Style"
+msgstr ""
+
+#: server/apps/basemaps/admin.py:224
+msgid "Placement & fallback"
+msgstr ""
+
+#: server/apps/basemaps/admin.py:228
+msgid "Content & interaction"
+msgstr ""
+
+#: server/apps/basemaps/admin.py:231
+msgid "Legal"
+msgstr ""
+
+#: server/apps/basemaps/admin.py:261
+#, python-format
+msgid "Preview: %(layer)s"
+msgstr ""
+
+#: server/apps/basemaps/admin.py:273
+msgid "Served at"
+msgstr ""
+
+#: server/apps/basemaps/models.py:54
+msgid "Stable slot identifier (referenced by layers)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:60
+msgid "Human-readable slot name"
+msgstr ""
+
+#: server/apps/basemaps/models.py:67
+msgid "Render order of the slot (lower renders beneath)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:71
+msgid "Map slot"
+msgstr ""
+
+#: server/apps/basemaps/models.py:72
+msgid "Map slots"
+msgstr ""
+
+#: server/apps/basemaps/models.py:92
+msgid "number"
+msgstr ""
+
+#: server/apps/basemaps/models.py:93
+msgid "color"
+msgstr ""
+
+#: server/apps/basemaps/models.py:94
+msgid "boolean"
+msgstr ""
+
+#: server/apps/basemaps/models.py:95
+msgid "enum"
+msgstr ""
+
+#: server/apps/basemaps/models.py:96
+msgid "string"
+msgstr ""
+
+#: server/apps/basemaps/models.py:97
+msgid "date (runtime)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:98
+msgid "opacity curve (widget)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:113
+msgid "Token name referenced in styles as {{slug}} (dots allowed)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:120
+msgid "Value type; determines the settings-tab control"
+msgstr ""
+
+#: server/apps/basemaps/models.py:126
+msgid "Human-readable label"
+msgstr ""
+
+#: server/apps/basemaps/models.py:132
+msgid "Explanation shown in the settings UI"
+msgstr ""
+
+#: server/apps/basemaps/models.py:141
+msgid ""
+"Default value: scalar, or for widget kinds a MapLibre expression subtree"
+msgstr ""
+
+#: server/apps/basemaps/models.py:148
+msgid ""
+"Kind-specific constraints (min/max/step/options; stop count for widgets)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:153
+msgid "Map parameter"
+msgstr ""
+
+#: server/apps/basemaps/models.py:154
+msgid "Map parameters"
+msgstr ""
+
+#: server/apps/basemaps/models.py:189
+msgid "Stable coverage identifier"
+msgstr ""
+
+#: server/apps/basemaps/models.py:195
+msgid "Human-readable name (e.g. 'Switzerland + Liechtenstein')"
+msgstr ""
+
+#: server/apps/basemaps/models.py:201
+msgid "Data source note (e.g. 'Natural Earth 10m, public domain')"
+msgstr ""
+
+#: server/apps/basemaps/models.py:205
+msgid "Coverage multipolygon (WGS84)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:209
+msgid "Map coverage"
+msgstr ""
+
+#: server/apps/basemaps/models.py:210
+msgid "Map coverages"
+msgstr ""
+
+#: server/apps/basemaps/models.py:241
+msgid "Legend title (fallback: layer name)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:247
+msgid "Legend intro text"
+msgstr ""
+
+#: server/apps/basemaps/models.py:258 server/apps/parties/admin.py:84
+#: server/apps/parties/models/_party.py:77
+msgid "Links"
+msgstr ""
+
+#: server/apps/basemaps/models.py:259
+msgid "Related external links (more info, sources)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:269
+msgid "Map legend"
+msgstr ""
+
+#: server/apps/basemaps/models.py:270
+msgid "Map legends"
+msgstr ""
+
+#: server/apps/basemaps/models.py:282
+msgid "detailed symbols"
+msgstr ""
+
+#: server/apps/basemaps/models.py:283
+msgid "simple symbols"
+msgstr ""
+
+#: server/apps/basemaps/models.py:284
+msgid "monochrome symbols"
+msgstr ""
+
+#: server/apps/basemaps/models.py:285
+msgid "dual symbols"
+msgstr ""
+
+#: server/apps/basemaps/models.py:286
+msgid "lines"
+msgstr ""
+
+#: server/apps/basemaps/models.py:287
+msgid "areas"
+msgstr ""
+
+#: server/apps/basemaps/models.py:288
+msgid "points"
+msgstr ""
+
+#: server/apps/basemaps/models.py:306
+msgid "How items in this section render"
+msgstr ""
+
+#: server/apps/basemaps/models.py:316
+msgid ""
+"Category-driven section: items resolve from this category tree (overrides "
+"static items)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:322
+msgid "Legend section"
+msgstr ""
+
+#: server/apps/basemaps/models.py:323
+msgid "Legend sections"
+msgstr ""
+
+#: server/apps/basemaps/models.py:366
+msgid ""
+"Item color (hex) — may reference a parameter token like {{trail_color}} so "
+"the legend follows user customization"
+msgstr ""
+
+#: server/apps/basemaps/models.py:375
+msgid ""
+"Line/size value — may reference a parameter token (e.g. {{trail_width}})"
+msgstr ""
+
+#: server/apps/basemaps/models.py:382
+msgid "Icon library reference (optional)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:386
+msgid "Legend item"
+msgstr ""
+
+#: server/apps/basemaps/models.py:387
+msgid "Legend items"
+msgstr ""
+
+#: server/apps/basemaps/models.py:412
+msgid "Legend link"
+msgstr ""
+
+#: server/apps/basemaps/models.py:413
+msgid "Legend links"
+msgstr ""
+
+#: server/apps/basemaps/models.py:436
+msgid "basemap"
+msgstr ""
+
+#: server/apps/basemaps/models.py:437
+msgid "overlay"
+msgstr ""
+
+#: server/apps/basemaps/models.py:440
+msgid "low (weak GPU)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:441
+msgid "medium"
+msgstr ""
+
+#: server/apps/basemaps/models.py:442
+msgid "high (vector-capable)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:458
+msgid ""
+"Stable layer identity — shared across spec variants; groups and preferences "
+"reference the slug. Dots allowed (swisstopo layer names)."
+msgstr ""
+
+#: server/apps/basemaps/models.py:468
+msgid "Device tier this variant targets"
+msgstr ""
+
+#: server/apps/basemaps/models.py:475
+msgid "basemap or overlay"
+msgstr ""
+
+#: server/apps/basemaps/models.py:481
+msgid "Layer name (menu label)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:487
+msgid "Layer description (info sheet)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:498
+msgid "Icon library reference 'pack/slug' (e.g. 'fluent-emoji/hiking-boot')"
+msgstr ""
+
+#: server/apps/basemaps/models.py:505
+msgid "Optional badge icon (e.g. a country flag from the icon library)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:514
+msgid "Slot"
+msgstr ""
+
+#: server/apps/basemaps/models.py:515
+msgid "Insertion slot for overlays (ignored for basemaps)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:520
+msgid "Display/render order within the role"
+msgstr ""
+
+#: server/apps/basemaps/models.py:524
+msgid "Show in the layer menu"
+msgstr ""
+
+#: server/apps/basemaps/models.py:529
+msgid "Included in catalog and style serving"
+msgstr ""
+
+#: server/apps/basemaps/models.py:533
+msgid "Default basemap (role=basemap only)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:539
+msgid "Layer zoom floor"
+msgstr ""
+
+#: server/apps/basemaps/models.py:544
+msgid "Layer zoom ceiling"
+msgstr ""
+
+#: server/apps/basemaps/models.py:551
+msgid ""
+"Inline MapLibre StyleSpecification (raster/vector/geojson sources; "
+"'{{token}}' parameter nodes allowed)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:560
+msgid ""
+"Externally authored style URL (MapTiler, swisstopo, OpenFreeMap); '{{env:"
+"NAME}}' tokens allowed (resolved server-side)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:570
+msgid ""
+"Overlay config layout: filters, legend sections, links (category refs by "
+"slug)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:578
+msgid "Interaction hints: clickable layer ids and behaviors (e.g. hut detail)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:588
+msgid "Coverage"
+msgstr ""
+
+#: server/apps/basemaps/models.py:589
+msgid "Clip polygon — catalog exports its bbox"
+msgstr ""
+
+#: server/apps/basemaps/models.py:595
+msgid ""
+"Below this zoom the variant hides and the fallback beneath shows (country "
+"rasters)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:605
+msgid "Fallback layer"
+msgstr ""
+
+#: server/apps/basemaps/models.py:606
+msgid "Basemap auto-switch target when this one fails"
+msgstr ""
+
+#: server/apps/basemaps/models.py:613
+msgid ""
+"Basemap insertion anchors for overlay slots: {'ways': {'before': 'LayerId'}, "
+"'background': {...}}"
+msgstr ""
+
+#: server/apps/basemaps/models.py:621
+msgid "Preview thumbnail URL (basemap switch)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:630 server/apps/licenses/models.py:99
+#: server/apps/symbols/admin.py:124 server/apps/symbols/models.py:107
+msgid "License"
+msgstr ""
+
+#: server/apps/basemaps/models.py:631
+msgid "License under which this layer's data is used"
+msgstr ""
+
+#: server/apps/basemaps/models.py:639
+msgid "Legend"
+msgstr ""
+
+#: server/apps/basemaps/models.py:641
+msgid ""
+"This variant row's legend (per-spec divergence possible; sharing one legend "
+"row across variants is the seed default)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:651 server/settings/components/unfold.py:395
+msgid "Parameters"
+msgstr ""
+
+#: server/apps/basemaps/models.py:652
+msgid "Customization knobs referenced from the style"
+msgstr ""
+
+#: server/apps/basemaps/models.py:659 server/apps/categories/apps.py:8
+#: server/apps/categories/models.py:212
+#: server/apps/categories/templates/admin/categories_symbols.html:8
+#: server/apps/categories/templates/admin/categories_symbols.html:26
+#: server/apps/geometries/admin/_geoplace.py:452
+#: server/apps/geometries/admin/_geoplace.py:668
+#: server/apps/geometries/models/_geoplace.py:110
+#: server/settings/components/unfold.py:165
+msgid "Categories"
+msgstr ""
+
+#: server/apps/basemaps/models.py:660
+msgid "Category links powering filters and legends"
+msgstr ""
+
+#: server/apps/basemaps/models.py:667
+msgid "Attributions"
+msgstr ""
+
+#: server/apps/basemaps/models.py:668
+msgid "Required attributions (org.attribution is the payload)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:680
+msgid "Map layer"
+msgstr ""
+
+#: server/apps/basemaps/models.py:681 server/settings/components/unfold.py:388
+msgid "Map layers"
+msgstr ""
+
+#: server/apps/basemaps/models.py:843
+msgid "Authored per-layer default (wins over registry default)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:847
+msgid "Layer parameter"
+msgstr ""
+
+#: server/apps/basemaps/models.py:848
+msgid "Layer parameters"
+msgstr ""
+
+#: server/apps/basemaps/models.py:865
+msgid "primary"
+msgstr ""
+
+#: server/apps/basemaps/models.py:866
+msgid "filter"
+msgstr ""
+
+#: server/apps/basemaps/models.py:867
+msgid "legend"
+msgstr ""
+
+#: server/apps/basemaps/models.py:886
+msgid "What the category powers for this layer"
+msgstr ""
+
+#: server/apps/basemaps/models.py:890
+msgid "Order within the use group"
+msgstr ""
+
+#: server/apps/basemaps/models.py:894
+msgid "Layer category"
+msgstr ""
+
+#: server/apps/basemaps/models.py:895
+msgid "Layer categories"
+msgstr ""
+
+#: server/apps/basemaps/models.py:929
+msgid "Attribution display order"
+msgstr ""
+
+#: server/apps/basemaps/models.py:933
+msgid "Layer attribution"
+msgstr ""
+
+#: server/apps/basemaps/models.py:934
+msgid "Layer attributions"
+msgstr ""
+
+#: server/apps/basemaps/models.py:962
+msgid "martin sync (observed bytes)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:963
+msgid "external asset (verified / manual)"
+msgstr ""
+
+#: server/apps/basemaps/models.py:970
+msgid "Stable key: 'sprites', 'fonts', or the external URL"
+msgstr ""
+
+#: server/apps/basemaps/models.py:976
+msgid "Short content hash; empty = not yet published"
+msgstr ""
+
+#: server/apps/basemaps/models.py:987
+msgid "External verifier: last observed ETag validator"
+msgstr ""
+
+#: server/apps/basemaps/models.py:993
+msgid "External verifier: last observed Last-Modified validator"
+msgstr ""
+
+#: server/apps/basemaps/models.py:998
+msgid "External verifier: last successful probe"
+msgstr ""
+
+#: server/apps/basemaps/models.py:1002
+msgid "Tile asset version"
+msgstr ""
+
+#: server/apps/basemaps/models.py:1003
+msgid "Tile asset versions"
+msgstr ""
+
+#: server/apps/basemaps/templates/admin/basemaps/maplayer/preview.html:4
+msgid "Basemaps"
+msgstr ""
+
+#: server/apps/basemaps/templates/admin/basemaps/maplayer/preview.html:27
+#, python-format
+msgid ""
+"Served (resolved mode, defaults) at <code>%(url)s</code> — the same document "
+"any MapLibre client fetches."
+msgstr ""
+
+#: server/apps/basemaps/templates/admin/basemaps/maplayer/preview.html:34
+#, python-format
+msgid ""
+"This layer references an externally authored style: <code>%(url)s</code>"
+msgstr ""
+
+#: server/apps/basemaps/templates/admin/basemaps/maplayer/preview.html:40
+msgid "No style to preview."
+msgstr ""
+
+#: server/apps/categories/admin.py:48
+msgid "Child Category"
+msgstr ""
+
+#: server/apps/categories/admin.py:49
+msgid "Child Categories"
+msgstr ""
+
+#: server/apps/categories/admin.py:138
+#: server/apps/contacts/admin/_contact.py:57
+#: server/apps/contacts/admin/_contact_function.py:25
+#: server/apps/external_links/admin.py:74 server/apps/geometries/forms.py:6
+#: server/apps/huts/admin/_hut_type.py:39 server/apps/huts/forms.py:11
+#: server/apps/images/forms.py:6 server/apps/images/forms.py:65
+#: server/apps/licenses/forms.py:6 server/apps/organizations/forms.py:6
+#: server/apps/owners/admin/_owner.py:77 server/apps/parties/admin.py:56
+#: server/apps/symbols/forms.py:5
+msgid "Main Information"
+msgstr ""
+
+#: server/apps/categories/admin.py:149 server/apps/categories/models.py:194
+#: server/apps/images/admin.py:64 server/apps/images/models.py:60
+msgid "Color"
+msgstr ""
+
+#: server/apps/categories/admin.py:153
+msgid "SEO"
+msgstr ""
+
+#: server/apps/categories/admin.py:157
+msgid ""
+"Sitemap policy for places in this category (tri-state: empty inherits from "
+"the parent, roots default to exclude)."
+msgstr ""
+
+#: server/apps/categories/admin.py:163
+#: server/apps/contacts/admin/_contact.py:71
+#: server/apps/contacts/admin/_contact_function.py:29
+#: server/apps/huts/admin/_hut_type.py:43 server/apps/owners/admin/_owner.py:88
+#: server/apps/parties/admin.py:68
+msgid "Translations"
+msgstr ""
+
+#: server/apps/categories/admin.py:173 server/apps/meteo/admin.py:383
+#: server/apps/symbols/admin.py:255 server/apps/symbols/models.py:156
+#: server/settings/components/unfold.py:259
+#: server/settings/components/unfold.py:579
+msgid "Symbols"
+msgstr ""
+
+#: server/apps/categories/admin.py:177
+msgid "Additional Data"
+msgstr ""
+
+#: server/apps/categories/admin.py:182
+msgid "Additional metadata as JSON. Example: {'mapcomplete_theme': 'transit'}"
+msgstr ""
+
+#: server/apps/categories/admin.py:246
+msgid "All Symbols by Category"
+msgstr ""
+
+#: server/apps/categories/admin.py:270 server/apps/huts/admin/_hut_type.py:87
+msgid "Name and Description"
+msgstr ""
+
+#: server/apps/categories/admin.py:282
+#: server/apps/contacts/models/_contact_function.py:34
+#: server/apps/huts/admin/_hut_type.py:95 server/apps/symbols/models.py:155
+msgid "Symbol"
+msgstr ""
+
+#: server/apps/categories/admin.py:291
+msgid "Mono"
+msgstr ""
+
+#: server/apps/categories/admin.py:300 server/apps/external_links/models.py:38
+msgid "Identifier"
+msgstr ""
+
+#: server/apps/categories/admin.py:308
+msgid "Children"
+msgstr ""
+
+#: server/apps/categories/admin.py:328
+#: server/apps/geometries/models/_associations.py:203
+#: server/apps/geometries/models/_associations.py:322
+#: server/apps/huts/admin/_hut_type.py:110 server/apps/licenses/models.py:59
+#: server/apps/organizations/models.py:98
+#: server/apps/owners/models/_associations.py:23
+#: server/apps/parties/models/_party_link.py:31
+#: server/apps/symbols/models.py:311
+msgid "Order"
+msgstr ""
+
+#: server/apps/categories/admin.py:333 server/apps/categories/models.py:152
+#: server/apps/external_geonames/admin/_geoname.py:239
+#: server/apps/external_geonames/models/_geoname.py:59
+msgid "Parent"
+msgstr ""
+
+#: server/apps/categories/admin.py:344
+msgid "Auto-set color from SVG"
+msgstr ""
+
+#: server/apps/categories/admin.py:364
+#, python-format
+msgid "Successfully updated color for %(count)d category(ies)."
+msgstr ""
+
+#: server/apps/categories/admin.py:369
+#, python-format
+msgid " Skipped %(count)d category(ies) with no SVG or no colors."
+msgstr ""
+
+#: server/apps/categories/admin.py:376
+msgid ""
+"No colors were updated. Make sure categories have SVG symbols with colors."
+msgstr ""
+
+#: server/apps/categories/admin.py:381
+msgid "Auto-set color from SVG symbols"
+msgstr ""
+
+#: server/apps/categories/models.py:28
+msgid "include in sitemap"
+msgstr ""
+
+#: server/apps/categories/models.py:29
+msgid "exclude from sitemap"
+msgstr ""
+
+#: server/apps/categories/models.py:65
+msgid "Unique identifier within parent level"
+msgstr ""
+
+#: server/apps/categories/models.py:72
+msgid "Full identifier path (root.slug or parent.slug)"
+msgstr ""
+
+#: server/apps/categories/models.py:91
+msgid "Category name"
+msgstr ""
+
+#: server/apps/categories/models.py:100
+msgid "Category description"
+msgstr ""
+
+#: server/apps/categories/models.py:108 server/apps/symbols/models.py:312
+msgid "Display order (lower values appear first)"
+msgstr ""
+
+#: server/apps/categories/models.py:118 server/apps/parties/models/_party.py:88
+#: server/apps/symbols/models.py:349
+msgid "Symbol (Color)"
+msgstr ""
+
+#: server/apps/categories/models.py:119 server/apps/parties/models/_party.py:89
+#: server/apps/symbols/models.py:350
+msgid "Reference to color symbol from Symbols app"
+msgstr ""
+
+#: server/apps/categories/models.py:129 server/apps/symbols/models.py:359
+msgid "Symbol (Primitive)"
+msgstr ""
+
+#: server/apps/categories/models.py:130 server/apps/symbols/models.py:360
+msgid "Reference to primitive symbol from Symbols app"
+msgstr ""
+
+#: server/apps/categories/models.py:140 server/apps/parties/models/_party.py:98
+msgid "Symbol (Monochrome)"
+msgstr ""
+
+#: server/apps/categories/models.py:141 server/apps/parties/models/_party.py:99
+#: server/apps/symbols/models.py:370
+msgid "Reference to monochrome symbol from Symbols app"
+msgstr ""
+
+#: server/apps/categories/models.py:153
+msgid "Parent category in hierarchy"
+msgstr ""
+
+#: server/apps/categories/models.py:163
+msgid "Default Child"
+msgstr ""
+
+#: server/apps/categories/models.py:164
+msgid "Default child category (used when parent has children)"
+msgstr ""
+
+#: server/apps/categories/models.py:172
+msgid "Whether this category is currently active"
+msgstr ""
+
+#: server/apps/categories/models.py:185
+msgid "SEO sitemap policy"
+msgstr ""
+
+#: server/apps/categories/models.py:187
+msgid ""
+"Include/exclude this category's places in the sitemap; empty inherits from "
+"the parent category (roots default to exclude)."
+msgstr ""
+
+#: server/apps/categories/models.py:195
+msgid "theme color as hex number with #"
+msgstr ""
+
+#: server/apps/categories/models.py:203 server/apps/symbols/models.py:256
+msgid "Extra Metadata"
+msgstr ""
+
+#: server/apps/categories/models.py:205
+msgid ""
+"Additional metadata as JSON. Example: {'mapcomplete_theme': 'transit', "
+"'custom_field': 'value'}"
+msgstr ""
+
+#: server/apps/categories/models.py:211
+#: server/apps/external_geonames/models/_feature.py:76
+#: server/apps/geometries/admin/_geoplace.py:193
+#: server/apps/licenses/models.py:75 server/apps/meteo/admin.py:196
+#: server/apps/meteo/models.py:44 server/apps/symbols/admin.py:247
+#: server/apps/symbols/models.py:338
+msgid "Category"
+msgstr ""
+
+#: server/apps/categories/templates/admin/categories_change_list.html:8
+msgid "View All Symbols"
+msgstr ""
+
+#: server/apps/categories/templates/admin/categories_symbols.html:6
+#: server/apps/geometries/templates/admin/geometries_tilemap.html:25
+#: server/apps/licenses/templates/organizations/detail.html:10
+#: server/apps/organizations/templates/organizations/detail.html:10
+msgid "Home"
+msgstr ""
+
+#: server/apps/categories/templates/admin/categories_symbols.html:9
+msgid "All Symbols"
+msgstr ""
+
+#: server/apps/categories/templates/admin/categories_symbols.html:16
+msgid "All Symbols Grouped by Slug"
+msgstr ""
+
+#: server/apps/categories/templates/admin/categories_symbols.html:17
+msgid ""
+"View all three style variants (detailed, simple, monochrome) for each symbol "
+"grouped by slug."
+msgstr ""
+
+#: server/apps/categories/templates/admin/categories_symbols.html:22
+#: server/apps/geometries/models/_geoplace.py:99
+#: server/apps/huts/models/_hut.py:150 server/apps/images/models.py:55
+#: server/apps/meteo/models.py:35 server/apps/meteo/models.py:204
+#: server/apps/organizations/models.py:37
+#: server/apps/owners/admin/_associations.py:61
+#: server/apps/symbols/models.py:243 server/apps/symbols/models.py:297
+#: server/apps/symbols/models.py:489
+msgid "Slug"
+msgstr ""
+
+#: server/apps/categories/templates/admin/categories_symbols.html:23
+msgid "Detailed"
+msgstr ""
+
+#: server/apps/categories/templates/admin/categories_symbols.html:24
+msgid "Simple"
+msgstr ""
+
+#: server/apps/categories/templates/admin/categories_symbols.html:25
+msgid "Monochrome"
+msgstr ""
+
+#: server/apps/categories/templates/admin/categories_symbols.html:27
+msgid "Actions"
+msgstr ""
+
+#: server/apps/categories/templates/admin/categories_symbols.html:36
+msgid "Edit detailed symbol"
+msgstr ""
+
+#: server/apps/categories/templates/admin/categories_symbols.html:45
+msgid "Edit simple symbol"
+msgstr ""
+
+#: server/apps/categories/templates/admin/categories_symbols.html:54
+msgid "Edit monochrome symbol"
+msgstr ""
+
+#: server/apps/categories/templates/admin/categories_symbols.html:88
+msgid "Back to Categories"
+msgstr ""
+
+#: server/apps/contacts/admin/_contact.py:36
+#: server/apps/huts/admin/_associations.py:112
+#: server/apps/owners/admin/_associations.py:65
+#: server/apps/owners/models/_associations.py:20
+#: server/apps/owners/models/_owner.py:57
+msgid "Owner"
+msgstr ""
+
+#: server/apps/contacts/admin/_contact.py:101
+msgid "Name and Email"
+msgstr ""
+
+#: server/apps/contacts/admin/_contact.py:105
+#: server/apps/contacts/models/_contact.py:36
+msgid "Address"
+msgstr ""
+
+#: server/apps/contacts/admin/_contact.py:116
+#: server/apps/contacts/models/_contact.py:25
+msgid "Phone"
+msgstr ""
+
+#: server/apps/contacts/models/_contact.py:19 server/apps/envvars/models.py:46
+#: server/apps/external_geonames/admin/_alternative_name.py:60
+#: server/apps/external_geonames/admin/_feature.py:84
+#: server/apps/external_geonames/admin/_geoname.py:217
+#: server/apps/external_geonames/models/_boundary.py:28
+#: server/apps/external_geonames/models/_feature.py:54
+#: server/apps/external_geonames/models/_geoname.py:30
+#: server/apps/geometries/models/_geoplace.py:91
+#: server/apps/huts/models/_hut.py:178
+#: server/apps/huts/models/_hut_source.py:49 server/apps/images/models.py:57
+#: server/apps/local_auth/templates/local_auth/account_overview.html:12
+#: server/apps/owners/admin/_owner.py:108
+#: server/apps/owners/models/_owner.py:24 server/apps/parties/admin.py:88
+#: server/apps/parties/models/_party.py:39 server/apps/symbols/admin.py:238
+#: server/apps/symbols/admin.py:325 server/apps/symbols/models.py:304
+#: server/apps/symbols/models.py:496
+msgid "Name"
+msgstr ""
+
+#: server/apps/contacts/models/_contact.py:22
+msgid "E-Mail"
+msgstr ""
+
+#: server/apps/contacts/models/_contact.py:28
+msgid "Mobile"
+msgstr ""
+
+#: server/apps/contacts/models/_contact.py:34
+#: server/apps/external_links/models.py:44 server/apps/huts/models/_hut.py:204
+#: server/apps/huts/templates/admin/widgets/open_monthly.html:61
+#: server/apps/organizations/models.py:57
+#: server/apps/owners/models/_owner.py:28
+#: server/apps/owners/models/_owner.py:40
+msgid "URL"
+msgstr ""
+
+#: server/apps/contacts/models/_contact.py:39
+#: server/apps/huts/models/_hut.py:209 server/apps/owners/admin/_owner.py:112
+#: server/apps/owners/models/_owner.py:33
+#: server/apps/parties/models/_party.py:47
+msgid "Note"
+msgstr ""
+
+#: server/apps/contacts/models/_contact.py:44 server/apps/envvars/models.py:74
+#: server/apps/external_links/models.py:165 server/apps/huts/models/_hut.py:163
+#: server/apps/huts/models/_hut_source.py:59 server/apps/images/models.py:108
+#: server/apps/organizations/models.py:39
+#: server/apps/parties/models/_party.py:55 server/apps/symbols/models.py:92
+#: server/apps/symbols/models.py:317
+msgid "Active"
+msgstr ""
+
+#: server/apps/contacts/models/_contact.py:45
+#: server/apps/huts/models/_hut.py:164 server/apps/images/models.py:109
+#: server/apps/symbols/models.py:93 server/apps/symbols/models.py:318
+msgid "Only shown to admin if not active"
+msgstr ""
+
+#: server/apps/contacts/models/_contact.py:50
+#: server/apps/external_links/models.py:158 server/apps/huts/models/_hut.py:169
+#: server/apps/organizations/models.py:42
+#: server/apps/parties/models/_party.py:60
+msgid "Public"
+msgstr ""
+
+#: server/apps/contacts/models/_contact.py:51
+#: server/apps/huts/models/_hut.py:170
+msgid "Only shown to editors if not public"
+msgstr ""
+
+#: server/apps/contacts/models/_contact.py:55
+#: server/apps/geometries/admin/_geoplace.py:633
+#: server/apps/huts/admin/_associations.py:60
+#: server/apps/owners/models/_associations.py:16
+msgid "Contact"
+msgstr ""
+
+#: server/apps/contacts/models/_contact_function.py:24
+msgid "Function"
+msgstr ""
+
+#: server/apps/contacts/models/_contact_function.py:25
+msgid "For example 'warden', 'hut owner', 'cook', ..."
+msgstr ""
+
+#: server/apps/contacts/models/_contact_function.py:36
+msgid "Contact function symbol, should be square and good visible if small."
+msgstr ""
+
+#: server/apps/contacts/models/_contact_function.py:41
+msgid "Priorty, used for ordering. Lower number has higher priority."
+msgstr ""
+
+#: server/apps/contacts/models/_contact_function.py:42
+#: server/apps/geometries/models/_associations.py:138
+msgid "Priority"
+msgstr ""
+
+#: server/apps/contacts/models/_contact_function.py:49
+msgid "Contact Function"
+msgstr ""
+
+#: server/apps/djjmt/fields.py:34
+msgid "A JSON object with translations"
+msgstr ""
+
+#: server/apps/envvars/models.py:51
+msgid ""
+"Variable name, UPPER_SNAKE_CASE, stored uppercase (e.g. "
+"WODORE_MAPTILER_API_KEY)"
+msgstr ""
+
+#: server/apps/envvars/models.py:56
+msgid "Value"
+msgstr ""
+
+#: server/apps/envvars/models.py:60
+msgid ""
+"Stored value wins when set; empty falls back to the process environment "
+"unless pinned (see below)"
+msgstr ""
+
+#: server/apps/envvars/models.py:65
+msgid "Env fallback"
+msgstr ""
+
+#: server/apps/envvars/models.py:68
+msgid ""
+"When the value is empty, fall back to the process environment (infisical). "
+"Unchecked: the empty value is intentional and overrides the environment"
+msgstr ""
+
+#: server/apps/envvars/models.py:77
+msgid "Inactive entries never resolve — not even from the environment"
+msgstr ""
+
+#: server/apps/envvars/models.py:80
+#: server/apps/external_geonames/models/_feature.py:60
+#: server/apps/external_links/models.py:83
+#: server/apps/geometries/models/_geoplace.py:148
+#: server/apps/licenses/models.py:53 server/apps/organizations/models.py:51
+msgid "Description"
+msgstr ""
+
+#: server/apps/envvars/models.py:84
+msgid "What this variable is used for (admin hint)"
+msgstr ""
+
+#: server/apps/envvars/models.py:88
+msgid "Environment variable"
+msgstr ""
+
+#: server/apps/envvars/models.py:89
+msgid "Environment variables"
+msgstr ""
+
+#: server/apps/external_geonames/admin/_alternative_name.py:51
+#: server/apps/external_geonames/admin/_boundary.py:47
+#: server/apps/external_geonames/admin/_geoname.py:159
+msgid "Identification"
+msgstr ""
+
+#: server/apps/external_geonames/admin/_alternative_name.py:69
+msgid "Attributes"
+msgstr ""
+
+#: server/apps/external_geonames/admin/_alternative_name.py:80
+msgid "Time Period"
+msgstr ""
+
+#: server/apps/external_geonames/admin/_boundary.py:57
+msgid "Administrative"
+msgstr ""
+
+#: server/apps/external_geonames/admin/_boundary.py:66
+msgid "Geography"
+msgstr ""
+
+#: server/apps/external_geonames/admin/_boundary.py:70
+#: server/apps/external_geonames/admin/_geoname.py:204
+#: server/apps/meteo/admin.py:166 server/apps/meteo/admin.py:311
+#: server/apps/meteo/admin.py:392
+msgid "Metadata"
+msgstr ""
+
+#: server/apps/external_geonames/admin/_feature.py:52
+msgid "Feature Information"
+msgstr ""
+
+#: server/apps/external_geonames/admin/_feature.py:62
+msgid "Import Configuration"
+msgstr ""
+
+#: server/apps/external_geonames/admin/_feature.py:72
+#: server/apps/external_geonames/models/_feature.py:89
+msgid "Notes"
+msgstr ""
+
+#: server/apps/external_geonames/admin/_feature.py:80
+#: server/apps/external_geonames/models/_boundary.py:36
+#: server/apps/external_geonames/models/_feature.py:47
+msgid "Feature Code"
+msgstr ""
+
+#: server/apps/external_geonames/admin/_geoname.py:75
+msgid "feature importance"
+msgstr ""
+
+#: server/apps/external_geonames/admin/_geoname.py:83
+msgid "High (80-100)"
+msgstr ""
+
+#: server/apps/external_geonames/admin/_geoname.py:84
+msgid "Medium (50-79)"
+msgstr ""
+
+#: server/apps/external_geonames/admin/_geoname.py:85
+msgid "Low (0-49)"
+msgstr ""
+
+#: server/apps/external_geonames/admin/_geoname.py:169
+msgid "Classification"
+msgstr ""
+
+#: server/apps/external_geonames/admin/_geoname.py:173
+msgid "Hierarchy"
+msgstr ""
+
+#: server/apps/external_geonames/admin/_geoname.py:182
+#: server/apps/external_geonames/admin/_geoname.py:245
+#: server/apps/external_geonames/models/_geoname.py:74
+#: server/apps/geometries/admin/_geoplace.py:549
+#: server/apps/huts/admin/_hut.py:224 server/apps/huts/models/_hut.py:233
+#: server/apps/huts/models/_hut_source.py:54
+msgid "Location"
+msgstr ""
+
+#: server/apps/external_geonames/admin/_geoname.py:192
+msgid "Administrative Divisions"
+msgstr ""
+
+#: server/apps/external_geonames/admin/_geoname.py:221
+#: server/apps/geometries/models/_geoplace.py:54
+#: server/apps/local_auth/templates/local_auth/account_overview.html:39
+msgid "Admin"
+msgstr ""
+
+#: server/apps/external_geonames/admin/_geoname.py:235
+#: server/apps/external_geonames/models/_geoname.py:47
+msgid "Feature"
+msgstr ""
+
+#: server/apps/external_geonames/admin/_geoname.py:252
+#: server/apps/external_geonames/models/_feature.py:68
+msgid "Enabled"
+msgstr ""
+
+#: server/apps/external_geonames/admin/_geoname.py:256
+#: server/apps/external_geonames/models/_feature.py:81
+#: server/apps/geometries/admin/_geoplace.py:499
+#: server/apps/geometries/models/_geoplace.py:140
+msgid "Importance"
+msgstr ""
+
+#: server/apps/external_geonames/apps.py:8
+msgid "External GeoNames"
+msgstr ""
+
+#: server/apps/external_geonames/models/_alternative_name.py:20
+msgid "Alternate Name ID"
+msgstr ""
+
+#: server/apps/external_geonames/models/_alternative_name.py:21
+msgid "Unique GeoNames alternate name identifier"
+msgstr ""
+
+#: server/apps/external_geonames/models/_alternative_name.py:29
+#: server/apps/external_geonames/models/_geoname.py:151
+msgid "GeoName"
+msgstr ""
+
+#: server/apps/external_geonames/models/_alternative_name.py:30
+msgid "GeoNames place this name refers to"
+msgstr ""
+
+#: server/apps/external_geonames/models/_alternative_name.py:37
+msgid "ISO Language"
+msgstr ""
+
+#: server/apps/external_geonames/models/_alternative_name.py:39
+msgid ""
+"ISO 639 language code (2-3 chars) optionally followed by country code (e.g., "
+"'zh-CN') or variant (e.g., 'zh-Hant'). Special codes: 'post' for postal "
+"codes, 'iata'/'icao'/'faac' for airport codes, 'fr_1793' for French "
+"Revolution names, 'abbr' for abbreviations, 'link' for website links, 'wkdt' "
+"for Wikidata IDs"
+msgstr ""
+
+#: server/apps/external_geonames/models/_alternative_name.py:49
+msgid "Alternate Name"
+msgstr ""
+
+#: server/apps/external_geonames/models/_alternative_name.py:50
+msgid "Alternate name or name variant"
+msgstr ""
+
+#: server/apps/external_geonames/models/_alternative_name.py:57
+msgid "Is Preferred Name"
+msgstr ""
+
+#: server/apps/external_geonames/models/_alternative_name.py:58
+msgid "True if this is an official/preferred name"
+msgstr ""
+
+#: server/apps/external_geonames/models/_alternative_name.py:63
+msgid "Is Short Name"
+msgstr ""
+
+#: server/apps/external_geonames/models/_alternative_name.py:65
+msgid ""
+"True if this is a short name (e.g., 'California' for 'State of California')"
+msgstr ""
+
+#: server/apps/external_geonames/models/_alternative_name.py:70
+msgid "Is Colloquial"
+msgstr ""
+
+#: server/apps/external_geonames/models/_alternative_name.py:72
+msgid ""
+"True if this is a colloquial or slang term (e.g., 'Big Apple' for 'New York')"
+msgstr ""
+
+#: server/apps/external_geonames/models/_alternative_name.py:77
+msgid "Is Historic"
+msgstr ""
+
+#: server/apps/external_geonames/models/_alternative_name.py:79
+msgid ""
+"True if this is a historic name used in the past (e.g., 'Bombay' for "
+"'Mumbai')"
+msgstr ""
+
+#: server/apps/external_geonames/models/_alternative_name.py:88
+msgid "From Period"
+msgstr ""
+
+#: server/apps/external_geonames/models/_alternative_name.py:89
+msgid "Period when the name started being used"
+msgstr ""
+
+#: server/apps/external_geonames/models/_alternative_name.py:95
+msgid "To Period"
+msgstr ""
+
+#: server/apps/external_geonames/models/_alternative_name.py:96
+msgid "Period when the name stopped being used"
+msgstr ""
+
+#: server/apps/external_geonames/models/_alternative_name.py:100
+msgid "Alternative Name"
+msgstr ""
+
+#: server/apps/external_geonames/models/_alternative_name.py:101
+#: server/settings/components/unfold.py:610
+msgid "Alternative Names"
+msgstr ""
+
+#: server/apps/external_geonames/models/_boundary.py:21
+#: server/apps/external_geonames/models/_geoname.py:23
+msgid "GeoName ID"
+msgstr ""
+
+#: server/apps/external_geonames/models/_boundary.py:22
+#: server/apps/external_geonames/models/_geoname.py:24
+msgid "Unique GeoNames identifier"
+msgstr ""
+
+#: server/apps/external_geonames/models/_boundary.py:29
+msgid "Name of area or region"
+msgstr ""
+
+#: server/apps/external_geonames/models/_boundary.py:37
+msgid "GeoNames feature code"
+msgstr ""
+
+#: server/apps/external_geonames/models/_boundary.py:44
+#: server/apps/geometries/forms.py:35
+msgid "Geometry"
+msgstr ""
+
+#: server/apps/external_geonames/models/_boundary.py:45
+msgid "Polygon boundaries (SRID 4326)"
+msgstr ""
+
+#: server/apps/external_geonames/models/_boundary.py:52
+#: server/apps/external_geonames/models/_geoname.py:96
+msgid "Country Code"
+msgstr ""
+
+#: server/apps/external_geonames/models/_boundary.py:53
+#: server/apps/external_geonames/models/_geoname.py:97
+msgid "ISO-3166 country code"
+msgstr ""
+
+#: server/apps/external_geonames/models/_boundary.py:59
+#: server/apps/geometries/models/_admin_detail.py:39
+msgid "Admin Level"
+msgstr ""
+
+#: server/apps/external_geonames/models/_boundary.py:60
+msgid "Administrative level (1-4)"
+msgstr ""
+
+#: server/apps/external_geonames/models/_boundary.py:68
+#: server/apps/external_geonames/models/_geoname.py:140
+msgid "Modification Date"
+msgstr ""
+
+#: server/apps/external_geonames/models/_boundary.py:69
+msgid "Last modification date from GeoNames"
+msgstr ""
+
+#: server/apps/external_geonames/models/_boundary.py:73
+msgid "Boundary"
+msgstr ""
+
+#: server/apps/external_geonames/models/_boundary.py:74
+#: server/settings/components/unfold.py:619
+msgid "Boundaries"
+msgstr ""
+
+#: server/apps/external_geonames/models/_feature.py:19
+msgid "A · Administrative"
+msgstr ""
+
+#: server/apps/external_geonames/models/_feature.py:20
+msgid "H · Hydrographic"
+msgstr ""
+
+#: server/apps/external_geonames/models/_feature.py:21
+msgid "L · Area"
+msgstr ""
+
+#: server/apps/external_geonames/models/_feature.py:22
+msgid "P · Populated Place"
+msgstr ""
+
+#: server/apps/external_geonames/models/_feature.py:23
+msgid "R · Road / Railroad"
+msgstr ""
+
+#: server/apps/external_geonames/models/_feature.py:24
+msgid "S · Spot Feature"
+msgstr ""
+
+#: server/apps/external_geonames/models/_feature.py:25
+msgid "T · Terrain"
+msgstr ""
+
+#: server/apps/external_geonames/models/_feature.py:26
+msgid "U · Undersea"
+msgstr ""
+
+#: server/apps/external_geonames/models/_feature.py:27
+msgid "V · Vegetation"
+msgstr ""
+
+#: server/apps/external_geonames/models/_feature.py:33
+msgid "Feature ID"
+msgstr ""
+
+#: server/apps/external_geonames/models/_feature.py:34
+msgid "Feature identifier: feature_class.feature_code (e.g., T.PK)"
+msgstr ""
+
+#: server/apps/external_geonames/models/_feature.py:41
+msgid "Feature Class"
+msgstr ""
+
+#: server/apps/external_geonames/models/_feature.py:42
+msgid "GeoNames feature class (e.g., T, S, P)"
+msgstr ""
+
+#: server/apps/external_geonames/models/_feature.py:48
+msgid "GeoNames feature code (e.g., PK, RSTN)"
+msgstr ""
+
+#: server/apps/external_geonames/models/_feature.py:55
+msgid "Official name of the feature type"
+msgstr ""
+
+#: server/apps/external_geonames/models/_feature.py:61
+msgid "Optional description from GeoNames"
+msgstr ""
+
+#: server/apps/external_geonames/models/_feature.py:69
+msgid "Only enabled features are imported into GeoPlace"
+msgstr ""
+
+#: server/apps/external_geonames/models/_feature.py:77
+msgid "Category mapping for import to GeoPlace"
+msgstr ""
+
+#: server/apps/external_geonames/models/_feature.py:82
+msgid "Base importance for this feature type (0-100 scale, default: 25)"
+msgstr ""
+
+#: server/apps/external_geonames/models/_feature.py:90
+msgid "Internal notes for manual curation"
+msgstr ""
+
+#: server/apps/external_geonames/models/_feature.py:94
+msgid "GeoNames Feature"
+msgstr ""
+
+#: server/apps/external_geonames/models/_feature.py:95
+msgid "GeoNames Features"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:31
+msgid "Primary name from GeoNames"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:38
+msgid "ASCII Name"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:39
+msgid "ASCII variant of name"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:48
+msgid "GeoNames feature type"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:60
+msgid "Parent GeoName in hierarchy"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:67
+msgid "Hierarchy Type"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:68
+msgid "Type of hierarchy relationship (e.g., 'ADM' for administrative)"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:75
+msgid "Geographic coordinates (SRID 4326)"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:81
+#: server/apps/geometries/admin/_geoplace.py:458
+#: server/apps/huts/models/_hut.py:239
+msgid "Elevation"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:82
+msgid "Elevation in meters"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:89
+#: server/apps/geometries/models/_admin_detail.py:51
+msgid "Population"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:90
+msgid "Population count (if applicable)"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:104
+msgid "Admin1 Code"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:105
+msgid "First-level administrative division"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:111
+msgid "Admin2 Code"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:112
+msgid "Second-level administrative division"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:118
+msgid "Admin3 Code"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:119
+msgid "Third-level administrative division"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:125
+msgid "Admin4 Code"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:126
+msgid "Fourth-level administrative division"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:134
+msgid "Timezone"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:135
+msgid "Timezone identifier"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:141
+msgid "GeoNames modification date"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:146
+msgid "Deleted"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:147
+msgid "Marked as deleted in GeoNames"
+msgstr ""
+
+#: server/apps/external_geonames/models/_geoname.py:152
+#: server/settings/components/unfold.py:603
+msgid "GeoNames"
+msgstr ""
+
+#: server/apps/external_links/admin.py:99
+msgid "Link Health"
+msgstr ""
+
+#: server/apps/external_links/admin.py:104
+msgid ""
+"Health status is automatically checked on save. Use the admin action to "
+"manually check selected links."
+msgstr ""
+
+#: server/apps/external_links/admin.py:120
+#: server/apps/external_links/models.py:20
+#: server/apps/geometries/admin/_geoplace.py:537
+#: server/apps/licenses/admin.py:87 server/apps/symbols/forms.py:18
+msgid "Review"
+msgstr ""
+
+#: server/apps/external_links/admin.py:132
+msgid "ID"
+msgstr ""
+
+#: server/apps/external_links/admin.py:137 server/apps/parties/admin.py:31
+msgid "Link"
+msgstr ""
+
+#: server/apps/external_links/admin.py:170
+msgid "Health"
+msgstr ""
+
+#: server/apps/external_links/admin.py:189
+msgid "Check health of selected links"
+msgstr ""
+
+#: server/apps/external_links/admin.py:210
+#, python-format
+msgid "Checked %(checked)d links: %(success)d OK, %(failed)d failed."
+msgstr ""
+
+#: server/apps/external_links/models.py:19
+#: server/apps/geometries/models/_geoplace.py:60
+msgid "New"
+msgstr ""
+
+#: server/apps/external_links/models.py:21
+msgid "Work"
+msgstr ""
+
+#: server/apps/external_links/models.py:22
+msgid "Done"
+msgstr ""
+
+#: server/apps/external_links/models.py:39
+msgid "Short unique identifier (6 characters)"
+msgstr ""
+
+#: server/apps/external_links/models.py:46
+msgid ""
+"The URL of the external link (translatable - defaults to first language)"
+msgstr ""
+
+#: server/apps/external_links/models.py:57
+msgid "Organization that provided this link (optional)"
+msgstr ""
+
+#: server/apps/external_links/models.py:68
+msgid "Link Type"
+msgstr ""
+
+#: server/apps/external_links/models.py:69
+msgid "Type of link (e.g., social, website, api, document)"
+msgstr ""
+
+#: server/apps/external_links/models.py:77
+msgid "Label"
+msgstr ""
+
+#: server/apps/external_links/models.py:78
+msgid "Short label for the link (translatable)"
+msgstr ""
+
+#: server/apps/external_links/models.py:84
+msgid "Detailed description of the link (translatable)"
+msgstr ""
+
+#: server/apps/external_links/models.py:93
+#: server/apps/geometries/models/_geoplace.py:178
+#: server/apps/parties/models/_party.py:68
+msgid "Review Status"
+msgstr ""
+
+#: server/apps/external_links/models.py:94
+msgid "Editorial state - links shown only when 'done'"
+msgstr ""
+
+#: server/apps/external_links/models.py:100
+#: server/apps/geometries/models/_geoplace.py:184
+#: server/apps/huts/admin/_hut_source.py:123 server/apps/images/models.py:131
+#: server/apps/licenses/forms.py:56 server/apps/symbols/models.py:102
+msgid "Review Comment"
+msgstr ""
+
+#: server/apps/external_links/models.py:101
+#: server/apps/geometries/models/_geoplace.py:185
+msgid "Internal reviewer note"
+msgstr ""
+
+#: server/apps/external_links/models.py:109
+msgid "When this link was last checked for accessibility"
+msgstr ""
+
+#: server/apps/external_links/models.py:115
+msgid "Response Code"
+msgstr ""
+
+#: server/apps/external_links/models.py:116
+msgid "Last HTTP response code (e.g., 200, 404)"
+msgstr ""
+
+#: server/apps/external_links/models.py:121
+msgid "Failure Count"
+msgstr ""
+
+#: server/apps/external_links/models.py:122
+msgid "Number of consecutive check failures"
+msgstr ""
+
+#: server/apps/external_links/models.py:129
+msgid "Is Template"
+msgstr ""
+
+#: server/apps/external_links/models.py:131
+#, python-brace-format
+msgid ""
+"Auto-detected: True if URL contains placeholders like {osm_type} or {osm_id}"
+msgstr ""
+
+#: server/apps/external_links/models.py:138
+msgid "Template Variables"
+msgstr ""
+
+#: server/apps/external_links/models.py:140
+msgid ""
+"Available template variables and their example values for health check. "
+"Example: {'osm_type': 'node', 'osm_id': '123456', 'source_id': 'node/123456'}"
+msgstr ""
+
+#: server/apps/external_links/models.py:147
+msgid "Run Health Check"
+msgstr ""
+
+#: server/apps/external_links/models.py:149
+msgid ""
+"Whether to run health checks on this link. Disable for templates without "
+"example values."
+msgstr ""
+
+#: server/apps/external_links/models.py:159
+msgid "Show this link to public users"
+msgstr ""
+
+#: server/apps/external_links/models.py:166
+msgid "Whether this link is active (soft delete)"
+msgstr ""
+
+#: server/apps/external_links/models.py:170
+#: server/apps/geometries/admin/_geoplace.py:150
+#: server/apps/geometries/models/_associations.py:197
+#: server/apps/parties/models/_party_link.py:26
+msgid "External Link"
+msgstr ""
+
+#: server/apps/external_links/models.py:171
+#: server/apps/geometries/models/_geoplace.py:227
+#: server/settings/components/unfold.py:217
+#: server/settings/components/unfold.py:302
+msgid "External Links"
+msgstr ""
+
+#: server/apps/feedbacks/admin.py:25 server/apps/feedbacks/models.py:49
+msgid "Feedback"
+msgstr ""
+
+#: server/apps/feedbacks/models.py:10 server/apps/huts/models/_hut.py:70
+#: server/apps/huts/models/_hut_source.py:22
+msgid "new"
+msgstr ""
+
+#: server/apps/feedbacks/models.py:11 server/apps/huts/models/_hut.py:72
+#: server/apps/huts/models/_hut_source.py:24
+msgid "done"
+msgstr ""
+
+#: server/apps/feedbacks/models.py:12
+msgid "work"
+msgstr ""
+
+#: server/apps/feedbacks/models.py:13 server/apps/huts/models/_hut.py:74
+#: server/apps/huts/models/_hut_source.py:27
+msgid "reject"
+msgstr ""
+
+#: server/apps/feedbacks/models.py:25
+msgid "URLs"
+msgstr ""
+
+#: server/apps/feedbacks/models.py:26
+msgid "Additional urls ['url1','url2',...]."
+msgstr ""
+
+#: server/apps/feedbacks/models.py:35 server/apps/huts/models/_hut.py:155
+#: server/apps/huts/models/_hut_source.py:69 server/apps/images/models.py:203
+#: server/apps/symbols/models.py:99
+msgid "Review status"
+msgstr ""
+
+#: server/apps/feedbacks/models.py:41
+msgid "Feedback comment"
+msgstr ""
+
+#: server/apps/feedbacks/models.py:42
+msgid "Non public comment to the feedback."
+msgstr ""
+
+#: server/apps/geometries/admin/_geoplace.py:58
+#: server/apps/huts/admin/_associations.py:28
+msgid "Property JSON Schema"
+msgstr ""
+
+#: server/apps/geometries/admin/_geoplace.py:119
+msgid "Extra Data"
+msgstr ""
+
+#: server/apps/geometries/admin/_geoplace.py:212
+#: server/apps/geometries/models/_associations.py:309
+#: server/apps/parties/models/_party.py:104
+#: server/apps/parties/models/_party_link.py:19
+msgid "Party"
+msgstr ""
+
+#: server/apps/geometries/admin/_geoplace.py:417
+#: server/apps/geometries/templates/admin/geometries_tilemap.html:28
+#: server/apps/geometries/templates/admin/geometries_tilemap.html:36
+#: server/settings/components/unfold.py:211
+msgid "Tile Map"
+msgstr ""
+
+#: server/apps/geometries/admin/_geoplace.py:465
+#: server/apps/geometries/models/_geoplace.py:247
+#: server/apps/huts/admin/_hut.py:239 server/apps/huts/models/_hut.py:292
+#: server/settings/components/unfold.py:431
+msgid "Sources"
+msgstr ""
+
+#: server/apps/geometries/admin/_geoplace.py:511
+#: server/apps/huts/admin/_hut.py:185
+msgid "Visits 30d"
+msgstr ""
+
+#: server/apps/geometries/admin/_geoplace.py:516
+#: server/apps/huts/admin/_hut.py:190
+msgid "Visits 1y"
+msgstr ""
+
+#: server/apps/geometries/admin/_geoplace.py:521
+msgid "Created/Modified"
+msgstr ""
+
+#: server/apps/geometries/admin/_geoplace.py:624
+msgid "Opening Information"
+msgstr ""
+
+#: server/apps/geometries/admin/_geoplace.py:663
+msgid "Place Name"
+msgstr ""
+
+#: server/apps/geometries/admin/_geoplace.py:674
+#: server/apps/geometries/models/_amenity_detail.py:86
+msgid "Opening Hours"
+msgstr ""
+
+#: server/apps/geometries/admin/_geoplace.py:679
+msgid "Phones"
+msgstr ""
+
+#: server/apps/geometries/apps.py:8
+msgid "Geometries"
+msgstr ""
+
+#: server/apps/geometries/forms.py:47
+#: server/apps/geometries/models/_geoplace.py:210
+msgid "OSM Tags"
+msgstr ""
+
+#: server/apps/geometries/forms.py:56
+msgid "Modifications"
+msgstr ""
+
+#: server/apps/geometries/models/_admin_detail.py:31
+#: server/apps/geometries/models/_amenity_detail.py:58
+#: server/apps/geometries/models/_associations.py:189
+#: server/apps/geometries/models/_associations.py:302
+#: server/apps/geometries/models/_geoplace.py:265
+msgid "Geo Place"
+msgstr ""
+
+#: server/apps/geometries/models/_admin_detail.py:41
+msgid ""
+"OSM administrative level (2=country, 4=state, 6=county, 8=city/municipality, "
+"10=village/hamlet). Can be calculated from parent relationship but stored "
+"here for performance and OSM data preservation."
+msgstr ""
+
+#: server/apps/geometries/models/_admin_detail.py:52
+msgid "Number of inhabitants"
+msgstr ""
+
+#: server/apps/geometries/models/_admin_detail.py:60
+msgid "Postal Code"
+msgstr ""
+
+#: server/apps/geometries/models/_admin_detail.py:61
+msgid "Postal code for this administrative area"
+msgstr ""
+
+#: server/apps/geometries/models/_admin_detail.py:69
+msgid "ISO Code"
+msgstr ""
+
+#: server/apps/geometries/models/_admin_detail.py:71
+msgid "ISO 3166-2 code for administrative divisions (e.g., CH-ZH for Zürich)"
+msgstr ""
+
+#: server/apps/geometries/models/_admin_detail.py:76
+msgid "Admin Detail"
+msgstr ""
+
+#: server/apps/geometries/models/_admin_detail.py:77
+msgid "Admin Details"
+msgstr ""
+
+#: server/apps/geometries/models/_amenity_detail.py:19
+msgid "Open"
+msgstr ""
+
+#: server/apps/geometries/models/_amenity_detail.py:20
+msgid "Temporarily Closed"
+msgstr ""
+
+#: server/apps/geometries/models/_amenity_detail.py:21
+msgid "Permanently Closed"
+msgstr ""
+
+#: server/apps/geometries/models/_amenity_detail.py:22
+#: server/apps/geometries/models/_amenity_detail.py:33
+msgid "Unknown"
+msgstr ""
+
+#: server/apps/geometries/models/_amenity_detail.py:28
+#: server/apps/huts/widgets.py:11
+msgid "Yes"
+msgstr ""
+
+#: server/apps/geometries/models/_amenity_detail.py:29
+msgid "Mostly Yes"
+msgstr ""
+
+#: server/apps/geometries/models/_amenity_detail.py:30
+#: server/apps/huts/widgets.py:13
+msgid "Maybe"
+msgstr ""
+
+#: server/apps/geometries/models/_amenity_detail.py:31
+msgid "Mostly No"
+msgstr ""
+
+#: server/apps/geometries/models/_amenity_detail.py:32
+#: server/apps/huts/widgets.py:15
+msgid "No"
+msgstr ""
+
+#: server/apps/geometries/models/_amenity_detail.py:67
+msgid "Operating Status"
+msgstr ""
+
+#: server/apps/geometries/models/_amenity_detail.py:68
+msgid "Current operating status"
+msgstr ""
+
+#: server/apps/geometries/models/_amenity_detail.py:75
+msgid "Opening Months"
+msgstr ""
+
+#: server/apps/geometries/models/_amenity_detail.py:77
+msgid ""
+"Monthly availability per month: {'jan': 'yes', 'feb': 'yes', ..., 'dec': "
+"'no'}"
+msgstr ""
+
+#: server/apps/geometries/models/_amenity_detail.py:88
+msgid ""
+"Structured weekly hours per weekday + public holidays. Example: {'mon': "
+"[['09:00', '12:00'], ['14:00', '18:00']], 'tue': [['09:00', '12:00'], "
+"['14:00', '18:00']], ..., 'public_holidays': 'closed'}"
+msgstr ""
+
+#: server/apps/geometries/models/_amenity_detail.py:98
+msgid "Phone Numbers"
+msgstr ""
+
+#: server/apps/geometries/models/_amenity_detail.py:100
+msgid ""
+"List of phone numbers: [{'number': '+41 123 456 78 90', 'label': 'Main'}]"
+msgstr ""
+
+#: server/apps/geometries/models/_amenity_detail.py:105
+msgid "Amenity Detail"
+msgstr ""
+
+#: server/apps/geometries/models/_amenity_detail.py:106
+msgid "Amenity Details"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:20
+msgid "Always overwrite all fields"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:21
+msgid "Skip fields edited by wodore source"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:22
+msgid "Never overwrite"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:23
+msgid "Merge until wodore.modified_date, then protected"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:29
+msgid "Set is_active=False"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:30
+msgid "Ignore deletion"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:31
+msgid "Hard delete"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:32
+msgid "Deactivate until wodore.modified_date, then keep"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:54
+msgid ""
+"Display score — higher is shown first; pinned external images stay in 0–89."
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:62
+msgid "Image and Geo Place Association"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:88
+msgid "Source properties."
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:102
+#: server/apps/geometries/models/_associations.py:253
+#: server/apps/geometries/models/_geoplace.py:218
+msgid "Extra"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:103
+msgid "Source-specific overflow data (JSON)"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:112
+msgid "Last time this source updated the record"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:123
+msgid "Update Policy"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:124
+msgid "How this source may update the record"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:131
+msgid "Delete Policy"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:132
+msgid "What happens when this source no longer includes the record"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:139
+msgid "Source precedence for field conflicts (lower number wins)"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:143
+msgid "Geo Place and Organization Association"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:204
+#: server/apps/parties/models/_party_link.py:32
+msgid "Display order for this link"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:208
+msgid "Geo Place Link"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:209
+msgid "Geo Place Links"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:248
+msgid "Optional classifier for this association (e.g., seasonal status)"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:254
+#: server/apps/geometries/models/_geoplace.py:219
+msgid "Category-specific overflow data (JSON)"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:259
+msgid "Geo Place Category Association"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:260
+msgid "Geo Place Category Associations"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:316
+msgid "Role"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:317
+msgid "Role this party plays for the place (role.* category)"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:323
+msgid "Display order among same-role associations"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:327
+msgid "Geo Place Party Association"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:328
+msgid "Geo Place Party Associations"
+msgstr ""
+
+#: server/apps/geometries/models/_associations.py:362
+msgid "Role must be a role.* category (a child of the 'role' parent)."
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:52
+msgid "Amenity"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:53
+msgid "Transport"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:55
+msgid "Natural"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:56
+msgid "None"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:61
+msgid "Review Needed"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:62
+#: server/apps/huts/models/_hut.py:73
+msgid "needs rework"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:63
+msgid "Reviewed"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:85
+#: server/apps/huts/models/_hut.py:127
+msgid "Main language"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:87
+#: server/apps/huts/models/_hut.py:129
+msgid "Language of the original texts; other languages are translated from it."
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:100
+msgid "Unique URL identifier (max 15 chars)"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:111
+msgid "Category associations for this place"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:121
+msgid "Shape"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:123
+msgid "Optional polygon geometry for natural features or administrative areas"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:141
+msgid "Higher values = more important (0-100 scale)"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:149
+msgid "Long-form text description"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:159
+#: server/apps/huts/models/_hut.py:138
+msgid "Description quality"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:161
+#: server/apps/huts/models/_hut.py:140
+msgid ""
+"LLM quality score of the description: 1 = low (thin/marketing text), 10 = "
+"excellent. Empty means not assessed yet."
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:168
+#: server/apps/huts/models/_hut.py:147
+msgid "Description quality assessed at"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:179
+msgid "Editorial state - places shown only when 'new' or 'done'"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:194
+msgid "Detail Type"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:195
+msgid "Which detail model is attached"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:202
+msgid "Protected Fields"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:203
+msgid "Field names that sources may not overwrite"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:211
+msgid "Raw tags from OpenStreetMap (JSON)"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:229
+msgid "Associated external links (websites, social media, documents, etc.)"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:239
+#: server/apps/huts/models/_hut.py:175
+msgid "Modifed"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:240
+#: server/apps/huts/models/_hut.py:176
+msgid "Any modification compared to the original source were done"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:254
+#: server/apps/huts/models/_hut.py:223
+msgid "Images pinned at"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:255
+#: server/apps/huts/models/_hut.py:224
+msgid "Last pin sync from providers."
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:261
+#: server/apps/huts/models/_hut.py:230 server/apps/images/apps.py:7
+#: server/settings/components/unfold.py:251
+#: server/settings/components/unfold.py:558
+msgid "Images"
+msgstr ""
+
+#: server/apps/geometries/models/_geoplace.py:266
+#: server/settings/components/unfold.py:203
+#: server/settings/components/unfold.py:634
+msgid "Geo Places"
+msgstr ""
+
+#: server/apps/geometries/templates/admin/geometries_tilemap.html:41
+msgid "Clustering Settings"
+msgstr ""
+
+#: server/apps/geometries/templates/admin/geometries_tilemap.html:85
+msgid "Apply & Reload Tiles"
+msgstr ""
+
+#: server/apps/geometries/templates/admin/geometries_tilemap.html:93
+msgid "Overlays"
+msgstr ""
+
+#: server/apps/geometries/templates/admin/geometries_tilemap.html:98
+msgid "Select All"
+msgstr ""
+
+#: server/apps/geometries/templates/admin/geometries_tilemap.html:99
+msgid "Clear All"
+msgstr ""
+
+#: server/apps/geometries/templates/admin/geometries_tilemap.html:108
+msgid "Zoom"
+msgstr ""
+
+#: server/apps/geometries/templates/admin/geometries_tilemap.html:109
+msgid "Cluster Mode"
+msgstr ""
+
+#: server/apps/geometries/templates/admin/geometries_tilemap.html:110
+msgid "Actual Radius"
+msgstr ""
+
+#: server/apps/geometries/templates/admin/geometries_tilemap.html:111
+msgid "Visible Features"
+msgstr ""
+
+#: server/apps/geometries/templates/admin/geometries_tilemap.html:113
+msgid "By Parent Category"
+msgstr ""
+
+#: server/apps/geometries/templates/admin/geometries_tilemap.html:114
+msgid "Loading..."
+msgstr ""
+
+#: server/apps/geometries/templates/admin/geometries_tilemap.html:122
+msgid "Martin Debug"
+msgstr ""
+
+#: server/apps/geometries/templates/admin/geometries_tilemap.html:125
+msgid "Last Tile Load"
+msgstr ""
+
+#: server/apps/geometries/templates/admin/geometries_tilemap.html:128
+msgid "Recent Tiles"
+msgstr ""
+
+#: server/apps/geometries/templates/admin/geometries_tilemap.html:129
+msgid "Loading tiles..."
+msgstr ""
+
+#: server/apps/geometries/templates/admin/geometries_tilemap.html:132
+msgid "Errors"
+msgstr ""
+
+#: server/apps/geometries/templates/admin/geometries_tilemap.html:133
+msgid "No errors"
+msgstr ""
+
+#: server/apps/geometries/templates/admin/geometries_tilemap.html:136
+msgid "Active Tiles"
+msgstr ""
+
+#: server/apps/geometries/templates/admin/geometries_tilemap.html:137
+msgid "No active tiles"
+msgstr ""
+
+#: server/apps/geometries/validators.py:40
+msgid "Websites must be a list of objects"
+msgstr ""
+
+#: server/apps/geometries/validators.py:47
+#, python-format
+msgid "Website at index %(index)s must be an object"
+msgstr ""
+
+#: server/apps/geometries/validators.py:55
+#, python-format
+msgid "Website at index %(index)s missing required 'url' field"
+msgstr ""
+
+#: server/apps/geometries/validators.py:63
+#, python-format
+msgid "Website URL at index %(index)s must be a string"
+msgstr ""
+
+#: server/apps/geometries/validators.py:73
+#, python-format
+msgid "Website URL at index %(index)s is invalid: %(error)s"
+msgstr ""
+
+#: server/apps/geometries/validators.py:81
+#, python-format
+msgid "Website label at index %(index)s must be a string"
+msgstr ""
+
+#: server/apps/geometries/validators.py:92
+#, python-format
+msgid ""
+"Website at index %(index)s has unexpected fields: %(fields)s. Allowed "
+"fields: %(allowed)s"
+msgstr ""
+
+#: server/apps/huts/admin/_associations.py:71 server/apps/images/models.py:244
+msgid "Image"
+msgstr ""
+
+#: server/apps/huts/admin/_associations.py:127
+msgid "Edit Source"
+msgstr ""
+
+#: server/apps/huts/admin/_hut.py:264 server/apps/huts/forms.py:31
+msgid "Photos"
+msgstr ""
+
+#: server/apps/huts/admin/_hut.py:343
+msgid "Photo"
+msgstr ""
+
+#: server/apps/huts/admin/_hut.py:369
+msgid "Next"
+msgstr ""
+
+#: server/apps/huts/admin/_hut.py:376
+msgid "Previous"
+msgstr ""
+
+#: server/apps/huts/admin/_hut_type.py:53
+msgid "Symbols & Icon"
+msgstr ""
+
+#: server/apps/huts/admin/_hut_type.py:79 server/apps/huts/apps.py:17
+#: server/apps/images/admin.py:637 server/apps/owners/admin/_owner.py:104
+#: server/settings/components/unfold.py:121
+#: server/settings/components/unfold.py:424
+msgid "Huts"
+msgstr ""
+
+#: server/apps/huts/admin/_hut_type.py:101 server/apps/symbols/models.py:374
+#: server/apps/symbols/models.py:429 server/apps/symbols/models.py:539
+msgid "Icon"
+msgstr ""
+
+#: server/apps/huts/forms.py:74
+msgid "Geo"
+msgstr ""
+
+#: server/apps/huts/forms.py:84
+msgid "Infrastructure"
+msgstr ""
+
+#: server/apps/huts/models/_associations.py:29
+msgid "Contact and Hut Association"
+msgstr ""
+
+#: server/apps/huts/models/_associations.py:73
+msgid ""
+"Display score — higher is shown first; curated uploads live in 90–99, pinned "
+"external images in 0–89."
+msgstr ""
+
+#: server/apps/huts/models/_associations.py:82
+msgid "Image and Hut Association"
+msgstr ""
+
+#: server/apps/huts/models/_associations.py:103
+msgid "Organization dependend properties."
+msgstr ""
+
+#: server/apps/huts/models/_associations.py:111
+msgid "Hut and Organization Association"
+msgstr ""
+
+#: server/apps/huts/models/_associations.py:131
+msgid "Link to object by this organisation"
+msgstr ""
+
+#: server/apps/huts/models/_hut.py:71 server/apps/huts/models/_hut_source.py:23
+msgid "review"
+msgstr ""
+
+#: server/apps/huts/models/_hut.py:158
+#: server/apps/huts/models/_hut_source.py:72
+msgid "Review comment"
+msgstr ""
+
+#: server/apps/huts/models/_hut.py:186
+msgid "Descripion attribution"
+msgstr ""
+
+#: server/apps/huts/models/_hut.py:195
+msgid "Hut owner."
+msgstr ""
+
+#: server/apps/huts/models/_hut.py:196
+msgid "For example 'SAC Bern' ..."
+msgstr ""
+
+#: server/apps/huts/models/_hut.py:202 server/apps/owners/admin/_owner.py:34
+#: server/apps/owners/models/_owner.py:53
+#: server/settings/components/unfold.py:181
+#: server/settings/components/unfold.py:482
+msgid "Contacts"
+msgstr ""
+
+#: server/apps/huts/models/_hut.py:210
+msgid "Public note, might be some important information"
+msgstr ""
+
+#: server/apps/huts/models/_hut.py:215
+msgid "Hut photo"
+msgstr ""
+
+#: server/apps/huts/models/_hut.py:218
+msgid "Hut photo attribution"
+msgstr ""
+
+#: server/apps/huts/models/_hut.py:242
+msgid "Capacity if open"
+msgstr ""
+
+#: server/apps/huts/models/_hut.py:247
+msgid "Capacity if closed"
+msgstr ""
+
+#: server/apps/huts/models/_hut.py:248
+msgid "Only if an additional shelter is available, e.g. during winter."
+msgstr ""
+
+#: server/apps/huts/models/_hut.py:252
+msgid "Hut Open"
+msgstr ""
+
+#: server/apps/huts/models/_hut.py:262
+msgid "Hut type if open"
+msgstr ""
+
+#: server/apps/huts/models/_hut.py:272
+msgid "Hut type if closed"
+msgstr ""
+
+#: server/apps/huts/models/_hut.py:282
+msgid "Availability Source Reference"
+msgstr ""
+
+#: server/apps/huts/models/_hut.py:284
+msgid "Organization providing online booking/availability data for this hut"
+msgstr ""
+
+#: server/apps/huts/models/_hut.py:294
+msgid ""
+"This is used to link a hut to different organizations/portals, for example "
+"'SAC', 'Open Stree Map', 'Gipfelbuch', ..."
+msgstr ""
+
+#: server/apps/huts/models/_hut_source.py:25
+msgid "old"
+msgstr ""
+
+#: server/apps/huts/models/_hut_source.py:26
+msgid "failed"
+msgstr ""
+
+#: server/apps/huts/models/_hut_source.py:43
+msgid "Original ID from source object."
+msgstr ""
+
+#: server/apps/huts/models/_hut_source.py:45
+msgid "Version"
+msgstr ""
+
+#: server/apps/huts/models/_hut_source.py:50
+msgid "Name of the object"
+msgstr ""
+
+#: server/apps/huts/models/_hut_source.py:60
+msgid "If set to inactive no more updates are done from this source"
+msgstr ""
+
+#: server/apps/huts/models/_hut_source.py:63
+msgid "Current Entry"
+msgstr ""
+
+#: server/apps/huts/models/_hut_source.py:75
+msgid "Source data as JSON"
+msgstr ""
+
+#: server/apps/huts/models/_hut_source.py:76
+msgid "Data from the source model."
+msgstr ""
+
+#: server/apps/huts/models/_hut_source.py:81
+msgid "Source properties as JSON"
+msgstr ""
+
+#: server/apps/huts/models/_hut_source.py:82
+msgid "Additional properties from the source model."
+msgstr ""
+
+#: server/apps/huts/models/_hut_source.py:91
+msgid "Previous Entry"
+msgstr ""
+
+#: server/apps/huts/models/_hut_source.py:92
+msgid "Id to the previous object."
+msgstr ""
+
+#: server/apps/huts/templates/admin/widgets/open_monthly.html:12
+msgid "Reset"
+msgstr ""
+
+#: server/apps/huts/widgets.py:20
+msgid "January"
+msgstr ""
+
+#: server/apps/huts/widgets.py:21
+msgid "February"
+msgstr ""
+
+#: server/apps/huts/widgets.py:22
+msgid "March"
+msgstr ""
+
+#: server/apps/huts/widgets.py:23
+msgid "April"
+msgstr ""
+
+#: server/apps/huts/widgets.py:24
+msgid "May"
+msgstr ""
+
+#: server/apps/huts/widgets.py:25
+msgid "June"
+msgstr ""
+
+#: server/apps/huts/widgets.py:26
+msgid "July"
+msgstr ""
+
+#: server/apps/huts/widgets.py:27
+msgid "August"
+msgstr ""
+
+#: server/apps/huts/widgets.py:28
+msgid "September"
+msgstr ""
+
+#: server/apps/huts/widgets.py:29
+msgid "October"
+msgstr ""
+
+#: server/apps/huts/widgets.py:30
+msgid "November"
+msgstr ""
+
+#: server/apps/huts/widgets.py:31
+msgid "December"
+msgstr ""
+
+#: server/apps/images/admin.py:154
+msgid "Serving"
+msgstr ""
+
+#: server/apps/images/admin.py:177
+msgid "ThumbHashes"
+msgstr ""
+
+#: server/apps/images/admin.py:390 server/apps/translations/admin_helpers.py:83
+msgid "Quality"
+msgstr ""
+
+#: server/apps/images/admin.py:399
+msgid "Approve selected images"
+msgstr ""
+
+#: server/apps/images/admin.py:406
+msgid "Disable selected images"
+msgstr ""
+
+#: server/apps/images/admin.py:413
+msgid "Reject selected images"
+msgstr ""
+
+#: server/apps/images/admin.py:420
+msgid "Download raw for selected images"
+msgstr ""
+
+#: server/apps/images/admin.py:440
+msgid "Assess selected images (quality, phash, thumbhash)"
+msgstr ""
+
+#: server/apps/images/forms.py:47 server/apps/symbols/forms.py:39
+msgid "Meta"
+msgstr ""
+
+#: server/apps/images/models.py:43
+msgid "pending"
+msgstr ""
+
+#: server/apps/images/models.py:44
+msgid "approved"
+msgstr ""
+
+#: server/apps/images/models.py:45
+msgid "disabled"
+msgstr ""
+
+#: server/apps/images/models.py:46
+msgid "rejected"
+msgstr ""
+
+#: server/apps/images/models.py:61
+msgid "color as hex number with #"
+msgstr ""
+
+#: server/apps/images/models.py:66
+msgid "Image Tag"
+msgstr ""
+
+#: server/apps/images/models.py:97
+msgid ""
+"Local image file. Pinned external images have no local file — they are "
+"served from the source URL through imagor and can be localized later via "
+"'Download raw'."
+msgstr ""
+
+#: server/apps/images/models.py:103
+msgid "Image Metadata"
+msgstr ""
+
+#: server/apps/images/models.py:113 server/apps/symbols/models.py:110
+msgid "Author"
+msgstr ""
+
+#: server/apps/images/models.py:116 server/apps/symbols/models.py:113
+msgid "Author URL"
+msgstr ""
+
+#: server/apps/images/models.py:120
+msgid "Caption"
+msgstr ""
+
+#: server/apps/images/models.py:124
+msgid "Optional. Pinned external images default to a cleaned-up file name."
+msgstr ""
+
+#: server/apps/images/models.py:128
+msgid "Tags"
+msgstr ""
+
+#: server/apps/images/models.py:135
+msgid "Capture Date"
+msgstr ""
+
+#: server/apps/images/models.py:139
+msgid "Granted Date"
+msgstr ""
+
+#: server/apps/images/models.py:146
+msgid "Granted By (Anonym)"
+msgstr ""
+
+#: server/apps/images/models.py:147
+msgid "E-mail or name of the granted person"
+msgstr ""
+
+#: server/apps/images/models.py:154
+msgid "Granted By (User)"
+msgstr ""
+
+#: server/apps/images/models.py:157 server/apps/symbols/models.py:152
+msgid "Uploaded Date"
+msgstr ""
+
+#: server/apps/images/models.py:163 server/apps/symbols/models.py:149
+msgid "Uploaded By (Anonym)"
+msgstr ""
+
+#: server/apps/images/models.py:164 server/apps/symbols/models.py:150
+msgid "E-mail or name of the anonymous uploader"
+msgstr ""
+
+#: server/apps/images/models.py:171 server/apps/symbols/models.py:141
+msgid "Uploaded By (User)"
+msgstr ""
+
+#: server/apps/images/models.py:175 server/apps/symbols/models.py:118
+msgid "Source URL"
+msgstr ""
+
+#: server/apps/images/models.py:182
+msgid "Source URL to raw image"
+msgstr ""
+
+#: server/apps/images/models.py:189 server/apps/symbols/models.py:125
+msgid "Source Identification"
+msgstr ""
+
+#: server/apps/images/models.py:208
+msgid "Provider Synced At"
+msgstr ""
+
+#: server/apps/images/models.py:209
+msgid "Last refresh from the external provider."
+msgstr ""
+
+#: server/apps/images/models.py:216
+msgid "Perceptual Hash"
+msgstr ""
+
+#: server/apps/images/models.py:218
+msgid ""
+"64-bit dHash (hex) of the cached thumbnail — near-duplicates sit within a "
+"small Hamming distance."
+msgstr ""
+
+#: server/apps/images/models.py:226
+msgid "ThumbHash"
+msgstr ""
+
+#: server/apps/images/models.py:228
+msgid ""
+"Compact placeholder encoding (~30 chars, computed by imagor) served response "
+"so clients can render instant placeholders."
+msgstr ""
+
+#: server/apps/images/models.py:236
+msgid "Quality Score"
+msgstr ""
+
+#: server/apps/images/models.py:238
+msgid ""
+"Technical image quality 0–100 (blur, exposure, contrast, resolution) — "
+"computed, not curated."
+msgstr ""
+
+#: server/apps/licenses/apps.py:18 server/settings/components/unfold.py:267
+msgid "Licenses"
+msgstr ""
+
+#: server/apps/licenses/forms.py:45
+msgid "License Settings"
+msgstr ""
+
+#: server/apps/licenses/models.py:20
+msgid ""
+"Enter a valid “slug” consisting of letters, numbers, underscores, dots or "
+"hyphens."
+msgstr ""
+
+#: server/apps/licenses/models.py:47 server/apps/organizations/models.py:45
+msgid "Shortname"
+msgstr ""
+
+#: server/apps/licenses/models.py:50 server/apps/organizations/models.py:48
+msgid "Fullname"
+msgstr ""
+
+#: server/apps/licenses/models.py:77
+msgid "Category for license symbols (references detailed/simple/mono symbols)"
+msgstr ""
+
+#: server/apps/licenses/models.py:90
+msgid "Review status: 'new' for auto-added, 'done' for reviewed"
+msgstr ""
+
+#: server/apps/licenses/models.py:95
+msgid "Review comments or notes"
+msgstr ""
+
+#: server/apps/licenses/templates/organizations/detail.html:35
+#: server/apps/organizations/templates/organizations/detail.html:35
+msgid "Django site admin"
+msgstr ""
+
+#: server/apps/licenses/templates/organizations/detail.html:41
+#: server/apps/organizations/templates/organizations/detail.html:41
+msgid "Django administration"
+msgstr ""
+
+#: server/apps/licenses/templates/organizations/detail.html:55
+#: server/apps/organizations/templates/organizations/detail.html:55
+msgid "Last 7 days"
+msgstr ""
+
+#: server/apps/local_auth/templates/allauth/layouts/base.html:26
+#: server/apps/local_auth/templates/local_auth/account_overview.html:4
+msgid "Account"
+msgstr ""
+
+#: server/apps/local_auth/templates/allauth/layouts/base.html:27
+msgid "Two-Factor Auth"
+msgstr ""
+
+#: server/apps/local_auth/templates/allauth/layouts/base.html:28
+msgid "Change Email"
+msgstr ""
+
+#: server/apps/local_auth/templates/allauth/layouts/base.html:29
+msgid "Change Password"
+msgstr ""
+
+#: server/apps/local_auth/templates/allauth/layouts/base.html:32
+msgid "Sign Out"
+msgstr ""
+
+#: server/apps/local_auth/templates/local_auth/account_overview.html:7
+msgid "Your account"
+msgstr ""
+
+#: server/apps/local_auth/templates/local_auth/account_overview.html:10
+msgid "Email"
+msgstr ""
+
+#: server/apps/local_auth/templates/local_auth/account_overview.html:13
+msgid "not set"
+msgstr ""
+
+#: server/apps/local_auth/templates/local_auth/account_overview.html:14
+#: server/settings/components/unfold.py:288
+msgid "Groups"
+msgstr ""
+
+#: server/apps/local_auth/templates/local_auth/account_overview.html:22
+msgid "Two-factor authentication"
+msgstr ""
+
+#: server/apps/local_auth/templates/local_auth/account_overview.html:27
+msgid "not configured"
+msgstr ""
+
+#: server/apps/local_auth/templates/local_auth/account_overview.html:35
+msgid "Change password"
+msgstr ""
+
+#: server/apps/local_auth/templates/local_auth/account_overview.html:36
+msgid "Manage two-factor authentication"
+msgstr ""
+
+#: server/apps/local_auth/templates/local_auth/account_overview.html:37
+msgid "Active sessions"
+msgstr ""
+
+#: server/apps/local_auth/templates/local_auth/account_overview.html:38
+msgid "Email addresses"
+msgstr ""
+
+#: server/apps/manager/apps.py:9
+msgid "Manager"
+msgstr ""
+
+#: server/apps/manager/templates/jsonsuit/widget.html:3
+#: server/apps/manager/templates/jsonsuit/widget.html:4
+msgid "edit"
+msgstr ""
+
+#: server/apps/manager/templates/jsonsuit/widget.html:3
+msgid "view"
+msgstr ""
+
+#: server/apps/meta_image_field/fields.py:17
+msgid "The 'meta_field' argument is required."
+msgstr ""
+
+#: server/apps/meta_image_field/templates/meta_image_field/meta_image_widget.html:17
+msgid "Downloaded — click Save to store the file locally."
+msgstr ""
+
+#: server/apps/meta_image_field/templates/meta_image_field/meta_image_widget.html:18
+msgid "Download failed"
+msgstr ""
+
+#: server/apps/meta_image_field/templates/meta_image_field/meta_image_widget.html:19
+msgid "The URL field was filled instead — saving will fetch it server-side."
+msgstr ""
+
+#: server/apps/meta_image_field/templates/meta_image_field/meta_image_widget.html:20
+#: server/apps/meta_image_field/templates/meta_image_field/meta_image_widget.html:33
+msgid "Stored locally"
+msgstr ""
+
+#: server/apps/meta_image_field/templates/meta_image_field/meta_image_widget.html:23
+msgid "Image preview"
+msgstr ""
+
+#: server/apps/meta_image_field/templates/meta_image_field/meta_image_widget.html:25
+msgid "Image preview (external source)"
+msgstr ""
+
+#: server/apps/meta_image_field/templates/meta_image_field/meta_image_widget.html:38
+msgid "Served externally — no local file"
+msgstr ""
+
+#: server/apps/meta_image_field/templates/meta_image_field/meta_image_widget.html:43
+msgid "No image yet"
+msgstr ""
+
+#: server/apps/meta_image_field/templates/meta_image_field/meta_image_widget.html:50
+msgid "Raw source"
+msgstr ""
+
+#: server/apps/meta_image_field/templates/meta_image_field/meta_image_widget.html:60
+msgid "Upload from URL"
+msgstr ""
+
+#: server/apps/meta_image_field/templates/meta_image_field/meta_image_widget.html:64
+#: server/apps/meta_image_field/templates/meta_image_field/meta_image_widget.html:68
+msgid "Download raw"
+msgstr ""
+
+#: server/apps/meta_image_field/templates/meta_image_field/meta_image_widget.html:66
+msgid ""
+"Fetch the URL image and attach it as the local file (saved with the form)"
+msgstr ""
+
+#: server/apps/meta_image_field/templates/meta_image_field/meta_image_widget.html:79
+msgid "Choose file to upload"
+msgstr ""
+
+#: server/apps/meteo/admin.py:55 server/apps/meteo/admin.py:420
+msgid "Collection"
+msgstr ""
+
+#: server/apps/meteo/admin.py:62 server/apps/meteo/admin.py:413
+#: server/apps/meteo/models.py:28 server/apps/meteo/models.py:59
+#: server/apps/meteo/models.py:235
+msgid "Weather Code"
+msgstr ""
+
+#: server/apps/meteo/admin.py:69 server/apps/meteo/admin.py:205
+msgid "Day"
+msgstr ""
+
+#: server/apps/meteo/admin.py:82 server/apps/meteo/admin.py:225
+msgid "Night"
+msgstr ""
+
+#: server/apps/meteo/admin.py:147
+msgid "WMO Code"
+msgstr ""
+
+#: server/apps/meteo/admin.py:157
+msgid "Descriptions"
+msgstr ""
+
+#: server/apps/meteo/admin.py:242
+msgid "Day Description"
+msgstr ""
+
+#: server/apps/meteo/admin.py:307
+msgid "Statistics"
+msgstr ""
+
+#: server/apps/meteo/admin.py:331 server/apps/organizations/models.py:102
+msgid "Organization"
+msgstr ""
+
+#: server/apps/meteo/admin.py:338
+msgid "Symbol Count"
+msgstr ""
+
+#: server/apps/meteo/admin.py:427 server/apps/meteo/models.py:251
+msgid "Day Symbol"
+msgstr ""
+
+#: server/apps/meteo/admin.py:440 server/apps/meteo/models.py:261
+msgid "Night Symbol"
+msgstr ""
+
+#: server/apps/meteo/models.py:29
+msgid "WMO weather code (e.g., 0 = clear sky, 61 = rain)"
+msgstr ""
+
+#: server/apps/meteo/models.py:45
+msgid "Weather category for grouping"
+msgstr ""
+
+#: server/apps/meteo/models.py:49
+msgid "Description (Day)"
+msgstr ""
+
+#: server/apps/meteo/models.py:50
+msgid "Weather description for daytime"
+msgstr ""
+
+#: server/apps/meteo/models.py:54
+msgid "Description (Night)"
+msgstr ""
+
+#: server/apps/meteo/models.py:55
+msgid "Weather description for nighttime"
+msgstr ""
+
+#: server/apps/meteo/models.py:60 server/settings/components/unfold.py:657
+msgid "Weather Codes"
+msgstr ""
+
+#: server/apps/meteo/models.py:205
+msgid "Unique identifier for this symbol collection"
+msgstr ""
+
+#: server/apps/meteo/models.py:213
+msgid "Organization providing this symbol collection"
+msgstr ""
+
+#: server/apps/meteo/models.py:217
+msgid "Weather Symbol Collection"
+msgstr ""
+
+#: server/apps/meteo/models.py:218
+msgid "Weather Symbol Collections"
+msgstr ""
+
+#: server/apps/meteo/models.py:242 server/apps/symbols/models.py:264
+msgid "Symbol Collection"
+msgstr ""
+
+#: server/apps/meteo/models.py:252
+msgid "Weather symbol for daytime"
+msgstr ""
+
+#: server/apps/meteo/models.py:262
+msgid "Weather symbol for nighttime"
+msgstr ""
+
+#: server/apps/meteo/models.py:267
+msgid "Weather Code Symbol"
+msgstr ""
+
+#: server/apps/meteo/models.py:268
+msgid "Weather Code Symbols"
+msgstr ""
+
+#: server/apps/organizations/apps.py:18
+#: server/settings/components/unfold.py:155
+msgid "Organizations"
+msgstr ""
+
+#: server/apps/organizations/forms.py:60
+msgid "Colors"
+msgstr ""
+
+#: server/apps/organizations/forms.py:69
+msgid "Schemas"
+msgstr ""
+
+#: server/apps/organizations/models.py:58
+msgid "URL to organization's homepage"
+msgstr ""
+
+#: server/apps/organizations/models.py:61
+msgid "Attribution"
+msgstr ""
+
+#: server/apps/organizations/models.py:66
+msgid "Link patten to object"
+msgstr ""
+
+#: server/apps/organizations/models.py:68
+msgid ""
+"Link pattern to corresponding object. Variables to use: {{id}}, {{lang}}, "
+"{{props}}, {{config}}.)"
+msgstr ""
+
+#: server/apps/organizations/models.py:78
+msgid "Logo"
+msgstr ""
+
+#: server/apps/organizations/models.py:79
+msgid "Organiztion logo as image"
+msgstr ""
+
+#: server/apps/organizations/models.py:82
+msgid "Light Color"
+msgstr ""
+
+#: server/apps/organizations/models.py:83
+msgid "light theme color as hex number with #"
+msgstr ""
+
+#: server/apps/organizations/models.py:87
+msgid "Dark Color"
+msgstr ""
+
+#: server/apps/organizations/models.py:88
+msgid "dark theme color as hex number with #"
+msgstr ""
+
+#: server/apps/organizations/models.py:92
+msgid "Configuration dictonary"
+msgstr ""
+
+#: server/apps/organizations/models.py:95
+msgid "Property schema"
+msgstr ""
+
+#: server/apps/owners/models/_associations.py:30
+msgid "Contact Association"
+msgstr ""
+
+#: server/apps/owners/models/_owner.py:25
+msgid "For example 'SAC Bern', 'Naturschutzverein Hergiswil', ..."
+msgstr ""
+
+#: server/apps/owners/models/_owner.py:34
+msgid "Public note to the owner (e.g. 'with the help of ....')"
+msgstr ""
+
+#: server/apps/owners/models/_owner.py:45
+msgid "Comment"
+msgstr ""
+
+#: server/apps/owners/models/_owner.py:46
+msgid "Private comment to the owner, used for review."
+msgstr ""
+
+#: server/apps/owners/models/_owner_hut_proxy.py:10
+msgid "Hut Association"
+msgstr ""
+
+#: server/apps/parties/models/_party.py:40
+msgid "For example 'SAC Bern', 'Volg', 'Migros', ..."
+msgstr ""
+
+#: server/apps/parties/models/_party.py:48
+msgid "Public note about the party"
+msgstr ""
+
+#: server/apps/parties/models/_party.py:56
+msgid "Inactive parties are hidden from pickers and the API"
+msgstr ""
+
+#: server/apps/parties/models/_party.py:61
+msgid "Public parties may appear in public API responses"
+msgstr ""
+
+#: server/apps/parties/models/_party.py:69
+msgid "Editorial state - imported/minted parties start in 'review'"
+msgstr ""
+
+#: server/apps/parties/models/_party.py:105
+#: server/settings/components/unfold.py:147
+#: server/settings/components/unfold.py:536
+msgid "Parties"
+msgstr ""
+
+#: server/apps/parties/models/_party_link.py:36
+msgid "Party Link"
+msgstr ""
+
+#: server/apps/parties/models/_party_link.py:37
+#: server/settings/components/unfold.py:543
+msgid "Party Links"
+msgstr ""
+
+#: server/apps/symbols/admin.py:86
+msgid "SVG"
+msgstr ""
+
+#: server/apps/symbols/admin.py:98
+msgid "Preview"
+msgstr ""
+
+#: server/apps/symbols/admin.py:112 server/apps/symbols/models.py:84
+msgid "Search Text"
+msgstr ""
+
+#: server/apps/symbols/admin.py:243 server/apps/symbols/models.py:325
+msgid "Unicode"
+msgstr ""
+
+#: server/apps/symbols/admin.py:285
+msgid "Source Org"
+msgstr ""
+
+#: server/apps/symbols/admin.py:290 server/apps/symbols/admin.py:330
+#: server/apps/symbols/models.py:375 server/apps/symbols/models.py:505
+#: server/settings/components/unfold.py:173
+msgid "Icons"
+msgstr ""
+
+#: server/apps/symbols/admin.py:294
+msgid "Imported ref"
+msgstr ""
+
+#: server/apps/symbols/models.py:37
+msgid "Pending"
+msgstr ""
+
+#: server/apps/symbols/models.py:38
+msgid "Approved"
+msgstr ""
+
+#: server/apps/symbols/models.py:39
+msgid "Disabled"
+msgstr ""
+
+#: server/apps/symbols/models.py:40
+msgid "Rejected"
+msgstr ""
+
+#: server/apps/symbols/models.py:56
+msgid "Symbol identifier (e.g., 'water', 'mountain')"
+msgstr ""
+
+#: server/apps/symbols/models.py:64
+msgid "Symbol style variant"
+msgstr ""
+
+#: server/apps/symbols/models.py:76
+msgid "SVG File"
+msgstr ""
+
+#: server/apps/symbols/models.py:77
+msgid "SVG file for this symbol"
+msgstr ""
+
+#: server/apps/symbols/models.py:85
+msgid "Keywords for admin search (e.g., 'water, river, lake, blue')"
+msgstr ""
+
+#: server/apps/symbols/models.py:224
+msgid "Symbol Group"
+msgstr ""
+
+#: server/apps/symbols/models.py:225
+msgid "Symbol Groups"
+msgstr ""
+
+#: server/apps/symbols/models.py:244
+msgid "Unique identifier for this icon pack"
+msgstr ""
+
+#: server/apps/symbols/models.py:251
+msgid "Organization providing this icon pack"
+msgstr ""
+
+#: server/apps/symbols/models.py:258
+msgid ""
+"Additional metadata as JSON. Import commands record their pinned upstream "
+"refs here."
+msgstr ""
+
+#: server/apps/symbols/models.py:265 server/settings/components/unfold.py:664
+msgid "Symbol Collections"
+msgstr ""
+
+#: server/apps/symbols/models.py:291
+msgid "Pack"
+msgstr ""
+
+#: server/apps/symbols/models.py:292
+msgid "Icon pack this icon belongs to"
+msgstr ""
+
+#: server/apps/symbols/models.py:298
+msgid "Upstream icon identifier, unique within the pack"
+msgstr ""
+
+#: server/apps/symbols/models.py:305 server/apps/symbols/models.py:497
+msgid "Display name (English source; translated via i18n)"
+msgstr ""
+
+#: server/apps/symbols/models.py:327
+msgid ""
+"Unicode hexcode(s), variation selectors stripped (e.g. '26FA' or "
+"'1F468-200D-2764')"
+msgstr ""
+
+#: server/apps/symbols/models.py:339
+msgid "CLDR subgroup category (non-root)"
+msgstr ""
+
+#: server/apps/symbols/models.py:369
+msgid "Symbol (Mono)"
+msgstr ""
+
+#: server/apps/symbols/models.py:394
+msgid "Icons may only reference non-root categories."
+msgstr ""
+
+#: server/apps/symbols/models.py:434
+msgid "Locale"
+msgstr ""
+
+#: server/apps/symbols/models.py:435
+msgid "Language code of this keyword (de, en, fr, it)"
+msgstr ""
+
+#: server/apps/symbols/models.py:439
+msgid "Keyword"
+msgstr ""
+
+#: server/apps/symbols/models.py:440
+msgid "Original keyword form (label or tag)"
+msgstr ""
+
+#: server/apps/symbols/models.py:444
+msgid "Keyword (folded)"
+msgstr ""
+
+#: server/apps/symbols/models.py:445
+msgid "Accent- and case-folded form used for matching"
+msgstr ""
+
+#: server/apps/symbols/models.py:449
+msgid "Icon Keyword"
+msgstr ""
+
+#: server/apps/symbols/models.py:450
+msgid "Icon Keywords"
+msgstr ""
+
+#: server/apps/symbols/models.py:490
+msgid "List identifier requested by clients (e.g. 'activities')"
+msgstr ""
+
+#: server/apps/symbols/models.py:506
+msgid "Curated icons, managed in the admin"
+msgstr ""
+
+#: server/apps/symbols/models.py:510
+msgid "Icon Curated List"
+msgstr ""
+
+#: server/apps/symbols/models.py:511
+msgid "Icon Curated Lists"
+msgstr ""
+
+#: server/apps/symbols/models.py:532
+msgid "Curated list"
+msgstr ""
+
+#: server/apps/symbols/models.py:543
+msgid "Icon Curated List Entry"
+msgstr ""
+
+#: server/apps/symbols/models.py:544
+msgid "Icon Curated List Entries"
+msgstr ""
+
+#: server/apps/translations/admin_helpers.py:36
+msgid "description quality"
+msgstr ""
+
+#: server/apps/translations/admin_helpers.py:44
+msgid "low (1-3)"
+msgstr ""
+
+#: server/apps/translations/admin_helpers.py:45
+msgid "adequate (4-6)"
+msgstr ""
+
+#: server/apps/translations/admin_helpers.py:46
+msgid "good (7-10)"
+msgstr ""
+
+#: server/apps/translations/admin_helpers.py:47
+msgid "unscored"
+msgstr ""
+
+#: server/apps/translations/admin_helpers.py:114
+msgid "Translate missing languages (AI)"
+msgstr ""
+
+#: server/apps/translations/admin_helpers.py:123
+msgid "Assess description (AI)"
+msgstr ""
+
+#: server/apps/translations/admin_helpers.py:261
+msgid "translated"
+msgstr ""
+
+#: server/apps/translations/admin_helpers.py:261
+msgid "assessed"
+msgstr ""
+
+#: server/apps/translations/admin_helpers.py:265
+#, python-format
+msgid "%(n)s object(s) %(verb)s: %(list)s"
+msgstr ""
+
+#: server/apps/translations/admin_helpers.py:272
+#, python-format
+msgid "Skipped %(n)s: %(list)s"
+msgstr ""
+
+#: server/apps/translations/admin_helpers.py:279
+#, python-format
+msgid "Errors (%(n)s): %(list)s"
+msgstr ""
+
+#: server/apps/translations/forms.py:23
+#, python-brace-format
+msgid ""
+"At least one <i>{field}</i> field under <b>Translations</b> is required."
+msgstr ""
+
+#: server/apps/translations/templates/translations/llm_change_form.html:10
+msgid "Translate (AI)"
+msgstr ""
+
+#: server/apps/translations/templates/translations/llm_change_form.html:20
+msgid "Assess (AI)"
+msgstr ""
+
+#: server/core/models.py:69
+msgid "created"
+msgstr ""
+
+#: server/core/models.py:70
+msgid "modified"
+msgstr ""
+
+#: server/core/utils.py:88
+msgid "Live"
+msgstr ""
+
+#: server/core/utils.py:91
+msgid "Staging"
+msgstr ""
+
+#: server/core/utils.py:95
+msgid "Dev"
+msgstr ""
+
+#: server/settings/components/common.py:372
+msgid "German"
+msgstr ""
+
+#: server/settings/components/common.py:373
+msgid "English"
+msgstr ""
+
+#: server/settings/components/common.py:374
+msgid "French"
+msgstr ""
+
+#: server/settings/components/common.py:375
+msgid "Italian"
+msgstr ""
+
+#: server/settings/components/unfold.py:107
+msgid "Dashboard"
+msgstr ""
+
+#: server/settings/components/unfold.py:139
+#: server/settings/components/unfold.py:505
+msgid "Owners"
+msgstr ""
+
+#: server/settings/components/unfold.py:189
+msgid "Meteo"
+msgstr ""
+
+#: server/settings/components/unfold.py:227
+msgid "External"
+msgstr ""
+
+#: server/settings/components/unfold.py:243
+msgid "Feedbacks"
+msgstr ""
+
+#: server/settings/components/unfold.py:281
+msgid "Zitadel Users"
+msgstr ""
+
+#: server/settings/components/unfold.py:294
+msgid "Users"
+msgstr ""
+
+#: server/settings/components/unfold.py:306
+msgid "API"
+msgstr ""
+
+#: server/settings/components/unfold.py:314
+msgid "Frontend (wodo.re)"
+msgstr ""
+
+#: server/settings/components/unfold.py:322
+msgid "Command Runner"
+msgstr ""
+
+#: server/settings/components/unfold.py:327
+msgid "Commands"
+msgstr ""
+
+#: server/settings/components/unfold.py:335
+msgid "Results"
+msgstr ""
+
+#: server/settings/components/unfold.py:345
+msgid "Scheduled Tasks"
+msgstr ""
+
+#: server/settings/components/unfold.py:350
+msgid "Schedules"
+msgstr ""
+
+#: server/settings/components/unfold.py:356
+msgid "Successful tasks"
+msgstr ""
+
+#: server/settings/components/unfold.py:362
+msgid "Failed tasks"
+msgstr ""
+
+#: server/settings/components/unfold.py:368
+msgid "Queued tasks"
+msgstr ""
+
+#: server/settings/components/unfold.py:402
+msgid "Coverages"
+msgstr ""
+
+#: server/settings/components/unfold.py:409
+msgid "Legends"
+msgstr ""
+
+#: server/settings/components/unfold.py:456
+msgid "History"
+msgstr ""
+
+#: server/settings/components/unfold.py:489
+msgid "Contact Functions"
+msgstr ""
+
+#: server/settings/components/unfold.py:512
+msgid "with Contacts"
+msgstr ""
+
+#: server/settings/components/unfold.py:521
+msgid "with Huts"
+msgstr ""
+
+#: server/settings/components/unfold.py:565
+msgid "Image Tags"
+msgstr ""
+
+#: server/settings/components/unfold.py:596
+msgid "Features"
+msgstr ""
+
+#: server/settings/components/unfold.py:641
+msgid "Amenities"
+msgstr ""
+
+#: server/settings/components/unfold.py:673
+msgid "Code Symbols"
+msgstr ""
+
+#: server/settings/components/unfold.py:687
+msgid "Environment Variables"
+msgstr ""
+
+#: server/templates/txt/llms.txt:3 server/templates/txt/llms.txt:9
+msgid "Other languages"
+msgstr "Andere Sprachen"
+
+#: server/templates/txt/llms.txt:4
+msgid ""
+"> Staging environment: content may be incomplete or experimental.\n"
+"> Use production https://wodore.com and its llms.txt\n"
+"> https://wodore.com/llms.txt instead. Every URL in this document\n"
+"> points to production."
+msgstr "> Staging-Umgebung: Inhalte können unvollständig oder experimentell sein.\n> Stattdessen die Produktivumgebung https://wodore.com und deren llms.txt\n> https://wodore.com/llms.txt verwenden. Jede URL in diesem Dokument\n> verweist auf die Produktivumgebung."
+
+#: server/templates/txt/llms.txt:11
+msgid ""
+"> Wodore is the international hut directory: an interactive map with\n"
+"> opening seasons, capacities, availability and booking sources for\n"
+"> mountain huts, bivouacs and shelters."
+msgstr "> Wodore ist das internationale Hüttenverzeichnis: eine interaktive Karte mit\n> Öffnungszeiten, Kapazitäten, Verfügbarkeiten und Buchungsquellen für\n> Berghütten, Biwaks und Unterkünfte."
+
+#: server/templates/txt/llms.txt:15
+#, python-format, python-brace-format
+msgid ""
+"Web app: %(frontend_url)s\n"
+"Hut pages: %(frontend_url)s/{lang}/hut/{slug} for lang in\n"
+"  %(lang_codes_csv)s — each serves the page with localized metadata. The\n"
+"  bare %(frontend_url)s/hut/{slug} is the app's user-facing alias\n"
+"  (the app strips the prefix after loading; display language follows\n"
+"  the stored user preference first, then the path)"
+msgstr "Web-App: %(frontend_url)s\nHütten-Seiten: %(frontend_url)s/{lang}/hut/{slug} für lang in\n  %(lang_codes_csv)s — jede Seite wird mit lokalisierten Metadaten ausgeliefert. Die\n  bloße %(frontend_url)s/hut/{slug} ist der benutzerseitige Alias der App\n  (die App entfernt das Präfix nach dem Laden; die Anzeigesprache folgt\n  zuerst der gespeicherten Benutzereinstellung, dann dem Pfad)"
+
+#: server/templates/txt/llms.txt:22
+msgid "Places"
+msgstr "Orte"
+
+#: server/templates/txt/llms.txt:24
+msgid "Place detail (Markdown):"
+msgstr "Ortsdetails (Markdown):"
+
+#: server/templates/txt/llms.txt:25
+msgid "Place metadata (JSON):"
+msgstr "Orts-Metadaten (JSON):"
+
+#: server/templates/txt/llms.txt:26
+msgid "Category index (Markdown):"
+msgstr "Kategorienindex (Markdown):"
+
+#: server/templates/txt/llms.txt:30
+msgid "OpenAPI documentation:"
+msgstr "OpenAPI-Dokumentation:"
+
+#: server/templates/txt/llms.txt:31
+msgid "OpenAPI schema (JSON):"
+msgstr "OpenAPI-Schema (JSON):"
+
+#: server/templates/txt/llms.txt:32
+msgid "Hut list (JSON):"
+msgstr "Hüttenliste (JSON):"
+
+#: server/templates/txt/llms.txt:33
+msgid "Hut detail (JSON):"
+msgstr "Hütten-Details (JSON):"
+
+#: server/templates/txt/llms.txt:34
+msgid "Hut detail (Markdown):"
+msgstr "Hütten-Details (Markdown):"
+
+#: server/templates/txt/llms.txt:35
+msgid "Hut detail (Markdown, canonical URL):"
+msgstr "Hütten-Details (Markdown, kanonische URL):"
+
+#: server/templates/txt/llms.txt:36
+msgid "Sitemap:"
+msgstr "Sitemap:"
+
+#: server/templates/txt/llms.txt:38
+msgid "Finding huts"
+msgstr "Hütten finden"
+
+#: server/templates/txt/llms.txt:40
+msgid "By name (fuzzy, all languages):"
+msgstr "Nach Name (unscharfe Suche, alle Sprachen):"
+
+#: server/templates/txt/llms.txt:41
+#, python-format
+msgid ""
+"By map area: filter the hut/place listings to a bounding box with\n"
+"  bbox=minLon,minLat,maxLon,maxLat (WGS84) — e.g.\n"
+"  %(api_base)s/v1/huts/huts.geojson?bbox=7.6,45.9,8.1,46.2\n"
+"  (accepted on hut search, hut list, both GeoJSON dumps and place\n"
+"  search; paginate with offset and limit)"
+msgstr "Nach Kartenbereich: die Hütten-/Ortslisten mit einer Bounding Box filtern über\n  bbox=minLon,minLat,maxLon,maxLat (WGS84) — z. B.\n  %(api_base)s/v1/huts/huts.geojson?bbox=7.6,45.9,8.1,46.2\n  (akzeptiert bei Hüttensuche, Hüttenliste, beiden GeoJSON-Dumps und der\n  Ortssuche; Paginierung mit offset und limit)"
+
+#: server/templates/txt/llms.txt:47
+msgid "Live availability"
+msgstr "Live-Verfügbarkeit"
+
+#: server/templates/txt/llms.txt:49
+msgid ""
+"Bed availability per hut and day, aggregated from booking sources\n"
+"(SAC, HRS, ...):"
+msgstr "Bettenverfügbarkeit je Hütte und Tag, aggregiert aus Buchungsquellen\n(SAC, HRS, ...):"
+
+#: server/templates/txt/llms.txt:52
+msgid "One hut, next 7 days (JSON):"
+msgstr "Eine Hütte, die nächsten 7 Tage (JSON):"
+
+#: server/templates/txt/llms.txt:54
+msgid "Many huts at once (GeoJSON):"
+msgstr "Viele Hütten auf einmal (GeoJSON):"
+
+#: server/templates/txt/llms.txt:57
+msgid ""
+"Dates accept ISO (2026-07-18), European (18.07.2026) or the keywords\n"
+"now, today and weekend. Each day carries free/total beds,\n"
+"occupancy_status (empty | low | medium | high | full) and\n"
+"reservation_status (possible | not_possible | not_online | unknown)."
+msgstr "Als Datum akzeptiert werden ISO (2026-07-18), europäisch (18.07.2026) oder die\nSchlüsselwörter now, today und weekend. Jeder Tag führt freie/gesamte Betten,\noccupancy_status (empty | low | medium | high | full) und\nreservation_status (possible | not_possible | not_online | unknown) auf."
+
+#: server/templates/txt/llms.txt:62
+msgid "About the data"
+msgstr "Zu den Daten"
+
+#: server/templates/txt/llms.txt:64
+msgid ""
+"Hut descriptions come from their respective sources (for example SAC-CAS)\n"
+"and are reproduced with attribution — keep the attribution line when\n"
+"quoting. Hut data is aggregated from public sources (OpenStreetMap, SAC,\n"
+"Alpsonline/HRS, refuges.info, Wikidata and others); the `sources` field\n"
+"of each hut lists provenance and deep links."
+msgstr "Hüttenbeschreibungen stammen von ihren jeweiligen Quellen (zum Beispiel SAC-CAS)\nund werden mit Quellenangabe wiedergegeben — die Attributionszeile beim Zitieren\nbeibehalten. Hüttendaten werden aus öffentlichen Quellen aggregiert (OpenStreetMap, SAC,\nAlpsonline/HRS, refuges.info, Wikidata und andere); das Feld `sources` jeder Hütte\nlistet Herkunft und Deep-Links auf."
+
+#: server/templates/txt/llms.txt:70
+msgid "Usage"
+msgstr "Verwendung"
+
+#: server/templates/txt/llms.txt:72
+msgid ""
+"All endpoints listed here are public and read-only. Responses are\n"
+"cacheable (ETag / Last-Modified where available). Please identify\n"
+"yourself with a reasonable User-Agent and keep request rates modest\n"
+"(around one request per second)."
+msgstr "Alle hier aufgeführten Endpunkte sind öffentlich und read-only. Antworten sind\nzwischenspeicherbar (ETag / Last-Modified, wo verfügbar). Bitte mit einem\nsinnvollen User-Agent identifizieren und die Anfragefrequenz moderat halten\n(etwa eine Anfrage pro Sekunde)."

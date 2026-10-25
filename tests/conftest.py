@@ -17,6 +17,23 @@ from pytest_django.plugin import DjangoDbBlocker
 from server.apps.huts.models import Hut
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _bake_root_urlconf():
+    """Import the root urlconf eagerly (session start, real settings).
+
+    ``server/urls.py`` generates the per-language ``/llms.<lang>.txt``
+    routes from ``settings.LANGUAGES``, and a urlconf is imported lazily
+    on the first URL resolution of the process. Under pytest-randomly
+    that first resolution can happen inside a test overriding
+    ``settings.LANGUAGES`` — the overridden routes then stay baked into
+    the session-wide resolver and order-dependently break other tests
+    (seen with the llms.txt variants). Importing the urlconf here, before
+    any test runs, pins it to the real settings; per-test overrides
+    route through the settings-driven view logic instead.
+    """
+    import server.urls  # noqa: F401  (import for its side effect)
+
+
 def _reset_pk_sequences() -> None:
     """Advance Postgres pk sequences past fixture-loaded explicit ids.
 
