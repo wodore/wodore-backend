@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 
 import pydantic
 
-from django.conf import settings
+from server.apps.envvars.registry import resolve_setting
 
 TOKEN_RE = re.compile(r"^\{\{([a-z0-9][a-z0-9_.\-]*)\}\}$")
 ENV_TOKEN_RE = re.compile(r"\{\{env:([A-Z0-9_]+)\}\}")
@@ -145,7 +145,7 @@ def validate_opacity_curve(expression: Any) -> None:
 def local_hosts() -> set[str]:
     """Hosts considered first-party (no attribution requirement)."""
     hosts = {"localhost", "127.0.0.1"}
-    tile_url = getattr(settings, "MARTIN_TILE_URL", "") or ""
+    tile_url = resolve_setting("MARTIN_TILE_URL")
     if tile_url:
         parsed = urlparse(tile_url)
         if parsed.hostname:
