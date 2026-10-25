@@ -62,15 +62,20 @@
 
 ## 4. API & admin
 
-- [ ] 4.1 Add `parties` (`[{role, slug, name, links, symbol}]`, symbol
+- [x] 4.1 Add `parties` (`[{role, slug, name, links, symbol}]`, symbol
       as resolved color/mono URLs, same helper pattern as category
       symbols) to GeoPlace responses under `fields[places]`, nested
-      `fields[parties]` narrowing; changelog entry per `api-conventions`;
-      schema + response tests
-- [ ] 4.2 Party admin + GeoPlace party inline (party autocomplete, role
+      `fields[parties]` narrowing (no changelog entry — auto-generated
+      on release); schema + response tests (search/nearby gate with
+      `field_selected` + `prefetch_parties`; amenity detail builds
+      unconditionally; projection now keeps required schema fields at
+      top AND nested level — fixed 422s on narrowed non-empty
+      responses)
+- [x] 4.2 Party admin + GeoPlace party inline (party autocomplete, role
       autocomplete scoped to `role.*`); inline save marks
       `is_modified`/`protected_fields`; amenity admin brand-free; admin
-      tests
+      tests (save_formset unit tests; PartyAdmin + links inline shipped
+      with the scaffold)
 
 ## 5. Verification
 

@@ -35,6 +35,7 @@ from ..models import (
     GeoPlace,
     GeoPlaceCategory,
     GeoPlaceExternalLink,
+    GeoPlaceParty,
     GeoPlaceSourceAssociation,
 )
 from ..utils import get_progress_bar
@@ -188,6 +189,28 @@ class GeoPlaceCategoryInline(unfold_admin.TabularInline):
         return True
 
 
+class GeoPlacePartyInline(unfold_admin.TabularInline):
+    """GeoPlace party association inline (role-classified)."""
+
+    model = GeoPlaceParty
+    tab = True
+    fields = ("party", "role", "order")
+    autocomplete_fields = ("party", "role")
+    extra = 0
+    show_change_link = True
+    verbose_name = _("Party")
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Scope the role autocomplete to the role.* subtree."""
+        from server.apps.categories.models import Category
+
+        if db_field.name == "role":
+            kwargs["queryset"] = Category.objects.filter(parent__slug="role").order_by(
+                "order"
+            )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
 ## ADMIN
 
 
@@ -302,7 +325,29 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             GeoPlaceCategoryInline,
             GeoPlaceSourceAssociationInline,
             GeoPlaceExternalLinkInline,
+            GeoPlacePartyInline,
         ]
+
+    def save_formset(self, request, form, formset, change):
+        """Manual party edits protect the place from import overwrites.
+
+        OpenSpec geoplace-parties decision 7: associations carry no
+        automatic tracking, so the inline formset save explicitly marks
+        the place ``is_modified`` and records ``parties`` in
+        ``protected_fields``.
+        """
+        if formset.model is GeoPlaceParty and formset.has_changed():
+            place = form.instance
+            place.is_modified = True
+            protected = list(place.protected_fields or [])
+            if "parties" not in protected:
+                protected.append("parties")
+                place.protected_fields = protected
+                place.save(update_fields=["is_modified", "protected_fields"])
+            else:
+                place.save(update_fields=["is_modified"])
+
+        super().save_formset(request, form, formset, change)
 
     def get_urls(self):
         from django.urls import path

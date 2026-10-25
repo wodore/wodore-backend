@@ -134,8 +134,8 @@ GeoPlace responses SHALL include a `parties` list
 (`[{role, slug, name, links, symbol}]`, `role` as category identifier)
 under the `fields[places]` sparse-fieldset selection, with nested
 narrowing via `fields[parties]` per the sparse-fieldsets conventions.
-The additive change SHALL be registered in the API changelog per
-`api-conventions`.
+The changelog picks the additive change up automatically at release
+(built from PR titles — no manual entry).
 
 #### Scenario: Detail carries parties
 - **WHEN** a client requests a place whose party association has role

@@ -145,8 +145,9 @@ entity is neutral, the *relation* carries the semantics. "Relation"/
    the category identifier (e.g. `role.operator`) and `symbol` the
    resolved color and mono URLs when set (same helper pattern as the
    category symbol, minus the unused primitive variant). `brand` was
-   never in public responses, so no version bump; changelog entry per
-   `api-conventions`.
+   never in public responses, so no version bump; the changelog is
+   built automatically at release from the PR title — no manual
+   entry.
 
 7. **Admin tracking mirrors the capacity change's decision**: the party
    inline formset save marks the place `is_modified` and records the

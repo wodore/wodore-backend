@@ -30,9 +30,7 @@ def _unique_identifier(ExternalLink) -> str:
     """Mirror ExternalLink.generate_unique_identifier (6 chars, retry)."""
     length = 6
     while True:
-        candidate = "".join(
-            secrets.choice(_IDENTIFIER_CHARSET) for _ in range(length)
-        )
+        candidate = "".join(secrets.choice(_IDENTIFIER_CHARSET) for _ in range(length))
         if not ExternalLink.objects.filter(identifier=candidate).exists():
             return candidate
         length += 1
@@ -74,7 +72,6 @@ def merge_owners(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("external_links", "0009_add_template_fields"),
         ("owners", "0011_owner_upd_mod_a69e3013_and_more"),
