@@ -1,6 +1,6 @@
 import sys
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, override
 
 import click
 from django_admin_runner import register_command
@@ -114,7 +114,7 @@ def add_hutsources_function(
     lang = kwargs.get("lang")
     with_minisite = kwargs.get("with_minisite", False)
     for org in selected_orgs:
-        service_class: BaseService = settings.SERVICES.get(org, None)
+        service_class: BaseService[Any] | None = settings.SERVICES.get(org, None)
         if service_class is not None:
             service = service_class
             obj.stdout.write(f"Get data from '{service.__class__.__name__}'")
@@ -170,6 +170,7 @@ class Command(CRUDCommand[HutSource]):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
 
+    @override
     def add_arguments(self, parser: CommandParser) -> None:
         super().add_arguments(parser)
         parser.add_argument(
@@ -200,9 +201,10 @@ class Command(CRUDCommand[HutSource]):
             ),
         )
 
+    @override
     def handle(
         self, sources: str, lang: str, with_minisite: bool, *args: Any, **options: Any
-    ) -> None:  # type: ignore[override]
+    ) -> None:  # type: ignore[override]  # required named params before *args: signature drift vs CRUDCommand.handle (Django call_command kwargs)
         if sources.lower().strip() == "all":
             org_list = list(settings.SERVICES.keys())
         else:

@@ -23,7 +23,7 @@ def guess_hut_type(
     if osm_tag is None:
         osm_tag = ""
 
-    def _in(patterns: list, target: str):
+    def _in(patterns: list[str], target: str):
         for pat in patterns:
             if re.search(pat.lower(), target.lower()):
                 # rprint(f"Match {pat} in '{target}'")
