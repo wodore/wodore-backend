@@ -21,6 +21,7 @@ the geoplace re-mint).
 import re
 from typing import Any
 
+from django.contrib.postgres.indexes import GinIndex
 from django.db import DEFAULT_DB_ALIAS, migrations, models
 
 from server.core.utils import mint_short_slug
@@ -129,6 +130,14 @@ class Migration(migrations.Migration):
                 max_length=15,
                 unique=True,
                 verbose_name="Slug",
+            ),
+        ),
+        # Last, so the data migrations above run on the un-indexed
+        # table (index name matches Django's autodetected migration).
+        migrations.AddIndex(
+            model_name="party",
+            index=GinIndex(
+                fields=["extra"], name="parties_par_extra_75c6dd_gin"
             ),
         ),
     ]
