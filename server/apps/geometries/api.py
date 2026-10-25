@@ -393,7 +393,9 @@ class GeoSearchController(ApiController):
 
         for place in queryset:
             result = base_result(place, media_url)
-            result["score"] = place.rank_score
+            # rank_score is a queryset annotation — django-stubs cannot
+            # model .annotate() attributes.
+            result["score"] = place.rank_score  # type: ignore  # annotated attr (rank_score)
 
             if wants_categories:
                 result["categories"] = build_categories_data(place, request) or []
@@ -464,8 +466,11 @@ class GeoNearbyController(ApiController):
             media_url = request.build_absolute_uri(media_url)
 
         for place in queryset:
+            # distance is a queryset annotation (Distance("location", point))
+            # — django-stubs cannot model .annotate() attributes.
+            place_distance = place.distance  # type: ignore  # annotated attr (distance)
             distance_m = (
-                place.distance.m if hasattr(place.distance, "m") else place.distance
+                place_distance.m if hasattr(place_distance, "m") else place_distance
             )
 
             result = base_result(place, media_url)
