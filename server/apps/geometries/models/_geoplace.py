@@ -4,7 +4,7 @@ import sys
 import threading
 from collections import OrderedDict
 from functools import lru_cache
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, override
 
 from django_countries.fields import CountryField
 from modeltrans.fields import TranslationField
@@ -365,14 +365,15 @@ class GeoPlace(TimeStampedModel):
         category_slug = first_category.slug if first_category else "uncategorized"
         return f"{self.name_i18n} ({category_slug})"
 
+    @override
     def save(
         self,
-        *args,
-        track_modifications=True,
-        fallback_slug=None,
-        max_retries=3,
-        **kwargs,
-    ):
+        *args: Any,
+        track_modifications: bool = True,
+        fallback_slug: str | None = None,
+        max_retries: int = 3,
+        **kwargs: Any,
+    ) -> None:
         """Auto-generate slug from name if not provided and track manual modifications.
 
         Args:
@@ -487,7 +488,7 @@ class GeoPlace(TimeStampedModel):
         translation_fields = ["name", "description"]
 
         # Helper function to normalize values for comparison
-        def normalize_value(value):
+        def normalize_value(value: Any) -> Any:
             """Treat None and empty string as equivalent."""
             if value is None or value == "":
                 return ""
@@ -644,7 +645,7 @@ class GeoPlace(TimeStampedModel):
         cls,
         source: Organization | int | str,
         source_id: str | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> GeoPlace:
         """
         Create a new GeoPlace and associate it with a source.
@@ -1374,7 +1375,7 @@ class GeoPlace(TimeStampedModel):
         self,
         source: Organization | int | str,
         source_id: str | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> GeoPlaceSourceAssociation:
         """
         Add or update a source association for this GeoPlace.

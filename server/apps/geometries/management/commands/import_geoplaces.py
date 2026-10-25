@@ -26,7 +26,7 @@ Usage:
 
 import math
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 
 import yaml
 from django_admin_runner import register_command
@@ -67,6 +67,7 @@ class Command(BaseCommand):
         # Truncate and add ellipsis
         return name[: max_length - 3] + "..."
 
+    @override
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "-s",
@@ -116,7 +117,8 @@ class Command(BaseCommand):
             help="Drop all GeoPlaces from specified sources before importing (use with caution!)",
         )
 
-    def handle(self, *args, **options) -> None:
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         sources_str = options["sources"]
         dry_run = options["dry_run"]
         countries = (
