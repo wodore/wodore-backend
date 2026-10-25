@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import html
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Protocol
 
 import structlog
 from asgiref.sync import sync_to_async
@@ -51,6 +51,21 @@ from .scoring import (
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
+
+
+class _ResponseLike(Protocol):
+    """Minimal response shape the provider reads from any client."""
+
+    def raise_for_status(self) -> Any: ...
+    def json(self) -> Any: ...
+
+
+class _AsyncClientLike(Protocol):
+    """Client surface the provider uses (test doubles; real callers pass
+    httpx.AsyncClient, accepted via the union on client params)."""
+
+    async def get(self, url: str, params: Any) -> _ResponseLike: ...
+
 
 logger = structlog.get_logger()
 
@@ -195,7 +210,7 @@ class RefugesInfoProvider(ImageProvider):
 
     async def _fetch_refuges_images(
         self,
-        client: AsyncClient,
+        client: AsyncClient | _AsyncClientLike,
         source_id: str,
         place: GeoPlaceSchema,
     ) -> list[ImageResult]:
@@ -319,7 +334,7 @@ class RefugesInfoProvider(ImageProvider):
             return []
 
     async def _canonical_point_url(
-        self, client: AsyncClient, source_id: str
+        self, client: AsyncClient | _AsyncClientLike, source_id: str
     ) -> str | None:
         """The point's canonical page URL (``properties.lien`` of /api/point).
 

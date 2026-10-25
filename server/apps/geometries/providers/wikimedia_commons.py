@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from types import ModuleType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 import structlog
 
@@ -33,6 +33,21 @@ from .scoring import (
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
+
+
+class _ResponseLike(Protocol):
+    """Minimal response shape the provider reads from any client."""
+
+    def raise_for_status(self) -> Any: ...
+    def json(self) -> Any: ...
+
+
+class _AsyncClientLike(Protocol):
+    """Client surface the provider uses (test doubles; real callers pass
+    httpx.AsyncClient, accepted via the union on client params)."""
+
+    async def get(self, url: str, params: Any) -> _ResponseLike: ...
+
 
 logger = structlog.get_logger()
 
@@ -290,7 +305,7 @@ class WikimediaCommonsProvider(ImageProvider):
         radius: float,
         limit: int,
         place_qids: set[str],
-        httpx: ModuleType,
+        httpx: ModuleType | type[Any],
     ) -> list[ImageResult]:
         """
         Fetch images via Wikidata SPARQL spatial query.
@@ -396,7 +411,7 @@ class WikimediaCommonsProvider(ImageProvider):
         lat: float,
         lon: float,
         limit: int,
-        httpx: ModuleType,
+        httpx: ModuleType | type[Any],
     ) -> list[ImageResult]:
         """
         Fetch images via Wikidata SPARQL using QIDs.
@@ -542,7 +557,7 @@ class WikimediaCommonsProvider(ImageProvider):
         radius: float,
         limit: int,
         place_qids: set[str],
-        httpx: ModuleType,
+        httpx: ModuleType | type[Any],
     ) -> list[ImageResult]:
         """
         Fetch images via Commons geosearch API.
@@ -642,7 +657,7 @@ class WikimediaCommonsProvider(ImageProvider):
             return results
 
     async def _fetch_thumb_bucket(
-        self, client: AsyncClient, params: dict[str, Any], width: int
+        self, client: AsyncClient | _AsyncClientLike, params: dict[str, Any], width: int
     ) -> dict[str, str]:
         """Fetch servable thumburls for one bucket width, keyed by page title.
 
@@ -672,7 +687,7 @@ class WikimediaCommonsProvider(ImageProvider):
         return thumbs
 
     async def _fetch_commons_metadata(
-        self, commons_title: str, client: AsyncClient
+        self, commons_title: str, client: AsyncClient | _AsyncClientLike
     ) -> dict[str, Any] | None:
         """
         Fetch detailed metadata for a Commons image.
@@ -735,7 +750,7 @@ class WikimediaCommonsProvider(ImageProvider):
         lat: float,
         lon: float,
         limit: int,
-        httpx: ModuleType,
+        httpx: ModuleType | type[Any],
     ) -> list[ImageResult]:
         """
         Fetch images from a Wikimedia Commons category.
