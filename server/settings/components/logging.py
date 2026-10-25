@@ -202,16 +202,15 @@ def configure_structlog() -> None:
         ]
     else:
         # Production: add full callsite info for debugging
-        shared_processors.append(  # type: ignore  # CallsiteParameterAdder is a processor
-            structlog.processors.CallsiteParameterAdder(
-                parameters=[
-                    structlog.processors.CallsiteParameter.FILENAME,
-                    structlog.processors.CallsiteParameter.LINENO,
-                    structlog.processors.CallsiteParameter.FUNC_NAME,
-                    structlog.processors.CallsiteParameter.MODULE,
-                ]
-            )  # type: ignore  # structlog processor stubs too narrow
+        callsite_adder = structlog.processors.CallsiteParameterAdder(
+            parameters=[
+                structlog.processors.CallsiteParameter.FILENAME,
+                structlog.processors.CallsiteParameter.LINENO,
+                structlog.processors.CallsiteParameter.FUNC_NAME,
+                structlog.processors.CallsiteParameter.MODULE,
+            ]
         )
+        shared_processors.append(callsite_adder)  # type: ignore  # structlog processor stubs too narrow
         # Add timestamp only in production (dev shows relative time)
         shared_processors.insert(0, structlog.processors.TimeStamper(fmt="iso"))  # type: ignore  # ditto
         # Use same chain for foreign loggers in production

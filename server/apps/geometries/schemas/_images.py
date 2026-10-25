@@ -234,14 +234,14 @@ class ImagePropertiesSchema(BaseModel):
         ),
     )
 
-    thumbhashes: ImageThumbhashesSchema = Field(
+    thumbhashes: ImageThumbhashesSchema = Field(  # type: ignore  # pydantic Field overload gap (long description)
         default_factory=ImageThumbhashesSchema,
         description=(
             "ThumbHash placeholder per rendering context (6 variants: "
             "thumb/preview × square/landscape/portrait). "
             "Individual hashes are null when not yet assessed."
         ),
-    )  # type: ignore  # pydantic Field overload with long description
+    )
 
 
 # GeoJSON types

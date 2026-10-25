@@ -42,7 +42,7 @@ jobs:
       - name: Run pre-commit
         run: uv run --no-project pre-commit run --show-diff-on-failure --color=always --all-files
 
-      # Baseline-gated: fails only on type errors not in pyrefly-baseline.json
+      # Full-strict: every type error fails
       - name: Type check (pyrefly)
         run: uv run pyrefly check
 
