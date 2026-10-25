@@ -1,4 +1,6 @@
-from django.core.management.base import BaseCommand
+from typing import Any, override
+
+from django.core.management.base import BaseCommand, CommandParser
 from django.db import transaction
 
 from server.apps.meteo.models import (
@@ -11,7 +13,8 @@ from server.apps.meteo.models import (
 class Command(BaseCommand):
     help = "Reset weather data by deleting WeatherCode entries, collections, and optionally symbols"
 
-    def add_arguments(self, parser):
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--icons",
             action="store_true",
@@ -39,7 +42,8 @@ class Command(BaseCommand):
         )
 
     @transaction.atomic
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         dry_run = options.get("dry_run", False)
         delete_icons = options.get("icons", False)
         collection_slug = options.get("collection")

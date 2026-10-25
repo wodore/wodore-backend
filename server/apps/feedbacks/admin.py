@@ -68,5 +68,5 @@ class FeedbackAdmin(ModelAdmin):
             Feedback.FeedbackStatusChoices.work: "danger",
         },
     )
-    def status_tag(self, obj):
+    def status_tag(self, obj: Feedback):
         return obj.feedback_status

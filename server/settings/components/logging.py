@@ -9,7 +9,7 @@ import logging
 import logging.config
 import os
 from collections.abc import Callable
-from typing import TYPE_CHECKING, final
+from typing import TYPE_CHECKING, Any, final, override
 
 import structlog
 
@@ -29,6 +29,7 @@ class SlowQueryFilter(logging.Filter):
         except ValueError:
             self._threshold_ms = 200
 
+    @override
     def filter(self, record: logging.LogRecord) -> bool:
         duration = getattr(record, "duration", None)
         if duration is None:
@@ -52,8 +53,8 @@ def _is_debug() -> bool:
 
 
 def _format_callsite(
-    logger: logging.Logger, method_name: str, event_dict: dict
-) -> dict:
+    logger: logging.Logger, method_name: str, event_dict: dict[str, Any]
+) -> dict[str, Any]:
     """Format logger name and lineno as '[logger:line]' for cleaner output."""
     logger_name = event_dict.pop("logger", None)
     lineno = event_dict.pop("lineno", None)
@@ -71,7 +72,12 @@ def _format_callsite(
 class CustomConsoleRenderer(structlog.dev.ConsoleRenderer):
     """Custom console renderer that shows callsite at the end in brackets."""
 
-    def __call__(self, logger, name, event_dict):
+    # No @override here on purpose: structlog's stubs don't model
+    # ConsoleRenderer.__call__ precisely enough — adding the decorator
+    # would trip bad-override instead of satisfying it.
+    def __call__(
+        self, logger: Any, name: str, event_dict: structlog.types.EventDict
+    ) -> str:
         """Render event with callsite at the end in dim blue."""
         # Extract callsite before rendering
         callsite = event_dict.pop("_callsite", None)
@@ -93,12 +99,16 @@ class CustomConsoleRenderer(structlog.dev.ConsoleRenderer):
 class StructlogFormatter(logging.Formatter):
     """Custom formatter that processes Django logs through structlog."""
 
-    def __init__(self, *args, **kwargs):
+    renderer: structlog.types.Processor | None
+    processors: list[structlog.types.Processor] | None
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.renderer = None
         self.processors = None
 
-    def format(self, record):
+    @override
+    def format(self, record: logging.LogRecord) -> str:
         """Format a logging record using structlog."""
         # Build event dict from log record
         event_dict = {
@@ -192,16 +202,15 @@ def configure_structlog() -> None:
         ]
     else:
         # Production: add full callsite info for debugging
-        shared_processors.append(  # type: ignore  # CallsiteParameterAdder is a processor
-            structlog.processors.CallsiteParameterAdder(
-                parameters=[
-                    structlog.processors.CallsiteParameter.FILENAME,
-                    structlog.processors.CallsiteParameter.LINENO,
-                    structlog.processors.CallsiteParameter.FUNC_NAME,
-                    structlog.processors.CallsiteParameter.MODULE,
-                ]
-            )  # type: ignore  # structlog processor stubs too narrow
+        callsite_adder = structlog.processors.CallsiteParameterAdder(
+            parameters=[
+                structlog.processors.CallsiteParameter.FILENAME,
+                structlog.processors.CallsiteParameter.LINENO,
+                structlog.processors.CallsiteParameter.FUNC_NAME,
+                structlog.processors.CallsiteParameter.MODULE,
+            ]
         )
+        shared_processors.append(callsite_adder)  # type: ignore  # structlog processor stubs too narrow
         # Add timestamp only in production (dev shows relative time)
         shared_processors.insert(0, structlog.processors.TimeStamper(fmt="iso"))  # type: ignore  # ditto
         # Use same chain for foreign loggers in production

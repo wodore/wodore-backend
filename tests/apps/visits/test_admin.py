@@ -11,15 +11,22 @@ import pytest
 
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
+from django.db.models import Model
+from django.test import Client
 from django.urls import reverse
 from django.utils import timezone as djtz
 
+from server.apps.accounts.models import User
+from server.apps.geometries.admin._geoplace import GeoPlaceAdmin
+from server.apps.geometries.models import GeoPlace
+from server.apps.huts.admin._hut import HutsAdmin
+from server.apps.huts.models import Hut
 from server.apps.visits.models import ObjectVisitDay, visit_window_annotation
 
 pytestmark = pytest.mark.django_db
 
 
-def _count(obj, days_ago: int, n: int) -> None:
+def _count(obj: Hut | GeoPlace, days_ago: int, n: int) -> None:
     ObjectVisitDay.objects.create(
         content_type=ContentType.objects.get_for_model(obj),
         object_id=obj.pk,
@@ -29,7 +36,7 @@ def _count(obj, days_ago: int, n: int) -> None:
 
 
 @pytest.fixture
-def superuser(db):
+def superuser(db: None):
     user = get_user_model().objects.create_superuser(  # type: ignore  # custom manager method inference gap
         email="visits-admin@example.com", password="pw"
     )
@@ -37,21 +44,21 @@ def superuser(db):
 
 
 @pytest.fixture
-def hut(seed_data):
+def hut(seed_data: dict[str, int]):
     from server.apps.huts.models import Hut
 
     return Hut.objects.filter(is_active=True, is_public=True).first()
 
 
 @pytest.fixture
-def place(seed_data):
+def place(seed_data: dict[str, int]):
     from server.apps.geometries.models import GeoPlace
 
     return GeoPlace.objects.filter(is_active=True, is_public=True).first()
 
 
 class TestWindowAnnotation:
-    def test_windows_and_content_type_isolation(self, hut, place):
+    def test_windows_and_content_type_isolation(self, hut: Hut, place: GeoPlace):
         _count(hut, days_ago=0, n=10)  # in both windows
         _count(hut, days_ago=100, n=40)  # only in the 365d window
         _count(place, days_ago=0, n=7)  # other content type
@@ -82,7 +89,7 @@ class TestWindowAnnotation:
         )
         assert cross == 0
 
-    def test_no_counters_annotate_zero(self, hut):
+    def test_no_counters_annotate_zero(self, hut: Hut):
         from server.apps.huts.models import Hut
 
         annotated = Hut.objects.annotate(v30=visit_window_annotation(Hut, days=30)).get(
@@ -97,7 +104,14 @@ class TestChangelistSorting:
     itself was broken under unfold 0.87 (pre-#269); it is smoke-tested
     separately in TestChangelistRendering below."""
 
-    def _sorted_pks(self, admin_cls, model, column, user, descending=True):
+    def _sorted_pks(
+        self,
+        admin_cls: type[HutsAdmin] | type[GeoPlaceAdmin],
+        model: type[Model],
+        column: str,
+        user: User,
+        descending: bool = True,
+    ):
         from django.contrib import admin as django_admin
         from django.test import RequestFactory
 
@@ -110,7 +124,9 @@ class TestChangelistSorting:
         cl = ma.get_changelist_instance(request)
         return list(cl.queryset.values_list("pk", flat=True))
 
-    def test_hut_changelist_sorts_by_visits(self, superuser, seed_data, hut):
+    def test_hut_changelist_sorts_by_visits(
+        self, superuser: User, seed_data: dict[str, int], hut: Hut
+    ):
         from server.apps.huts.admin import HutsAdmin
         from server.apps.huts.models import Hut
 
@@ -127,7 +143,9 @@ class TestChangelistSorting:
         pks = self._sorted_pks(HutsAdmin, Hut, "visits_30d", user=superuser)
         assert pks.index(popular.pk) < pks.index(quiet.pk)  # most visits first
 
-    def test_geoplace_changelist_sorts_by_visits(self, superuser, seed_data, place):
+    def test_geoplace_changelist_sorts_by_visits(
+        self, superuser: User, seed_data: dict[str, int], place: GeoPlace
+    ):
         from server.apps.geometries.admin import GeoPlaceAdmin
         from server.apps.geometries.models import GeoPlace
 
@@ -170,7 +188,13 @@ class TestChangelistRendering:
         ],
     )
     def test_changelist_renders_with_visit_columns(
-        self, client, superuser, seed_data, url_name, admin_cls, model
+        self,
+        client: Client,
+        superuser: User,
+        seed_data: dict[str, int],
+        url_name: str,
+        admin_cls: str,
+        model: str,
     ):
         if url_name.startswith("admin:huts"):
             from server.apps.huts import admin as admin_mod

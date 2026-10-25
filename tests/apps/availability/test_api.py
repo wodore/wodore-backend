@@ -16,6 +16,7 @@ import pytest
 
 from tests.factories.availability import AvailabilityFactory
 
+from django.test import Client
 from django.utils import timezone
 
 from server.apps.huts.models import Hut
@@ -25,7 +26,7 @@ pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture()
-def hut_with_availability(seed_data):
+def hut_with_availability(seed_data: dict[str, int]):
     hut = Hut.objects.first()
     assert hut is not None
     org = Organization.objects.first()
@@ -36,7 +37,7 @@ def hut_with_availability(seed_data):
 
 
 @pytest.fixture()
-def hut_with_multiday_availability_unordered(seed_data):
+def hut_with_multiday_availability_unordered(seed_data: dict[str, int]):
     """Hut with several availability days inserted OUT of date order.
 
     Consumers read the geojson ``data`` array by index (index 0 must be the
@@ -60,7 +61,9 @@ def hut_with_multiday_availability_unordered(seed_data):
 
 
 class TestAvailabilityApi:
-    def test_availability_geojson(self, hut_with_availability, client):
+    def test_availability_geojson(
+        self, hut_with_availability: tuple[Hut, datetime.date], client: Client
+    ):
         _hut, date = hut_with_availability
         response = client.get(f"/v1/huts/availability/{date.isoformat()}.geojson")
         assert response.status_code == 200
@@ -69,7 +72,9 @@ class TestAvailabilityApi:
         assert isinstance(data["features"], list)
 
     def test_availability_geojson_days_sorted_by_date(
-        self, hut_with_multiday_availability_unordered, client
+        self,
+        hut_with_multiday_availability_unordered: tuple[Hut, datetime.date],
+        client: Client,
     ):
         """The geojson ``data`` days must be ordered by date ascending.
 
@@ -93,7 +98,9 @@ class TestAvailabilityApi:
         # Index 0 is the requested date itself
         assert dates[0] == today.isoformat()
 
-    def test_hut_availability_current(self, hut_with_availability, client):
+    def test_hut_availability_current(
+        self, hut_with_availability: tuple[Hut, datetime.date], client: Client
+    ):
         hut, date = hut_with_availability
         response = client.get(f"/v1/huts/{hut.slug}/availability/{date.isoformat()}")
         assert response.status_code == 200
@@ -101,7 +108,9 @@ class TestAvailabilityApi:
         # Flexible: shape only - values come from external providers.
         assert isinstance(data, dict)
 
-    def test_hut_availability_trend(self, hut_with_availability, client):
+    def test_hut_availability_trend(
+        self, hut_with_availability: tuple[Hut, datetime.date], client: Client
+    ):
         hut, date = hut_with_availability
         response = client.get(
             f"/v1/huts/{hut.slug}/availability/{date.isoformat()}/trend"

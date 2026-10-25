@@ -5,8 +5,23 @@ one implementation of type filtering, source annotation and the
 place-dict projection.
 """
 
+from __future__ import annotations
 
-def apply_type_filters(queryset, types, categories):
+from typing import TYPE_CHECKING, Any
+
+from django.db.models import QuerySet
+
+if TYPE_CHECKING:
+    from django.http import HttpRequest
+
+    from .models import GeoPlace
+
+
+def apply_type_filters(
+    queryset: QuerySet[GeoPlace],
+    types: list[str] | None,
+    categories: list[str] | None,
+) -> QuerySet[GeoPlace]:
     if categories:
         queryset = queryset.filter(categories__parent__slug__in=categories)
     if types:
@@ -30,7 +45,7 @@ def apply_type_filters(queryset, types, categories):
     return queryset
 
 
-def prefetch_categories(queryset):
+def prefetch_categories(queryset: QuerySet[GeoPlace]) -> QuerySet[GeoPlace]:
     return queryset.prefetch_related(
         "categories",
         "categories__parent",
@@ -40,7 +55,7 @@ def prefetch_categories(queryset):
     )
 
 
-def annotate_sources(queryset):
+def annotate_sources(queryset: QuerySet[GeoPlace]) -> QuerySet[GeoPlace]:
     from django.contrib.postgres.aggregates import JSONBAgg
     from django.db.models.functions import JSONObject
 
@@ -59,12 +74,14 @@ def annotate_sources(queryset):
     return queryset
 
 
-def build_categories_data(place, request):
+def build_categories_data(
+    place: GeoPlace, request: HttpRequest
+) -> list[dict[str, Any]]:
     from server.apps.symbols.utils import resolve_symbol_urls
 
     categories_data = []
     for category in place.categories.all():
-        category_data = {
+        category_data: dict[str, Any] = {
             "slug": category.slug,
             "name": category.name_i18n,  # noqa: WPS308  # modeltranslation
             "description": category.description_i18n,  # noqa: WPS308
@@ -76,12 +93,16 @@ def build_categories_data(place, request):
     return categories_data
 
 
-def build_sources(result: dict, place, media_url: str) -> None:
+def build_sources(result: dict[str, Any], place: GeoPlace, media_url: str) -> None:
     from server.apps.organizations.schema import (
         OrganizationSourceIdDetailSchema,
     )
 
     sources = []
+    # sources_data is a queryset annotation (annotate_sources), not a
+    # model field — django-stubs cannot model .annotate() attributes. The
+    # getattr keeps nearby-without-sources working (annotation only applied
+    # when the field is selected).
     for src in getattr(place, "sources_data", None) or []:
         if src.get("slug") is not None:
             org_data = {
@@ -100,7 +121,7 @@ def build_sources(result: dict, place, media_url: str) -> None:
         result["sources"] = sources
 
 
-def base_result(place, media_url: str) -> dict:
+def base_result(place: GeoPlace, media_url: str) -> dict[str, Any]:
     return {
         "name": place.name_i18n,  # noqa: WPS308  # modeltranslation
         "country_code": str(place.country_code) if place.country_code else None,
@@ -114,7 +135,7 @@ def base_result(place, media_url: str) -> dict:
     }
 
 
-def prefetch_parties(queryset):
+def prefetch_parties(queryset: QuerySet[GeoPlace]) -> QuerySet[GeoPlace]:
     """Prefetch role-classified party associations (links + symbols)."""
     return queryset.prefetch_related(
         "party_associations__role",
@@ -124,7 +145,7 @@ def prefetch_parties(queryset):
     )
 
 
-def build_parties_data(place, request) -> list[dict]:
+def build_parties_data(place: GeoPlace, request: HttpRequest) -> list[dict[str, Any]]:
     """Public party payload per place: ``[{role, slug, name, links, symbol}]``.
 
     Skips inactive/non-public parties (public API surface). Callers
@@ -133,7 +154,7 @@ def build_parties_data(place, request) -> list[dict]:
     from server.apps.symbols.utils import resolve_symbol_urls
 
     parties = []
-    for assoc in place.party_associations.all():  # prefetched by caller
+    for assoc in place.party_associations.all():  # type: ignore  # reverse FK: plugin-less inference gap  # prefetched by caller
         party = assoc.party
         if not (party.is_active and party.is_public):
             continue

@@ -8,6 +8,7 @@ import re
 import socket
 import subprocess
 from importlib.util import find_spec
+from typing import TYPE_CHECKING
 
 from server.settings.components.common import (
     DATABASES,
@@ -19,6 +20,9 @@ from server.settings.components.csp import CONTENT_SECURITY_POLICY
 from server.settings.components.oidc import (
     ZITADEL_RP_ENABLED,
 )
+
+if TYPE_CHECKING:
+    from django.http import HttpRequest
 
 # Setting the development status:
 
@@ -145,13 +149,13 @@ try:  # This might fail on some OS
         for ip in socket.gethostbyname_ex(socket.gethostname())[2]
     ]
 except OSError:  # pragma: no cover
-    INTERNAL_IPS = []
+    INTERNAL_IPS: list[str] = []
 INTERNAL_IPS += ["127.0.0.1", "0.0.0.0"]
 
 
-def _custom_show_toolbar(request) -> bool:
+def _custom_show_toolbar(request: "HttpRequest") -> bool:
     """Only show the debug toolbar to users with the superuser flag."""
-    return DEBUG and request.user.is_superuser
+    return DEBUG and request.user.is_superuser  # type: ignore  # dynamic attr: plugin-less inference gap
 
 
 DEBUG_TOOLBAR_CONFIG = {

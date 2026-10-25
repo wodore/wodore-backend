@@ -13,6 +13,7 @@ from tests.factories.geometries import GeoPlaceFactory
 from tests.factories.parties import PartyFactory
 
 from django.contrib.admin import AdminSite
+from django.test import Client
 
 from server.apps.categories.models import Category
 from server.apps.external_links.models import ExternalLink
@@ -42,7 +43,7 @@ def _link_party(
 
 
 class TestSearchPartiesField:
-    def test_parties_included_when_selected(self, client):
+    def test_parties_included_when_selected(self, client: Client) -> None:
         place = GeoPlaceFactory(name="Volg Zermatt")
         _link_party(place, slug="volg", url="https://volg.example.com")
 
@@ -58,7 +59,7 @@ class TestSearchPartiesField:
         assert parties[0]["name"] == "Volg"
         assert parties[0]["links"][0]["url"] == "https://volg.example.com"
 
-    def test_parties_absent_when_not_selected(self, client):
+    def test_parties_absent_when_not_selected(self, client: Client) -> None:
         place = GeoPlaceFactory(name="Volg Zermatt")
         _link_party(place, slug="volg")
 
@@ -70,16 +71,16 @@ class TestSearchPartiesField:
         assert response.status_code == 200
         assert "parties" not in response.json()[0]
 
-    def test_nested_fields_narrowing_on_nearby(self, client):
+    def test_nested_fields_narrowing_on_nearby(self, client: Client) -> None:
         place = GeoPlaceFactory(name="Volg Zermatt")
         _link_party(place, slug="volg", url="https://volg.example.com")
 
         response = client.get(
             "/v1/geo/places/nearby",
             {
-                "lat": place.location.y,
-                "lon": place.location.x,
-                "radius": 1000,
+                "lat": str(place.location.y),
+                "lon": str(place.location.x),
+                "radius": "1000",
                 "fields[places]": "id,parties",
                 "fields[parties]": "slug",
             },
@@ -89,7 +90,7 @@ class TestSearchPartiesField:
 
 
 class TestAmenityPartiesField:
-    def test_amenity_detail_includes_parties(self, client):
+    def test_amenity_detail_includes_parties(self, client: Client) -> None:
         from server.apps.geometries.models import AmenityDetail
 
         place = GeoPlaceFactory(name="Volg Zermatt", detail_type="amenity")

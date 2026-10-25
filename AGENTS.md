@@ -239,21 +239,38 @@ that matter for any code change:
 
 ## Type Checking
 
-Type checking is **pyrefly** (CLI + CI + editor LSP, one engine; openspec
-`pyrefly-type-checking`). django-stubs stays as the Django type vocabulary.
+Type checking is **pyrefly** — one engine for CLI, CI and editor LSP, running
+`preset = "strict"` project-wide (openspec `pyrefly-type-checking`; campaign
+history: `_work/261024_django_type_checking.md`). django-stubs provides the
+Django type vocabulary.
 
 ```bash
 inv check.types        # or: uv run pyrefly check
 ```
 
-- `pyrefly-baseline.json` suppresses pre-existing findings — **only new type
-  errors fail**. Shrinking it is deliberate: fix errors, then
-  `pyrefly check --update-baseline` (never absorb new errors into it).
-- New suppressions: `# pyrefly: ignore[rule]` or bare `# type: ignore`.
-  Legacy `# pyright: ignore[...]` comments are inert for pyrefly — remove them
-  when touching the code (full sweep is a follow-up task).
-- nvim: LazyVim runs the pyrefly LSP (pyright disabled). pi agents: the
-  committed `.pi-lens.json` points the python LSP at pyrefly.
+**Rules & quirks** (hard-won, follow them):
+
+- All new/changed code must be fully annotated — the implicit-any rules are
+  on everywhere. Fix findings in code; there is **no baseline** (retired) and
+  creating one is not an option.
+- Suppressions are a last resort: bare `# type: ignore  # <short reason>`.
+  Never `# pyright:` comments. For multi-line expressions pyrefly cannot
+  suppress line-based — restructure to a single-line anchor (typed local,
+  constant) and suppress that line.
+- Established idioms: modeltrans `<field>_i18n: str` annotations ·
+  `Manager.from_queryset(QuerySet)` factory (+ its one documented chain gap) ·
+  split-settings cross-file `# type: ignore` · `@override` from `typing` ·
+  django-stubs signatures for management commands (`add_arguments(parser:
+  CommandParser)`, `handle(*args: Any, **options: Any)`) and admin hooks.
+- pi-lens may report pyright-family "unresolved import" blockers from a
+  venv-less runner (`ready=0/N`): environmental noise — pyrefly is the only
+  authority; verify with `pyrefly check` and runtime imports, never chase them.
+- CI quirk: workflow events sometimes don't fire for a branch — proactively
+  merge `origin/main` before pushing (merge-pushes trigger), or recreate the
+  PR from a fresh branch name. Prefer fresh branch names per PR.
+- Don't gate on ty (Astral): it has no Django support (~373 false positives
+  here); revisit when astral-sh/ty#1018 lands.
+
 
 ## Testing
 

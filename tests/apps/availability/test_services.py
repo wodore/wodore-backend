@@ -7,6 +7,7 @@ payload with several bookings per date from violating ``unique_hut_date``.
 
 import datetime
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -44,13 +45,13 @@ def _places_booking(date: datetime.date, free: int | None) -> SimpleNamespace:
     return SimpleNamespace(date=date, places=SimpleNamespace(free=free))
 
 
-def _hut_booking(source: str, source_id: str, bookings: list) -> SimpleNamespace:
+def _hut_booking(source: str, source_id: str, bookings: list[Any]) -> SimpleNamespace:
     """Minimal stand-in for ``HutBookingsSchema``."""
     return SimpleNamespace(source=source, source_id=source_id, bookings=bookings)
 
 
 @pytest.fixture
-def hut_and_org(seed_data) -> tuple[Hut, Organization]:
+def hut_and_org(seed_data: dict[str, int]) -> tuple[Hut, Organization]:
     hut = Hut.objects.first()
     org = Organization.objects.first()
     assert hut is not None and org is not None  # guaranteed by seed_data
@@ -58,7 +59,7 @@ def hut_and_org(seed_data) -> tuple[Hut, Organization]:
 
 
 class TestProcessHutsBatch:
-    def test_creates_updates_and_histories(self, hut_and_org):
+    def test_creates_updates_and_histories(self, hut_and_org: tuple[Hut, Organization]):
         hut, org = hut_and_org
         now = timezone.now()
         date = datetime.date(2030, 7, 1)
@@ -80,7 +81,9 @@ class TestProcessHutsBatch:
         avail.refresh_from_db()
         assert avail.free == 2
 
-    def test_duplicate_hut_date_in_payload_last_wins(self, hut_and_org):
+    def test_duplicate_hut_date_in_payload_last_wins(
+        self, hut_and_org: tuple[Hut, Organization]
+    ):
         """Several bookings for one (hut, date) must not violate unique_hut_date.
 
         Regression test: the batch used to queue both rows, and the bulk
@@ -108,7 +111,9 @@ class TestProcessHutsBatch:
         avail = HutAvailability.objects.get(hut=hut, availability_date=date)
         assert avail.free == 1  # latest payload values win
 
-    def test_large_batch_spans_bulk_write_chunks(self, hut_and_org):
+    def test_large_batch_spans_bulk_write_chunks(
+        self, hut_and_org: tuple[Hut, Organization]
+    ):
         """More rows than BULK_WRITE_BATCH_SIZE still write correctly."""
         hut, org = hut_and_org
         start = datetime.date(2030, 1, 1)

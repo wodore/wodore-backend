@@ -10,6 +10,8 @@ the huts table source only).
 
 from __future__ import annotations
 
+from typing import Any
+
 from django.test import SimpleTestCase, override_settings
 
 from server.apps.basemaps.resolution import resolve_style
@@ -17,7 +19,7 @@ from server.apps.basemaps.seed_lib import HUTS_STYLE
 from server.apps.basemaps.validation import validate_style_spec
 
 
-def _style() -> dict:
+def _style() -> dict[str, Any]:
     """A fresh minimal style with one MLT and one MVT vector source."""
     return {
         "version": 8,

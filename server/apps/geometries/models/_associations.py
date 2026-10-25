@@ -1,3 +1,5 @@
+from typing import override
+
 from computedfields.models import ComputedFieldsModel
 
 from modeltrans.manager import MultilingualManager
@@ -348,6 +350,7 @@ class GeoPlaceParty(TimeStampedModel):
             f" [{self.role.identifier}]"
         )
 
+    @override
     def clean(self) -> None:
         super().clean()
         if self.role_id:

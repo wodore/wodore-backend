@@ -1,16 +1,21 @@
+from __future__ import annotations
+
 import json
-from typing import ClassVar
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Any, ClassVar, override
 
 from django_admin_runner.admin import CommandRunnerModelAdminMixin
 
 from django import forms
 from django.conf import settings
 from django.contrib import admin
+from django.db import models as db_models
 from django.db.models.functions import Lower
 from django.forms import ModelForm
+from django.http import HttpRequest
 from django.template.response import TemplateResponse
 from django.utils.html import format_html, format_html_join
-from django.utils.safestring import mark_safe
+from django.utils.safestring import SafeString, mark_safe
 from django.utils.translation import gettext_lazy as _
 
 from unfold import admin as unfold_admin
@@ -40,10 +45,13 @@ from ..models import (
 )
 from ..utils import get_progress_bar
 
+if TYPE_CHECKING:
+    from server.apps.categories.models import Category
+
 ## Custom Admin Forms
 
 
-class _GeoPlaceSourceAssociationForm(ModelForm):
+class _GeoPlaceSourceAssociationForm(ModelForm[GeoPlaceSourceAssociation]):
     """Form for GeoPlace source associations."""
 
     schema = forms.JSONField(
@@ -62,7 +70,7 @@ class _GeoPlaceSourceAssociationForm(ModelForm):
             "delete_policy",
         )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         instance = kwargs.get("instance")
         initial = kwargs.get("initial", {})
 
@@ -101,7 +109,8 @@ class GeoPlaceSourceAssociationInline(unfold_admin.TabularInline):
     show_change_link = True
     verbose_name = _("Source")
 
-    def has_add_permission(self, request, obj):
+    @override
+    def has_add_permission(self, request: HttpRequest, obj: Any) -> bool:  # type: ignore  # inline-admin default-param drift, plugin-less
         return False
 
     def has_delete_permission(self, request, obj):  # type: ignore  # inline-admin default-param drift, plugin-less
@@ -140,14 +149,15 @@ class GeoPlaceExternalLinkInline(unfold_admin.TabularInline):
     show_change_link = True
     verbose_name = _("External Link")
 
-    def has_add_permission(self, request, obj):
+    @override
+    def has_add_permission(self, request: HttpRequest, obj: Any) -> bool:  # type: ignore  # inline-admin default-param drift, plugin-less
         return True
 
     def has_delete_permission(self, request, obj):  # type: ignore  # inline-admin default-param drift, plugin-less
         return True
 
 
-def _format_categories_list(categories) -> str:
+def _format_categories_list(categories: Sequence[Category]) -> str:
     if not categories:
         return "-"
 
@@ -182,7 +192,8 @@ class GeoPlaceCategoryInline(unfold_admin.TabularInline):
     show_change_link = True
     verbose_name = _("Category")
 
-    def has_add_permission(self, request, obj):
+    @override
+    def has_add_permission(self, request: HttpRequest, obj: Any) -> bool:  # type: ignore  # inline-admin default-param drift, plugin-less
         return True
 
     def has_delete_permission(self, request, obj):  # type: ignore  # inline-admin default-param drift, plugin-less
@@ -200,7 +211,13 @@ class GeoPlacePartyInline(unfold_admin.TabularInline):
     show_change_link = True
     verbose_name = _("Party")
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+    @override
+    def formfield_for_foreignkey(
+        self,
+        db_field: db_models.ForeignKey[Any, Any],
+        request: HttpRequest,
+        **kwargs: Any,
+    ):
         """Scope the role autocomplete to the role.* subtree."""
         from server.apps.categories.models import Category
 
@@ -306,7 +323,8 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
 
     list_per_page = 50
 
-    def get_queryset(self, request):
+    @override
+    def get_queryset(self, request: HttpRequest):
         from server.apps.visits.models import visit_window_annotation
 
         return (
@@ -328,7 +346,14 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             GeoPlacePartyInline,
         ]
 
-    def save_formset(self, request, form, formset, change):
+    @override
+    def save_formset(
+        self,
+        request: HttpRequest,
+        form: Any,
+        formset: Any,
+        change: bool,
+    ) -> None:
         """Manual party edits protect the place from import overwrites.
 
         OpenSpec geoplace-parties decision 7: associations carry no
@@ -349,7 +374,8 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
 
         super().save_formset(request, form, formset, change)
 
-    def get_urls(self):
+    @override
+    def get_urls(self) -> list[Any]:
         from django.urls import path
 
         urls = super().get_urls()
@@ -362,7 +388,7 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         ]
         return custom_urls + urls
 
-    def tilemap_view(self, request):
+    def tilemap_view(self, request: HttpRequest):
         """Interactive tile map with clustering debug and overlay filtering."""
         from server.apps.categories.models import Category
         from server.apps.geometries.config.osm_categories import CATEGORY_REGISTRY
@@ -401,7 +427,7 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
     # Display methods
 
     @display(description="")
-    def category_icon(self, obj):
+    def category_icon(self, obj: GeoPlace) -> str:
         """Display the first category's symbol icon with priority: detailed → simple → mono."""
         # Get first category (ordered by the through model's order field)
         first_category = obj.categories.order_by("order", "slug").first()
@@ -419,7 +445,7 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         return ""
 
     @display(header=True, ordering=Lower("name"))
-    def title(self, obj):
+    def title(self, obj: GeoPlace) -> tuple[str, SafeString]:
         """Display name and slug in the same column, like Hut admin."""
         return (obj.name_i18n, mark_safe(f"<small><code>{obj.slug}</code></small>"))
 
@@ -623,7 +649,8 @@ class AmenityDetailAdmin(ModelAdmin):
 
     list_per_page = 50
 
-    def get_queryset(self, request):
+    @override
+    def get_queryset(self, request: HttpRequest):
         return (
             super()
             .get_queryset(request)

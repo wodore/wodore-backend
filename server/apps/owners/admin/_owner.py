@@ -1,10 +1,12 @@
 import contextlib
+from typing import override
 
 from django.conf import settings
 from django.contrib import admin
 from django.db import models
 from django.db.models.functions import Lower
 from django.http import HttpRequest
+from django.utils.safestring import SafeString
 from django.utils.translation import gettext_lazy as _
 
 with contextlib.suppress(ModuleNotFoundError):
@@ -43,10 +45,16 @@ class _OwnerShowHutsViewInline(unfold_admin.TabularInline):
     verbose_name = _("Hut")
     show_change_link = True
 
-    def has_add_permission(self, request, obj=None):
+    @override
+    def has_add_permission(
+        self, request: HttpRequest, obj: models.Model | None = None
+    ) -> bool:
         return False
 
-    def has_change_permission(self, request, obj=None):
+    @override
+    def has_change_permission(
+        self, request: HttpRequest, obj: models.Model | None = None
+    ) -> bool:
         return False
 
 
@@ -88,18 +96,19 @@ class OwnerAdmin(ModelAdmin):
         ),
     )
 
+    @override
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request)
         return qs.annotate(number_huts=models.Count("huts"))
 
     @display(description=_("Huts"), ordering="number_huts")
-    def show_numbers_huts(self, obj):  # new
+    def show_numbers_huts(self, obj: Owner) -> int:
         return obj.number_huts
 
     @display(header=True, description=_("Name"), ordering=Lower("name_i18n"))
-    def name_slug(self, obj):  # new
+    def name_slug(self, obj: Owner) -> tuple[str, str]:
         return obj.name_i18n, obj.slug
 
     @display(description=_("Note"))
-    def note_short(self, obj):  # new
+    def note_short(self, obj: Owner) -> SafeString:
         return text_shorten_html(obj.note_i18n, width=100)

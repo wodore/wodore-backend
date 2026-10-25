@@ -2,6 +2,8 @@
 
 import pytest
 
+from django.test import Client
+
 from server.apps.meteo.models import WeatherCode, WeatherCodeSymbolCollection
 from server.apps.organizations.models import Organization
 
@@ -12,7 +14,7 @@ WC_CACHE_CONTROL = "public, max-age=3600, stale-while-revalidate=604800"
 
 
 @pytest.fixture
-def _org(db):
+def _org(db: None):
     org, _ = Organization.objects.get_or_create(
         slug="test-wmo-org",
         defaults={"name": "Test WMO Org", "is_active": True},
@@ -39,7 +41,7 @@ def alt_collection(_org):
 
 
 @pytest.fixture
-def weather_codes(collection):
+def weather_codes(collection: WeatherCodeSymbolCollection):
     codes = []
     for code, desc_day, desc_night in [
         (0, "Clear sky", "Clear sky"),
@@ -58,7 +60,9 @@ def weather_codes(collection):
 
 
 class TestWeatherCodesCaching:
-    def test_etag_and_cache_control_present(self, weather_codes, client):
+    def test_etag_and_cache_control_present(
+        self, weather_codes: list[WeatherCode], client: Client
+    ):
         response = client.get(WEATHER_CODES_URL)
         assert response.status_code == 200
         assert "ETag" in response
@@ -66,7 +70,9 @@ class TestWeatherCodesCaching:
         etag = response["ETag"]
         assert etag.startswith('"') and etag.endswith('"')
 
-    def test_if_none_match_returns_304_empty_body(self, weather_codes, client):
+    def test_if_none_match_returns_304_empty_body(
+        self, weather_codes: list[WeatherCode], client: Client
+    ):
         first = client.get(WEATHER_CODES_URL)
         assert first.status_code == 200
         etag = first["ETag"]
@@ -77,7 +83,9 @@ class TestWeatherCodesCaching:
         assert second["Cache-Control"] == WC_CACHE_CONTROL
         assert second.content == b""
 
-    def test_if_none_match_list_returns_304(self, weather_codes, client):
+    def test_if_none_match_list_returns_304(
+        self, weather_codes: list[WeatherCode], client: Client
+    ):
         """Comma-separated If-None-Match list (CDN revalidation form)."""
         etag = client.get(WEATHER_CODES_URL)["ETag"]
 
@@ -87,24 +95,35 @@ class TestWeatherCodesCaching:
         )
         assert response.status_code == 304
 
-    def test_if_none_match_wildcard_returns_304(self, weather_codes, client):
+    def test_if_none_match_wildcard_returns_304(
+        self, weather_codes: list[WeatherCode], client: Client
+    ):
         """If-None-Match: * must match any current representation."""
         response = client.get(WEATHER_CODES_URL, HTTP_IF_NONE_MATCH="*")
         assert response.status_code == 304
 
-    def test_etag_varies_by_lang(self, weather_codes, client):
+    def test_etag_varies_by_lang(
+        self, weather_codes: list[WeatherCode], client: Client
+    ):
         en = client.get(WEATHER_CODES_URL, {"lang": "en"})["ETag"]
         de = client.get(WEATHER_CODES_URL, {"lang": "de"})["ETag"]
         assert en != de
 
-    def test_etag_varies_by_collection(self, weather_codes, alt_collection, client):
+    def test_etag_varies_by_collection(
+        self,
+        weather_codes: list[WeatherCode],
+        alt_collection: WeatherCodeSymbolCollection,
+        client: Client,
+    ):
         """Different collection slug must produce a different ETag."""
         default = client.get(WEATHER_CODES_URL)["ETag"]
         other = client.get(WEATHER_CODES_URL, {"collection": alt_collection.slug})
         assert other.status_code == 200
         assert other["ETag"] != default
 
-    def test_stale_etag_returns_200(self, weather_codes, client):
+    def test_stale_etag_returns_200(
+        self, weather_codes: list[WeatherCode], client: Client
+    ):
         first = client.get(WEATHER_CODES_URL)
         assert first.status_code == 200
 

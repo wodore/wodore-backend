@@ -2,11 +2,13 @@ import factory
 
 from server.apps.parties.models import Party
 
+from . import _fmt_seq
 
-class PartyFactory(factory.django.DjangoModelFactory):
+
+class PartyFactory(factory.django.DjangoModelFactory[Party]):
     class Meta:
         model = Party
         skip_postgeneration_save = True
 
-    slug = factory.Sequence(lambda n: f"party-{n}")
-    name = factory.Sequence(lambda n: f"Test Party {n}")
+    slug = factory.Sequence(_fmt_seq("party-"))
+    name = factory.Sequence(_fmt_seq("Test Party "))

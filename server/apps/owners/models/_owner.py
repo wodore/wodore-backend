@@ -34,6 +34,9 @@ class Owner(TimeStampedModel):
         help_text=_("Public note to the owner (e.g. 'with the help of ....')"),
     )
     note_i18n: str
+    # Admin queryset annotation (`OwnerAdmin.get_queryset` → Count("huts"));
+    # declared for type checkers without the django-stubs mypy plugin.
+    number_huts: int
     url = models.URLField(blank=True, default="", max_length=200, verbose_name=_("URL"))
     comment = models.TextField(
         blank=True,

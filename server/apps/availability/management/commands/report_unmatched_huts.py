@@ -4,6 +4,8 @@ Lists huts that have availability data but no place association (design
 D5). Phase E (hut model removal) is gated on this report being empty.
 """
 
+from typing import Any, override
+
 from django.core.management.base import BaseCommand
 
 from ...models import HutAvailability
@@ -16,7 +18,8 @@ class Command(BaseCommand):
         "(geoplace-availability Phase E gate)"
     )
 
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         huts = unmatched_huts()
         if not huts:
             self.stdout.write(

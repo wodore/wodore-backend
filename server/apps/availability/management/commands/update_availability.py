@@ -8,6 +8,8 @@ Usage:
     python manage.py update_availability --dry-run           # Show what would be updated
 """
 
+from typing import Any, override
+
 import click
 from django_admin_runner import register_command
 from rich.progress import (
@@ -19,13 +21,13 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand, CommandError, CommandParser
 from django.utils import timezone
 
 from server.apps.huts.models import Hut
 
 from ...models import GeoPlaceAvailability
-from ...services import SERVICES, AvailabilityService
+from ...services import SERVICES, AvailabilityService, UpdateResult
 
 # availability sources that provide booking data (slug -> service)
 BOOKING_SOURCES = [
@@ -42,7 +44,8 @@ def _hut_source_str(hut: "Hut") -> str:
 class Command(BaseCommand):
     help = "Update hut availability data from booking sources"
 
-    def add_arguments(self, parser):
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--hut-slug",
             type=str,
@@ -119,7 +122,8 @@ class Command(BaseCommand):
             help="Number of days in the future to consider for priority selection (default from settings)",
         )
 
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         profile_enabled = options.get("profile")
         profiler = None
         if profile_enabled:
@@ -156,7 +160,7 @@ class Command(BaseCommand):
                 stats.print_stats(30)
                 click.echo(s.getvalue())
 
-    def _handle_update(self, *args, **options):
+    def _handle_update(self, *args: Any, **options: Any) -> None:
         hut_slug = options.get("hut_slug")
         hut_id = options.get("hut_id")
         update_all = options.get("all")
@@ -240,7 +244,7 @@ class Command(BaseCommand):
             click.echo(f"Estimated fetch time: ~{estimated_seconds:.0f} seconds")
         click.echo()
 
-        failed_results: list[tuple] = []
+        failed_results: list[tuple[UpdateResult, str]] = []
         stats = {
             "huts_processed": 0,
             "huts_failed": 0,

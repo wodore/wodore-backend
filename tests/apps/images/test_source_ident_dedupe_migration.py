@@ -1,14 +1,24 @@
-"""Images migration 0033 + runtime tolerance — the 155850205 regression.
+"""Images migrations 0033/0034 + runtime tolerance — two Sentry regressions.
 
-Legacy bug: ``source_ident`` had no unique constraint, so concurrent syncs
-(request write-through vs. django-q2 refresh vs. ``geoimages_pin`` sweeps)
-could mint twin ``Image`` rows — every later sync then crashed with
-``MultipleObjectsReturned`` ("get() returned more than one Image -- it
-returned 2!", Sentry 155850205, hut cedullo). Migration 0033 merges the
-twins and adds the partial unique constraint; the pin runtime resolves the
-canonical (oldest) row either way.
+Legacy bug (155850205): ``source_ident`` had no unique constraint, so
+concurrent syncs (request write-through vs. django-q2 refresh vs.
+``geoimages_pin`` sweeps) could mint twin ``Image`` rows — every later
+sync then crashed with ``MultipleObjectsReturned`` ("get() returned more
+than one Image -- it returned 2!", hut cedullo). Migration 0033 merges
+the twins; migration 0034 adds the partial unique constraint. The pin
+runtime resolves the canonical (oldest) row either way.
 
-The twins are minted by dropping 0033's constraint for the whole module.
+Deploy bug (BACKEND-DJANGO-8): 0033 as shipped also added the constraint
+— DML + ``CREATE UNIQUE INDEX`` in one atomic migration (one
+transaction). Postgres refuses index builds while the transaction has
+pending deferred trigger events (Django FKs are ``DEFERRABLE INITIALLY
+DEFERRED``), so the staging migrate job died with ``cannot CREATE INDEX
+"images_image" because it has pending trigger events``. The constraint
+now lives in its own migration; ``test_source_ident_migration_atomicity``
+pins that arrangement by driving 0033 + 0034 through the real
+MigrationExecutor with twins present.
+
+The twins are minted by dropping 0034's constraint for the whole module.
 DDL must live outside the per-test transactions — Postgres refuses CREATE
 INDEX while the ``TimeStampedModel`` modified-trigger has pending events
 in the open transaction — and ``django_db(transaction=True)`` would flush
@@ -20,8 +30,9 @@ import importlib
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from pytest_django.plugin import DjangoDbBlocker
 
-from server.apps.geometries.models import GeoPlaceImageAssociation
+from server.apps.geometries.models import GeoPlace, GeoPlaceImageAssociation
 from server.apps.huts.models import Hut, HutImageAssociation
 from server.apps.images.models import Image, ImageTag
 from server.apps.licenses.models import License
@@ -39,7 +50,7 @@ class _RealApps:
     """Migrations get a historical registry; the merge logic only calls
     ``get_model()``, so the live registry exercises the same code path."""
 
-    def get_model(self, app_label, model_name):
+    def get_model(self, app_label: str, model_name: str):
         from django.apps import apps
 
         return apps.get_model(app_label, model_name)
@@ -54,7 +65,7 @@ def _constraint():
 
 
 @pytest.fixture(scope="module", autouse=True)
-def legacy_schema(django_db_setup, django_db_blocker):
+def legacy_schema(django_db_setup: None, django_db_blocker: DjangoDbBlocker):
     """Pre-0033 schema for the whole module: no source_ident uniqueness."""
     from django.db import connection
 
@@ -92,7 +103,9 @@ def place():
 
 
 class TestMergeDuplicatePins:
-    def test_merges_twins_and_repoints_associations(self, license_obj, hut, place):
+    def test_merges_twins_and_repoints_associations(
+        self, license_obj: License, hut: Hut, place: GeoPlace
+    ):
         keeper = Image.objects.create(
             source_ident=IDENT,
             license=license_obj,
@@ -128,7 +141,7 @@ class TestMergeDuplicatePins:
         assert place_assoc.image_id == keeper.id
         assert place_assoc.score == 7  # the keeper's link won, not the twin's
 
-    def test_merges_triples_and_adopts_tags(self, license_obj, hut):
+    def test_merges_triples_and_adopts_tags(self, license_obj: License, hut: Hut):
         """N > 2 twins per ident: every duplicate collapses into the oldest
         row, and tags carried only by dupes survive on the keeper (review
         N-3/N-4 coverage)."""
@@ -167,7 +180,7 @@ class TestMergeDuplicatePins:
             "dupe-tag",
         }
 
-    def test_unique_idents_untouched(self, license_obj, hut):
+    def test_unique_idents_untouched(self, license_obj: License, hut: Hut):
         pin = Image.objects.create(
             source_ident=IDENT,
             license=license_obj,
@@ -187,7 +200,7 @@ class TestMergeDuplicatePins:
         assert Image.objects.count() == 2
         assert HutImageAssociation.objects.filter(hut=hut).count() == 2
 
-    def test_identless_rows_never_merged(self, license_obj):
+    def test_identless_rows_never_merged(self, license_obj: License):
         """Empty idents are not a dedupe group — every identless upload
         survives (the constraint ignores them, and so must the merge)."""
         for _ in range(3):
@@ -204,7 +217,7 @@ class TestPinningWithLegacyTwins:
     must refresh the canonical (oldest) image instead of raising
     ``MultipleObjectsReturned`` (the exact cedullo crash)."""
 
-    def test_sync_refreshes_canonical_row(self, hut, license_obj):
+    def test_sync_refreshes_canonical_row(self, hut: Hut, license_obj: License):
         from tests.apps.geometries.test_image_pinning import _result
 
         from server.apps.geometries.pinning import pin_place_images

@@ -6,10 +6,15 @@ success, wrong-role 401, invalid-token 401, disabled-mode 401, and
 validator routing by issuer/flags.
 """
 
+from typing import cast
+
 import pytest
 from dmr import modify
 from dmr.test import DMRRequestFactory
+from pytest_django.fixtures import SettingsWrapper
+from pytest_django.plugin import DjangoDbBlocker
 
+from django.http import HttpResponse
 from django.test import Client
 
 from server.apps.api.auth import (
@@ -78,7 +83,7 @@ def _password_token(username: str, password: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def local_users(django_db_setup, django_db_blocker):
+def local_users(django_db_setup: None, django_db_blocker: DjangoDbBlocker):
     from django.core.management import call_command
 
     with django_db_blocker.unblock():
@@ -87,24 +92,28 @@ def local_users(django_db_setup, django_db_blocker):
 
 
 @pytest.fixture
-def rf(local_users):  # matches the usage below
+def rf(local_users: None):  # matches the usage below
     return DMRRequestFactory()
 
 
-def _get(controller_cls, path, headers=None):
+def _get(
+    controller_cls: type[ApiController],
+    path: str,
+    headers: dict[str, str] | None = None,
+):
     request = DMRRequestFactory().get(path, headers=headers)
-    return controller_cls.as_view()(request)
+    return cast(HttpResponse, controller_cls.as_view()(request))
 
 
 class TestProtectedEndpoints:
-    def test_public_endpoint_needs_no_token(self, local_users):
+    def test_public_endpoint_needs_no_token(self, local_users: None):
         import json as _json
 
         response = _get(PublicController, "/public")
         assert response.status_code == 200
         assert _json.loads(response.content) == {"ok": True}
 
-    def test_admin_token_passes_admin_endpoint(self, local_users):
+    def test_admin_token_passes_admin_endpoint(self, local_users: None):
         token = _password_token("admin@local.test", "admin-dev")
         response = _get(
             AdminOnlyController,
@@ -113,7 +122,7 @@ class TestProtectedEndpoints:
         )
         assert response.status_code == 200
 
-    def test_editor_token_rejected_on_admin_endpoint(self, local_users):
+    def test_editor_token_rejected_on_admin_endpoint(self, local_users: None):
         token = _password_token("editor@local.test", "editor-dev")
         response = _get(
             AdminOnlyController,
@@ -122,7 +131,7 @@ class TestProtectedEndpoints:
         )
         assert response.status_code == 401
 
-    def test_editor_token_passes_editor_endpoint(self, local_users):
+    def test_editor_token_passes_editor_endpoint(self, local_users: None):
         token = _password_token("editor@local.test", "editor-dev")
         response = _get(
             EditorOnlyController,
@@ -131,7 +140,7 @@ class TestProtectedEndpoints:
         )
         assert response.status_code == 200
 
-    def test_garbage_token_rejected(self, local_users):
+    def test_garbage_token_rejected(self, local_users: None):
         response = _get(
             AdminOnlyController,
             "/admin-only",
@@ -139,11 +148,11 @@ class TestProtectedEndpoints:
         )
         assert response.status_code == 401
 
-    def test_missing_token_rejected(self, local_users):
+    def test_missing_token_rejected(self, local_users: None):
         response = _get(AdminOnlyController, "/admin-only")
         assert response.status_code == 401
 
-    def test_wrong_issuer_jwt_rejected(self, local_users):
+    def test_wrong_issuer_jwt_rejected(self, local_users: None):
         from django.contrib.auth import get_user_model
 
         from server.apps.local_auth import tokens
@@ -161,7 +170,7 @@ class TestProtectedEndpoints:
         )
         assert response.status_code == 401
 
-    def test_revocation_takes_effect_immediately(self, local_users):
+    def test_revocation_takes_effect_immediately(self, local_users: None):
         from oauth2_provider.models import get_access_token_model
 
         token = _password_token("admin@local.test", "admin-dev")
@@ -175,7 +184,9 @@ class TestProtectedEndpoints:
 
 
 class TestDisabledMode:
-    def test_clean_401_when_nothing_configured(self, local_users, settings):
+    def test_clean_401_when_nothing_configured(
+        self, local_users: None, settings: SettingsWrapper
+    ):
         settings.OIDC_ENABLED = False
         settings.ZITADEL_RP_ENABLED = False
         settings.ZITADEL_ROLLBACK_ENABLED = False
@@ -201,14 +212,14 @@ class TestDisabledMode:
 
 
 class TestValidatorRouting:
-    def test_builtin_validator_selected_by_default(self, settings):
+    def test_builtin_validator_selected_by_default(self, settings: SettingsWrapper):
         settings.OIDC_ENABLED = True
         settings.ZITADEL_RP_ENABLED = False
         settings.ZITADEL_ROLLBACK_ENABLED = False
         validators = AuthBearer().validators
         assert [type(v) for v in validators] == [BuiltInJWTValidator]
 
-    def test_zitadel_mode_selects_zitadel_validator(self, settings):
+    def test_zitadel_mode_selects_zitadel_validator(self, settings: SettingsWrapper):
         settings.OIDC_ENABLED = False
         settings.ZITADEL_RP_ENABLED = True
         settings.ZITADEL_ROLLBACK_ENABLED = False
@@ -220,7 +231,7 @@ class TestValidatorRouting:
         validators = AuthBearer().validators
         assert [type(v) for v in validators] == [ZitadelIntrospectTokenValidator]
 
-    def test_rollback_adds_zitadel_validator(self, settings):
+    def test_rollback_adds_zitadel_validator(self, settings: SettingsWrapper):
         settings.OIDC_ENABLED = True
         settings.ZITADEL_RP_ENABLED = False
         settings.ZITADEL_ROLLBACK_ENABLED = True
@@ -235,7 +246,7 @@ class TestValidatorRouting:
             ZitadelIntrospectTokenValidator,
         ]
 
-    def test_disabled_mode_has_no_validators(self, settings):
+    def test_disabled_mode_has_no_validators(self, settings: SettingsWrapper):
         settings.OIDC_ENABLED = False
         settings.ZITADEL_RP_ENABLED = False
         settings.ZITADEL_ROLLBACK_ENABLED = False

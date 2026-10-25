@@ -7,11 +7,20 @@ https://github.com/unfoldadmin/django-unfold#configuration
 
 """
 
+from typing import TYPE_CHECKING, Any
+
 from django.templatetags.static import static
 from django.urls import reverse_lazy
 from django.utils.translation import gettext_lazy as _
 
-UNFOLD = {
+if TYPE_CHECKING:
+    from django.http import HttpRequest
+
+# The unfold settings dict is a heterogeneous configuration structure
+# consumed by the unfold admin template tags (string, bool, dict, list
+# and ``Callable[[HttpRequest], ...]`` callbacks). The broad value type
+# keeps that contract explicit without narrowing runtime semantics.
+UNFOLD: dict[str, Any] = {
     "SITE_TITLE": "wodo.re",
     "SITE_HEADER": "Wodore Admin",
     "SITE_URL": "/",
@@ -687,7 +696,9 @@ UNFOLD = {
 }
 
 
-def dashboard_callback(request, context):
+def dashboard_callback(
+    request: "HttpRequest", context: dict[str, Any]
+) -> dict[str, Any]:
     """
     Callback to prepare custom variables for index template which is used as dashboard
     template. It can be overridden in application by creating custom admin/index.html.
@@ -700,9 +711,11 @@ def dashboard_callback(request, context):
     return context
 
 
-def badge_callback(request):
+def badge_callback(request: "HttpRequest") -> int:
     return 3
 
 
-def permission_callback(request):
-    return request.user.has_perm("sample_app.change_model")
+def permission_callback(request: "HttpRequest") -> bool:
+    return request.user.has_perm(  # type: ignore  # dynamic attr: plugin-less inference gap
+        "sample_app.change_model"
+    )

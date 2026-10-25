@@ -12,11 +12,14 @@ Usage:
     app geoplaces_import_osm --overpass ch --output-dir /tmp         # Use /tmp for logs (Docker)
 """
 
+from __future__ import annotations
+
 import tempfile
 import threading
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, override
 
 import httpx
 import osmium
@@ -29,14 +32,19 @@ from django.db import transaction
 from django.utils import timezone
 
 from server.apps.categories.models import Category
+from server.apps.geometries.config.osm_base import OSMMapping
 from server.apps.geometries.config.osm_categories import (
     get_categories,
     get_enabled_categories,
     match_tags_to_category,
 )
-from server.apps.geometries.models import GeoPlace
+from server.apps.geometries.models import AmenityDetail, GeoPlace
 from server.apps.organizations.models import Organization
 from server.apps.parties.models import Party
+
+if TYPE_CHECKING:
+    from rich.console import Console
+    from rich.progress import Progress, TaskID
 
 # Global Overpass server list with labels for display
 OVERPASS_SERVERS = [
@@ -54,7 +62,7 @@ class OSMElement:
     osm_type: str  # "node" or "way"
     lat: float
     lon: float
-    tags: dict
+    tags: dict[str, str]
     action: (
         str | None
     )  # "create", "modify", "delete" for diff mode; None for full import
@@ -76,7 +84,7 @@ class OSMHandler(osmium.SimpleHandler):
         else:
             self.categories = get_enabled_categories()
 
-    def node(self, n):
+    def node(self, n: Any) -> None:
         """Process OSM nodes (point features)."""
         # Check if this matches any category
         tags = dict(n.tags)
@@ -106,7 +114,7 @@ class OSMHandler(osmium.SimpleHandler):
 
             self.amenities.append(data)
 
-    def way(self, w):
+    def way(self, w: Any) -> None:
         """Process OSM ways (polygon features)."""
         tags = dict(w.tags)
         match_result = match_tags_to_category(tags, self.category_names)
@@ -121,7 +129,8 @@ class OSMHandler(osmium.SimpleHandler):
             tags = mapping.pre_process(tags)
 
         # Calculate centroid from way nodes (locations are provided by NodeLocationsForWays)
-        lons, lats = [], []
+        lons: list[float] = []
+        lats: list[float] = []
         for node in w.nodes:
             if node.location.valid():
                 lons.append(node.location.lon)
@@ -157,10 +166,10 @@ class OSMHandler(osmium.SimpleHandler):
         osm_id: int,
         lat: float,
         lon: float,
-        tags: dict,
+        tags: dict[str, str],
         category_slug: str,
-        mapping,
-    ) -> dict:
+        mapping: OSMMapping,
+    ) -> dict[str, Any]:
         """Extract amenity data from OSM element."""
         # Use default_name from mapping if no name tag exists
         name = tags.get("name", "")
@@ -189,15 +198,15 @@ class OSMHandler(osmium.SimpleHandler):
 class Command(BaseCommand):
     help = "Import amenities from OpenStreetMap via Geofabrik"
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self._error_log_file = None
+        self._error_log_file: Path | None = None
         self._error_count = 0
         self._thread_local = threading.local()
         self._category_rank_map: dict[str, int] = {}
 
-    def _get_cache(self, cache_name: str) -> dict:
-        cache = getattr(self._thread_local, cache_name, None)
+    def _get_cache(self, cache_name: str) -> dict[str, Any]:
+        cache: dict[str, Any] | None = getattr(self._thread_local, cache_name, None)
         if cache is None:
             cache = {}
             setattr(self._thread_local, cache_name, cache)
@@ -220,7 +229,7 @@ class Command(BaseCommand):
         return rank_map
 
     @staticmethod
-    def _get_category_slugs(data: dict) -> list[str]:
+    def _get_category_slugs(data: dict[str, Any]) -> list[str]:
         category_slugs = data.get("category_slugs")
         if category_slugs:
             return category_slugs
@@ -228,13 +237,13 @@ class Command(BaseCommand):
         return [category_slug] if category_slug else []
 
     @staticmethod
-    def _matches_single_tag(tags: dict, tag_str: str) -> bool:
+    def _matches_single_tag(tags: dict[str, Any], tag_str: str) -> bool:
         if "=" in tag_str:
             key, value = tag_str.split("=", 1)
             return tags.get(key) == value
         return tag_str in tags
 
-    def _tags_match(self, tags: dict, osm_filters: list) -> bool:
+    def _tags_match(self, tags: dict[str, Any], osm_filters: list[Any]) -> bool:
         for item in osm_filters:
             if isinstance(item, tuple):
                 if not any(self._matches_single_tag(tags, t) for t in item):
@@ -244,11 +253,13 @@ class Command(BaseCommand):
                     return False
         return True
 
-    def _aggregate_amenities_by_element(self, amenities: list[dict]) -> list[dict]:
+    def _aggregate_amenities_by_element(
+        self, amenities: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         if not amenities:
             return amenities
 
-        grouped: dict[tuple[str, int], dict] = {}
+        grouped: dict[tuple[str, int], dict[str, Any]] = {}
         for data in amenities:
             key = (data["osm_type"], data["osm_id"])
             entry = grouped.setdefault(
@@ -263,14 +274,14 @@ class Command(BaseCommand):
                 if current is None or rank < current:
                     entry["category_ranks"][category_slug] = rank
 
-        aggregated: list[dict] = []
+        aggregated: list[dict[str, Any]] = []
         for entry in grouped.values():
             items = entry["items"]
             delete_item = next(
                 (item for item in items if item.get("action") == "delete"), None
             )
 
-            def _item_rank(item: dict) -> int:
+            def _item_rank(item: dict[str, Any]) -> int:
                 category_slugs = self._get_category_slugs(item)
                 if not category_slugs:
                     return 1_000_000
@@ -282,7 +293,7 @@ class Command(BaseCommand):
             base = delete_item or min(items, key=_item_rank)
             category_ranks: dict[str, int] = entry["category_ranks"]
             if category_ranks:
-                per_parent: dict[str, dict] = {}
+                per_parent: dict[str, dict[str, Any]] = {}
                 for slug, rank in category_ranks.items():
                     parent_slug = slug.split(".", 1)[0]
                     existing = per_parent.get(parent_slug)
@@ -300,6 +311,7 @@ class Command(BaseCommand):
 
         return aggregated
 
+    @override
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "region",
@@ -381,14 +393,15 @@ class Command(BaseCommand):
             help="Directory for error log files (default: '.' for current directory, use '/tmp' for Docker environments)",
         )
 
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         """Main command execution."""
         import signal
 
         # Set up signal handler for graceful shutdown
         self._shutdown_requested = False
 
-        def signal_handler(signum, frame):
+        def signal_handler(signum: int, frame: Any) -> None:
             """Handle Ctrl+C gracefully."""
             if not self._shutdown_requested:
                 self._shutdown_requested = True
@@ -796,7 +809,7 @@ class Command(BaseCommand):
         osm_type: str | None = None,
         osm_id: int | None = None,
         error: str | None = None,
-        osm_tags: dict | None = None,
+        osm_tags: dict[str, str] | None = None,
     ) -> None:
         """Log error to file immediately (on-the-fly).
 
@@ -838,7 +851,7 @@ class Command(BaseCommand):
                 f.write(f"   Error: {error}\n")
             f.write("\n")
 
-    def _load_state(self, state_file: Path) -> dict:
+    def _load_state(self, state_file: Path) -> dict[str, Any]:
         """Load import state from JSON file.
 
         Returns dict with structure:
@@ -873,7 +886,7 @@ class Command(BaseCommand):
                 return {"countries": {}}
         return {"countries": {}}
 
-    def _save_state(self, state_file: Path, state: dict) -> None:
+    def _save_state(self, state_file: Path, state: dict[str, Any]) -> None:
         """Save import state to JSON file.
 
         Uses atomic write to prevent corruption if interrupted.
@@ -905,7 +918,7 @@ class Command(BaseCommand):
 
     def _update_mapping_state(
         self,
-        state: dict,
+        state: dict[str, Any],
         country: str,
         mapping_slug: str,
         timestamp: str,
@@ -950,7 +963,7 @@ class Command(BaseCommand):
         }
 
     def _get_mapping_timestamp(
-        self, state: dict, country: str, mapping_slug: str
+        self, state: dict[str, Any], country: str, mapping_slug: str
     ) -> str | None:
         """Get last import timestamp for a specific country/mapping."""
         country = country.upper()
@@ -1020,7 +1033,7 @@ class Command(BaseCommand):
             return Path()
 
     def _upsert_amenity(
-        self, data: dict, osm_org: Organization, run_start: datetime
+        self, data: dict[str, Any], osm_org: Organization, run_start: datetime
     ) -> str:
         """Create or update GeoPlace + AmenityDetail using schema-based approach."""
         from hut_services import LocationSchema
@@ -1054,7 +1067,7 @@ class Command(BaseCommand):
         opening_hours_data = self._parse_opening_hours(data.get("opening_hours"))
 
         # Build phones list
-        phones = []
+        phones: list[Any] = []
         if data.get("phone"):
             phone_numbers = self._format_phones(data.get("phone"))
             phones = [PhoneSchema(**p) for p in phone_numbers]
@@ -1092,7 +1105,10 @@ class Command(BaseCommand):
 
         # Calculate importance based on OSM tags and mapping
         mapping = data.get("mapping")
-        importance = self._calculate_osm_importance(data.get("tags", {}), mapping)
+        importance = self._calculate_osm_importance(
+            data.get("tags", {}),
+            mapping,  # type: ignore  # data["mapping"] carries the OSMMapping set in _process_elements
+        )
 
         # Build flattened GeoPlace schema
         schema = GeoPlaceAmenityInput(
@@ -1249,7 +1265,7 @@ class Command(BaseCommand):
         # Process in batches to avoid timeout
         batch_size = 1000
         total_count = 0
-        place_ids = []
+        place_ids: list[int] = []
 
         self.stdout.write(
             f"  Batch processing stale places (batch size: {batch_size})..."
@@ -1266,7 +1282,7 @@ class Command(BaseCommand):
                 self.stdout.write(
                     f"    Deactivated {count} places (total: {total_count})"
                 )
-                place_ids = []
+                place_ids: list[int] = []
 
         # Process remaining places in final batch
         if place_ids:
@@ -1472,7 +1488,7 @@ class Command(BaseCommand):
 
         return total_deleted
 
-    def _precache_data(self, amenities: list[dict]):
+    def _precache_data(self, amenities: list[dict[str, Any]]):
         """Pre-cache categories and parties to reduce DB queries."""
         # Cache for categories
         category_cache = self._get_cache("category_cache")
@@ -1579,7 +1595,7 @@ class Command(BaseCommand):
 
         return category
 
-    def _parse_opening_hours(self, opening_hours_str: str | None) -> dict:
+    def _parse_opening_hours(self, opening_hours_str: str | None) -> dict[str, Any]:
         """Parse OSM opening_hours format to our JSON schema."""
         if not opening_hours_str:
             return {}
@@ -1664,7 +1680,7 @@ class Command(BaseCommand):
             # Fallback: store raw string
             return {"_raw": opening_hours_str}
 
-    def _format_phones(self, phone: str | None) -> list:
+    def _format_phones(self, phone: str | None) -> list[Any]:
         """Format phone number(s) to our JSON schema."""
         if not phone:
             return []
@@ -1674,7 +1690,9 @@ class Command(BaseCommand):
 
         return [{"number": p} for p in phones]
 
-    def _extract_i18n_field(self, tags: dict, field_name: str) -> dict:
+    def _extract_i18n_field(
+        self, tags: dict[str, Any], field_name: str
+    ) -> dict[str, Any]:
         """
         Extract multilingual field from OSM tags.
 
@@ -1719,23 +1737,23 @@ class Command(BaseCommand):
     def _process_mapping_worker(
         self,
         worker_id: int,
-        mapping_data: tuple,
+        mapping_data: tuple[str, OSMMapping],
         region: str,
         osm_org: Organization,
         run_start: datetime,
         category_names: list[str],
         api_endpoint: str | None,
-        headers: dict,
-        queries_md: dict,
+        headers: dict[str, Any],
+        queries_md: dict[str, Any],
         since: datetime | None,
         limit: int | None,
         dry_run: bool,
-        console,
-        progress,
-        overall_task,
-        state: dict | None = None,
+        console: Console,
+        progress: Progress,
+        overall_task: TaskID | None,
+        state: dict[str, Any] | None = None,
         state_file: Path | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Worker function to process a single mapping in parallel.
 
         Returns a dict with:
@@ -1757,7 +1775,7 @@ class Command(BaseCommand):
         # Calculate server start index based on worker_id
         server_start_index = worker_id % len(OVERPASS_SERVERS)
 
-        def _hide_task_later(task_to_hide: int) -> None:
+        def _hide_task_later(task_to_hide: TaskID) -> None:
             def _hide() -> None:
                 try:
                     progress.update(task_to_hide, visible=False)
@@ -1977,7 +1995,7 @@ class Command(BaseCommand):
         overpass_queries_file: str | None = None,
         since: str | None = None,
         dry_run: bool = False,
-        state: dict | None = None,
+        state: dict[str, Any] | None = None,
         state_file: Path | None = None,
         output_dir: str = ".",
     ):
@@ -2015,7 +2033,7 @@ class Command(BaseCommand):
                 return
 
         # Load queries
-        queries_md = {}
+        queries_md: dict[str, Any] = {}
         if overpass_queries_file:
             queries_md = self._load_queries_file(overpass_queries_file)  # type: ignore  # dynamic attr: plugin-less inference gap
 
@@ -2238,7 +2256,7 @@ class Command(BaseCommand):
         overpass_queries_file: str | None = None,
         since: str | None = None,
         dry_run: bool = False,
-        state: dict | None = None,
+        state: dict[str, Any] | None = None,
         state_file: Path | None = None,
     ) -> bool:
         """Process Overpass data using pipeline approach (fetch → process → import per mapping).
@@ -2554,7 +2572,7 @@ class Command(BaseCommand):
 
         return True
 
-    def _process_full_json(self, json_data: dict) -> list[OSMElement]:
+    def _process_full_json(self, json_data: dict[str, Any]) -> list[OSMElement]:
         """Convert JSON response to OSMElement list.
 
         All elements get action=None since we don't know if they changed.
@@ -2624,9 +2642,9 @@ class Command(BaseCommand):
                 continue
 
             # Extract tags
-            tags = {}
+            tags: dict[str, str] = {}
             for tag in osm_elem.findall("tag"):
-                tags[tag.get("k")] = tag.get("v")
+                tags[tag.get("k")] = tag.get("v")  # type: ignore  # OSM XML <tag> always carries k/v attrs
 
             # Get coordinates
             if osm_elem.tag == "node":
@@ -2659,13 +2677,15 @@ class Command(BaseCommand):
     def _fetch_mapping_overpass(
         self,
         region: str,
-        mapping,
+        mapping: OSMMapping,
         api_endpoint: str,
-        headers: dict,
-        queries_md,
+        headers: dict[str, Any],
+        # Queries log sink: an open file handle (pipeline mode writes a
+        # rendered Markdown log) or the queries dict (worker mode).
+        queries_md: Any,
         since: str | None,
         limit: int | None,
-        console=None,
+        console: Console | None = None,
         server_start_index: int = 0,
     ) -> tuple[list[OSMElement] | None, int, str, int]:
         """Fetch elements for a single mapping from Overpass API.
@@ -2831,9 +2851,9 @@ class Command(BaseCommand):
     def _process_elements(
         self,
         elements: list[OSMElement],
-        mapping,
+        mapping: OSMMapping,
         category_names: list[str],
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Process OSMElement list into amenity data format.
 
         Returns:
@@ -2897,7 +2917,7 @@ class Command(BaseCommand):
 
         return amenities
 
-    def _precache_mapping_data(self, amenities: list[dict]):
+    def _precache_mapping_data(self, amenities: list[dict[str, Any]]):
         """Pre-cache categories and parties for a mapping's amenities."""
         if not amenities:
             return
@@ -2943,7 +2963,7 @@ class Command(BaseCommand):
             )
 
     def _preload_place_cache(
-        self, amenities: list[dict], osm_org: Organization
+        self, amenities: list[dict[str, Any]], osm_org: Organization
     ) -> None:
         """Pre-load GeoPlace associations for a mapping's amenities."""
         if not amenities:
@@ -2966,12 +2986,12 @@ class Command(BaseCommand):
 
     def _import_amenities(
         self,
-        amenities: list[dict],
+        amenities: list[dict[str, Any]],
         osm_org: Organization,
         run_start: datetime,
         dry_run: bool,
-        progress=None,
-        task_id: int | None = None,
+        progress: Progress | None = None,
+        task_id: TaskID | None = None,
         total_count: int | None = None,
         downloaded_count: int | None = None,
         downloaded_bytes: int | None = None,
@@ -3125,7 +3145,7 @@ class Command(BaseCommand):
         limit: int | None = None,
         queries_file: str | None = None,
         since: str | None = None,
-    ) -> list[dict] | None:
+    ) -> list[dict[str, Any]] | None:
         """Fetch amenities from Overpass API.
 
         Args:
@@ -3223,7 +3243,7 @@ class Command(BaseCommand):
                 max_retries = 3
                 retry_delay = 5  # seconds
 
-                result: dict = {}  # assigned on success; re-raised otherwise
+                result: dict[str, Any] = {}  # assigned on success; re-raised otherwise
                 for attempt in range(max_retries):
                     try:
                         # Make direct HTTP request to Overpass API
@@ -3573,7 +3593,7 @@ class Command(BaseCommand):
             external_link=external_link,
         )
 
-    def _precache_categories_batch(self, amenities: list[dict]):
+    def _precache_categories_batch(self, amenities: list[dict[str, Any]]):
         """Pre-fetch all categories in a single query for batch processing.
 
         This is much faster than looking up categories individually during import.
@@ -3610,7 +3630,7 @@ class Command(BaseCommand):
 
     def _upsert_amenities_hybrid_bulk(
         self,
-        amenities: list[dict],
+        amenities: list[dict[str, Any]],
         osm_org: Organization,
         run_start: datetime,
         dry_run: bool,
@@ -3662,7 +3682,7 @@ class Command(BaseCommand):
             return (0, 0, len(amenities), 0, 0)
 
         # Process in batches using fill-and-process strategy
-        buffer = []
+        buffer: list[dict[str, Any]] = []
         total_processed = 0
 
         for idx, data in enumerate(amenities, 1):
@@ -3700,7 +3720,7 @@ class Command(BaseCommand):
 
     def _process_batch_with_retry(
         self,
-        batch: list[dict],
+        batch: list[dict[str, Any]],
         osm_org: Organization,
         run_start: datetime,
         max_retries: int = 3,
@@ -3725,8 +3745,8 @@ class Command(BaseCommand):
         from django.db import DatabaseError
 
         # Step 1: Check all for duplicates (BBox queries)
-        new_places = []
-        existing_places = []
+        new_places: list[dict[str, Any]] = []
+        existing_places: list[tuple[GeoPlace, dict[str, Any]]] = []
 
         place_cache = self._get_cache("place_cache")
 
@@ -3801,8 +3821,8 @@ class Command(BaseCommand):
 
     def _bulk_create_and_update(
         self,
-        new_places: list[dict],
-        existing_places: list[tuple],
+        new_places: list[dict[str, Any]],
+        existing_places: list[tuple[GeoPlace, dict[str, Any]]],
         osm_org: Organization,
         run_start: datetime,
     ) -> tuple[int, int, int, int]:
@@ -3891,9 +3911,9 @@ class Command(BaseCommand):
 
             # Part 2: Bulk update existing places
             if existing_places:
-                places_to_update = []
-                details_to_update = []
-                detail_by_place_id = {}
+                places_to_update: list[GeoPlace] = []
+                details_to_update: list[AmenityDetail] = []
+                detail_by_place_id: dict[int, AmenityDetail] = {}
 
                 place_ids = [existing.id for existing, _ in existing_places]
                 if place_ids:
@@ -3935,7 +3955,9 @@ class Command(BaseCommand):
 
         return (created_count, updated_count, skipped_count, 0)
 
-    def _calculate_osm_importance(self, tags: dict, mapping) -> int:
+    def _calculate_osm_importance(
+        self, tags: dict[str, Any], mapping: OSMMapping
+    ) -> int:
         """
         Calculate importance for OSM-imported places based on tags and category.
 
@@ -4012,7 +4034,9 @@ class Command(BaseCommand):
         # Clamp to range
         return max(min_importance, min(importance, max_importance))
 
-    def _prepare_geoplace(self, data: dict) -> tuple[GeoPlace, list[Category]]:
+    def _prepare_geoplace(
+        self, data: dict[str, Any]
+    ) -> tuple[GeoPlace, list[Category]]:
         """Prepare GeoPlace instance from amenity data."""
         from server.apps.geometries.models import OperatingStatus
 
@@ -4024,7 +4048,10 @@ class Command(BaseCommand):
 
         # Calculate importance based on OSM tags and mapping (already in data)
         mapping = data.get("mapping")
-        importance = self._calculate_osm_importance(data.get("tags", {}), mapping)
+        importance = self._calculate_osm_importance(
+            data.get("tags", {}),
+            mapping,  # type: ignore  # data["mapping"] carries the OSMMapping set in _process_elements
+        )
 
         # Get name (may be empty string if no name and no default_name)
         name = data.get("name", "")
@@ -4061,7 +4088,7 @@ class Command(BaseCommand):
             distance_any=4,
         )
 
-    def _data_to_schema(self, data: dict):
+    def _data_to_schema(self, data: dict[str, Any]):
         """Convert amenity data to schema."""
         from hut_services import LocationSchema
 
@@ -4076,7 +4103,7 @@ class Command(BaseCommand):
             operating_status="open",
         )
 
-    def _data_to_source(self, data: dict, run_start: datetime):
+    def _data_to_source(self, data: dict[str, Any], run_start: datetime):
         """Convert amenity data to source input."""
         from server.apps.geometries.schemas import SourceInput
 

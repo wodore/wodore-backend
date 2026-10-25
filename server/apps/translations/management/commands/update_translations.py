@@ -9,6 +9,7 @@ Examples:
 """
 
 import typing as t
+from typing import override
 
 from django_admin_runner import register_command
 from rich.progress import (
@@ -21,7 +22,7 @@ from rich.progress import (
 )
 
 from django.conf import settings
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand, CommandError, CommandParser
 from django.db.models import QuerySet
 
 from server.apps.geometries.models import GeoPlace
@@ -54,7 +55,8 @@ class Command(BaseCommand):
         "Existing translations are never touched unless --overwrite is set."
     )
 
-    def add_arguments(self, parser) -> None:
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--hut",
             action="append",
@@ -107,6 +109,7 @@ class Command(BaseCommand):
             "complete (useful for cron jobs)",
         )
 
+    @override
     def handle(self, *args: t.Any, **options: t.Any) -> None:
         hut_slugs: list[str] = options["hut"]
         geoplace_slugs: list[str] = options["geoplace"]
@@ -158,7 +161,7 @@ class Command(BaseCommand):
 
     def _run(
         self,
-        queryset: QuerySet,
+        queryset: QuerySet[t.Any],
         limit: int | None,
         options: dict[str, t.Any],
         languages: list[str] | None,
@@ -232,7 +235,7 @@ class Command(BaseCommand):
         hut_slugs: list[str],
         geoplace_slugs: list[str],
         options: dict[str, t.Any],
-    ) -> QuerySet | None:
+    ) -> QuerySet[t.Any] | None:
         all_flag: bool = options["all"]
         model: str | None = options["model"]
         if all_flag and not model:
@@ -244,7 +247,7 @@ class Command(BaseCommand):
         # geoplace before hut: geoplaces vastly outnumber huts, process
         # cheap records first when both are requested.
         if geoplace_slugs or (all_flag and model == "geoplace"):
-            qs: QuerySet = GeoPlace.objects.order_by("id")
+            qs: QuerySet[t.Any] = GeoPlace.objects.order_by("id")
             if geoplace_slugs:
                 qs = qs.filter(slug__in=geoplace_slugs)
             self._check_found(qs, geoplace_slugs, "geoplace")
@@ -255,7 +258,9 @@ class Command(BaseCommand):
         self._check_found(qs, hut_slugs, "hut")
         return qs
 
-    def _check_found(self, queryset: QuerySet, slugs: list[str], label: str) -> None:
+    def _check_found(
+        self, queryset: QuerySet[t.Any], slugs: list[str], label: str
+    ) -> None:
         if slugs:
             found = set(queryset.values_list("slug", flat=True))
             missing = [slug for slug in slugs if slug not in found]

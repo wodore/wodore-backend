@@ -8,6 +8,14 @@ requires-python = "<4.0,>=3.12"
 
 dependencies = [
   "Django[argon2]==6.*",              # https://pypi.org/project/Django/
+  "django-stubs-ext==6.*",         # https://pypi.org/project/django-stubs-ext/ (6.x tracks Django 6.x)
+  # ^ RUNTIME dependency, not dev tooling: server/settings/__init__.py
+  #   monkeypatches Django's generics with it, and typed model classes
+  #   (e.g. server.core.models._AutoCreatedField) subclass parametrized
+  #   fields at import time. Without it in the prod image, Django startup
+  #   dies with "type 'DateTimeField' is not subscriptable" (Build Docker
+  #   broken on every merge since #400). The stub vocabulary (django-stubs)
+  #   itself stays dev-only.
   "django-split-settings==1.*",       # https://pypi.org/project/django-split-settings/
   "django-axes==8.*",                 # https://pypi.org/project/django-axes/
   "django-csp==4.*",                  # https://pypi.org/project/django-csp/
@@ -95,8 +103,7 @@ dev = [
   "django-querycount==0.8.*",      # https://pypi.org/project/django-querycount/
   "django-migration-linter==5.*",  # https://pypi.org/project/django-migration-linter/
   "django-extra-checks==0.*",      # https://pypi.org/project/django-extra-checks/
-  "django-stubs-ext==6.*",         # https://pypi.org/project/django-stubs-ext/ (6.x tracks Django 6.x)
-  "django-stubs==6.*",             # https://pypi.org/project/django-stubs/ — type vocabulary for pyrefly's Django ORM inference
+  "django-stubs==6.*",             # https://pypi.org/project/django-stubs/ — type vocabulary for pyrefly's Django ORM inference (runtime half = django-stubs-ext, a prod dep)
   "wemake-python-styleguide==1.*", # https://pypi.org/project/wemake-python-styleguide/
   "flake8-pytest-style==2.*",      # https://pypi.org/project/flake8-pytest-style/
   "flake8-django==1.*",            # https://pypi.org/project/flake8-django/
@@ -326,42 +333,13 @@ DEP003 = ["server"] # transitive dependencies
 
 [tool.pyrefly]
 # One engine for CLI, CI and editor LSP — see openspec change `pyrefly-type-checking`.
+# Strict typing is now project-wide: the per-app ratchet sub-configs were
+# removed once every app had been ratcheted (27 merged ratchet PRs).
+preset = "strict"
 project-includes = ["server", "tests"]
 project-excludes = ["**/migrations/**"]
 search-path = ["."]
 python-interpreter-path = ".venv/bin/python"
-baseline = "pyrefly-baseline.json" # ratchet: suppresses pre-existing findings; only NEW type errors fail
-
-[[tool.pyrefly.sub-config]]
-# Strict-typing ratchet for the contacts app: new code must be fully annotated.
-matches = "server/apps/contacts/**"
-
-[tool.pyrefly.sub-config.errors]
-implicit-any-parameter = true
-implicit-any-type-argument = true
-implicit-any-lambda = true
-implicit-any-empty-container = true
-implicit-any-attribute = true
-missing-override-decorator = true
-bad-override = true
-method-assign = true
-
-[[tool.pyrefly.sub-config]]
-# Strict-typing ratchet: the envvars app is small and fully owned, so it is
-# held to annotation-completeness rules the default preset does not enforce.
-# Only this subtree is affected; strictness is ratcheted app by app.
-matches = "server/apps/envvars/**"
-
-[tool.pyrefly.sub-config.errors]
-implicit-any-parameter = true
-implicit-any-type-argument = true
-implicit-any-lambda = true
-implicit-any-empty-container = true
-implicit-any-attribute = true
-missing-override-decorator = true
-bad-override = true
-method-assign = true
-
 
 [build-system]
 requires = ["hatchling"]

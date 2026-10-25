@@ -8,6 +8,8 @@ separate rows for multiple roles, RESTRICT on party and role FKs), and
 the schema write path that replaced the ``AmenityDetail.brand`` FK.
 """
 
+from typing import Any
+
 import pytest
 from hut_services import LocationSchema
 
@@ -129,7 +131,7 @@ class TestAmenityWritePath:
     """AmenityDetail.update_or_create writes party associations (2.2)."""
 
     @staticmethod
-    def _schema(*entries: dict) -> GeoPlaceAmenityInput:
+    def _schema(*entries: dict[str, Any]) -> GeoPlaceAmenityInput:
         return GeoPlaceAmenityInput(
             name="Test Place",
             location=LocationSchema(lon=7.7343, lat=46.0234),

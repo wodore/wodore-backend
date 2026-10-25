@@ -23,12 +23,12 @@ def org() -> Organization:
 
 
 @pytest.fixture
-def pack(org):
+def pack(org: Organization):
     return SymbolCollection.objects.create(slug="fluent-emoji", source_org=org)
 
 
 @pytest.fixture
-def other_pack(org):
+def other_pack(org: Organization):
     return SymbolCollection.objects.create(slug="noto-emoji", source_org=org)
 
 
@@ -38,7 +38,7 @@ def emoji_root():
 
 
 @pytest.fixture
-def subgroup(emoji_root):
+def subgroup(emoji_root: Category):
     group = Category.objects.create(slug="travel-places", parent=emoji_root)
     return Category.objects.create(slug="place-other", parent=group)
 
@@ -64,34 +64,38 @@ class IconDataHelpers:
 
 
 class TestIconModel:
-    def test_same_slug_in_two_packs(self, pack, other_pack, subgroup):
+    def test_same_slug_in_two_packs(
+        self, pack: SymbolCollection, other_pack: SymbolCollection, subgroup: Category
+    ):
         """Spec scenario: slug `tent` exists independently in two packs."""
         fluent = Icon.objects.create(pack=pack, slug="tent", category=subgroup)
         noto = Icon.objects.create(pack=other_pack, slug="tent")
         assert fluent.pk != noto.pk
         assert Icon.objects.filter(slug="tent").count() == 2
 
-    def test_duplicate_slug_within_pack_rejected(self, pack):
+    def test_duplicate_slug_within_pack_rejected(self, pack: SymbolCollection):
         Icon.objects.create(pack=pack, slug="tent")
         # Nested atomic keeps the test transaction usable afterwards.
         with pytest.raises(IntegrityError), transaction.atomic():
             Icon.objects.create(pack=pack, slug="tent")
 
-    def test_unicode_nullable_and_indexed(self, pack):
+    def test_unicode_nullable_and_indexed(self, pack: SymbolCollection):
         icon = Icon.objects.create(pack=pack, slug="brand-logo")
         assert icon.unicode is None
 
-    def test_root_category_rejected(self, pack, emoji_root):
+    def test_root_category_rejected(self, pack: SymbolCollection, emoji_root: Category):
         """Design D4: the category FK must reference subgroups only."""
         icon = Icon(pack=pack, slug="tent", category=emoji_root)
         with pytest.raises(ValidationError):
             icon.clean()
 
-    def test_subgroup_category_accepted(self, pack, subgroup):
+    def test_subgroup_category_accepted(
+        self, pack: SymbolCollection, subgroup: Category
+    ):
         icon = Icon(pack=pack, slug="tent", category=subgroup)
         icon.clean()  # no raise
 
-    def test_i18n_name(self, pack):
+    def test_i18n_name(self, pack: SymbolCollection):
         icon = Icon.objects.create(pack=pack, slug="tent", name="tent")
         icon.i18n = {"name_de": "Zelt"}
         icon.save()
@@ -101,7 +105,7 @@ class TestIconModel:
 
 
 class TestIconKeywordModel:
-    def test_unique_icon_locale_folded(self, pack):
+    def test_unique_icon_locale_folded(self, pack: SymbolCollection):
         icon = Icon.objects.create(pack=pack, slug="tent")
         IconKeyword.objects.create(
             icon=icon, locale="de", keyword="Zelt", keyword_folded="zelt"

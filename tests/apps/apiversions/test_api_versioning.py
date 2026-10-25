@@ -6,10 +6,14 @@ snapshot infrastructure.
 """
 
 from datetime import date
+from typing import Any
 
 import pytest
 
+from django.test import Client
+
 from server.apps.apiversions import registry
+from server.apps.apiversions.registry import VersionChange
 from server.apps.apiversions.transforms import each, feature_properties
 
 
@@ -74,13 +78,15 @@ class TestVersionResolution:
     """api-versioning spec: Version selection."""
 
     @pytest.mark.django_db
-    def test_no_version_serves_latest_with_echo(self, seed_data, client):
+    def test_no_version_serves_latest_with_echo(
+        self, seed_data: dict[str, int], client: Client
+    ):
         response = client.get("/v1/huts/huts", {"limit": 1})
         assert response.status_code == 200
         assert response["Api-Version"] == registry.current_version()
 
     @pytest.mark.django_db
-    def test_header_resolves_version(self, seed_data, client):
+    def test_header_resolves_version(self, seed_data: dict[str, int], client: Client):
         version = registry.current_version()
         response = client.get(
             "/v1/huts/huts", {"limit": 1}, headers={"Api-Version": version}
@@ -89,14 +95,16 @@ class TestVersionResolution:
         assert response["Api-Version"] == version
 
     @pytest.mark.django_db
-    def test_query_parameter_resolves_version(self, seed_data, client):
+    def test_query_parameter_resolves_version(
+        self, seed_data: dict[str, int], client: Client
+    ):
         version = registry.current_version()
         response = client.get("/v1/huts/huts", {"limit": 1, "api_version": version})
         assert response.status_code == 200
         assert response["Api-Version"] == version
 
     @pytest.mark.django_db
-    def test_header_and_query_agree(self, seed_data, client):
+    def test_header_and_query_agree(self, seed_data: dict[str, int], client: Client):
         version = registry.current_version()
         response = client.get(
             "/v1/huts/huts",
@@ -106,7 +114,9 @@ class TestVersionResolution:
         assert response.status_code == 200
 
     @pytest.mark.django_db
-    def test_header_query_conflict_is_400(self, seed_data, client):
+    def test_header_query_conflict_is_400(
+        self, seed_data: dict[str, int], client: Client
+    ):
         response = client.get(
             "/v1/huts/huts",
             {"limit": 1, "api_version": "2098-01-01"},
@@ -117,7 +127,9 @@ class TestVersionResolution:
 
     @pytest.mark.django_db
     @pytest.mark.parametrize("raw", ["2099-13-01", "not-a-date", "2026-1-1"])
-    def test_unknown_version_is_400(self, seed_data, client, raw):
+    def test_unknown_version_is_400(
+        self, seed_data: dict[str, int], client: Client, raw: str
+    ):
         response = client.get(
             "/v1/huts/huts", {"limit": 1}, headers={"Api-Version": raw}
         )
@@ -125,7 +137,9 @@ class TestVersionResolution:
         assert response.json()["code"] == "validation_error"
 
     @pytest.mark.django_db
-    def test_version_not_in_registry_is_400(self, seed_data, client):
+    def test_version_not_in_registry_is_400(
+        self, seed_data: dict[str, int], client: Client
+    ):
         response = client.get(
             "/v1/huts/huts", {"limit": 1}, headers={"Api-Version": "2025-01-01"}
         )
@@ -137,7 +151,9 @@ class TestVersioningScope:
     """api-versioning spec: Versioning scope."""
 
     @pytest.mark.django_db
-    def test_svg_redirect_ignores_bogus_version(self, seed_data, client):
+    def test_svg_redirect_ignores_bogus_version(
+        self, seed_data: dict[str, int], client: Client
+    ):
         response = client.get(
             "/v1/symbols/detailed/mountain.svg",
             headers={"Api-Version": "bogus"},
@@ -148,13 +164,17 @@ class TestVersioningScope:
         assert "Api-Version" not in response.headers
 
     @pytest.mark.django_db
-    def test_version_endpoint_ignores_bogus_version(self, seed_data, client):
+    def test_version_endpoint_ignores_bogus_version(
+        self, seed_data: dict[str, int], client: Client
+    ):
         response = client.get("/v1/version", headers={"Api-Version": "bogus"})
         assert response.status_code == 200
         assert "Api-Version" not in response.headers
 
     @pytest.mark.django_db
-    def test_schema_paths_validate_but_no_echo(self, seed_data, client):
+    def test_schema_paths_validate_but_no_echo(
+        self, seed_data: dict[str, int], client: Client
+    ):
         version = registry.current_version()
         response = client.get("/v1/openapi.json", {"api_version": version})
         assert response.status_code == 200
@@ -166,7 +186,10 @@ class TestLifecycle:
 
     @pytest.mark.django_db
     def test_deprecated_version_gets_headers(
-        self, seed_data, client, deprecated_old_version
+        self,
+        seed_data: dict[str, int],
+        client: Client,
+        deprecated_old_version: VersionChange,
     ):
         response = client.get(
             "/v1/huts/huts",
@@ -179,7 +202,12 @@ class TestLifecycle:
         assert 'rel="deprecation"' in response["Link"]
 
     @pytest.mark.django_db
-    def test_sunset_version_is_410(self, seed_data, client, sunset_old_version):
+    def test_sunset_version_is_410(
+        self,
+        seed_data: dict[str, int],
+        client: Client,
+        sunset_old_version: VersionChange,
+    ):
         response = client.get(
             "/v1/huts/huts",
             {"limit": 1},
@@ -192,13 +220,18 @@ class TestLifecycle:
 
     @pytest.mark.django_db
     def test_version_endpoint_reachable_for_sunset_versions(
-        self, seed_data, client, sunset_old_version
+        self,
+        seed_data: dict[str, int],
+        client: Client,
+        sunset_old_version: VersionChange,
     ):
         response = client.get("/v1/version")
         assert response.status_code == 200
 
     @pytest.mark.django_db
-    def test_bookings_endpoints_announce_sunset(self, seed_data, client):
+    def test_bookings_endpoints_announce_sunset(
+        self, seed_data: dict[str, int], client: Client
+    ):
         response = client.get("/v1/huts/bookings", {"slugs": "nothing"})
         # The booking service is unavailable in tests (503) — the headers
         # prove the middleware wiring regardless of status.
@@ -208,7 +241,9 @@ class TestLifecycle:
         assert 'rel="deprecation"' in response["Link"]
 
     @pytest.mark.django_db
-    def test_bookings_endpoints_410_after_sunset(self, seed_data, client, monkeypatch):
+    def test_bookings_endpoints_410_after_sunset(
+        self, seed_data: dict[str, int], client: Client, monkeypatch: pytest.MonkeyPatch
+    ):
         from datetime import date as date_cls
 
         monkeypatch.setitem(
@@ -230,7 +265,10 @@ class TestBackwardTransforms:
 
     @pytest.mark.django_db
     def test_response_downgrade_regular_endpoint(
-        self, seed_data, client, pinned_old_version
+        self,
+        seed_data: dict[str, int],
+        client: Client,
+        pinned_old_version: VersionChange,
     ):
         old = max(v for v in registry.versions() if v != pinned_old_version.version)
         assert old != pinned_old_version.version
@@ -246,7 +284,10 @@ class TestBackwardTransforms:
 
     @pytest.mark.django_db
     def test_response_downgrade_keeps_content_length_truthful(
-        self, seed_data, client, pinned_old_version
+        self,
+        seed_data: dict[str, int],
+        client: Client,
+        pinned_old_version: VersionChange,
     ):
         """2026-10-05 staging wedge: CommonMiddleware (inner) stamps
         Content-Length on the full body; the outer version downgrade then
@@ -272,7 +313,10 @@ class TestBackwardTransforms:
 
     @pytest.mark.django_db
     def test_response_downgrade_skips_bodyless_responses(
-        self, seed_data, client, pinned_old_version
+        self,
+        seed_data: dict[str, int],
+        client: Client,
+        pinned_old_version: VersionChange,
     ):
         """ETag revalidations (304) have a JSON Content-Type but an empty
         body — the downgrade must not try to decode (or rewrite) them."""
@@ -297,7 +341,10 @@ class TestBackwardTransforms:
 
     @pytest.mark.django_db
     def test_response_downgrade_direct_write_geojson(
-        self, seed_data, client, pinned_old_version
+        self,
+        seed_data: dict[str, int],
+        client: Client,
+        pinned_old_version: VersionChange,
     ):
         old = max(v for v in registry.versions() if v != pinned_old_version.version)
         response = client.get("/v1/huts/huts.geojson", headers={"Api-Version": old})
@@ -312,7 +359,10 @@ class TestBackwardTransforms:
 
     @pytest.mark.django_db
     def test_response_downgrade_direct_write_availability_geojson(
-        self, seed_data, client, pinned_old_version
+        self,
+        seed_data: dict[str, int],
+        client: Client,
+        pinned_old_version: VersionChange,
     ):
         """The second direct-write endpoint (availability/{date}.geojson)
         must honor transforms — deleting the explicit helper call in
@@ -341,7 +391,7 @@ class TestBackwardTransforms:
     def test_transform_helpers_defensive(self):
         from server.apps.apiversions.transforms import downgrade_response
 
-        def downgrade_capacity(hut):
+        def downgrade_capacity(hut: dict[str, Any]):
             """Defensive rename: only converts when the source key is
             present (design.md D4 rules)."""
             if "capacity_open" in hut:
@@ -366,7 +416,7 @@ class TestBackwardTransforms:
         finally:
             registry.REGISTRY.remove(change)
 
-    def test_changes_chain_in_reverse_order(self, pinned_old_version):
+    def test_changes_chain_in_reverse_order(self, pinned_old_version: VersionChange):
         from server.apps.apiversions.registry import changes_after
 
         ordered = [c.version for c in changes_after("2026-10-01")]
@@ -399,7 +449,9 @@ class TestCaching:
     """api-versioning spec: Caching correctness."""
 
     @pytest.mark.django_db
-    def test_vary_on_header_resolved_response(self, seed_data, client):
+    def test_vary_on_header_resolved_response(
+        self, seed_data: dict[str, int], client: Client
+    ):
         response = client.get(
             "/v1/huts/huts",
             {"limit": 1},
@@ -408,14 +460,16 @@ class TestCaching:
         assert "Api-Version" in response["Vary"]
 
     @pytest.mark.django_db
-    def test_vary_on_unpinned_response(self, seed_data, client):
+    def test_vary_on_unpinned_response(self, seed_data: dict[str, int], client: Client):
         """Stored unpinned (current-version) responses must not be reused
         for later pinned requests on the same URL (review P2, RFC 9111)."""
         response = client.get("/v1/huts/huts", {"limit": 1})
         assert "Api-Version" in response.get("Vary", "")
 
     @pytest.mark.django_db
-    def test_no_vary_on_query_resolved_response(self, seed_data, client):
+    def test_no_vary_on_query_resolved_response(
+        self, seed_data: dict[str, int], client: Client
+    ):
         response = client.get(
             "/v1/huts/huts",
             {"limit": 1, "api_version": registry.current_version()},
@@ -424,7 +478,12 @@ class TestCaching:
         assert "Api-Version" not in response.get("Vary", "")
 
     @pytest.mark.django_db
-    def test_etag_differs_across_versions(self, seed_data, client, pinned_old_version):
+    def test_etag_differs_across_versions(
+        self,
+        seed_data: dict[str, int],
+        client: Client,
+        pinned_old_version: VersionChange,
+    ):
         old = max(v for v in registry.versions() if v != pinned_old_version.version)
         old_response = client.get("/v1/huts/huts.geojson", headers={"Api-Version": old})
         new_response = client.get("/v1/huts/huts.geojson")
@@ -438,7 +497,13 @@ class TestCaching:
             ("/v1/huts/huts", {"Api-Version": "bogus"}),  # 400 invalid
         ],
     )
-    def test_error_responses_keep_cors_headers(self, seed_data, client, path, headers):
+    def test_error_responses_keep_cors_headers(
+        self,
+        seed_data: dict[str, int],
+        client: Client,
+        path: str,
+        headers: dict[str, str],
+    ):
         """The middleware's 400/410 responses unwind through
         CorsMiddleware, so browser clients still see CORS headers
         (design.md D5.4 / review P2)."""
@@ -456,7 +521,12 @@ class TestCaching:
             )
 
     @pytest.mark.django_db
-    def test_sunset_410_keeps_cors_headers(self, seed_data, client, sunset_old_version):
+    def test_sunset_410_keeps_cors_headers(
+        self,
+        seed_data: dict[str, int],
+        client: Client,
+        sunset_old_version: VersionChange,
+    ):
         from django.test import override_settings
 
         with override_settings(CORS_ALLOWED_ORIGINS=["https://app.example.com"]):
@@ -478,7 +548,9 @@ class TestVersionDiscovery:
     """api-versioning spec: Version discovery."""
 
     @pytest.mark.django_db
-    def test_version_endpoint_has_api_block(self, seed_data, client):
+    def test_version_endpoint_has_api_block(
+        self, seed_data: dict[str, int], client: Client
+    ):
         response = client.get("/v1/version")
         assert response.status_code == 200
         data = response.json()
@@ -493,7 +565,10 @@ class TestVersionDiscovery:
 
     @pytest.mark.django_db
     def test_deprecated_version_listed_with_sunset(
-        self, seed_data, client, deprecated_old_version
+        self,
+        seed_data: dict[str, int],
+        client: Client,
+        deprecated_old_version: VersionChange,
     ):
         data = client.get("/v1/version").json()
         entry = next(
@@ -509,7 +584,7 @@ class TestCors:
     """api-versioning spec: Cross-origin access to version headers."""
 
     @pytest.mark.django_db
-    def test_preflight_allows_api_version_header(self, client):
+    def test_preflight_allows_api_version_header(self, client: Client):
         from django.test import override_settings
 
         with override_settings(CORS_ALLOWED_ORIGINS=["https://app.example.com"]):
@@ -537,7 +612,7 @@ class TestCors:
 class TestRegistryIntegrity:
     """api-versioning spec: Registry integrity."""
 
-    def test_bogus_operation_id_fails_check(self, monkeypatch):
+    def test_bogus_operation_id_fails_check(self, monkeypatch: pytest.MonkeyPatch):
         from server.apps.apiversions import checks as av_checks
 
         bogus = registry.VersionChange(
@@ -553,7 +628,9 @@ class TestRegistryIntegrity:
 
         assert av_checks.check_registry_operation_ids() == []
 
-    def test_url_name_without_operation_id_fails_check(self, monkeypatch):
+    def test_url_name_without_operation_id_fails_check(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         """A route renamed without its @modify(operation_id=...) -> E003."""
         from server.apps.apiversions import checks as av_checks
 
@@ -566,7 +643,9 @@ class TestRegistryIntegrity:
         errors = av_checks.check_url_names_match_operation_ids()
         assert any(e.id == "apiversions.E003" for e in errors)
 
-    def test_operation_id_without_url_name_fails_check(self, monkeypatch):
+    def test_operation_id_without_url_name_fails_check(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         """An operationId the resolver cannot produce -> versioning dead (E004)."""
         from server.apps.apiversions import checks as av_checks
 
@@ -604,7 +683,7 @@ class TestStaticMapFallbackVersioning:
     (the downgrade strips is_fallback features)."""
 
     @pytest.fixture(autouse=True)
-    def _isolated_cache(self, monkeypatch):
+    def _isolated_cache(self, monkeypatch: pytest.MonkeyPatch):
         from uuid import uuid4
 
         from django.core.cache.backends.locmem import LocMemCache
@@ -615,7 +694,7 @@ class TestStaticMapFallbackVersioning:
         monkeypatch.setattr(irc, "_cache", lambda: cache)
 
     @pytest.fixture(autouse=True)
-    def _no_images(self, db):
+    def _no_images(self, db: None):
         from server.apps.geometries.models import GeoPlaceImageAssociation
         from server.apps.huts.models import HutImageAssociation
 
@@ -623,7 +702,7 @@ class TestStaticMapFallbackVersioning:
         GeoPlaceImageAssociation.objects.all().delete()
 
     @pytest.fixture
-    def hut_slug(self, seed_data):
+    def hut_slug(self, seed_data: dict[str, int]):
         from server.apps.huts.models import Hut
 
         slug = (
@@ -634,14 +713,16 @@ class TestStaticMapFallbackVersioning:
         assert slug, "seed data provides no public hut"
         return slug
 
-    def test_current_version_includes_fallback(self, hut_slug, client):
+    def test_current_version_includes_fallback(self, hut_slug: str, client: Client):
         response = client.get(f"/v1/geo/images/hut/{hut_slug}", {"sources": "wodore"})
         assert response.status_code == 200
         assert response["Api-Version"] == "unreleased"
         features = response.json()["features"]
         assert [f["properties"]["is_fallback"] for f in features] == [True]
 
-    def test_pinned_previous_version_strips_fallback(self, hut_slug, client):
+    def test_pinned_previous_version_strips_fallback(
+        self, hut_slug: str, client: Client
+    ):
         response = client.get(
             f"/v1/geo/images/hut/{hut_slug}",
             {"sources": "wodore"},
@@ -653,7 +734,9 @@ class TestStaticMapFallbackVersioning:
         assert body["features"] == []
         assert body["metadata"]["total"] == 0
 
-    def test_pinned_previous_version_strips_fallback_place(self, seed_data, client):
+    def test_pinned_previous_version_strips_fallback_place(
+        self, seed_data: dict[str, int], client: Client
+    ):
         from server.apps.geometries.models import GeoPlace
 
         place = GeoPlace.objects.filter(is_active=True, is_public=True).first()

@@ -106,8 +106,11 @@ def _narrow_item(
 
 
 def _narrow_object(
-    obj: dict, spec: str, type_name: str, required: set[str] | None = None
-) -> dict:
+    obj: dict[str, Any],
+    spec: str,
+    type_name: str,
+    required: set[str] | None = None,
+) -> dict[str, Any]:
     """Narrow a flat object to the selected fields (required kept)."""
     if spec == "__all__":
         return obj

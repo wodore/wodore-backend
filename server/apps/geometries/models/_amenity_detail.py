@@ -176,7 +176,7 @@ class AmenityDetail(GeoPlaceDetailBase):
         ]
         if 1 <= month <= 12:
             if not self.opening_months:
-                self.opening_months = {}
+                self.opening_months = dict[str, str]()
             self.opening_months[month_names[month - 1]] = status
             self.save(update_fields=["opening_months"])
 

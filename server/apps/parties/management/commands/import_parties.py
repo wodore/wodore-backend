@@ -5,9 +5,11 @@ huts app retires, so a re-runnable command beats a one-shot data
 migration (design decision 5).
 """
 
+from typing import Any, override
+
 from django_admin_runner import register_command
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandParser
 
 from server.apps.owners.models import Owner
 from server.apps.parties.models import Party
@@ -18,14 +20,16 @@ from server.apps.parties.services import merge_owner
 class Command(BaseCommand):
     help = "Merge owners.Owner rows into parties.Party (idempotent)"
 
-    def add_arguments(self, parser):
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--dry-run",
             action="store_true",
             help="Report what would be merged without writing",
         )
 
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         dry_run = options["dry_run"]
         owners = Owner.objects.all().order_by("slug")
 

@@ -20,6 +20,7 @@ cached independently. When places/POIs get public pages later, add a
 
 from __future__ import annotations
 
+from datetime import datetime
 from xml.sax.saxutils import escape
 
 from django.conf import settings
@@ -46,7 +47,7 @@ def frontend_url(path: str = "") -> str:
     return f"{base}/{path.lstrip('/')}"
 
 
-def _url(loc: str, lastmod=None) -> str:
+def _url(loc: str, lastmod: datetime | None = None) -> str:
     lastmod_xml = f"<lastmod>{lastmod:%Y-%m-%d}</lastmod>" if lastmod else ""
     return f"<url><loc>{escape(loc)}</loc>{lastmod_xml}</url>"
 
@@ -80,7 +81,7 @@ def _lang_alternates(bare_path: str) -> str:
     return "".join(links)
 
 
-def _url_with_alternates(bare_path: str, lastmod=None) -> str:
+def _url_with_alternates(bare_path: str, lastmod: datetime | None = None) -> str:
     """One <url> entry per path: loc is the default language's prefixed
     URL; the cluster links every language variant."""
     lastmod_xml = f"<lastmod>{lastmod:%Y-%m-%d}</lastmod>" if lastmod else ""

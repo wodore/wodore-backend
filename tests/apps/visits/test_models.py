@@ -5,6 +5,7 @@ buffer-then-flush upserts per (content_type, object_id, day) for both
 content types, operator/UA guard, enqueue-only behavior, popular_places.
 """
 
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -13,11 +14,12 @@ from tests.apps.geometries.test_image_pinning import _result
 from tests.helpers import PrefixedClient as TestClient
 
 from django.core.cache import cache
-from django.test import RequestFactory
+from django.test import Client, RequestFactory
 from django.utils import timezone as djtz
 
 from server.apps.geometries import image_response_cache as irc
 from server.apps.geometries.pinning import pin_place_images, popular_places
+from server.apps.huts.models import Hut
 from server.apps.visits import models as vc
 from server.apps.visits.models import (
     ObjectVisitDay,
@@ -29,7 +31,7 @@ pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture(autouse=True)
-def _isolated_response_cache(monkeypatch):
+def _isolated_response_cache(monkeypatch: pytest.MonkeyPatch):
     from uuid import uuid4
 
     from django.core.cache.backends.locmem import LocMemCache
@@ -43,7 +45,7 @@ def _isolated_default_cache():
 
 
 @pytest.fixture
-def hut(seed_data):
+def hut(seed_data: dict[str, int]):
     from server.apps.huts.models import Hut, HutImageAssociation
 
     hut = Hut.objects.filter(is_active=True, is_public=True).first()
@@ -52,7 +54,9 @@ def hut(seed_data):
     return hut
 
 
-def _request(ua="Mozilla/5.0 TestBrowser", ip="203.0.113.1", **params):
+def _request(
+    ua: str = "Mozilla/5.0 TestBrowser", ip: str = "203.0.113.1", **params: Any
+):
     rf = RequestFactory()
     return rf.get(
         "/v1/geo/images/hut/x",
@@ -63,7 +67,7 @@ def _request(ua="Mozilla/5.0 TestBrowser", ip="203.0.113.1", **params):
     )
 
 
-def _buffer_key(obj) -> str:
+def _buffer_key(obj: Any) -> str:
     """Reconstruct the buffer key record_visit used for obj today."""
     from django.contrib.contenttypes.models import ContentType
     from django.utils import timezone
@@ -73,7 +77,7 @@ def _buffer_key(obj) -> str:
     return f"visitcount:buffer:{ct.pk}:{obj.pk}:{day}"
 
 
-def _flush(objs) -> int:
+def _flush(objs: list[Any]) -> int:
     """Flush the buffer keys for objs (as the q2 task would)."""
     flushed = 0
     for obj in objs:
@@ -85,13 +89,13 @@ def _flush(objs) -> int:
 
 
 class TestRecordVisit:
-    def test_first_hit_buffers(self, hut):
+    def test_first_hit_buffers(self, hut: Hut):
         enqueued = []
         import django_q.tasks as qtasks
 
         original = qtasks.async_task
 
-        def _fake_async_task(func, *args, **kwargs):
+        def _fake_async_task(func: Any, *args: Any, **kwargs: Any):
             enqueued.append(func)
 
         qtasks.async_task = _fake_async_task
@@ -102,13 +106,15 @@ class TestRecordVisit:
         assert enqueued == ["server.apps.visits.models.flush_visit_counters"]
         assert ObjectVisitDay.objects.count() == 0  # no DB write in-request
 
-    def test_repeat_within_window_counts_once(self, hut):
+    def test_repeat_within_window_counts_once(self, hut: Hut):
         request = _request()
         assert record_visit(request, hut) is True
         assert record_visit(_request(), hut) is False  # same visitor+ip
         assert record_visit(_request(ip="198.51.100.9"), hut) is True  # other visitor
 
-    def test_different_visitor_dedup_is_per_object(self, hut, seed_data):
+    def test_different_visitor_dedup_is_per_object(
+        self, hut: Hut, seed_data: dict[str, int]
+    ):
         from server.apps.geometries.models import GeoPlace
 
         place = GeoPlace.objects.filter(is_active=True, is_public=True).first()
@@ -116,18 +122,20 @@ class TestRecordVisit:
         assert record_visit(request, hut) is True
         assert record_visit(_request(), place) is True  # same visitor, new object
 
-    def test_operator_and_prefetch_skipped(self, hut):
+    def test_operator_and_prefetch_skipped(self, hut: Hut):
         assert record_visit(_request(update_cache="true"), hut) is False
         assert record_visit(_request(ua="python-requests/2.31"), hut) is False
         assert record_visit(_request(ua="curl/8.1"), hut) is False
 
-    def test_never_raises(self, hut, monkeypatch):
+    def test_never_raises(self, hut: Hut, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr(vc, "_cache", MagicMock(side_effect=RuntimeError("boom")))
         assert record_visit(_request(), hut) is False  # swallowed
 
 
 class TestFlush:
-    def test_flush_upserts_one_row_per_object_day(self, hut, seed_data):
+    def test_flush_upserts_one_row_per_object_day(
+        self, hut: Hut, seed_data: dict[str, int]
+    ):
         from server.apps.geometries.models import GeoPlace
 
         place = GeoPlace.objects.filter(is_active=True, is_public=True).first()
@@ -144,7 +152,7 @@ class TestFlush:
         place_row = rows.get(object_id=place.pk, content_type__model="geoplace")  # type: ignore  # dynamic attr: plugin-less inference gap
         assert place_row.count == 1
 
-    def test_flush_accumulates_across_flushes(self, hut):
+    def test_flush_accumulates_across_flushes(self, hut: Hut):
         record_visit(_request(ip="1.1.1.1"), hut)
         _flush([hut])
         record_visit(_request(ip="2.2.2.2"), hut)
@@ -152,7 +160,7 @@ class TestFlush:
         row = ObjectVisitDay.objects.get(object_id=hut.pk)
         assert row.count == 2
 
-    def test_timestamps_present(self, hut):
+    def test_timestamps_present(self, hut: Hut):
         record_visit(_request(), hut)
         _flush([hut])
         row = ObjectVisitDay.objects.get(object_id=hut.pk)
@@ -160,7 +168,7 @@ class TestFlush:
 
 
 class TestPopularPlaces:
-    def test_sums_window_and_orders(self, seed_data):
+    def test_sums_window_and_orders(self, seed_data: dict[str, int]):
         from django.contrib.contenttypes.models import ContentType
 
         from server.apps.geometries.models import GeoPlace
@@ -182,23 +190,29 @@ class TestPopularPlaces:
 class TestEndpointCounting:
     """Visit counting on the hut detail endpoint, not the images endpoint."""
 
-    def test_hut_detail_counts_visit(self, hut, client, monkeypatch):
+    def test_hut_detail_counts_visit(
+        self, hut: Hut, client: Client, monkeypatch: pytest.MonkeyPatch
+    ):
         calls = []
-        monkeypatch.setattr(
-            "django_q.tasks.async_task",
-            lambda func, *a, **kw: calls.append(func),
-        )
+
+        def _async_task(func: Any, *args: Any, **kwargs: Any) -> None:
+            calls.append(func)
+
+        monkeypatch.setattr("django_q.tasks.async_task", _async_task)
         response = client.get(f"/v1/huts/{hut.slug}")
         assert response.status_code == 200
         assert calls  # flush task enqueued via the buffer
         assert ObjectVisitDay.objects.count() == 0  # still no in-request write
 
-    def test_images_endpoint_does_not_count(self, hut, monkeypatch):
+    def test_images_endpoint_does_not_count(
+        self, hut: Hut, monkeypatch: pytest.MonkeyPatch
+    ):
         calls = []
-        monkeypatch.setattr(
-            "django_q.tasks.async_task",
-            lambda func, *a, **kw: calls.append(func),
-        )
+
+        def _async_task(func: Any, *args: Any, **kwargs: Any) -> None:
+            calls.append(func)
+
+        monkeypatch.setattr("django_q.tasks.async_task", _async_task)
         pin_place_images(hut, [_result(score=80)])
         client = TestClient("/v1/geo/images")
         response = client.get(f"/hut/{hut.slug}?radius=50&lang=en&limit=10")

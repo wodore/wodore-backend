@@ -38,7 +38,7 @@ def deps(c: Ctx):
 
 @task
 def types(c: Ctx):
-    """Static type checking (pyrefly, baseline-gated: only new errors fail)"""
+    """Static type checking (pyrefly, full-strict: every error fails)"""
     header(doc())
     c.run("uv run pyrefly check", echo=True, pty=True)
 

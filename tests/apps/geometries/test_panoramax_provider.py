@@ -8,14 +8,16 @@ beyond the requested limit to keep approved images reachable behind
 robot-import floods. These tests pin that behavior offline.
 """
 
+from typing import Any
+
 import pytest
 
 from server.apps.geometries.providers.panoramax import PanoramaxProvider
 
 
-def _stac_feature(producer: str | None) -> dict:
+def _stac_feature(producer: str | None) -> dict[str, Any]:
     """Minimal STAC item as returned by /api/search (official instance)."""
-    properties: dict = {
+    properties: dict[str, Any] = {
         "datetime": "2024-07-29T13:53:32+00:00",
         "license": "CC-BY-SA-4.0",
     }
@@ -60,7 +62,7 @@ class TestFetchLimit:
             (1000, 500),  # capped at the API maximum
         ],
     )
-    def test_fetch_limit_is_clamped(self, requested, expected):
+    def test_fetch_limit_is_clamped(self, requested: int, expected: int):
         assert PanoramaxProvider().fetch_limit_for(requested) == expected
 
 
@@ -72,7 +74,7 @@ class TestProducerAllowList:
             "MapComplete",  # compared case-insensitively
         ],
     )
-    def test_approved_producer_is_parsed(self, producer):
+    def test_approved_producer_is_parsed(self, producer: str | None):
         result = PanoramaxProvider()._parse_stac_item(
             _stac_feature(producer), 46.5, 7.5
         )
@@ -96,7 +98,7 @@ class TestProducerAllowList:
             "",
         ],
     )
-    def test_non_approved_producer_is_skipped_entirely(self, producer):
+    def test_non_approved_producer_is_skipped_entirely(self, producer: str | None):
         result = PanoramaxProvider()._parse_stac_item(
             _stac_feature(producer), 46.5, 7.5
         )

@@ -243,7 +243,7 @@ class _CategoryPage:
 class _SparqlPage:
     """Canned Wikidata SPARQL bindings for the direct-QID path."""
 
-    bindings: list[dict] = []
+    bindings: list[dict[str, Any]] = []
 
 
 class _DispatchingFakeClient:
@@ -258,7 +258,7 @@ class _DispatchingFakeClient:
     async def __aexit__(self, *exc: object) -> None:
         pass
 
-    async def get(self, url: str, params: dict) -> _Response:
+    async def get(self, url: str, params: dict[str, Any]) -> _Response:
         if "query" in params:  # Wikidata SPARQL
             return _Response({"results": {"bindings": _SparqlPage.bindings}})
         if params.get("list") == "categorymembers":
@@ -276,7 +276,7 @@ class _DispatchingFakeClient:
         if meta is None:
             return _Response({"query": {"pages": {"-1": {"title": title}}}})
         lat, lon = meta
-        page: dict = {
+        page: dict[str, Any] = {
             "title": title,
             "imageinfo": [
                 {
@@ -305,7 +305,7 @@ class _DispatchingHttpx:
 class TestCategoryImageDistance:
     """Category members: drop far geotags, keep untagged, true distances."""
 
-    def _fetch(self, members, lat=46.5, lon=7.5):
+    def _fetch(self, members: list[Any], lat: float = 46.5, lon: float = 7.5):
         _CategoryPage.members = members
         provider = WikimediaCommonsProvider()
         return asyncio.run(

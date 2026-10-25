@@ -27,7 +27,7 @@ import dataclasses
 import logging
 import threading
 import time
-from typing import Any
+from typing import Any, override
 
 from health_check.contrib.db_heartbeat.backends import DatabaseHeartBeatCheck
 from health_check.exceptions import ServiceUnavailable
@@ -114,7 +114,8 @@ class PoolStatsDatabaseCheck(DatabaseHeartBeatCheck):
     (``POSTGRES_POOL`` unset — ``connections[alias].pool`` is ``None``).
     """
 
-    def check_status(self):
+    @override
+    def check_status(self) -> None:
         try:
             super().check_status()
         except BaseException:
@@ -156,7 +157,8 @@ class FastDatabaseReadinessCheck(DatabaseHeartBeatCheck):
 
     budget_seconds: float = 2.0
 
-    def check_status(self):
+    @override
+    def check_status(self) -> None:
         pool = self._pool_or_none()
         if pool is not None:
             self._check_via_pool(pool)
@@ -174,7 +176,7 @@ class FastDatabaseReadinessCheck(DatabaseHeartBeatCheck):
         except Exception:  # pragma: no cover - fall back to the heartbeat
             return None
 
-    def _check_via_pool(self, pool) -> None:
+    def _check_via_pool(self, pool: Any) -> None:
         # Django creates the pool with open=False and opens it lazily before
         # its first getconn (backends/postgresql: "If nothing else has opened
         # the pool, open it now"). A freshly booted worker whose first
@@ -213,7 +215,7 @@ class FastDatabaseReadinessCheck(DatabaseHeartBeatCheck):
             raise ServiceUnavailable("readiness query returned an unexpected result")
 
     def _check_via_thread(self) -> None:
-        outcome: dict = {}
+        outcome: dict[str, Any] = {}
 
         def _heartbeat() -> None:
             try:
