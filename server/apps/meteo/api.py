@@ -27,8 +27,9 @@ from server.apps.api.controller import (
     raise_not_found,
 )
 from server.apps.api.projection import field_selected
-from server.apps.api.query import sparse_fields_query
+from server.apps.api.query import SparseFieldsQuery, sparse_fields_query
 from server.apps.categories.models import Category
+from server.apps.symbols.models import Symbol
 from server.apps.translations import LanguageQuery
 
 from .models import WeatherCode, WeatherCodeSymbol, WeatherCodeSymbolCollection
@@ -149,7 +150,7 @@ def _wc_version(request: HttpRequest, **_: Any) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _symbol_obj(request: HttpRequest, symbol) -> dict | None:
+def _symbol_obj(request: HttpRequest, symbol: Symbol | None) -> dict[str, Any] | None:
     """Build the full symbol object (slug + absolute URL)."""
     if symbol is None:
         return None
@@ -159,11 +160,11 @@ def _symbol_obj(request: HttpRequest, symbol) -> dict | None:
     return {"slug": symbol.slug, "url": url}
 
 
-def _category_obj(request: HttpRequest, category: Category) -> dict | None:
+def _category_obj(request: HttpRequest, category: Category) -> dict[str, Any] | None:
     """Build the full category object."""
     if category is None:
         return None
-    data: dict = {
+    data: dict[str, Any] = {
         "slug": category.slug,
         "name": category.name_i18n,  # noqa: WPS308  # modeltranslation
     }
@@ -185,7 +186,7 @@ def _category_obj(request: HttpRequest, category: Category) -> dict | None:
     return data
 
 
-def _collection_obj(code_symbol: WeatherCodeSymbol) -> dict | None:
+def _collection_obj(code_symbol: WeatherCodeSymbol) -> dict[str, Any] | None:
     """Build the full collection object."""
     if code_symbol is None:
         return None
@@ -199,9 +200,9 @@ def build_weather_code_full(
     weather_code: WeatherCode,
     code_symbol: WeatherCodeSymbol | None,
     request: HttpRequest,
-) -> dict:
+) -> dict[str, Any]:
     """Build the full weather code dict (all fields, objects not slugs)."""
-    data: dict = {
+    data: dict[str, Any] = {
         "code": weather_code.code,
         "slug": weather_code.slug,
         "description_day": weather_code.description_day_i18n,  # noqa: WPS308
@@ -216,7 +217,9 @@ def build_weather_code_full(
     return data
 
 
-def project_meteo_fields(data: dict, parsed_query, request: HttpRequest) -> dict:
+def project_meteo_fields(
+    data: dict[str, Any], parsed_query: SparseFieldsQuery, request: HttpRequest
+) -> dict[str, Any]:
     """Apply fields[TYPE] projection to a weather code dict.
 
     Symbols are special: symbol_day/symbol_night are separate fields
@@ -411,7 +414,7 @@ class WeatherCodeController(ApiController):
         self,
         parsed_path: Path[WeatherCodePath],
         parsed_query: Query[WeatherCodeQuery],
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Get a weather code.
 
         Dict for one WMO code, with symbols from the specified collection.
