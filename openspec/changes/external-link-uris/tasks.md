@@ -50,7 +50,12 @@
       `uri_kind=uri.website` (expected: all ~92k; assert the count),
       then an `AlterField` making `uri_kind` NOT NULL — backfill
       first, constraint second (the place-detail-endpoint
-      slug-invariant pattern)
+      slug-invariant pattern). Backfill as a single bulk
+      `UPDATE … SET uri_kind_id = … WHERE uri_kind_id IS NULL` (one
+      statement, sub-second on ~92k rows) — never per-row `save()`;
+      the NOT NULL alter's table scan is trivial at this size, and
+      the `url` URLField→CharField alter rewrites nothing (same
+      column type/width)
 - [ ] 2.7 Unit tests: tel/mailto storable; scheme↔kind mismatch
       rejected; unknown scheme rejected; derivation sets the kind on
       enter and re-derives it on URL change; kindless save rejected
