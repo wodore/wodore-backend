@@ -81,7 +81,7 @@ SOURCE_IDENT_CONSTRAINT = "images_image_source_ident_unique"
 class TestDuplicateSourceIdents:
     """Legacy twin Image rows must not crash pin syncs.
 
-    ``source_ident`` had no unique constraint (until images migration 0033),
+    ``source_ident`` had no unique constraint (until images migration 0034),
     so concurrent syncs — request write-through vs. django-q2 refresh vs. the
     ``geoimages_pin`` sweep — could mint twins, and every later sync then
     raised ``MultipleObjectsReturned`` in ``get_or_create`` ("get() returned
