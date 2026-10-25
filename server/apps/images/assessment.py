@@ -17,11 +17,20 @@ deduplicated gallery. The ThumbHash placeholder is computed by imagor itself
 the pixels there.
 """
 
+from __future__ import annotations
+
 import io
+from typing import TYPE_CHECKING, TypedDict
 
 import requests
 import structlog
 from PIL import Image as PILImage
+
+if TYPE_CHECKING:
+    from server.apps.geometries.models import GeoPlace
+    from server.apps.huts.models import Hut
+
+    from .models import Image
 
 logger = structlog.get_logger()
 
@@ -58,7 +67,7 @@ def hamming_distance(hash_a: str, hash_b: str) -> int:
     return (int(hash_a, 16) ^ int(hash_b, 16)).bit_count()
 
 
-def quality_metrics(image: PILImage.Image) -> dict:
+def quality_metrics(image: PILImage.Image) -> dict[str, float]:
     """Technical quality signals from numpy statistics (no ML).
 
     sharpness: variance of the Laplacian (high = sharp, low = blurred);
@@ -97,7 +106,9 @@ def quality_metrics(image: PILImage.Image) -> dict:
     }
 
 
-def technical_score(metrics: dict, width: int | None, height: int | None) -> int:
+def technical_score(
+    metrics: dict[str, float], width: int | None, height: int | None
+) -> int:
     """Combine the signals into a 0–100 score (heuristic, monotonic).
 
     Deliberately transparent: every factor is visible in the breakdown so
@@ -123,7 +134,7 @@ def technical_score(metrics: dict, width: int | None, height: int | None) -> int
     return max(0, min(100, round(score)))
 
 
-def _thumb_url(image) -> str | None:
+def _thumb_url(image: Image) -> str | None:
     """500px preview URL served by our own imagor (never the origin)."""
     from server.apps.images.transfomer import ImagorImage
 
@@ -137,7 +148,7 @@ def _thumb_url(image) -> str | None:
     )
 
 
-def _meta_url(image) -> str | None:
+def _meta_url(image: Image) -> str | None:
     """Signed imagor metadata URL computing the ThumbHash placeholder.
 
     ``GET {imagor}/{sig}/meta/filters:thumbhash()/<source>`` returns JSON
@@ -159,7 +170,7 @@ def _meta_url(image) -> str | None:
     return f"{settings.IMAGOR_URL}/{signature}/{path}"
 
 
-def _fetch_thumbhash(image) -> str | None:
+def _fetch_thumbhash(image: Image) -> str | None:
     """ThumbHash from imagor's metadata endpoint (None on any failure)."""
     url = _meta_url(image)
     if not url:
@@ -173,7 +184,7 @@ def _fetch_thumbhash(image) -> str | None:
         return None
 
 
-def assess_image(image, *, force: bool = False) -> bool:
+def assess_image(image: Image, *, force: bool = False) -> bool:
     """Compute phash + quality + thumbhash for one image; True when written.
 
     Skips images that already carry both values unless ``force``.
@@ -212,7 +223,7 @@ def assess_image(image, *, force: bool = False) -> bool:
     return True
 
 
-def assess_place_pins(place, *, force: bool = False) -> dict:
+def assess_place_pins(place: Hut | GeoPlace, *, force: bool = False) -> dict[str, int]:
     """Assess a place's pins and mark near-duplicates within the place.
 
     The strongest image of a duplicate cluster (higher quality score,
@@ -242,7 +253,7 @@ def assess_place_pins(place, *, force: bool = False) -> dict:
             -((img.image_meta or {}).get("width") or 0),
         ),
     )
-    primaries = []
+    primaries: list[Image] = []
     markers_changed = False
     for image in by_quality:
         primary = None
@@ -275,7 +286,9 @@ def assess_place_pins(place, *, force: bool = False) -> dict:
     # served set could differ, so the next visitor recomputes instead of
     # hitting the pre-assessment cache entry.
     if assessed or markers_changed:
-        invalidate(place.slug)
+        # GeoPlace.slug is temporarily nullable (migration) — a degenerate
+        # None flows into bump_version exactly as before, not skipped.
+        invalidate(place.slug)  # type: ignore  # slug: str | None (migration-nullable); None passes through unchanged
 
     stats = {"assessed": assessed, "duplicates": duplicates, "pins": len(hashed)}
     logger.info(
@@ -306,7 +319,7 @@ def assess_place_task(place_type: str, slug: str):
 PLACE_ASSESS_DEBOUNCE_S = 15 * 60
 
 
-def maybe_enqueue_place_assessment(place) -> bool:
+def maybe_enqueue_place_assessment(place: Hut | GeoPlace) -> bool:
     """Enqueue a background phash/quality assessment if pins lack one.
 
     Serve-time duplicate filtering (the Wodore provider's
@@ -377,7 +390,20 @@ THUMBHASH_VARIANT_SIZES = {
 }
 
 
-def _focal_crop_params(image):
+class _FocalCropParams(TypedDict):
+    """Focal/crop params of an image's meta, mirroring the serving pipeline."""
+
+    focal_point: str | None
+    focal_start: str | None
+    focal_stop: str | None
+    crop_start: str | None
+    crop_stop: str | None
+    is_portrait: bool
+    width: int | None
+    height: int | None
+
+
+def _focal_crop_params(image: Image) -> _FocalCropParams:
     """Focal/crop areas from image_meta, mirroring the serving pipeline.
 
     Serving semantics: thumbs crop to the focal area when defined (else the
@@ -415,7 +441,7 @@ def _focal_crop_params(image):
     }
 
 
-def _variant_meta_urls(image) -> dict[str, str]:
+def _variant_meta_urls(image: Image) -> dict[str, str]:
     """Signed imagor metadata URLs computing the thumbhash per variant."""
 
     from django.conf import settings
@@ -429,7 +455,7 @@ def _variant_meta_urls(image) -> dict[str, str]:
     params = _focal_crop_params(image)
     img = ImagorImage(source)  # FieldFile or URL string — the init maps media paths
 
-    def meta_url(target_w, target_h, *, thumb: bool):
+    def meta_url(target_w: int, target_h: int, *, thumb: bool) -> str:
         size = "x".join(
             str(v)
             for v in _calculate_constrained_size(
@@ -465,7 +491,7 @@ def _variant_meta_urls(image) -> dict[str, str]:
     return urls
 
 
-def fetch_variant_thumbhashes(image) -> dict[str, str]:
+def fetch_variant_thumbhashes(image: Image) -> dict[str, str]:
     """One thumbhash per rendering context, from imagor metadata calls."""
     hashes: dict[str, str] = {}
     for variant, url in _variant_meta_urls(image).items():
@@ -510,7 +536,7 @@ def thumbhash_to_image(thumbhash: str):
     ac_start = 6 if has_alpha else 5
     state = {"i": 0}
 
-    def decode_channel(nx, ny, scale):
+    def decode_channel(nx: int, ny: int, scale: float) -> list[float]:
         ac = []
         for cy in range(ny):
             start_cx = 0 if cy else 1
@@ -583,7 +609,9 @@ def thumbhash_to_image(thumbhash: str):
     return _put_pixels(w, h, pixels)
 
 
-def _put_pixels(w, h, pixels):
+def _put_pixels(
+    w: int, h: int, pixels: list[tuple[int, int, int, int]]
+) -> PILImage.Image:
     image = PILImage.new("RGBA", (w, h))
     image.putdata(pixels)
     return image
