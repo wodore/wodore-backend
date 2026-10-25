@@ -189,7 +189,7 @@ this same rule; no wrapper object SHALL bundle the blocks.
 
 - **WHEN** a client sends `?fields[places]=admin` before an
   admin block change has landed
-- **THEN** the response is 400 `invalid_field_name` naming the valid
+- **THEN** the response is 400 `validation_error` naming the valid
   field names, per the sparse-fieldsets conventions
 
 ### Requirement: Path resolution and caching parity

@@ -13,8 +13,10 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import Client
 
+from server.apps.categories.models import Category
 from server.apps.geometries.converters import SLUG_GRAMMAR_RE
-from server.apps.geometries.models import AmenityDetail, GeoPlace
+from server.apps.geometries.models import AmenityDetail, GeoPlace, GeoPlaceParty
+from server.apps.parties.models import Party
 
 pytestmark = [pytest.mark.django_db]
 
@@ -197,6 +199,64 @@ class TestPlaceDetailContent:
         body = response.json()
         assert body["code"] == "validation_error"
         assert "amenity" in body["detail"]  # valid names listed
+
+    def test_selecting_empty_members_is_200_with_member_absent(self, client: Client):
+        """Review finding #1: selection validity comes from the schema,
+        not from what the row carries — no spurious 400 on empty members."""
+        place = make_place()  # no categories/sources/parties, no amenity
+        response = client.get(
+            f"/v1/geo/places/{place.slug}",
+            {"fields[places]": "slug,name,categories,sources,parties,amenity"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "categories" not in data
+        assert "sources" not in data
+        assert "parties" not in data
+        assert "amenity" not in data
+
+    def test_nested_category_narrowing_keeps_required(
+        self, seed_data: dict[str, int], client: Client
+    ):
+        """Review finding #2: nested required fields stay (no pydantic 500)."""
+        place = (
+            GeoPlace.objects.filter(is_active=True, is_public=True)
+            .exclude(categories=None)
+            .first()
+        )
+        assert place is not None
+        data = client.get(
+            f"/v1/geo/places/{place.slug}",
+            {"fields[places]": "slug,categories", "fields[categories]": "slug"},
+        ).json()
+        assert data["categories"]
+        for category in data["categories"]:
+            assert "slug" in category
+            assert "name" in category  # required member kept
+
+    def test_nested_parties_narrowing(self, client: Client):
+        """Review finding #3: fields[parties] narrows on the detail route."""
+        place = make_place()
+        party = Party.objects.create(slug="test-club", name="Test Club")
+        role = Category.objects.get(slug="operator", parent__slug="role")
+        GeoPlaceParty.objects.create(geo_place=place, party=party, role=role)
+        data = client.get(
+            f"/v1/geo/places/{place.slug}",
+            {"fields[places]": "slug,parties", "fields[parties]": "slug"},
+        ).json()
+        assert len(data["parties"]) == 1
+        assert "slug" in data["parties"][0]
+        assert "role" in data["parties"][0]  # required member kept
+
+    def test_lang_variants_cache_separately(self, client: Client):
+        """Task 5.5: language variants must never mix through cache_page."""
+        place = make_place(name="Test Berg", name_fr="Test Montagne")
+        default = client.get(f"/v1/geo/places/{place.slug}")
+        french = client.get(f"/v1/geo/places/{place.slug}", {"lang": "fr"})
+        default_again = client.get(f"/v1/geo/places/{place.slug}")
+        assert default.json()["name"] == "Test Berg"
+        assert french.json()["name"] == "Test Montagne"
+        assert default_again.json()["name"] == "Test Berg"
 
 
 class TestSlugOnlyIdentifiers:
