@@ -22,7 +22,7 @@ from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 
 from django.core.exceptions import FieldDoesNotExist
-from django.db.models import Field, Model, Prefetch
+from django.db.models import Field, Model, Prefetch, QuerySet
 
 # A django-readers reader pair: (prepare, project).
 Pair = tuple[Any, Any]
@@ -60,7 +60,7 @@ def _to_one_pair(name: str, related_model: type[Model], child_spec: Spec) -> Pai
             qs.prefetch_related(Prefetch(name, queryset=child_qs)),
         )(queryset)
 
-    def project(instance):
+    def project(instance: Model):
         related = getattr(instance, name)
         return project_child(related) if related is not None else None
 
@@ -111,7 +111,7 @@ def _candidate_names(name: str, info: FieldInfo) -> list[str]:
     return names
 
 
-def _find_field(model: type[Model], names: list[str]) -> Field | None:
+def _find_field(model: type[Model], names: list[str]) -> Field[Any, Any] | None:
     for candidate in names:
         try:
             return model._meta.get_field(candidate)  # type: ignore  # get_field stubs include ForeignObjectRel
@@ -129,7 +129,7 @@ def _prefetch_pair(name: str):
     pair per relation composes safely.
     """
 
-    def prepare(queryset):
+    def prepare(queryset: QuerySet[Any]) -> QuerySet[Any]:
         return queryset.prefetch_related(name)
 
     return prepare, None
@@ -145,7 +145,7 @@ def _join_pair(relations: list[str]):
     replace each other.
     """
 
-    def prepare(queryset):
+    def prepare(queryset: QuerySet[Any]) -> QuerySet[Any]:
         return queryset.select_related(*relations)
 
     return prepare, None

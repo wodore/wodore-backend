@@ -80,7 +80,7 @@ def _narrow_item(item: Any, spec: str, type_name: str) -> Any:
     return _narrow_object(item, spec, type_name)
 
 
-def _narrow_object(obj: dict, spec: str, type_name: str) -> dict:
+def _narrow_object(obj: dict[str, Any], spec: str, type_name: str) -> dict[str, Any]:
     """Narrow a flat object to the selected fields."""
     if spec == "__all__":
         return obj

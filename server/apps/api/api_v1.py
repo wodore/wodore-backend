@@ -86,7 +86,7 @@ def _cached_schema() -> Any:
     )
 
 
-def get_openapi_schema(request: HttpRequest | None = None) -> dict:
+def get_openapi_schema(request: HttpRequest | None = None) -> dict[str, Any]:
     """The live OpenAPI document (dict form).
 
     ``info.version`` always reflects the *current* registry state —
