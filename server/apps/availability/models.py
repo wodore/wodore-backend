@@ -1,3 +1,5 @@
+import datetime
+
 from hut_services.core.schema import OccupancyStatusEnum, ReservationStatusEnum
 
 from django.conf import settings
@@ -81,7 +83,7 @@ class AvailabilityStatus(TimeStampedModel):
         self.consecutive_failures = 0
         self.save()
 
-    def mark_failure(self, now=None):
+    def mark_failure(self, now: datetime.datetime | None = None) -> None:
         """Mark failed or empty data fetch
 
         ``now`` (optional) lets callers share one timestamp across the
@@ -529,7 +531,7 @@ class GeoPlaceAvailabilityStatus(TimeStampedModel):
         self.consecutive_failures = 0
         self.save()
 
-    def mark_failure(self, now=None):
+    def mark_failure(self, now: datetime.datetime | None = None) -> None:
         """Mark failed or empty data fetch
 
         ``now`` (optional) lets callers share one timestamp across the

@@ -1,16 +1,27 @@
 import datetime
+from typing import TYPE_CHECKING, Any
 
 from django.db import models
 from django.utils import timezone
 
 from server.core.managers import BaseManager
 
+if TYPE_CHECKING:
+    from server.apps.huts.models import Hut
+
+    from .models import (
+        GeoPlaceAvailability,
+        GeoPlaceAvailabilityHistory,
+        HutAvailability,
+        HutAvailabilityHistory,
+    )
+
 
 class AvailabilityStatusManager(BaseManager):
     """Custom manager for AvailabilityStatus"""
 
 
-class _PriorityNeedingUpdateMixin(models.Manager):
+class _PriorityNeedingUpdateMixin(models.Manager[Any]):
     """Priority-based ``needing_update()`` shared by the hut and place
     availability managers.
 
@@ -27,7 +38,7 @@ class _PriorityNeedingUpdateMixin(models.Manager):
         low_priority_minutes: int | None = None,
         inactive_priority_minutes: int | None = None,
         next_days: int | None = None,
-    ) -> models.QuerySet:
+    ) -> "models.QuerySet[Any]":
         """
         Return availability rows that need updating based on priority rules.
 
@@ -121,7 +132,7 @@ class HutAvailabilityManager(_PriorityNeedingUpdateMixin, BaseManager):
         date_from: datetime.date | None = None,
         date_to: datetime.date | None = None,
         days: int | None = None,
-    ) -> models.QuerySet:
+    ) -> "models.QuerySet[HutAvailability]":
         """
         Optimized query for date range views (map and detail).
 
@@ -161,7 +172,7 @@ class HutAvailabilityManager(_PriorityNeedingUpdateMixin, BaseManager):
         low_priority_minutes: int | None = None,
         inactive_priority_minutes: int | None = None,
         next_days: int | None = None,
-    ) -> models.QuerySet:
+    ) -> "models.QuerySet[Hut]":
         """
         Get distinct Hut objects that need updating.
 
@@ -245,7 +256,7 @@ class HutAvailabilityHistoryManager(BaseManager):
         hut_id: int,
         target_date: datetime.date,
         days_before: int = 30,
-    ) -> models.QuerySet:
+    ) -> "models.QuerySet[HutAvailabilityHistory]":
         """
         Get historical trend data for a specific date.
         Shows how availability for target_date evolved over time.
@@ -282,7 +293,7 @@ class GeoPlaceAvailabilityManager(_PriorityNeedingUpdateMixin, BaseManager):
         date_from: datetime.date | None = None,
         date_to: datetime.date | None = None,
         days: int | None = None,
-    ) -> models.QuerySet:
+    ) -> "models.QuerySet[GeoPlaceAvailability]":
         """
         Optimized query for date range views (map and detail).
 
@@ -322,7 +333,7 @@ class GeoPlaceAvailabilityManager(_PriorityNeedingUpdateMixin, BaseManager):
         low_priority_minutes: int | None = None,
         inactive_priority_minutes: int | None = None,
         next_days: int | None = None,
-    ) -> models.QuerySet:
+    ) -> "models.QuerySet[Hut]":
         """
         Hut discovery driven by the place tables (Phase C of the
         geoplace-availability change; replaces the hut-side
@@ -418,7 +429,7 @@ class GeoPlaceAvailabilityHistoryManager(BaseManager):
         place_id: int,
         target_date: datetime.date,
         days_before: int = 30,
-    ) -> models.QuerySet:
+    ) -> "models.QuerySet[GeoPlaceAvailabilityHistory]":
         """
         Get historical trend data for a specific date.
         Shows how availability for target_date evolved over time.
