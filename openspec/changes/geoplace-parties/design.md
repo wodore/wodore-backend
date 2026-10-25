@@ -128,9 +128,15 @@ entity is neutral, the *relation* carries the semantics. "Relation"/
    already maps it into `owner`, so the field carries the
    owning-or-operating organisation and a single operator role
    expresses it faithfully (`owner` returns on demand if a true
-   legal-owner source ever appears). Command — not data migration —
-   because Owner rows keep arriving from hut imports until cutover;
-   re-runnable sync beats a one-shot migration.
+   legal-owner source ever appears). Command for re-sync — Owner rows
+   keep arriving from hut imports until cutover, so a re-runnable
+   sync beats a one-shot — PLUS a one-shot provisioning data
+   migration (`parties.0002`) that runs the same merge at migrate
+   time, so plain `migrate` delivers the initial parties without a
+   manual command step; both share the same semantics (the migration
+   reimplements the merge on historical models — no app-code
+   imports, `ExternalLink` identifier generation replicated inline
+   because historical models strip `save()` overrides).
 
 6. **API: additive `parties` on place responses** under the
    `fields[places]` sparse-fieldset selection (nested narrowing via

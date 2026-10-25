@@ -49,7 +49,10 @@
       (name/note i18n, url → ExternalLink), `--dry-run`, idempotent
       re-runs; tests (shared `parties.services.merge_owner`; new links
       get an explicit label + skip_health_check so the merge never
-      does network I/O)
+      does network I/O; `parties.0002` provisioning migration runs the
+      same merge at migrate time — historical models, identifier
+      generation replicated inline — so `migrate` alone delivers the
+      parties)
 - [x] 3.2 Extend the wodore hut import to write party associations
       from `hut_owner` (role `role.operator`); import test
       (`_ensure_hut_party` on create + on unprotected updates; merges

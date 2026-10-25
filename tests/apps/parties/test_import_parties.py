@@ -64,3 +64,28 @@ class TestWodoreHutImport:
         association = place.party_associations.get()  # type: ignore  # reverse FK: plugin-less inference gap
         assert association.role.identifier == "role.operator"
         assert association.party.slug == owner.slug
+
+
+class TestOwnerProvisioningMigration:
+    """The migrate-time merge (parties 0002) — ran on the test database
+    during ``--create-db``; re-running must change nothing."""
+
+    def test_every_owner_has_a_party(self):
+        from server.apps.owners.models import Owner
+
+        merged = Party.objects.filter(slug__in=Owner.objects.values("slug"))
+        assert merged.count() == Owner.objects.count()
+
+    def test_migration_idempotent(self):
+        import importlib
+
+        from django.apps import apps as global_apps
+
+        module = importlib.import_module(
+            "server.apps.parties.migrations.0002_merge_owners_into_parties"
+        )
+        before = Party.objects.count()
+
+        module.merge_owners(global_apps, None)
+
+        assert Party.objects.count() == before

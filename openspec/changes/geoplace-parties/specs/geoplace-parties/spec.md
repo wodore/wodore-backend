@@ -110,8 +110,11 @@ SHALL remain in the database (rollback safety) until a later cleanup.
 The system SHALL provide an idempotent management command that merges
 `owners.Owner` rows into Parties (slug, localized name, note preserved;
 url converted to an ExternalLink). The command SHALL support dry-run.
-The `Owner` model SHALL remain unchanged for `Hut.hut_owner` until the
-huts app is removed.
+A data migration SHALL perform the same merge once at migrate time, so
+environments provisioning via `migrate` alone receive the parties and
+links (idempotent; the command remains the re-sync for Owner rows
+arriving later). The `Owner` model SHALL remain unchanged for
+`Hut.hut_owner` until the huts app is removed.
 
 #### Scenario: Merge run
 - **WHEN** `import_parties` runs against an owners table containing
