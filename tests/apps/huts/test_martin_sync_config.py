@@ -13,6 +13,7 @@ from __future__ import annotations
 import io
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -24,13 +25,13 @@ from server.apps.huts.management.commands.martin_sync import Command
 TEMPLATE = Path(settings.BASE_DIR) / "tile_server" / "config" / "martin.yaml"
 
 
-def _generated_config(tmp: Path) -> dict:
+def _generated_config(tmp: Path) -> dict[str, Any]:
     """Run the config-generation step into ``tmp`` and load the result."""
     out, err = io.StringIO(), io.StringIO()
     command = Command(stdout=out, stderr=err)
     # Same shape the command's handle() initializes (counters it bumps
     # on write; only config generation runs — no DB steps involved).
-    stats: dict = {
+    stats: dict[str, Any] = {
         "files_copied": 0,
         "files_updated": 0,
         "files_created": 0,

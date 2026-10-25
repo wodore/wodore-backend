@@ -12,6 +12,7 @@ import os
 os.environ.setdefault("DJANGO_ENV", "test")
 
 import pytest
+from pytest_django.plugin import DjangoDbBlocker
 
 from server.apps.huts.models import Hut
 
@@ -51,7 +52,9 @@ _pk_sequences_reset_done = False
 
 
 @pytest.fixture(autouse=True)
-def _pk_sequences_reset(request, django_db_blocker):
+def _pk_sequences_reset(
+    request: pytest.FixtureRequest, django_db_blocker: DjangoDbBlocker
+):
     """Advance pk sequences past fixture-loaded explicit ids before the first db test.
 
     Test order must not matter: with pytest-randomly shuffling, unseeded
@@ -94,7 +97,7 @@ def _seed_file_hash() -> str:
 
 
 @pytest.fixture(scope="session")
-def seed_data(django_db_setup, django_db_blocker):
+def seed_data(django_db_setup: None, django_db_blocker: DjangoDbBlocker):
     """Session-scoped fixture that loads seed data once per test session.
 
     Detects if seeding is needed:
@@ -128,7 +131,7 @@ def seed_data(django_db_setup, django_db_blocker):
 
             cache.set("test_seed_hash", _seed_file_hash())
         else:
-            results = {}
+            results: dict[str, int] = {}
 
         # App fixtures load with explicit pks and leave sequences behind
         # (management base); reset on every session regardless of whether

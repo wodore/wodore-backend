@@ -27,7 +27,10 @@ pytestmark = [pytest.mark.django_db]
 
 
 def _run(
-    root: Path, source: str = "fluent", ref: str = "test-ref", extra: tuple = ()
+    root: Path,
+    source: str = "fluent",
+    ref: str = "test-ref",
+    extra: tuple[str, ...] = (),
 ) -> str:
     """Run one icon_import invocation for the given source."""
     out = StringIO()
@@ -47,11 +50,11 @@ def _run(
     return out.getvalue()
 
 
-def _run_fluent_only(root: Path, extra: tuple = ()) -> str:
+def _run_fluent_only(root: Path, extra: tuple[str, ...] = ()) -> str:
     return _run(root, source="fluent", ref="test-ref", extra=extra)
 
 
-def _run_all(root: Path, extra: tuple = ()) -> str:
+def _run_all(root: Path, extra: tuple[str, ...] = ()) -> str:
     """Import all packs (one invocation per source)."""
     output = ""
     for source, ref in (
@@ -68,7 +71,7 @@ class TestFullImport:
     """First run at a fresh database."""
 
     @pytest.fixture(autouse=True)
-    def _imported(self, emoji_fixture):
+    def _imported(self, emoji_fixture: Path):
         self.output = _run_all(emoji_fixture)
 
     def test_packs_refs_licenses_orgs_recorded(self):
@@ -182,7 +185,7 @@ class TestFlagImports:
     """Country flags: noto region flags + the two flag packs."""
 
     @pytest.fixture(autouse=True)
-    def _imported(self, emoji_fixture):
+    def _imported(self, emoji_fixture: Path):
         _run_all(emoji_fixture)
 
     def test_noto_region_flags_imported(self):
@@ -273,7 +276,7 @@ class TestFlagImports:
 class TestIdempotentRerun:
     """Re-running at the same ref creates no duplicates (spec)."""
 
-    def test_rerun_creates_nothing(self, emoji_fixture):
+    def test_rerun_creates_nothing(self, emoji_fixture: Path):
         _run_all(emoji_fixture)
         counts = {
             Icon: Icon.objects.count(),
@@ -293,7 +296,7 @@ class TestIdempotentRerun:
         assert "symbols_created: 0" in output
         assert "categories_created: 0" in output
 
-    def test_taxonomy_rerun_no_duplicate_categories(self, emoji_fixture):
+    def test_taxonomy_rerun_no_duplicate_categories(self, emoji_fixture: Path):
         _run_all(emoji_fixture)
         _run_all(emoji_fixture)
         assert Category.objects.filter(slug="emoji", parent=None).count() == 1
@@ -302,7 +305,7 @@ class TestIdempotentRerun:
 
 
 class TestRerunPreservesCuration:
-    def test_curated_membership_survives_rerun(self, emoji_fixture):
+    def test_curated_membership_survives_rerun(self, emoji_fixture: Path):
         """Curation is separate data: re-imports never clobber it."""
         _run_fluent_only(emoji_fixture)
         # The seeded default list (migration) — as the admin would use it.
@@ -319,7 +322,7 @@ class TestRerunPreservesCuration:
 
 
 class TestDryRun:
-    def test_dry_run_writes_nothing(self, emoji_fixture):
+    def test_dry_run_writes_nothing(self, emoji_fixture: Path):
         _run_all(emoji_fixture, extra=("--dry-run",))
         assert Icon.objects.count() == 0
         assert Symbol.objects.count() == 0

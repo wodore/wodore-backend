@@ -10,8 +10,11 @@ a type mix-up must degrade gracefully instead of raising.
 """
 
 import asyncio
+from typing import Any
 
 import pytest
+
+from django.db.models import Model
 
 from server.apps.geometries.models import GeoPlace
 from server.apps.geometries.providers.schemas import (
@@ -23,14 +26,14 @@ from server.apps.huts.models import Hut
 pytestmark = [pytest.mark.django_db]
 
 
-def _first(model):
+def _first(model: type[Model]) -> Any:
     obj = model.objects.filter(is_active=True, is_public=True).first()
     assert obj is not None, f"seed data provides no public {model.__name__}"
     return obj
 
 
 class TestMixedPlaceDispatch:
-    def test_geoplaces_and_huts_both_convert(self, seed_data):
+    def test_geoplaces_and_huts_both_convert(self, seed_data: dict[str, int]):
         geoplace = _first(GeoPlace)
         hut = _first(Hut)
 
@@ -43,7 +46,9 @@ class TestMixedPlaceDispatch:
         for schema in schemas:
             assert schema.lat != 0.0 and schema.lon != 0.0
 
-    def test_hut_mistyped_as_geoplace_degrades_gracefully(self, seed_data):
+    def test_hut_mistyped_as_geoplace_degrades_gracefully(
+        self, seed_data: dict[str, int]
+    ):
         # Regression ('Hut' object has no attribute 'osm_tags'): a hut
         # passed through the geoplace path must convert without raising —
         # it just gets no OSM source.
@@ -55,7 +60,7 @@ class TestMixedPlaceDispatch:
         assert schema.lat == pytest.approx(hut.location.y)
         assert all(s.slug != "osm" for s in schema.sources)
 
-    def test_geoplace_with_osm_tags_keeps_osm_source(self, seed_data):
+    def test_geoplace_with_osm_tags_keeps_osm_source(self, seed_data: dict[str, int]):
         geoplace = _first(GeoPlace)
         geoplace.osm_tags = {"id": 424242, "name": "Testberg"}
         geoplace.save(update_fields=["osm_tags"])

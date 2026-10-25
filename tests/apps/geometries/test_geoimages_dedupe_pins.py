@@ -21,7 +21,7 @@ pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture(autouse=True)
-def _isolated_cache(monkeypatch):
+def _isolated_cache(monkeypatch: pytest.MonkeyPatch):
     """Private locmem response cache per test (no database cache leakage)."""
     from uuid import uuid4
 
@@ -32,7 +32,7 @@ def _isolated_cache(monkeypatch):
 
 
 @pytest.fixture
-def hut(seed_data):
+def hut(seed_data: dict[str, int]):
     hut = Hut.objects.filter(is_active=True, is_public=True).first()
     assert hut is not None
     HutImageAssociation.objects.filter(hut=hut).delete()
@@ -67,12 +67,12 @@ def _run(*args: str) -> str:
 
 
 class TestDedupePinsCommand:
-    def test_no_duplicates(self, hut):
+    def test_no_duplicates(self, hut: Hut):
         _pin(hut, "camptocamp:waypoint_1_a.jpg")
         _pin(hut, "wikicommons:File:Test.jpg")
         assert "No duplicated pins found." in _run()
 
-    def test_dry_run_reports_without_deleting(self, hut):
+    def test_dry_run_reports_without_deleting(self, hut: Hut):
         _pin(hut, "camptocamp:waypoint_1_a.jpg")
         duplicate = _pin(hut, "camptocamp:camptocamp:waypoint_1_a.jpg")
         output = _run()
@@ -80,7 +80,7 @@ class TestDedupePinsCommand:
         assert "Dry run" in output
         assert Image.objects.filter(pk=duplicate.pk).exists()
 
-    def test_apply_deletes_only_duplicates(self, hut):
+    def test_apply_deletes_only_duplicates(self, hut: Hut):
         keep = _pin(hut, "camptocamp:waypoint_1_a.jpg")
         control = _pin(hut, "wikicommons:File:Test.jpg")
         duplicate = _pin(hut, "camptocamp:camptocamp:waypoint_1_a.jpg")
@@ -90,14 +90,14 @@ class TestDedupePinsCommand:
         assert HutImageAssociation.objects.filter(hut=hut).count() == 2
         assert "Deleted 1 duplicate image(s)" in output
 
-    def test_apply_invalidates_place_cache(self, hut):
+    def test_apply_invalidates_place_cache(self, hut: Hut):
         _pin(hut, "camptocamp:waypoint_1_a.jpg")
         _pin(hut, "camptocamp:camptocamp:waypoint_1_a.jpg")
         version_before = irc_geo.get_version("hut", hut.slug)
         _run("--apply")
         assert irc_geo.get_version("hut", hut.slug) > version_before
 
-    def test_place_filter_scopes_deletion(self, hut):
+    def test_place_filter_scopes_deletion(self, hut: Hut):
         from server.apps.huts.models import Hut as HutModel
 
         other = (
@@ -115,7 +115,7 @@ class TestDedupePinsCommand:
         assert Image.objects.filter(pk=other_duplicate.pk).exists()
         assert "Deleted 1 duplicate image(s)" in output
 
-    def test_triple_prefixes_also_detected(self, hut):
+    def test_triple_prefixes_also_detected(self, hut: Hut):
         _pin(hut, "wikicommons:wikicommons:wikicommons:File:X.jpg")
         output = _run()
         assert "1 duplicated image(s)" in output

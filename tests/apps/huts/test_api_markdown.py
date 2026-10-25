@@ -1,6 +1,9 @@
 """HTTP-level tests for the hut Markdown endpoint (/v1/huts/{slug}.md)."""
 
 import pytest
+from pytest_django.fixtures import SettingsWrapper
+
+from django.test import Client
 
 from server.apps.huts.models import Hut
 from server.apps.organizations.models import Organization
@@ -9,12 +12,12 @@ pytestmark = [pytest.mark.django_db]
 
 
 @pytest.fixture(autouse=True)
-def _frontend_domain(settings):
+def _frontend_domain(settings: SettingsWrapper):
     settings.FRONTEND_DOMAIN = "https://wodore.com"
 
 
 class TestHutMarkdown:
-    def test_markdown_detail(self, seed_data, client):
+    def test_markdown_detail(self, seed_data: dict[str, int], client: Client):
         hut = Hut.objects.filter(is_active=True, is_public=True).first()
         assert hut is not None
         response = client.get(f"/v1/huts/{hut.slug}.md")
@@ -34,7 +37,9 @@ class TestHutMarkdown:
         # Last-updated footer from the modified timestamp.
         assert f"Last updated: {hut.modified:%Y-%m-%d}" in body
 
-    def test_markdown_keeps_attribution(self, seed_data, client):
+    def test_markdown_keeps_attribution(
+        self, seed_data: dict[str, int], client: Client
+    ):
         hut = (
             Hut.objects.filter(
                 is_active=True, is_public=True, description_attribution__contains="href"
@@ -50,11 +55,15 @@ class TestHutMarkdown:
             assert "<a href" not in body
             assert "*Description:" in body
 
-    def test_markdown_unknown_slug_is_404(self, seed_data, client):
+    def test_markdown_unknown_slug_is_404(
+        self, seed_data: dict[str, int], client: Client
+    ):
         response = client.get("/v1/huts/does-not-exist-xyz.md")
         assert response.status_code == 404
 
-    def test_markdown_hidden_hut_is_404(self, seed_data, client):
+    def test_markdown_hidden_hut_is_404(
+        self, seed_data: dict[str, int], client: Client
+    ):
         hut = Hut.objects.filter(is_active=True, is_public=True).first()
         assert hut is not None
         hut.is_public = False
@@ -62,7 +71,9 @@ class TestHutMarkdown:
         response = client.get(f"/v1/huts/{hut.slug}.md")
         assert response.status_code == 404
 
-    def test_markdown_links_live_availability_when_sourced(self, seed_data, client):
+    def test_markdown_links_live_availability_when_sourced(
+        self, seed_data: dict[str, int], client: Client
+    ):
         """Huts with an availability source link the live availability API."""
         hut = Hut.objects.filter(
             is_active=True, is_public=True, availability_source_ref=None
@@ -84,7 +95,9 @@ class TestHutMarkdown:
             hut.availability_source_ref = None
             hut.save()
 
-    def test_markdown_without_availability_source_has_no_link(self, seed_data, client):
+    def test_markdown_without_availability_source_has_no_link(
+        self, seed_data: dict[str, int], client: Client
+    ):
         hut = Hut.objects.filter(
             is_active=True, is_public=True, availability_source_ref=None
         ).first()
@@ -92,7 +105,9 @@ class TestHutMarkdown:
         body = client.get(f"/v1/huts/{hut.slug}.md").content.decode()
         assert "availability/today" not in body
 
-    def test_json_detail_still_works_for_same_slug(self, seed_data, client):
+    def test_json_detail_still_works_for_same_slug(
+        self, seed_data: dict[str, int], client: Client
+    ):
         """The /{slug} catch-all must not swallow or break .md handling."""
         hut = Hut.objects.filter(is_active=True, is_public=True).first()
         assert hut is not None
@@ -101,7 +116,9 @@ class TestHutMarkdown:
 
 
 class TestHutMarkdownSeasons:
-    def test_months_show_both_modes_with_explanation(self, seed_data, client):
+    def test_months_show_both_modes_with_explanation(
+        self, seed_data: dict[str, int], client: Client
+    ):
         hut = Hut.objects.filter(
             is_active=True, is_public=True, hut_type_closed__isnull=False
         ).first()
@@ -114,7 +131,9 @@ class TestHutMarkdownSeasons:
         assert "Legend: yes = open" in body
         assert "Reduced-operation months are derived" in body
 
-    def test_months_standard_only_without_reduced_type(self, seed_data, client):
+    def test_months_standard_only_without_reduced_type(
+        self, seed_data: dict[str, int], client: Client
+    ):
         hut = Hut.objects.filter(
             is_active=True, is_public=True, hut_type_closed__isnull=True
         ).first()
@@ -126,7 +145,7 @@ class TestHutMarkdownSeasons:
         assert "No reduced operation (e.g. winter room) is recorded" in body
 
     def test_reduced_row_derives_yes_from_closed_standard_months(
-        self, seed_data, client
+        self, seed_data: dict[str, int], client: Client
     ):
         hut = Hut.objects.filter(
             is_active=True, is_public=True, hut_type_closed__isnull=False
@@ -148,7 +167,9 @@ class TestHutMarkdownSeasons:
 
 
 class TestHutMarkdownNearby:
-    def test_nearby_huts_listed_with_distance(self, seed_data, client):
+    def test_nearby_huts_listed_with_distance(
+        self, seed_data: dict[str, int], client: Client
+    ):
         from django.contrib.gis.geos import Point
 
         huts = list(Hut.objects.filter(is_active=True, is_public=True)[:2])
@@ -165,7 +186,9 @@ class TestHutMarkdownNearby:
         assert f"[{other.name}](https://wodore.com/hut/{other.slug})" in body
         assert " — 3." in body
 
-    def test_no_nearby_section_when_isolated(self, seed_data, client):
+    def test_no_nearby_section_when_isolated(
+        self, seed_data: dict[str, int], client: Client
+    ):
         from django.contrib.gis.geos import Point
 
         hut = Hut.objects.filter(is_active=True, is_public=True).first()

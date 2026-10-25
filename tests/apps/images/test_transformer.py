@@ -1,6 +1,7 @@
 """Tests for image transformation logic (transfomer.py)."""
 
 from types import SimpleNamespace
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -19,13 +20,15 @@ def _unique_url() -> str:
 
 
 @pytest.mark.django_db
-def test_redirect_result_cached_with_single_head_request(monkeypatch):
+def test_redirect_result_cached_with_single_head_request(
+    monkeypatch: pytest.MonkeyPatch,
+):
     """The final URL is cached; a repeated call performs no new HEAD."""
     url = _unique_url()
     final = f"https://upload.example/{uuid4().hex}"
     calls = []
 
-    def fake_head(request_url, **kwargs):
+    def fake_head(request_url: str, **kwargs: Any):
         calls.append((request_url, kwargs))
         return SimpleNamespace(url=final)
 
@@ -40,12 +43,12 @@ def test_redirect_result_cached_with_single_head_request(monkeypatch):
 
 
 @pytest.mark.django_db
-def test_redirect_failure_not_cached_and_propagates(monkeypatch):
+def test_redirect_failure_not_cached_and_propagates(monkeypatch: pytest.MonkeyPatch):
     """A failing HEAD propagates uncached; the next call retries."""
     url = _unique_url()
     attempts = []
 
-    def flaky_head(request_url, **kwargs):
+    def flaky_head(request_url: str, **kwargs: Any):
         attempts.append(request_url)
         if len(attempts) == 1:
             raise ConnectionError("boom")

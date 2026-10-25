@@ -10,6 +10,7 @@ staging scale). ``SampledCullDatabaseCache`` backports Django 6.2's
 a sampled fraction of writes.
 """
 
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -35,12 +36,12 @@ from server.core.checks import (
 _TABLE = "django_cache_test_sampled_cull"
 
 
-def _backend(**options) -> SampledCullDatabaseCache:
+def _backend(**options: Any) -> SampledCullDatabaseCache:
     return SampledCullDatabaseCache(_TABLE, {"OPTIONS": options})
 
 
 @pytest.fixture(autouse=True)
-def _fresh_table(db):
+def _fresh_table(db: None):
     """A clean, test-private cache table for every test."""
     call_command("createcachetable", _TABLE, verbosity=0)
     with connection.cursor() as cursor:
@@ -131,7 +132,7 @@ def test_culling_still_enforced_when_sampled():
 # until the module is deleted (see server/core/checks.py).
 
 
-def _current_aliases_config() -> dict:
+def _current_aliases_config() -> dict[str, Any]:
     from django.conf import settings
 
     return {a: dict(c) for a, c in settings.CACHES.items()}

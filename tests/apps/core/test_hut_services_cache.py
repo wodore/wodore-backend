@@ -29,7 +29,7 @@ def test_default_backend_wired_to_django_alias():
     assert backend is caches["hut_services"]
 
 
-def test_cached_function_uses_db_table_not_filesystem(db):
+def test_cached_function_uses_db_table_not_filesystem(db: None):
     """A ``@cached`` function round-trips through the DB cache table only."""
     from hut_services.core.cache import cached
 

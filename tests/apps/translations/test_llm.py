@@ -1,6 +1,8 @@
 """Tests for the LLM translation client (no database needed)."""
 
 import json
+from collections.abc import Callable
+from typing import Any
 
 import httpx
 import pytest
@@ -14,7 +16,9 @@ from server.apps.translations.llm import TranslationClient, TranslationError
 VALID_JSON = '{"fr": {"name": "Cabane"}, "it": {"name": "Rifugio"}}'
 
 
-def make_client(handler, **kwargs):
+def make_client(
+    handler: Callable[[httpx.Request], httpx.Response], **kwargs: Any
+) -> TranslationClient:
     return TranslationClient(
         base_url="https://llm.example/v1",
         api_key="test-key",
@@ -24,7 +28,7 @@ def make_client(handler, **kwargs):
     )
 
 
-def ok_response(content):
+def ok_response(content: str) -> httpx.Response:
     return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
 
 
@@ -87,7 +91,9 @@ def test_translate_filters_unrequested_and_empty_values():
     assert result == {"fr": {"name": "Cabane"}}
 
 
-def test_translate_retries_retryable_status_then_succeeds(monkeypatch):
+def test_translate_retries_retryable_status_then_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+):
     monkeypatch.setattr(llm_module, "RETRY_BACKOFF_SECONDS", 0)
     calls = {"n": 0}
 

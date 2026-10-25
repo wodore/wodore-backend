@@ -7,15 +7,19 @@ that the frontend nginx proxies to ``/v1/sitemap.xml``.
 """
 
 import pytest
+from pytest_django.fixtures import SettingsWrapper
+
+from django.test import Client
 
 from server.apps.api.sitemap import SITEMAP_PAGE_SIZE
+from server.apps.categories.models import Category
 from server.apps.huts.models import Hut
 
 pytestmark = [pytest.mark.django_db]
 
 
 @pytest.fixture(autouse=True)
-def _frontend_domain(settings):
+def _frontend_domain(settings: SettingsWrapper):
     settings.FRONTEND_DOMAIN = "https://wodore.com"
 
 
@@ -41,7 +45,7 @@ def _clear_sitemap_cache():
 
 
 class TestSitemapIndex:
-    def test_index_is_valid_xml(self, seed_data, client):
+    def test_index_is_valid_xml(self, seed_data: dict[str, int], client: Client):
         response = client.get("/v1/sitemap.xml")
         assert response.status_code == 200
         assert response.headers["Content-Type"].startswith("application/xml")
@@ -50,7 +54,9 @@ class TestSitemapIndex:
         # At least one hut page is referenced.
         assert b"https://wodore.com/sitemap-huts-0.xml" in response.content
 
-    def test_index_lists_every_page(self, seed_data, client, monkeypatch):
+    def test_index_lists_every_page(
+        self, seed_data: dict[str, int], client: Client, monkeypatch: pytest.MonkeyPatch
+    ):
         monkeypatch.setattr("server.apps.api.sitemap.SITEMAP_PAGE_SIZE", 2)
         public_huts = Hut.objects.filter(is_active=True, is_public=True).count()
         expected_pages = max(1, -(-public_huts // 2))
@@ -64,7 +70,7 @@ class TestSitemapIndex:
 
 
 class TestSitemapStatic:
-    def test_static_pages(self, seed_data, client):
+    def test_static_pages(self, seed_data: dict[str, int], client: Client):
         response = client.get("/v1/sitemap-static.xml")
         assert response.status_code == 200
         assert b"<urlset" in response.content
@@ -73,7 +79,9 @@ class TestSitemapStatic:
 
 
 class TestSitemapHuts:
-    def test_huts_page_lists_public_huts(self, seed_data, client):
+    def test_huts_page_lists_public_huts(
+        self, seed_data: dict[str, int], client: Client
+    ):
         response = client.get("/v1/sitemap-huts-0.xml")
         assert response.status_code == 200
         assert b"<urlset" in response.content
@@ -89,7 +97,7 @@ class TestSitemapHuts:
         assert public_huts.count() <= SITEMAP_PAGE_SIZE
         assert response.content.count(b"<url>") == public_huts.count()
 
-    def test_hidden_huts_are_excluded(self, seed_data, client):
+    def test_hidden_huts_are_excluded(self, seed_data: dict[str, int], client: Client):
         hidden = (
             Hut.objects.filter(is_active=True, is_public=True).order_by("pk").first()
         )
@@ -107,11 +115,11 @@ class TestSitemapHuts:
             f"https://wodore.com/en/hut/{hidden.slug}".encode() not in response.content
         )
 
-    def test_out_of_range_page_is_404(self, seed_data, client):
+    def test_out_of_range_page_is_404(self, seed_data: dict[str, int], client: Client):
         response = client.get("/v1/sitemap-huts-9999.xml")
         assert response.status_code == 404
 
-    def test_negative_page_is_404(self, seed_data, client):
+    def test_negative_page_is_404(self, seed_data: dict[str, int], client: Client):
         response = client.get("/v1/sitemap-huts--1.xml")
         assert response.status_code == 404
 
@@ -154,13 +162,17 @@ class TestSitemapPlaces:
         cache.delete("sitemap:places:count")
         cache.delete("sitemap:category-include-ids")
 
-    def test_disabled_by_default(self, seed_data, client):
+    def test_disabled_by_default(self, seed_data: dict[str, int], client: Client):
         response = client.get("/v1/sitemap.xml")
         assert b"sitemap-places" not in response.content
         assert client.get("/v1/sitemap-places-0.xml").status_code == 404
 
     def test_enabled_lists_places_with_name_and_include_category(
-        self, seed_data, client, settings, include_category
+        self,
+        seed_data: dict[str, int],
+        client: Client,
+        settings: SettingsWrapper,
+        include_category: Category,
     ):
         settings.WODORE_SEO_PLACE_SITEMAP = True
         from server.apps.geometries.models import GeoPlace
@@ -178,7 +190,11 @@ class TestSitemapPlaces:
         assert place.slug.encode() in page.content  # type: ignore  # dynamic attr: plugin-less inference gap
 
     def test_nameless_place_excluded(
-        self, seed_data, client, settings, include_category
+        self,
+        seed_data: dict[str, int],
+        client: Client,
+        settings: SettingsWrapper,
+        include_category: Category,
     ):
         settings.WODORE_SEO_PLACE_SITEMAP = True
         from server.apps.geometries.models import GeoPlace
@@ -197,7 +213,7 @@ class TestSitemapPlaces:
         assert place.slug.encode() not in page.content  # type: ignore  # dynamic attr: plugin-less inference gap
 
     def test_category_without_include_flag_excludes_places(
-        self, seed_data, client, settings
+        self, seed_data: dict[str, int], client: Client, settings: SettingsWrapper
     ):
         """Tri-state: categories default to exclude (root None)."""
         settings.WODORE_SEO_PLACE_SITEMAP = True
@@ -215,7 +231,11 @@ class TestSitemapPlaces:
         assert place.slug.encode() not in page.content  # type: ignore  # dynamic attr: plugin-less inference gap
 
     def test_category_tri_state_inheritance(
-        self, seed_data, client, settings, include_category
+        self,
+        seed_data: dict[str, int],
+        client: Client,
+        settings: SettingsWrapper,
+        include_category: Category,
     ):
         """Child with no value inherits the parent's include; explicit
         exclude on the child wins over the parent's include."""
@@ -248,7 +268,9 @@ class TestSitemapPlaces:
         assert listed.slug.encode() in page.content  # type: ignore  # dynamic attr: plugin-less inference gap
         assert excluded.slug.encode() not in page.content  # type: ignore  # dynamic attr: plugin-less inference gap
 
-    def test_effective_seo_sitemap_resolution(self, seed_data, include_category):
+    def test_effective_seo_sitemap_resolution(
+        self, seed_data: dict[str, int], include_category: Category
+    ):
         from server.apps.categories.models import Category
 
         # Root without value -> None (callers treat as exclude)
@@ -273,7 +295,7 @@ class TestSitemapPlaces:
 
 
 class TestHreflangAlternates:
-    def test_hut_urls_carry_alternates(self, seed_data, client):
+    def test_hut_urls_carry_alternates(self, seed_data: dict[str, int], client: Client):
         """Full-prefix model: every language has a prefixed, indexed URL;
         the bare URL is a user alias and does not appear."""
         from django.conf import settings
@@ -304,7 +326,9 @@ class TestHreflangAlternates:
         )
         assert f"https://wodore.com/hut/{hut.slug}</loc>" not in body  # type: ignore  # dynamic attr: plugin-less inference gap
 
-    def test_static_pages_no_alternates(self, seed_data, client):
+    def test_static_pages_no_alternates(
+        self, seed_data: dict[str, int], client: Client
+    ):
         from django.core.cache import cache
 
         cache.delete("sitemap:static")

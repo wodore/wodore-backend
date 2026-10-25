@@ -8,7 +8,10 @@ tuple``. These tests render every icon-library changelist for real
 ``SuspiciousFileOperation`` in in-process requests).
 """
 
+from pathlib import Path
+
 import pytest
+from pytest_django.fixtures import SettingsWrapper
 
 from django.contrib import admin as django_admin
 from django.contrib.auth import get_user_model
@@ -18,7 +21,7 @@ pytestmark = [pytest.mark.django_db]
 
 
 @pytest.fixture
-def admin_client(settings, imported_db, db):
+def admin_client(settings: SettingsWrapper, imported_db: str, db: None):
     """Superuser client rendering admin pages without the debug toolbar."""
     settings.MIDDLEWARE = [m for m in settings.MIDDLEWARE if "debug_toolbar" not in m]
     settings.ALLOWED_HOSTS = list(settings.ALLOWED_HOSTS) + ["testserver"]
@@ -39,13 +42,13 @@ def admin_client(settings, imported_db, db):
         "/admin/categories/category/",
     ],
 )
-def test_changelist_renders(admin_client, url):
+def test_changelist_renders(admin_client: Client, url: str):
     """All icon-library changelists render (incl. header displays)."""
     response = admin_client.get(url)
     assert response.status_code == 200, getattr(response, "content", b"")[:300]
 
 
-def test_header_displays_return_tuples(emoji_fixture):
+def test_header_displays_return_tuples(emoji_fixture: Path):
     """Unit pin: header=True displays must return list/tuple always."""
 
     from django.core.management import call_command
