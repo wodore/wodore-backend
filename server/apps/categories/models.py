@@ -1,5 +1,6 @@
 import re
 from collections import defaultdict
+from typing import Any, override
 from xml.etree import ElementTree as ET
 
 from colorfield.fields import ColorField
@@ -248,7 +249,8 @@ class Category(ComputedFieldsModel, TimeStampedModel):
             .title()
         )
 
-    def save(self, *args, **kwargs):
+    @override
+    def save(self, *args: Any, **kwargs: Any) -> None:
         """Auto-generate slug from name if not provided."""
         if not self.slug and self.name_i18n:
             self.slug = slugify(self.name_i18n)
@@ -265,7 +267,9 @@ class Category(ComputedFieldsModel, TimeStampedModel):
             current = current.parent
         return ancestors
 
-    def get_descendants(self, include_self: bool = False) -> models.QuerySet:
+    def get_descendants(
+        self, include_self: bool = False
+    ) -> models.QuerySet["Category"]:
         """Get all descendants recursively."""
 
         descendants_ids = []
@@ -279,7 +283,7 @@ class Category(ComputedFieldsModel, TimeStampedModel):
             descendants_ids.extend([c.id for c in children])
             to_process.extend(children)  # type: ignore  # argument typing drift vs stubs
 
-        return Category.objects.filter(id__in=descendants_ids)
+        return Category.objects.filter(id__in=descendants_ids)  # type: ignore  # custom manager/queryset inference gap
 
     def get_root(self) -> "Category":
         """Get the root category of this hierarchy."""
