@@ -148,6 +148,7 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
   && apt-get install -y --no-install-recommends \
   wait-for-it \
   gdal-bin \
+  gettext \
   wget \
   # Martin tile server \
   && wget -qO /tmp/martin.deb "https://github.com/maplibre/martin/releases/download/martin-v${MARTIN_VERSION}/debian-x86_64.deb" \
@@ -183,6 +184,7 @@ RUN chmod +x '/docker-entrypoint.sh' \
 WORKDIR /code
 COPY --chown=web:web ./pyproject.toml /code/
 COPY --chown=web:web ./manage.py /code/
+COPY --chown=web:web ./locale /code/locale
 COPY --chown=web:web server /code/server
 COPY --chown=web:web ${CONFIG_DIR} /code/config
 # Martin tile server config (needed for martin_sync command)
@@ -199,6 +201,10 @@ chown web:web /code/static
 # DJANGO_ENV=test: see Dockerfile.alpine (offline-safe settings; no
 # network, no production signing key needed - without this the
 # auth settings raise at build time).
+# Translations (.po -> .mo): the per-language llms.txt variants render
+# through the django catalog, so the image must carry compiled messages
+# (locale/*.mo is gitignored).
+DJANGO_ENV=test python manage.py compilemessages
 DJANGO_ENV=test python manage.py collectstatic --noinput
 # Regression guard (see Dockerfile.alpine): sentinel checks that every
 # runtime-registered app contributed its static files.

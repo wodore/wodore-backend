@@ -90,12 +90,20 @@ urlpatterns = [
     # Text and xml static files:
     path("robots.txt", main_views.robots_txt),
     # llms.txt: the bare root is ALWAYS English (the conventional LLM
-    # entry point, no Accept-Language negotiation); German, French and
-    # Italian live at stable /llms.<lang>.txt variants beside it.
+    # entry point, no Accept-Language negotiation); every OTHER language
+    # in settings.LANGUAGES gets a stable /llms.<lang>.txt variant. The
+    # language list lives in ONE place — settings.LANGUAGES — driving
+    # these routes, the view's cross-links header and the robots.txt
+    # Allow lines alike. Any other /llms.<lang>.txt spelling (unknown
+    # language, or the root language as a variant) permanently redirects
+    # to the English root instead of 404ing.
     path("llms.txt", main_views.llms_txt),
-    path("llms.de.txt", main_views.llms_txt, {"lang": "de"}),
-    path("llms.fr.txt", main_views.llms_txt, {"lang": "fr"}),
-    path("llms.it.txt", main_views.llms_txt, {"lang": "it"}),
+    *(
+        path(f"llms.{code}.txt", main_views.llms_txt, {"lang": code})
+        for code, _name in settings.LANGUAGES
+        if code != main_views.LLMS_ROOT_LANG
+    ),
+    path("llms.<str:lang>.txt", main_views.llms_txt_redirect),
     # Backend-served brand assets (og/imagor pipeline references —
     # e.g. the watermark composited onto og photos). No frontend
     # dependency: the files are bundled in server/apps/api/assets/.

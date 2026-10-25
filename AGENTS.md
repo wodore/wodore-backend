@@ -67,6 +67,18 @@ Two feature flags (see `server/settings/components/oidc.py`):
 
 Document your work under `_work` in this form `yymmdd_working_title.md`. Keep the document up-to-date.
 
+### Translations (gettext)
+
+`LOCALE_PATHS = ("locale/",)` holds the gettext catalogs; `LANGUAGE_CODE`
+is `de`, `settings.LANGUAGES` (de/en/fr/it) is the canonical language
+list. `.mo` files are gitignored: run `app compilemessages` (needs
+`gettext`) after pulling/changing `.po` files — CI and the docker image
+build compile them automatically. Regenerate msgids with
+`app makemessages -l <lang>`; the per-language `/llms.<lang>.txt`
+variants render through these catalogs (`{% translate %}` in
+`server/templates/txt/llms.txt`, locale active per URL — see
+`server/apps/main/views.py`).
+
 ### API Documentation
 
 OpenAPI schema available at:
