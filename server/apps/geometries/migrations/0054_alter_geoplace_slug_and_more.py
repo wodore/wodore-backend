@@ -48,7 +48,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ("categories", "0021_category_created_category_modified_and_more"),
         ("external_links", "0009_add_template_fields"),
-        ("geometries", "0050_alter_geoplaceimageassociation_score"),
+        ("geometries", "0053_brand_categories_to_parties"),
         ("images", "0034_image_source_ident_unique"),
         ("organizations", "0022_content_hash_logo_files"),
     ]
