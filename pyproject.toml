@@ -559,6 +559,22 @@ method-assign = true
 
 
 [[tool.pyrefly.sub-config]]
+# Strict-typing ratchet: the translations app is fully owned, so it is held
+# to annotation-completeness rules the default preset does not enforce.
+# Only this subtree is affected; strictness is ratcheted app by app.
+matches = "server/apps/translations/**"
+
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = true
+implicit-any-type-argument = true
+implicit-any-lambda = true
+implicit-any-empty-container = true
+implicit-any-attribute = true
+missing-override-decorator = true
+bad-override = true
+method-assign = true
+
+[[tool.pyrefly.sub-config]]
 # Strict-typing ratchet for the api app (shared API infrastructure: controller
 # base, auth, sitemap, readers). New code must be fully annotated; only this
 # subtree is affected; strictness is ratcheted app by app.
@@ -581,6 +597,23 @@ method-assign = true
 # must be fully annotated; only this subtree is affected; strictness is
 # ratcheted module by module.
 matches = "server/core/**"
+
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = true
+implicit-any-type-argument = true
+implicit-any-lambda = true
+implicit-any-empty-container = true
+implicit-any-attribute = true
+missing-override-decorator = true
+bad-override = true
+method-assign = true
+
+
+[[tool.pyrefly.sub-config]]
+# Strict-typing ratchet for the apiversions app (API contract versioning:
+# registry, middleware, transforms). New code must be fully annotated; only
+# this subtree is affected; strictness is ratcheted app by app.
+matches = "server/apps/apiversions/**"
 
 [tool.pyrefly.sub-config.errors]
 implicit-any-parameter = true
