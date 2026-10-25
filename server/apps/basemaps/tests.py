@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, override
+from typing import Any, NoReturn, override
 
 import pytest
 from pytest_django.fixtures import SettingsWrapper
@@ -1764,7 +1764,7 @@ class TestMartinWatcher:
 
         def failing_fetch(
             url: str, nonce: str, headers: dict[str, str] | None = None
-        ) -> None:
+        ) -> NoReturn:
             raise OSError("martin down")
 
         monkeypatch.setattr("server.apps.basemaps.tile_assets._fetch", failing_fetch)
