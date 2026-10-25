@@ -14,8 +14,7 @@ DEFAULTS: tuple[tuple[str, str], ...] = (
         "MARTIN_TILE_URL",
         (
             "Tile origin (tile-router/Martin; CDN in staging/prod) — "
-            "resolves {{env:MARTIN_TILE_URL}} style tokens (legacy "
-            "{TILE_SERVER_URL} placeholder kept as alias)"
+            "resolves {{env:MARTIN_TILE_URL}} style tokens"
         ),
     ),
     (

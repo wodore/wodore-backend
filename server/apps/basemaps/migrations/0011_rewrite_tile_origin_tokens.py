@@ -1,10 +1,10 @@
 """Rewrite legacy {TILE_SERVER_URL} placeholders to the env token.
 
-Authored styles reference the tile origin through the standard
-``{{env:MARTIN_TILE_URL}}`` registry token; the legacy single-brace
-placeholder keeps working (resolution alias), but stored rows are
-migrated to the canonical form. Depends on the envvars URL-origin seed
-so the registry row exists before any style references the token
+Authored styles reference the tile origin ONLY through the standard
+``{{env:MARTIN_TILE_URL}}`` registry token — the legacy single-brace
+placeholder has no resolution path anymore, so this migration is the
+mandatory bridge for stored rows. Depends on the envvars URL-origin
+seed so the registry row exists before any style references the token
 (env-gated layers are hidden while a name is unresolvable).
 """
 
@@ -21,16 +21,6 @@ def _rewrite(value):
         return {key: _rewrite(child) for key, child in value.items()}
     if isinstance(value, list):
         return [_rewrite(child) for child in value]
-    return value
-
-
-def _rewrite_back(value):
-    if isinstance(value, str):
-        return value.replace(TOKEN, LEGACY)
-    if isinstance(value, dict):
-        return {key: _rewrite_back(child) for key, child in value.items()}
-    if isinstance(value, list):
-        return [_rewrite_back(child) for child in value]
     return value
 
 
@@ -52,19 +42,11 @@ def forwards(apps, schema_editor):
 
 
 def backwards(apps, schema_editor):
-    MapLayer = apps.get_model("basemaps", "MapLayer")
-    for layer in MapLayer.objects.iterator():
-        changed = False
-        if isinstance(layer.style, dict):
-            style = _rewrite_back(layer.style)
-            if style != layer.style:
-                layer.style = style
-                changed = True
-        if layer.style_url and TOKEN in layer.style_url:
-            layer.style_url = layer.style_url.replace(TOKEN, LEGACY)
-            changed = True
-        if changed:
-            layer.save(update_fields=["style", "style_url", "modified"])
+    """No-op: the legacy placeholder has no resolution path — rewriting
+    rows back to it would render literal ``{TILE_SERVER_URL}`` into
+    served URLs. Rows stay on the token form (re-applying forwards is
+    idempotent anyway)."""
+    return
 
 
 class Migration(migrations.Migration):

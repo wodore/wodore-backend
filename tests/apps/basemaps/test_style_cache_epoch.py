@@ -1,10 +1,11 @@
 """Registry edits re-key rendered style bodies (DB-derived epoch).
 
 Rendered style bodies bake registry values in at render time — the tile
-origin via ``{TILE_SERVER_URL}`` absolutization, ``{{env:...}}`` tokens
-via substitution. The body cache is version-keyed (modified + asset
-digest + registry epoch); the epoch is DERIVED from the EnvVar table
-(count + max(modified)) and memoized 10 s — never signal-bumped, because
+origin and every other ``{{env:...}}`` token via substitution. The body
+cache is version-keyed (modified + asset
+digest + registry epoch); the epoch is DERIVED from the EnvVar table's
+content (digest over every row's name/value/flags + count) and
+memoized 10 s — never signal-bumped, because
 the default cache is process-local (LocMemCache) and a bump would never
 reach the other gunicorn workers. Every worker derives the identical
 epoch from the DB and converges within the memo window (review finding:

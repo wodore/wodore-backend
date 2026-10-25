@@ -84,12 +84,11 @@ CATALOG_VERSION_TTL = 10
 #: Cache key of the memoized catalog version (tests clear it after edits).
 CATALOG_VERSION_CACHE_KEY = "basemaps:catalog-version"
 
-#: Render epoch of cached style bodies — derived from the env registry
-#: (EnvVar count + max(modified)) and memoized: registry values are
-#: baked into rendered bodies (the tile origin via the
-#: ``{{env:MARTIN_TILE_URL}}`` token — legacy ``{TILE_SERVER_URL}``
-#: alias — and every other ``{{env:...}}`` token via substitution), so
-#: every registry change must re-key them. DB-derived on purpose — the default cache is
+#: Render epoch of cached style bodies — derived from the env
+#: registry's content and memoized: registry values are baked into
+#: rendered bodies (``{{env:...}}`` tokens via substitution, including
+#: the tile origin's ``{{env:MARTIN_TILE_URL}}``), so every registry
+#: change must re-key them. DB-derived on purpose — the default cache is
 #: process-local (LocMemCache), so a signal bump would never reach the
 #: other gunicorn workers; every worker derives the same value from
 #: the DB and converges within the memo window.

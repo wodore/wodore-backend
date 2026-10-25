@@ -208,11 +208,10 @@ def _normalize_probe_url(url: str, origin: str) -> tuple[str, bool]:
     """(path, is_martin) for an authored OR resolved asset URL.
 
     Accepts the authored shapes — ``{{env:MARTIN_TILE_URL}}/…`` env
-    token (the convention), the legacy ``{TILE_SERVER_URL}/…``
-    placeholder, root-relative ``/…`` (Martin) and absolute URLs —
-    plus the resolved absolute ones. Martin URLs are identified by the
-    token/placeholder/root-relative forms or an absolute URL on the
-    tile origin; other absolute URLs are external candidates.
+    token, root-relative ``/…`` (Martin) and absolute URLs — plus the
+    resolved absolute ones. Martin URLs are identified by the
+    token/root-relative forms or an absolute URL on the tile origin;
+    other absolute URLs are external candidates.
     """
     url = replace_tile_origin(url, origin)
     if url.startswith("/"):

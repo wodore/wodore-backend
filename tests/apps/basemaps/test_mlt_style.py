@@ -7,9 +7,9 @@ never injects one) and the seed pairing contract for the huts overlay
 vector source stays MVT — phase 1 scopes the Martin-side conversion to
 the huts table source only).
 
-Tile-origin URLs use the ``{{env:MARTIN_TILE_URL}}`` registry token; the
-legacy ``{TILE_SERVER_URL}`` placeholder stays supported as an alias
-(rows authored before the unification — basemaps migration 0011).
+Tile-origin URLs use the ``{{env:MARTIN_TILE_URL}}`` registry token —
+the pre-unification ``{TILE_SERVER_URL}`` placeholder is gone entirely
+(basemaps migration 0011 rewrites stored rows).
 """
 
 from __future__ import annotations
@@ -79,26 +79,6 @@ class EncodingPreservationTests:
                 _style(), {"date": "2026-10-22"}, tokenized=tokenized
             )
             assert "encoding" not in resolved["sources"]["wd-bookings"]
-
-    @override_settings(MARTIN_TILE_URL="https://tiles.example.org")
-    def test_legacy_placeholder_still_absolutizes(self):
-        """The pre-unification ``{TILE_SERVER_URL}`` placeholder keeps
-        working (rows authored before migration 0011)."""
-        style = {
-            "version": 8,
-            "sources": {
-                "wd-huts": {
-                    "type": "vector",
-                    "tiles": ["{TILE_SERVER_URL}/huts/{z}/{x}/{y}.mlt"],
-                    "encoding": "mlt",
-                }
-            },
-            "layers": [{"id": "wd-huts", "type": "circle", "source": "wd-huts"}],
-        }
-        resolved = resolve_style(style, {})
-        assert resolved["sources"]["wd-huts"]["tiles"] == [
-            "https://tiles.example.org/huts/{z}/{x}/{y}.mlt"
-        ]
 
 
 class SeedPairingTests(SimpleTestCase):

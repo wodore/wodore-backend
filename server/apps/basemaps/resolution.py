@@ -30,28 +30,20 @@ from server.apps.envvars.registry import resolve_setting
 
 from .validation import ENV_TOKEN_RE, TOKEN_RE
 
-PLACEHOLDER_RE = re.compile(r"\{TILE_SERVER_URL\}")
 #: Inline ``{{slug}}`` occurrences inside longer strings (URL templates).
 TOKEN_RE_INLINE = re.compile(r"\{\{([a-z0-9][a-z0-9_.\-]*)\}\}")
 
-#: Authored tile-origin references: the env token (the authored
-#: convention — the tile origin resolves through the same env registry
-#: as every other ``{{env:…}}`` name, via the seeded ``MARTIN_TILE_URL``
-#: row) and the legacy ``{TILE_SERVER_URL}`` placeholder (kept working
-#: for rows authored before the unification; basemaps migration 0011
-#: rewrites seeded rows to the token form).
-TILE_ORIGIN_TOKENS: tuple[str, ...] = (
-    "{{env:MARTIN_TILE_URL}}",
-    "{TILE_SERVER_URL}",
-)
+#: The authored tile-origin reference: a plain ``{{env:…}}`` token like
+#: every other registry name, resolved through the seeded
+#: ``MARTIN_TILE_URL`` row. The pre-unification ``{TILE_SERVER_URL}``
+#: placeholder has no resolution path anymore (basemaps migration
+#: 0011 rewrote stored rows); authored URLs use the token only.
+TILE_ORIGIN_TOKEN = "{{env:MARTIN_TILE_URL}}"
 
 
 def replace_tile_origin(value: str, origin: str) -> str:
-    """Replace every authored tile-origin form in a URL string."""
-    for token in TILE_ORIGIN_TOKENS:
-        if token in value:
-            value = value.replace(token, origin)
-    return value
+    """Replace the authored tile-origin token in a URL string."""
+    return value.replace(TILE_ORIGIN_TOKEN, origin)
 
 
 def resolve_tokens(value: Any, values: dict[str, Any]) -> Any:
@@ -186,14 +178,12 @@ def absolutize_urls(value: Any, tile_server_url: str, api_url: str = "") -> Any:
     (``/font/{fontstack}/{range}``, ``/sprite/wd-maps``) that only
     work when Martin serves the style itself. Once the API serves it,
     they must point at the tile server origin (spec requirement
-    'absolutization'). The legacy ``{TILE_SERVER_URL}`` placeholder is
-    substituted here too — the env-token form resolves earlier, in
-    ``substitute_env_tree``.
+    'absolutization'). Tile-origin ``{{env:MARTIN_TILE_URL}}`` tokens
+    are resolved before this stage (``substitute_env_tree`` runs
+    first).
     """
-    tile_server_url = PLACEHOLDER_RE.sub(tile_server_url.rstrip("/"), tile_server_url)
     if isinstance(value, str):
-        replaced = PLACEHOLDER_RE.sub(tile_server_url.rstrip("/"), value)
-        return _absolutize_url(replaced, tile_server_url, api_url)
+        return _absolutize_url(value, tile_server_url, api_url)
     if isinstance(value, dict):
         return {
             key: absolutize_urls(child, tile_server_url, api_url)
