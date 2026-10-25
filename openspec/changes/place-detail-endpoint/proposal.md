@@ -23,7 +23,7 @@ cheap; unifying after consumers bind to per-type URLs is not.
 - Add `GET /v1/geo/places/{place_id}` — one unified detail endpoint for
   **every** active, public GeoPlace regardless of `detail_type`. The
   type is a response field (`detail_type`), not a path segment.
-- Response: base place fields (`id`, `slug` when set, localized `name`,
+- Response: base place fields (`id`, `slug`, localized `name`,
   `country_code`, `elevation`, `importance`, `location`, `description`,
   `review_status`, `detail_type`) plus optional members `categories`,
   `sources`, `amenity_detail`, `parties` (per `geoplace-parties`) under
@@ -41,6 +41,10 @@ cheap; unifying after consumers bind to per-type URLs is not.
   bump per `docs/api-versioning.md`.
 - Amend `api-conventions`' slug-identifier requirement with a
   family-consistency clause (the geo places family is id-keyed).
+- Drop the vestigial `null=True` on `GeoPlace.slug`: the field has
+  been de facto mandatory since its introducing migration backfilled
+  every row — now enforced NOT NULL (D8; `blank=True` stays, `save()`
+  mints).
 
 Additive only — new endpoint, new optional response members — no API
 contract version bump.
@@ -70,6 +74,8 @@ contract version bump.
   (reuses `base_result`, `build_categories_data`, `annotate_sources`,
   `build_sources`)
 - `server/apps/geometries/schemas/_output.py` — `GeoPlaceDetailSchema`
+- `server/apps/geometries/models/_geoplace.py` + migration — slug
+  `null=False` cleanup
 - tests for the endpoint/alias contract; OpenAPI snapshot regeneration
 - Composes with pending `geoplace-parties` (parties member, nested
   projection fix) — dependency assumption, not duplicated here

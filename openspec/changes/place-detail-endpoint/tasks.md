@@ -12,6 +12,11 @@
       covers the endpoint (`places`, `categories`, `sources`, plus
       `parties` once `geoplace-parties` has landed)
 
+- [ ] 1.3 Slug NOT NULL cleanup: `AlterField` on `GeoPlace.slug` to
+      `null=False` (keep `blank=True` — `save()` auto-mints, forms
+      stay permissive); safe — production data has 0 NULL slugs; test
+      that a row without a slug is rejected at the database level
+
 ## 2. Presenter & controllers
 
 - [ ] 2.1 Extract a shared detail presenter into
@@ -47,7 +52,8 @@
 
 - [ ] 4.1 Per-detail-type coverage: amenity with block, natural/admin/
       none without; 404s (unknown, inactive, non-public — identical
-      body per the single error contract); `slug` present when set
+      body per the single error contract); `slug` always present
+      (never-null invariant)
 - [ ] 4.2 Selection: default full response;
       `?fields[places]=id,name,amenity_detail` narrowing; block of
       another type absent (200, no error); unknown block name → 400

@@ -7,7 +7,7 @@ The system SHALL expose `GET /v1/geo/places/{place_id}` returning the
 bare place resource (no envelope key) for every active, public
 GeoPlace regardless of `detail_type` (amenity, transport, admin,
 natural, none) — places without a detail model are first-class. The
-response SHALL carry the base fields `id`, `slug` (when set), `name`
+response SHALL carry the base fields `id`, `slug`, `name`
 (localized per `lang`), `country_code`, `elevation`, `importance`,
 `location`, `description`, `detail_type` and `review_status`. The
 endpoint SHALL accept the shared `lang` and `fields[TYPE]` query
@@ -48,8 +48,8 @@ matched by an integer path converter, and resolution SHALL filter to
 ids SHALL answer 404 with the single error contract body
 (`{"code": "not_found", "detail": …}` plus the RFC 9457 members
 `type`, `title`, `status` and `instance`) with no distinction between
-the cases. The response SHALL include the place's `slug` when set so
-clients can construct `place/{slug}` frontend URLs without a second
+the cases. The response SHALL include the place's `slug` so clients
+can construct `place/{slug}` frontend URLs without a second
 lookup.
 
 #### Scenario: Unknown id answers the standard 404
@@ -66,9 +66,31 @@ lookup.
 
 #### Scenario: slug rides along for URL building
 
-- **WHEN** a place with a slug set is fetched
-- **THEN** the response carries `slug`, and `place/{slug}` frontend
-  URLs can be built from the detail response alone
+- **WHEN** any place is fetched
+- **THEN** the response carries its (unique, never-null) `slug`, and
+  `place/{slug}` frontend URLs can be built from the detail response
+  alone
+
+### Requirement: Place slug invariant
+Every GeoPlace row SHALL have a unique, non-null slug, enforced at
+the database level (`null=False`). Input forms SHALL still accept an
+empty slug because `save()` mints one at creation, and import/creation
+paths SHALL mint the slug exactly once and never rewrite it for an
+existing row.
+
+#### Scenario: NOT NULL migration holds
+
+- **WHEN** the slug cleanup migration runs against production data
+- **THEN** it succeeds (no NULL slugs exist — the field's introducing
+  migration backfilled every row) and subsequent inserts without a
+  slug are rejected by the database
+
+#### Scenario: Fallback slug for nameless places
+
+- **WHEN** a place is created with an empty name and a category
+- **THEN** `save()` mints a fallback slug from the category slug (or
+  the `place-…` base without one), so no public place is ever served
+  without a slug
 
 ### Requirement: Optional members under sparse fieldset selection
 Optional response members SHALL follow the `fields[places]`

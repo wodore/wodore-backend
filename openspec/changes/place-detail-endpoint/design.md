@@ -27,13 +27,19 @@ GeoPlace facts that drive the keying decision:
 
 - `id`: bigint PK — stable across OSM re-imports, dedupe merges and
   renames; never re-minted, never moves between rows.
-- `slug`: `SlugField(max_length=15, unique, db_index, null=True)` —
-  "temporarily nullable for migration"; auto-minted on first save from
-  the English name (`slugify`), truncated to 15 chars, UUID-suffixed on
-  collision (`generate_unique_slug`); **not returned by any geo list or
-  detail response today**. Merges/re-imports can re-mint or orphan
-  slugs (a dedupe merge makes the losing row's slug vanish → deep
-  links rot); ids never move.
+- `slug`: `SlugField(max_length=15, unique, db_index, null=True,
+  blank=True)` — born nullable in migration 0012 (2026-03-09, PR #103
+  "Add amenities as geoplace"), whose own backfill populated every
+  existing row; the `null=True` is vestigial model debt, never flipped
+  back. De facto mandatory ever since: `save()` auto-mints when empty,
+  imports mint at creation and never rewrite (verified: every slug
+  assignment outside `save()` is a creation path), and the lane DB
+  shows **441,940/441,940 rows with a slug, 0 NULL**. Format is
+  `{4–11-char base}-{5–8 random chars}` (`bern-26xo40q9`,
+  `liechtenst-dne4`) — a stable but *opaque* URL key, not a
+  human-readable name; 0 purely numeric slugs exist and the random
+  suffix makes them impossible. **Not returned by any geo list or
+  detail response today.** This change cleans the debt up (D8).
 
 Routing constraint: the `places/` namespace has fixed siblings
 (`search`, `nearby`, `overlays`). A `<str:key>` converter at
@@ -77,8 +83,9 @@ Non-Goals:
   later changes; only the extension pattern is fixed.
 - No type/category filter parameters on the detail route (the place IS
   its type; filtering belongs to `search`/`nearby`).
-- No slug-quality workstream (longer slugs, immutability guarantees,
-  slug in list responses).
+- No slug-quality workstream (readable/longer slugs, slug exposure in
+  list responses). The NOT NULL cleanup (D8) is in scope; readability
+  is not — the random-suffix format is a deliberate URL-key design.
 - No ETag machinery (hut-style ETags may come later; the family tier is
   time-based today).
 
@@ -91,25 +98,33 @@ Non-Goals:
    | Criterion | A: id-only | B: slug-only | C: dual id-or-slug |
    |---|---|---|---|
    | List→detail navigation | native (search/nearby return `id`) | blocked — lists return no slug; requires a prerequisite change exposing it everywhere | works for id callers; slug callers still need exposure |
-   | Identifier stability | immune to import churn | exposed to 15-char truncation, UUID suffixes, re-minting on merge/dedupe (deep links rot) | same exposure for the slug half |
+   | Identifier stability | minted once, never edited | equal in practice: minted once at creation, never rewritten; dies with the row on merge/dedupe exactly like the id; residual delta: slug is admin-editable in principle, id never | same as slug for the slug half |
    | Routing | zero collision (`<int>` can't match `search`/`nearby`/`overlays`) | `<str:key>` collides with fixed siblings → needs `by-slug/` prefix or fragile ordering | same collision |
-   | Ambiguity | none | none | numeric-slug hazard: `slugify("88")` → `"88"` — a place named with digits is indistinguishable from an id; precedence rules silently change meaning as data grows |
+   | Ambiguity | none | none | none in practice — the mandatory random suffix (`base-xxxxx`) makes purely numeric slugs impossible (0 in 441,940 rows); the case against dual-key is complexity (two cache/404 key namespaces, type sniffing), not ambiguity |
    | Cache/404 semantics | one key namespace | one | two key namespaces per resource; 404 debugging muddied (miss-by-id vs miss-by-slug) |
    | URL friendliness | poor | best | mixed |
    | api-conventions | deviates (family-consistent) | compliant | deviates |
    | Versioning cost later | alias retirement is the only breaking step | migrating lists to slug = family-wide breaking | retiring either half = breaking |
 
-   **Recommendation: A.** The convention's own precondition — "stable,
-   human-readable slugs" — is not met by `GeoPlace.slug` as it exists
-   (auto-minted, truncated, UUID-suffixed, nullable), and the geo
-   family is id-keyed end to end and grandfathered as such. A slug-
-   keyed detail endpoint would be unaddressable from the list results
-   clients actually consume, and dual-key pays permanent ambiguity and
-   double cache/404 namespaces for a bridge nobody needs (zero
-   consumers today; the slug audience — frontend URLs, edge meta,
-   LLMs — is already served by the slug-keyed SEO/images surfaces).
+   **Recommendation: A.** With nullability off the table (slug is de
+   facto mandatory, D8 makes it de jure) and stability at parity
+   (both keys are minted once and die with the row), the decision
+   rests on four remaining factors, all pointing to id: (1) navigation
+   — search/nearby return `id` and no slug member exists in any geo
+   response, so a slug-keyed detail endpoint is unreachable from the
+   lists clients consume without a prerequisite change; (2) routing —
+   `<int>` cannot collide with the fixed `places/search|nearby|
+   overlays` siblings, `<str:key>` would; (3) family consistency —
+   the geo family is id-keyed end to end and grandfathered as such by
+   api-conventions (D6); (4) opacity — a `bern-26xo40q9`-style slug
+   is a second opaque key, not a human-readable identifier, so
+   slug-keying the machine API buys no readability. api-conventions'
+   "stable, human-readable slugs" precondition is not met by
+   GeoPlace.slug *as designed* — by deliberate format choice, not by
+   accident. Dual-key is rejected on complexity/YAGNI grounds, not
+   ambiguity (see the table).
 
-   Mitigations: the response carries `slug` when set, so clients build
+   Mitigations: the response carries `slug`, so clients build
    `place/{slug}` URLs from a detail fetch; the convention deviation is
    recorded in the specs (D6); the revisit trigger is explicit — a
    concrete consumer needing slug→full-detail deep links plus a slug-
@@ -186,6 +201,19 @@ Non-Goals:
    independently — a wrapper would couple their releases and break the
    one-nesting-level projection model.
 
+8. **Slug de jure mandatory (`null=False`).** Owner-confirmed intent:
+   the slug was always meant to be mandatory; `null=True` is leftover
+   from the field's introducing migration (0012), which backfilled
+   every row itself. One `AlterField` to `null=False`, keeping
+   `blank=True` — admin/forms may submit an empty slug because
+   `save()` mints one (category-based fallback for nameless places);
+   the database invariant then guarantees the endpoint's always-
+   present `slug` member at the storage layer. Safe to land: 0 NULL
+   rows in production data (441,940/441,940 on the dev snapshot).
+   The endpoint does not depend on the cleanup ordering — `slug`
+   remains an optional *member* under sparse fieldsets either way;
+   only its value is never null.
+
 ## Risks / Trade-offs
 
 - **Deviating from the slug-identifier convention** — mitigated by the
@@ -205,11 +233,12 @@ Non-Goals:
 
 ## Migration Plan
 
-None — no DB or schema changes. Sequencing: land after (or together
-with) `geoplace-parties` so the `parties` member and the projection fix
-are in place; landing before is also valid — the parties change already
-requires the member on GeoPlace responses and would add it to the
-detail route when it lands.
+One schema cleanup: the slug `null=False` `AlterField` (D8) — no other
+DB changes. Sequencing: land after (or together with)
+`geoplace-parties` so the `parties` member and the projection fix
+are in place; landing before is also valid — the parties change
+already requires the member on GeoPlace responses and would add it
+to the detail route when it lands.
 
 ## Open Questions
 
