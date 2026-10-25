@@ -34,7 +34,10 @@ DEFAULTS: tuple[tuple[str, str], ...] = (
 def seed(apps, schema_editor):
     EnvVar = apps.get_model("envvars", "EnvVar")
     for name, description in DEFAULTS:
-        EnvVar.objects.update_or_create(
+        # get_or_create, not update_or_create: a replay (fake-back +
+        # forward, restored DB with reset migration state) must never
+        # clobber a value an operator administered in the admin.
+        EnvVar.objects.get_or_create(
             name=name,
             defaults={
                 "value": "",

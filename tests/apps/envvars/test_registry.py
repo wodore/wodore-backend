@@ -109,6 +109,26 @@ class TestUrlOriginSeed:
             name__in=[name for name, _ in migration.DEFAULTS]
         ).exists()
 
+    def test_seed_never_clobbers_administered_rows(self):
+        """Replay-safety (get_or_create): an operator's value, fallback
+        and active flags survive a seed re-run."""
+        from django.apps import apps as global_apps
+
+        migration = importlib.import_module(
+            "server.apps.envvars.migrations.0004_seed_url_origins"
+        )
+        EnvVar.objects.create(
+            name="IMAGOR_URL",
+            value="https://op.example.org",
+            env_fallback=False,
+            is_active=False,
+        )
+        migration.seed(global_apps, None)
+        row = EnvVar.objects.get(name="IMAGOR_URL")
+        assert row.value == "https://op.example.org"
+        assert row.env_fallback is False
+        assert row.is_active is False
+
 
 class NoDatabaseDegradation(SimpleTestCase):
     """``resolve_setting`` works wherever the plain setting did.
