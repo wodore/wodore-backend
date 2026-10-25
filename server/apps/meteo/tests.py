@@ -11,6 +11,7 @@ import pytest
 
 from django.core.files.base import ContentFile
 from django.db import connection
+from django.db.models import Model
 from django.test import Client
 
 from server.apps.licenses.models import License
@@ -25,7 +26,7 @@ from server.apps.symbols.models import Symbol
 SVG_BODY = b'<svg xmlns="http://www.w3.org/2000/svg"/>'
 
 
-def _reset_pk_sequence(model) -> None:
+def _reset_pk_sequence(model: type[Model]) -> None:
     """Sync a table's ``id`` sequence with ``MAX(id)``.
 
     Test databases cloned from the dev/template data contain rows
@@ -72,7 +73,7 @@ class TestWeatherCodeSvg:
         )
         return symbol
 
-    def test_redirects_to_svg(self, weather_svg):
+    def test_redirects_to_svg(self, weather_svg: Symbol) -> None:
         response = Client().get("/v1/meteo/symbol/test-collection-xy/day/9001.svg")
 
         assert response.status_code == 302
@@ -87,12 +88,12 @@ class TestWeatherCodeSvg:
 
         assert response.status_code == 404
 
-    def test_unknown_code_returns_404(self, weather_svg):
+    def test_unknown_code_returns_404(self, weather_svg: Symbol) -> None:
         response = Client().get("/v1/meteo/symbol/test-collection-xy/day/99.svg")
 
         assert response.status_code == 404
 
-    def test_code_without_day_symbol_returns_404(self, weather_svg):
+    def test_code_without_day_symbol_returns_404(self, weather_svg: Symbol) -> None:
         WeatherCode.objects.create(
             code=9002,
             slug="test-mainly-clear",
