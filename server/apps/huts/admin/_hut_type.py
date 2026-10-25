@@ -64,7 +64,7 @@ class HutTypesAdmin(ModelAdmin):
         )
 
     def _get_url_str(
-        self, obj: "QuerySetAny", closed: bool = False, klass: str = "font-semibold"
+        self, obj: Category, closed: bool = False, klass: str = "font-semibold"
     ) -> str:
         number = obj.number_huts_closed if closed else obj.number_huts_open  # type: ignore  # custom manager/queryset inference gap
         type_id = obj.id  # type: ignore  # custom manager/queryset inference gap
@@ -77,7 +77,7 @@ class HutTypesAdmin(ModelAdmin):
         return f'<a class="{klass}" title="{help_text}" href={url}>{number}</a>'
 
     @display(description=_("Huts"), ordering="number_huts")
-    def show_numbers_huts(self, obj: "QuerySetAny") -> str:
+    def show_numbers_huts(self, obj: Category) -> str:
         open_url = self._get_url_str(obj, closed=False)
         # return mark_safe(f"{open_url}")
         closed_url = self._get_url_str(obj, closed=True, klass="")
