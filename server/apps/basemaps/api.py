@@ -84,9 +84,16 @@ CATALOG_VERSION_TTL = 10
 #: Cache key of the memoized catalog version (tests clear it after edits).
 CATALOG_VERSION_CACHE_KEY = "basemaps:catalog-version"
 
+#: Render-epoch of cached style bodies — bumped on every env-registry
+#: edit (see ``_registry_changed``) and folded into every style cache
+#: key: registry values are baked into rendered bodies (the tile origin
+#: via ``{TILE_SERVER_URL}``, ``{{env:...}}`` tokens via substitution).
+STYLE_BODIES_EPOCH_KEY = "basemaps:style-bodies-epoch"
+
 #: Rendered-style body retention. Keys are version-keyed (modified +
-#: asset-version digest) so entries fall out of reach on every edit; the
-#: TTL merely bounds stranded entries from version churn.
+#: asset-version digest + registry epoch) so entries fall out of reach
+#: on every edit; the TTL merely bounds stranded entries from version
+#: churn.
 STYLE_CACHE_TTL = 7 * 24 * 3600
 
 
@@ -479,17 +486,23 @@ def _env_servable(layers: list[MapLayer]) -> list[MapLayer]:
 
 
 def _registry_changed(*_: object, **_kwargs: object) -> None:
-    """Env registry edit: availability and catalog payloads may change.
+    """Env registry edit: availability, catalog and style bodies change.
 
     Signal receiver wired in ``BasemapsConfig.ready()`` (post_save /
     post_delete on ``envvars.EnvVar``); the registry row snapshot is
-    invalidated by ``envvars.registry`` itself.
+    invalidated by ``envvars.registry`` itself. The epoch bump re-keys
+    every rendered style body so none survives a registry change with
+    stale baked-in values (old tile origin, old ``{{env:...}}`` keys).
     """
     from django.core.cache import cache
 
     global _env_gated_warned
     _env_gated_warned = set()
     cache.delete(CATALOG_VERSION_CACHE_KEY)
+    try:
+        cache.incr(STYLE_BODIES_EPOCH_KEY)
+    except ValueError:  # first bump after a flush
+        cache.set(STYLE_BODIES_EPOCH_KEY, 1, timeout=None)
 
 
 def _prefetched_layers(**filters: Any) -> list[MapLayer]:
@@ -794,14 +807,27 @@ def _inject_serving_metadata(
     return payload
 
 
+def _style_bodies_epoch() -> str:
+    """Current render epoch of style bodies ('' until the first bump).
+
+    Seeded rows with empty values keep rendering from Django settings —
+    the epoch only needs to separate renders across registry *changes*,
+    not track their count.
+    """
+    from django.core.cache import cache
+
+    return str(cache.get(STYLE_BODIES_EPOCH_KEY, ""))
+
+
 def _style_cache_key(layer: MapLayer, tokenized: bool, digest: str = "") -> str:
-    """Render cache key — version-bumped by ``modified`` and the
+    """Render cache key — version-bumped by ``modified``, the
     asset-version digest (a published sprite/font/tile version change
-    re-renders even when the layer row is untouched)."""
+    re-renders even when the layer row is untouched) and the registry
+    epoch (registry values are baked into bodies at render time)."""
     return (
         f"basemaps:style:{layer.pk}:{layer.spec}:"
         f"{'tokenized' if tokenized else 'resolved'}:"
-        f"{layer.modified.isoformat()}:{digest}"
+        f"{layer.modified.isoformat()}:{digest}:{_style_bodies_epoch()}"
     )
 
 
@@ -823,9 +849,9 @@ def _style_cache_set(
     from django.core.cache import cache
 
     # No unbounded retention: the key embeds ``modified`` + the per-style
-    # asset-version digest — any style/parameter/asset-version edit
-    # changes the key — and a generous TTL bounds stranded entries from
-    # version churn.
+    # asset-version digest + the registry epoch — any style/parameter/
+    # asset-version/registry edit changes the key — and a generous TTL
+    # bounds stranded entries from version churn.
     cache.set(
         _style_cache_key(layer, tokenized, digest),
         (body, etag),

@@ -13,7 +13,7 @@ import importlib
 import pytest
 
 from django.core.cache import cache
-from django.test import override_settings
+from django.test import SimpleTestCase, override_settings
 
 from server.apps.basemaps.resolution import resolve_style
 from server.apps.envvars.models import EnvVar
@@ -25,8 +25,15 @@ NAME = "IMAGOR_URL"
 
 
 @pytest.fixture(autouse=True)
-def _fresh_registry():
-    """Every test starts from an empty registry + dropped snapshot."""
+def _fresh_registry(request: pytest.FixtureRequest):
+    """DB-backed tests start from an empty registry + dropped snapshot.
+
+    No-DB tests (SimpleTestCase) skip the wipe — they exercise the
+    registry-unavailable degradation path on purpose.
+    """
+    if not request.node.get_closest_marker("django_db"):
+        yield
+        return
     EnvVar.objects.all().delete()
     cache.delete(CACHE_KEY)
     yield
@@ -101,6 +108,22 @@ class TestUrlOriginSeed:
         assert not EnvVar.objects.filter(
             name__in=[name for name, _ in migration.DEFAULTS]
         ).exists()
+
+
+class NoDatabaseDegradation(SimpleTestCase):
+    """``resolve_setting`` works wherever the plain setting did.
+
+    No-DB contexts (SimpleTestCase, early boot) must degrade to
+    "registry off" — the Django setting serves — not raise. Pins the
+    regression where ``resolve_style`` became DB-bound through the
+    registry and broke no-DB callers.
+    """
+
+    @override_settings(MARTIN_TILE_URL="https://tiles.example.org")
+    def test_registry_unavailable_falls_back_to_setting(self):
+        self.assertEqual(
+            resolve_setting("MARTIN_TILE_URL"), "https://tiles.example.org"
+        )
 
 
 @pytest.mark.django_db

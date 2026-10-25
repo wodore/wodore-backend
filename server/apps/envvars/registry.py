@@ -113,6 +113,20 @@ def usable(name: str, snapshot: dict[str, Row] | None = None) -> bool:
     return bool(resolve(name, snap))
 
 
+def _rows_or_empty() -> dict[str, Row]:
+    """Registry rows, or an empty snapshot when the DB is unreachable.
+
+    ``resolve_setting`` must stay usable wherever the plain Django
+    setting was (SimpleTestCase tests, early boot, degraded cache):
+    a blocked or unavailable database degrades to "registry off" —
+    the Django setting serves — instead of raising.
+    """
+    try:
+        return rows()
+    except Exception:  # any DB/cache failure degrades to "registry off"
+        return {}
+
+
 def resolve_setting(name: str, default: str = "") -> str:
     """Runtime value for a Django-settings-backed name (URL origins).
 
@@ -131,7 +145,7 @@ def resolve_setting(name: str, default: str = "") -> str:
     ``override_settings`` in tests (and decouple-loaded config) lose
     against a stray shell export of the same name.
     """
-    snap = rows()
+    snap = _rows_or_empty()
     row = snap.get(name)
     if row is not None:
         value, active, env_fallback = row

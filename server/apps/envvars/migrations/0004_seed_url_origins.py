@@ -26,10 +26,7 @@ DEFAULTS: tuple[tuple[str, str], ...] = (
     ),
     (
         "BACKEND_DOMAIN",
-        (
-            "Backend public base URL — og watermark URLs and RFC 9457 "
-            "problem-type URIs"
-        ),
+        ("Backend public base URL — og watermark URLs and RFC 9457 problem-type URIs"),
     ),
 )
 

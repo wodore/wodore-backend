@@ -359,9 +359,7 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             "title": _("Tile Map"),
             "has_permission": True,
             "overlay_categories_json": json.dumps(overlay_categories),
-            "martin_tile_url": resolve_setting(
-                "MARTIN_TILE_URL", "http://localhost:8075"
-            ),
+            "martin_tile_url": resolve_setting("MARTIN_TILE_URL"),
             "is_fullwidth": "1",
         }
         return TemplateResponse(request, "admin/geometries_tilemap.html", context)
