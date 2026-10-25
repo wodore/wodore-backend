@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -83,13 +84,15 @@ class OSMMapping:
     category_slug: str
     """Target category slug (e.g., 'groceries.bakery')"""
 
-    condition: Callable[[dict], bool] | None = None
+    condition: Callable[[dict[str, str]], bool] | None = None
     """Optional filter function to check additional tag conditions"""
 
-    pre_process: Callable[[dict], dict] | None = None
+    pre_process: Callable[[dict[str, str]], dict[str, str]] | None = None
     """Optional function to transform tags before mapping (returns modified tags dict)"""
 
-    post_process: Callable[[dict, dict], dict] | None = None
+    post_process: Callable[[dict[str, str], dict[str, Any]], dict[str, Any]] | None = (
+        None
+    )
     """Optional function to add extra data after mapping (receives tags and extracted data, returns modified data dict)"""
 
     mapcomplete_theme: str = "shops"
@@ -98,7 +101,7 @@ class OSMMapping:
     priority: int = 0
     """Priority for this mapping (lower number = higher priority, used when multiple mappings match)"""
 
-    default_name: dict | None = field(default_factory=dict)
+    default_name: dict[str, str] | None = field(default_factory=dict)
     """
     Optional multilingual default name for unnamed places.
 
@@ -156,14 +159,14 @@ class CategoryMappings:
     enabled: bool = True
     """Whether this category is enabled for import"""
 
-    def get_osm_filters(self) -> list:
+    def get_osm_filters(self) -> list[str | tuple[str, ...]]:
         """Get all OSM filters for osmium filtering."""
         filters = []
         for mapping in self.mappings:
             filters.extend(mapping.osm_filters)
         return filters
 
-    def match_category(self, tags: dict) -> tuple[str, OSMMapping] | None:
+    def match_category(self, tags: dict[str, str]) -> tuple[str, OSMMapping] | None:
         """
         Find matching category slug for given OSM tags.
 
@@ -186,7 +189,9 @@ class CategoryMappings:
         matches.sort(key=lambda m: m[1].priority)
         return matches[0]
 
-    def _tags_match(self, tags: dict, osm_filters: list) -> bool:
+    def _tags_match(
+        self, tags: dict[str, str], osm_filters: list[str | tuple[str, ...]]
+    ) -> bool:
         """
         Check if tags match osm_filters (AND logic with OR support).
 
@@ -213,7 +218,7 @@ class CategoryMappings:
 
         return True  # All AND conditions passed
 
-    def _matches_single_tag(self, tags: dict, tag_str: str) -> bool:
+    def _matches_single_tag(self, tags: dict[str, str], tag_str: str) -> bool:
         """
         Check if single tag pattern matches.
 

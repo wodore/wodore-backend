@@ -1,5 +1,7 @@
 """GeoPlace search and query endpoints on dmr."""
 
+from typing import Any
+
 import pydantic
 from dmr import Path, Query, modify
 from dmr.routing import path
@@ -132,7 +134,7 @@ class OverlayCategoriesController(ApiController):
         operation_id="get_overlay_categories",
         headers=cache_headers(300),
     )
-    def get(self) -> list[dict]:
+    def get(self) -> list[dict[str, Any]]:
         """List map overlay categories.
 
         Usable as overlay filters in vector tile requests; returns root-level categories that can be used as overlay filters

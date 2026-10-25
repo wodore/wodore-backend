@@ -11,6 +11,8 @@ GeoPlace texts are stored per place (``main_language``), not per-active
 language like huts — the endpoints serve the stored text as-is.
 """
 
+from typing import Any
+
 import pydantic
 from dmr import Path, Query, modify
 from dmr.routing import external_path, path
@@ -47,7 +49,9 @@ class PlaceMetaSchema(pydantic.BaseModel):
     longitude: float | None = Field(None, description="WGS84 longitude")
     image: str | None = Field(None, description="Social preview image (absolute URL)")
     page_url: str = Field(description="Canonical frontend page URL")
-    jsonld: dict | None = Field(None, description="Ready-to-inline schema.org JSON-LD")
+    jsonld: dict[str, Any] | None = Field(
+        None, description="Ready-to-inline schema.org JSON-LD"
+    )
     modified: str | None = Field(None, description="Last modification (ISO date)")
 
 
@@ -148,8 +152,8 @@ def _cap_first(label: str) -> str:
 
 def _place_jsonld(
     place: GeoPlace, description: str, page_url: str, image: str | None
-) -> dict:
-    data: dict = {
+) -> dict[str, Any]:
+    data: dict[str, Any] = {
         "@context": "https://schema.org",
         "@type": "Place",
         "name": place.name,
