@@ -3,6 +3,7 @@ from ._associations import (
     GeoPlaceCategoryAdmin,
     GeoPlaceExternalLinkAdmin,
     GeoPlaceImageAssociationAdmin,
+    GeoPlacePartyAdmin,
     GeoPlaceSourceAssociationAdmin,
 )
 from ._geoplace import GeoPlaceAdmin
@@ -13,5 +14,6 @@ __all__ = [
     "GeoPlaceCategoryAdmin",
     "GeoPlaceExternalLinkAdmin",
     "GeoPlaceImageAssociationAdmin",
+    "GeoPlacePartyAdmin",
     "GeoPlaceSourceAssociationAdmin",
 ]

@@ -67,7 +67,7 @@ def merge_owners(apps, schema_editor):
                 label=owner.name or owner.slug,
                 identifier=_unique_identifier(ExternalLink),
             )
-            link.save()  # base save: no override exists on historical models
+            link.save()  # historical models use base Model.save(); skip_health_check has no effect here
         PartyLink.objects.get_or_create(party=party, external_link=link)
 
 

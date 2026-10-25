@@ -1143,7 +1143,11 @@ class GeoPlace(TimeStampedModel):
                     respect_protected = True
 
         if respect_protected:
-            pass  # TODO do something with it
+            # Policy-level enforcement deferred (pre-existing TODO): the
+            # per-field ``protected`` checks below already honor protected
+            # fields uniformly; MERGE vs AUTO_PROTECT currently behave the
+            # same here.
+            pass
 
         # Track if anything was updated
         place_updated = False

@@ -14,8 +14,17 @@ from ..models import (
     GeoPlaceCategory,
     GeoPlaceExternalLink,
     GeoPlaceImageAssociation,
+    GeoPlaceParty,
     GeoPlaceSourceAssociation,
 )
+
+
+@admin.register(GeoPlaceParty)
+class GeoPlacePartyAdmin(ModelAdmin):
+    list_display = ("geo_place", "party", "role", "order")
+    list_filter = ("role",)
+    search_fields = ("geo_place__name", "geo_place__slug", "party__slug")
+    autocomplete_fields = ("geo_place", "party", "role")
 
 
 @admin.register(AdminDetail)
