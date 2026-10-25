@@ -1083,12 +1083,13 @@ class Command(BaseCommand):
 
         # Build party inputs (single-value tags only — ";" lists are
         # product/brand lists, not chain identity). Operator-tag parties
-        # are minted into review (noisy free text).
+        # are minted into review (noisy free text). Name-only inputs:
+        # the write path resolves or mints via the dedup key
+        # (OpenSpec ``party-slug-minting``).
         party_inputs = []
         if data.get("brand") and ";" not in data["brand"]:
             party_inputs.append(
                 PartyInput(
-                    slug=self._normalize_party_slug(data["brand"]),
                     name=data["brand"],
                     role="role.brand",
                 )
@@ -1096,7 +1097,6 @@ class Command(BaseCommand):
         if data.get("operator") and ";" not in data["operator"]:
             party_inputs.append(
                 PartyInput(
-                    slug=self._normalize_party_slug(data["operator"]),
                     name=data["operator"],
                     role="role.operator",
                     review_status="review",
@@ -1519,15 +1519,17 @@ class Command(BaseCommand):
         # Pre-create parties. Operator names are minted first with
         # review status — a name appearing as both brand and operator
         # stays in the conservative review state (the write path's
-        # get_or_create ignores defaults once the row exists).
+        # get_or_create ignores defaults once the row exists). Dedup is
+        # by normalized name; slugs mint once on creation
+        # (OpenSpec ``party-slug-minting``).
         for name in operator_names:
             Party.objects.get_or_create(
-                slug=self._normalize_party_slug(name),
+                dedup_key=Party.normalize_key(name),
                 defaults={"name": name, "review_status": "review"},
             )
         for name in party_names:
             Party.objects.get_or_create(
-                slug=self._normalize_party_slug(name),
+                dedup_key=Party.normalize_key(name),
                 defaults={"name": name},
             )
 
@@ -1535,14 +1537,6 @@ class Command(BaseCommand):
             f"Cached {len(category_cache)} categories and "
             f"{len(party_names | operator_names)} parties"
         )
-
-    def _normalize_party_slug(self, name: str) -> str:
-        """Normalize a party name to a consistent slug.
-
-        Kept identical to the former ``_normalize_brand_slug`` so OSM
-        re-imports match parties migrated from brand categories.
-        """
-        return name.lower().replace(" ", "_")[:50]
 
     def _get_or_create_category(self, category_slug: str) -> Category | None:
         """Get or create category by identifier (parent.slug format)."""
@@ -2950,15 +2944,17 @@ class Command(BaseCommand):
         # Pre-create parties (operator names first — they mint into
         # review; a name that is both brand and operator stays in the
         # conservative state). The write path's get_or_create ignores
-        # defaults once the row exists, so this is idempotent.
+        # defaults once the row exists, so this is idempotent. Dedup is
+        # by normalized name; slugs mint once on creation (OpenSpec
+        # ``party-slug-minting``).
         for name in operator_names:
             Party.objects.get_or_create(
-                slug=self._normalize_party_slug(name),
+                dedup_key=Party.normalize_key(name),
                 defaults={"name": name, "review_status": "review"},
             )
         for name in party_names:
             Party.objects.get_or_create(
-                slug=self._normalize_party_slug(name),
+                dedup_key=Party.normalize_key(name),
                 defaults={"name": name},
             )
 

@@ -540,6 +540,21 @@ class GeoPlace(TimeStampedModel):
             if self.review_status == "new":
                 self.review_status = "done"
 
+    #: Amenity-type words that carry no identity in a place name -
+    #: filtered from the minted base slug (geoplace-specific vocabulary
+    #: for the generic ``mint_short_slug`` helper).
+    SLUG_IGNORE_WORDS = [
+        "hotel",
+        "restaurant",
+        "gasthaus",
+        "gasthof",
+        "berghaus",
+        "berggasthaus",
+        "hostel",
+        "cafeteria",
+        "campground",
+    ]
+
     @classmethod
     def generate_unique_slug(
         cls,
@@ -571,76 +586,14 @@ class GeoPlace(TimeStampedModel):
             "" (category: "drinkwater") → "drinkwater-ito4"
             "" (no category) → "place-vn191wad"
         """
-        import secrets
-        import string
+        from server.core.utils import mint_short_slug
 
-        from slugify import slugify as pyslugify
-
-        # 1. Fallback to category if name is empty
-        if not name or len(name.strip()) < 2:
-            base_slug = category_slug or "place"
-        else:
-            # 2. Create base slug
-            slug = pyslugify(name, word_boundary=True)
-            slug = slug.strip("-")
-
-            # 3. Filter common words (amenity types only)
-            SLUG_IGNORE = [
-                "hotel",
-                "restaurant",
-                "gasthaus",
-                "gasthof",
-                "berghaus",
-                "berggasthaus",
-                "hostel",
-                "cafeteria",
-                "campground",
-            ]
-            words = [w for w in slug.split("-") if w not in SLUG_IGNORE and len(w) >= 3]
-
-            if not words:
-                base_slug = category_slug or "place"
-            else:
-                # 4. Smart word splitting: take up to 3 words, distribute space equally
-                # Target: 9 chars for base slug (leaves room for 5-char UUID)
-                target_base_length = 9
-                selected_words = words[:3]
-                num_words = len(selected_words)
-
-                # Calculate chars per word (minimum 3 chars per word)
-                chars_per_word = max(3, target_base_length // num_words)
-
-                # Build base slug by taking chars_per_word from each word
-                word_parts = []
-                for word in selected_words:
-                    word_parts.append(word[:chars_per_word])
-
-                base_slug = "".join(word_parts)
-
-                # If we have space left, extend the first word
-                remaining = target_base_length - len(base_slug)
-                if remaining > 0 and len(selected_words[0]) > chars_per_word:
-                    # Take more chars from first word
-                    extended_first = selected_words[0][: chars_per_word + remaining]
-                    # Rebuild base_slug with extended first word
-                    base_slug = extended_first + "".join(word_parts[1:])
-
-                base_slug = base_slug[
-                    :target_base_length
-                ]  # Ensure we don't exceed target
-
-        # 5. Smart UUID sizing (min 5, max 8)
-        # Calculate available space for UUID: max_length - base_length - 1 (for hyphen)
-        available_space = max_length - len(base_slug) - 1
-        uuid_len = max(5, min(8, available_space))
-
-        # 6. Generate UUID suffix
-        charset = string.ascii_lowercase + string.digits
-        suffix = "".join(secrets.choice(charset) for _ in range(uuid_len))
-
-        # 7. Combine and enforce max length
-        slug = f"{base_slug}-{suffix}"
-        return slug[:max_length]
+        return mint_short_slug(
+            name,
+            fallback=category_slug or "place",
+            ignore_words=cls.SLUG_IGNORE_WORDS,
+            max_length=max_length,
+        )
 
     @classmethod
     def create_with_source(

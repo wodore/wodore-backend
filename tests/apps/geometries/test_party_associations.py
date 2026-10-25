@@ -8,6 +8,7 @@ separate rows for multiple roles, RESTRICT on party and role FKs), and
 the schema write path that replaced the ``AmenityDetail.brand`` FK.
 """
 
+import re
 from typing import Any
 
 import pytest
@@ -154,6 +155,70 @@ class TestAmenityWritePath:
         assert association.party.slug == "volg"
         assert association.party.name == "Volg"
 
+    def test_name_only_write_resolves_by_dedup_key(self):
+        place = GeoPlaceFactory()
+
+        _detail, _status = AmenityDetail.update_or_create(
+            place=place,
+            schema=self._schema({"name": "SAC Bern", "role": "role.operator"}),
+        )
+
+        party = Party.objects.get(dedup_key="sac_bern")
+        assert party.name == "SAC Bern"
+        assert place.party_associations.get().party == party  # type: ignore  # reverse FK
+
+    def test_name_only_write_mints_short_slug(self):
+        place = GeoPlaceFactory()
+
+        _detail, _status = AmenityDetail.update_or_create(
+            place=place,
+            schema=self._schema({"name": "Coop Supermarkt", "role": "role.brand"}),
+        )
+
+        party = Party.objects.get(dedup_key="coop_supermarkt")
+        assert len(party.slug) <= 15
+        assert re.fullmatch(r"[a-z0-9]{1,9}-[a-z0-9]{5,8}", party.slug)
+
+    def test_existing_slug_reference_wins_over_name(self):
+        """A slug match resolves the party even when the name differs."""
+        place = GeoPlaceFactory()
+        existing = Party.objects.create(slug="volg", name="Volg")
+
+        AmenityDetail.update_or_create(
+            place=place,
+            schema=self._schema(
+                {"slug": "volg", "name": "Completely Different", "role": "role.brand"}
+            ),
+        )
+
+        association = place.party_associations.get()  # type: ignore  # reverse FK
+        assert association.party == existing
+        assert Party.objects.filter(dedup_key="completely_different").count() == 0
+
+    def test_name_only_reuses_existing_party(self):
+        """Name-only input dedups through the key — no duplicate row."""
+        place = GeoPlaceFactory()
+        existing = Party.objects.create(name="Volg")
+
+        AmenityDetail.update_or_create(
+            place=place,
+            schema=self._schema({"name": "Volg", "role": "role.brand"}),
+        )
+
+        assert Party.objects.filter(dedup_key="volg").count() == 1
+        association = place.party_associations.get()  # type: ignore  # reverse FK
+        assert association.party == existing
+        assert existing.slug  # untouched minted slug
+
+    def test_slug_and_name_missing_rejected(self):
+        place = GeoPlaceFactory()
+
+        with pytest.raises(ValueError, match="slug or a name"):
+            AmenityDetail.update_or_create(
+                place=place,
+                schema=self._schema({"role": "role.brand"}),
+            )
+
     def test_parties_write_idempotent(self):
         place = GeoPlaceFactory()
         schema = self._schema({"slug": "volg", "name": "Volg", "role": "role.brand"})
@@ -171,7 +236,6 @@ class TestAmenityWritePath:
             place=place,
             schema=self._schema(
                 {
-                    "slug": "sac_bern",
                     "name": "SAC Bern",
                     "role": "role.operator",
                     "review_status": "review",
@@ -179,7 +243,7 @@ class TestAmenityWritePath:
             ),
         )
 
-        party = Party.objects.get(slug="sac_bern")
+        party = Party.objects.get(dedup_key="sac_bern")
         assert party.review_status == "review"
 
     def test_unknown_role_identifier_rejected(self):

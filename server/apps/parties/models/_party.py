@@ -5,6 +5,8 @@ OpenSpec change: ``geoplace-parties`` (ISO 19115-1 ``CI_Party`` +
 the semantics via ``GeoPlaceParty`` role categories (``role.*``).
 """
 
+from typing import Any, override
+
 from modeltrans.fields import TranslationField
 
 from django.contrib.postgres.indexes import GinIndex
@@ -15,6 +17,7 @@ from django.utils.translation import gettext_lazy as _
 from server.apps.external_links.models import ReviewStatus
 from server.core.managers import BaseMutlilingualManager
 from server.core.models import TimeStampedModel
+from server.core.utils import mint_short_slug
 
 from ._party_link import PartyLink
 
@@ -31,7 +34,22 @@ class Party(TimeStampedModel):
     i18n = TranslationField(fields=("name", "note"))
     objects = BaseMutlilingualManager()
 
-    slug = models.SlugField(unique=True, db_index=True, blank=False)
+    slug = models.SlugField(
+        unique=True,
+        db_index=True,
+        blank=True,
+        max_length=15,
+        verbose_name=_("Slug"),
+        help_text=_("Short public identifier; minted from the name when left blank"),
+    )
+    dedup_key = models.SlugField(
+        max_length=50,
+        unique=True,
+        db_index=True,
+        blank=True,
+        verbose_name=_("Dedup key"),
+        help_text=_("Normalized name - the import identity (auto-derived when blank)"),
+    )
     name = models.CharField(
         max_length=100,
         null=True,
@@ -111,6 +129,35 @@ class Party(TimeStampedModel):
             ),
         ]
         ordering = (Lower("name_i18n"),)
+
+    @staticmethod
+    def normalize_key(value: str) -> str:
+        """Normalize a name to the import dedup key.
+
+        Verbatim the OSM import's former ``_normalize_party_slug``
+        (itself kept identical to the pre-parties ``_normalize_brand_slug``
+        so re-imports keep matching migrated rows).
+        """
+        return value.lower().replace(" ", "_")[:50]
+
+    @override
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Mint the short slug and derive the dedup key when blank.
+
+        The slug is minted once at creation and never re-derived - the
+        dedup key is the stable import identity (OpenSpec change
+        ``party-slug-minting``).
+        """
+        if not self.slug:
+            base = (
+                self.name
+                if self.name and len(self.name.strip()) >= 2
+                else self.dedup_key or ""
+            )
+            self.slug = mint_short_slug(base, fallback="party")
+        if not self.dedup_key:
+            self.dedup_key = Party.normalize_key(self.name if self.name else self.slug)
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return self.name_i18n

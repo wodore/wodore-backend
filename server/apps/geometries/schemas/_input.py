@@ -58,10 +58,16 @@ class DeletePolicyEnum(str, Enum):
 
 # Helper schemas
 class PartyInput(BaseModel):
-    """Role-classified party association input."""
+    """Role-classified party association input.
 
-    slug: str  # Party slug
-    name: str | None = None  # Optional party name if the party does not exist yet
+    Resolution (OpenSpec ``party-slug-minting``): a ``slug`` references
+    an existing party (created with that slug when unknown); without a
+    slug the ``name`` resolves or mints via the dedup key. One of the
+    two is required.
+    """
+
+    slug: str | None = None  # Party slug (reference an existing party)
+    name: str | None = None  # Party name (resolves or mints by dedup key)
     role: str  # Role category identifier (e.g., "role.brand", "role.operator")
     review_status: str | None = None  # Review status for newly minted parties
 

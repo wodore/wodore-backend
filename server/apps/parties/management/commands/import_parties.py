@@ -41,7 +41,9 @@ class Command(BaseCommand):
         created = existing = linked = 0
         for owner in owners.iterator(chunk_size=500):
             if dry_run:
-                if Party.objects.filter(slug=owner.slug).exists():
+                if Party.objects.filter(
+                    dedup_key=Party.normalize_key(owner.slug)
+                ).exists():
                     existing += 1
                 else:
                     created += 1

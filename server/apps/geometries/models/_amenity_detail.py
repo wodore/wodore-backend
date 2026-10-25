@@ -202,14 +202,28 @@ class AmenityDetail(GeoPlaceDetailBase):
             role = Category.objects.filter(identifier=entry.role).first()
             if role is None or role.parent_id is None or role.parent.slug != "role":
                 raise ValueError(f"Invalid party role identifier: {entry.role}")
-            party_defaults: dict[str, object] = {
-                "name": entry.name or entry.slug.replace("_", " ").title(),
-            }
+            party_defaults: dict[str, object] = {}
             if entry.review_status:
                 party_defaults["review_status"] = entry.review_status
-            party, _created = Party.objects.get_or_create(
-                slug=entry.slug, defaults=party_defaults
-            )
+            if entry.slug:
+                # Explicit slug: reference the existing party, or create
+                # it under that slug (pre-minting-era semantics).
+                party_defaults.setdefault(
+                    "name", entry.name or entry.slug.replace("_", " ").title()
+                )
+                party, _created = Party.objects.get_or_create(
+                    slug=entry.slug, defaults=party_defaults
+                )
+            elif entry.name:
+                # Name-only: dedup by the normalized name; the slug is
+                # minted once on creation (Party.save()).
+                party_defaults["name"] = entry.name
+                party, _created = Party.objects.get_or_create(
+                    dedup_key=Party.normalize_key(entry.name),
+                    defaults=party_defaults,
+                )
+            else:
+                raise ValueError("PartyInput needs a slug or a name")
             _assoc, assoc_created = GeoPlaceParty.objects.get_or_create(
                 geo_place=place, party=party, role=role
             )

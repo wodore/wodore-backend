@@ -29,8 +29,12 @@ def merge_owner(owner: Owner) -> tuple[Party, bool, bool]:
         for key, value in (owner.i18n or {}).items()
         if key.startswith(("name_", "note_"))
     }
+    # Dedup by the normalized owner slug (OpenSpec ``party-slug-minting``):
+    # the slug is a minted short public identifier, minted once on
+    # creation; re-merges resolve through the key. Owner slugs are
+    # already normalized, so ``normalize_key`` is the identity here.
     party, party_created = Party.objects.get_or_create(
-        slug=owner.slug,
+        dedup_key=Party.normalize_key(owner.slug),
         defaults={"name": owner.name or owner.slug, "i18n": i18n},
     )
 
