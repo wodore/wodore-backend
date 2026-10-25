@@ -39,7 +39,7 @@ _SYMBOL_SPEC = spec_from_schema(
 _SYMBOL_PREPARE, _ = specs.process(_SYMBOL_SPEC)
 
 
-def _prepared_symbols(base_qs: "QuerySetAny"):
+def _prepared_symbols(base_qs: "QuerySetAny") -> "QuerySetAny":
     """Base queryset with schema-derived relation loading.
 
     relations_only: the serializer validates the full wire schema off

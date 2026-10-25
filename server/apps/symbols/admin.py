@@ -73,7 +73,7 @@ class SymbolAdmin(ModelAdmin):
     def save_model(
         self, request: HttpRequest, obj: Model, form: Form, change: Any
     ) -> None:
-        symbol = cast("Symbol", obj)  # admin is registered for Symbol only
+        symbol = cast(Symbol, obj)  # admin is registered for Symbol only
         if not symbol.uploaded_by_user:
             symbol.uploaded_by_user = request.user  # type: ignore  # FK descriptor read as the model class (plugin-less inference gap)
         super().save_model(request, obj, form, change)
