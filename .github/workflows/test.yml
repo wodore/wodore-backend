@@ -141,6 +141,15 @@ jobs:
           ")
           uv run python manage.py makemigrations --check --dry-run $APPS
 
+      # ── Compile translations ──────────────────────────────────────
+
+      - name: Compile translations
+        # The per-language llms.txt variants render through the django
+        # catalog ({% translate %} in server/templates/txt/llms.txt);
+        # .mo files are gitignored and compiled here (gettext's msgfmt is
+        # preinstalled on ubuntu runners).
+        run: uv run python manage.py compilemessages
+
       # ── Run tests ───────────────────────────────────────────────────────
 
       - name: Run tests
