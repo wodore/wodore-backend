@@ -1,8 +1,11 @@
+from typing import override
+
 from computedfields.models import ComputedFieldsModel
 
 from modeltrans.manager import MultilingualManager
 
 from django.contrib.gis.db import models
+from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 
 from server.apps.categories.models import Category
@@ -279,3 +282,85 @@ class GeoPlaceCategory(TimeStampedModel):
         return (
             f"{self.geo_place.name_i18n} -> {self.category.identifier}{classifier_str}"
         )
+
+
+class GeoPlaceParty(TimeStampedModel):
+    """Role-classified association between a GeoPlace and a Party.
+
+    Mirrors the ``classifier`` pattern of ``GeoPlaceCategory``: the
+    ``role`` FK must reference a category under the ``role`` parent
+    (validated in ``clean()`` and the schema write path), and multiple
+    roles for the same place–party pair are separate rows — one role
+    classifier per row.
+    """
+
+    geo_place = models.ForeignKey(
+        "GeoPlace",
+        on_delete=models.CASCADE,
+        db_index=True,
+        related_name="party_associations",
+        verbose_name=_("Geo Place"),
+    )
+    party = models.ForeignKey(
+        "parties.Party",
+        on_delete=models.RESTRICT,
+        db_index=True,
+        related_name="geo_place_associations",
+        verbose_name=_("Party"),
+    )
+    role = models.ForeignKey(
+        Category,
+        on_delete=models.RESTRICT,
+        db_index=True,
+        related_name="party_associations",
+        verbose_name=_("Role"),
+        help_text=_("Role this party plays for the place (role.* category)"),
+    )
+    order = models.PositiveSmallIntegerField(
+        default=0,
+        db_index=True,
+        verbose_name=_("Order"),
+        help_text=_("Display order among same-role associations"),
+    )
+
+    class Meta:
+        verbose_name = _("Geo Place Party Association")
+        verbose_name_plural = _("Geo Place Party Associations")
+        ordering = ["geo_place", "role", "order", "id"]
+        indexes = [
+            models.Index(
+                fields=["party", "geo_place"],
+                name="gpp_party_place_idx",
+            ),
+            models.Index(
+                fields=["geo_place", "role"],
+                name="gpp_place_role_idx",
+            ),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["geo_place", "party", "role"],
+                name="geoplaceparty_unique_place_party_role",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.geo_place.name_i18n} → {self.party.name_i18n}"
+            f" [{self.role.identifier}]"
+        )
+
+    @override
+    def clean(self) -> None:
+        super().clean()
+        if self.role_id:
+            parent = self.role.parent
+            if parent is None or parent.slug != "role":
+                raise ValidationError(
+                    {
+                        "role": _(
+                            "Role must be a role.* category "
+                            "(a child of the 'role' parent)."
+                        )
+                    }
+                )

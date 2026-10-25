@@ -99,9 +99,11 @@ def build_sources(result: dict[str, Any], place: GeoPlace, media_url: str) -> No
     )
 
     sources = []
-    # sources_data is a queryset annotation (annotate_sources), not a model
-    # field — django-stubs cannot model .annotate() attributes.
-    for src in place.sources_data or []:  # type: ignore  # annotated attr (JSONBAgg sources_data), not a GeoPlace field
+    # sources_data is a queryset annotation (annotate_sources), not a
+    # model field — django-stubs cannot model .annotate() attributes. The
+    # getattr keeps nearby-without-sources working (annotation only applied
+    # when the field is selected).
+    for src in getattr(place, "sources_data", None) or []:
         if src.get("slug") is not None:
             org_data = {
                 "slug": src["slug"],
@@ -123,7 +125,7 @@ def base_result(place: GeoPlace, media_url: str) -> dict[str, Any]:
     return {
         "name": place.name_i18n,  # noqa: WPS308  # modeltranslation
         "country_code": str(place.country_code) if place.country_code else None,
-        "id": place.id,
+        "slug": place.slug,
         "elevation": place.elevation,
         "importance": place.importance,
         "location": {
@@ -131,3 +133,66 @@ def base_result(place: GeoPlace, media_url: str) -> dict[str, Any]:
             "lon": place.location.x if place.location else None,
         },
     }
+
+
+def build_amenity_detail(place: GeoPlace) -> dict[str, Any] | None:
+    """Serialize the place's ``AmenityDetail`` into the wire block.
+
+    Returns ``None`` when the place has no detail row (callers seed
+    the member anyway so it stays a valid field-selection name) —
+    the amenity endpoint's former crash-prone inline mapping, moved
+    here once (place-detail-endpoint). Requires ``select_related``
+    when called (cached ``None`` on absent rows, no exception).
+    """
+    detail = getattr(place, "amenity_detail", None)  # plugin-less inference gap
+    if detail is None:
+        return None
+    # Websites/links live at the place level (external links), overflow
+    # data on GeoPlace.extra — neither is part of this block.
+    return {
+        "operating_status": detail.operating_status,
+        "opening_months": detail.opening_months or {},
+        "opening_hours": detail.opening_hours or {},
+        "phones": detail.phones or [],
+    }
+
+
+def prefetch_parties(queryset: QuerySet[GeoPlace]) -> QuerySet[GeoPlace]:
+    """Prefetch role-classified party associations (links + symbols)."""
+    return queryset.prefetch_related(
+        "party_associations__role",
+        "party_associations__party__symbol_color",
+        "party_associations__party__symbol_mono",
+        "party_associations__party__link_associations__external_link",
+    )
+
+
+def build_parties_data(place: GeoPlace, request: HttpRequest) -> list[dict[str, Any]]:
+    """Public party payload per place: ``[{role, slug, name, links, symbol}]``.
+
+    Skips inactive/non-public parties (public API surface). Callers
+    prefetch via :func:`prefetch_parties`.
+    """
+    from server.apps.symbols.utils import resolve_symbol_urls
+
+    parties = []
+    for assoc in place.party_associations.all():  # type: ignore  # reverse FK: plugin-less inference gap  # prefetched by caller
+        party = assoc.party
+        if not (party.is_active and party.is_public):
+            continue
+        parties.append(
+            {
+                "role": assoc.role.identifier,
+                "slug": party.slug,
+                "name": party.name_i18n,  # noqa: WPS308  # modeltranslation
+                "links": [
+                    {
+                        "url": link.external_link.url,
+                        "label": link.external_link.label_i18n,  # noqa: WPS308
+                    }
+                    for link in party.link_associations.all()
+                ],
+                "symbol": resolve_symbol_urls(party, {"request": request}),
+            }
+        )
+    return parties

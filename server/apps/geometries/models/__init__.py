@@ -5,6 +5,7 @@ from ._associations import (
     GeoPlaceCategory,
     GeoPlaceExternalLink,
     GeoPlaceImageAssociation,
+    GeoPlaceParty,
     GeoPlaceSourceAssociation,
     UpdatePolicy,
 )
@@ -21,6 +22,7 @@ __all__ = [
     "GeoPlaceDetailBase",
     "GeoPlaceExternalLink",
     "GeoPlaceImageAssociation",
+    "GeoPlaceParty",
     "GeoPlaceSourceAssociation",
     "MonthStatus",
     "OperatingStatus",

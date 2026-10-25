@@ -219,6 +219,10 @@ INSTALLED_APPS: tuple[str, ...] = (
 MIDDLEWARE: tuple[str, ...] = (
     # Environment identification header:
     "server.middleware.headers.EnvironmentHeadersMiddleware",
+    # LLM entry-point documents are language-fixed per URL — strip the
+    # Vary header LocaleMiddleware (below) would stamp on them so the
+    # CDN can cache them per URL (see server/middleware/headers.py).
+    "server.middleware.headers.LlmsTxtCacheMiddleware",
     # Logging:
     "server.settings.components.logging.LoggingContextVarsMiddleware",
     # Cross-Origin Resource Sharing (CORS)

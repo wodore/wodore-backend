@@ -29,7 +29,9 @@ attribution, logos) used by availability integrations and link
 auto-detection; minting hundreds of OSM brands into the table behind
 booking-source pickers is a semantic hazard today. Nothing in this
 design blocks convergence later (portals become parties with a source
-role; `ExternalLink.source` re-points then).
+role; `ExternalLink.source` re-points then): the `source` role ships
+with the seeded vocabulary and the link-template contract is recorded
+as decision 8.
 
 Naming: **Party** follows ISO 19115-1 (`CI_Party` + `CI_RoleCode`) and
 the classic party-role data model (Hay; Siebel/Oracle `S_PARTY`): the
@@ -94,7 +96,8 @@ entity is neutral, the *relation* carries the semantics. "Relation"/
    `GeoPlaceExternalLink` — every geoplace regardless of `detail_type`,
    replacing the amenity-scoped `brand` FK. It carries `role` FK →
    Category under parent `role` (children seeded: `operator`, `brand`,
-   `owner` — `authority` on demand, per the open-question resolution),
+   `source` — `authority`, `owner`, or `lessee` on demand, per the
+   open-question resolution),
    unique per `(geo_place, party, role)`;
    multiple roles = multiple rows, one classifier per row — mirroring
    how `season` classifiers work on category associations. Validation
@@ -118,13 +121,22 @@ entity is neutral, the *relation* carries the semantics. "Relation"/
 
 5. **Owner merge via management command** (`import_parties`):
    Owner → Party by slug (name/note carried over, url → ExternalLink),
-   idempotent, dry-run capable. The wodore hut import rewrite (capacity
-   change) then creates associations from `hut_owner` with role
-   `role.owner` (the field means the legal owner; clubs that also
-   operate get a second `role.operator` row from editors or a later
-   mapping refinement). Command — not data migration — because Owner
-   rows keep arriving from hut imports until cutover; re-runnable sync
-   beats a one-shot migration.
+   idempotent, dry-run capable. The wodore hut import then creates
+   associations from `hut_owner` with role `role.operator` — the
+   owner/operator distinction is dropped: OSM's `operator` tag is
+   defined as "owned or maintained by", hut-services' OSM import
+   already maps it into `owner`, so the field carries the
+   owning-or-operating organisation and a single operator role
+   expresses it faithfully (`owner` returns on demand if a true
+   legal-owner source ever appears). Command for re-sync — Owner rows
+   keep arriving from hut imports until cutover, so a re-runnable
+   sync beats a one-shot — PLUS a one-shot provisioning data
+   migration (`parties.0002`) that runs the same merge at migrate
+   time, so plain `migrate` delivers the initial parties without a
+   manual command step; both share the same semantics (the migration
+   reimplements the merge on historical models — no app-code
+   imports, `ExternalLink` identifier generation replicated inline
+   because historical models strip `save()` overrides).
 
 6. **API: additive `parties` on place responses** under the
    `fields[places]` sparse-fieldset selection (nested narrowing via
@@ -133,14 +145,36 @@ entity is neutral, the *relation* carries the semantics. "Relation"/
    the category identifier (e.g. `role.operator`) and `symbol` the
    resolved color and mono URLs when set (same helper pattern as the
    category symbol, minus the unused primitive variant). `brand` was
-   never in public responses, so no version bump; changelog entry per
-   `api-conventions`.
+   never in public responses, so no version bump; the changelog is
+   built automatically at release from the PR title — no manual
+   entry.
 
 7. **Admin tracking mirrors the capacity change's decision**: the party
    inline formset save marks the place `is_modified` and records the
    association in `protected_fields` (associations carry no automatic
    `GeoPlaceDetailBase` tracking). Role autocomplete scoped to the
    `role` subtree; party autocomplete by slug/name.
+
+8. **Source-role link templates: Jinja2 on ExternalLink, implemented
+   at Organization convergence.** A source-role Party (portal) carries
+   its per-object link pattern as a template `ExternalLink` attached
+   via `PartyLink` (e.g. `https://portal.example/huts/{{ source_id }}`);
+   the concrete URL is rendered per place at read time — nothing
+   per-place is stored, mirroring today's computed `link` on
+   `HutOrganizationAssociation`. Template syntax is Jinja2 `{{var}}`,
+   the same engine `link_hut_pattern` already uses, so org patterns
+   migrate by variable rename only (`{{id}}` → `{{source_id}}`;
+   `{{lang}}` and `{{slug}}` keep their names; `{{props}}` resolves
+   from the place's source association; `{{config}}` dies with the
+   org). Rendering uses a `SandboxedEnvironment` (source ids are
+   imported data); variables and filters only — no control-flow
+   blocks by convention. `ExternalLink`'s dormant template machinery
+   (auto-detect, `template_vars` health-check substitution) converges
+   to Jinja2 in the same change; no rows exist today (92k links,
+   zero templates), so no row migration is needed. Nothing in this
+   change consumes a source-party template — this decision records
+   the contract so the convergence change has no open design
+   questions.
 
 ## Risks / Trade-offs
 
@@ -171,7 +205,7 @@ entity is neutral, the *relation* carries the semantics. "Relation"/
    updates: `BrandInput` → `PartyInput`).
 4. OSM import mapping switch (`brand`/`operator` tags).
 5. `import_parties` merge command (Owner → Party), then extend the
-   wodore hut import to write party associations (role `role.owner`).
+   wodore hut import to write party associations (role `role.operator`).
 6. API `parties` field + changelog entry; tests; lane-DB dry-runs of
    the data migrations and both imports.
 7. Rollback: steps are additive except the brand FK removal — the FK
@@ -180,10 +214,11 @@ entity is neutral, the *relation* carries the semantics. "Relation"/
 
 ## Open Questions
 
-- Initial role vocabulary beyond the four seeded children — e.g.
-  `authority` (national park service approving a hut) now or when a
-  source needs it? Lean: seed only what has data today
-  (`operator`, `brand`, `owner`), add `authority` on demand.
+- Initial role vocabulary beyond the seeded children (`operator`,
+  `brand`, `source`) — e.g. `authority` (national park
+  service approving a hut) now or when a source needs it? Lean: seed
+  only what has data today or a recorded convergence contract
+  (`source`), add `authority`, `owner`, or `lessee` on demand.
 - Party `review_status` lifecycle for OSM-minted parties: who reviews,
   and does the admin surface them like external links? Lean: same
   pattern as ExternalLink's review workflow.

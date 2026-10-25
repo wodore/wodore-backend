@@ -84,10 +84,27 @@ class CategoryPlaceTypeSchema(pydantic.BaseModel):
     symbol: dict[str, str] | None = None
 
 
+class PartyLinkSchema(pydantic.BaseModel):
+    """Schema for a party link (label + url)."""
+
+    url: str
+    label: str | None = None
+
+
+class PartySchema(pydantic.BaseModel):
+    """Schema for role-classified party associations (geoplace-parties)."""
+
+    role: str  # role category identifier, e.g. "role.operator"
+    slug: str
+    name: str | None = Field(None, validation_alias="name_i18n")
+    links: list[PartyLinkSchema] = Field(default_factory=list)
+    symbol: dict[str, str] | None = None  # resolved color/mono URLs
+
+
 class GeoPlaceBaseSchema(pydantic.BaseModel):
     """Base schema for GeoPlace with common fields."""
 
-    id: int
+    slug: str
     name: str
     country_code: str | None
     elevation: int | None
@@ -99,6 +116,7 @@ class GeoPlaceBaseSchema(pydantic.BaseModel):
         | list[OrganizationSourceIdDetailSchema]
         | None
     ) = None
+    parties: list[PartySchema] | None = None
 
 
 class GeoPlaceSearchSchema(GeoPlaceBaseSchema):
@@ -116,13 +134,6 @@ class GeoPlaceNearbySchema(GeoPlaceBaseSchema):
 # Amenity schemas
 
 
-class WebsiteSchema(pydantic.BaseModel):
-    """Schema for website with optional label."""
-
-    url: str
-    label: str | None = None
-
-
 class PhoneSchema(pydantic.BaseModel):
     """Schema for phone number with optional label."""
 
@@ -131,7 +142,11 @@ class PhoneSchema(pydantic.BaseModel):
 
 
 class AmenityDetailSchema(pydantic.BaseModel):
-    """Schema for amenity detailed information."""
+    """Schema for amenity detailed information.
+
+    Websites/links live at the place level (external links), overflow
+    data on ``GeoPlace.extra`` — neither belongs on this block.
+    """
 
     operating_status: str
     opening_months: dict[str, str] = Field(
@@ -142,15 +157,26 @@ class AmenityDetailSchema(pydantic.BaseModel):
         default_factory=dict,
         description="Structured weekly hours per weekday + public holidays",
     )
-    websites: list[WebsiteSchema] = Field(default_factory=list)
     phones: list[PhoneSchema] = Field(default_factory=list)
-    extra: dict[str, Any] = Field(default_factory=dict)
 
 
-class AmenitySchema(GeoPlaceBaseSchema):
-    """Schema for amenity places with full details."""
+class GeoPlaceDetailSchema(GeoPlaceBaseSchema):
+    """Unified place detail (place-detail-endpoint).
+
+    Required members: ``slug``, ``name``, ``detail_type`` (the type
+    discriminator clients switch on), ``location``, ``importance``.
+    Everything else is an optional member under the ``fields[places]``
+    sparse-fieldset selection; detail blocks appear as sibling members
+    named exactly after their ``detail_type`` value (``amenity`` now,
+    ``admin``/``transport``/``natural`` later) and only for places of
+    that type with a detail row.
+    """
 
     description: str | None = None
-    detail_type: str
     review_status: str | None = None
-    amenity_detail: AmenityDetailSchema | None = None
+    detail_type: str
+    amenity: AmenityDetailSchema | None = None
+    # Required-but-nullable on the list schemas; optional members on
+    # the detail endpoint — excludable via fields[places] selection.
+    country_code: str | None = None
+    elevation: int | None = None
