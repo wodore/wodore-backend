@@ -11,6 +11,8 @@ Usage:
     app drop_geoplaces -c ch --force                # Skip confirmation prompt
 """
 
+from typing import Any, override
+
 from django.core.management.base import BaseCommand, CommandParser
 
 from server.apps.external_geonames.management.commands._country_groups import (
@@ -22,6 +24,7 @@ from server.apps.geometries.models import GeoPlace
 class Command(BaseCommand):
     help = "Drop GeoPlace data with optional country filtering"
 
+    @override
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "-c",
@@ -45,7 +48,8 @@ class Command(BaseCommand):
             help="Show what would be deleted without actually deleting",
         )
 
-    def handle(self, *args, **options) -> None:
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         countries = (
             expand_countries(options["countries"]) if options["countries"] else None
         )

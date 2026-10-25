@@ -20,11 +20,12 @@ Examples:
 """
 
 import re
+from typing import Any, override
 
 from django_admin_runner import register_command
 from django_admin_runner.forms import _hidden_aware_argparse
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand, CommandError, CommandParser
 from django.db.models import Q
 
 from server.apps.geometries.widgets import BBoxWidget
@@ -38,7 +39,8 @@ DUPLICATE_PATTERN = re.compile(r"^([a-z0-9_-]+):\1:")
 class Command(BaseCommand):
     help = __doc__ or ""
 
-    def add_arguments(self, parser):
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--place",
             metavar="SLUG",
@@ -57,7 +59,8 @@ class Command(BaseCommand):
                 help="Restrict to places inside this bounding box (WGS84 degrees).",
             )
 
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         from server.apps.geometries.bbox import parse_bbox
         from server.apps.geometries.image_response_cache import (
             invalidate_for_hut,

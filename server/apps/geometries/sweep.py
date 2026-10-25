@@ -50,6 +50,8 @@ class _RecentResults:
 
 
 if TYPE_CHECKING:
+    from django.core.management.base import OutputWrapper
+
     from server.apps.geometries.models import GeoPlace
     from server.apps.huts.models import Hut
 
@@ -63,8 +65,8 @@ def run_sweep(
     mode: str,
     verb: str,
     no_progress: bool,
-    stdout: TextIO,
-    stderr: TextIO,
+    stdout: TextIO | OutputWrapper,
+    stderr: TextIO | OutputWrapper,
     work: Callable[[str, Place, Callable[[str, bool], None]], bool],
 ) -> tuple[int, int]:
     """Run *work* for every target behind a rich progress display.
