@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, override
 
 from django.apps import AppConfig
 from django.db.models.signals import post_migrate
@@ -16,5 +16,6 @@ class HutsConfig(AppConfig):
     name = "server.apps.huts"
     verbose_name = _("Huts")
 
+    @override
     def ready(self) -> None:
         post_migrate.connect(_create_hut_types, sender=self)

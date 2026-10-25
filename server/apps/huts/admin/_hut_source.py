@@ -1,9 +1,10 @@
 # NOTE: description=_(...) is the project-wide lazy-gettext idiom (i18n-safe);
 # per-line pyright ignores below suppress the unfold-stub str-typing mismatch.
-from typing import ClassVar
+from typing import Any, ClassVar, override
 
 from django.contrib import admin
 from django.db import models
+from django.forms import ModelForm
 from django.http import HttpRequest
 from django.shortcuts import redirect
 from django.utils.safestring import mark_safe
@@ -18,6 +19,7 @@ from server.apps.manager.widgets import UnfoldReadonlyJSONSuit
 from server.core.utils import text_shorten_html
 
 from ..models import (
+    Hut,
     HutSource,
 )
 
@@ -51,7 +53,8 @@ class HutSourceViewInline(unfold_admin.StackedInline):
         models.JSONField: {"widget": UnfoldReadonlyJSONSuit}
     }
 
-    def has_add_permission(self, request, obj):
+    @override
+    def has_add_permission(self, request: HttpRequest, obj: Hut | None = None) -> bool:
         return False
 
 
@@ -114,14 +117,21 @@ class HutsSourceAdmin(ModelAdmin):
             HutSource.ReviewStatusChoices.failed: "danger",  # red
         },
     )
-    def review_tag(self, obj):
+    def review_tag(self, obj: HutSource):
         return obj.review_status
 
     @display(description=_("Review Comment"))
-    def review_comment_short(self, obj):  # new
+    def review_comment_short(self, obj: HutSource):  # new
         return text_shorten_html(obj.review_comment, width=100)
 
-    def get_form(self, request, obj=None, change=False, **kwargs):
+    @override
+    def get_form(
+        self,
+        request: HttpRequest,
+        obj: HutSource | None = None,
+        change: bool = False,
+        **kwargs: Any,
+    ) -> type[ModelForm[HutSource]]:
         form = super().get_form(request, obj, **kwargs)
         if obj is not None:
             form.base_fields["previous_object"].queryset = (  # type: ignore  # dynamic attr: plugin-less inference gap

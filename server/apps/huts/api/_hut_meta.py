@@ -14,6 +14,8 @@ The ``jsonld`` block is pre-built so the edge script can inline it
 verbatim.
 """
 
+from typing import Any
+
 import pydantic
 from dmr import Path, Query, modify
 from dmr.routing import path
@@ -109,7 +111,9 @@ class HutMetaSchema(pydantic.BaseModel):
     owner: str | None = Field(None, description="Owner name")
     image: str | None = Field(None, description="Social preview image (absolute URL)")
     page_url: str = Field(description="Canonical frontend page URL")
-    jsonld: dict | None = Field(None, description="Ready-to-inline schema.org JSON-LD")
+    jsonld: dict[str, Any] | None = Field(
+        None, description="Ready-to-inline schema.org JSON-LD"
+    )
     modified: str | None = Field(None, description="Last modification (ISO date)")
 
 
@@ -243,8 +247,10 @@ def _meta_description(hut: Hut, lang: str) -> str:
     return " ".join(sentences)
 
 
-def _jsonld(hut: Hut, description: str, page_url: str, image: str | None) -> dict:
-    data: dict = {
+def _jsonld(
+    hut: Hut, description: str, page_url: str, image: str | None
+) -> dict[str, Any]:
+    data: dict[str, Any] = {
         "@context": "https://schema.org",
         "@type": "LodgingBusiness",
         "name": hut.name,
