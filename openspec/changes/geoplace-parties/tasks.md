@@ -79,8 +79,14 @@
 
 ## 5. Verification
 
-- [ ] 5.1 Lane-DB dry-runs: data migrations (role vocabulary, brand
+- [x] 5.1 Lane-DB dry-runs: data migrations (role vocabulary, brand
       counts before/after), `import_parties --dry-run`, OSM sample
-      import, wodore hut import
-- [ ] 5.2 Full test suite (`scripts/lane-run.sh .venv/bin/pytest`) and
-      work doc under `_work/`
+      import, wodore hut import (0052/0053/parties.0002 applied live:
+      brand conversion 0 rows on this clone with root.brand vocabulary
+      kept, owner merge idempotent 360/360; wodore create + update
+      paths verified with real data — Aarbiwak SAC → sac-pilatus
+      role.operator; OSM sample is PBF/overpass download-bound in the
+      lane — its write path is covered by the task-2.3 tests)
+- [x] 5.2 Full test suite (`scripts/lane-run.sh .venv/bin/pytest`) and
+      work doc under `_work/` (882 passed, pyrefly 0, ruff clean at
+      every slice; gotchas logged)
