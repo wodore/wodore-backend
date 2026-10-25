@@ -15,11 +15,13 @@ from expressions import GeoJSON
 {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'geometry': {'type': 'MultiPolygon', 'coordinates': [ ... ]
 """
 
+from collections.abc import Sequence
+
 from django.contrib.gis.db.models import GeometryField
 from django.contrib.gis.db.models.functions import AsGeoJSON, GeomOutputGeoFunc
 from django.contrib.postgres.aggregates import JSONBAgg
 from django.db.models import Func, JSONField
-from django.db.models.expressions import F, Value
+from django.db.models.expressions import Combinable, F, Value
 from django.db.models.functions import Cast
 
 __all__ = ["AsGeoJSON", "GeoJSON", "JsonBuildObject", "Simplify"]
@@ -29,7 +31,7 @@ class JsonBuildObject(Func):
     # with gratitude to Schinckel
     # https://schinckel.net/2019/07/30/subquery-and-subclasses/
     function = "jsonb_build_object"
-    output_field = JSONField()
+    output_field = JSONField()  # type: ignore  # overrides stub cached_property; @override is invalid syntax on assignments
 
 
 class Simplify(GeomOutputGeoFunc):
@@ -41,8 +43,13 @@ class GeoJSON(JsonBuildObject):
     output_field = JSONField()
 
     def __init__(
-        self, geom_field, fields=None, simplify=True, precision=0.0025, decimals=3
-    ):
+        self,
+        geom_field: str,
+        fields: Sequence[str] | None = None,
+        simplify: bool = True,
+        precision: float = 0.0025,
+        decimals: int = 3,
+    ) -> None:
         if fields is None:
             fields = []
         expressions = [Value("type"), Value("FeatureCollection"), Value("features")]
@@ -60,7 +67,7 @@ class GeoJSON(JsonBuildObject):
         # We are building a JSON object, though.
         geojson = Cast(AsGeoJSON(geometry, precision=decimals), JSONField())
 
-        properties = []
+        properties: list[Combinable] = []
 
         for field in fields:
             properties.append(Value(field))

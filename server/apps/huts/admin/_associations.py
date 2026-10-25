@@ -1,9 +1,10 @@
-from typing import ClassVar
+from typing import Any, ClassVar, override
 
 from django import forms
 from django.contrib import admin
 from django.db import models
 from django.forms import ModelForm
+from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _
 
 from unfold import admin as unfold_admin
@@ -22,7 +23,7 @@ from ..models import (
 
 
 ## Custom Admin Forms (private)
-class _HutOrganizationAssociationForm(ModelForm):
+class _HutOrganizationAssociationForm(ModelForm[HutOrganizationAssociation]):
     schema = forms.JSONField(
         label=_("Property JSON Schema"), required=False, widget=UnfoldReadonlyJSONSuit()
     )
@@ -31,7 +32,7 @@ class _HutOrganizationAssociationForm(ModelForm):
         model = HutOrganizationAssociation
         fields = "__all__"
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         instance = kwargs.get("instance")
         initial = kwargs.get("initial", {})
 
@@ -40,7 +41,8 @@ class _HutOrganizationAssociationForm(ModelForm):
 
         super().__init__(*args, **kwargs, initial=initial)
 
-    def save(self, commit=True):
+    @override
+    def save(self, commit: bool = True) -> HutOrganizationAssociation:
         return super().save(commit)
 
 
@@ -69,7 +71,10 @@ class HutImageAssociationEditInline(unfold_admin.TabularInline):
     verbose_name = _("Image")
     # template = "huts/image_inline.html"
 
-    def formfield_for_dbfield(self, db_field, request, **kwargs):
+    @override
+    def formfield_for_dbfield(
+        self, db_field: models.Field[Any, Any], request: HttpRequest, **kwargs: Any
+    ) -> forms.Field | None:
         # New uploads outrank pinned external images by default (provider
         # scores live in 0–100; deliberate content sits above that range).
         if db_field.name == "score":
@@ -121,7 +126,10 @@ class HutOrganizationAssociationEditInline(unfold_admin.StackedInline):
     formfield_overrides: ClassVar = {models.JSONField: {"widget": UnfoldJSONSuit}}  # type: ignore  # inline formfield_overrides typing drift
     verbose_name = _("Edit Source")
 
-    def get_queryset(self, request):
+    @override
+    def get_queryset(
+        self, request: HttpRequest
+    ) -> models.QuerySet[HutOrganizationAssociation]:
         return super().get_queryset(request).select_related("organization")
 
 
@@ -136,13 +144,20 @@ class HutOrganizationAssociationViewInline(unfold_admin.TabularInline):
     show_change_link = True
     verbose_name = _("Source")
 
-    def get_queryset(self, request):
+    @override
+    def get_queryset(
+        self, request: HttpRequest
+    ) -> models.QuerySet[HutOrganizationAssociation]:
         return super().get_queryset(request).select_related("organization")
 
-    def has_add_permission(self, request, obj):
+    @override
+    def has_add_permission(self, request: HttpRequest, obj: Hut | None = None) -> bool:
         return False
 
-    def has_change_permission(self, request, obj=None):
+    @override
+    def has_change_permission(
+        self, request: HttpRequest, obj: Hut | None = None
+    ) -> bool:
         return False
 
 

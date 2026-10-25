@@ -1,6 +1,10 @@
 """Image aggregation endpoints on dmr (mounted at /geo/images/)."""
 
+from __future__ import annotations
+
 import logging
+from datetime import datetime
+from typing import TYPE_CHECKING, Any
 
 import pydantic
 from dmr import Path, Query, modify
@@ -23,8 +27,12 @@ from server.apps.translations import LanguageQuery, activate
 
 from . import image_response_cache
 from .models import GeoPlace
+
+if TYPE_CHECKING:
+    from server.apps.huts.models import Hut
 from .providers import (
     CamptocampProvider,
+    ImageResult,
     MapillaryProvider,
     PanoramaxProvider,
     RefugesInfoProvider,
@@ -185,7 +193,7 @@ def _empty_images_response(
     lon: float,
     radius: float,
     sources_list: list[str] | None,
-    features: list | None = None,
+    features: list[dict[str, Any]] | None = None,
 ) -> ImageCollectionResponse:
     """(Near-)empty FeatureCollection for ``cached_only`` misses:
     nothing was cached, so the answer is whatever the caller's
@@ -273,8 +281,8 @@ class NearbyImagesController(ApiController):
         search_radius = 10  # meters
         max_radius = int(query.radius)
 
-        geoplaces = []
-        huts = []
+        geoplaces: list[GeoPlace] = []
+        huts: list[Hut] = []
         current_radius = search_radius
 
         while current_radius <= max_radius:
@@ -343,7 +351,7 @@ class NearbyImagesController(ApiController):
                     f"({query.lat},{query.lon})"
                 )
                 return cached
-            results = []
+            results: list[ImageResult] = []
             fetch_failed = True
 
         # Sort by score (primary), then by distance (secondary)
@@ -381,10 +389,10 @@ def _map_fallback_feature(
     slug: str,
     lat: float,
     lon: float,
-    modified,
+    modified: datetime,
     place_type: str,
     symbol_url: str | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Static-map fallback feature for entities without any images.
 
     Generated exactly like the og preview cards (server.apps.images.og):
@@ -474,8 +482,8 @@ def _map_fallback_feature(
             },
         ),
     }
-    urls: dict = {}
-    sizes: dict = {"raw": {"width": 1200, "height": 630}}
+    urls: dict[str, Any] = {}
+    sizes: dict[str, Any] = {"raw": {"width": 1200, "height": 630}}
     for group, ((sw, sh), presets) in aspect_sources.items():
         source = ImagorImage(map_url(f"{sw}x{sh}"))
         variants = {}
@@ -949,7 +957,7 @@ GALLERY_QUERY_SHAPE = {"radius": 50.0, "sources": None, "limit": 20, "fallback":
 def cached_only_response(
     *,
     cached: ImageCollectionResponse | None,
-    entity,
+    entity: Hut | GeoPlace,
     request: HttpRequest,
     place_type: str,
     radius: float,
@@ -967,12 +975,14 @@ def cached_only_response(
     if cached is not None:
         return cached
     location = entity.location
-    features = []
+    features: list[dict[str, Any]] = []
     if static_map_fallback and location is not None:
         features = [
             _map_fallback_feature(
                 request,
-                slug=entity.slug,
+                # GeoPlace.slug is migration-nullable; a degenerate None
+                # formats into the cache key exactly as before.
+                slug=entity.slug,  # type: ignore  # slug: str | None (migration-nullable)
                 lat=location.y,
                 lon=location.x,
                 modified=entity.modified,
@@ -990,7 +1000,7 @@ def cached_only_response(
 
 
 def hut_gallery_response(
-    hut, request: HttpRequest, *, lang: str | None
+    hut: Hut, request: HttpRequest, *, lang: str | None
 ) -> ImageCollectionResponse:
     """The image service's answer for the hut page's gallery, default
     parameters, for in-process callers (the hut meta og:image).
@@ -1019,7 +1029,7 @@ def hut_gallery_response(
 
 
 def place_gallery_response(
-    place, request: HttpRequest, *, lang: str | None = None
+    place: GeoPlace, request: HttpRequest, *, lang: str | None = None
 ) -> ImageCollectionResponse:
     """The image service's answer for the place page's gallery (the
     place SEO surface's og:image) — see :func:`hut_gallery_response`.
@@ -1027,7 +1037,7 @@ def place_gallery_response(
     language's entry counts."""
     cached = None
     for candidate_lang in ("en", "de", "fr", "it"):
-        entry = cached_place_images(place.slug, lang=candidate_lang)
+        entry = cached_place_images(place.slug, lang=candidate_lang)  # type: ignore  # slug: str | None (migration-nullable)
         if entry is not None and entry.features:
             cached = entry
             break

@@ -7,10 +7,11 @@ full tag history); these tests pin its logic with a faked release state.
 import pytest
 
 from server.apps.apiversions import registry, registry_check
+from server.apps.apiversions.registry import VersionChange
 
 
 @pytest.fixture
-def release_state(monkeypatch):
+def release_state(monkeypatch: pytest.MonkeyPatch):
     """Fake per-version release state (version -> released?)."""
     state: dict[str, bool] = {}
 
@@ -22,7 +23,7 @@ def release_state(monkeypatch):
 
 
 @pytest.fixture
-def two_versions(monkeypatch):
+def two_versions(monkeypatch: pytest.MonkeyPatch):
     extra = registry.VersionChange(
         version="zzzz-01-01", description="test-only newer version"
     )
@@ -34,7 +35,9 @@ class TestRegistryCheck:
     """Baseline: dates released, 'unreleased' current. Fake versions must
     sort after 'unreleased' (zzzz-*) to become current."""
 
-    def _release_all_but_current(self, release_state, current=None):
+    def _release_all_but_current(
+        self, release_state: dict[str, bool], current: str | None = None
+    ):
         """Release every non-current version in the fake state."""
         versions = registry.versions()
         target = current or versions[-1]
@@ -42,12 +45,16 @@ class TestRegistryCheck:
             if version != target:
                 release_state[version] = True
 
-    def test_unreleased_current_with_released_old_is_ok(self, release_state):
+    def test_unreleased_current_with_released_old_is_ok(
+        self, release_state: dict[str, bool]
+    ):
         self._release_all_but_current(release_state)
         assert registry_check.check() == []
         assert registry_check.main() == 0
 
-    def test_all_released_is_ok(self, release_state, two_versions):
+    def test_all_released_is_ok(
+        self, release_state: dict[str, bool], two_versions: VersionChange
+    ):
         self._release_all_but_current(release_state, two_versions.version)
         # "unreleased" is always flagged when non-current (it should never
         # survive past a release) — the test fake makes it non-current
@@ -55,14 +62,19 @@ class TestRegistryCheck:
         assert len(problems) == 1
         assert "unreleased" in problems[0]
 
-    def test_unreleased_current_with_released_old_is_ok_extra(self, release_state):
+    def test_unreleased_current_with_released_old_is_ok_extra(
+        self, release_state: dict[str, bool]
+    ):
         # Without two_versions, "unreleased" IS current → no problems
         # (this test runs without the fixture's fake version)
         self._release_all_but_current(release_state)
         assert registry_check.check() == []
 
     def test_stacked_unreleased_version_fails(
-        self, release_state, two_versions, capsys
+        self,
+        release_state: dict[str, bool],
+        two_versions: VersionChange,
+        capsys: pytest.CaptureFixture[str],
     ):
         # "unreleased" is non-current (the fixture version is current)
         # and never released → violation.
@@ -77,7 +89,9 @@ class TestRegistryCheck:
         stderr = capsys.readouterr().err
         assert "unreleased" in stderr
 
-    def test_guidance_mentions_amend_workflow(self, release_state, two_versions):
+    def test_guidance_mentions_amend_workflow(
+        self, release_state: dict[str, bool], two_versions: VersionChange
+    ):
         self._release_all_but_current(release_state, two_versions.version)
         release_state["unreleased"] = False
         problems = registry_check.check()

@@ -3,7 +3,9 @@ Provider for Wodore internal database images.
 Works with both GeoPlaces and Huts.
 """
 
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from asgiref.sync import sync_to_async
@@ -16,10 +18,14 @@ from django.db.models import F
 from .base import ImageArea, ImageProvider, ImageResult
 from .schemas import GeoPlaceSchema
 
+if TYPE_CHECKING:
+    # Lazy import: images→geometries import cycle; annotation-only use.
+    from server.apps.images.models import Image
+
 logger = structlog.get_logger()
 
 
-def _assessment_extra(img) -> dict | None:
+def _assessment_extra(img: Image) -> dict[str, Any] | None:
     """Result ``extra`` for internal (DB-backed) images.
 
     Thumbhashes for the serving pipeline (quality stays backend-only), the
@@ -30,7 +36,7 @@ def _assessment_extra(img) -> dict | None:
     ``duplicate_of`` marker consumed by :func:`_drop_duplicate_pins`.
     """
     meta = img.image_meta or {}
-    extra: dict = {"internal_pin": True}
+    extra: dict[str, Any] = {"internal_pin": True}
     if meta.get("thumbhashes"):
         extra["thumbhashes"] = meta["thumbhashes"]
     if meta.get("duplicate_of"):

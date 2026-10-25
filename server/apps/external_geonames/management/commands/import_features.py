@@ -12,6 +12,7 @@ Usage:
 import urllib.error
 import urllib.request
 from io import StringIO
+from typing import Any, override
 
 from django_admin_runner import register_command
 
@@ -27,6 +28,7 @@ class Command(BaseCommand):
 
     DEFAULT_URL = "https://download.geonames.org/export/dump/featureCodes_en.txt"
 
+    @override
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--url",
@@ -35,7 +37,8 @@ class Command(BaseCommand):
             help=f"URL to fetch feature codes (default: {self.DEFAULT_URL})",
         )
 
-    def handle(self, *args, **options) -> None:
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         url = options["url"]
 
         self.stdout.write(f"Fetching feature codes from: {url}")

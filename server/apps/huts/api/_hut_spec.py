@@ -21,10 +21,11 @@ from collections.abc import Callable
 
 from django.db.models import QuerySet
 
+from ..models import Hut
 from .annotations import annotate_hut_images, annotate_hut_sources
 
 # A django-readers-style reader pair half: (queryset) -> queryset.
-Prepare = Callable[[QuerySet], QuerySet]
+Prepare = Callable[[QuerySet[Hut]], QuerySet[Hut]]
 
 # Relations joined in the single detail query.
 DETAIL_JOINS = (
@@ -38,7 +39,7 @@ DETAIL_JOINS = (
 def select_related_pair(*relations: str) -> tuple[Prepare, None]:
     """Join the given relations in the main query (to-one)."""
 
-    def prepare(queryset: QuerySet) -> QuerySet:
+    def prepare(queryset: QuerySet[Hut]) -> QuerySet[Hut]:
         return queryset.select_related(*relations)
 
     return prepare, None
@@ -49,7 +50,7 @@ def annotate_pair(
 ) -> tuple[Prepare, None]:
     """Attach the given annotation expressions in the main query."""
 
-    def prepare(queryset: QuerySet) -> QuerySet:
+    def prepare(queryset: QuerySet[Hut]) -> QuerySet[Hut]:
         return queryset.annotate(**annotations)
 
     return prepare, None
@@ -85,7 +86,7 @@ def has_availability_annotation():
     )
 
 
-def prepare_hut_detail(queryset: QuerySet, *, media_url: str) -> QuerySet:
+def prepare_hut_detail(queryset: QuerySet[Hut], *, media_url: str) -> QuerySet[Hut]:
     """The full hut-detail query: four joins + four aggregates, one pass.
 
     Same SQL shape as the pre-readers implementation (joins instead of

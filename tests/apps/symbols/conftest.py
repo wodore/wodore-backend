@@ -2,8 +2,10 @@
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
+from pytest_django.fixtures import SettingsWrapper
 
 SVG = (
     "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>"
@@ -11,7 +13,7 @@ SVG = (
 )
 
 
-def _write(path: Path, content: str | dict | list) -> None:
+def _write(path: Path, content: str | dict[str, Any] | list[Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if isinstance(content, (dict, list)):
         path.write_text(json.dumps(content), encoding="utf-8")
@@ -23,7 +25,7 @@ def _fluent_entry(hexcode: str, label: str, group: int, subgroup: int, order: in
     return {
         "label": label,
         "hexcode": hexcode,
-        "tags": [],
+        "tags": list[str](),
         "type": 1,
         "order": order,
         "group": group,
@@ -153,7 +155,7 @@ def emoji_fixture(tmp_path: Path) -> Path:
         {
             "label": "flag: England",
             "hexcode": "1F3F4-E0067-E0062-E0065-E006E-E0067-E007F",
-            "tags": [],
+            "tags": list[str](),
             "type": 1,
             "order": 4601,
             "group": 9,
@@ -170,7 +172,7 @@ def emoji_fixture(tmp_path: Path) -> Path:
             "group": 5,
             "subgroup": 53,
         },
-        {"label": "rotes Herz", "hexcode": "2764-FE0F", "tags": [], "type": 1},
+        {"label": "rotes Herz", "hexcode": "2764-FE0F", "tags": list[str](), "type": 1},
         {
             "label": "Wanderschuh",
             "hexcode": "1F97E",
@@ -183,7 +185,7 @@ def emoji_fixture(tmp_path: Path) -> Path:
         {
             "label": "Fahne: Schweiz",
             "hexcode": "1F1E8-1F1ED",
-            "tags": [],
+            "tags": list[str](),
             "type": 1,
             "order": 4600,
             "group": 9,
@@ -192,7 +194,7 @@ def emoji_fixture(tmp_path: Path) -> Path:
         {
             "label": "Fahne: England",
             "hexcode": "1F3F4-E0067-E0062-E0065-E006E-E0067-E007F",
-            "tags": [],
+            "tags": list[str](),
             "type": 1,
             "order": 4601,
             "group": 9,
@@ -242,13 +244,13 @@ def emoji_fixture(tmp_path: Path) -> Path:
 
 
 @pytest.fixture(autouse=True)
-def _tmp_media(settings, tmp_path):
+def _tmp_media(settings: SettingsWrapper, tmp_path: Path):
     """Keep imported SVG files out of the repo checkout."""
     settings.MEDIA_ROOT = tmp_path / "media"
 
 
 @pytest.fixture
-def imported_db(emoji_fixture):
+def imported_db(emoji_fixture: Path):
     """Run the import (both packs, one invocation per source)."""
     from io import StringIO
 

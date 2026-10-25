@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import Literal, Union
+from typing import Any, Literal, Union
 
 from pydantic import BaseModel, PrivateAttr, validator
 
@@ -46,8 +46,8 @@ class Translations(BaseModel):
     __fallback_locale: LOCALES | None = PrivateAttr()
     __fallback: bool = PrivateAttr()
     __ignore_errors: bool = PrivateAttr()
-    __locale_factory: Callable | None = PrivateAttr()
-    __fallback_locale_factory: Callable | None = PrivateAttr()
+    __locale_factory: Callable[[], LOCALES] | None = PrivateAttr()
+    __fallback_locale_factory: Callable[[], LOCALES] | None = PrivateAttr()
 
     def __init__(
         self,
@@ -56,10 +56,10 @@ class Translations(BaseModel):
         fallback_locale: LOCALES | None = None,
         fallback: bool = True,
         ignore_errors: bool = True,
-        locale_factory: Callable | None = None,
-        fallback_locale_factory: Callable | None = None,
-        **kwargs,
-    ):
+        locale_factory: Callable[[], LOCALES] | None = None,
+        fallback_locale_factory: Callable[[], LOCALES] | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         self.__locale = locale
         self.__fallback_locale = fallback_locale
@@ -95,7 +95,7 @@ class Translations(BaseModel):
 
     def set(
         self,
-        value: Union[str, dict, "Translations"],
+        value: Union[str, dict[str, Any], "Translations"],
         locale: LOCALES | None = None,
         ignore_errors: bool | None = None,
     ):
@@ -155,7 +155,9 @@ class Translations(BaseModel):
         return validator(field, allow_reuse=True, pre=True)(cls.validator)  # type: ignore  # pydantic v1 validator idiom
 
     @classmethod
-    def validator(cls, value: Union[str, dict, "Translations"]) -> "Translations":
+    def validator(
+        cls, value: Union[str, dict[str, Any], "Translations"]
+    ) -> "Translations":
         _t = None
         if isinstance(value, str):
             out = {get_current_locale(): value}
@@ -207,7 +209,7 @@ class TranslationModel(BaseModel):
     name:str = Translation(field="name_t") #, default_locale="fr", locale="en")
     """
 
-    def __setattr__(self, key, val):
+    def __setattr__(self, key: str, val: Any) -> None:
         orig = None
         try:
             orig = super().__getattribute__(key)
@@ -221,7 +223,7 @@ class TranslationModel(BaseModel):
         else:
             super().__setattr__(key, val)
 
-    def __getattr__(self, key):
+    def __getattr__(self, key: str) -> Any:
         # try:
         if hasattr(super(), "__getattr__"):
             return super().__getattr__(key)  # type: ignore  # dynamic attr: plugin-less inference gap
@@ -231,7 +233,7 @@ class TranslationModel(BaseModel):
         # except:
         # raise
 
-    def __getattribute__(self, key):
+    def __getattribute__(self, key: str) -> Any:
         orig = None
         try:
             orig = super().__getattribute__(key)

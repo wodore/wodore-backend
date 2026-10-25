@@ -2,11 +2,13 @@
 
 import pytest
 
+from django.test import Client
+
 pytestmark = pytest.mark.django_db
 
 
 class TestFeedbackThrottling:
-    def test_sixth_request_within_a_minute_is_throttled(self, client):
+    def test_sixth_request_within_a_minute_is_throttled(self, client: Client):
         """Public endpoint that stores a row and mails admins: 5/min/IP."""
         payload = {
             "email": "someone@example.com",

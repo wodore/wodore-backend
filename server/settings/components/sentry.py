@@ -31,8 +31,10 @@ for human-readable filtering.
 import logging
 import os
 import re
+from collections.abc import Callable
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as pkg_version
+from typing import Any
 
 import sentry_sdk
 from decouple import config
@@ -45,7 +47,7 @@ from sentry_sdk.integrations.logging import LoggingIntegration
 _HEALTH_PATH_RE = re.compile(r"^/health/")
 
 
-def _transaction_path(sampling_context: dict) -> str:
+def _transaction_path(sampling_context: dict[str, Any]) -> str:
     """Best request path available at sampling time.
 
     The transaction *name* is useless for matching at sampling time: WSGI
@@ -80,7 +82,7 @@ def _app_version() -> str | None:
 _APP_VERSION = _app_version()
 
 
-def _stamp_app_version(event: dict) -> dict:
+def _stamp_app_version(event: dict[str, Any]) -> dict[str, Any]:
     """Attach the package semver to an error or transaction event."""
     if _APP_VERSION:
         event.setdefault("tags", {})["app_version"] = _APP_VERSION
@@ -104,7 +106,7 @@ def _stamp_app_version(event: dict) -> dict:
 # The exception-type check keeps real shielded exceptions flowing.
 
 
-def _is_shielded_cancel_noise(event: dict) -> bool:
+def _is_shielded_cancel_noise(event: dict[str, Any]) -> bool:
     """True for asyncio's "CancelledError exception in shielded future"
     log events — client-abort noise from the py3.14 shield rework, not
     an application error."""
@@ -142,7 +144,7 @@ def _is_shielded_cancel_noise(event: dict) -> bool:
 # no dispatcher.asend + ASGIHandler frames and still reports.
 
 
-def _in_frame(frame: dict, function: str, module: str, path: str) -> bool:
+def _in_frame(frame: dict[str, Any], function: str, module: str, path: str) -> bool:
     """True when a Sentry stacktrace frame is the given function of the
     given module (module preferred; filename suffix as fallback — the
     SDK's frame shape varies between capture paths)."""
@@ -153,7 +155,7 @@ def _in_frame(frame: dict, function: str, module: str, path: str) -> bool:
     )
 
 
-def _is_current_thread_executor_noise(event: dict) -> bool:
+def _is_current_thread_executor_noise(event: dict[str, Any]) -> bool:
     """True for the RuntimeError asgiref raises when Django's
     post-disconnect request_finished dispatch hits the request's
     already-broken CurrentThreadExecutor — client-abort teardown noise,
@@ -190,7 +192,7 @@ def _is_current_thread_executor_noise(event: dict) -> bool:
     return False
 
 
-def _before_send(event: dict, hint: dict) -> dict | None:
+def _before_send(event: dict[str, Any], hint: dict[str, Any]) -> dict[str, Any] | None:
     """Sentry init hook: error events."""
     if _is_shielded_cancel_noise(event):
         return None  # client aborted the request; not actionable
@@ -199,21 +201,23 @@ def _before_send(event: dict, hint: dict) -> dict | None:
     return _stamp_app_version(event)
 
 
-def _before_send_transaction(event: dict, hint: dict) -> dict:
+def _before_send_transaction(
+    event: dict[str, Any], hint: dict[str, Any]
+) -> dict[str, Any]:
     """Sentry init hook: transaction events (spec: every event carries
     release/environment/app_version — release and environment come from
     init options, the tag from here)."""
     return _stamp_app_version(event)
 
 
-def _traces_sampler(rate: float):
+def _traces_sampler(rate: float) -> Callable[[dict[str, Any]], float]:
     """Uniform sampling at ``rate``, health checks always excluded.
 
     ``rate == 0`` disables tracing entirely (errors-only mode): the
     sampler returns 0 for everything, so no transactions are created.
     """
 
-    def sample(sampling_context: dict) -> float:
+    def sample(sampling_context: dict[str, Any]) -> float:
         if _HEALTH_PATH_RE.match(_transaction_path(sampling_context)):
             return 0.0
         return rate

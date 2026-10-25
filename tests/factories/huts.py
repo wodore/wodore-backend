@@ -1,17 +1,19 @@
+from typing import Any
+
 import factory
 
 from server.apps.huts.models import Hut, HutOrganizationAssociation
 from server.apps.organizations.models import Organization
 
-from . import CategoryFactory, random_swiss_point
+from . import CategoryFactory, _fmt_seq, random_swiss_point
 
 
-class HutFactory(factory.django.DjangoModelFactory):
+class HutFactory(factory.django.DjangoModelFactory[Hut]):
     class Meta:
         model = Hut
         skip_postgeneration_save = True
 
-    name = factory.Sequence(lambda n: f"Test Hut {n}")
+    name = factory.Sequence(_fmt_seq("Test Hut "))
     location = factory.LazyFunction(random_swiss_point)
     country_field = "CH"
     is_active = True
@@ -21,7 +23,7 @@ class HutFactory(factory.django.DjangoModelFactory):
     hut_type_open = factory.SubFactory(CategoryFactory)
 
     @factory.post_generation
-    def organizations(self, create, extracted, **kwargs):
+    def organizations(self, create: bool, extracted: list[Any] | None, **kwargs: Any):
         if not create:
             return
         if extracted:

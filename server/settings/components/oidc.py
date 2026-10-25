@@ -23,6 +23,7 @@ rehearsed in staging; the later flip is an env change
 
 import json
 import logging
+from typing import Any
 from urllib.parse import urlparse
 
 import requests
@@ -79,7 +80,7 @@ LOCAL_AUTH_REDIRECT_URIS = config("LOCAL_AUTH_REDIRECT_URIS", "")
 
 # Committed dev-only RSA key (JWK). Only ever the fallback in dev/test -
 # ``AUTH_PROVIDER=builtin`` outside dev/test requires a real key.
-_DEV_PRIVATE_JWK: dict = {
+_DEV_PRIVATE_JWK: dict[str, str] = {
     "kty": "RSA",
     "kid": "wodore-local-dev-1",
     "alg": "RS256",
@@ -95,7 +96,7 @@ _DEV_PRIVATE_JWK: dict = {
 }
 
 
-def _resolve_provider_jwk() -> dict:
+def _resolve_provider_jwk() -> dict[str, Any]:
     raw = config("LOCAL_AUTH_PRIVATE_KEY_JWK", "")
     if raw:
         try:
@@ -120,17 +121,19 @@ def _resolve_provider_jwk() -> dict:
     )
 
 
-OIDC_PROVIDER_PRIVATE_JWK: dict = _resolve_provider_jwk() if OIDC_ENABLED else {}
+OIDC_PROVIDER_PRIVATE_JWK: dict[str, Any] = (
+    _resolve_provider_jwk() if OIDC_ENABLED else {}
+)
 
 
-def _jwk_to_pem(jwk: dict) -> str:
+def _jwk_to_pem(jwk: dict[str, Any]) -> str:
     key = JsonWebKey.import_key(jwk, {"kty": "RSA"})
     pem = key.as_pem(is_private=True)  # type: ignore  # authlib Key stubs lack as_pem
     return pem.decode() if isinstance(pem, bytes) else str(pem)
 
 
 if OIDC_ENABLED:
-    OAUTH2_PROVIDER: dict = {
+    OAUTH2_PROVIDER: dict[str, Any] = {
         "OIDC_ENABLED": True,
         "OIDC_RSA_PRIVATE_KEY": _jwk_to_pem(OIDC_PROVIDER_PRIVATE_JWK),
         "OAUTH2_VALIDATOR_CLASS": (
@@ -171,7 +174,7 @@ OIDC_ISSUER_INTERNAL_URL = config("OIDC_ISSUER_INTERNAL_URL", "")
 OIDC_OP_DISCOVERY_ENDPOINT = ZITADEL_OP_BASE_URL + "/.well-known/openid-configuration"
 
 
-def discover_oidc(discovery_url: str, internal_url: str = "") -> dict | None:
+def discover_oidc(discovery_url: str, internal_url: str = "") -> dict[str, Any] | None:
     """Fetch the provider's OIDC discovery document (endpoint URLs)."""
     headers: dict[str, str] = {}
     actual_url = discovery_url
@@ -214,7 +217,7 @@ def discover_oidc(discovery_url: str, internal_url: str = "") -> dict | None:
     }
 
 
-def _load_zitadel_private_key() -> dict:
+def _load_zitadel_private_key() -> dict[str, Any]:
     raw = config("ZITADEL_API_PRIVATE_KEY_JSON", None)
     if not raw:
         return {}
@@ -245,7 +248,7 @@ OIDC_STORE_ID_TOKEN = True
 # renewal on particular paths (regexes); the mozilla
 # authenticate/callback/logout routes are always exempt upstream
 # (that is also the redirect-loop protection).
-OIDC_EXEMPT_URLS = []
+OIDC_EXEMPT_URLS: list[str] = []
 
 discovery_info = None
 if ZITADEL_RP_ENABLED:

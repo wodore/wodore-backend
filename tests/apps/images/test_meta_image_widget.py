@@ -6,6 +6,9 @@ localization (spec: external-image-pinning, admin wiring).
 """
 
 import pytest
+from pytest_django.fixtures import SettingsWrapper
+
+from django.test import Client
 
 from server.apps.meta_image_field.widgets import MetaImageWidget
 
@@ -65,7 +68,7 @@ def test_widget_context_default_has_no_raw_url():
 @pytest.mark.django_db
 class TestImageAdminRawWiring:
     def test_pin_is_editable_without_local_file(
-        self, seed_data, admin_client, settings
+        self, seed_data: dict[str, int], admin_client: Client, settings: SettingsWrapper
     ):
         """blank=True: a pinned image (no file) must pass admin form validation."""
         # The dev/test lane runs with the debug toolbar middleware, whose
@@ -94,14 +97,16 @@ class TestImageAdminRawWiring:
 class TestDownloadRawEndpoint:
     """Same-origin proxy for the Download raw button (SSRF-guarded)."""
 
-    def _setup_admin(self, settings):
+    def _setup_admin(self, settings: SettingsWrapper):
         from django.conf import settings as dj_settings
 
         settings.MIDDLEWARE = tuple(
             m for m in dj_settings.MIDDLEWARE if "debug_toolbar" not in m
         )
 
-    def test_private_url_rejected(self, admin_client, settings):
+    def test_private_url_rejected(
+        self, admin_client: Client, settings: SettingsWrapper
+    ):
         from django.urls import reverse
 
         self._setup_admin(settings)
@@ -111,14 +116,18 @@ class TestDownloadRawEndpoint:
             )
             assert response.status_code == 400, url
 
-    def test_missing_url_rejected(self, admin_client, settings):
+    def test_missing_url_rejected(
+        self, admin_client: Client, settings: SettingsWrapper
+    ):
         from django.urls import reverse
 
         self._setup_admin(settings)
         response = admin_client.get(reverse("admin:images_image_download_raw"))
         assert response.status_code == 400
 
-    def test_known_url_streams_content(self, admin_client, settings):
+    def test_known_url_streams_content(
+        self, admin_client: Client, settings: SettingsWrapper
+    ):
         from unittest.mock import MagicMock, patch
 
         from django.urls import reverse
@@ -145,7 +154,7 @@ class TestDownloadRawEndpoint:
         assert response.content == b"fake-image-bytes"
         assert response["Content-Type"] == "image/jpeg"
 
-    def test_anonymous_denied(self, client, settings):
+    def test_anonymous_denied(self, client: Client, settings: SettingsWrapper):
         from django.urls import reverse
 
         self._setup_admin(settings)
@@ -157,7 +166,7 @@ class TestDownloadRawEndpoint:
 class TestQuickActions:
     """Changelog quick buttons: review status, download raw, bulk actions."""
 
-    def _no_toolbar(self, settings):
+    def _no_toolbar(self, settings: SettingsWrapper):
         from django.conf import settings as dj_settings
 
         settings.MIDDLEWARE = tuple(
@@ -178,7 +187,7 @@ class TestQuickActions:
             review_status=Image.ReviewStatusChoices.pending,
         )
 
-    def test_set_review(self, admin_client, settings):
+    def test_set_review(self, admin_client: Client, settings: SettingsWrapper):
         from django.urls import reverse
 
         from server.apps.images.models import Image
@@ -192,7 +201,9 @@ class TestQuickActions:
         pin.refresh_from_db()
         assert pin.review_status == Image.ReviewStatusChoices.approved
 
-    def test_set_review_invalid_status(self, admin_client, settings):
+    def test_set_review_invalid_status(
+        self, admin_client: Client, settings: SettingsWrapper
+    ):
         from django.urls import reverse
 
         self._no_toolbar(settings)
@@ -204,7 +215,7 @@ class TestQuickActions:
         pin.refresh_from_db()
         assert pin.review_status == "pending"  # unchanged
 
-    def test_download_raw_row(self, admin_client, settings):
+    def test_download_raw_row(self, admin_client: Client, settings: SettingsWrapper):
         from unittest.mock import MagicMock, patch
 
         from django.urls import reverse
@@ -224,7 +235,9 @@ class TestQuickActions:
         assert pin.image.name.startswith("images/")
         assert "%C3%" not in pin.image.name  # sanitized ASCII name
 
-    def test_bulk_download_action(self, admin_client, settings):
+    def test_bulk_download_action(
+        self, admin_client: Client, settings: SettingsWrapper
+    ):
         from unittest.mock import MagicMock, patch
 
         from django.urls import reverse
@@ -251,7 +264,7 @@ class TestQuickActions:
 class TestQuickActionsAjax:
     """AJAX mode: JSON instead of redirects, for in-place row updates."""
 
-    def _no_toolbar(self, settings):
+    def _no_toolbar(self, settings: SettingsWrapper):
         from django.conf import settings as dj_settings
 
         settings.MIDDLEWARE = tuple(
@@ -272,7 +285,9 @@ class TestQuickActionsAjax:
             review_status=Image.ReviewStatusChoices.pending,
         )
 
-    def test_set_review_ajax_returns_json(self, admin_client, settings):
+    def test_set_review_ajax_returns_json(
+        self, admin_client: Client, settings: SettingsWrapper
+    ):
         from django.urls import reverse
 
         self._no_toolbar(settings)
@@ -290,7 +305,9 @@ class TestQuickActionsAjax:
         pin.refresh_from_db()
         assert pin.review_status == "approved"
 
-    def test_download_ajax_returns_json(self, admin_client, settings):
+    def test_download_ajax_returns_json(
+        self, admin_client: Client, settings: SettingsWrapper
+    ):
         from unittest.mock import MagicMock, patch
 
         from django.urls import reverse
@@ -311,7 +328,9 @@ class TestQuickActionsAjax:
         pin.refresh_from_db()
         assert bool(pin.image) is True
 
-    def test_download_ajax_error_json(self, admin_client, settings):
+    def test_download_ajax_error_json(
+        self, admin_client: Client, settings: SettingsWrapper
+    ):
         from unittest.mock import patch
 
         from django.urls import reverse
@@ -331,7 +350,7 @@ class TestQuickActionsAjax:
 class TestServingCell:
     """Serving column: pill + in-cell download button (external only)."""
 
-    def _no_toolbar(self, settings):
+    def _no_toolbar(self, settings: SettingsWrapper):
         from django.conf import settings as dj_settings
 
         settings.MIDDLEWARE = tuple(
@@ -358,7 +377,9 @@ class TestServingCell:
             )
         return Image.objects.create(**kwargs)
 
-    def test_external_shows_download_in_serving(self, admin_client, settings):
+    def test_external_shows_download_in_serving(
+        self, admin_client: Client, settings: SettingsWrapper
+    ):
         from server.apps.images.admin import ImageAdmin
         from server.apps.images.models import Image
 
@@ -368,7 +389,9 @@ class TestServingCell:
         assert "mfu-qa-download" in html
         assert "extern" in html
 
-    def test_local_has_no_download_button(self, admin_client, settings):
+    def test_local_has_no_download_button(
+        self, admin_client: Client, settings: SettingsWrapper
+    ):
         from server.apps.images.admin import ImageAdmin
         from server.apps.images.models import Image
 
@@ -378,7 +401,9 @@ class TestServingCell:
         assert "mfu-qa-download" not in html
         assert "local" in html
 
-    def test_download_ajax_returns_serving_html(self, admin_client, settings):
+    def test_download_ajax_returns_serving_html(
+        self, admin_client: Client, settings: SettingsWrapper
+    ):
         from unittest.mock import MagicMock, patch
 
         from django.urls import reverse

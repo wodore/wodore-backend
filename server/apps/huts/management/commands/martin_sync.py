@@ -21,21 +21,28 @@ Usage:
     app martin_sync --target ./test_output --dry-run --all
 """
 
+from __future__ import annotations
+
 import shutil
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, override
 
 import yaml
 from django_admin_runner import register_command
 
 from django.conf import settings
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand, CommandError, CommandParser
+
+if TYPE_CHECKING:
+    from server.apps.categories.models import Category
 
 
 @register_command(group="Huts")
 class Command(BaseCommand):
     help = "Sync Martin tile server assets to target directory (e.g., Kubernetes PVC)"
 
-    def add_arguments(self, parser):
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--target",
             type=str,
@@ -76,7 +83,8 @@ class Command(BaseCommand):
             help="Validate files after copying (verify they exist and are readable)",
         )
 
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         from server.apps.categories.models import Category
         from server.apps.symbols.models import Symbol
 
@@ -141,7 +149,7 @@ class Command(BaseCommand):
         self.stdout.write("=" * 60)
 
         # Statistics
-        stats = {
+        stats: dict[str, Any] = {
             "files_copied": 0,
             "files_updated": 0,
             "files_created": 0,
@@ -192,8 +200,14 @@ class Command(BaseCommand):
         self._print_summary(stats, dry_run)
 
     def _cleanup_old_sprites(
-        self, target_path, dry_run, stats, include_list, variants, Category
-    ):
+        self,
+        target_path: Path,
+        dry_run: bool,
+        stats: dict[str, Any],
+        include_list: list[str] | None,
+        variants: list[str],
+        Category: type[Category],
+    ) -> None:
         """
         Remove old sprite files that are no longer in the database.
 
@@ -301,7 +315,9 @@ class Command(BaseCommand):
         else:
             self.stdout.write("  ✓ No old files to remove")
 
-    def _sync_static_sprites(self, target_path, dry_run, stats):
+    def _sync_static_sprites(
+        self, target_path: Path, dry_run: bool, stats: dict[str, Any]
+    ) -> None:
         """Copy static sprite SVG files (basemap sprites like wd-maps).
 
         ``tile_server/sprites/<name>/`` directories are sprite collections
@@ -328,7 +344,7 @@ class Command(BaseCommand):
 
         # Ensure sprite_dirs is initialized in stats
         if "sprite_dirs" not in stats:
-            stats["sprite_dirs"] = []
+            stats["sprite_dirs"] = list[str]()
 
         for sprite_category_dir in sorted(source_dir.iterdir()):
             if not sprite_category_dir.is_dir():
@@ -355,7 +371,9 @@ class Command(BaseCommand):
                     label=f"static-sprite: {category_name}/{svg_file.stem}",
                 )
 
-    def _sync_fonts(self, target_path, dry_run, stats):
+    def _sync_fonts(
+        self, target_path: Path, dry_run: bool, stats: dict[str, Any]
+    ) -> None:
         """Copy TTF font files for Martin glyph serving."""
         self.stdout.write("\n[2b] Syncing font files...")
 
@@ -389,7 +407,13 @@ class Command(BaseCommand):
                 label=f"font: {font_file.stem}",
             )
 
-    def _sync_config(self, target_path, dry_run, stats, merge_file_path=""):
+    def _sync_config(
+        self,
+        target_path: Path,
+        dry_run: bool,
+        stats: dict[str, Any],
+        merge_file_path: str = "",
+    ) -> None:
         """Generate and copy martin.yaml config file with sprite paths."""
         self.stdout.write("\n[3/3] Generating config file...")
 
@@ -427,7 +451,9 @@ class Command(BaseCommand):
 
                     if merge_config:
                         # Deep merge the configs
-                        def deep_merge(base, override):
+                        def deep_merge(
+                            base: dict[str, Any], override: dict[str, Any]
+                        ) -> dict[str, Any]:
                             """Recursively merge override dict into base dict."""
                             result = base.copy()
                             for key, value in override.items():
@@ -524,8 +550,14 @@ class Command(BaseCommand):
             stats["files_copied"] += 1
 
     def _sync_sprites(
-        self, target_path, dry_run, stats, include_list, variants, Category
-    ):
+        self,
+        target_path: Path,
+        dry_run: bool,
+        stats: dict[str, Any],
+        include_list: list[str] | None,
+        variants: list[str],
+        Category: type[Category],
+    ) -> None:
         """Copy sprite SVG files from database (Category -> Symbol -> svg_file)."""
         self.stdout.write("\n[1/3] Syncing sprites from database...")
 
@@ -605,8 +637,14 @@ class Command(BaseCommand):
         stats["sprite_dirs"] = sprite_dirs
 
     def _sync_category_sprites(
-        self, category, target_base_dir, variants, dry_run, stats, parent_slug
-    ):
+        self,
+        category: Category,
+        target_base_dir: Path,
+        variants: list[str],
+        dry_run: bool,
+        stats: dict[str, Any],
+        parent_slug: str,
+    ) -> None:
         """
         Sync all style variants for a single category.
 
@@ -684,8 +722,14 @@ class Command(BaseCommand):
             stats["categories_skipped"] += 1
 
     def _copy_file(
-        self, source_file, target_file, target_dir, dry_run, stats, label=None
-    ):
+        self,
+        source_file: Path,
+        target_file: Path,
+        target_dir: Path,
+        dry_run: bool,
+        stats: dict[str, Any],
+        label: str | None = None,
+    ) -> None:
         """Copy a single file from source to target."""
         indent = "  "
 
@@ -764,7 +808,7 @@ class Command(BaseCommand):
             )
             stats["errors"] += 1
 
-    def _write_marker_file(self, target_path, stats):
+    def _write_marker_file(self, target_path: Path, stats: dict[str, Any]) -> None:
         """Write a marker file with timestamp - only updated if changes were made."""
         from datetime import datetime, timezone
 
@@ -792,7 +836,7 @@ class Command(BaseCommand):
                     f.write(f"Last modified: {timestamp}\n")
                 self.stdout.write(f"\n✓ Created marker file: {marker_file}")
 
-    def _validate_files(self, target_path, stats):
+    def _validate_files(self, target_path: Path, stats: dict[str, Any]) -> None:
         """Validate that all files were copied successfully."""
         validation_errors = 0
 
@@ -838,7 +882,7 @@ class Command(BaseCommand):
         else:
             self.stdout.write(self.style.SUCCESS("\n✓ Validation successful"))
 
-    def _print_summary(self, stats, dry_run):
+    def _print_summary(self, stats: dict[str, Any], dry_run: bool) -> None:
         """Print summary statistics."""
         self.stdout.write("\n" + "=" * 60)
         self.stdout.write("Summary:")

@@ -18,11 +18,14 @@ actually return features.
 import asyncio
 import threading
 import time
+from typing import Any
 
 import httpx
 import pytest
+from pytest_django.plugin import DjangoDbBlocker
 
 from django.core.asgi import get_asgi_application
+from django.core.handlers.asgi import ASGIHandler
 from django.test import override_settings
 
 from server.apps.geometries import (
@@ -31,7 +34,8 @@ from server.apps.geometries import (
 from server.apps.geometries import image_response_cache as irc
 from server.apps.geometries.models import GeoPlace
 from server.apps.geometries.providers import provider_registry
-from server.apps.geometries.providers.base import ImageResult
+from server.apps.geometries.providers.base import ImageProvider, ImageResult
+from server.apps.geometries.providers.schemas import GeoPlaceSchema
 from server.apps.huts.models import Hut
 
 pytestmark = [pytest.mark.django_db]
@@ -48,7 +52,7 @@ def asgi_app():
 
 
 @pytest.fixture(autouse=True)
-def _isolated_cache(monkeypatch):
+def _isolated_cache(monkeypatch: pytest.MonkeyPatch):
     """Private locmem response cache per test (no database cache leakage)."""
     from uuid import uuid4
 
@@ -59,7 +63,7 @@ def _isolated_cache(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _cleanup_committed_writes(django_db_blocker):
+def _cleanup_committed_writes(django_db_blocker: DjangoDbBlocker):
     """Remove rows the ASGI view threads COMMIT behind pytest-django's back.
 
     The sync views run on asgiref executor threads with their own
@@ -113,7 +117,7 @@ def _stub_result(provider_source: str, index: int) -> ImageResult:
 
 
 @pytest.fixture(autouse=True)
-def _stub_providers(monkeypatch):
+def _stub_providers(monkeypatch: pytest.MonkeyPatch):
     """Every registered provider answers 1–2 images without network.
 
     Only the provider ``fetch`` methods are stubbed: the endpoints still
@@ -121,7 +125,15 @@ def _stub_providers(monkeypatch):
     conversion with its nested ``sync_to_async``, dedupe, post-process).
     """
 
-    async def _fetch(self, places, lat, lon, radius, limit=100, update_cache=False):
+    async def _fetch(
+        self: ImageProvider,
+        places: list[GeoPlaceSchema],
+        lat: float,
+        lon: float,
+        radius: float,
+        limit: int = 100,
+        update_cache: bool = False,
+    ):
         # 1–2 images per provider, dimensions large enough to survive
         # post_process_images' minimum-size filter.
         return [_stub_result(self.source, 1), _stub_result(self.source, 2)][
@@ -138,12 +150,12 @@ def _stub_providers(monkeypatch):
     assert stubbed, "no image providers registered — stubs not applied"
 
 
-def _asgi_get(app, url: str) -> httpx.Response:
+def _asgi_get(app: ASGIHandler, url: str) -> httpx.Response:
     """Drive one GET through the real ASGI stack (event loop + asgiref
     bridging, sync views dispatched via sync_to_async like under uvicorn)."""
 
     async def _do() -> httpx.Response:
-        transport = httpx.ASGITransport(app=app)
+        transport = httpx.ASGITransport(app=app)  # type: ignore  # asgi signature drift: django-stubs Mapping/Awaitable callbacks vs httpx dict/Coroutine
         async with httpx.AsyncClient(
             transport=transport, base_url="http://testserver"
         ) as client:
@@ -153,7 +165,7 @@ def _asgi_get(app, url: str) -> httpx.Response:
 
 
 @pytest.fixture
-def hut(seed_data):
+def hut(seed_data: dict[str, int]):
     hut = Hut.objects.filter(
         is_active=True, is_public=True, location__isnull=False
     ).first()
@@ -162,7 +174,7 @@ def hut(seed_data):
 
 
 @pytest.fixture
-def place(seed_data):
+def place(seed_data: dict[str, int]):
     place = GeoPlace.objects.filter(
         is_active=True, is_public=True, location__isnull=False
     ).first()
@@ -175,7 +187,7 @@ class TestImagesEndpointsUnderASGI:
     ASGI — the failure mode that emptied them on staging (swallowed
     bridging errors → empty responses) must not recur."""
 
-    def test_nearby_images_return_features(self, asgi_app, hut):
+    def test_nearby_images_return_features(self, asgi_app: ASGIHandler, hut: Hut):
         url = f"/v1/geo/images/nearby?lat={hut.location.y}&lon={hut.location.x}&radius=50&lang=en&limit=20"
         response = _asgi_get(asgi_app, url)
         assert response.status_code == 200
@@ -183,7 +195,7 @@ class TestImagesEndpointsUnderASGI:
         assert len(features) > 0
         assert not features[0]["properties"].get("is_fallback")
 
-    def test_place_images_return_features(self, asgi_app, place):
+    def test_place_images_return_features(self, asgi_app: ASGIHandler, place: GeoPlace):
         # sources=wikicommons keeps the request off the pinning
         # write-through (the ASGI view thread's connection commits for
         # real, outside pytest-django's test transaction).
@@ -194,7 +206,7 @@ class TestImagesEndpointsUnderASGI:
         assert len(features) > 0
         assert not features[0]["properties"].get("is_fallback")
 
-    def test_hut_images_return_features(self, asgi_app, hut):
+    def test_hut_images_return_features(self, asgi_app: ASGIHandler, hut: Hut):
         url = f"/v1/geo/images/hut/{hut.slug}?radius=50&sources=wikicommons&lang=en&limit=20"
         response = _asgi_get(asgi_app, url)
         assert response.status_code == 200
@@ -215,9 +227,9 @@ class TestConcurrentBridgeRequests:
     """
 
     @staticmethod
-    def _concurrent_get(app, urls: list[str]) -> list[httpx.Response]:
+    def _concurrent_get(app: ASGIHandler, urls: list[str]) -> list[httpx.Response]:
         async def _do() -> list[httpx.Response]:
-            transport = httpx.ASGITransport(app=app)
+            transport = httpx.ASGITransport(app=app)  # type: ignore  # asgi signature drift: django-stubs Mapping/Awaitable callbacks vs httpx dict/Coroutine
             async with httpx.AsyncClient(
                 transport=transport, base_url="http://testserver", timeout=30
             ) as client:
@@ -228,7 +240,9 @@ class TestConcurrentBridgeRequests:
 
         return asyncio.run(_do())
 
-    def test_concurrent_mixed_requests_complete(self, asgi_app, hut, place):
+    def test_concurrent_mixed_requests_complete(
+        self, asgi_app: ASGIHandler, hut: Hut, place: GeoPlace
+    ):
         """8 concurrent requests across all three endpoints must all answer."""
         urls = [
             f"/v1/geo/images/nearby?lat={hut.location.y}&lon={hut.location.x}&radius=50&lang=en&limit=20",
@@ -251,14 +265,20 @@ class TestFanoutBudget:
     """
 
     def test_slow_provider_serves_partial_results_within_budget(
-        self, asgi_app, hut, monkeypatch
+        self, asgi_app: ASGIHandler, hut: Hut, monkeypatch: pytest.MonkeyPatch
     ):
         from structlog.testing import capture_logs
 
         slow = provider_registry.get_provider("wikicommons")
 
         async def _slow_fetch(
-            self, places, lat, lon, radius, limit=100, update_cache=False
+            self: ImageProvider,
+            places: list[GeoPlaceSchema],
+            lat: float,
+            lon: float,
+            radius: float,
+            limit: int = 100,
+            update_cache: bool = False,
         ):
             await asyncio.sleep(30.0)  # far beyond the 0.3s budget
             return [_stub_result(self.source, 99)]
@@ -288,7 +308,7 @@ class TestFanoutBudget:
         ]
         assert stragglers, "timed-out provider must be logged, not raised"
 
-    def test_explicit_budget_overrides_setting(self, monkeypatch):
+    def test_explicit_budget_overrides_setting(self, monkeypatch: pytest.MonkeyPatch):
         """The budget parameter wins over the setting (pin-command path).
 
         The setting stays at its 10s default here; only the explicit 0.3s
@@ -306,7 +326,13 @@ class TestFanoutBudget:
         slow = provider_registry.get_provider("wikicommons")
 
         async def _slow_fetch(
-            self, places, lat, lon, radius, limit=100, update_cache=False
+            self: ImageProvider,
+            places: list[GeoPlaceSchema],
+            lat: float,
+            lon: float,
+            radius: float,
+            limit: int = 100,
+            update_cache: bool = False,
         ):
             await asyncio.sleep(30.0)  # far beyond the 0.3s explicit budget
             return [_stub_result(self.source, 99)]
@@ -357,7 +383,7 @@ class TestCancelledRequestConnectionHygiene:
     """
 
     def test_cancelled_request_releases_view_thread_connections(
-        self, asgi_app, hut, monkeypatch
+        self, asgi_app: ASGIHandler, hut: Hut, monkeypatch: pytest.MonkeyPatch
     ):
         import django.db
 
@@ -365,20 +391,26 @@ class TestCancelledRequestConnectionHygiene:
         fetch_started = threading.Event()
 
         async def _slow_fetch(
-            self, places, lat, lon, radius, limit=100, update_cache=False
-        ):
+            self: ImageProvider,
+            places: list[GeoPlaceSchema],
+            lat: float,
+            lon: float,
+            radius: float,
+            limit: int = 100,
+            update_cache: bool = False,
+        ) -> list[ImageResult]:
             fetch_started.set()
             await asyncio.sleep(30.0)
             return []
 
         monkeypatch.setattr(slow, "fetch", _slow_fetch.__get__(slow))
 
-        cleanup_calls: list[dict] = []
+        cleanup_calls: list[dict[str, Any]] = []
         cleanup_started = threading.Event()
         connections = django.db.connections
         real_all = connections.all
 
-        def _spied_all(initialized_only=False):
+        def _spied_all(initialized_only: bool = False):
             conns = real_all(initialized_only=initialized_only)
             if initialized_only and conns:
                 cleanup_calls.append(
@@ -397,7 +429,7 @@ class TestCancelledRequestConnectionHygiene:
         monkeypatch.setattr(connections, "all", _spied_all)
 
         async def _aborted_get() -> None:
-            transport = httpx.ASGITransport(app=asgi_app)
+            transport = httpx.ASGITransport(app=asgi_app)  # type: ignore  # asgi signature drift: django-stubs Mapping/Awaitable callbacks vs httpx dict/Coroutine
             async with httpx.AsyncClient(
                 transport=transport, base_url="http://testserver"
             ) as client:

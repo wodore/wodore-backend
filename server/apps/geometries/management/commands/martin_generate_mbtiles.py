@@ -1,15 +1,17 @@
 import os
 import subprocess
 from pathlib import Path
+from typing import Any, override
 
 from django.conf import settings
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand, CommandError, CommandParser
 
 
 class Command(BaseCommand):
     help = "Generate MBTiles from Martin config sources using martin cp"
 
-    def add_arguments(self, parser):
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--source",
             type=str,
@@ -59,7 +61,8 @@ class Command(BaseCommand):
             help="Number of concurrent connections (default: 4)",
         )
 
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         source = options["source"]
         config = options["config"]
         max_zoom = options["max_zoom"]
@@ -129,8 +132,15 @@ class Command(BaseCommand):
         return f"postgresql://{db['USER']}:{db['PASSWORD']}@{db['HOST']}:{db['PORT']}/{db['NAME']}"
 
     def _generate_mbtiles(
-        self, config, source, min_zoom, max_zoom, url_query, concurrency, output_path
-    ):
+        self,
+        config: str,
+        source: str,
+        min_zoom: int,
+        max_zoom: int,
+        url_query: str | None,
+        concurrency: int,
+        output_path: str,
+    ) -> bool:
         db_url = self._get_db_url()
         cmd = [
             "martin-cp",

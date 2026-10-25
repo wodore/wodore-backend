@@ -22,7 +22,7 @@ import json
 import logging
 import time
 from math import floor
-from typing import Any
+from typing import TYPE_CHECKING, Any, override
 
 import requests
 from authlib.jose import jwt
@@ -36,6 +36,12 @@ from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
 
 from server.apps.api.error_codes import ErrorCode
+
+if TYPE_CHECKING:
+    # Type-only dmr imports: annotating the auth hooks without the runtime
+    # import cycle (dmr pulls in the controller stack, auth is global).
+    from dmr.controller import Controller
+    from dmr.serializer import BaseSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -396,6 +402,7 @@ class BearerSyncAuth(_HttpBasicAuth, SyncAuth):
         )
 
     @property
+    @override
     def www_authenticate_challenge(self) -> str | None:
         """RFC 9110 challenge for 401 responses."""
         return "Bearer"
@@ -414,7 +421,7 @@ class BearerSyncAuth(_HttpBasicAuth, SyncAuth):
     def __call__(  # type: ignore[override]  # sync auth contract
         self,
         endpoint: "Endpoint",
-        controller,  # dmr Controller, avoided for import cycle
+        controller: "Controller[BaseSerializer]",
     ) -> "SyncAuth | None":
         """Extract the bearer token and delegate to ``authenticate``."""
         header = controller.request.headers.get(self.header)
@@ -428,7 +435,7 @@ class BearerSyncAuth(_HttpBasicAuth, SyncAuth):
     def authenticate(
         self,
         endpoint: "Endpoint",
-        controller,
+        controller: "Controller[BaseSerializer]",
         token: str,
     ) -> "SyncAuth | None":
         """Validate the token; return ``self`` on success."""
@@ -449,10 +456,11 @@ class AuthBearer(BearerSyncAuth):
         self.groups = groups
         self.validators = _select_validators()
 
+    @override
     def authenticate(
         self,
         endpoint: "Endpoint",
-        controller,
+        controller: "Controller[BaseSerializer]",
         token: str,
     ) -> "SyncAuth | None":
         """Try every configured validator in order.

@@ -4,7 +4,10 @@ with stubbed provider fetches to verify caching, parameter separation,
 stale-fallback, forced refresh, and invalidation.
 """
 
+from typing import Any
+
 import pytest
+from pytest_django.fixtures import SettingsWrapper
 
 from tests.helpers import PrefixedClient as TestClient
 
@@ -25,7 +28,7 @@ from server.apps.geometries.schemas import (
 
 
 @pytest.fixture(autouse=True)
-def _isolated_cache(monkeypatch):
+def _isolated_cache(monkeypatch: pytest.MonkeyPatch):
     """Give every test a private locmem cache.
     Overriding ``CACHES`` via settings is unreliable here (the cache handler
     may keep serving the database backend and leak entries across runs), so
@@ -65,7 +68,7 @@ class TestResponseCacheHelper:
         assert cached is not None
         assert cached.metadata.total == 3
 
-    def test_stale_after_fresh_window(self, monkeypatch):
+    def test_stale_after_fresh_window(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr(irc, "fresh_seconds", lambda: -1)
         key = response_key("hut", "s", radius=50.0, sources=None, lang="en", limit=10)
         set_response(key, _sample_response(total=1))
@@ -73,7 +76,7 @@ class TestResponseCacheHelper:
         assert fresh is False
         assert cached is not None  # still retrievable for stale fallback
 
-    def test_storage_expiry_returns_nothing(self, settings):
+    def test_storage_expiry_returns_nothing(self, settings: SettingsWrapper):
         settings.IMAGE_RESPONSE_CACHE_STALE_SECONDS = 0
         key = response_key("hut", "s", radius=50.0, sources=None, lang="en", limit=10)
         set_response(key, _sample_response())
@@ -111,7 +114,9 @@ class _FetchStub:
         self.returns_tuple = returns_tuple
         self.place_info = {"location": {"lat": 46.5, "lon": 7.5}}
 
-    async def __call__(self, **kwargs):
+    async def __call__(
+        self, **kwargs: Any
+    ) -> list[Any] | tuple[list[Any], dict[str, Any]]:
         self.calls += 1
         if self.exc is not None:
             raise self.exc
@@ -127,7 +132,7 @@ class TestEndpointCaching:
         return TestClient("/v1/geo/images")
 
     @pytest.fixture
-    def hut_slug(self, seed_data):
+    def hut_slug(self, seed_data: dict[str, int]):
         from server.apps.huts.models import Hut
 
         slug = (
@@ -139,14 +144,16 @@ class TestEndpointCaching:
         return slug
 
     @pytest.fixture
-    def fetch(self, monkeypatch):
+    def fetch(self, monkeypatch: pytest.MonkeyPatch):
         from server.apps.geometries import api_images
 
         stub = _FetchStub()
         monkeypatch.setattr(api_images, "fetch_images_for_place", stub)
         return stub
 
-    def test_second_request_hits_cache(self, client, hut_slug, fetch):
+    def test_second_request_hits_cache(
+        self, client: TestClient, hut_slug: str, fetch: _FetchStub
+    ):
         url = f"/hut/{hut_slug}?radius=50&lang=en&limit=10"
         first = client.get(url)
         second = client.get(url)
@@ -155,13 +162,17 @@ class TestEndpointCaching:
         assert fetch.calls == 1  # second response served from cache
         assert second.json() == first.json()
 
-    def test_parameters_split_cache(self, client, hut_slug, fetch):
+    def test_parameters_split_cache(
+        self, client: TestClient, hut_slug: str, fetch: _FetchStub
+    ):
         client.get(f"/hut/{hut_slug}?radius=50&lang=en&limit=10")
         client.get(f"/hut/{hut_slug}?radius=50&lang=fr&limit=10")
         client.get(f"/hut/{hut_slug}?radius=100&lang=en&limit=10")
         assert fetch.calls == 3
 
-    def test_update_cache_bypasses_and_resets(self, client, hut_slug, fetch):
+    def test_update_cache_bypasses_and_resets(
+        self, client: TestClient, hut_slug: str, fetch: _FetchStub
+    ):
         url = f"/hut/{hut_slug}?radius=50&lang=en&limit=10"
         client.get(url)
         client.get(f"{url}&update_cache=true")
@@ -169,7 +180,13 @@ class TestEndpointCaching:
         client.get(url)
         assert fetch.calls == 2  # fresh again → served from cache
 
-    def test_stale_fallback_on_failure(self, client, hut_slug, fetch, monkeypatch):
+    def test_stale_fallback_on_failure(
+        self,
+        client: TestClient,
+        hut_slug: str,
+        fetch: _FetchStub,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
         monkeypatch.setattr(irc, "fresh_seconds", lambda: -1)
         url = f"/hut/{hut_slug}?radius=50&lang=en&limit=10"
         first = client.get(url)
@@ -180,20 +197,30 @@ class TestEndpointCaching:
         assert second.json() == first.json()
         assert fetch.calls == 2
 
-    def test_failure_without_cache_raises(self, client, hut_slug, fetch, monkeypatch):
+    def test_failure_without_cache_raises(
+        self,
+        client: TestClient,
+        hut_slug: str,
+        fetch: _FetchStub,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
         monkeypatch.setattr(irc, "fresh_seconds", lambda: -1)
         fetch.exc = RuntimeError("provider down")
         with pytest.raises(RuntimeError, match="provider down"):
             client.get(f"/hut/{hut_slug}?radius=50&lang=en&limit=10")
 
-    def test_invalidate_forces_recompute(self, client, hut_slug, fetch):
+    def test_invalidate_forces_recompute(
+        self, client: TestClient, hut_slug: str, fetch: _FetchStub
+    ):
         url = f"/hut/{hut_slug}?radius=50&lang=en&limit=10"
         client.get(url)
         invalidate_for_hut(hut_slug)
         client.get(url)
         assert fetch.calls == 2
 
-    def test_nearby_cached(self, seed_data, monkeypatch):
+    def test_nearby_cached(
+        self, seed_data: dict[str, int], monkeypatch: pytest.MonkeyPatch
+    ):
         from server.apps.geometries import api_images
 
         stub = _FetchStub(returns_tuple=False)
@@ -215,7 +242,7 @@ class TestCachedOnly:
         return TestClient("/v1/geo/images")
 
     @pytest.fixture
-    def hut_slug(self, seed_data):
+    def hut_slug(self, seed_data: dict[str, int]):
         from server.apps.huts.models import Hut
 
         slug = (
@@ -227,7 +254,7 @@ class TestCachedOnly:
         return slug
 
     @pytest.fixture
-    def place_slug(self, seed_data):
+    def place_slug(self, seed_data: dict[str, int]):
         from server.apps.geometries.models import GeoPlace
 
         slug = (
@@ -239,7 +266,7 @@ class TestCachedOnly:
         return slug
 
     @pytest.fixture
-    def fetch(self, monkeypatch):
+    def fetch(self, monkeypatch: pytest.MonkeyPatch):
         from server.apps.geometries import api_images
 
         stub = _FetchStub()
@@ -247,7 +274,11 @@ class TestCachedOnly:
         return stub
 
     def test_serves_stale_entry_without_providers(
-        self, client, hut_slug, fetch, monkeypatch
+        self,
+        client: TestClient,
+        hut_slug: str,
+        fetch: _FetchStub,
+        monkeypatch: pytest.MonkeyPatch,
     ):
         monkeypatch.setattr(irc, "fresh_seconds", lambda: -1)
         url = f"/hut/{hut_slug}?radius=50&lang=en&limit=20"
@@ -260,7 +291,7 @@ class TestCachedOnly:
         assert fetch.calls == 1  # only the warm-up call
 
     def test_cold_cache_returns_fallback_without_providers(
-        self, client, hut_slug, fetch
+        self, client: TestClient, hut_slug: str, fetch: _FetchStub
     ):
         fetch.exc = RuntimeError("provider down")
         response = client.get(
@@ -275,7 +306,9 @@ class TestCachedOnly:
         assert body["metadata"]["total"] == 1
         assert fetch.calls == 0
 
-    def test_cold_cache_opt_out_is_empty(self, client, hut_slug, fetch):
+    def test_cold_cache_opt_out_is_empty(
+        self, client: TestClient, hut_slug: str, fetch: _FetchStub
+    ):
         fetch.exc = RuntimeError("provider down")
         response = client.get(
             f"/hut/{hut_slug}?radius=50&lang=en&limit=20"
@@ -287,12 +320,16 @@ class TestCachedOnly:
         assert body["metadata"]["total"] == 0
         assert fetch.calls == 0
 
-    def test_cold_cache_does_not_shadow_future_responses(self, client, hut_slug, fetch):
+    def test_cold_cache_does_not_shadow_future_responses(
+        self, client: TestClient, hut_slug: str, fetch: _FetchStub
+    ):
         client.get(f"/hut/{hut_slug}?radius=50&lang=en&limit=20&cached_only=true")
         client.get(f"/hut/{hut_slug}?radius=50&lang=en&limit=20")
         assert fetch.calls == 1  # the empty fast call was not cached
 
-    def test_place_cold_cache_returns_fallback(self, client, place_slug, fetch):
+    def test_place_cold_cache_returns_fallback(
+        self, client: TestClient, place_slug: str, fetch: _FetchStub
+    ):
         fetch.exc = RuntimeError("provider down")
         response = client.get(
             f"/place/{place_slug}?radius=50&lang=en&limit=20&cached_only=true"
@@ -303,7 +340,7 @@ class TestCachedOnly:
         assert features[0]["properties"]["is_fallback"] is True
         assert fetch.calls == 0
 
-    def test_place_unknown_slug_is_404(self, client, fetch):
+    def test_place_unknown_slug_is_404(self, client: TestClient, fetch: _FetchStub):
         fetch.exc = RuntimeError("provider down")
         response = client.get(
             "/place/does-not-exist-xyz?cached_only=true&radius=50&lang=en&limit=20"
@@ -311,7 +348,7 @@ class TestCachedOnly:
         assert response.status_code == 404
         assert fetch.calls == 0
 
-    def test_hut_unknown_slug_is_404(self, client, fetch):
+    def test_hut_unknown_slug_is_404(self, client: TestClient, fetch: _FetchStub):
         fetch.exc = RuntimeError("provider down")
         response = client.get(
             "/hut/does-not-exist-xyz?cached_only=true&radius=50&lang=en&limit=20"
@@ -319,7 +356,9 @@ class TestCachedOnly:
         assert response.status_code == 404
         assert fetch.calls == 0
 
-    def test_nearby_serves_cached_only(self, seed_data, monkeypatch):
+    def test_nearby_serves_cached_only(
+        self, seed_data: dict[str, int], monkeypatch: pytest.MonkeyPatch
+    ):
         from server.apps.geometries import api_images
 
         stub = _FetchStub(returns_tuple=False)
@@ -333,7 +372,9 @@ class TestCachedOnly:
         assert fast.json() == warm.json()
         assert stub.calls == 1
 
-    def test_nearby_cold_cache_returns_empty(self, seed_data, monkeypatch):
+    def test_nearby_cold_cache_returns_empty(
+        self, seed_data: dict[str, int], monkeypatch: pytest.MonkeyPatch
+    ):
         from server.apps.geometries import api_images
 
         stub = _FetchStub(returns_tuple=False)
@@ -347,14 +388,14 @@ class TestCachedOnly:
         assert response.json()["features"] == []
         assert stub.calls == 0
 
-    def test_cached_only_rejects_update_cache(self, client, hut_slug):
+    def test_cached_only_rejects_update_cache(self, client: TestClient, hut_slug: str):
         response = client.get(
             f"/hut/{hut_slug}?cached_only=true&update_cache=true&radius=50&lang=en"
         )
         assert response.status_code == 400  # dmr maps validation errors to 400
 
     def test_cached_hut_images_helper_reads_endpoint_entry(
-        self, client, hut_slug, fetch
+        self, client: TestClient, hut_slug: str, fetch: _FetchStub
     ):
         from server.apps.geometries.api_images import cached_hut_images
 
@@ -368,7 +409,7 @@ class TestCachedOnly:
         assert props is not None
         assert props.is_fallback is True
 
-    def test_cached_place_images_helper_cold_is_none(self, place_slug):
+    def test_cached_place_images_helper_cold_is_none(self, place_slug: str):
         from server.apps.geometries.api_images import cached_place_images
 
         assert cached_place_images(place_slug, lang="en") is None
@@ -388,7 +429,7 @@ class TestFailureIsNotCached:
             self.calls = 0
             self.exc: Exception | None = None
 
-        async def __call__(self, **kwargs):
+        async def __call__(self, **kwargs: Any):
             self.calls += 1
             if self.exc is not None:
                 raise self.exc
@@ -396,7 +437,9 @@ class TestFailureIsNotCached:
 
             return [_result(provider="wikicommons", source_id="File:CacheGuard.jpg")]
 
-    def test_nearby_exception_response_not_cached(self, seed_data, monkeypatch):
+    def test_nearby_exception_response_not_cached(
+        self, seed_data: dict[str, int], monkeypatch: pytest.MonkeyPatch
+    ):
         from server.apps.geometries import api_images
 
         stub = self._FetchStub()

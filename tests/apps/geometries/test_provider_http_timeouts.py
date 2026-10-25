@@ -16,6 +16,7 @@ stub without HTTP calls — nothing to pin there.)
 
 import asyncio
 import contextlib
+from typing import Any
 
 import httpx
 import pytest
@@ -42,12 +43,12 @@ class _Stop(Exception):
 
 
 @pytest.fixture
-def captured_timeouts(monkeypatch):
+def captured_timeouts(monkeypatch: pytest.MonkeyPatch):
     """Record the ``timeout=`` of every AsyncClient a provider constructs."""
     captured = []
 
     class _CapturingClient:
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *args: Any, **kwargs: Any):
             captured.append(kwargs.get("timeout"))
             raise _Stop()
 
@@ -76,7 +77,9 @@ class TestWikimediaStrategyClients:
             "_fetch_commons_category_images",
         ],
     )
-    def test_strategy_client_uses_configured_timeout(self, captured_timeouts, method):
+    def test_strategy_client_uses_configured_timeout(
+        self, captured_timeouts: list[float | None], method: str
+    ):
         provider = WikimediaCommonsProvider()
         call = getattr(provider, method)
         with contextlib.suppress(Exception):
@@ -93,21 +96,27 @@ class TestWikimediaStrategyClients:
 class TestOtherProviderClients:
     """Camptocamp, Panoramax and RefugesInfo each construct one client."""
 
-    def test_camptocamp_client_uses_configured_timeout(self, captured_timeouts):
+    def test_camptocamp_client_uses_configured_timeout(
+        self, captured_timeouts: list[float | None]
+    ):
         with contextlib.suppress(Exception):
             asyncio.run(
                 CamptocampProvider().fetch([], 46.5, 7.5, 50.0, 10, update_cache=True)
             )
         assert captured_timeouts == [provider_http_timeout()]
 
-    def test_panoramax_client_uses_configured_timeout(self, captured_timeouts):
+    def test_panoramax_client_uses_configured_timeout(
+        self, captured_timeouts: list[float | None]
+    ):
         with contextlib.suppress(Exception):
             asyncio.run(
                 PanoramaxProvider().fetch([], 46.5, 7.5, 50.0, 10, update_cache=True)
             )
         assert captured_timeouts == [provider_http_timeout()]
 
-    def test_refugesinfo_client_uses_configured_timeout(self, captured_timeouts):
+    def test_refugesinfo_client_uses_configured_timeout(
+        self, captured_timeouts: list[float | None]
+    ):
         place = GeoPlaceSchema(
             slug="test-place",
             name="Test Place",
@@ -125,7 +134,9 @@ class TestOtherProviderClients:
         assert captured_timeouts == [provider_http_timeout()]
 
     @override_settings(IMAGES_PROVIDER_HTTP_TIMEOUT_SECONDS=12.5)
-    def test_configured_value_flows_to_clients(self, captured_timeouts):
+    def test_configured_value_flows_to_clients(
+        self, captured_timeouts: list[float | None]
+    ):
         with contextlib.suppress(Exception):
             asyncio.run(
                 CamptocampProvider().fetch([], 46.5, 7.5, 50.0, 10, update_cache=True)
@@ -136,7 +147,9 @@ class TestOtherProviderClients:
 class TestDimensionProbeClient:
     """The dimension probe in base.py shares the provider timeout."""
 
-    def test_dimension_probe_uses_configured_timeout(self, captured_timeouts):
+    def test_dimension_probe_uses_configured_timeout(
+        self, captured_timeouts: list[float | None]
+    ):
         result = asyncio.run(_get_image_dimensions_from_headers("http://x/t.jpg"))
         assert result is None  # the stub aborts the probe
         assert captured_timeouts == [provider_http_timeout()]

@@ -2,6 +2,8 @@
 
 import pytest
 
+from django.test import Client
+
 from server.apps.geometries.models import GeoPlace
 from server.apps.huts.models import Hut, HutImageAssociation
 
@@ -9,7 +11,7 @@ pytestmark = [pytest.mark.django_db]
 
 
 @pytest.fixture(autouse=True)
-def _no_images(db):
+def _no_images(db: None):
     HutImageAssociation.objects.all().delete()
     from server.apps.geometries.models import GeoPlaceImageAssociation
 
@@ -20,7 +22,9 @@ class TestImageFallback:
     """static_map_fallback defaults to true — every hut/place response
     carries at least the generated static-map card; false opts out."""
 
-    def test_hut_without_images_default_includes_fallback(self, seed_data, client):
+    def test_hut_without_images_default_includes_fallback(
+        self, seed_data: dict[str, int], client: Client
+    ):
         hut = Hut.objects.filter(
             is_active=True, is_public=True, location__isnull=False
         ).first()
@@ -60,7 +64,9 @@ class TestImageFallback:
         assert "OpenTopoMap" in props["attribution"]["full"]
         assert "openstreetmap.org/copyright" in props["attribution"]["author"]
 
-    def test_hut_without_images_opt_out(self, seed_data, client):
+    def test_hut_without_images_opt_out(
+        self, seed_data: dict[str, int], client: Client
+    ):
         hut = Hut.objects.filter(
             is_active=True, is_public=True, location__isnull=False
         ).first()
@@ -73,7 +79,9 @@ class TestImageFallback:
         features = response.json()["features"]
         assert not [f for f in features if f["properties"].get("is_fallback")]
 
-    def test_place_without_images_default_fallback(self, seed_data, client):
+    def test_place_without_images_default_fallback(
+        self, seed_data: dict[str, int], client: Client
+    ):
         place = GeoPlace.objects.filter(
             is_active=True, is_public=True, location__isnull=False
         ).first()

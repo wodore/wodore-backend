@@ -22,7 +22,9 @@ from server.apps.images.models import Image
 from server.apps.licenses.models import License
 
 
-def _image(license: License, *, phash: str, quality: int, meta: dict | None) -> Image:
+def _image(
+    license: License, *, phash: str, quality: int, meta: dict[str, int] | None
+) -> Image:
     return Image.objects.create(
         license=license,
         phash=phash,
@@ -51,7 +53,7 @@ def hut():
 class TestAssessPlacePins:
     """Duplicate clustering across pins — sort-key robustness."""
 
-    def test_images_without_width_do_not_crash(self, hut):
+    def test_images_without_width_do_not_crash(self, hut: Hut) -> None:
         """Pinned SVGs (no meta width) must sort, not raise TypeError."""
         license = License.objects.create(slug="cc-by-sa-4.0")
         raster = _image(
@@ -83,7 +85,7 @@ class TestAssessPlacePins:
 
         assert stats == {"assessed": 0, "duplicates": 0, "pins": 3}
 
-    def test_duplicate_cluster_prefers_higher_quality(self, hut):
+    def test_duplicate_cluster_prefers_higher_quality(self, hut: Hut) -> None:
         """Equal phash → cluster; quality score picks the primary."""
         license = License.objects.create(slug="cc-by-sa-4.0")
         strong = _image(

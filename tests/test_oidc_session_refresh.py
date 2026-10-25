@@ -26,8 +26,12 @@ root forwarded to Zitadel's login UI with a dead-end JSON error
 import time
 
 import pytest
+from pytest_django.fixtures import SettingsWrapper
 
 from django.contrib.auth import get_user_model
+from django.test import Client
+
+from server.apps.accounts.models import User
 
 pytestmark = pytest.mark.django_db
 
@@ -35,7 +39,7 @@ _MW = "server.middleware.oidc.AsyncSafeSessionRefresh"
 
 
 @pytest.fixture
-def rp_mode(settings):
+def rp_mode(settings: SettingsWrapper):
     """Mount the Zitadel-RP middleware surface for the test.
 
     The middleware only runs in Zitadel-RP mode; the test env is builtin,
@@ -60,7 +64,7 @@ def rp_mode(settings):
 
 
 @pytest.fixture
-def oidc_session_user(client):
+def oidc_session_user(client: Client):
     """Superuser whose session was created by the OIDC backend."""
     user = get_user_model().objects.create_superuser(  # type: ignore  # custom manager/queryset inference gap
         email="admin-session@example.test", password="x"
@@ -76,7 +80,9 @@ def oidc_session_user(client):
 class TestSessionRefreshScope:
     """Only views that render for a login session may renew it."""
 
-    def test_public_root_with_expired_token_is_served(self, rp_mode, oidc_session_user):
+    def test_public_root_with_expired_token_is_served(
+        self, rp_mode: None, oidc_session_user: tuple[Client, User]
+    ):
         client, _ = oidc_session_user
         response = client.get("/")
         assert response.status_code == 200
@@ -86,21 +92,23 @@ class TestSessionRefreshScope:
         "path",
         ["/v1/huts/", "/robots.txt", "/llms.txt", "/health/", "/static/app.css"],
     )
-    def test_public_paths_are_exempt(self, rp_mode, oidc_session_user, path):
+    def test_public_paths_are_exempt(
+        self, rp_mode: None, oidc_session_user: tuple[Client, User], path: str
+    ):
         client, _ = oidc_session_user
         # The URLconf has no such routes: the assertion is that the
         # middleware does NOT redirect before routing (404, not 302).
         response = client.get(path)
         assert response.status_code == 404
 
-    def test_anonymous_never_redirected(self, rp_mode, client):
+    def test_anonymous_never_redirected(self, rp_mode: None, client: Client):
         # The admin redirects to its own login - never into the IdP flow.
         response = client.get("/admin/")
         assert response.status_code == 302
         assert not response["Location"].startswith("/oidc/authenticate")
 
     def test_protected_view_with_valid_token_untouched(
-        self, rp_mode, oidc_session_user
+        self, rp_mode: None, oidc_session_user: tuple[Client, User]
     ):
         client, _ = oidc_session_user
         # NB: Client.session builds a NEW SessionStore per access - keep
@@ -116,7 +124,9 @@ class TestSessionRefreshScope:
         assert response.status_code == 200
         assert response.content == b"gated"
 
-    def test_self_gated_demo_view_out_of_scope(self, rp_mode, oidc_session_user):
+    def test_self_gated_demo_view_out_of_scope(
+        self, rp_mode: None, oidc_session_user: tuple[Client, User]
+    ):
         """Staging demos gate themselves (redirect to the interactive
         login); a stale session browsing them must not be hijacked into
         the IdP renewal either."""
@@ -125,7 +135,9 @@ class TestSessionRefreshScope:
         assert response.status_code == 200
         assert response.content == b"demo"
 
-    def test_self_gated_demo_view_anonymous_redirects_itself(self, rp_mode, client):
+    def test_self_gated_demo_view_anonymous_redirects_itself(
+        self, rp_mode: None, client: Client
+    ):
         response = client.get("/demos/mapcompare/")
         assert response.status_code == 302
         # The view's own redirect (to the login), not the middleware's.
@@ -136,7 +148,7 @@ class TestExpiredTokenRenewal:
     """Expired id_token -> interactive login entry point, not prompt=none."""
 
     def test_admin_view_redirects_to_authenticate_with_next(
-        self, rp_mode, oidc_session_user
+        self, rp_mode: None, oidc_session_user: tuple[Client, User]
     ):
         client, _ = oidc_session_user
         response = client.get("/admin/")
@@ -149,7 +161,7 @@ class TestExpiredTokenRenewal:
         assert "op.example.test" not in location
 
     def test_access_mixin_view_outside_admin_is_auto_detected(
-        self, rp_mode, oidc_session_user
+        self, rp_mode: None, oidc_session_user: tuple[Client, User]
     ):
         """Scope detection is by VIEW, not by path: a LoginRequiredMixin
         CBV mounted anywhere gets the renewal."""
@@ -160,7 +172,9 @@ class TestExpiredTokenRenewal:
         assert location.startswith("/oidc/authenticate/")
         assert "next=%2Fmanager%2Fgated%2F" in location
 
-    def test_xhr_gets_403_with_refresh_url(self, rp_mode, oidc_session_user):
+    def test_xhr_gets_403_with_refresh_url(
+        self, rp_mode: None, oidc_session_user: tuple[Client, User]
+    ):
         client, _ = oidc_session_user
         response = client.get("/admin/", headers={"x-requested-with": "XMLHttpRequest"})
         assert response.status_code == 403

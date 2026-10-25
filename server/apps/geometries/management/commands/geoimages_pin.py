@@ -16,10 +16,14 @@ Examples:
     manage.py geoimages_pin --all --no-progress # plain output (cron jobs)
 """
 
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, override
+
 from django_admin_runner import register_command
 from django_admin_runner.forms import _hidden_aware_argparse
 
-from django.core.management.base import BaseCommand, CommandError
+from django.contrib.gis.geos import GEOSGeometry
+from django.core.management.base import BaseCommand, CommandError, CommandParser
 from django.db.models import Q
 
 from server.apps.geometries.bbox import parse_bbox
@@ -31,12 +35,19 @@ from server.apps.geometries.pinning import (
 from server.apps.geometries.sweep import run_sweep
 from server.apps.geometries.widgets import BBoxWidget
 
+if TYPE_CHECKING:
+    from server.apps.geometries.models import GeoPlace
+    from server.apps.huts.models import Hut
+
 HELP_TYPE = "Which place type to sync: hut, geoplace or all (default)."
 
 
 def _sweep_targets(
-    all_places: bool, place_type: str, bbox=None, limit: int | None = None
-):
+    all_places: bool,
+    place_type: str,
+    bbox: GEOSGeometry | None = None,
+    limit: int | None = None,
+) -> "list[tuple[str, Hut | GeoPlace]]":
     """Materialized sweep targets.
 
     Default (``all_places=False``): only places never synced from
@@ -83,7 +94,8 @@ def _sweep_targets(
 class Command(BaseCommand):
     help = __doc__ or ""
 
-    def add_arguments(self, parser):
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--place", metavar="SLUG", help="Sync a single place by slug."
         )
@@ -168,7 +180,8 @@ class Command(BaseCommand):
             ),
         )
 
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         check_origins = bool(options["check_origins"])
         warmup = bool(options["warmup_image_cache"])
         assess = bool(options["assess"])
@@ -224,7 +237,11 @@ class Command(BaseCommand):
             )
             return
 
-        def work(place_type, place, report) -> bool:
+        def work(
+            place_type: str,
+            place: "Hut | GeoPlace",
+            report: Callable[[str, bool], None],
+        ) -> bool:
             pins = getattr(place, "image_associations", None)
             pin_count = (
                 pins.count()

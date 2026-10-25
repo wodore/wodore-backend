@@ -9,7 +9,7 @@ slug. Styles map Color→color, Flat→primitive, High Contrast→mono.
 import json
 from collections.abc import Iterator
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar, override
 
 from server.apps.symbols.icon_data import FLUENT_STYLES, normalize_hexcode
 from server.apps.symbols.icon_sources.base import (
@@ -46,11 +46,13 @@ class FluentSource(IconSource):
 
     spec: ClassVar[SourceSpec] = FLUENT_SPEC
 
+    @override
     def source_dir(self, base_dir: Path) -> Path:
         return base_dir / "fluent" / "assets"
 
+    @override
     def iter_candidates(
-        self, source_dir: Path, entries: dict[str, dict]
+        self, source_dir: Path, entries: dict[str, Any]
     ) -> Iterator[IconCandidate]:
         self.reset()
         for folder in sorted(p for p in source_dir.iterdir() if p.is_dir()):

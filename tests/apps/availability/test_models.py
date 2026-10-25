@@ -33,11 +33,13 @@ def _make_availability(hut: Hut, org: Organization) -> HutAvailability:
 
 
 class TestFreeTolerance:
-    def test_default_zero(self, seed_data) -> None:
+    def test_default_zero(self, seed_data: dict[str, int]) -> None:
         avail = _make_availability(Hut.objects.first(), Organization.objects.first())  # type: ignore  # argument typing drift vs stubs
         assert avail.free_tolerance == 0
 
-    def test_update_availability_records_tolerance(self, seed_data) -> None:
+    def test_update_availability_records_tolerance(
+        self, seed_data: dict[str, int]
+    ) -> None:
         avail = _make_availability(Hut.objects.first(), Organization.objects.first())  # type: ignore  # argument typing drift vs stubs
         changed, history = avail.update_availability(
             free=10,  # same free
@@ -54,7 +56,9 @@ class TestFreeTolerance:
         assert avail.free_tolerance == 5
         assert history.free_tolerance == 5
 
-    def test_tolerance_change_alone_flags_change(self, seed_data) -> None:
+    def test_tolerance_change_alone_flags_change(
+        self, seed_data: dict[str, int]
+    ) -> None:
         avail = _make_availability(Hut.objects.first(), Organization.objects.first())  # type: ignore  # argument typing drift vs stubs
         assert (
             avail.has_changed(
@@ -75,7 +79,9 @@ class TestFreeTolerance:
             is False
         )
 
-    def test_history_records_tolerance_snapshot(self, seed_data) -> None:
+    def test_history_records_tolerance_snapshot(
+        self, seed_data: dict[str, int]
+    ) -> None:
         avail = _make_availability(Hut.objects.first(), Organization.objects.first())  # type: ignore  # argument typing drift vs stubs
         history = avail.record_change(
             free=8,

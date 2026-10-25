@@ -33,7 +33,7 @@ class _StubApps:
 
 
 @pytest.fixture
-def hut(seed_data):
+def hut(seed_data: dict[str, int]):
     hut = Hut.objects.filter(is_active=True, is_public=True).first()
     assert hut is not None
     HutImageAssociation.objects.filter(hut=hut).delete()
@@ -60,7 +60,7 @@ def _scores(hut: Hut) -> list[int]:
 
 
 class TestRemapScores:
-    def test_uploads_rebanded_newest_first(self, hut):
+    def test_uploads_rebanded_newest_first(self, hut: Hut):
         oldest = _image("a:old.jpg")
         newest = _image("a:new.jpg")
         HutImageAssociation.objects.create(image=oldest, hut=hut, score=1000)
@@ -74,7 +74,7 @@ class TestRemapScores:
         assert by_ident["a:new.jpg"] == 99  # newest import first
         assert by_ident["a:old.jpg"] == 98
 
-    def test_uploads_stack_caps_at_90(self, hut):
+    def test_uploads_stack_caps_at_90(self, hut: Hut):
         for i in range(14):
             HutImageAssociation.objects.create(
                 image=_image(f"a:img_{i:02}.jpg"), hut=hut, score=1000 + i
@@ -86,13 +86,13 @@ class TestRemapScores:
         # 14 uploads squeeze into the 90..99 band (oldest share the floor).
         assert scores == [90] * 5 + [91, 92, 93, 94, 95, 96, 97, 98, 99]
 
-    def test_gap_scores_clamped_to_pin_band(self, hut):
+    def test_gap_scores_clamped_to_pin_band(self, hut: Hut):
         image = _image("camptocamp:strong.jpg")
         HutImageAssociation.objects.create(image=image, hut=hut, score=95)
         migration.remap_scores(_StubApps(), None)
         assert HutImageAssociation.objects.get(image=image, hut=hut).score == 89
 
-    def test_pins_below_90_untouched(self, hut):
+    def test_pins_below_90_untouched(self, hut: Hut):
         image = _image("camptocamp:weak.jpg")
         HutImageAssociation.objects.create(image=image, hut=hut, score=50)
         migration.remap_scores(_StubApps(), None)

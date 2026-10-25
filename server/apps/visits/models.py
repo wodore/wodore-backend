@@ -13,12 +13,18 @@ those. No PII is stored: the visitor hash lives only in the cache.
 import hashlib
 import logging
 from datetime import date, datetime, timezone
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
+from django.http import HttpRequest
 
 from server.core.models import TimeStampedModel
+
+if TYPE_CHECKING:
+    from django.core.cache.backends.base import BaseCache
+    from django.db.models.functions import Coalesce
 
 logger = logging.getLogger(__name__)
 
@@ -56,20 +62,20 @@ class ObjectVisitDay(TimeStampedModel):
         return f"{self.content_type.model}#{self.object_id} {self.day}: {self.count}"
 
 
-def _cache():
+def _cache() -> "BaseCache":
     from django.core.cache import cache
 
     return cache
 
 
-def _should_skip(request) -> bool:
+def _should_skip(request: HttpRequest) -> bool:
     if request.GET.get("update_cache"):
         return True
     ua = (request.headers.get("User-Agent") or "").lower()
     return any(marker in ua for marker in SKIP_USER_AGENTS)
 
 
-def _visitor_key(request) -> str:
+def _visitor_key(request: HttpRequest) -> str:
     ip = request.META.get("REMOTE_ADDR", "")
     forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
     ua = request.headers.get("User-Agent") or ""
@@ -77,14 +83,17 @@ def _visitor_key(request) -> str:
     return hashlib.sha256(raw).hexdigest()[:20]
 
 
-def record_visit(request, obj) -> bool:
+def record_visit(request: HttpRequest, obj: models.Model | None) -> bool:
     """Count a visit for obj, best-effort. Never writes to the database.
 
     Returns True when the visit was buffered (first hit in the visitor's
     dedup window). All failures are swallowed: counting must never break
-    the observed request.
+    the observed request. A None obj (e.g. a lookup that matched nothing)
+    counts as a no-op, like every other failure.
     """
     try:
+        if obj is None:
+            return False
         if _should_skip(request):
             return False
         ct = ContentType.objects.get_for_model(obj)
@@ -115,7 +124,7 @@ def record_visit(request, obj) -> bool:
         return False
 
 
-def flush_visit_counters(buffer_key: str | None = None):
+def flush_visit_counters(buffer_key: str | None = None) -> None:
     """django-q2 task: read-and-clear the given buffer key, upsert its row.
 
     Receives the key that crossed the enqueue threshold. Visits buffered
@@ -138,7 +147,7 @@ def flush_visit_counters(buffer_key: str | None = None):
         logger.warning("visit_flush_failed", exc_info=True)
 
 
-def _persist(buffer_key: str, hits: int):
+def _persist(buffer_key: str, hits: int) -> None:
     from django.db.models import F
 
     if hits <= 0:
@@ -159,7 +168,9 @@ def _persist(buffer_key: str, hits: int):
         )
 
 
-def visit_window_annotation(model_or_ct, *, days: int = 30):
+def visit_window_annotation(
+    model_or_ct: type[models.Model] | ContentType, *, days: int = 30
+) -> "Coalesce":
     """Subquery annotation: per-object visit sum over the last ``days`` days.
 
     For use in admin ``get_queryset().annotate(visits_Nd=...)`` so
@@ -190,7 +201,11 @@ def visit_window_annotation(model_or_ct, *, days: int = 30):
     return Coalesce(Subquery(totals), 0)
 
 
-def visit_totals(model_or_ct, *, days: int = 30):
+def visit_totals(
+    model_or_ct: type[models.Model] | ContentType,
+    *,
+    days: int = 30,
+) -> models.QuerySet[ObjectVisitDay, dict[str, Any]]:
     """Visit sums per object_id for a given model (or ContentType),
     ordered by descending total over the window. Generic — knows
     nothing about which model it's counting."""

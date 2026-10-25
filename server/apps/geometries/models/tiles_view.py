@@ -107,6 +107,8 @@ tile = GeoPlacesForTilesView.objects.get_tile(12, 1234, 2345, {"cluster_max_zoom
   - martin.yaml: buffer 64→16, maxzoom 20/24→16 for all point layers
 """
 
+from typing import Any
+
 from psqlextra.models import PostgresViewModel
 
 from django.conf import settings
@@ -114,13 +116,13 @@ from django.contrib.gis.db import models
 from django.db import connection
 
 
-class GeoPlacesForTilesViewManager(models.Manager):
+class GeoPlacesForTilesViewManager(models.Manager["GeoPlacesForTilesView"]):
     """
     Manager for GeoPlacesForTilesView with helper methods for tile generation.
     """
 
     def get_tile(
-        self, z: int, x: int, y: int, query_params: dict | None = None
+        self, z: int, x: int, y: int, query_params: dict[str, Any] | None = None
     ) -> bytes | None:
         """
         Get vector tile for given coordinates.
@@ -229,7 +231,7 @@ class GeoPlacesForTilesView(PostgresViewModel):
         db_table = "geoplaces_for_tiles"
 
     # Custom manager with helper methods
-    objects = GeoPlacesForTilesViewManager()
+    objects = GeoPlacesForTilesViewManager()  # pyrefly: ignore[missing-override-decorator]  # @override cannot decorate class-body assignments; Django manager idiom
 
     class ViewMeta:
         """
@@ -240,7 +242,7 @@ class GeoPlacesForTilesView(PostgresViewModel):
         """
 
         @staticmethod
-        def query():
+        def query() -> tuple[str, list[Any]]:
             """
             Generate SQL for creating the view.
 

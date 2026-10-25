@@ -101,6 +101,6 @@ def test_lon_span_over_360_collapses_to_world():
         "0,0,inf,10",
     ],
 )
-def test_invalid_raises(value):
+def test_invalid_raises(value: str):
     with pytest.raises(ValueError, match="bbox"):
         parse_bbox(value)

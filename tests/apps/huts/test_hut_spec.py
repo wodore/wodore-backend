@@ -22,7 +22,7 @@ DETAIL_QUERY_PIN = 15
 
 @pytest.mark.django_db
 class TestHutDetailQueryCount:
-    def test_detail_query_count_pinned(self, seed_data):
+    def test_detail_query_count_pinned(self, seed_data: dict[str, int]):
         slug = (
             Hut.objects.filter(is_active=True, is_public=True)
             .values_list("slug", flat=True)
@@ -42,7 +42,9 @@ class TestHutDetailQueryCount:
             "If this is an intentional change, update the pin with review."
         )
 
-    def test_detail_main_query_is_single_pass(self, seed_data, db):
+    def test_detail_main_query_is_single_pass(
+        self, seed_data: dict[str, int], db: None
+    ):
         """The readers-prepared core runs as ONE query (joins, no prefetch)."""
         from server.apps.huts.api._hut_spec import prepare_hut_detail
 

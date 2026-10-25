@@ -11,8 +11,11 @@ places with independent per-place scores.
 See openspec change ``pin-external-images``.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -27,6 +30,10 @@ from server.apps.organizations.models import Organization
 
 from .image_response_cache import invalidate_for_hut, invalidate_for_place
 from .providers.base import ImageResult
+
+if TYPE_CHECKING:
+    from server.apps.geometries.models import GeoPlace
+    from server.apps.huts.models import Hut
 
 logger = structlog.get_logger()
 
@@ -127,7 +134,7 @@ def _org_for(slug: str) -> Organization:
     return org
 
 
-def _merge_image_meta(image: Image, result: ImageResult) -> dict:
+def _merge_image_meta(image: Image, result: ImageResult) -> dict[str, Any]:
     """Refresh provider metadata while preserving curated keys (focal/crop)."""
     meta = dict(image.image_meta or {})
     if result.width:
@@ -138,8 +145,8 @@ def _merge_image_meta(image: Image, result: ImageResult) -> dict:
     return meta
 
 
-def _merge_image_meta_from_result(result: ImageResult) -> dict:
-    meta: dict = {"provider_score": result.score}
+def _merge_image_meta_from_result(result: ImageResult) -> dict[str, Any]:
+    meta: dict[str, Any] = {"provider_score": result.score}
     if result.width:
         meta["width"] = result.width
     if result.height:
@@ -147,7 +154,7 @@ def _merge_image_meta_from_result(result: ImageResult) -> dict:
     return meta
 
 
-def _association_for(place):
+def _association_for(place: Hut | GeoPlace):
     """Resolve (association model, place FK field name, cache invalidator)."""
     from server.apps.geometries.models import GeoPlace
     from server.apps.huts.models import Hut
@@ -222,7 +229,7 @@ def _get_or_create_pin(
         return image, False
 
 
-def pin_place_images(place, results: list[ImageResult]) -> PinStats:
+def pin_place_images(place: Hut | GeoPlace, results: list[ImageResult]) -> PinStats:
     """Pin provider results to a place (Hut or GeoPlace).
 
     Existing pins get their mutable fields refreshed (URLs can change when a
@@ -286,7 +293,9 @@ def pin_place_images(place, results: list[ImageResult]) -> PinStats:
     if hasattr(place, "images_pinned_at"):
         place.images_pinned_at = now
         place.save(update_fields=["images_pinned_at"])
-    invalidate(place.slug)
+    # GeoPlace.slug is temporarily nullable (migration) — a degenerate None
+    # flows into the invalidator exactly as before, not skipped.
+    invalidate(place.slug)  # type: ignore  # slug: str | None (migration-nullable); None passes through unchanged
     logger.info(
         "place_images_pinned",
         place_type=type(place).__name__,
@@ -299,7 +308,7 @@ def pin_place_images(place, results: list[ImageResult]) -> PinStats:
     return stats
 
 
-def place_has_visible_pins(place) -> bool:
+def place_has_visible_pins(place: Hut | GeoPlace) -> bool:
     """Whether the place has at least one servable pinned/associated image."""
     assoc_model, place_field, _invalidator = _association_for(place)
     return (
@@ -338,7 +347,7 @@ def _pin_cache():
     return caches["persistent"]
 
 
-def place_type_of(place) -> str:
+def place_type_of(place: Hut | GeoPlace) -> str:
     """'hut' or 'geoplace' for a supported place instance."""
     from server.apps.geometries.models import GeoPlace
     from server.apps.huts.models import Hut
@@ -351,7 +360,11 @@ def place_type_of(place) -> str:
 
 
 def sync_place_images(
-    place, *, radius: float = PIN_SYNC_RADIUS_M, check_origins=False, budget=None
+    place: Hut | GeoPlace,
+    *,
+    radius: float = PIN_SYNC_RADIUS_M,
+    check_origins: bool = False,
+    budget: float | None = None,
 ):
     """Run the live provider pipeline for a place and pin the results.
 
@@ -415,7 +428,7 @@ def _place_by_slug(place_type: str, slug: str):
     raise ValueError(f"Unsupported place type: {place_type}")
 
 
-def maybe_enqueue_place_refresh(place) -> bool:
+def maybe_enqueue_place_refresh(place: Hut | GeoPlace) -> bool:
     """Enqueue a background refresh if the place's pins are stale.
 
     Never blocks or raises: the caller serves the response immediately and
@@ -459,7 +472,7 @@ def maybe_enqueue_place_refresh(place) -> bool:
     return True
 
 
-def _flag_dead_origins(place, fresh_idents: set[str]) -> int:
+def _flag_dead_origins(place: Hut | GeoPlace, fresh_idents: set[str]) -> int:
     """Move pins with dead origins (HEAD 404/410) to review — never delete.
 
     A pin missing from fresh provider results is NOT considered dead (our own
@@ -517,7 +530,7 @@ WARMUP_VARIANTS = ("sm", "lg")
 
 
 def warmup_place_image_cache(
-    place, *, variants: tuple[str, ...] = WARMUP_VARIANTS
+    place: Hut | GeoPlace, *, variants: tuple[str, ...] = WARMUP_VARIANTS
 ) -> int:
     """Pre-fetch imagor variant URLs for a place's pins.
 
