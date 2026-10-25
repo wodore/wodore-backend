@@ -46,7 +46,7 @@ def remove_brand_categories(apps: Any, _schema_editor: Any) -> None:
 class Migration(migrations.Migration):
     dependencies = [
         ("categories", "0021_category_created_category_modified_and_more"),
-        ("geometries", "0054_alter_geoplace_slug_and_more"),
+        ("geometries", "0055_amenity_phones_to_links"),
         ("parties", "0003_party_extra_and_slug_remint"),
     ]
 

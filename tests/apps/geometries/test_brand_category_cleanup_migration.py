@@ -22,7 +22,7 @@ from server.apps.geometries.models import GeoPlaceCategory, GeoPlaceParty
 
 pytestmark = pytest.mark.django_db
 
-MIGRATION = "server.apps.geometries.migrations.0055_remove_brand_categories"
+MIGRATION = "server.apps.geometries.migrations.0056_remove_brand_categories"
 
 
 def _migration() -> Any:
