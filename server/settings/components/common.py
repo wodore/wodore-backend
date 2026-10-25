@@ -10,6 +10,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 import os
 import subprocess
+from typing import Any
 
 from django_countries.data import COUNTRIES
 
@@ -29,7 +30,9 @@ from server.settings.components import BASE_DIR, config
 try:
     from hut_services_private import SERVICES as PRIVATE_SERVICES
 except ImportError:
-    PRIVATE_SERVICES = {}
+    # The optional private services package is absent (e.g. plain
+    # `uv sync` without the `private` extra): no private services.
+    PRIVATE_SERVICES: dict[str, Any] = {}
 
 if PRIVATE_SERVICES:
     SERVICES.update(PRIVATE_SERVICES)  # type: ignore pyright
@@ -588,7 +591,7 @@ HUTS_CATEGORY_PARENT = config("HUTS_CATEGORY_PARENT", default="accommodation")
 # https://django-q2.readthedocs.io/
 # Pattern from the django-admin-runner q2 example
 # (examples/unfold_django_q2/settings.py).
-Q_CLUSTER = {
+Q_CLUSTER: dict[str, Any] = {
     "name": "DJANGORM",
     "orm": "default",
     # Missed schedule slots while the cluster was down are NOT replayed:
