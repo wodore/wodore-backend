@@ -17,13 +17,17 @@ from django.db.models.functions import Cast
 from django.utils import timezone
 
 from server.apps.huts.models import Hut, HutTypeHelper
+from server.apps.huts.schemas_booking import HutBookingsSchema
 from server.apps.organizations.models import Organization
 
 from .models import AvailabilityStatus, HutAvailability, HutAvailabilityHistory
 from .place_dualwrite import mirror_batch, mirror_mark_failure, mirror_status
 from .place_link import hut_slug_to_place_ids
 
-SERVICES: dict = settings.SERVICES
+# Values are hut-services ``BaseService`` instances (plus private-service
+# subclasses merged in settings); typed as ``Any`` because the installed
+# library stubs lag the runtime signature (progress_callback/cached).
+SERVICES: dict[str, Any] = settings.SERVICES
 
 #: Per-statement timeout (ms) for availability batch writes. The global
 #: ``statement_timeout`` (15 s) protects API traffic but is too tight for
@@ -39,7 +43,7 @@ BATCH_STATEMENT_TIMEOUT_MS = 120_000
 BULK_WRITE_BATCH_SIZE = 500
 
 
-def _sanitize_negative_free(bookings: dict) -> None:  # type: ignore[type-arg]
+def _sanitize_negative_free(bookings: dict[int, Any]) -> None:
     """Clamp negative ``places.free`` sentinels to ``None`` (in place).
 
     Some sources report unknown free counts as negative numbers — DOC's
@@ -96,7 +100,7 @@ class AvailabilityService:
         days: int = 365,
         request_interval: float = 0.1,
         progress_callback: Callable[[], None] | None = None,
-    ) -> list:
+    ) -> list[HutBookingsSchema]:
         """
         Fetch booking data from external services (original Hut.get_bookings logic).
 
@@ -120,10 +124,8 @@ class AvailabilityService:
             TotalFallback,
         )
 
-        from server.apps.huts.schemas_booking import HutBookingsSchema
-
         bookings: dict[int, HutServiceBookingSchema] = {}
-        huts = []
+        huts: list[dict[str, Any]] = []
 
         # Build base queryset with prefetch to avoid N+1 queries
         obj = Hut.objects.prefetch_related(
@@ -217,7 +219,9 @@ class AvailabilityService:
             # source_id from DB is a string (CharField), but external service may use int keys
             # Try both string and int lookup for compatibility
             source_id_str = h.get("source_id")
-            booking = bookings.get(source_id_str)  # Try string key first
+            booking = (
+                bookings.get(source_id_str) if source_id_str is not None else None
+            )  # Try string key first
             if booking is None and source_id_str:
                 # Try converting to int if string lookup failed
                 try:
@@ -590,7 +594,7 @@ class AvailabilityService:
             all_unchanged_availability_ids = []
             # (hut_id, date) of rows already queued for creation — see the
             # create branch below.
-            queued_new: dict[tuple, HutAvailability] = {}
+            queued_new: dict[tuple[int, datetime.date], HutAvailability] = {}
 
             # Process each hut in the batch
             for hut, hut_booking in batch:
@@ -849,7 +853,7 @@ class AvailabilityService:
 
     @staticmethod
     def _process_hut_bookings(
-        hut: Hut, hut_booking, now: datetime.datetime | None = None
+        hut: Hut, hut_booking: HutBookingsSchema, now: datetime.datetime | None = None
     ) -> UpdateResult:
         """
         Process booking data for a single hut and store in database.
