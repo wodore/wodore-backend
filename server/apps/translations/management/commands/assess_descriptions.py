@@ -13,6 +13,7 @@ Examples:
 """
 
 import typing as t
+from typing import override
 
 from django_admin_runner import register_command
 from rich.progress import (
@@ -24,7 +25,7 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand, CommandError, CommandParser
 from django.db.models import QuerySet
 
 from server.apps.geometries.models import GeoPlace
@@ -61,7 +62,8 @@ class Command(BaseCommand):
         "--rescore is set."
     )
 
-    def add_arguments(self, parser) -> None:
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--hut",
             action="append",
@@ -111,6 +113,7 @@ class Command(BaseCommand):
             "complete (useful for cron jobs)",
         )
 
+    @override
     def handle(self, *args: t.Any, **options: t.Any) -> None:
         hut_slugs: list[str] = options["hut"]
         geoplace_slugs: list[str] = options["geoplace"]
@@ -162,7 +165,7 @@ class Command(BaseCommand):
 
     def _run(
         self,
-        queryset: QuerySet,
+        queryset: QuerySet[t.Any],
         limit: int | None,
         options: dict[str, t.Any],
         client: TranslationClient,
@@ -270,8 +273,8 @@ class Command(BaseCommand):
         hut_slugs: list[str],
         geoplace_slugs: list[str],
         options: dict[str, t.Any],
-    ) -> QuerySet:
-        qs: QuerySet = model.objects.order_by("id")
+    ) -> QuerySet[t.Any]:
+        qs: QuerySet[t.Any] = model.objects.order_by("id")
         if not options["rescore"]:
             qs = qs.filter(description_quality__isnull=True)
         slugs = geoplace_slugs if model_label == "geoplace" else hut_slugs
