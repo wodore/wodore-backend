@@ -43,7 +43,7 @@ BATCH_STATEMENT_TIMEOUT_MS = 120_000
 BULK_WRITE_BATCH_SIZE = 500
 
 
-def _sanitize_negative_free(bookings: dict) -> None:  # type: ignore[type-arg]
+def _sanitize_negative_free(bookings: dict[int, Any]) -> None:
     """Clamp negative ``places.free`` sentinels to ``None`` (in place).
 
     Some sources report unknown free counts as negative numbers — DOC's
@@ -123,8 +123,6 @@ class AvailabilityService:
         from hut_services.core.schema import (
             TotalFallback,
         )
-
-        from server.apps.huts.schemas_booking import HutBookingsSchema
 
         bookings: dict[int, HutServiceBookingSchema] = {}
         huts: list[dict[str, Any]] = []

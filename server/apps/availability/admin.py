@@ -10,6 +10,7 @@ from django.db.models.functions import Lower
 from django.http import HttpRequest
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.functional import Promise
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
@@ -270,7 +271,9 @@ class AvailabilityStatusAdmin(ModelAdmin):
         return obj.consecutive_failures
 
     @display(description=_("Failing Since"))
-    def failing_since(self, obj: AvailabilityStatus):
+    def failing_since(
+        self, obj: AvailabilityStatus
+    ) -> str | datetime.datetime | Promise:
         """Calculate and display when the hut started failing (if currently failing)"""
         if obj.consecutive_failures == 0:
             return "-"
