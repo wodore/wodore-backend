@@ -24,7 +24,6 @@ from ._images import (
 
 # Input schemas (for creating/updating models)
 from ._input import (
-    BrandInput,
     DedupOptions,
     DeletePolicyEnum,
     DetailType,
@@ -33,6 +32,7 @@ from ._input import (
     GeoPlaceBaseInput,
     GeoPlaceNaturalInput,
     GeoPlaceTransportInput,
+    PartyInput,
     ReviewStatus,
     SourceInput,
     UpdatePolicyEnum,
@@ -45,6 +45,8 @@ from ._output import (
     GeoPlaceBaseSchema,
     GeoPlaceNearbySchema,
     GeoPlaceSearchSchema,
+    PartyLinkSchema,
+    PartySchema,
     PhoneSchema,
     SymbolSchema,
     WebsiteSchema,
@@ -54,7 +56,6 @@ __all__ = [
     "DEFAULT_THUMBHASHES",
     "AmenityDetailSchema",
     "AmenitySchema",
-    "BrandInput",
     "CategoryPlaceTypeSchema",
     "CategorySchema",
     "DedupOptions",
@@ -78,6 +79,9 @@ __all__ = [
     "ImagePropertiesSchema",
     "ImageProviderSchema",
     "ImageUrlsSchema",
+    "PartyInput",
+    "PartyLinkSchema",
+    "PartySchema",
     "PhoneSchema",
     "ReviewStatus",
     "SourceInput",

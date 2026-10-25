@@ -30,9 +30,9 @@ mono; the map-styling primitive variant is not used for parties).
 ### Requirement: Role category vocabulary
 
 The system SHALL provide a `role` parent category with children
-`operator`, `brand`, and `owner`, created by data migration and
-manageable in the category admin. Additional role children MAY be added
-later via migration and spec delta.
+`operator`, `brand`, and `source`, created by data migration
+and manageable in the category admin. Additional role children MAY be
+added later via migration and spec delta.
 
 #### Scenario: Vocabulary exists after migrate
 - **WHEN** migrations run on a fresh database
@@ -49,11 +49,11 @@ roles for the same place–party pair SHALL be expressed as multiple
 association rows. Role and party references SHALL NOT be deletable
 while in use (RESTRICT).
 
-#### Scenario: Hut owned by a club
+#### Scenario: Hut run by a club
 - **WHEN** a hut-derived geoplace is linked to party "sac-bern" with
-  role `role.owner`
+  role `role.operator`
 - **THEN** the association exists exactly once and API/admin consumers
-  see role `role.owner`
+  see role `role.operator`
 
 #### Scenario: Party on a non-amenity place
 - **WHEN** a transport geoplace (e.g. a cable car) is linked to its
@@ -110,8 +110,11 @@ SHALL remain in the database (rollback safety) until a later cleanup.
 The system SHALL provide an idempotent management command that merges
 `owners.Owner` rows into Parties (slug, localized name, note preserved;
 url converted to an ExternalLink). The command SHALL support dry-run.
-The `Owner` model SHALL remain unchanged for `Hut.hut_owner` until the
-huts app is removed.
+A data migration SHALL perform the same merge once at migrate time, so
+environments provisioning via `migrate` alone receive the parties and
+links (idempotent; the command remains the re-sync for Owner rows
+arriving later). The `Owner` model SHALL remain unchanged for
+`Hut.hut_owner` until the huts app is removed.
 
 #### Scenario: Merge run
 - **WHEN** `import_parties` runs against an owners table containing
@@ -123,7 +126,7 @@ huts app is removed.
 - **WHEN** the wodore hut import processes a hut with `hut_owner` and
   the merge has run
 - **THEN** the resulting GeoPlace carries a party association with role
-  `role.owner` referencing the merged party
+  `role.operator` referencing the merged party
 
 ### Requirement: API exposes place parties
 
@@ -131,8 +134,8 @@ GeoPlace responses SHALL include a `parties` list
 (`[{role, slug, name, links, symbol}]`, `role` as category identifier)
 under the `fields[places]` sparse-fieldset selection, with nested
 narrowing via `fields[parties]` per the sparse-fieldsets conventions.
-The additive change SHALL be registered in the API changelog per
-`api-conventions`.
+The changelog picks the additive change up automatically at release
+(built from PR titles — no manual entry).
 
 #### Scenario: Detail carries parties
 - **WHEN** a client requests a place whose party association has role

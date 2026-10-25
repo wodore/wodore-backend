@@ -17,8 +17,10 @@ from server.apps.geometries.presenters import (
     apply_type_filters,
     base_result,
     build_categories_data,
+    build_parties_data,
     build_sources,
     prefetch_categories,
+    prefetch_parties,
 )
 from server.apps.geometries.schemas import CategoryPlaceTypeSchema as CategorySchema
 from server.apps.organizations.schema import OrganizationSourceIdSlugSchema
@@ -29,6 +31,7 @@ from .schemas import (
     AmenitySchema,
     GeoPlaceNearbySchema,
     GeoPlaceSearchSchema,
+    PartySchema,
 )
 
 __all__ = ["paths"]
@@ -38,6 +41,7 @@ GeoPlaceFields = sparse_fields_query(
     places=GeoPlaceSearchSchema,
     categories=CategorySchema,
     sources=OrganizationSourceIdSlugSchema,
+    parties=PartySchema,
 )
 
 
@@ -271,10 +275,13 @@ class GeoSearchController(ApiController):
         # fields the wire schema does not declare. Hand-tuned on purpose.
         wants_categories = field_selected(query, "places", "categories")
         wants_sources = field_selected(query, "places", "sources")
+        wants_parties = field_selected(query, "places", "parties")
         if wants_categories:
             queryset = prefetch_categories(queryset)
         if wants_sources:
             queryset = annotate_sources(queryset)
+        if wants_parties:
+            queryset = prefetch_parties(queryset)
 
         # Fuzzy search using trigram similarity
         requested_language = query.lang
@@ -401,6 +408,8 @@ class GeoSearchController(ApiController):
                 result["categories"] = build_categories_data(place, request) or []
             if wants_sources:
                 build_sources(result, place, media_url)
+            if wants_parties:
+                result["parties"] = build_parties_data(place, request) or []
             results.append(result)
 
         return results  # type: ignore  # serialized dicts match schema shape at runtime
@@ -451,10 +460,13 @@ class GeoNearbyController(ApiController):
         # purpose, same reasoning as search_geoplaces.
         wants_categories = field_selected(query, "places", "categories")
         wants_sources = field_selected(query, "places", "sources")
+        wants_parties = field_selected(query, "places", "parties")
         if wants_categories:
             queryset = prefetch_categories(queryset)
         if wants_sources:
             queryset = annotate_sources(queryset)
+        if wants_parties:
+            queryset = prefetch_parties(queryset)
 
         queryset = queryset.annotate(distance=Distance("location", point)).order_by(
             "distance"
@@ -478,12 +490,18 @@ class GeoNearbyController(ApiController):
 
             result["categories"] = build_categories_data(place, request) or []
             build_sources(result, place, media_url)
+            if wants_parties:
+                result["parties"] = build_parties_data(place, request) or []
             results.append(
                 project_fields(
                     result,
                     query,
                     "places",
-                    {"categories": "categories", "sources": "sources"},
+                    {
+                        "categories": "categories",
+                        "sources": "sources",
+                        "parties": "parties",
+                    },
                 )
             )
 
@@ -537,6 +555,10 @@ class AmenityController(ApiController):
                     "categories__symbol_color",
                     "categories__symbol_primitive",
                     "categories__symbol_mono",
+                    "party_associations__role",
+                    "party_associations__party__symbol_color",
+                    "party_associations__party__symbol_mono",
+                    "party_associations__party__link_associations__external_link",
                 )
                 .only(
                     "id",
@@ -549,6 +571,7 @@ class AmenityController(ApiController):
                     "country_code",
                     "detail_type",
                     "review_status",
+                    "amenity_detail",
                 )
                 .get()
             )
@@ -614,12 +637,14 @@ class AmenityController(ApiController):
                 "operating_status": place.amenity_detail.operating_status,  # type: ignore  # dynamic attr: plugin-less inference gap
                 "opening_months": place.amenity_detail.opening_months or {},  # type: ignore  # dynamic attr: plugin-less inference gap
                 "opening_hours": place.amenity_detail.opening_hours or {},  # type: ignore  # dynamic attr: plugin-less inference gap
-                "websites": place.amenity_detail.websites or [],  # type: ignore  # dynamic attr: plugin-less inference gap
                 "phones": place.amenity_detail.phones or [],  # type: ignore  # dynamic attr: plugin-less inference gap
-                "extra": place.amenity_detail.extra or {},  # type: ignore  # dynamic attr: plugin-less inference gap
             }
 
         build_sources(result, place, media_url)
+
+        parties_data = build_parties_data(place, request)
+        if parties_data:
+            result["parties"] = parties_data
 
         return AmenitySchema(**result)
 

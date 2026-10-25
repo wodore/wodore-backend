@@ -40,13 +40,25 @@ def project_fields(
 
     result = dict(data)
 
-    # Top-level selection
+    # Top-level selection — the top DTO's required fields always stay
+    # (sparse_include keeps them for the model-level endpoints; without
+    # this, response validation fails on narrowed non-empty results,
+    # e.g. fields[places]=id,parties on nearby with matches).
     top_spec = fields_map.get(top_type)
     if top_spec is not None:
         names = set(_parse(top_spec, list(result.keys())))
+        top_dto = getattr(parsed, "FIELD_TYPES", {}).get(top_type)
+        if top_dto is not None:
+            names |= {
+                field_name
+                for field_name, info in top_dto.model_fields.items()
+                if info.is_required()
+            }
         result = {k: v for k, v in result.items() if k in names}
 
-    # Nested type selections
+    # Nested type selections — required fields of the nested DTO stay
+    # (same rule as the top level: response validation demands them,
+    # e.g. fields[parties]=slug keeps the required ``role`` too).
     for type_name, spec in fields_map.items():
         if type_name == top_type:
             continue
@@ -57,15 +69,28 @@ def project_fields(
         if value is None:
             continue
 
+        nested_dto = getattr(parsed, "FIELD_TYPES", {}).get(type_name)
+        required: set[str] = set()
+        if nested_dto is not None:
+            required = {
+                nested_name
+                for nested_name, info in nested_dto.model_fields.items()
+                if info.is_required()
+            }
+
         if isinstance(value, list):
-            result[field_name] = [_narrow_item(item, spec, type_name) for item in value]
+            result[field_name] = [
+                _narrow_item(item, spec, type_name, required) for item in value
+            ]
         elif isinstance(value, dict):
-            result[field_name] = _narrow_item(value, spec, type_name)
+            result[field_name] = _narrow_item(value, spec, type_name, required)
 
     return result
 
 
-def _narrow_item(item: Any, spec: str, type_name: str) -> Any:
+def _narrow_item(
+    item: Any, spec: str, type_name: str, required: set[str] | None = None
+) -> Any:
     """Narrow one nested object based on the spec."""
     if not isinstance(item, dict):
         return item
@@ -73,19 +98,25 @@ def _narrow_item(item: Any, spec: str, type_name: str) -> Any:
     # each inner object rather than the wrapper keys.
     if all(isinstance(v, dict) for v in item.values()) and spec != "__all__":
         return {
-            key: _narrow_object(obj, spec, type_name)
+            key: _narrow_object(obj, spec, type_name, required)
             for key, obj in item.items()
             if isinstance(obj, dict)
         }
-    return _narrow_object(item, spec, type_name)
+    return _narrow_object(item, spec, type_name, required)
 
 
-def _narrow_object(obj: dict[str, Any], spec: str, type_name: str) -> dict[str, Any]:
-    """Narrow a flat object to the selected fields."""
+def _narrow_object(
+    obj: dict[str, Any],
+    spec: str,
+    type_name: str,
+    required: set[str] | None = None,
+) -> dict[str, Any]:
+    """Narrow a flat object to the selected fields (required kept)."""
     if spec == "__all__":
         return obj
     available = list(obj.keys())
     names = set(_parse(spec, available))
+    names |= required or set()
     return {k: v for k, v in obj.items() if k in names}
 
 

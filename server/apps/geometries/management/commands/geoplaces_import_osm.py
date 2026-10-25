@@ -40,6 +40,7 @@ from server.apps.geometries.config.osm_categories import (
 )
 from server.apps.geometries.models import AmenityDetail, GeoPlace
 from server.apps.organizations.models import Organization
+from server.apps.parties.models import Party
 
 if TYPE_CHECKING:
     from rich.console import Console
@@ -189,6 +190,7 @@ class OSMHandler(osmium.SimpleHandler):
             "phone": tags.get("phone") or tags.get("contact:phone"),
             "website": tags.get("website") or tags.get("contact:website"),
             "brand": tags.get("brand"),
+            "operator": tags.get("operator"),
         }
 
 
@@ -1038,9 +1040,9 @@ class Command(BaseCommand):
 
         from server.apps.geometries.models import OperatingStatus
         from server.apps.geometries.schemas import (
-            BrandInput,
             DedupOptions,
             GeoPlaceAmenityInput,
+            PartyInput,
             PhoneSchema,
             SourceInput,
         )
@@ -1079,13 +1081,27 @@ class Command(BaseCommand):
         if not category_identifiers:
             raise ValueError("No categories resolved for OSM element")
 
-        # Build brand input if provided (only for chain brands, not product lists)
-        brand_input = None
-        if data.get("brand"):
-            # Skip if brand is a list (contains semicolons) - these are product brands, not chain brands
-            if ";" not in data["brand"]:
-                brand_category = self._get_or_create_brand_category(data["brand"])
-                brand_input = BrandInput(slug=brand_category.slug, name=data["brand"])
+        # Build party inputs (single-value tags only — ";" lists are
+        # product/brand lists, not chain identity). Operator-tag parties
+        # are minted into review (noisy free text).
+        party_inputs = []
+        if data.get("brand") and ";" not in data["brand"]:
+            party_inputs.append(
+                PartyInput(
+                    slug=self._normalize_party_slug(data["brand"]),
+                    name=data["brand"],
+                    role="role.brand",
+                )
+            )
+        if data.get("operator") and ";" not in data["operator"]:
+            party_inputs.append(
+                PartyInput(
+                    slug=self._normalize_party_slug(data["operator"]),
+                    name=data["operator"],
+                    role="role.operator",
+                    review_status="review",
+                )
+            )
 
         # Calculate importance based on OSM tags and mapping
         mapping = data.get("mapping")
@@ -1107,7 +1123,7 @@ class Command(BaseCommand):
             operating_status=OperatingStatus.OPEN,
             opening_hours=opening_hours_data,
             phones=phones,
-            brand=brand_input,
+            parties=party_inputs,
         )
 
         # Build source input
@@ -1473,24 +1489,23 @@ class Command(BaseCommand):
         return total_deleted
 
     def _precache_data(self, amenities: list[dict[str, Any]]):
-        """Pre-cache categories, brands, and organizations to reduce DB queries."""
+        """Pre-cache categories and parties to reduce DB queries."""
         # Cache for categories
         category_cache = self._get_cache("category_cache")
-        brand_cache = self._get_cache("brand_cache")
-        brand_org_cache = self._get_cache("brand_org_cache")
         category_cache.clear()
-        brand_cache.clear()
-        brand_org_cache.clear()
 
-        # Collect unique category slugs and brands
+        # Collect unique category slugs and party names
         category_slugs = set()
-        brands = set()
+        party_names = set()
+        operator_names = set()
 
         for data in amenities:
             category_slugs.update(self._get_category_slugs(data))
             if data.get("brand") and ";" not in data["brand"]:
-                # Only cache chain brands, not product lists
-                brands.add(data["brand"].lower())
+                # Only chain brands, not product lists
+                party_names.add(data["brand"])
+            if data.get("operator") and ";" not in data["operator"]:
+                operator_names.add(data["operator"])
 
         # Pre-create all categories
         for category_slug in category_slugs:
@@ -1501,106 +1516,33 @@ class Command(BaseCommand):
             except (OSError, ValueError, KeyError, TypeError):
                 pass
 
-        # Pre-create brand parent category
-        if brands:
-            brand_parent, _ = Category.objects.get_or_create(
-                slug="brand",
-                defaults={"name": "Brand"},
+        # Pre-create parties. Operator names are minted first with
+        # review status — a name appearing as both brand and operator
+        # stays in the conservative review state (the write path's
+        # get_or_create ignores defaults once the row exists).
+        for name in operator_names:
+            Party.objects.get_or_create(
+                slug=self._normalize_party_slug(name),
+                defaults={"name": name, "review_status": "review"},
+            )
+        for name in party_names:
+            Party.objects.get_or_create(
+                slug=self._normalize_party_slug(name),
+                defaults={"name": name},
             )
 
-            # Pre-create all brand categories and organizations
-            for brand_name in brands:
-                brand_slug = self._normalize_brand_slug(brand_name)
-                try:
-                    brand_category, _ = Category.objects.get_or_create(
-                        slug=brand_slug,
-                        defaults={
-                            "name": brand_name.title(),
-                            "parent": brand_parent,
-                        },
-                    )
-                    brand_cache[brand_name] = brand_category
-                except (OSError, ValueError, KeyError, TypeError):
-                    pass
-
         self.stdout.write(
-            f"Cached {len(category_cache)} categories and {len(brand_cache)} brands"
+            f"Cached {len(category_cache)} categories and "
+            f"{len(party_names | operator_names)} parties"
         )
 
-    def _get_or_create_brand_category(self, brand_name: str) -> Category:
-        """Get or create brand category (cached)."""
-        brand_name_lower = brand_name.lower()
-        brand_cache = self._get_cache("brand_cache")
+    def _normalize_party_slug(self, name: str) -> str:
+        """Normalize a party name to a consistent slug.
 
-        # Check cache first
-        if brand_name_lower in brand_cache:
-            return brand_cache[brand_name_lower]
-
-        # Fallback to DB query if not cached
-        parent, _ = Category.objects.get_or_create(
-            slug="brand",
-            defaults={
-                "name": "Brand",
-            },
-        )
-
-        brand_slug = self._normalize_brand_slug(brand_name)
-
-        brand_category, _ = Category.objects.get_or_create(
-            slug=brand_slug,
-            defaults={
-                "name": brand_name.title(),
-                "parent": parent,
-            },
-        )
-
-        # Cache for future use
-        brand_cache[brand_name_lower] = brand_category
-
-        return brand_category
-
-    def _normalize_brand_slug(self, brand_name: str) -> str:
-        """Normalize brand name to a consistent slug."""
-        return brand_name.lower().replace(" ", "_")[:50]
-
-    def _get_or_create_brand_organization(
-        self, brand_name: str, website: str | None
-    ) -> Organization:
-        """Get or create organization for brand (cached)."""
-        brand_slug = self._normalize_brand_slug(brand_name)
-        brand_org_cache = self._get_cache("brand_org_cache")
-
-        # Check cache first
-        if brand_slug in brand_org_cache:
-            return brand_org_cache[brand_slug]
-
-        # Extract base URL from website if available
-        url = None
-        if website:
-            # Extract domain from URL (e.g., https://www.volg.ch/... -> https://www.volg.ch)
-            from urllib.parse import urlparse
-
-            parsed = urlparse(website)
-            url = f"{parsed.scheme}://{parsed.netloc}"
-
-        org, _ = Organization.objects.get_or_create(
-            slug=brand_slug,
-            defaults={
-                "name": brand_name.title(),
-                "url": url or "",
-                "is_active": True,
-            },
-        )
-
-        # Update URL if it was empty and we have one now
-        if not org.url and url:
-            org.url = url
-            org.save(update_fields=["url"])
-
-        # Cache for future use
-        brand_org_cache[brand_slug] = org
-
-        return org
+        Kept identical to the former ``_normalize_brand_slug`` so OSM
+        re-imports match parties migrated from brand categories.
+        """
+        return name.lower().replace(" ", "_")[:50]
 
     def _get_or_create_category(self, category_slug: str) -> Category | None:
         """Get or create category by identifier (parent.slug format)."""
@@ -1921,8 +1863,6 @@ class Command(BaseCommand):
             # Pre-cache data and existing associations for this mapping
             self._clear_cache("place_cache")
             self._clear_cache("category_cache")
-            self._clear_cache("brand_cache")
-            self._clear_cache("brand_org_cache")
             self._precache_mapping_data(amenities)
             self._preload_place_cache(amenities, osm_org)
 
@@ -2508,8 +2448,6 @@ class Command(BaseCommand):
                 # MEMORY FIX: Clear all caches after each mapping to prevent accumulation
                 self._clear_cache("place_cache")
                 self._clear_cache("category_cache")
-                self._clear_cache("brand_cache")
-                self._clear_cache("brand_org_cache")
 
                 self._pipeline_created += created
                 self._pipeline_updated += updated
@@ -2980,19 +2918,22 @@ class Command(BaseCommand):
         return amenities
 
     def _precache_mapping_data(self, amenities: list[dict[str, Any]]):
-        """Pre-cache categories and brands for a mapping's amenities."""
+        """Pre-cache categories and parties for a mapping's amenities."""
         if not amenities:
             return
 
-        # Collect unique category slugs and brands
+        # Collect unique category slugs and party names
         category_slugs = set()
-        brands = set()
+        party_names = set()
+        operator_names = set()
 
         for data in amenities:
             category_slugs.update(self._get_category_slugs(data))
             if data.get("brand") and ";" not in data["brand"]:
-                # Only cache chain brands, not product lists
-                brands.add(data["brand"].lower())
+                # Only chain brands, not product lists
+                party_names.add(data["brand"])
+            if data.get("operator") and ";" not in data["operator"]:
+                operator_names.add(data["operator"])
 
         # Pre-create categories if not cached
         category_cache = self._get_cache("category_cache")
@@ -3006,29 +2947,20 @@ class Command(BaseCommand):
                 except (OSError, ValueError, KeyError, TypeError):
                     pass
 
-        # Pre-create brand categories if not cached
-        brand_cache = self._get_cache("brand_cache")
-
-        if brands:
-            brand_parent, _ = Category.objects.get_or_create(
-                slug="brand",
-                defaults={"name": "Brand"},
+        # Pre-create parties (operator names first — they mint into
+        # review; a name that is both brand and operator stays in the
+        # conservative state). The write path's get_or_create ignores
+        # defaults once the row exists, so this is idempotent.
+        for name in operator_names:
+            Party.objects.get_or_create(
+                slug=self._normalize_party_slug(name),
+                defaults={"name": name, "review_status": "review"},
             )
-
-            for brand_name in brands:
-                if brand_name not in brand_cache:
-                    brand_slug = self._normalize_brand_slug(brand_name)
-                    try:
-                        brand_category, _ = Category.objects.get_or_create(
-                            slug=brand_slug,
-                            defaults={
-                                "name": brand_name.title(),
-                                "parent": brand_parent,
-                            },
-                        )
-                        brand_cache[brand_name] = brand_category
-                    except (OSError, ValueError, KeyError, TypeError):
-                        pass
+        for name in party_names:
+            Party.objects.get_or_create(
+                slug=self._normalize_party_slug(name),
+                defaults={"name": name},
+            )
 
     def _preload_place_cache(
         self, amenities: list[dict[str, Any]], osm_org: Organization
@@ -3203,8 +3135,6 @@ class Command(BaseCommand):
             if idx > 0 and idx % 500 == 0:
                 self._clear_cache("place_cache")
                 self._clear_cache("category_cache")
-                self._clear_cache("brand_cache")
-                self._clear_cache("brand_org_cache")
 
         return created_count, updated_count, skipped_count, deleted_count, error_count
 
