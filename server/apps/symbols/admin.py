@@ -1,12 +1,13 @@
 # Models
 import contextlib
-from typing import ClassVar
+from typing import Any, ClassVar, cast, override
 
 with contextlib.suppress(ModuleNotFoundError):
     from django_stubs_ext import QuerySetAny
 
 from django.contrib import admin
-from django.db.models import Count
+from django.db.models import Count, Model
+from django.forms import Form
 from django.http import HttpRequest
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
@@ -68,17 +69,22 @@ class SymbolAdmin(ModelAdmin):
         "uploaded_date",
     )
 
-    def save_model(self, request, obj, form, change):
-        if not obj.uploaded_by_user:
-            obj.uploaded_by_user = request.user
+    @override
+    def save_model(
+        self, request: HttpRequest, obj: Model, form: Form, change: Any
+    ) -> None:
+        symbol = cast("Symbol", obj)  # admin is registered for Symbol only
+        if not symbol.uploaded_by_user:
+            symbol.uploaded_by_user = request.user  # type: ignore  # FK descriptor read as the model class (plugin-less inference gap)
         super().save_model(request, obj, form, change)
 
+    @override
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request)
         return qs.select_related("license", "source_org", "uploaded_by_user")
 
     @display(description=_("SVG"))
-    def svg_preview(self, obj):
+    def svg_preview(self, obj: Symbol):
         """Show SVG preview in list view."""
         try:
             if obj.svg_file:
@@ -90,7 +96,7 @@ class SymbolAdmin(ModelAdmin):
         return mark_safe('<span style="color:#999;">No file</span>')
 
     @display(description=_("Preview"))
-    def svg_preview_inline(self, obj):
+    def svg_preview_inline(self, obj: Symbol):
         """Show SVG preview inline in the form."""
         try:
             if obj.svg_file:
@@ -104,7 +110,7 @@ class SymbolAdmin(ModelAdmin):
         return mark_safe('<span style="color:#999;">No file uploaded</span>')
 
     @display(description=_("Search Text"))
-    def search_text_display(self, obj):
+    def search_text_display(self, obj: Symbol):
         """Show search text in list view."""
         if obj.search_text:
             text = (
@@ -116,7 +122,7 @@ class SymbolAdmin(ModelAdmin):
         return mark_safe('<small style="color:#999;">-</small>')
 
     @display(description=_("License"), header=True)
-    def license_display(self, obj):
+    def license_display(self, obj: Symbol):
         """Show license with link."""
         if obj.license:
             link = mark_safe(
@@ -126,7 +132,7 @@ class SymbolAdmin(ModelAdmin):
         return mark_safe("-"), mark_safe("-")
 
     @display(description=_("Source"), header=True)
-    def source_display(self, obj):
+    def source_display(self, obj: Symbol):
         """Show source information."""
         parts = []
         if obj.author:
@@ -144,7 +150,7 @@ class SymbolAdmin(ModelAdmin):
         return mark_safe("-"), mark_safe("-")
 
     @display(description=_("Status"))
-    def review_status_display(self, obj):
+    def review_status_display(self, obj: Symbol):
         """Show review status."""
         return obj.get_review_status_display()
 
@@ -215,6 +221,7 @@ class IconAdmin(ModelAdmin):
     readonly_fields = ("id", "created", "modified")
     inlines = (IconKeywordInline,)
 
+    @override
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request)
         # Default to one pack when no pack filter/search is active (list
@@ -229,23 +236,24 @@ class IconAdmin(ModelAdmin):
         return qs
 
     @display(description=_("Name"), header=True)
-    def name_i18n_display(self, obj):
+    def name_i18n_display(self, obj: Icon):
         name = obj.name_i18n or obj.name or "-"
         return (name, "")  # header display requires a tuple
 
     @display(description=_("Unicode"))
-    def unicode_display(self, obj):
+    def unicode_display(self, obj: Icon):
         return obj.unicode or "-"
 
     @display(description=_("Category"), header=True)
-    def category_display(self, obj):
+    def category_display(self, obj: Icon):
         if obj.category is None:
             return ("-", "")
-        group = obj.category.parent.slug if obj.category.parent_id else ""
+        parent = obj.category.parent
+        group = parent.slug if parent else ""
         return (f"{group} → {obj.category.slug}", obj.category.slug)
 
     @display(description=_("Symbols"))
-    def symbol_previews(self, obj):
+    def symbol_previews(self, obj: Icon):
         """Preview thumbnails of the three symbol slots."""
         cells = []
         for style in ("color", "primitive", "mono"):
@@ -270,20 +278,21 @@ class SymbolCollectionAdmin(ModelAdmin):
     search_fields = ("slug", "source_org__name")
     readonly_fields = ("created", "modified")
 
+    @override
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         return super().get_queryset(request).annotate(_icon_count=Count("icons"))
 
     @display(description=_("Source Org"), header=True)
-    def source_org_display(self, obj):
+    def source_org_display(self, obj: SymbolCollection):
         name = obj.source_org.name_i18n if obj.source_org else "-"
         return (name, "")
 
     @display(description=_("Icons"), ordering="_icon_count")
-    def icon_count(self, obj):
+    def icon_count(self, obj: SymbolCollection):
         return getattr(obj, "_icon_count", 0)
 
     @display(description=_("Imported ref"))
-    def ref_display(self, obj):
+    def ref_display(self, obj: SymbolCollection):
         return (obj.extra or {}).get("ref", "-")
 
 
@@ -309,14 +318,15 @@ class IconCuratedListAdmin(ModelAdmin):
     readonly_fields = ("created", "modified")
     inlines = (IconCuratedListEntryInline,)
 
+    @override
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         return super().get_queryset(request).annotate(_entry_count=Count("entries"))
 
     @display(description=_("Name"), header=True)
-    def name_i18n_display(self, obj):
+    def name_i18n_display(self, obj: IconCuratedList):
         name = getattr(obj, "name_i18n", "") or obj.name or "-"
         return (name, "")
 
     @display(description=_("Icons"), ordering="_entry_count")
-    def entry_count(self, obj):
+    def entry_count(self, obj: IconCuratedList):
         return getattr(obj, "_entry_count", 0)
