@@ -17,6 +17,12 @@ _LLMS_PATH_RE = re.compile(r"^/llms(?:\.[^/]+)?\.txt$")
 
 # Public API (/v1) CDN cache policy (see ApiCdnCacheMiddleware):
 _API_PATH_PREFIX = "/v1/"
+#: Whitenoise-served static files (admin/panel assets): public, stable
+#: filenames (non-manifest storage), whitenoise's own ``max-age=60`` in
+#: production. Tagged so a CDN zone fronting them can be purged via
+#: ``static`` right after a deploy instead of waiting out the TTL.
+_STATIC_PATH_PREFIX = settings.STATIC_URL
+_STATIC_CDN_TAG = "static"
 #: Default TTL for anonymous public-API reads (one hour, browser+CDN).
 _PUBLIC_API_CACHE_CONTROL = "public, max-age=3600"
 #: Non-2xx anonymous /v1 responses are never cacheable: the CDN keys its
@@ -172,10 +178,18 @@ class ApiCdnCacheMiddleware:
       SVG redirects, ETag revalidation endpoints) always win.
     * 2xx anonymous reads also carry ``CDN-Tag: api api:<app>`` (Bunny
       tag-based purging: flush one app or the whole API without touching
-      untagged surfaces — media, static; taxonomy in
+      untagged surfaces — media, admin; taxonomy in
       ``_work/261026_cdn_tags.md``). Errors, 304s and authenticated
       responses stay untagged — only what the CDN actually stores owns
       a purge tag.
+    * Whitenoise static responses (``/static/…`` — served by the inner
+      WhiteNoiseMiddleware, so they unwind through this middleware)
+      carry ``CDN-Tag: static`` on 2xx anonymous GET/HEAD. Everything
+      else on them stays whitenoise's own (Cache-Control ``max-age=60``,
+      ACAO ``*``): this branch only adds the purge tag. Django media is
+      dev-only inside Django (prod: burginfra nginx) and admin traffic
+      never goes through a CDN host — both stay untagged, i.e.
+      purge-immune by construction.
     * OPTIONS (preflights belong to corsheaders) and anonymous non-GET/HEAD
       requests (POST etc. are never CDN-cached) are left untouched.
 
@@ -208,6 +222,19 @@ class ApiCdnCacheMiddleware:
             HTTP response with auth-state-aware CORS/Cache-Control headers
         """
         response = self.get_response(request)
+
+        if request.path_info.startswith(_STATIC_PATH_PREFIX):
+            # Whitenoise static: public and user-independent; Cache-Control
+            # and CORS are whitenoise's own and are never touched here. Only
+            # the purge tag is added — 2xx anonymous GET/HEAD, mirroring the
+            # API branch's rules (errors/304s/authenticated stay untagged).
+            if (
+                request.method in ("GET", "HEAD")
+                and not request.headers.get("Authorization")
+                and 200 <= response.status_code < 300
+            ):
+                _set_cdn_tag_if_unset(response, _STATIC_CDN_TAG)
+            return response
 
         if not request.path_info.startswith(_API_PATH_PREFIX):
             return response
@@ -279,9 +306,10 @@ def _api_cdn_tag(path_info: str) -> str:
     ``api api:<app>`` (``/v1/huts/...`` → ``api api:huts``), plain ``api``
     when no app segment exists (bare ``/v1/``). The segment's extension
     is stripped (``/v1/openapi.json`` → ``api:openapi``) so the tag set
-    stays small and predictable. Untagged surfaces (Django media, static,
-    admin — none of which flow through the CDN host) can never be hit by
-    a tag purge.
+    stays small and predictable. Untagged surfaces (Django media —
+    dev-only inside Django, prod served by burginfra nginx — and admin,
+    which never flows through a CDN host) can never be hit by a tag
+    purge.
 
     Args:
         path_info: The request's path (``request.path_info``)

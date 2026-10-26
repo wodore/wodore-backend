@@ -314,10 +314,74 @@ def test_anonymous_post_is_untagged() -> None:
 
 
 def test_non_api_path_is_untagged() -> None:
-    """Media/static/admin never flow through the CDN host — and stay
-    purge-immune by construction (no tag to match)."""
+    """Django media (dev-only inside Django, prod: burginfra nginx) and
+    admin never flow through the CDN host — and stay purge-immune by
+    construction (no tag to match)."""
     response = _process(_factory.get("/media/uploads/x.jpg"), HttpResponse(""))
     assert "CDN-Tag" not in response.headers
+
+
+# --------------------------------------------------------------------------
+# CDN-Tag: whitenoise static (`static`) — served by the inner
+# WhiteNoiseMiddleware, unwinds through this middleware on the way out
+# --------------------------------------------------------------------------
+
+
+def test_static_2xx_get_is_tagged_and_otherwise_untouched() -> None:
+    """Tagged `static` for purgeability; Cache-Control/CORS stay
+    whitenoise's own — the middleware must not stamp defaults here."""
+    response = _process(_factory.get("/static/admin/app.js"), HttpResponse("{}"))
+    assert response["CDN-Tag"] == "static"
+    assert "Cache-Control" not in response.headers
+    assert "Access-Control-Allow-Origin" not in response.headers
+
+
+def test_static_whitenoise_cache_control_is_preserved_verbatim() -> None:
+    """Whitenoise's own ``max-age=60`` (prod default) rides along as-is."""
+    response = HttpResponse("{}")
+    response["Cache-Control"] = "public, max-age=60"
+    response["Access-Control-Allow-Origin"] = "*"
+    response = _process(_factory.get("/static/css/site.css"), response)
+    assert response["CDN-Tag"] == "static"
+    assert response["Cache-Control"] == "public, max-age=60"
+    assert response["Access-Control-Allow-Origin"] == "*"
+
+
+@pytest.mark.parametrize("status", [301, 400, 404, 500])
+def test_static_errors_and_redirects_are_untagged(status: int) -> None:
+    response = _process(
+        _factory.get("/static/admin/missing.js"), HttpResponse("", status=status)
+    )
+    assert "CDN-Tag" not in response.headers
+
+
+def test_static_304_is_untagged() -> None:
+    response = _process(
+        _factory.get("/static/admin/app.js"), HttpResponse("", status=304)
+    )
+    assert "CDN-Tag" not in response.headers
+
+
+def test_static_authenticated_get_is_untagged() -> None:
+    response = _process(
+        _factory.get("/static/admin/app.js", HTTP_AUTHORIZATION="Bearer t"),
+        HttpResponse("{}"),
+    )
+    assert "CDN-Tag" not in response.headers
+
+
+def test_static_post_is_untouched() -> None:
+    response = _process(_factory.post("/static/admin/app.js"), HttpResponse(""))
+    assert "CDN-Tag" not in response.headers
+    assert "Cache-Control" not in response.headers
+
+
+def test_static_lookalike_prefix_untouched() -> None:
+    """/staticfoo does not start with STATIC_URL ("/static/", slash
+    included) — same discipline as the /v1/ prefix guard."""
+    response = _process(_factory.get("/staticfoo/app.js"), HttpResponse(""))
+    assert "CDN-Tag" not in response.headers
+    assert "Cache-Control" not in response.headers
 
 
 def test_endpoint_cdn_tag_is_preserved() -> None:
