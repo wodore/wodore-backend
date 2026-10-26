@@ -13,6 +13,11 @@ chunked after the 0054 pattern: collision domain in one set, stream
 ``.only()`` rows, ``bulk_update`` batches, retry while a minted slug
 is taken. The slug column shrinks to varchar(15) AFTER the re-mint
 (legacy slugs are up to 50 chars — the ALTER would fail before).
+The skip predicate is length-aware: the minted shape itself spans up
+to 9+1+8 = 18 chars, so a minted-looking slug is only skipped when
+it also fits the 15-char column — legacy name-based slugs in that
+16-18 char overlap would otherwise survive the re-mint and fail the
+ALTER (staging data hit exactly this).
 
 Reverse: no-op — re-minted slugs are not recoverable (same call as
 the geoplace re-mint).
@@ -23,16 +28,19 @@ from typing import Any
 
 from django.contrib.postgres.indexes import GinIndex
 from django.db import DEFAULT_DB_ALIAS, migrations, models
+from django.db.models.functions import Length
 
 from server.core.utils import mint_short_slug
 
 #: Rows processed per bulk_update statement — matches 0054.
 CHUNK_SIZE = 2_000
 
-#: Minted slug shape: base ≤ 9 alphanumerics, hyphen, 5-8 char suffix.
-#: Re-runs only touch slugs that do not already match it (the 0054
-#: re-runnability pattern: a retried or crashed-then-rolled-back run
-#: finds nothing left to change).
+#: Minted slug shape: base ≤ 9 alphanumerics, hyphen, 5-8 char suffix
+#: (up to 18 chars — wider than the 15-char column this migration
+#: ends with). Re-runs only touch slugs that neither violate the
+#: shape nor overflow the column (the 0054 re-runnability pattern:
+#: a retried or crashed-then-rolled-back run finds nothing left to
+#: change); a slug is skipped only when it matches AND is ≤ 15 chars.
 _MINTED_RE = re.compile(r"^[a-z0-9]{1,9}-[a-z0-9]{5,8}$")
 
 
@@ -74,7 +82,24 @@ def re_mint_slugs(apps: Any, schema_editor: Any) -> None:
     minted = 0
     batch: list[Any] = []
     parties = (
-        objects.exclude(slug__regex=_MINTED_RE.pattern)
+        # Length as an annotation — the ``__length`` transform is not
+        # registered on SlugField (Django 6), and annotate keeps the
+        # whole predicate server-side.
+        objects.annotate(slug_length=Length("slug"))
+        .exclude(
+            # Skip only what is provably safe to keep: matching the
+            # minted shape AND fitting the 15-char column the ALTER
+            # below enforces. The shape alone spans up to 9+1+8 = 18
+            # chars, so legacy name-based slugs that coincidentally
+            # match it at 16-18 chars must be re-minted too or the
+            # ALTER fails on them (staging: froissard-bastien,
+            # giovanni-frapolli, skiclub-martigny). Multiple kwargs
+            # in one exclude() are ANDed: NOT (shape AND length ≤ 15)
+            # — one queryset, one server-side WHERE, so the chunked
+            # iterator below is unchanged.
+            slug__regex=_MINTED_RE.pattern,
+            slug_length__lte=15,
+        )
         .order_by("id")
         .only("id", "slug", "name", "extra")
         .iterator(chunk_size=CHUNK_SIZE)
