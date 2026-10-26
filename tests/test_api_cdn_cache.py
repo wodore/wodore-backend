@@ -250,6 +250,93 @@ def test_lookalike_prefix_untouched() -> None:
 
 
 # --------------------------------------------------------------------------
+# CDN-Tag (Bunny purge taxonomy — _work/261026_cdn_tags.md)
+# --------------------------------------------------------------------------
+
+
+def test_anonymous_2xx_get_carries_api_and_app_cdn_tags() -> None:
+    """`CDN-Tag: api api:huts` — purging `api:huts` flushes one app,
+    purging `api` the whole API, never untagged media/static."""
+    response = _process(_factory.get("/v1/huts"), HttpResponse("{}"))
+    assert response["CDN-Tag"] == "api api:huts"
+
+
+@pytest.mark.parametrize(
+    ("path", "tag"),
+    [
+        ("/v1/version", "api api:version"),
+        ("/v1/openapi.json", "api api:openapi"),
+        ("/v1/sitemap.xml", "api api:sitemap"),
+        ("/v1/map/styles/outdoor.json", "api api:map"),
+        ("/v1/huts/my-hut", "api api:huts"),
+        ("/v1/availability/current/hut-slug", "api api:availability"),
+    ],
+)
+def test_app_tag_derivation(path: str, tag: str) -> None:
+    """First /v1/ path segment, extension stripped — RequestFactory
+    tests, so the paths need not exist as routes."""
+    response = _process(_factory.get(path), HttpResponse("{}"))
+    assert response["CDN-Tag"] == tag
+
+
+def test_cdn_tag_rides_with_endpoint_cache_control() -> None:
+    """Views stamping their own TTL (version 300 s, sitemaps) are still
+    CDN-cached — and must stay purgeable."""
+    response = HttpResponse("{}")
+    response["Cache-Control"] = "public, max-age=300"
+    response = _process(_factory.get("/v1/version"), response)
+    assert response["CDN-Tag"] == "api api:version"
+
+
+@pytest.mark.parametrize("status", [301, 400, 404, 429, 500])
+def test_errors_and_redirects_are_untagged(status: int) -> None:
+    """no-store responses never enter the CDN cache — no purge tag."""
+    response = _process(_factory.get("/v1/huts"), HttpResponse("{}", status=status))
+    assert "CDN-Tag" not in response.headers
+
+
+def test_304_is_untagged() -> None:
+    """The stored 200 owns the tag; the revalidation carries none."""
+    response = _process(_factory.get("/v1/huts"), HttpResponse("", status=304))
+    assert "CDN-Tag" not in response.headers
+
+
+def test_authenticated_get_is_untagged() -> None:
+    response = _process(
+        _factory.get("/v1/huts", HTTP_AUTHORIZATION="Bearer token"), HttpResponse("{}")
+    )
+    assert "CDN-Tag" not in response.headers
+
+
+def test_anonymous_post_is_untagged() -> None:
+    response = _process(_factory.post("/v1/feedbacks"), HttpResponse("{}", status=201))
+    assert "CDN-Tag" not in response.headers
+
+
+def test_non_api_path_is_untagged() -> None:
+    """Media/static/admin never flow through the CDN host — and stay
+    purge-immune by construction (no tag to match)."""
+    response = _process(_factory.get("/media/uploads/x.jpg"), HttpResponse(""))
+    assert "CDN-Tag" not in response.headers
+
+
+def test_endpoint_cdn_tag_is_preserved() -> None:
+    """Only-if-unset mirrors the Cache-Control rule."""
+    response = HttpResponse("{}")
+    response["CDN-Tag"] = "api api:custom"
+    response = _process(_factory.get("/v1/huts"), response)
+    assert response["CDN-Tag"] == "api api:custom"
+
+
+def test_client_version_carries_cdn_tag(client: Client) -> None:
+    """End-to-end: the wildcard-ACAO/TTL machinery and the tag ride
+    together on a real route."""
+    response = client.get("/v1/version")
+    assert response.status_code == 200
+    assert response["CDN-Tag"] == "api api:version"
+
+
+# --------------------------------------------------------------------------
 # Full stack (client): middleware ordering vs. the real corsheaders output
 # --------------------------------------------------------------------------
 
