@@ -97,7 +97,7 @@ class TestReMintSlugs:
         party.refresh_from_db()
         assert MINTED.fullmatch(party.slug)
         assert len(party.slug) <= 15
-        assert party.slug.startswith("coopsupe-") or party.slug.split("-")[0]
+        assert party.slug.startswith("coopsupe-")
         assert party.extra["osm_name"] == "coop_supermarkt"  # never moves
 
     def test_all_slugs_unique_after_re_mint(self):
