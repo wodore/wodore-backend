@@ -373,11 +373,15 @@ class TestSeed:
         resolved = resolve_style(layer.style, values)
         assert "{{date}}" not in json.dumps(resolved)
         # wd-bookings is the Martin `availability` vector source: the
-        # {{date}} token substitutes inside the tile URL templates.
-        tiles = resolved["sources"]["wd-bookings"]["tiles"]
+        # {{date}} token substitutes inside the tile URL templates —
+        # which opt into the .mlt URL space (suffix in the path, query
+        # carried through the tile-router rewrite).
+        bookings = resolved["sources"]["wd-bookings"]
+        tiles = bookings["tiles"]
         assert len(tiles) == 1
         assert f"date={values['date']}" in tiles[0]
-        assert "/availability/{z}/{x}/{y}" in tiles[0]
+        assert "/availability/{z}/{x}/{y}.mlt" in tiles[0]
+        assert bookings["encoding"] == "mlt"
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────
@@ -1162,7 +1166,7 @@ class TestAssetVersionInjection:
                     "type": "vector",
                     "tiles": [
                         (
-                            "https://tiles.example.org/availability/{z}/{x}/{y}"
+                            "https://tiles.example.org/availability/{z}/{x}/{y}.mlt"
                             "?date={{date}}&days=4"
                         )
                     ],
@@ -1175,7 +1179,7 @@ class TestAssetVersionInjection:
         }
         out = inject_asset_versions(style, self._versions())
         assert out["sources"]["wd-bookings"]["tiles"][0] == (
-            "https://tiles.example.org/availability/{z}/{x}/{y}?date={{date}}&days=4"
+            "https://tiles.example.org/availability/{z}/{x}/{y}.mlt?date={{date}}&days=4"
         )
         assert out["sources"]["raster-manual"]["tiles"][0] == (
             "https://tiles.example.org/raster/{z}/{x}/{y}.webp?v=2"

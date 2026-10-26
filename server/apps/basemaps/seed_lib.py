@@ -352,10 +352,15 @@ HUTS_STYLE: dict[str, Any] = {
             # matches the four day-column layers; below zoom 7 the server
             # serves only day 0. maxzoom 9: deeper zooms overzoom the z9
             # tiles client-side (no further requests).
+            # MLT v1 like wd-huts: explicit .mlt URL space (tile-router
+            # strips the suffix and keeps the date/days query) plus the
+            # MapLibre decoder marker. Pairing contract (tested): a .mlt
+            # tiles template always ships with ``encoding: mlt``.
             "type": "vector",
             "tiles": [
-                "{{env:MARTIN_TILE_URL}}/availability/{z}/{x}/{y}?date={{date}}&days=4"
+                "{{env:MARTIN_TILE_URL}}/availability/{z}/{x}/{y}.mlt?date={{date}}&days=4"
             ],
+            "encoding": "mlt",
             "promoteId": "slug",
             "minzoom": 5,
             "maxzoom": 9,
