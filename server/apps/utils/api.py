@@ -16,7 +16,7 @@ from pydantic import Field
 
 from django.http import HttpRequest, HttpResponse
 
-from server.apps.api.controller import ApiController
+from server.apps.api.controller import ApiController, cache_headers
 from server.apps.api.sitemap import (
     SITEMAP_INDEX_TTL,
     SITEMAP_TTL,
@@ -64,6 +64,14 @@ def _get_package_version() -> str:
 
 PACKAGE_VERSION = _get_package_version()
 DJANGO_ENV = environ.get("DJANGO_ENV", "development")
+
+#: ``/v1/version`` Cache-Control TTL: the frontend versions panel treats
+#: the endpoint as a live deploy signal — cache briefly, not the default
+#: hour. Set view-level via ``@modify(headers=cache_headers(...))`` so
+#: the TTL lives next to the endpoint; ``ApiCdnCacheMiddleware`` stamps
+#: only-if-unset and therefore lets it win (anonymous reads) — exactly
+#: like sitemaps and the ETag endpoints.
+VERSION_TTL = 300
 
 
 def _build_timestamp() -> datetime.datetime:
@@ -133,7 +141,9 @@ class VersionSchema(pydantic.BaseModel):
 class VersionController(ApiController):
     """Build/runtime/API version information."""
 
-    @modify(operation_id="get_version", tags=["version"])
+    @modify(
+        operation_id="get_version", tags=["version"], headers=cache_headers(VERSION_TTL)
+    )
     def get(self) -> VersionSchema:
         """Get version information.
 

@@ -225,6 +225,14 @@ MIDDLEWARE: tuple[str, ...] = (
     "server.middleware.headers.LlmsTxtCacheMiddleware",
     # Logging:
     "server.settings.components.logging.LoggingContextVarsMiddleware",
+    # Public API (/v1) CDN cache policy: auth-state-aware CORS wildcard +
+    # Cache-Control. Registered BEFORE CorsMiddleware (outer in the
+    # response phase, like LlmsTxtCacheMiddleware above) so it runs after
+    # corsheaders and can replace its per-origin Access-Control-Allow-
+    # Origin with `*` for anonymous reads — corsheaders overwrites ACAO
+    # unconditionally, so a position below it would be clobbered
+    # (see server/middleware/headers.py).
+    "server.middleware.headers.ApiCdnCacheMiddleware",
     # Cross-Origin Resource Sharing (CORS)
     "corsheaders.middleware.CorsMiddleware",
     # API contract versioning (must sit inside CORS so its 400/410
