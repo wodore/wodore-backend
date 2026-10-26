@@ -506,7 +506,9 @@ class TestCaching:
     ):
         """The middleware's 400/410 responses unwind through
         CorsMiddleware, so browser clients still see CORS headers
-        (design.md D5.4 / review P2)."""
+        (design.md D5.4 / review P2). Anonymous /v1 GETs are then flattened
+        to the CDN wildcard by ApiCdnCacheMiddleware — CORS headers present
+        regardless of origin."""
         from django.test import override_settings
 
         with override_settings(CORS_ALLOWED_ORIGINS=["https://app.example.com"]):
@@ -516,9 +518,10 @@ class TestCaching:
                 headers={"Origin": "https://app.example.com", **headers},
             )
             assert response.status_code == 400
-            assert response["Access-Control-Allow-Origin"] == (
-                "https://app.example.com"
-            )
+            assert response["Access-Control-Allow-Origin"] == "*"
+            # Non-2xx: the CDN middleware stamps no-store (an error must
+            # never become the URL's cached variant)
+            assert response["Cache-Control"] == "no-store"
 
     @pytest.mark.django_db
     def test_sunset_410_keeps_cors_headers(
@@ -539,9 +542,10 @@ class TestCaching:
                 },
             )
             assert response.status_code == 410
-            assert response["Access-Control-Allow-Origin"] == (
-                "https://app.example.com"
-            )
+            # Anonymous /v1 GET → CDN wildcard (ApiCdnCacheMiddleware)
+            assert response["Access-Control-Allow-Origin"] == "*"
+            # Non-2xx: no-store — never seed the CDN cache with an error
+            assert response["Cache-Control"] == "no-store"
 
 
 class TestVersionDiscovery:
