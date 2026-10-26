@@ -10,7 +10,7 @@ from typing import Any, override
 from modeltrans.fields import TranslationField
 
 from django.contrib.postgres.indexes import GinIndex
-from django.db import models
+from django.db import IntegrityError, models, transaction
 from django.db.models.functions import Lower
 from django.utils.translation import gettext_lazy as _
 
@@ -129,6 +129,13 @@ class Party(TimeStampedModel):
                 name="%(app_label)s_%(class)s_review_status_valid",
                 condition=models.Q(review_status__in=["new", "review", "work", "done"]),
             ),
+            # blank=True is form-level only (the admin may leave the slug
+            # empty so save() mints one); this keeps the column non-empty
+            # at the database level for direct writes.
+            models.CheckConstraint(
+                name="%(app_label)s_%(class)s_slug_not_empty",
+                condition=~models.Q(slug=""),
+            ),
         ]
         ordering = (Lower("name_i18n"),)
 
@@ -136,11 +143,11 @@ class Party(TimeStampedModel):
     def normalize_key(value: str) -> str:
         """Normalize a name to the import identity (``extra.osm_name``).
 
-        Verbatim the OSM import's former ``_normalize_party_slug``
-        (itself kept identical to the pre-parties ``_normalize_brand_slug``
-        so re-imports keep matching migrated rows).
+        Same normalization as the OSM import's former
+        ``_normalize_party_slug`` — the ``extra`` JSONB carries the
+        value, so no length trim is needed.
         """
-        return value.lower().replace(" ", "_")[:50]
+        return value.lower().replace(" ", "_")
 
     @override
     def save(self, *args: Any, **kwargs: Any) -> None:
@@ -148,7 +155,9 @@ class Party(TimeStampedModel):
 
         The base prefers the name and falls back to the ``osm_name``
         import identity in ``extra`` (OpenSpec change
-        ``party-slug-minting``).
+        ``party-slug-minting``). On the rare unique collision the save
+        retries inside a savepoint with a freshly minted suffix
+        (bounded attempts; the last error propagates).
         """
         if not self.slug:
             base = (
@@ -156,8 +165,17 @@ class Party(TimeStampedModel):
                 if self.name and len(self.name.strip()) >= 2
                 else str((self.extra or {}).get("osm_name", ""))
             )
-            self.slug = mint_short_slug(base, fallback="party")
-        super().save(*args, **kwargs)
+            for attempt in range(3):
+                self.slug = mint_short_slug(base, fallback="party")
+                try:
+                    with transaction.atomic():
+                        super().save(*args, **kwargs)
+                    return
+                except IntegrityError:
+                    if attempt == 2:
+                        raise  # retries exhausted — surface the error
+        else:
+            super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return self.name_i18n

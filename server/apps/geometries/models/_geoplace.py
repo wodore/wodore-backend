@@ -13,6 +13,7 @@ from django.contrib.gis.geos import Point
 from django.contrib.postgres.indexes import GinIndex, GistIndex
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.db.models.functions import Lower
 from django.utils.translation import gettext_lazy as _
@@ -390,6 +391,9 @@ class GeoPlace(TimeStampedModel):
         """
         # Auto-generate slug from name if not provided
         # Always use English for slug generation (for international consistency)
+        minted_slug = False
+        name_for_slug = ""
+        category_slug = fallback_slug
         if not self.slug:
             # Temporarily activate English to get English name for slug
             activate("en")
@@ -420,19 +424,32 @@ class GeoPlace(TimeStampedModel):
             self.slug = self.generate_unique_slug(
                 name_for_slug, category_slug=category_slug
             )
+            minted_slug = True
 
         # Track modifications if this is a manual edit (not an import)
         if track_modifications and self.pk:
             self._track_field_modifications()
 
-        # Retry logic for database locks
+        # Retry logic for database locks — and for the rare unique
+        # collision on a freshly minted slug (re-mint a new random
+        # suffix and retry; the savepoint keeps the surrounding
+        # transaction usable).
         import time
 
         last_exception = None
         for attempt in range(max_retries):
             try:
-                super().save(*args, **kwargs)
+                with transaction.atomic():
+                    super().save(*args, **kwargs)
                 return  # Success, exit retry loop
+            except IntegrityError as e:
+                last_exception = e
+                if minted_slug and attempt < max_retries - 1:
+                    self.slug = self.generate_unique_slug(
+                        name_for_slug, category_slug=category_slug
+                    )
+                    continue
+                raise
             except Exception as e:
                 last_exception = e
                 error_str = str(e).lower()

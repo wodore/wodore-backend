@@ -50,8 +50,10 @@ def backfill_extra(apps: Any, schema_editor: Any) -> None:
     # .order_by() clears the historical model's default ordering
     # (Lower on name_i18n — a modeltrans field that does not exist at
     # this migration state; the 0054 lesson).
-    for party in objects.order_by("id").only("id", "slug", "extra").iterator(
-        chunk_size=CHUNK_SIZE
+    for party in (
+        objects.order_by("id")
+        .only("id", "slug", "extra")
+        .iterator(chunk_size=CHUNK_SIZE)
     ):
         extra = dict(party.extra or {})
         if "osm_name" not in extra:
@@ -136,8 +138,15 @@ class Migration(migrations.Migration):
         # table (index name matches Django's autodetected migration).
         migrations.AddIndex(
             model_name="party",
-            index=GinIndex(
-                fields=["extra"], name="parties_par_extra_75c6dd_gin"
+            index=GinIndex(fields=["extra"], name="parties_par_extra_75c6dd_gin"),
+        ),
+        # blank=True is form-level only (save() mints); the constraint
+        # keeps the column non-empty for direct writes (review comment 3).
+        migrations.AddConstraint(
+            model_name="party",
+            constraint=models.CheckConstraint(
+                condition=models.Q(("slug", ""), _negated=True),
+                name="parties_party_slug_not_empty",
             ),
         ),
     ]

@@ -28,8 +28,10 @@ class TestNormalizeKey:
     def test_lowercases_and_underscores(self):
         assert Party.normalize_key("SAC Bern") == "sac_bern"
 
-    def test_truncates_to_50(self):
-        assert Party.normalize_key("x" * 80) == "x" * 50
+    def test_no_length_trim(self):
+        # ``extra`` JSONB carries the identity — no column limit to
+        # trim to (review comment 1).
+        assert Party.normalize_key("x" * 80) == "x" * 80
 
     def test_identity_for_owner_style_slugs(self):
         # Owner slugs (hyphenated, lowercase) pass through unchanged -
@@ -77,3 +79,50 @@ class TestSaveMinting:
         Party.objects.create(slug="volg", name="First")
         with pytest.raises(IntegrityError):
             Party.objects.create(slug="volg", name="Second")
+
+
+class TestSlugCollisionRetry:
+    """A unique collision on a freshly minted slug re-mints a new
+    suffix and retries inside a savepoint (review comment 2)."""
+
+    def test_collision_remints_and_retries(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        Party.objects.create(slug="aaaaa-11111", name="Existing")
+
+        minted = iter(["aaaaa-11111", "bbbbb-22222"])
+
+        def fake_mint(*_args: object, **_kwargs: object) -> str:
+            return next(minted)
+
+        monkeypatch.setattr(
+            "server.apps.parties.models._party.mint_short_slug", fake_mint
+        )
+
+        party = Party.objects.create(name="Migros")
+
+        assert party.slug == "bbbbb-22222"
+        assert Party.objects.count() == 2
+
+    def test_exhausted_retries_raise(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        Party.objects.create(slug="aaaaa-11111", name="Existing")
+
+        def fake_mint(*_args: object, **_kwargs: object) -> str:
+            return "aaaaa-11111"
+
+        monkeypatch.setattr(
+            "server.apps.parties.models._party.mint_short_slug", fake_mint
+        )
+
+        with pytest.raises(IntegrityError):
+            Party.objects.create(name="Migros")
+
+
+class TestSlugNotEmptyConstraint:
+    """blank=True is form-level only; the database rejects empty slugs
+    (review comment 3) — bulk_create bypasses save(), so the check
+    constraint is what fires."""
+
+    def test_bulk_create_empty_slug_rejected(self) -> None:
+        with pytest.raises(IntegrityError):
+            Party.objects.bulk_create([Party(slug="", name="No Slug")])
