@@ -145,8 +145,8 @@ Services are defined in `docker-compose.yml`:
     suffix and asks Martin to convert at serve time (implicit on
     Martin ≥ 1.16; `convert_to_mlt` in martin.yaml covers older). Only the
     literal `.mlt` suffix selects MLT — extension-less/`.pbf`/`.mvt` stay MVT.
-    Opt-in is style-side (`encoding: mlt` + `.mlt` tiles template; phase 1:
-    huts overlay). nginx (tile-router/edge) is required for `.mlt` URLs — it
+    Opt-in is style-side (`encoding: mlt` + `.mlt` tiles template; the huts
+    and availability overlays opted in). nginx (tile-router/edge) is required for `.mlt` URLs — it
     already is the single tile origin in dev and prod; lane Martin
     (`scripts/lane-martin.sh`) has no router in front, so `.mlt` works there
     only via extension-less URL + explicit `Accept: application/vnd.maplibre-tile`

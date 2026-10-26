@@ -2,10 +2,11 @@
 
 Covers the ``map-style-api`` delta (the rendering pipeline preserves a
 vector source's ``encoding`` verbatim in resolved and tokenized modes,
-never injects one) and the seed pairing contract for the huts overlay
-(``.mlt`` tiles template always ships with ``encoding: mlt``; every other
-vector source stays MVT — phase 1 scopes the Martin-side conversion to
-the huts table source only).
+never injects one) and the seed pairing contract (``.mlt`` tiles
+template always ships with ``encoding: mlt``): the huts overlay and the
+availability overlay (``wd-bookings``, whose ``.mlt`` suffix sits before
+the ``date``/``days`` query) both opt in; every other vector source
+stays MVT.
 
 Tile-origin URLs use the ``{{env:MARTIN_TILE_URL}}`` registry token —
 the pre-unification ``{TILE_SERVER_URL}`` placeholder is gone entirely
@@ -26,9 +27,19 @@ from server.apps.basemaps.validation import validate_style_spec
 
 TILE_ORIGIN = "{{env:MARTIN_TILE_URL}}"
 
+#: Sources whose tile path (query stripped) ends in ``.mlt`` and that
+#: therefore must carry ``encoding: mlt``.
+MLT_SOURCES = ("wd-huts", "wd-bookings")
+
+
+def _path_endswith_mlt(template: str) -> bool:
+    """``.mlt`` selects MLT by path suffix only — a query string
+    (``?date=…&days=4``) may follow it."""
+    return template.split("?", 1)[0].endswith(".mlt")
+
 
 def _style() -> dict[str, Any]:
-    """A fresh minimal style with one MLT and one MVT vector source."""
+    """A fresh minimal style with two MLT and one plain MVT source."""
     return {
         "version": 8,
         "sources": {
@@ -41,10 +52,15 @@ def _style() -> dict[str, Any]:
                 "type": "vector",
                 "tiles": [
                     (
-                        f"{TILE_ORIGIN}/availability/{{z}}/{{x}}/{{y}}"
+                        f"{TILE_ORIGIN}/availability/{{z}}/{{x}}/{{y}}.mlt"
                         "?date={{date}}&days=4"
                     )
                 ],
+                "encoding": "mlt",
+            },
+            "wd-plain": {
+                "type": "vector",
+                "tiles": [f"{TILE_ORIGIN}/geoplaces/{{z}}/{{x}}/{{y}}"],
             },
         },
         "layers": [{"id": "wd-huts", "type": "circle", "source": "wd-huts"}],
@@ -78,27 +94,47 @@ class EncodingPreservationTests:
             resolved = resolve_style(
                 _style(), {"date": "2026-10-22"}, tokenized=tokenized
             )
-            assert "encoding" not in resolved["sources"]["wd-bookings"]
+            assert "encoding" not in resolved["sources"]["wd-plain"]
+
+    @override_settings(MARTIN_TILE_URL="https://tiles.example.org")
+    def test_bookings_encoding_survives_with_query_template(self):
+        """The availability source's marker survives resolution alongside
+        its query-carrying template; the {{date}} token substitutes."""
+        resolved = resolve_style(_style(), {"date": "2026-10-22"})
+        bookings = resolved["sources"]["wd-bookings"]
+        assert bookings["encoding"] == "mlt"
+        assert bookings["tiles"] == [
+            (
+                "https://tiles.example.org/availability/{z}/{x}/{y}.mlt"
+                "?date=2026-10-22&days=4"
+            )
+        ]
 
 
 class SeedPairingTests(SimpleTestCase):
-    """The huts overlay opts in; nothing else does — and the pairing is
-    invariant (``.mlt`` template ⇔ ``encoding: mlt``)."""
+    """The huts and availability overlays opt in; nothing else does — and
+    the pairing is invariant (``.mlt`` tiles path ⇔ ``encoding: mlt``)."""
 
-    def test_huts_source_pairs_mlt_template_with_encoding(self):
-        source = HUTS_STYLE["sources"]["wd-huts"]
-        self.assertEqual(source["encoding"], "mlt")
-        self.assertTrue(source["tiles"])
-        for template in source["tiles"]:
-            self.assertTrue(template.endswith(".mlt"), template)
+    def test_mlt_sources_pair_template_with_encoding(self):
+        for name in MLT_SOURCES:
+            source = HUTS_STYLE["sources"][name]
+            self.assertEqual(source["encoding"], "mlt", name)
+            self.assertTrue(source["tiles"], name)
+            for template in source["tiles"]:
+                self.assertTrue(_path_endswith_mlt(template), (name, template))
+
+    def test_bookings_template_keeps_query_after_suffix(self):
+        """The .mlt suffix sits in the path; date/days stay a query."""
+        template = HUTS_STYLE["sources"]["wd-bookings"]["tiles"][0]
+        self.assertIn(".mlt?date={{date}}&days=4", template)
 
     def test_other_sources_stay_mvt(self):
         for name, source in HUTS_STYLE["sources"].items():
-            if name == "wd-huts":
+            if name in MLT_SOURCES:
                 continue
             self.assertNotIn("encoding", source, name)
             for template in source.get("tiles", []):
-                self.assertFalse(template.endswith(".mlt"), (name, template))
+                self.assertFalse(_path_endswith_mlt(template), (name, template))
 
     def test_style_with_encoding_is_structurally_valid(self):
         # Validation is deliberately open (extra: allow) — the encoding
