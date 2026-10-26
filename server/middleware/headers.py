@@ -17,6 +17,12 @@ _LLMS_PATH_RE = re.compile(r"^/llms(?:\.[^/]+)?\.txt$")
 
 # Public API (/v1) CDN cache policy (see ApiCdnCacheMiddleware):
 _API_PATH_PREFIX = "/v1/"
+#: Whitenoise-served static files (admin/panel assets): public, stable
+#: filenames (non-manifest storage), whitenoise's own ``max-age=60`` in
+#: production. Tagged so a CDN zone fronting them can be purged via
+#: ``static`` right after a deploy instead of waiting out the TTL.
+_STATIC_PATH_PREFIX = settings.STATIC_URL
+_STATIC_CDN_TAG = "static"
 #: Default TTL for anonymous public-API reads (one hour, browser+CDN).
 _PUBLIC_API_CACHE_CONTROL = "public, max-age=3600"
 #: Non-2xx anonymous /v1 responses are never cacheable: the CDN keys its
@@ -36,6 +42,12 @@ _PRIVATE_API_CACHE_CONTROL = "private, no-store"
 #: origin-independent, which BunnyCDN's URL-keyed single-variant cache
 #: requires (per-origin ACAO cannot survive it).
 _WILDCARD_ORIGIN = "*"
+#: Bunny cache-purge tag family for the public API: the broad ``api`` tag
+#: plus an app-specific ``api:<app>`` (first path segment after ``/v1/``,
+#: extension stripped). Space-separated multi-tag values are Bunny's
+#: CDN-Tag format; a purge targets one tag via the wildcard form
+#: ``* api:<app> *`` (taxonomy: _work/261026_cdn_tags.md).
+_API_CDN_TAG = "api"
 
 
 class EnvironmentHeadersMiddleware:
@@ -164,6 +176,20 @@ class ApiCdnCacheMiddleware:
     * ``Cache-Control`` is only ever set when the response does not carry
       one yet — endpoints deliberately overriding their TTL (sitemaps,
       SVG redirects, ETag revalidation endpoints) always win.
+    * 2xx anonymous reads also carry ``CDN-Tag: api api:<app>`` (Bunny
+      tag-based purging: flush one app or the whole API without touching
+      untagged surfaces — media, admin; taxonomy in
+      ``_work/261026_cdn_tags.md``). Errors, 304s and authenticated
+      responses stay untagged — only what the CDN actually stores owns
+      a purge tag.
+    * Whitenoise static responses (``/static/…`` — served by the inner
+      WhiteNoiseMiddleware, so they unwind through this middleware)
+      carry ``CDN-Tag: static`` on 2xx anonymous GET/HEAD. Everything
+      else on them stays whitenoise's own (Cache-Control ``max-age=60``,
+      ACAO ``*``): this branch only adds the purge tag. Django media is
+      dev-only inside Django (prod: burginfra nginx) and admin traffic
+      never goes through a CDN host — both stay untagged, i.e.
+      purge-immune by construction.
     * OPTIONS (preflights belong to corsheaders) and anonymous non-GET/HEAD
       requests (POST etc. are never CDN-cached) are left untouched.
 
@@ -196,6 +222,19 @@ class ApiCdnCacheMiddleware:
             HTTP response with auth-state-aware CORS/Cache-Control headers
         """
         response = self.get_response(request)
+
+        if request.path_info.startswith(_STATIC_PATH_PREFIX):
+            # Whitenoise static: public and user-independent; Cache-Control
+            # and CORS are whitenoise's own and are never touched here. Only
+            # the purge tag is added — 2xx anonymous GET/HEAD, mirroring the
+            # API branch's rules (errors/304s/authenticated stay untagged).
+            if (
+                request.method in ("GET", "HEAD")
+                and not request.headers.get("Authorization")
+                and 200 <= response.status_code < 300
+            ):
+                _set_cdn_tag_if_unset(response, _STATIC_CDN_TAG)
+            return response
 
         if not request.path_info.startswith(_API_PATH_PREFIX):
             return response
@@ -231,6 +270,7 @@ class ApiCdnCacheMiddleware:
             response["Access-Control-Allow-Origin"] = _WILDCARD_ORIGIN
             if 200 <= response.status_code < 300:
                 _set_cache_control_if_unset(response, _PUBLIC_API_CACHE_CONTROL)
+                _set_cdn_tag_if_unset(response, _api_cdn_tag(request.path_info))
             elif response.status_code != 304:
                 # Errors and redirects must never seed the URL-keyed CDN
                 # cache: the first cached variant is served to every
@@ -258,6 +298,44 @@ def _set_cache_control_if_unset(response: HttpResponse, value: str) -> None:
     """
     if "Cache-Control" not in response.headers:
         response["Cache-Control"] = value
+
+
+def _api_cdn_tag(path_info: str) -> str:
+    """Bunny ``CDN-Tag`` value for a cacheable anonymous /v1 response.
+
+    ``api api:<app>`` (``/v1/huts/...`` → ``api api:huts``), plain ``api``
+    when no app segment exists (bare ``/v1/``). The segment's extension
+    is stripped (``/v1/openapi.json`` → ``api:openapi``) so the tag set
+    stays small and predictable. Untagged surfaces (Django media —
+    dev-only inside Django, prod served by burginfra nginx — and admin,
+    which never flows through a CDN host) can never be hit by a tag
+    purge.
+
+    Args:
+        path_info: The request's path (``request.path_info``)
+
+    Returns:
+        Space-separated CDN-Tag value for the response
+    """
+    segment = path_info[len(_API_PATH_PREFIX) :].partition("/")[0]
+    app = segment.partition(".")[0]
+    if app:
+        return f"{_API_CDN_TAG} {_API_CDN_TAG}:{app}"
+    return _API_CDN_TAG
+
+
+def _set_cdn_tag_if_unset(response: HttpResponse, value: str) -> None:
+    """Set ``CDN-Tag`` unless the response already carries one.
+
+    Mirrors the Cache-Control only-if-unset rule: an endpoint stamping
+    its own purge tag is never clobbered.
+
+    Args:
+        response: The HTTP response to (maybe) stamp
+        value: CDN-Tag value to set if absent
+    """
+    if "CDN-Tag" not in response.headers:
+        response["CDN-Tag"] = value
 
 
 class RobotsTagMiddleware:

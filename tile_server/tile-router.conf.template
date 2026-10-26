@@ -20,9 +20,46 @@
 # level — a location with ANY own directive of that family stops
 # inheriting server-level ones — so each location repeats the trio.
 #
+# CDN-Tag: Bunny purge taxonomy (bunny.net tags responses via the
+# CDN-Tag header; purge through the pull-zone PurgeCache API with
+# CacheTag — wildcard-wrap to hit one of several space-separated tags:
+# "* tiles:huts *"). Every known tile path carries the broad `tiles`
+# tag plus a specific one (martin source, raster facade, or tiles:meta
+# for sprites/fonts/catalog), so ONE source can be flushed without
+# evicting the expensive warm terrain cache (contours/hillshade, 30 d
+# TTL). The map below keys on $request_uri — the ORIGINAL URI — so the
+# /raster/ and .mlt rewrites cannot skew the lookup. Unknown paths and
+# source composites (a,b) are untagged (add_header skips empty values),
+# i.e. purge-immune. The prod/staging edge (burginfra) must emit the
+# same tags; the API side is stamped by ApiCdnCacheMiddleware
+# (``api api:<app>``). Taxonomy: _work/261026_cdn_tags.md.
+#
 # Rendered by the official nginx image's envsubst-on-templates feature
 # (/etc/nginx/templates/*.template -> /etc/nginx/conf.d/). Plain nginx
 # runtime vars ($http_host, no braces) are left untouched.
+
+# Bunny CDN-Tag map — the purge taxonomy documented in the header
+# comment above and _work/261026_cdn_tags.md. Tags are DERIVED from
+# the URL (regex captures referenced in the map values), not enumerated
+# per source: a new martin source or raster facade is purgeable the
+# moment it is served, no nginx edit needed. Order matters (first match
+# wins): metadata first, then the raster facades, then the generic
+# martin-source rule (otherwise /raster/… would tag as source "raster").
+# Delimiters after a name: /, ., ? or end-of-URI (bare /catalog matches;
+# query strings and extensions ride along, no end anchors). Source
+# composites (a,b) and unknown shapes default to "" — nginx add_header
+# skips empty values, i.e. untagged/purge-immune.
+map $request_uri $cdn_tile_tag {
+    default                     "";
+    # Martin metadata (sprites, fonts, catalog, health) groups under one tag.
+    ~^/(sprite|font|catalog|healthz)(/|\.|\?|$)          "tiles tiles:meta";
+    # Raster facades (mapproxy behind /raster/tiles/<facade>/…) — automatic.
+    ~^/raster/tiles/(?<cdn_facade>[a-zA-Z0-9_]+)(/|\.|\?|$)  "tiles tiles:raster:$cdn_facade";
+    # Martin sources (tables, views, functions) + their TileJSON —
+    # automatic from the first path segment.
+    ~^/(?<cdn_src>[a-zA-Z0-9_]+)(/|\.|\?|$)              "tiles tiles:$cdn_src";
+}
+
 server {
     listen 80 default_server;
 
@@ -45,6 +82,8 @@ server {
         # header is hidden so one clean immutable header remains.
         proxy_hide_header Cache-Control;
         add_header Cache-Control "public, max-age=604800, immutable" always;
+        # Bunny purge tag (see the $cdn_tile_tag map) — facade-specific.
+        add_header CDN-Tag $cdn_tile_tag always;
         # CORS trio (see header comment) — repeated per location because
         # the Cache-Control lines above already cancel inheritance.
         proxy_hide_header Access-Control-Allow-Origin;
@@ -80,6 +119,10 @@ server {
         proxy_pass $martin_upstream;
         proxy_set_header Accept application/vnd.maplibre-tile;
         proxy_set_header Accept-Encoding identity;
+        # Bunny purge tag (see the $cdn_tile_tag map) — keyed on the
+        # ORIGINAL request URI, so the .mlt-stripped rewrite above
+        # cannot skew the lookup.
+        add_header CDN-Tag $cdn_tile_tag always;
         # CORS trio (see header comment): hide Martin's origin echo,
         # stamp the origin-independent wildcard instead.
         proxy_hide_header Access-Control-Allow-Origin;
@@ -93,6 +136,9 @@ server {
     location / {
         set $martin_upstream http://${MARTIN_UPSTREAM};
         proxy_pass $martin_upstream;
+        # Bunny purge tag (see the $cdn_tile_tag map): per-source for
+        # canonical tiles and TileJSON, tiles:meta for sprites/fonts/catalog.
+        add_header CDN-Tag $cdn_tile_tag always;
         # CORS trio (see header comment): hide Martin's origin echo,
         # stamp the origin-independent wildcard instead.
         proxy_hide_header Access-Control-Allow-Origin;
