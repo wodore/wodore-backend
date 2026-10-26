@@ -22,7 +22,10 @@ def resolve_party_by_name(
     only (get_or_create semantics). Returns ``(party, created)``.
     """
     key = Party.normalize_key(name)
-    party = Party.objects.filter(extra__osm_name=key).first()
+    # Containment lookups (``extra__contains={"osm_name": key}``)
+    # resolve the identity — the jsonb GIN index serves containment,
+    # not ``->>`` equality (advisor review finding 3).
+    party = Party.objects.filter(extra__contains={"osm_name": key}).first()
     if party is not None:
         return party, False
     same_name = Party.objects.filter(name=name).first()
@@ -33,7 +36,9 @@ def resolve_party_by_name(
     defaults: dict[str, object] = {"name": name, "extra": {"osm_name": key}}
     if review_status:
         defaults["review_status"] = review_status
-    return Party.objects.get_or_create(extra__osm_name=key, defaults=defaults)
+    return Party.objects.get_or_create(
+        extra__contains={"osm_name": key}, defaults=defaults
+    )
 
 
 def merge_owner(owner: Owner) -> tuple[Party, bool, bool]:
@@ -63,7 +68,9 @@ def merge_owner(owner: Owner) -> tuple[Party, bool, bool]:
     # normalized, so ``normalize_key`` is the identity here.
     key = Party.normalize_key(owner.slug)
     party, party_created = Party.objects.get_or_create(
-        extra__osm_name=key,
+        # Containment — served by the extra GIN index (advisor review
+        # finding 3).
+        extra__contains={"osm_name": key},
         defaults={
             "name": owner.name or owner.slug,
             "i18n": i18n,

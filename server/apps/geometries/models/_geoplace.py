@@ -547,10 +547,15 @@ class GeoPlace(TimeStampedModel):
         # If any fields were modified, mark as modified and update protected_fields
         if modified_fields:
             self.is_modified = True
-            # Add to protected_fields (avoid duplicates)
-            current_protected = set(self.protected_fields)
-            current_protected.update(modified_fields)
-            self.protected_fields = list(current_protected)
+            # Add to protected_fields (avoid duplicates). Structured
+            # entries (role-scoped party protection dicts) are
+            # unhashable — carry them through untouched instead of
+            # feeding them to set() (advisor review finding 2).
+            entries = list(self.protected_fields or [])
+            protected_strings = {e for e in entries if isinstance(e, str)}
+            protected_strings.update(modified_fields)
+            structured = [e for e in entries if not isinstance(e, str)]
+            self.protected_fields = structured + sorted(protected_strings)
 
             # Auto-transition review_status from "new" to "done"
             # If it was new and we're making manual changes, we're happy with it
@@ -894,12 +899,32 @@ class GeoPlace(TimeStampedModel):
 
             # Filter by brand party if enabled and provided
             if dedup_options.check_brand and schema.parties:
-                brand_slugs = [p.slug for p in schema.parties if p.role == "role.brand"]
-                if brand_slugs:
-                    nearby = nearby.filter(
-                        party_associations__party__slug__in=brand_slugs,
-                        party_associations__role__identifier="role.brand",
-                    )
+                brand_entries = [p for p in schema.parties if p.role == "role.brand"]
+                if brand_entries:
+                    # Slug entries reference the party by its slug;
+                    # name-only entries (OSM import) by the
+                    # ``extra.osm_name`` import identity — containment,
+                    # served by the party GIN index. A plain
+                    # ``slug__in`` over name-only entries used to filter
+                    # on ``[None]`` and never match (advisor-adjacent
+                    # regression of party-slug-minting).
+                    from server.apps.parties.models import Party
+
+                    brand_q = Q()
+                    for entry in brand_entries:
+                        if entry.slug:
+                            brand_q |= Q(
+                                party_associations__party__slug=entry.slug,
+                                party_associations__role__identifier="role.brand",
+                            )
+                        else:
+                            brand_q |= Q(
+                                party_associations__party__extra__contains={
+                                    "osm_name": Party.normalize_key(entry.name or "")
+                                },
+                                party_associations__role__identifier="role.brand",
+                            )
+                    nearby = nearby.filter(brand_q)
                 else:
                     # Brand check on but no brand entry - only match places
                     # without a brand party association
@@ -1152,8 +1177,13 @@ class GeoPlace(TimeStampedModel):
             # Don't update protected records
             return place, UpdateCreateStatus.no_change
 
-        # Determine which fields can be updated
-        protected = set(place.protected_fields)
+        # Determine which fields can be updated. String entries only —
+        # structured role-scoped party protection ({"parties": [...]} —
+        # dicts, unhashable) is resolved per role inside
+        # _write_party_associations instead (advisor review finding 1).
+        protected = {
+            entry for entry in (place.protected_fields or []) if isinstance(entry, str)
+        }
 
         # Check if we should respect protected fields
         respect_protected = False

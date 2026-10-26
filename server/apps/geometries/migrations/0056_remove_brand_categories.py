@@ -30,7 +30,10 @@ def remove_brand_categories(apps: Any, _schema_editor: Any) -> None:
 
     # Legacy place associations (superseded by role.brand party
     # associations from 0053) — includes associations to the root
-    # itself, which would otherwise RESTRICT the delete below.
+    # itself, which would otherwise RESTRICT the delete below. The
+    # subtree is flat by construction (0053 minted ``brand.<slug>``
+    # leaves, one level); a grandchild level with associations would
+    # RESTRICT-block ``root.delete()`` loudly (advisor review finding 6).
     category_ids = list(root.children.values_list("id", flat=True)) + [root.id]
     deleted, _ = GeoPlaceCategory.objects.filter(category_id__in=category_ids).delete()
 

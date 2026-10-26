@@ -22,7 +22,12 @@ from django.db import IntegrityError, transaction
 from django.db.models import RestrictedError
 
 from server.apps.categories.models import Category
-from server.apps.geometries.models import AmenityDetail, GeoPlaceParty
+from server.apps.geometries.models import (
+    AmenityDetail,
+    GeoPlace,
+    GeoPlaceParty,
+    OperatingStatus,
+)
 from server.apps.geometries.schemas import GeoPlaceAmenityInput, PartyInput
 from server.apps.parties.models import Party
 from server.core import UpdateCreateStatus
@@ -367,3 +372,87 @@ class TestRoleScopedPartyProtection:
         place.protected_fields = ["name_de", "parties"]
         place.save(update_fields=["protected_fields"])
         assert place.protected_party_roles() == set()
+
+    def test_geoplace_update_path_tolerates_structured_entries(self):
+        """Advisor review finding 1: the real import update path
+        (GeoPlace.update_or_create → _update_from_schema) must not
+        crash on structured protected_fields entries — the str-only
+        set() crashed with TypeError before the fix. Called directly:
+        dedup is orthogonal to the regression (note: category
+        resolution is lru_cached, so each test needs its own slugs)."""
+        from server.apps.geometries.schemas import (
+            GeoPlaceAmenityInput as Schema,
+        )
+
+        shop = Category.objects.create(slug="shop", name="Shop")
+        kiosk = Category.objects.create(slug="kiosk", parent=shop, name="Kiosk")
+
+        place = GeoPlaceFactory(
+            detail_type="amenity",
+            protected_fields=[{"parties": ["role.brand"]}],
+        )
+
+        schema = Schema(
+            name="Test Place",
+            location=LocationSchema(lon=7.7343, lat=46.0234),
+            country_code="CH",
+            place_type_identifiers=["shop.kiosk"],
+            operating_status=OperatingStatus.OPEN,  # branch requires it
+            parties=[
+                PartyInput(name="Volg", role="role.brand"),
+                PartyInput(name="SAC Bern", role="role.operator"),
+            ],
+        )
+
+        # The exact import entry that used to raise TypeError.
+        updated_place, _status = GeoPlace._update_from_schema(
+            place, schema, [kiosk], None, None
+        )
+
+        assert updated_place.pk == place.pk
+        roles = {
+            association.role.identifier
+            for association in updated_place.party_associations.all()  # type: ignore  # reverse FK
+        }
+        assert roles == {"role.operator"}  # brand protected, operator written
+
+    def test_tracked_field_edit_preserves_structured_entries(self):
+        """Advisor review finding 2: editing a tracked field on a place
+        that already carries structured protection must not crash (and
+        must not drop the structured entries)."""
+        place = GeoPlaceFactory(protected_fields=[{"parties": ["role.brand"]}])
+
+        place.name = "Renamed Place"
+        place.save()
+
+        place.refresh_from_db()
+        assert {"parties": ["role.brand"]} in (place.protected_fields or [])
+        # The tracker protects the language-suffixed field (name_de).
+        assert "name_de" in (place.protected_fields or [])
+
+    def test_brand_reimport_dedups_by_osm_name(self):
+        """Name-only PartyInput entries (the OSM import shape) must
+        dedup reimports by the ``extra.osm_name`` identity — the old
+        ``slug__in=[None]`` filter never matched and minted duplicate
+        places."""
+        from server.apps.geometries.schemas import (
+            GeoPlaceAmenityInput as Schema,
+        )
+
+        tourism = Category.objects.create(slug="tourism", name="Tourism")
+        Category.objects.create(slug="hotel", parent=tourism, name="Hotel")
+
+        def schema_with_brand() -> Schema:
+            return Schema(
+                name="Kiosk",
+                location=LocationSchema(lon=7.7343, lat=46.0234),
+                country_code="CH",
+                place_type_identifiers=["tourism.hotel"],
+                operating_status=OperatingStatus.OPEN,  # branch requires it
+                parties=[PartyInput(name="Volg", role="role.brand")],
+            )
+
+        place, _created = GeoPlace.update_or_create(schema=schema_with_brand())
+        reimported, _status = GeoPlace.update_or_create(schema=schema_with_brand())
+
+        assert reimported.pk == place.pk  # matched by identity, not duplicated

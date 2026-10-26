@@ -104,8 +104,13 @@ merge), admin (creation/protection UX), public API (`parties[].slug`).
   need two concurrent writers. A unique expression index can be added
   later without schema churn if this ever bites.
 - [Name adoption merges two genuinely distinct same-named parties] →
-  Mitigation: pre-existing condition (normalized-name identity always
-  collapsed them); editors split in the admin.
+  accepted: adoption is intentionally lossy — the normalized-name
+  identity has always collapsed same names (pre-parties slug identity
+  did the same); editors split genuinely distinct parties in the
+  admin. Identity uniqueness on ``extra.osm_name`` is enforced by
+  convention (single-process imports + the resolver), not by the
+  database — a unique expression index can be added without schema
+  churn if concurrent writers ever appear (advisor review finding 4).
 - [Wodore hut import still bails on coarse `is_modified`] → known
   inconsistency, pre-existing source policy, out of scope here.
 

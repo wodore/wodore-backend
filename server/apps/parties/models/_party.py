@@ -81,7 +81,10 @@ class Party(TimeStampedModel):
     # Additional attributes (JSONB, GIN-indexed) - the same pattern as
     # GeoPlace.extra / GeoPlaceSource.extra. Carries the import
     # identity ``osm_name`` (normalized source name; owner slugs ride
-    # the same key) and any future source-specific provenance.
+    # the same key) and any future source-specific provenance. NOTE:
+    # the GIN index serves containment lookups
+    # (``extra__contains={"osm_name": ...}``) — not ``->>`` equality
+    # (advisor review finding 3).
     extra = models.JSONField(
         default=dict,
         blank=True,
