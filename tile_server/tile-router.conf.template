@@ -39,26 +39,25 @@
 # runtime vars ($http_host, no braces) are left untouched.
 
 # Bunny CDN-Tag map — the purge taxonomy documented in the header
-# comment above and _work/261026_cdn_tags.md. No end anchors: query
-# strings (?v=N, ?date=…&days=…) and extensions (.json/.mlt/.webp)
-# ride along; the source delimiter is /, ., ? or end-of-URI (so bare
-# /catalog and /healthz match too).
+# comment above and _work/261026_cdn_tags.md. Tags are DERIVED from
+# the URL (regex captures referenced in the map values), not enumerated
+# per source: a new martin source or raster facade is purgeable the
+# moment it is served, no nginx edit needed. Order matters (first match
+# wins): metadata first, then the raster facades, then the generic
+# martin-source rule (otherwise /raster/… would tag as source "raster").
+# Delimiters after a name: /, ., ? or end-of-URI (bare /catalog matches;
+# query strings and extensions ride along, no end anchors). Source
+# composites (a,b) and unknown shapes default to "" — nginx add_header
+# skips empty values, i.e. untagged/purge-immune.
 map $request_uri $cdn_tile_tag {
     default                     "";
-    # Vector sources (martin postgres) — TileJSON /<src>.json matches too.
-    ~^/huts(/|\.|\?|$)               "tiles tiles:huts";
-    ~^/geoplaces_view(/|\.|\?|$)     "tiles tiles:geoplaces";
-    ~^/geoplaces(/|\.|\?|$)          "tiles tiles:geoplaces";
-    ~^/availability(/|\.|\?|$)       "tiles tiles:availability";
-    # Terrain (martin passthrough postprocessing) — 30 d TTL, expensive
-    # to regenerate: per-source tags protect them from broad purges.
-    ~^/contours(/|\.|\?|$)           "tiles tiles:contours";
-    ~^/hillshade(/|\.|\?|$)          "tiles tiles:hillshade";
-    # Raster facades (mapproxy behind /raster/tiles/<facade>/…).
-    ~^/raster/tiles/world_topo(/|\.|\?|$)      "tiles tiles:raster:world_topo";
-    ~^/raster/tiles/world_satellite(/|\.|\?|$) "tiles tiles:raster:world_satellite";
-    # Martin metadata: sprites, fonts, catalog, health.
-    ~^/(sprite|font|catalog|healthz)(/|\.|\?|$) "tiles tiles:meta";
+    # Martin metadata (sprites, fonts, catalog, health) groups under one tag.
+    ~^/(sprite|font|catalog|healthz)(/|\.|\?|$)          "tiles tiles:meta";
+    # Raster facades (mapproxy behind /raster/tiles/<facade>/…) — automatic.
+    ~^/raster/tiles/(?<cdn_facade>[a-zA-Z0-9_]+)(/|\.|\?|$)  "tiles tiles:raster:$cdn_facade";
+    # Martin sources (tables, views, functions) + their TileJSON —
+    # automatic from the first path segment.
+    ~^/(?<cdn_src>[a-zA-Z0-9_]+)(/|\.|\?|$)              "tiles tiles:$cdn_src";
 }
 
 server {
