@@ -6,7 +6,7 @@ from modeltrans.fields import TranslationField
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import IntegrityError, models, transaction
 from django.utils.translation import gettext_lazy as _
 
 from server.apps.categories.models import Category
@@ -226,10 +226,15 @@ class ExternalLink(TimeStampedModel):
         """
         Auto-generate identifier if not provided and run health check.
 
+        A unique collision on the freshly minted identifier retries
+        with a re-mint inside a savepoint (the constraint is the
+        authority — the old probe-based generation was TOCTOU-racy).
+
         Args:
             skip_health_check: If True, skip health check (useful for bulk imports)
         """
-        if not self.identifier:
+        minted_identifier = not self.identifier
+        if minted_identifier:
             self.identifier = self.generate_unique_identifier()
 
         # Typed URIs (external-link-uris): the kind follows the URL —
@@ -277,7 +282,15 @@ class ExternalLink(TimeStampedModel):
         if should_check:
             self.check_health()
 
-        super().save(*args, **kwargs)
+        for attempt in range(3):
+            try:
+                with transaction.atomic():
+                    super().save(*args, **kwargs)
+                return
+            except IntegrityError:
+                if not minted_identifier or attempt == 2:
+                    raise
+                self.identifier = self.generate_unique_identifier()
 
     def _uri_kind_schemes(self) -> set[str]:
         """Schemes the current ``uri_kind`` accepts (empty set if unset)."""
@@ -751,16 +764,14 @@ class ExternalLink(TimeStampedModel):
         }
 
     @classmethod
-    def generate_unique_identifier(cls, length: int = 6, max_attempts: int = 10) -> str:
+    def generate_unique_identifier(cls, length: int = 6) -> str:
         """
-        Generate a unique short identifier.
+        Mint a random short identifier (``[a-z0-9]``, cryptographic
+        source) — a pure function with no database access.
 
-        Args:
-            length: Length of identifier (default 6)
-            max_attempts: Maximum attempts to find unique identifier
-
-        Returns:
-            Unique identifier string
+        Uniqueness is enforced by ``save()``, which retries on the
+        unique constraint inside a savepoint (the former probe loop
+        here was TOCTOU-racy and cost one query per attempt).
 
         Examples:
             "a3f9b2", "x7k2m9", "p4t8w1"
@@ -769,20 +780,7 @@ class ExternalLink(TimeStampedModel):
         import string
 
         charset = string.ascii_lowercase + string.digits
-
-        for attempt in range(max_attempts):
-            identifier = "".join(secrets.choice(charset) for _ in range(length))
-
-            if not cls._identifier_exists(identifier):
-                return identifier
-
-        # Fallback: try longer identifier
-        return cls.generate_unique_identifier(length=length + 1)
-
-    @classmethod
-    def _identifier_exists(cls, identifier: str) -> bool:
-        """Check if an identifier already exists in the database."""
-        return cls.objects.filter(identifier=identifier).exists()
+        return "".join(secrets.choice(charset) for _ in range(length))
 
     def render_url(self, lang: str | None = None, **kwargs: str) -> str:
         """
