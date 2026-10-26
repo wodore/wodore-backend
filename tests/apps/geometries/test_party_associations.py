@@ -8,6 +8,7 @@ separate rows for multiple roles, RESTRICT on party and role FKs), and
 the schema write path that replaced the ``AmenityDetail.brand`` FK.
 """
 
+import re
 from typing import Any
 
 import pytest
@@ -21,7 +22,12 @@ from django.db import IntegrityError, transaction
 from django.db.models import RestrictedError
 
 from server.apps.categories.models import Category
-from server.apps.geometries.models import AmenityDetail, GeoPlaceParty
+from server.apps.geometries.models import (
+    AmenityDetail,
+    GeoPlace,
+    GeoPlaceParty,
+    OperatingStatus,
+)
 from server.apps.geometries.schemas import GeoPlaceAmenityInput, PartyInput
 from server.apps.parties.models import Party
 from server.core import UpdateCreateStatus
@@ -154,6 +160,70 @@ class TestAmenityWritePath:
         assert association.party.slug == "volg"
         assert association.party.name == "Volg"
 
+    def test_name_only_write_resolves_by_extra_identity(self):
+        place = GeoPlaceFactory()
+
+        _detail, _status = AmenityDetail.update_or_create(
+            place=place,
+            schema=self._schema({"name": "SAC Bern", "role": "role.operator"}),
+        )
+
+        party = Party.objects.get(extra__osm_name="sac_bern")
+        assert party.name == "SAC Bern"
+        assert place.party_associations.get().party == party  # type: ignore  # reverse FK
+
+    def test_name_only_write_mints_short_slug(self):
+        place = GeoPlaceFactory()
+
+        _detail, _status = AmenityDetail.update_or_create(
+            place=place,
+            schema=self._schema({"name": "Coop Supermarkt", "role": "role.brand"}),
+        )
+
+        party = Party.objects.get(extra__osm_name="coop_supermarkt")
+        assert len(party.slug) <= 15
+        assert re.fullmatch(r"[a-z0-9]{1,9}-[a-z0-9]{5,8}", party.slug)
+
+    def test_existing_slug_reference_wins_over_name(self):
+        """A slug match resolves the party even when the name differs."""
+        place = GeoPlaceFactory()
+        existing = Party.objects.create(slug="volg", name="Volg")
+
+        AmenityDetail.update_or_create(
+            place=place,
+            schema=self._schema(
+                {"slug": "volg", "name": "Completely Different", "role": "role.brand"}
+            ),
+        )
+
+        association = place.party_associations.get()  # type: ignore  # reverse FK
+        assert association.party == existing
+        assert Party.objects.filter(extra__osm_name="completely_different").count() == 0
+
+    def test_name_only_reuses_existing_party(self):
+        """Name-only input dedups through the key — no duplicate row."""
+        place = GeoPlaceFactory()
+        existing = Party.objects.create(name="Volg")
+
+        AmenityDetail.update_or_create(
+            place=place,
+            schema=self._schema({"name": "Volg", "role": "role.brand"}),
+        )
+
+        assert Party.objects.filter(extra__osm_name="volg").count() == 1
+        association = place.party_associations.get()  # type: ignore  # reverse FK
+        assert association.party == existing
+        assert existing.slug  # untouched minted slug
+
+    def test_slug_and_name_missing_rejected(self):
+        place = GeoPlaceFactory()
+
+        with pytest.raises(ValueError, match="slug or a name"):
+            AmenityDetail.update_or_create(
+                place=place,
+                schema=self._schema({"role": "role.brand"}),
+            )
+
     def test_parties_write_idempotent(self):
         place = GeoPlaceFactory()
         schema = self._schema({"slug": "volg", "name": "Volg", "role": "role.brand"})
@@ -171,7 +241,6 @@ class TestAmenityWritePath:
             place=place,
             schema=self._schema(
                 {
-                    "slug": "sac_bern",
                     "name": "SAC Bern",
                     "role": "role.operator",
                     "review_status": "review",
@@ -179,7 +248,7 @@ class TestAmenityWritePath:
             ),
         )
 
-        party = Party.objects.get(slug="sac_bern")
+        party = Party.objects.get(extra__osm_name="sac_bern")
         assert party.review_status == "review"
 
     def test_unknown_role_identifier_rejected(self):
@@ -214,3 +283,176 @@ class TestAmenityWritePath:
         )
 
         assert place.party_associations.count() == 0  # type: ignore  # reverse FK
+
+
+class TestRoleScopedPartyProtection:
+    """``{"parties": ["role.brand"]}`` in ``protected_fields`` shields
+    only the listed roles (OpenSpec ``party-slug-minting``); the legacy
+    flat ``"parties"`` string shields all roles."""
+
+    @staticmethod
+    def _schema(*entries: dict[str, Any]) -> GeoPlaceAmenityInput:
+        return GeoPlaceAmenityInput(
+            name="Test Place",
+            location=LocationSchema(lon=7.7343, lat=46.0234),
+            country_code="CH",
+            place_type_identifiers=[],
+            parties=[PartyInput(**entry) for entry in entries],
+        )
+
+    @staticmethod
+    def _protect(place: Any, protected_fields: list[Any]) -> None:
+        place.protected_fields = protected_fields
+        place.save(update_fields=["protected_fields"])
+
+    def test_scoped_protection_skips_only_protected_roles(self):
+        place = GeoPlaceFactory()
+        self._protect(place, [{"parties": ["role.brand"]}])
+
+        AmenityDetail.update_or_create(
+            place=place,
+            schema=self._schema(
+                {"name": "Volg", "role": "role.brand"},
+                {"name": "SAC Bern", "role": "role.operator"},
+            ),
+        )
+
+        roles = {
+            association.role.identifier
+            for association in place.party_associations.all()  # type: ignore  # reverse FK
+        }
+        assert roles == {"role.operator"}  # brand skipped, operator added
+
+    def test_scoped_protection_union_blocks_both(self):
+        place = GeoPlaceFactory()
+        self._protect(place, [{"parties": ["role.brand", "role.operator"]}])
+
+        AmenityDetail.update_or_create(
+            place=place,
+            schema=self._schema(
+                {"name": "Volg", "role": "role.brand"},
+                {"name": "SAC Bern", "role": "role.operator"},
+            ),
+        )
+
+        assert place.party_associations.count() == 0  # type: ignore  # reverse FK
+
+    def test_legacy_flat_protection_blocks_all_roles(self):
+        place = GeoPlaceFactory()
+        self._protect(place, ["parties"])
+
+        AmenityDetail.update_or_create(
+            place=place,
+            schema=self._schema(
+                {"name": "Volg", "role": "role.brand"},
+                {"name": "SAC Bern", "role": "role.operator"},
+            ),
+        )
+
+        assert place.party_associations.count() == 0  # type: ignore  # reverse FK
+
+    def test_unprotected_place_writes_all_roles(self):
+        place = GeoPlaceFactory()
+
+        AmenityDetail.update_or_create(
+            place=place,
+            schema=self._schema(
+                {"name": "Volg", "role": "role.brand"},
+                {"name": "SAC Bern", "role": "role.operator"},
+            ),
+        )
+
+        assert place.party_associations.count() == 2  # type: ignore  # reverse FK
+
+    def test_resolver_reads_only_scoped_entries(self):
+        place = GeoPlaceFactory(protected_fields=[{"parties": ["role.brand"]}])
+        assert place.protected_party_roles() == {"role.brand"}
+
+        # The flat string stays the gates' job — the resolver ignores it.
+        place.protected_fields = ["name_de", "parties"]
+        place.save(update_fields=["protected_fields"])
+        assert place.protected_party_roles() == set()
+
+    def test_geoplace_update_path_tolerates_structured_entries(self):
+        """Advisor review finding 1: the real import update path
+        (GeoPlace.update_or_create → _update_from_schema) must not
+        crash on structured protected_fields entries — the str-only
+        set() crashed with TypeError before the fix. Called directly:
+        dedup is orthogonal to the regression (note: category
+        resolution is lru_cached, so each test needs its own slugs)."""
+        from server.apps.geometries.schemas import (
+            GeoPlaceAmenityInput as Schema,
+        )
+
+        shop = Category.objects.create(slug="shop", name="Shop")
+        kiosk = Category.objects.create(slug="kiosk", parent=shop, name="Kiosk")
+
+        place = GeoPlaceFactory(
+            detail_type="amenity",
+            protected_fields=[{"parties": ["role.brand"]}],
+        )
+
+        schema = Schema(
+            name="Test Place",
+            location=LocationSchema(lon=7.7343, lat=46.0234),
+            country_code="CH",
+            place_type_identifiers=["shop.kiosk"],
+            operating_status=OperatingStatus.OPEN,  # branch requires it
+            parties=[
+                PartyInput(name="Volg", role="role.brand"),
+                PartyInput(name="SAC Bern", role="role.operator"),
+            ],
+        )
+
+        # The exact import entry that used to raise TypeError.
+        updated_place, _status = GeoPlace._update_from_schema(
+            place, schema, [kiosk], None, None
+        )
+
+        assert updated_place.pk == place.pk
+        roles = {
+            association.role.identifier
+            for association in updated_place.party_associations.all()  # type: ignore  # reverse FK
+        }
+        assert roles == {"role.operator"}  # brand protected, operator written
+
+    def test_tracked_field_edit_preserves_structured_entries(self):
+        """Advisor review finding 2: editing a tracked field on a place
+        that already carries structured protection must not crash (and
+        must not drop the structured entries)."""
+        place = GeoPlaceFactory(protected_fields=[{"parties": ["role.brand"]}])
+
+        place.name = "Renamed Place"
+        place.save()
+
+        place.refresh_from_db()
+        assert {"parties": ["role.brand"]} in (place.protected_fields or [])
+        # The tracker protects the language-suffixed field (name_de).
+        assert "name_de" in (place.protected_fields or [])
+
+    def test_brand_reimport_dedups_by_osm_name(self):
+        """Name-only PartyInput entries (the OSM import shape) must
+        dedup reimports by the ``extra.osm_name`` identity — the old
+        ``slug__in=[None]`` filter never matched and minted duplicate
+        places."""
+        from server.apps.geometries.schemas import (
+            GeoPlaceAmenityInput as Schema,
+        )
+
+        tourism = Category.objects.create(slug="tourism", name="Tourism")
+        Category.objects.create(slug="hotel", parent=tourism, name="Hotel")
+
+        def schema_with_brand() -> Schema:
+            return Schema(
+                name="Kiosk",
+                location=LocationSchema(lon=7.7343, lat=46.0234),
+                country_code="CH",
+                place_type_identifiers=["tourism.hotel"],
+                operating_status=OperatingStatus.OPEN,  # branch requires it
+                parties=[PartyInput(name="Volg", role="role.brand")],
+            )
+
+        place, _created = GeoPlace.update_or_create(schema=schema_with_brand())
+        reimported, _status = GeoPlace.update_or_create(schema=schema_with_brand())
+
+        assert reimported.pk == place.pk  # matched by identity, not duplicated

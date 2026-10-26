@@ -51,7 +51,7 @@ class PartyAdmin(ModelAdmin):
 
     inlines = (_PartyLinksInline,)
 
-    fieldsets = (
+    fieldsets = [
         (
             _("Main Information"),
             {
@@ -68,13 +68,11 @@ class PartyAdmin(ModelAdmin):
             _("Translations"),
             {
                 "classes": ["collapse"],
-                "fields": [
-                    tuple([f"name_{code}" for code in settings.LANGUAGE_CODES]),
-                ]
+                "fields": [f"name_{code}" for code in settings.LANGUAGE_CODES]
                 + [f"note_{code}" for code in settings.LANGUAGE_CODES],
             },
         ),
-    )
+    ]
 
     @override
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":

@@ -13,6 +13,7 @@ from django.contrib.gis.geos import Point
 from django.contrib.postgres.indexes import GinIndex, GistIndex
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.db.models.functions import Lower
 from django.utils.translation import gettext_lazy as _
@@ -390,6 +391,9 @@ class GeoPlace(TimeStampedModel):
         """
         # Auto-generate slug from name if not provided
         # Always use English for slug generation (for international consistency)
+        minted_slug = False
+        name_for_slug = ""
+        category_slug = fallback_slug
         if not self.slug:
             # Temporarily activate English to get English name for slug
             activate("en")
@@ -420,19 +424,32 @@ class GeoPlace(TimeStampedModel):
             self.slug = self.generate_unique_slug(
                 name_for_slug, category_slug=category_slug
             )
+            minted_slug = True
 
         # Track modifications if this is a manual edit (not an import)
         if track_modifications and self.pk:
             self._track_field_modifications()
 
-        # Retry logic for database locks
+        # Retry logic for database locks — and for the rare unique
+        # collision on a freshly minted slug (re-mint a new random
+        # suffix and retry; the savepoint keeps the surrounding
+        # transaction usable).
         import time
 
         last_exception = None
         for attempt in range(max_retries):
             try:
-                super().save(*args, **kwargs)
+                with transaction.atomic():
+                    super().save(*args, **kwargs)
                 return  # Success, exit retry loop
+            except IntegrityError as e:
+                last_exception = e
+                if minted_slug and attempt < max_retries - 1:
+                    self.slug = self.generate_unique_slug(
+                        name_for_slug, category_slug=category_slug
+                    )
+                    continue
+                raise
             except Exception as e:
                 last_exception = e
                 error_str = str(e).lower()
@@ -530,15 +547,50 @@ class GeoPlace(TimeStampedModel):
         # If any fields were modified, mark as modified and update protected_fields
         if modified_fields:
             self.is_modified = True
-            # Add to protected_fields (avoid duplicates)
-            current_protected = set(self.protected_fields)
-            current_protected.update(modified_fields)
-            self.protected_fields = list(current_protected)
+            # Add to protected_fields (avoid duplicates). Structured
+            # entries (role-scoped party protection dicts) are
+            # unhashable — carry them through untouched instead of
+            # feeding them to set() (advisor review finding 2).
+            entries = list(self.protected_fields or [])
+            protected_strings = {e for e in entries if isinstance(e, str)}
+            protected_strings.update(modified_fields)
+            structured = [e for e in entries if not isinstance(e, str)]
+            self.protected_fields = structured + sorted(protected_strings)
 
             # Auto-transition review_status from "new" to "done"
             # If it was new and we're making manual changes, we're happy with it
             if self.review_status == "new":
                 self.review_status = "done"
+
+    def protected_party_roles(self) -> set[str]:
+        """Role identifiers with role-scoped party protection.
+
+        Reads ``{"parties": ["role.brand", ...]}`` entries from
+        ``protected_fields`` (manual admin edits record the roles they
+        touched, OpenSpec ``party-slug-minting``). The legacy flat
+        ``"parties"`` string means *all* roles protected and is
+        handled by the update-path gates before this resolver runs.
+        """
+        roles: set[str] = set()
+        for entry in self.protected_fields or []:
+            if isinstance(entry, dict) and isinstance(entry.get("parties"), list):
+                roles.update(str(role) for role in entry["parties"])
+        return roles
+
+    #: Amenity-type words that carry no identity in a place name -
+    #: filtered from the minted base slug (geoplace-specific vocabulary
+    #: for the generic ``mint_short_slug`` helper).
+    SLUG_IGNORE_WORDS = [
+        "hotel",
+        "restaurant",
+        "gasthaus",
+        "gasthof",
+        "berghaus",
+        "berggasthaus",
+        "hostel",
+        "cafeteria",
+        "campground",
+    ]
 
     @classmethod
     def generate_unique_slug(
@@ -571,76 +623,14 @@ class GeoPlace(TimeStampedModel):
             "" (category: "drinkwater") → "drinkwater-ito4"
             "" (no category) → "place-vn191wad"
         """
-        import secrets
-        import string
+        from server.core.utils import mint_short_slug
 
-        from slugify import slugify as pyslugify
-
-        # 1. Fallback to category if name is empty
-        if not name or len(name.strip()) < 2:
-            base_slug = category_slug or "place"
-        else:
-            # 2. Create base slug
-            slug = pyslugify(name, word_boundary=True)
-            slug = slug.strip("-")
-
-            # 3. Filter common words (amenity types only)
-            SLUG_IGNORE = [
-                "hotel",
-                "restaurant",
-                "gasthaus",
-                "gasthof",
-                "berghaus",
-                "berggasthaus",
-                "hostel",
-                "cafeteria",
-                "campground",
-            ]
-            words = [w for w in slug.split("-") if w not in SLUG_IGNORE and len(w) >= 3]
-
-            if not words:
-                base_slug = category_slug or "place"
-            else:
-                # 4. Smart word splitting: take up to 3 words, distribute space equally
-                # Target: 9 chars for base slug (leaves room for 5-char UUID)
-                target_base_length = 9
-                selected_words = words[:3]
-                num_words = len(selected_words)
-
-                # Calculate chars per word (minimum 3 chars per word)
-                chars_per_word = max(3, target_base_length // num_words)
-
-                # Build base slug by taking chars_per_word from each word
-                word_parts = []
-                for word in selected_words:
-                    word_parts.append(word[:chars_per_word])
-
-                base_slug = "".join(word_parts)
-
-                # If we have space left, extend the first word
-                remaining = target_base_length - len(base_slug)
-                if remaining > 0 and len(selected_words[0]) > chars_per_word:
-                    # Take more chars from first word
-                    extended_first = selected_words[0][: chars_per_word + remaining]
-                    # Rebuild base_slug with extended first word
-                    base_slug = extended_first + "".join(word_parts[1:])
-
-                base_slug = base_slug[
-                    :target_base_length
-                ]  # Ensure we don't exceed target
-
-        # 5. Smart UUID sizing (min 5, max 8)
-        # Calculate available space for UUID: max_length - base_length - 1 (for hyphen)
-        available_space = max_length - len(base_slug) - 1
-        uuid_len = max(5, min(8, available_space))
-
-        # 6. Generate UUID suffix
-        charset = string.ascii_lowercase + string.digits
-        suffix = "".join(secrets.choice(charset) for _ in range(uuid_len))
-
-        # 7. Combine and enforce max length
-        slug = f"{base_slug}-{suffix}"
-        return slug[:max_length]
+        return mint_short_slug(
+            name,
+            fallback=category_slug or "place",
+            ignore_words=cls.SLUG_IGNORE_WORDS,
+            max_length=max_length,
+        )
 
     @classmethod
     def create_with_source(
@@ -909,12 +899,32 @@ class GeoPlace(TimeStampedModel):
 
             # Filter by brand party if enabled and provided
             if dedup_options.check_brand and schema.parties:
-                brand_slugs = [p.slug for p in schema.parties if p.role == "role.brand"]
-                if brand_slugs:
-                    nearby = nearby.filter(
-                        party_associations__party__slug__in=brand_slugs,
-                        party_associations__role__identifier="role.brand",
-                    )
+                brand_entries = [p for p in schema.parties if p.role == "role.brand"]
+                if brand_entries:
+                    # Slug entries reference the party by its slug;
+                    # name-only entries (OSM import) by the
+                    # ``extra.osm_name`` import identity — containment,
+                    # served by the party GIN index. A plain
+                    # ``slug__in`` over name-only entries used to filter
+                    # on ``[None]`` and never match (advisor-adjacent
+                    # regression of party-slug-minting).
+                    from server.apps.parties.models import Party
+
+                    brand_q = Q()
+                    for entry in brand_entries:
+                        if entry.slug:
+                            brand_q |= Q(
+                                party_associations__party__slug=entry.slug,
+                                party_associations__role__identifier="role.brand",
+                            )
+                        else:
+                            brand_q |= Q(
+                                party_associations__party__extra__contains={
+                                    "osm_name": Party.normalize_key(entry.name or "")
+                                },
+                                party_associations__role__identifier="role.brand",
+                            )
+                    nearby = nearby.filter(brand_q)
                 else:
                     # Brand check on but no brand entry - only match places
                     # without a brand party association
@@ -1167,8 +1177,13 @@ class GeoPlace(TimeStampedModel):
             # Don't update protected records
             return place, UpdateCreateStatus.no_change
 
-        # Determine which fields can be updated
-        protected = set(place.protected_fields)
+        # Determine which fields can be updated. String entries only —
+        # structured role-scoped party protection ({"parties": [...]} —
+        # dicts, unhashable) is resolved per role inside
+        # _write_party_associations instead (advisor review finding 1).
+        protected = {
+            entry for entry in (place.protected_fields or []) if isinstance(entry, str)
+        }
 
         # Check if we should respect protected fields
         respect_protected = False
@@ -1325,7 +1340,9 @@ class GeoPlace(TimeStampedModel):
             # place level — no detail-row write path
 
             if "parties" not in protected and schema.parties:
-                if AmenityDetail._write_party_associations(place, schema.parties):
+                if AmenityDetail._write_party_associations(
+                    place, schema.parties, respect_protection=True
+                ):
                     detail_updated = True
 
             if is_new:
