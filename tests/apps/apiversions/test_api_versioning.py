@@ -519,6 +519,9 @@ class TestCaching:
             )
             assert response.status_code == 400
             assert response["Access-Control-Allow-Origin"] == "*"
+            # Non-2xx: the CDN middleware stamps no-store (an error must
+            # never become the URL's cached variant)
+            assert response["Cache-Control"] == "no-store"
 
     @pytest.mark.django_db
     def test_sunset_410_keeps_cors_headers(
@@ -541,6 +544,8 @@ class TestCaching:
             assert response.status_code == 410
             # Anonymous /v1 GET → CDN wildcard (ApiCdnCacheMiddleware)
             assert response["Access-Control-Allow-Origin"] == "*"
+            # Non-2xx: no-store — never seed the CDN cache with an error
+            assert response["Cache-Control"] == "no-store"
 
 
 class TestVersionDiscovery:

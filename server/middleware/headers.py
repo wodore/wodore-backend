@@ -17,11 +17,13 @@ _LLMS_PATH_RE = re.compile(r"^/llms(?:\.[^/]+)?\.txt$")
 
 # Public API (/v1) CDN cache policy (see ApiCdnCacheMiddleware):
 _API_PATH_PREFIX = "/v1/"
-_API_VERSION_PATH = "/v1/version"
 #: Default TTL for anonymous public-API reads (one hour, browser+CDN).
 _PUBLIC_API_CACHE_CONTROL = "public, max-age=3600"
-#: ``/v1/version`` is the frontend's live deploy signal — cache shortly.
-_VERSION_CACHE_CONTROL = "public, max-age=300"
+#: Non-2xx anonymous /v1 responses are never cacheable: the CDN keys its
+#: cache by URL, so one cached error or redirect would become the single
+#: variant served to every client. Unstamped, the CDN zone default
+#: (30 days) would apply anyway — so stamp ``no-store`` explicitly.
+_ERROR_CACHE_CONTROL = "no-store"
 #: Authenticated API responses are personal — never cacheable anywhere.
 _PRIVATE_API_CACHE_CONTROL = "private, no-store"
 #: Origin-independent CORS allowance for anonymous public-API reads.
@@ -143,10 +145,16 @@ class ApiCdnCacheMiddleware:
       Bearer — and never credentialed: any ``Access-Control-Allow-
       Credentials`` header is stripped alongside, and the fetch spec
       forbids credentialed use of a wildcard ACAO anyway). A default
-      ``Cache-Control: public, max-age=3600`` makes the CDN honor a
-      bounded TTL instead of its zone default (30 days). ``/v1/version``
-      gets ``max-age=300`` — the frontend versions panel treats it as a
-      live signal.
+      ``Cache-Control: public, max-age=3600`` — on 2xx responses only —
+      makes the CDN honor a bounded TTL instead of its zone default
+      (30 days). Every other status (errors, redirects) is stamped
+      ``no-store`` so a cached 404/429/500 can never become the CDN's
+      variant for the URL; 304s are deliberately unstamped (a
+      revalidation owns no TTL — the stored 200 does). ``/v1/version``
+      carries its short ``max-age=300`` from the view itself
+      (``@modify(headers=cache_headers(VERSION_TTL))``, see
+      ``server/apps/utils/api.py``) — the only-if-unset rule lets the
+      view's header win over this default.
     * Authenticated requests (any method, ``Authorization`` present):
       ``Cache-Control: private, no-store`` — the safety net. If a frontend
       bug ever routes Bearer traffic through the CDN host, Bunny honors
@@ -208,21 +216,30 @@ class ApiCdnCacheMiddleware:
             # Anonymous public read: flatten CORS to the origin-independent
             # wildcard (replace, never append) so a single CDN cache variant
             # serves every browser origin, and stamp a bounded default TTL.
-            # The wildcard never rides with credentials: the fetch spec
-            # forbids credentialed use of `ACAO: *`, and any Allow-
-            # Credentials header corsheaders stamped is stripped so the
-            # combination cannot occur even if CORS_ALLOW_CREDENTIALS
-            # were ever enabled (we run after corsheaders in the response
-            # phase — this is the final word).
+            # The CORS flattening applies to EVERY status: browsers must
+            # stay able to read error bodies cross-origin, and the CDN's
+            # single variant must be origin-independent whatever the
+            # upstream outcome. The wildcard never rides with
+            # credentials: the fetch spec forbids credentialed use of
+            # `ACAO: *`, and any Allow-Credentials header corsheaders
+            # stamped is stripped so the combination cannot occur even
+            # if CORS_ALLOW_CREDENTIALS were ever enabled (we run after
+            # corsheaders in the response phase — this is the final
+            # word).
             response.headers.pop("Access-Control-Allow-Origin", None)
             response.headers.pop("Access-Control-Allow-Credentials", None)
             response["Access-Control-Allow-Origin"] = _WILDCARD_ORIGIN
-            cache_control = (
-                _VERSION_CACHE_CONTROL
-                if request.path_info == _API_VERSION_PATH
-                else _PUBLIC_API_CACHE_CONTROL
-            )
-            _set_cache_control_if_unset(response, cache_control)
+            if 200 <= response.status_code < 300:
+                _set_cache_control_if_unset(response, _PUBLIC_API_CACHE_CONTROL)
+            elif response.status_code != 304:
+                # Errors and redirects must never seed the URL-keyed CDN
+                # cache: the first cached variant is served to every
+                # client, so one 404/429/500 would masquerade as the
+                # endpoint for the full TTL. 304s are exempt — a
+                # revalidation response owns no TTL of its own (the
+                # stored 200 does) and endpoints issuing them set their
+                # own Cache-Control.
+                _set_cache_control_if_unset(response, _ERROR_CACHE_CONTROL)
 
         # Anonymous non-GET/HEAD (POST etc.): the CDN never caches those —
         # leave the response untouched.
