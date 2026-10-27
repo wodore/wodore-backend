@@ -8,6 +8,7 @@ from hut_services import (
     AnswerEnum,
     BaseService,
     HutSchema,
+    PhotosMode,
 )
 from hut_services.core.guess import guess_slug_name
 from jinja2 import Environment
@@ -424,13 +425,24 @@ class Hut(TimeStampedModel):
         return prev_id_dict.get("id") if prev_id_dict else last_id
 
     @classmethod
-    def _convert_source(cls, hut_source: HutSource) -> HutSchema:
+    def _convert_source(
+        cls, hut_source: HutSource, include_photos: PhotosMode = PhotosMode.EMBEDDED
+    ) -> HutSchema:
+        """Convert a stored source via its organization's service.
+
+        Args:
+            hut_source: The stored `HutSource` row.
+            include_photos: [`PhotosMode`][hut_services.PhotosMode] - `EMBEDDED`
+                (default) only converts photos already part of the stored source
+                data and never makes extra provider requests; `ALL` fetches
+                everything; `NONE` skips photos entirely.
+        """
         org = hut_source.organization.slug
         service: BaseService[Any] | None = SERVICES.get(org)
         if service is None:
             err_msg = f"No service for organization '{org}' found."
             raise NotImplementedError(err_msg)
-        return service.convert(hut_source)
+        return service.convert(hut_source, include_photos=include_photos)
 
     def add_organization(
         self, hut_source: HutSource, add_to_source: bool = True
@@ -451,9 +463,10 @@ class Hut(TimeStampedModel):
         cls,
         hut_source: HutSource,
         review: bool = True,
+        include_photos: PhotosMode = PhotosMode.EMBEDDED,
         _review_status: "Hut.ReviewStatusChoices | None" = None,
     ) -> "Hut":
-        hut = cls._convert_source(hut_source)
+        hut = cls._convert_source(hut_source, include_photos=include_photos)
         return cls.create_from_schema(
             hut_schema=hut,
             review=review,
@@ -643,6 +656,7 @@ class Hut(TimeStampedModel):
         hut_db: "Hut",
         hut_source: HutSource,
         review: bool = True,
+        include_photos: PhotosMode = PhotosMode.EMBEDDED,
         force_overwrite: bool = False,  # overwrite exisitng entries
         force_overwrite_include: t.Sequence[
             str
@@ -651,7 +665,7 @@ class Hut(TimeStampedModel):
         force_none: bool = False,  # force t oset value to none (overwrite is needed)
         _review_status: "Hut.ReviewStatusChoices | None" = None,
     ) -> tuple["Hut", UpdateCreateStatus]:
-        hut_schema = cls._convert_source(hut_source)
+        hut_schema = cls._convert_source(hut_source, include_photos=include_photos)
         # hut_schema = translate_hut(hut_schema)
         return cls.update_from_schema(
             hut_db=hut_db,
@@ -866,6 +880,7 @@ class Hut(TimeStampedModel):
         hut_schema: HutSchema | None = None,
         hut_source: HutSource | None = None,
         review: bool | None = None,
+        include_photos: PhotosMode = PhotosMode.EMBEDDED,
         force_overwrite: bool = False,  # overwrite exisitng entries
         force_overwrite_include: t.Sequence[
             str
@@ -911,6 +926,7 @@ class Hut(TimeStampedModel):
                     hut_db=hut_db,
                     hut_source=hut_source,
                     review=bool(review),
+                    include_photos=include_photos,
                     force_overwrite=force_overwrite,
                     force_overwrite_include=force_overwrite_include,
                     force_overwrite_exclude=force_overwrite_exclude,
@@ -935,6 +951,7 @@ class Hut(TimeStampedModel):
                 cls.create_from_source(
                     hut_source=hut_source,
                     review=bool(review),
+                    include_photos=include_photos,
                     _review_status=_review_status_create,
                 ),
                 UpdateCreateStatus.created,

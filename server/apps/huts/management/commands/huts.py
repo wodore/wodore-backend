@@ -4,6 +4,7 @@ from typing import Any, override
 
 import click
 from django_admin_runner import register_command
+from hut_services import PhotosMode
 from pydantic import ValidationError
 
 from django.conf import settings
@@ -21,6 +22,7 @@ from ...models import Hut, HutSource
 def init_huts_db(
     hut_sources: list[HutSource],
     review: bool = False,
+    include_photos: PhotosMode = PhotosMode.EMBEDDED,
     force_overwrite: bool = False,  # overwrite existing entries
     force_overwrite_include: t.Sequence[
         str
@@ -49,6 +51,7 @@ def init_huts_db(
             db_hut, created = Hut.update_or_create(
                 hut_source=hut_src,
                 review=review,
+                include_photos=include_photos,
                 force_overwrite=force_overwrite,
                 force_overwrite_include=force_overwrite_include,
                 force_overwrite_exclude=force_overwrite_exclude,
@@ -112,6 +115,7 @@ def add_huts_function(
     force_overwrite_exclude = kwargs.get("force_overwrite_exclude", [])
     review = kwargs.get("review", True)
     force_none = kwargs.get("force_none", False)
+    include_photos = PhotosMode(kwargs.get("photos", PhotosMode.EMBEDDED.value))
     total_entries = HutSource.objects.all().count()
     if total_entries == 0:
         obj.stdout.write(
@@ -138,6 +142,7 @@ def add_huts_function(
     added, updated, nochange, failed = init_huts_db(
         src_huts,
         review=review,
+        include_photos=include_photos,
         force_overwrite=force_overwrite,
         force_overwrite_include=force_overwrite_include,
         force_overwrite_exclude=force_overwrite_exclude,
@@ -192,6 +197,16 @@ class Command(CRUDCommand[Hut]):
             help="Do not change to review status (to 'review' if update, to 'new' if created)",
         )
         parser.add_argument(
+            "-p",
+            "--photos",
+            choices=[mode.value for mode in PhotosMode],
+            default=PhotosMode.EMBEDDED.value,
+            help="Which photos to import (hut-services PhotosMode): 'none' skips photos "
+            "entirely, 'embedded' (default) only converts photos already part of the "
+            "stored source data (no extra provider requests), 'all' additionally fetches "
+            "photos that need extra requests (camptocamp, wikidata, refuges.info, doc_nz)",
+        )
+        parser.add_argument(
             "-s",
             "--source",
             help="Hut source organization, only add this one, otherwise all",
@@ -239,6 +254,7 @@ class Command(CRUDCommand[Hut]):
         overwrite: bool,
         include: str,
         exclude: str,
+        photos: str,
         set_none: bool,
         delete_all: bool,
         add_all: bool,
@@ -272,6 +288,9 @@ class Command(CRUDCommand[Hut]):
                     "source": "wikidata",
                     "include": "location,photos,photos_attribution",
                     "no_review": True,
+                    # wikidata photos only exist via an extra wikicommons request
+                    # (PhotosMode.ALL) - the embedded mode would silently drop them
+                    "photos": "all",
                 },
                 {"source": "osm", "no_review": True},
                 {"source": "hrs", "no_review": True},
@@ -279,7 +298,12 @@ class Command(CRUDCommand[Hut]):
                 {"source": "tmb", "no_review": True},
                 {"source": "unico", "no_review": True},
                 {"source": "prenota", "no_review": True},
-                {"source": "refuges", "no_review": False},
+                {
+                    "source": "refuges",
+                    "no_review": False,
+                    # refuges.info photos are scraped per hut (PhotosMode.ALL)
+                    "photos": "all",
+                },
                 {
                     "source": "wodore",
                     "no_review": True,
@@ -302,6 +326,7 @@ class Command(CRUDCommand[Hut]):
             kwargs_add={
                 "review": not no_review,
                 "selected_organization": source,
+                "photos": photos,
                 "force_overwrite": overwrite,
                 "force_overwrite_include": [
                     f.strip() for f in include.split(",") if include
