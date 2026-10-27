@@ -81,11 +81,15 @@ spec (revision `0.1`) such that every `subset` document is a valid full
 MapLibre style (`"version": 8`) by construction while remaining
 renderable by a Leaflet-class engine. The whitelist SHALL cover:
 
-- **Sources**: `raster` (keys `tiles`, `maxzoom`, `tileSize`,
-  `attribution`), `vector` (inline MLT tile URLs via `tiles`, plus
-  `minzoom`, `maxzoom`, `attribution`; single `source-layer` consumed by
-  layers; no TileJSON `url` links), `geojson` (`data` URL string, with
-  `{{token}}` runtime parameter params allowed inline).
+- **Sources**: `raster` (keys `type`, `tiles`, `maxzoom`, `tileSize`,
+  `attribution`), `vector` (keys `type`, `tiles`, `minzoom`, `maxzoom`,
+  `attribution`, `encoding` — inline MLT tile URLs via `tiles` with the
+  `encoding: mlt` decoder marker; single `source-layer` consumed by
+  layers; no TileJSON `url` links), `geojson` (keys `type`, `data` —
+  `data` URL string, with `{{token}}` runtime parameter params allowed
+  inline). `encoding: mlt` is a wodore/Martin extension to the style
+  spec — the one deliberate qualification of validity-by-construction
+  for vector-MLT sources.
 - **Layers**: types `raster`, `circle`, `symbol` (sprite-pack icon +
   simple text), each carrying `id`, `source`, `source-layer`, `minzoom`,
   `maxzoom`, `paint` and `layout`; symbol layout is limited to
@@ -141,9 +145,12 @@ with `.stylrc` configuration — and NEVER in the server runtime (no
 Node.js or Rust dependency at serve time; serve-time checks stay
 structural). `subset` styles SHALL be validated by a pure-Python subset
 walker inside the Django app implementing the *Subset profile
-definition* whitelist, running at model validation (admin and factory
-saves), at seed ingest, and as a CI sweep over every `profile=subset`
-row. Structural checks (`version == 8`, sources object, `{id, type}`
+definition* whitelist, running at model validation (admin saves), at
+seed ingest — the seed upsert calls the walker directly on the prepared
+defaults before writing (`update_or_create` bypasses `clean()`; seed
+gating must be real, not CI-only) — and as a CI sweep over every
+`profile=subset` row. Structural checks (`version == 8`, sources object,
+`{id, type}`
 layers) SHALL apply to both profiles. The style-spec release validated
 against SHALL be recorded as the row's rules `version`.
 

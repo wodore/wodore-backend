@@ -136,17 +136,26 @@ Rules:
   reports what was served: existing `spec` plus new `profile`/`version`.
 - `resolution.style_endpoint_url(slug, spec)` becomes
   `style_endpoint_url(slug, spec, profile)`; `style_url` in the payload
-  carries the resolved profile exactly as it carries the resolved spec
-  today. The Martin-parity catalog resolves `profile` into `path` the
-  same way.
-- Cache correctness: `profile` joins `spec` in every ETag/cache-key input
-  the resolution feeds (collection version, per-layer detail version,
-  rendered-style cache key) — a `?profile=subset` body must never be
-  served from a `?profile=full` cache entry. (Folded into the modified
-  *Variant selection* requirement rather than the *Caching and API
-  contract* requirement: the latter is concurrently modified by the
-  active `tile-asset-versioning` change; this change's archive must
-  sequence after that one and merge, not clobber, its ETag input list.)
+  echoes the resolved profile **only when the request carried the
+  `profile` parameter** — a request without it must produce a
+  byte-identical payload to today's (#331 strict compat), so the
+  parameter is appended to `style_url` exactly when the client sent
+  it. `get_map_style` parses `profile` either way. The Martin-parity
+  catalog resolves `profile` into `path` the same way.
+- Cache correctness folds in **automatically** once `pick_variant`
+  honors the parameter — no new memo inputs. For the layers, detail,
+  slots and catalog endpoints, `etag_page` already hashes the full
+  sorted query string into the ETag and body-cache key
+  (`controller.py`), so `?profile=` gets its own identity per existing
+  machinery. For the style endpoint, `_style_cache_key` is per **row**
+  (`layer.pk`, `layer.spec`, …) — a different profile resolves to a
+  different variant row and therefore a different key. The only
+  required change is that `get_map_style` passes the parsed `profile`
+  into `pick_variant` (today it reads only `spec`). (Deliberately NOT
+  folded into the *Caching and API contract* requirement: that
+  requirement is concurrently modified by the active
+  `tile-asset-versioning` change; this change's archive must sequence
+  after that one and merge, not clobber, its ETag input list.)
 
 ### D4 — Subset profile v0.1: the strict whitelist
 
@@ -161,7 +170,7 @@ seeded raster styles carry an unused `glyphs` reference).
 | Type | Allowed keys |
 | --- | --- |
 | `raster` | `type`, `tiles`, `maxzoom`, `tileSize`, `attribution` |
-| `vector` | `type`, `tiles`, `minzoom`, `maxzoom`, `attribution` — inline MLT tile URLs (`.mlt` URL space), one `source-layer` consumed by the layers; no TileJSON `url` links (the huts overlay already moved to inline `tiles` in tile-asset-versioning) |
+| `vector` | `type`, `tiles`, `minzoom`, `maxzoom`, `attribution`, `encoding` (value `mlt`) — inline MLT tile URLs (`.mlt` URL space) with the MapLibre decoder marker, one `source-layer` consumed by the layers; no TileJSON `url` links (the huts overlay already moved to inline `tiles` in tile-asset-versioning). `encoding: mlt` is a wodore/Martin extension to the style spec — one deliberate qualification of "valid full MapLibre style by construction" for vector-MLT sources (every full renderer we ship consumes it; stock validators ignore unknown source keys) |
 | `geojson` | `type`, `data` — data URL string; `{{token}}` runtime params allowed inline (e.g. `?date={{date}}`) |
 
 `promoteId` is deliberately **not** whitelisted (clients key features by
@@ -273,8 +282,13 @@ path-precise errors (`layers[2].paint.fill-color: not in subset v0.1
 paint whitelist`). It runs:
 
 - at model validation (`MapLayer.clean()`) for `profile=subset` inline
-  styles — so the admin and the seed factory both gate,
-- at seed ingest (`map_seed` writes go through `clean()`),
+  styles — so the admin gates interactive edits,
+- **directly in the seed upsert, before the write** — `map_seed` uses
+  `MapLayer.objects.update_or_create(...)`, which bypasses `clean()`
+  entirely, so the layer upsert calls the walker (and the
+  version-required check) on the prepared defaults and fails the seed
+  loudly instead of relying on the CI sweep alone,
+- at seed ingest via the same path (the seed command is the ingest),
 - as a CI sweep over **all** `subset`-tagged rows (management command /
   system check), catching tagging drift.
 
@@ -313,6 +327,12 @@ revisit the raster-shaped `full` rows above.
   `basemaps_maplayer_profile_valid`; the data update tags the rows per D6
   (idempotent — re-running `map_seed` after the schema change converges on
   the same tags).
+- Post-migration transient: inline rows carry `version=''` until the
+  re-seed (D6 tagging) fills it, and `clean()` requires a `version` for
+  inline styles — between the migration and the re-seed, an *edit* to
+  such a row must supply `version` explicitly. One deploy step: run
+  `map_seed` immediately after `migrate` (the standard release order
+  already does).
 - API: `?profile=` is an optional additive param on layers, layer-detail,
   style and catalog; `MapLayerEntry` gains `profile` (string, resolved
   variant) and `version` (string or null — null for `style_url` rows,

@@ -19,12 +19,13 @@
       existing rows keep `profile='full'` (default) — verify the
       `style_xor_style_url` and spec/role checks are untouched
 - [ ] 1.4 `MapLayer.clean()`: `profile=subset` inline styles run the
-      subset walker (task 3.1) and report its errors on the `style`
-      field; full rows keep today's structural checks only
+      subset walker and report its errors on the `style`
+      field; full rows keep today's structural checks only (depends on
+      the walker — task 3.1 lands first)
 - [ ] 1.5 Tests: constraint rejections (duplicate `(slug, spec,
       profile)`, invalid profile value), version required-for-inline /
       optional-for-URL, subset rows rejected by `clean()` when the walker
-      fails
+      fails (walker fixtures shared with task 3.4)
 
 ## 2. Resolution: 2D walk + capability parameter
 
@@ -39,16 +40,22 @@
       pattern-validated, description naming it a *capability*, not a
       preference); omitted = current behavior (#331 compatible)
 - [ ] 2.3 `resolution.style_endpoint_url(slug, spec, profile)`; payload
-      `style_url` carries the resolved profile; Martin-parity catalog
-      (`/v1/map/catalog`) resolves `profile` into `path` the same way
+      `style_url` appends `profile=` **only when the request carried the
+      parameter** (strict #331 byte-compat when omitted); Martin-parity
+      catalog (`/v1/map/catalog`) resolves `profile` into `path` the
+      same way
 - [ ] 2.4 `MapLayerEntry` gains `profile` (served variant) and `version`
       (served variant, null for external `style_url` rows) with field
       descriptions that clearly distinguish `version` (rules version)
       from the existing `style_version` (cache token)
-- [ ] 2.5 Cache correctness: `profile` joins `spec` in the collection
-      ETag/version memo inputs, the per-layer detail version, and the
-      rendered-style cache key — a subset body can never be served from a
-      full cache entry (or vice versa)
+- [ ] 2.5 Cache correctness (mostly automatic): the layers/detail/
+      slots/catalog ETags already fold the full query string
+      (`etag_page` hashes the sorted params), and the style endpoint's
+      rendered-body cache key is per **row** (`_style_cache_key` keys on
+      `layer.pk`/`layer.spec`) — so the required change is exactly that
+      `pick_variant` (including `get_map_style`, which today reads only
+      `spec`) honors `profile`; verify with tests that the same slug at
+      two profiles yields distinct ETags and cache entries
 - [ ] 2.6 Tests: resolution chains (full client tier-first
       `full@T→subset@T→full@T′`, subset client never receives full,
       omitted profile unchanged for #331 clients); payload fields;
@@ -66,8 +73,12 @@
       with recursive descent and the `["linear"]`-only-inside-interpolate
       rule); path-precise error messages; `"{{slug}}"` token nodes pass
       through like values
-- [ ] 3.2 Wire into `MapLayer.clean()` (task 1.4) so admin and seed
-      writes both gate
+- [ ] 3.2 Wire into `MapLayer.clean()` (task 1.4) so admin edits gate —
+      AND into the `map_seed` layer upsert **directly, before the
+      write**: the seed uses `MapLayer.objects.update_or_create(...)`,
+      which bypasses `clean()` entirely, so the upsert calls the walker
+      (plus the version-required check) on the prepared defaults and
+      fails the seed loudly (seed gating must be real, not CI-only)
 - [ ] 3.3 CI sweep: management command (or system check) running the
       walker over **every** `profile=subset` row + the seed fixtures;
       nonzero exit on any violation (catches tagging drift)
@@ -82,10 +93,13 @@
 ## 4. Full-profile validation (styl, CI-only)
 
 - [ ] 4.1 CI job validating every inline `full` seed/fixture style with
-      `styl` — GitHub Action `navidnabavi/styl@v0.0.4` (or `cargo
-      install` in the runner) over `map_seed` fixtures +
-      `server/apps/basemaps/fixtures/styles/`; `.stylrc` config committed
-      (no Node, no server-runtime dependency)
+      `styl` — a light job that installs the styl binary (one-line
+      `install.sh` from github.com/navidnabavi/styl, or the GitHub
+      Action `navidnabavi/styl@v0.0.4`), dumps the seed's inline styles
+      to files (management command over the `map_seed` definitions — no
+      DB rows needed) and runs `styl validate` (E-code spec violations)
+      over the dump plus `server/apps/basemaps/fixtures/styles/`;
+      `.stylrc` config committed (no Node, no server-runtime dependency)
 - [ ] 4.2 Record the style-spec release styl validates against as the
       seeded `version` of `full` inline rows (e.g. `26.4.4`);
       document in the field help text that `version` travels with
@@ -115,7 +129,9 @@
       with `version` = the styl-validated style-spec release (inline
       styles) or empty (`style_url` rows) — the D6 table is the source of
       truth; data migration for deployed DBs (idempotent, converges with
-      re-run `map_seed`)
+      re-run `map_seed`; the seed upsert keys on `(slug, spec, profile)`
+      and the migration retags in place so no orphan `full` twins
+      remain — depends on the walker, task 3.1)
 - [ ] 6.2 Update `map_seed` idempotency tests: second run reports no
       changes (profile/version are part of the update_or_create
       defaults)

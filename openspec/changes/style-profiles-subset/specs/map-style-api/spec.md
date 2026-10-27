@@ -19,10 +19,16 @@ and a `subset` variant is a valid full MapLibre style by construction.
 tier chain, and SHALL NEVER serve a `full` variant (a slug without any
 `subset` variant is absent from collections and answers 404 on the
 detail/style endpoints). The response SHALL report the served `profile`
-and the served variant's rules `version`. The resolved `profile` SHALL be
-part of every ETag and cache-key input that the resolved `spec` is part
-of, so a `?profile=subset` body is never served from a `?profile=full`
-cache entry or vice versa.
+and the served variant's rules `version`. `style_url` SHALL append the
+`profile=` query parameter **only when the request carried the
+parameter** — a request without `profile` produces byte-identical
+payloads to today's. Cache identity SHALL fold the parameter in
+automatically: the collection/detail endpoints' ETags hash every query
+parameter (`etag_page`), and the style endpoint's rendered-body cache
+is keyed per resolved row — honoring `profile` in variant resolution
+(including the style endpoint, which today reads only `spec`) is what
+keeps a `?profile=subset` body from ever being served from a
+`?profile=full` cache entry or vice versa.
 
 #### Scenario: Medium degrades cheaply
 
@@ -47,7 +53,10 @@ cache entry or vice versa.
 #### Scenario: Omitted profile is today's behavior
 
 - **WHEN** a client sends no `profile` parameter
-- **THEN** resolution walks the tier chain profile-agnostically and the response is identical to today's (plus the additive `profile`/`version` fields reporting what was served)
+- **THEN** resolution walks the tier chain profile-agnostically and the
+  response is byte-identical to today's, except the additive
+  `profile`/`version` entry fields reporting what was served (`style_url`
+  gains no `profile=` parameter)
 
 #### Scenario: Profile folds into cache identity
 
@@ -60,8 +69,10 @@ The system SHALL serve `GET /v1/map/layers` returning the generic
 collection envelope `{"data": [...], "count": N}` with exactly one
 **resolved** layer per slug — no
 `variants[]` array, no inline style documents. Each entry SHALL carry the
-served `spec` (fallback applied) and a `style_url` resolved for that spec
-and the served profile, the layer's `modified` (ISO 8601) as the content
+served `spec` (fallback applied) and a `style_url` resolved for that
+spec — appending the `profile=` query parameter only when the request
+carried `profile` (omitted stays byte-identical to today) — the layer's
+`modified` (ISO 8601) as the content
 version, the resolved variant's `profile` (`full` | `subset`) and rules
 `version` (style-spec release or subset revision; null for externally
 authored `style_url` rows — distinct from the `style_version` cache
