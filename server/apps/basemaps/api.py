@@ -56,6 +56,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from datetime import datetime
 from http import HTTPStatus
 from typing import Any
 
@@ -303,19 +304,20 @@ def catalog_version() -> str:
             stamp = agg["m"].isoformat() if agg.get("m") else "-"
             parts.append(f"{model.__name__}:{agg['c']}:{stamp}")
         # The entries embed per-layer style version tokens whose inputs
-        # (registry epoch, asset versions, serve date) are not table
-        # aggregates — fold them in, or a cached catalog body (24 h keyed
-        # by this ETag, plus 60 s at the edge) would keep handing out
-        # stale tokens. A stale token never yields wrong content — the
+        # (registry epoch, asset versions, volatile-kind clocks) are not
+        # table aggregates — fold them in, or a cached catalog body (24 h
+        # keyed by this ETag, plus 60 s at the edge) would keep handing
+        # out stale tokens. A stale token never yields wrong content — the
         # style endpoint verifies it before stamping immutable — but it
         # would silently lose the immutable edge caching.
-        from django.utils import timezone as _tz
-
         from .tile_assets import asset_versions, version_digest
 
         parts.append(f"epoch:{_style_bodies_epoch()}")
         parts.append(f"assets:{version_digest(asset_versions())}")
-        parts.append(f"date:{_tz.localdate().isoformat()}")
+        for kind in MapParameter.Kind:
+            served = kind.serve_time_value()
+            if served is not None:
+                parts.append(f"serve_time:{kind}:{served}")
         return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
 
     return str(
@@ -369,7 +371,7 @@ def style_version(
     *,
     versions: dict[str, Any] | None = None,
     epoch: str | None = None,
-    today: str | None = None,
+    now: datetime | None = None,
 ) -> str | None:
     """URL version token for one layer's style documents (``?v=``).
 
@@ -377,22 +379,22 @@ def style_version(
     version. The token is the identity of the style CONTENT behind
     the URL: it folds every input the rendered bodies depend on (the
     row's ``modified``, the asset-version groups the style consumes,
-    the env-registry epoch) and, for layers with runtime date
-    parameters, the serve date (the resolved body bakes today's date,
-    so its immutable URL must rotate daily — this over-rotates the
-    tokenized twin, which is harmless: a fresh URL, never a stale
-    body). Mode-agnostic on purpose: tokenized and resolved variants
-    share the token — they are distinct URLs (``mode`` query) with
-    distinct cache entries, re-keyed by the same inputs.
+    the env-registry epoch) and, for layers with volatile parameters
+    (``Kind.is_volatile`` — e.g. the runtime ``date``), the serve-time
+    value: the resolved body bakes it in, so its immutable URL must
+    rotate on the value's clock (this over-rotates the tokenized twin,
+    which is harmless: a fresh URL, never a stale body). Mode-agnostic
+    on purpose: tokenized and resolved variants share the token —
+    they are distinct URLs (``mode`` query) with distinct cache
+    entries, re-keyed by the same inputs.
 
     Must be computed from the same memoized ``versions``/``epoch`` as
     the body render in a request (see ``get_map_style``) so an
     immutable stamp can never pair a token with a body it does not
-    describe.
+    describe. ``now`` pins the volatile clocks for tests.
     """
     if layer.style is None:
         return None
-    from django.utils import timezone as _tz
 
     from .tile_assets import asset_versions, consumed_versions, version_digest
 
@@ -401,12 +403,9 @@ def style_version(
     if epoch is None:
         epoch = _style_bodies_epoch()
     consumed = consumed_versions(layer.style, versions)
-    has_date_param = any(
-        link.parameter.kind == MapParameter.Kind.date
-        for link in layer.layer_parameters.all()
-    )
-    if has_date_param:
-        consumed = {**consumed, "date": today or _tz.localdate().isoformat()}
+    serve_time = layer.serve_time_parameter_values(now)
+    if serve_time:
+        consumed = {**consumed, **serve_time}
     source = "|".join(
         (
             str(layer.pk),
@@ -843,17 +842,14 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
     # before resolution (absolutization preserves paths).
     consumed = consumed_versions(layer.style, versions)
     if not tokenized:
-        # Resolved mode bakes a serve-time default into runtime date
-        # params — the cache key and ETag must rotate with the date, or
-        # a cached body would serve yesterday's date until any other
+        # Resolved mode bakes serve-time values into volatile
+        # parameters — the cache key and ETag must rotate with them, or
+        # a cached body would serve yesterday's value until any other
         # key input changes (bounded now by STYLE_CACHE_TTL, but a day
-        # of stale dates is still wrong).
-        from django.utils import timezone as _tz
-
-        if layer.layer_parameters.filter(
-            parameter__kind=MapParameter.Kind.date
-        ).exists():
-            consumed = {**consumed, "date": _tz.localdate().isoformat()}
+        # of stale values is still wrong).
+        serve_time = layer.serve_time_parameter_values()
+        if serve_time:
+            consumed = {**consumed, **serve_time}
     digest = version_digest(consumed)
 
     # One epoch per request: a registry edit landing between the cache
@@ -888,17 +884,14 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
 
     api_url = request.build_absolute_uri("/").rstrip("/")
     values = layer.authored_parameter_values()
-    # Runtime date params get a serve-time default so the resolved style
+    # Volatile parameters get a serve-time value so the resolved style
     # stays fetchable (spec: 'Runtime-scope parameters … resolved mode
     # substitutes the declared default').
-    from django.utils import timezone
-
     for link in layer.layer_parameters.select_related("parameter"):
-        if (
-            link.parameter.kind == MapParameter.Kind.date
-            and values.get(link.parameter.slug) is None
-        ):
-            values[link.parameter.slug] = timezone.localdate().isoformat()
+        if values.get(link.parameter.slug) is None:
+            served = link.parameter.serve_time_value()
+            if served is not None:
+                values[link.parameter.slug] = served
 
     payload = resolve_style(
         layer.style,

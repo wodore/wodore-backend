@@ -102,6 +102,27 @@ class TestMapLayerConstraints:
             layer.clean()
 
 
+def test_kind_volatility_lives_on_the_kind_registry():
+    """Serve-time volatility is declared on ``MapParameter.Kind``.
+
+    Single source of truth for "this kind rotates cache keys on its own
+    clock": the serve-time value injection, the render-cache digest and
+    the ``?v=`` style-version token all read it (``date`` → local date,
+    i.e. daily). A new volatile kind is a one-line change here.
+    """
+    from datetime import UTC, datetime
+
+    from server.apps.basemaps.models import MapParameter
+
+    volatile = [kind for kind in MapParameter.Kind if kind.is_volatile]
+    assert volatile == [MapParameter.Kind.date]
+    assert (
+        MapParameter.Kind.date.serve_time_value(datetime(2026, 1, 2, 12, tzinfo=UTC))
+        == "2026-01-02"
+    )
+    assert MapParameter.Kind.number.serve_time_value() is None
+
+
 @pytest.mark.django_db
 class TestParameterValidation:
     def test_opacity_curve_ascending_stops(self):
@@ -728,21 +749,23 @@ class TestStyleVersioning:
         cache.clear()
         assert self._entry(client, "huts")["style_version"] != bumped
 
-    def test_token_folds_serve_date_for_runtime_date_layers(self):
-        """Resolved bodies bake today's date — their URL must rotate daily."""
+    def test_token_folds_volatile_serve_time_values(self):
+        """Volatile parameters rotate the token on their own clock (date: daily)."""
+        from datetime import UTC, datetime
+
         from server.apps.basemaps.api import style_version
 
         self._seed()
         huts = MapLayer.objects.filter(slug="huts").first()
         topo = MapLayer.objects.filter(slug="world-topo", spec="high").first()
         assert huts is not None and topo is not None
-        # huts has the runtime ``date`` parameter; world-topo has none.
-        yesterday = style_version(huts, today="2026-01-01")
-        today = style_version(huts, today="2026-01-02")
-        assert yesterday != today
-        assert style_version(topo, today="2026-01-01") == style_version(
-            topo, today="2026-01-02"
-        )
+        # huts has the volatile ``date`` parameter; world-topo has none.
+        day_one = style_version(huts, now=datetime(2026, 1, 1, 12, tzinfo=UTC))
+        day_two = style_version(huts, now=datetime(2026, 1, 2, 12, tzinfo=UTC))
+        assert day_one != day_two
+        assert style_version(
+            topo, now=datetime(2026, 1, 1, 12, tzinfo=UTC)
+        ) == style_version(topo, now=datetime(2026, 1, 2, 12, tzinfo=UTC))
 
     def test_versioned_fetch_is_immutable(self):
         """Matching ``?v=`` → 1 y immutable + strong ETag (requirement b)."""
