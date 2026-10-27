@@ -4,6 +4,7 @@ from typing import Any, override
 
 import click
 from django_admin_runner import register_command
+from pydantic import ValidationError
 
 from django.conf import settings
 from django.core.management import call_command
@@ -65,15 +66,22 @@ def init_huts_db(
                 click.secho("not changed", dim=True)
             else:
                 click.secho("unknown state", fg="red")
-        except IntegrityError as e:
-            err_msg = str(e).split("\n")[0]
+        except ValidationError as e:
+            # Stale or broken stored ``source_data`` re-validated in
+            # ``BaseService.convert()`` (e.g. BACKEND-DJANGO-Q: a stored
+            # ``card.img: null``) must fail this hut only — not abort the
+            # whole import run after every other org/hut already processed.
+            err_loc = "; ".join(
+                ".".join(str(part) for part in err["loc"]) for err in e.errors()[:3]
+            )
             click.secho(
-                f" {'(' + hut_src.organization.slug + '-' + hut_src.source_id + ')':<20} E: {err_msg}",
+                f" {'(' + hut_src.organization.slug + '-' + hut_src.source_id + ')':<20}"
+                f" E: {e.title}: {err_loc}",
                 dim=True,
             )
             failed_huts += 1
             fails.append(hut_src)
-        except NotImplementedError as e:
+        except (IntegrityError, NotImplementedError) as e:
             err_msg = str(e).split("\n")[0]
             click.secho(
                 f" {'(' + hut_src.organization.slug + '-' + hut_src.source_id + ')':<20} E: {err_msg}",
