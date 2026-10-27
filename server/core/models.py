@@ -5,7 +5,7 @@ This module provides base model classes that should be used throughout the proje
 """
 
 import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.db import models
 from django.utils.timezone import now
@@ -69,5 +69,19 @@ class TimeStampedModel(models.Model):
     created = _AutoCreatedField(_("created"))
     modified = _AutoLastModifiedField(_("modified"))
 
-    class Meta:
-        abstract = True
+    # The canonical pyright/Django nested-Meta false positive: the base
+    # declares ``abstract = True`` (mandatory for Django abstract bases)
+    # and pyright-family checkers then demand every subclass's own
+    # ``class Meta`` be structurally assignable to it. Under type
+    # checking, expose an empty Meta instead — an empty class imposes no
+    # structural requirements, so every subclass Meta is a compatible
+    # override. Runtime (and pyrefly, the project's authority) is
+    # unchanged: the real abstract Meta is what Django's metaclass reads.
+    if TYPE_CHECKING:
+
+        class Meta:
+            pass
+    else:
+
+        class Meta:
+            abstract = True
