@@ -42,12 +42,12 @@ by the ETag — version-keyed, self-busting):
   it as ``?v=``), and a style request whose ``?v=`` matches the
   current token is served ``Cache-Control: public, max-age=31536000,
   immutable`` — the token folds every content input (row ``modified``,
-  consumed asset versions, env-registry epoch, serve date for
-  runtime-date layers), so the URL changes exactly when the content
-  does. This is safe wherever the cache key includes the query
-  string — the hub CDN zone provably does. A stale or missing
-  ``?v=`` keeps the catalog policy: current, correct content, just
-  revalidated; the current token is always visible in the
+  consumed asset versions, env-registry epoch, the serve-time values
+  of volatile parameters — ``Kind.is_volatile``), so the URL changes
+  exactly when the content does. This is safe wherever the cache key
+  includes the query string — the hub CDN zone provably does. A stale
+  or missing ``?v=`` keeps the catalog policy: current, correct
+  content, just revalidated; the current token is always visible in the
   ``X-Map-Style-Version`` response header.
 """
 
@@ -326,11 +326,32 @@ def catalog_version() -> str:
 
 
 def _layer_version(slug: str) -> str:
-    """Version input for one layer detail response (any variant row)."""
+    """Version input for one layer detail response (any variant row).
+
+    The detail body embeds the layer's ``style_version`` token, whose
+    inputs (registry epoch, asset versions, volatile clocks) are not
+    row attributes — fold them in like ``catalog_version`` does, or
+    the 24 h ETag-keyed body cache would keep serving a stale token
+    after an asset publish or registry edit (stale token ⇒ missed
+    immutable caching, never wrong content: the style endpoint
+    verifies the token before stamping immutable).
+    """
     from django.db.models import Max
 
+    from .tile_assets import asset_versions, version_digest
+
     modified = MapLayer.objects.filter(slug=slug).aggregate(m=Max("modified")).get("m")
-    return modified.isoformat() if modified else ""
+    parts = [modified.isoformat() if modified else ""]
+    parts.append(_style_bodies_epoch())
+    parts.append(version_digest(asset_versions()))
+    serve_time: dict[str, str] = {}
+    for layer in MapLayer.objects.filter(slug=slug).prefetch_related(
+        "layer_parameters__parameter"
+    ):
+        serve_time.update(layer.serve_time_parameter_values())
+    if serve_time:
+        parts.append(repr(sorted(serve_time.items())))
+    return "|".join(parts)
 
 
 def _collection_version(_request: HttpRequest, **_: Any) -> str:

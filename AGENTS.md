@@ -469,6 +469,13 @@ parameters (scalar + `opacity-curve` widgets, `{{token}}` nodes in styles),
 category links, coverage. Serving: `GET /v1/map/catalog` (dmr) and
 `GET /v1/map/styles/{slug}.json` (plain view; resolved by default,
 `?mode=tokenized` for customizing clients, `?spec=` variant selection).
+Caching: layer entries carry `style_version` (also appended to
+`style_url` as `&v=`) — a matching `?v=` on any style URL serves
+immutable (1 y); `layers`/`slots` and unversioned style fetches allow
+the CDN edge 60 s of staleness (`s-maxage=60`, browsers revalidate).
+Volatile-parameter clocks (runtime `date`) live on `MapParameter.Kind`
+(`is_volatile`) and rotate every derived cache key — see
+`server/apps/basemaps/api.py` module docstring.
 `map_seed` provisions the frontend-parity catalog (run after category seeds).
 `martin_sync` no longer syncs styles — Martin serves tiles/sprites/fonts only;
 styles are served by the API from the registry.

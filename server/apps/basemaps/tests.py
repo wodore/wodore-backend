@@ -844,6 +844,47 @@ class TestStyleVersioning:
             assert revalidated.status_code == 304
             assert revalidated.headers["Cache-Control"] == self.EDGE
 
+    def test_detail_etag_rotates_with_token_inputs(self):
+        """The detail body embeds the token — its ETag rotates with it.
+
+        Without the fold-ins (epoch, asset versions, volatile clocks)
+        the 24 h ETag-keyed body cache would keep serving a stale
+        ``style_version`` after an asset publish: missed immutable
+        caching, never wrong content.
+        """
+        from django.core.cache import cache
+
+        from server.apps.basemaps.models import TileAssetVersion
+
+        self._seed()
+        client = Client()
+        first = client.get("/v1/map/layers/huts", {"lang": "en"})
+        etag = first.headers["ETag"]
+        # Unchanged → 304 …
+        assert (
+            client.get(
+                "/v1/map/layers/huts",
+                {"lang": "en"},
+                HTTP_IF_NONE_MATCH=etag,
+            ).status_code
+            == 304
+        )
+        # … but an asset publish the style consumes re-keys the token
+        # and therefore the detail ETag (no row edit involved).
+        TileAssetVersion.objects.update_or_create(
+            key="sprites",
+            defaults={
+                "version": "detailprobe1",
+                "origin": TileAssetVersion.Origin.martin_sync,
+            },
+        )
+        cache.clear()
+        again = client.get(
+            "/v1/map/layers/huts", {"lang": "en"}, HTTP_IF_NONE_MATCH=etag
+        )
+        assert again.status_code == 200  # ETag rotated → fresh token
+        assert again.json()["style_version"] != first.json()["style_version"]
+
 
 # ── Env-gated layers ─────────────────────────────────────────────
 
