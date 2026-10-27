@@ -47,40 +47,63 @@ def untag_profiles(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('basemaps', '0011_rewrite_tile_origin_tokens'),
-        ('categories', '0021_category_created_category_modified_and_more'),
-        ('licenses', '0011_alter_license_slug'),
-        ('organizations', '0022_content_hash_logo_files'),
+        ("basemaps", "0011_rewrite_tile_origin_tokens"),
+        ("categories", "0021_category_created_category_modified_and_more"),
+        ("licenses", "0011_alter_license_slug"),
+        ("organizations", "0022_content_hash_logo_files"),
     ]
 
     operations = [
         migrations.AlterModelOptions(
-            name='maplayer',
-            options={'ordering': ('role', 'order', 'slug', 'spec', 'profile'), 'verbose_name': 'Map layer', 'verbose_name_plural': 'Map layers'},
+            name="maplayer",
+            options={
+                "ordering": ("role", "order", "slug", "spec", "profile"),
+                "verbose_name": "Map layer",
+                "verbose_name_plural": "Map layers",
+            },
         ),
         migrations.RemoveConstraint(
-            model_name='maplayer',
-            name='unique_slug_spec_variant',
+            model_name="maplayer",
+            name="unique_slug_spec_variant",
         ),
         migrations.AddField(
-            model_name='maplayer',
-            name='profile',
-            field=models.CharField(choices=[('full', 'full (complete MapLibre style)'), ('subset', 'subset (Leaflet-class renderable)')], db_index=True, default='full', help_text="Format richness of this variant's style document: 'full' is a complete MapLibre style; 'subset' is restricted to the subset whitelist — valid as a full style by construction, renderable by Leaflet-class engines.", max_length=10),
+            model_name="maplayer",
+            name="profile",
+            field=models.CharField(
+                choices=[
+                    ("full", "full (complete MapLibre style)"),
+                    ("subset", "subset (Leaflet-class renderable)"),
+                ],
+                db_index=True,
+                default="full",
+                help_text="Format richness of this variant's style document: 'full' is a complete MapLibre style; 'subset' is restricted to the subset whitelist — valid as a full style by construction, renderable by Leaflet-class engines.",
+                max_length=10,
+            ),
         ),
         migrations.AddField(
-            model_name='maplayer',
-            name='version',
-            field=models.CharField(blank=True, default='', help_text='Rules this document was validated against — the maplibre style-spec release for full rows (e.g. \'26.4.4\'), the subset revision for subset rows (e.g. \'0.1\'); empty for externally authored style_url rows. Not to be confused with the style document\'s internal "version": 8 field.', max_length=16),
+            model_name="maplayer",
+            name="version",
+            field=models.CharField(
+                blank=True,
+                default="",
+                help_text="Rules this document was validated against — the maplibre style-spec release for full rows (e.g. '26.4.4'), the subset revision for subset rows (e.g. '0.1'); empty for externally authored style_url rows. Not to be confused with the style document's internal \"version\": 8 field.",
+                max_length=16,
+            ),
         ),
         migrations.AddConstraint(
-            model_name='maplayer',
-            constraint=models.UniqueConstraint(fields=('slug', 'spec', 'profile'), name='unique_slug_spec_profile_variant'),
+            model_name="maplayer",
+            constraint=models.UniqueConstraint(
+                fields=("slug", "spec", "profile"),
+                name="unique_slug_spec_profile_variant",
+            ),
         ),
         migrations.AddConstraint(
-            model_name='maplayer',
-            constraint=models.CheckConstraint(condition=models.Q(('profile__in', ['full', 'subset'])), name='basemaps_maplayer_profile_valid'),
+            model_name="maplayer",
+            constraint=models.CheckConstraint(
+                condition=models.Q(("profile__in", ["full", "subset"])),
+                name="basemaps_maplayer_profile_valid",
+            ),
         ),
         migrations.RunPython(tag_profiles, untag_profiles),
     ]
