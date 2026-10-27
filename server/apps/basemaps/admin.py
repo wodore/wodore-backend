@@ -165,6 +165,7 @@ class MapLayerAdmin(ModelAdmin):
     list_display = (
         "slug",
         "spec",
+        "profile",
         "role",
         "order",
         "show",
@@ -173,7 +174,7 @@ class MapLayerAdmin(ModelAdmin):
         "style_kind",
         "slot",
     )
-    list_filter = ("role", "spec", "is_active", "show", "slot")
+    list_filter = ("role", "spec", "profile", "is_active", "show", "slot")
     list_editable = ("order",)
     search_fields = ("slug", "name", "description")
     autocomplete_fields = (
@@ -195,6 +196,8 @@ class MapLayerAdmin(ModelAdmin):
                 "fields": (
                     "slug",
                     "spec",
+                    "profile",
+                    "version",
                     "role",
                     "name",
                     "description",

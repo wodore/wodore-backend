@@ -1,0 +1,9 @@
+# styl — MapLibre GL style linter/validator/formatter (github.com/navidnabavi/styl)
+#
+# CI (`.github/workflows/test.yml`, map-style-spec job) gates on
+# `styl validate` (E-code spec violations) over the dumped inline seed
+# styles and the authored fixtures. W-code lint findings stay at their
+# defaults and are not part of the gate (openspec
+# style-profiles-subset D6).
+[format]
+indent = 2

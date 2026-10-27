@@ -237,6 +237,46 @@ jobs:
   # (the same generator `yarn gen:api` uses) and typecheck a smoke
   # consumer. Catches schema shapes that break the wodore_v1.d.ts build
   # before the frontend repo notices.
+  # -- Map style spec validation (styl) -------------------------------
+  # Full-profile inline seed styles are validated against the real
+  # MapLibre style spec by the styl Rust binary (github.com/navidnabavi/styl)
+  # -- the reference implementation is a Node toolchain, so the server
+  # runtime never depends on it; only CI does (style-profiles-subset D6).
+  # Subset rows are walker-owned and gated in the test suite (pure
+  # Python, no external binary).
+  map-style-spec:
+    name: Map style spec (styl)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v6
+
+      - name: Set up the environment
+        uses: ./.github/actions/setup-venv
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install styl
+        run: |
+          curl -fsSL \
+            https://raw.githubusercontent.com/navidnabavi/styl/main/install.sh \
+            | bash
+          styl --version
+
+      - name: Dump seed styles
+        run: uv run python manage.py dump_map_styles --out .style-dump
+
+      - name: Validate styles (E-code spec violations)
+        run: |
+          shopt -s nullglob
+          fail=0
+          for f in .style-dump/*.json \
+                   server/apps/basemaps/fixtures/styles/*.json; do
+            echo "styl validate $f"
+            styl validate "$f" || fail=1
+          done
+          exit $fail
+
   api-types:
     runs-on: ubuntu-latest
     needs: tests
