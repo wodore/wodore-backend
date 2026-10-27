@@ -27,11 +27,28 @@ unresolved variables): a style URL with a literal token would be
 unusable upstream, so the layer is simply not part of this
 deployment's catalog. Registry edits flip availability at runtime.
 
-All evolving documents share one caching contract: a strong ETag and
-``Cache-Control: public, max-age=0, must-revalidate, stale-if-error``
-— one online reload is guaranteed fresh, offline serves the stored
-copy. Rendered bodies are cached keyed by the ETag (version-keyed ⇒
-self-busting); there is no time-based page cache.
+All evolving documents share one caching contract built on strong
+ETags and no time-based page cache (rendered bodies are cached keyed
+by the ETag — version-keyed, self-busting):
+
+* **Catalog documents** (``layers``, ``slots``): ``Cache-Control:
+  public, max-age=0, must-revalidate, s-maxage=60, stale-if-error`` —
+  browsers revalidate on every use (one online reload is guaranteed
+  fresh; offline serves the stored copy), while the CDN edge may
+  serve its copy for up to 60 s. The edge hit rate is what removes
+  the map-boot round trips; a catalog ≤ 60 s stale is safe.
+* **Style documents** are additionally version-keyed: every layer
+  entry exposes ``style_version`` (and ``style_url`` already carries
+  it as ``?v=``), and a style request whose ``?v=`` matches the
+  current token is served ``Cache-Control: public, max-age=31536000,
+  immutable`` — the token folds every content input (row ``modified``,
+  consumed asset versions, env-registry epoch, the serve-time values
+  of volatile parameters — ``Kind.is_volatile``), so the URL changes
+  exactly when the content does. This is safe wherever the cache key
+  includes the query string — the hub CDN zone provably does. A stale
+  or missing ``?v=`` keeps the catalog policy: current, correct
+  content, just revalidated; the current token is always visible in the
+  ``X-Map-Style-Version`` response header.
 """
 
 from __future__ import annotations
@@ -39,6 +56,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from datetime import datetime
 from http import HTTPStatus
 from typing import Any
 
@@ -50,8 +68,11 @@ from pydantic import Field
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 
 from server.apps.api.controller import (
+    IMMUTABLE_CACHE_CONTROL,
     REVALIDATE_CACHE_CONTROL,
+    REVALIDATE_EDGE_CACHE_CONTROL,
     ApiController,
+    edge_revalidate_headers,
     etag_page,
     raise_not_found,
     revalidate_headers,
@@ -151,6 +172,17 @@ class MapLayerEntry(pydantic.BaseModel):
     # Served variant (spec-scoped)
     spec: str = ""
     style_url: str = ""
+    style_version: str | None = Field(
+        None,
+        description=(
+            "Version token of this layer's style documents. Append it as "
+            "``v`` to ANY style URL variant of this layer "
+            "(``/v1/map/styles/{slug}.json?spec=…&mode=tokenized&v=<token>``) "
+            "to receive an immutable, CDN- and browser-cacheable response. "
+            "``style_url`` already carries it for the served variant. "
+            "null for externally authored styles (nothing to version)."
+        ),
+    )
     modified: str = ""
 
     # Rich metadata (spec-scoped; resolved row)
@@ -271,6 +303,21 @@ def catalog_version() -> str:
                 agg["m"] = model.objects.aggregate(m=Max("modified"))["m"]
             stamp = agg["m"].isoformat() if agg.get("m") else "-"
             parts.append(f"{model.__name__}:{agg['c']}:{stamp}")
+        # The entries embed per-layer style version tokens whose inputs
+        # (registry epoch, asset versions, volatile-kind clocks) are not
+        # table aggregates — fold them in, or a cached catalog body (24 h
+        # keyed by this ETag, plus 60 s at the edge) would keep handing
+        # out stale tokens. A stale token never yields wrong content — the
+        # style endpoint verifies it before stamping immutable — but it
+        # would silently lose the immutable edge caching.
+        from .tile_assets import asset_versions, version_digest
+
+        parts.append(f"epoch:{_style_bodies_epoch()}")
+        parts.append(f"assets:{version_digest(asset_versions())}")
+        for kind in MapParameter.Kind:
+            served = kind.serve_time_value()
+            if served is not None:
+                parts.append(f"serve_time:{kind}:{served}")
         return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
 
     return str(
@@ -279,35 +326,122 @@ def catalog_version() -> str:
 
 
 def _layer_version(slug: str) -> str:
-    """Version input for one layer detail response (any variant row)."""
+    """Version input for one layer detail response (any variant row).
+
+    The detail body embeds the layer's ``style_version`` token, whose
+    inputs (registry epoch, asset versions, volatile clocks) are not
+    row attributes — fold them in like ``catalog_version`` does, or
+    the 24 h ETag-keyed body cache would keep serving a stale token
+    after an asset publish or registry edit (stale token ⇒ missed
+    immutable caching, never wrong content: the style endpoint
+    verifies the token before stamping immutable).
+    """
     from django.db.models import Max
 
+    from .tile_assets import asset_versions, version_digest
+
     modified = MapLayer.objects.filter(slug=slug).aggregate(m=Max("modified")).get("m")
-    return modified.isoformat() if modified else ""
+    parts = [modified.isoformat() if modified else ""]
+    parts.append(_style_bodies_epoch())
+    parts.append(version_digest(asset_versions()))
+    serve_time: dict[str, str] = {}
+    for layer in MapLayer.objects.filter(slug=slug).prefetch_related(
+        "layer_parameters__parameter"
+    ):
+        serve_time.update(layer.serve_time_parameter_values())
+    if serve_time:
+        parts.append(repr(sorted(serve_time.items())))
+    return "|".join(parts)
 
 
-def _collection_version(request: HttpRequest, **_: Any) -> str:
+def _collection_version(_request: HttpRequest, **_: Any) -> str:
     return catalog_version()
 
 
-def _detail_version(request: HttpRequest, slug: str = "", **_: Any) -> str:
+def _detail_version(_request: HttpRequest, slug: str = "", **_: Any) -> str:
     return _layer_version(slug)
 
 
 # ── Resolved-layer serialization ──────────────────────────────────────
 
 
-def _style_url(layer: MapLayer) -> str:
-    """Serving URL of the resolved variant's style document."""
+def _style_url(layer: MapLayer, token: str | None = None) -> str:
+    """Serving URL of the resolved variant's style document.
+
+    Owned styles carry the layer's ``?v=`` version token (immutable,
+    self-busting at every cache that keys the query string — the hub
+    CDN zone provably does); externally authored styles resolve env
+    tokens server-side and stay unversioned (their target is not ours
+    to version).
+    """
     if layer.style is not None:
-        return style_endpoint_url(layer.slug, layer.spec)
+        url = style_endpoint_url(layer.slug, layer.spec)
+        if token is None:
+            token = style_version(layer)
+        if token:
+            separator = "&" if "?" in url else "?"
+            url = f"{url}{separator}v={token}"
+        return url
     # Externally authored: resolve env tokens server-side (API keys
     # live in backend config and never reach the client as params).
     return substitute_env(layer.style_url or "")
 
 
+def style_version(
+    layer: MapLayer,
+    *,
+    versions: dict[str, Any] | None = None,
+    epoch: str | None = None,
+    now: datetime | None = None,
+) -> str | None:
+    """URL version token for one layer's style documents (``?v=``).
+
+    ``None`` for externally authored styles — nothing of ours to
+    version. The token is the identity of the style CONTENT behind
+    the URL: it folds every input the rendered bodies depend on (the
+    row's ``modified``, the asset-version groups the style consumes,
+    the env-registry epoch) and, for layers with volatile parameters
+    (``Kind.is_volatile`` — e.g. the runtime ``date``), the serve-time
+    value: the resolved body bakes it in, so its immutable URL must
+    rotate on the value's clock (this over-rotates the tokenized twin,
+    which is harmless: a fresh URL, never a stale body). Mode-agnostic
+    on purpose: tokenized and resolved variants share the token —
+    they are distinct URLs (``mode`` query) with distinct cache
+    entries, re-keyed by the same inputs.
+
+    Must be computed from the same memoized ``versions``/``epoch`` as
+    the body render in a request (see ``get_map_style``) so an
+    immutable stamp can never pair a token with a body it does not
+    describe. ``now`` pins the volatile clocks for tests.
+    """
+    if layer.style is None:
+        return None
+
+    from .tile_assets import asset_versions, consumed_versions, version_digest
+
+    if versions is None:
+        versions = asset_versions()
+    if epoch is None:
+        epoch = _style_bodies_epoch()
+    consumed = consumed_versions(layer.style, versions)
+    serve_time = layer.serve_time_parameter_values(now)
+    if serve_time:
+        consumed = {**consumed, **serve_time}
+    source = "|".join(
+        (
+            str(layer.pk),
+            layer.spec,
+            layer.modified.isoformat(),
+            version_digest(consumed),
+            epoch,
+        )
+    )
+    return hashlib.sha256(source.encode()).hexdigest()[:12]
+
+
 def _resolved_entry(layer: MapLayer) -> dict[str, Any]:
     """One resolved layer as a wire-shaped dict (i18n active)."""
+    token = style_version(layer)
     coverage_bbox = None
     if layer.coverage and layer.coverage.bbox:
         coverage_bbox = list(layer.coverage.bbox)
@@ -367,7 +501,8 @@ def _resolved_entry(layer: MapLayer) -> dict[str, Any]:
         "fallback": layer.fallback.slug if layer.fallback else None,
         "preview_url": layer.preview_url or None,
         "spec": layer.spec,
-        "style_url": _style_url(layer),
+        "style_url": _style_url(layer, token),
+        "style_version": token,
         "modified": layer.modified.isoformat(),
         "config": layer.config,
         "interaction": layer.interaction,
@@ -569,7 +704,7 @@ class MapLayersController(ApiController):
 
     @modify(
         operation_id="map-layers",
-        headers=revalidate_headers(),
+        headers=edge_revalidate_headers(),
     )
     def get(
         self,
@@ -626,7 +761,7 @@ class MapSlotsController(ApiController):
 
     @modify(
         operation_id="map-slots",
-        headers=revalidate_headers(),
+        headers=edge_revalidate_headers(),
     )
     def get(
         self,
@@ -674,8 +809,12 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
     """Serve a layer style — resolved by default, tokenized opt-in.
 
     ``?spec=`` picks the device-tier variant (exact → explicit chain →
-    single — the response reports the served spec); ``?v=`` is a
-    free-form cache buster the client may append.
+    single — the response reports the served spec); ``?v=`` with the
+    layer's current ``style_version`` token (from ``/v1/map/layers`` or
+    this endpoint's ``X-Map-Style-Version`` header) serves the response
+    as immutable — the token changes exactly when the content does.
+    A stale or missing token still serves the current content, under
+    the bounded-staleness catalog policy.
     """
     layer = MapLayer.pick_variant(
         MapLayer.objects.filter(slug=slug), request.GET.get("spec")
@@ -724,23 +863,32 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
     # before resolution (absolutization preserves paths).
     consumed = consumed_versions(layer.style, versions)
     if not tokenized:
-        # Resolved mode bakes a serve-time default into runtime date
-        # params — the cache key and ETag must rotate with the date, or
-        # a cached body would serve yesterday's date until any other
+        # Resolved mode bakes serve-time values into volatile
+        # parameters — the cache key and ETag must rotate with them, or
+        # a cached body would serve yesterday's value until any other
         # key input changes (bounded now by STYLE_CACHE_TTL, but a day
-        # of stale dates is still wrong).
-        from django.utils import timezone as _tz
-
-        if layer.layer_parameters.filter(
-            parameter__kind=MapParameter.Kind.date
-        ).exists():
-            consumed = {**consumed, "date": _tz.localdate().isoformat()}
+        # of stale values is still wrong).
+        serve_time = layer.serve_time_parameter_values()
+        if serve_time:
+            consumed = {**consumed, **serve_time}
     digest = version_digest(consumed)
 
     # One epoch per request: a registry edit landing between the cache
     # lookup and the store must not file a pre-edit body under the
     # post-edit epoch (it would survive the full STYLE_CACHE_TTL).
     epoch = _style_bodies_epoch()
+    # Version-keyed immutability: a ``?v=`` matching the current token
+    # makes the URL self-busting (token folds every content input), so
+    # every cache may treat the response as permanently fresh. Computed
+    # from the same request-pinned ``versions``/``epoch`` as the body
+    # below — an immutable stamp can never pair a token with a body it
+    # does not describe. Stale/missing token: current content under the
+    # bounded-staleness catalog policy (s-maxage=60), never immutable.
+    token = style_version(layer, versions=versions, epoch=epoch)
+    versioned = token is not None and request.GET.get("v") == token
+    cache_control = (
+        IMMUTABLE_CACHE_CONTROL if versioned else REVALIDATE_EDGE_CACHE_CONTROL
+    )
     cached = _style_cache_get(layer, tokenized, digest, epoch=epoch)
     if cached is not None:
         body, etag = cached
@@ -749,23 +897,22 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
         else:
             response = HttpResponse(body, content_type="application/json")
         response.headers["ETag"] = etag
-        response.headers["Cache-Control"] = REVALIDATE_CACHE_CONTROL
+        response.headers["Cache-Control"] = cache_control
         response.headers["X-Map-Spec"] = layer.spec
+        if token:
+            response.headers["X-Map-Style-Version"] = token
         return response
 
     api_url = request.build_absolute_uri("/").rstrip("/")
     values = layer.authored_parameter_values()
-    # Runtime date params get a serve-time default so the resolved style
+    # Volatile parameters get a serve-time value so the resolved style
     # stays fetchable (spec: 'Runtime-scope parameters … resolved mode
     # substitutes the declared default').
-    from django.utils import timezone
-
     for link in layer.layer_parameters.select_related("parameter"):
-        if (
-            link.parameter.kind == MapParameter.Kind.date
-            and values.get(link.parameter.slug) is None
-        ):
-            values[link.parameter.slug] = timezone.localdate().isoformat()
+        if values.get(link.parameter.slug) is None:
+            served = link.parameter.serve_time_value()
+            if served is not None:
+                values[link.parameter.slug] = served
 
     payload = resolve_style(
         layer.style,
@@ -801,8 +948,10 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
         response = HttpResponse(body, content_type="application/json")
         _style_cache_set(layer, tokenized, body, etag, digest, epoch=epoch)
     response.headers["ETag"] = etag
-    response.headers["Cache-Control"] = REVALIDATE_CACHE_CONTROL
+    response.headers["Cache-Control"] = cache_control
     response.headers["X-Map-Spec"] = layer.spec
+    if token:
+        response.headers["X-Map-Style-Version"] = token
     return response
 
 
@@ -910,7 +1059,9 @@ def _style_error(detail: str, status: HTTPStatus) -> HttpResponse:
 paths: list[Any] = [
     path(
         "layers",
-        etag_page(_collection_version)(MapLayersController.as_view()),
+        etag_page(_collection_version, REVALIDATE_EDGE_CACHE_CONTROL)(
+            MapLayersController.as_view()
+        ),
         name="map-layers",
     ),
     path(
@@ -920,7 +1071,9 @@ paths: list[Any] = [
     ),
     path(
         "slots",
-        etag_page(_collection_version)(MapSlotsController.as_view()),
+        etag_page(_collection_version, REVALIDATE_EDGE_CACHE_CONTROL)(
+            MapSlotsController.as_view()
+        ),
         name="map-slots",
     ),
     path(

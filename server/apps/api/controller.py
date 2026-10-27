@@ -220,10 +220,33 @@ REDIRECT_CACHE_CONTROL = "public, max-age=86400, stale-while-revalidate=604800"
 #: offline/origin-down may serve the stored copy for a day.
 REVALIDATE_CACHE_CONTROL = "public, max-age=0, must-revalidate, stale-if-error=604800"
 
+#: Bounded-staleness caching for evolving documents that gate client
+#: boot (map catalog): browsers revalidate on every use (correctness
+#: first — an online reload is always fresh), while shared caches (the
+#: Bunny edge) may serve their copy for up to 60 s without revalidating.
+#: The edge hit rate is what removes the boot round trips; a catalog
+#: ≤ 60 s stale is safe by contract. Bunny honors ``s-maxage`` over
+#: ``max-age`` for shared caching — and degrades safely to no edge
+#: caching if a zone ever ignored it (``max-age=0`` remains).
+REVALIDATE_EDGE_CACHE_CONTROL = (
+    "public, max-age=0, must-revalidate, s-maxage=60, stale-if-error=604800"
+)
+
+#: Versioned immutable documents (map styles keyed by a ``?v=`` token
+#: derived from the content): the token — and therefore the URL —
+#: changes whenever the content does, so every cache may treat the
+#: response as permanently fresh without ever revalidating it.
+IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable, stale-if-error=604800"
+
 
 def revalidate_headers() -> dict[str, NewHeader]:
     """``Cache-Control`` header spec for ``@modify(headers=...)``."""
     return {"Cache-Control": NewHeader(value=REVALIDATE_CACHE_CONTROL)}
+
+
+def edge_revalidate_headers() -> dict[str, NewHeader]:
+    """``Cache-Control`` spec for catalog documents edge-cached 60 s."""
+    return {"Cache-Control": NewHeader(value=REVALIDATE_EDGE_CACHE_CONTROL)}
 
 
 def _etag_matches(header: str, etag: str) -> bool:

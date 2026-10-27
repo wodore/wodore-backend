@@ -17,6 +17,7 @@ Key invariants enforced here:
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 from typing import TYPE_CHECKING, ClassVar, override
 
 from modeltrans.fields import TranslationField
@@ -24,6 +25,7 @@ from modeltrans.fields import TranslationField
 from django.contrib.gis.db.models import MultiPolygonField
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from server.core.models import TimeStampedModel
@@ -97,6 +99,29 @@ class MapParameter(TimeStampedModel):
         date = "date", _("date (runtime)")
         opacity_curve = "opacity-curve", _("opacity curve (widget)")
 
+        @property
+        def is_volatile(self) -> bool:
+            """Serve-time (volatile) kinds rotate cache keys on their own clock."""
+            return self.serve_time_value() is not None
+
+        def serve_time_value(self, now: datetime | None = None) -> str | None:
+            """Current value for serve-time (volatile) kinds, else ``None``.
+
+            Volatile kinds bake a serve-time value into resolved style
+            documents on their own clock — ``date`` resolves to the
+            local date, so those bodies rotate daily. Every cache key
+            derived from the content (render-cache digest, ``?v=``
+            style-version token, catalog version) must fold this value
+            in, or a cached/immutably-served document could outlive its
+            content. ``now`` pins the clock for tests.
+            """
+            if self == self.date:
+                current = (
+                    timezone.localdate(now) if now is not None else timezone.localdate()
+                )
+                return current.isoformat()
+            return None
+
     KINDS_SCALAR = (
         Kind.number,
         Kind.color,
@@ -105,6 +130,16 @@ class MapParameter(TimeStampedModel):
         Kind.string,
         Kind.date,
     )
+
+    def serve_time_value(self, now: datetime | None = None) -> str | None:
+        """Current serve-time value if this parameter is volatile, else None.
+
+        Delegates to the kind's serve-time clock
+        (:meth:`MapParameter.Kind.serve_time_value`). The field attribute
+        is typed ``str`` (django-stubs), so the choices member is
+        recovered first — no suppression needed.
+        """
+        return MapParameter.Kind(self.kind).serve_time_value(now)
 
     slug = models.CharField(
         max_length=100,
@@ -789,6 +824,25 @@ class MapLayer(TimeStampedModel):
             values[link.parameter.slug] = (
                 link.default_override if link.default_override is not None else default
             )
+        return values
+
+    def serve_time_parameter_values(
+        self, now: datetime | None = None
+    ) -> dict[str, str]:
+        """Serve-time values of this layer's volatile parameters.
+
+        The one place that knows a layer's style documents rotate on a
+        clock (``Kind.is_volatile``): the serve-time default injection,
+        the render-cache digest and the ``?v=`` style-version token all
+        consume this, so they cannot drift apart (see api.py). Empty for
+        layers without volatile parameters. ``now`` pins the clock for
+        tests.
+        """
+        values: dict[str, str] = {}
+        for link in self.layer_parameters.all():
+            served = link.parameter.serve_time_value(now)
+            if served is not None:
+                values[link.parameter.slug] = served
         return values
 
     @classmethod
