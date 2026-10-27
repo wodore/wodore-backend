@@ -444,8 +444,16 @@ class Image(TimeStampedModel):
             # could not get image type
             return None
         else:
-            msg = f"Unsupported image type: {image_format}"
-            raise ValueError(msg)
+            # Unknown-but-identified formats (BMP, GIF, TIFF, ...): a hut
+            # page only needs to ship one odd photo to abort a whole import
+            # run — skip the photo instead (same semantics as the
+            # unidentified-content branch above).
+            logging.warning(
+                "Unsupported image type %s from %s. Skipping this one.",
+                image_format,
+                photo_schema.raw_url,
+            )
+            return None
 
         image_uuid = uuid.uuid4()
         image_file = ContentFile(

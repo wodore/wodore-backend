@@ -494,6 +494,13 @@ class Hut(TimeStampedModel):
         _name = primary_name(i18n_fields)
         if _name:
             i18n_fields["name"] = _name
+            # modeltrans' patched ``Hut(...)`` init rejects passing the base
+            # field together with its default-language virtual field
+            # ("name" + "name_de"). ``primary_name`` prefers 'de', so when a
+            # source provides German names (hhde, gipfelbuch, sac, ...) the
+            # pair is identical — drop the virtual field instead of crashing
+            # the whole hut import on the first German-only source.
+            i18n_fields.pop(f"name_{settings.LANGUAGE_CODE}", None)
         main_language = detect_main_language(
             {code: i18n_fields.get(f"name_{code}") for code in settings.LANGUAGE_CODES}
         )
