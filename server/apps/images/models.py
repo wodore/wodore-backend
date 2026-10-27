@@ -444,8 +444,15 @@ class Image(TimeStampedModel):
             # could not get image type
             return None
         else:
-            msg = f"Unsupported image type: {image_format}"
-            raise ValueError(msg)
+            # e.g. BMP/GIF/TIFF served by an upstream hut source: not in the
+            # format set Imagor serves for us — skip the photo instead of
+            # crashing the whole hut sync run (BACKEND-DJANGO-P).
+            logging.warning(
+                "Unsupported image type %s from %s. Skipping this one.",
+                image_format,
+                photo_schema.raw_url,
+            )
+            return None
 
         image_uuid = uuid.uuid4()
         image_file = ContentFile(
