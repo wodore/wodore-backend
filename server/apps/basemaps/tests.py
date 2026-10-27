@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, NoReturn, override
 
@@ -341,7 +342,12 @@ class TestSeed:
         mtk = MapLayer.objects.get(
             slug="wd-outdoor-base-mtk-hill", spec=MapLayer.Spec.high
         )
-        fixture = json.loads((FIXTURES / "wd-outdoor-base-mtk-hill.json").read_text())
+        try:
+            fixture = json.loads(
+                (FIXTURES / "wd-outdoor-base-mtk-hill.json").read_text()
+            )
+        except (OSError, ValueError) as exc:
+            pytest.fail(f"mtk style fixture unreadable: {exc}")
         assert mtk.style == fixture
 
     def test_resolved_style_no_root_relative_no_tokens(self):
@@ -413,9 +419,19 @@ class TestLayersEndpoint:
             assert entry["style_url"]
             assert entry["modified"]  # ISO timestamp — client cache key
         mtk = entries["wd-outdoor-base-mtk-hill"]
-        assert (
-            mtk["style_url"] == "/v1/map/styles/wd-outdoor-base-mtk-hill.json?spec=high"
+        # Versioned style URL: the spec variant plus the layer's ``?v=``
+        # version token (immutable at any query-keying cache) — the bare
+        # token rides ``style_version`` for client-built variant URLs.
+        assert mtk["style_url"].startswith(
+            "/v1/map/styles/wd-outdoor-base-mtk-hill.json?spec=high&v="
         )
+        assert re.fullmatch(r"[0-9a-f]{12}", mtk["style_version"])
+        # Externally authored styles have nothing of ours to version
+        # (maptiler-hybrid is env-gated in tests; swisstopo-light's
+        # default high variant is external and always present).
+        swisstopo = entries["ch-swisstopo-light"]
+        assert swisstopo["style_version"] is None
+        assert "?v=" not in swisstopo["style_url"]
 
     def test_role_and_show_filters(self):
         self._seed()
@@ -446,7 +462,9 @@ class TestLayersEndpoint:
         # Variants: high (vector) + low (raster) — medium must degrade
         # to the cheaper tier, never upgrade to high.
         assert entry["spec"] == "low"
-        assert entry["style_url"].endswith("?spec=low")
+        assert entry["style_url"].startswith(
+            "/v1/map/styles/ch-swisstopo-light.json?spec=low&v="
+        )
 
     def test_sparse_fieldsets(self):
         self._seed()
@@ -487,12 +505,10 @@ class TestLayersEndpoint:
         self._seed()
         payload = Client().get("/v1/map/catalog", {"lang": "en", "spec": "low"}).json()
         # ch-swisstopo-light HAS a low variant → path carries ?spec=low
-        assert payload["styles"]["ch-swisstopo-light"]["path"].endswith("?spec=low")
+        assert "?spec=low&v=" in payload["styles"]["ch-swisstopo-light"]["path"]
         # wd-outdoor-base-mtk only exists at high → low falls through the
         # chain to the single variant, whose spec is reported
-        assert payload["styles"]["wd-outdoor-base-mtk-hill"]["path"].endswith(
-            "?spec=high"
-        )
+        assert "?spec=high&v=" in payload["styles"]["wd-outdoor-base-mtk-hill"]["path"]
 
     def test_slots_endpoint(self):
         self._seed()
@@ -630,6 +646,180 @@ class TestStyleEndpoint:
         response = client.get("/v1/map/styles/nope.json")
         assert response.status_code == 404
         assert response.json()["code"] == "not_found"
+
+
+@pytest.mark.django_db
+class TestStyleVersioning:
+    """``?v=`` version-keyed immutable style URLs + catalog edge TTLs.
+
+    Contract under test (map-endpoint-cache):
+
+    * every owned layer entry carries a ``style_version`` token that
+      changes whenever the style content changes (row edit, consumed
+      asset-version publish, env-registry edit, serve date for
+      runtime-date layers),
+    * a style fetch whose ``?v=`` matches the current token is served
+      immutable (1 y) — any variant (``spec``/``mode``) can carry it,
+    * stale/missing ``?v=`` serves the current content under the
+      bounded-staleness catalog policy, never immutable,
+    * ``layers``/``slots`` allow the CDN edge 60 s of staleness
+      (``s-maxage=60``) while browsers keep revalidating.
+    """
+
+    #: The exact wire values — the frontend adaptation is built
+    #: against these (see the PR description for the full contract).
+    IMMUTABLE = "public, max-age=31536000, immutable, stale-if-error=604800"
+    EDGE = "public, max-age=0, must-revalidate, s-maxage=60, stale-if-error=604800"
+
+    def _seed(self):
+        from django.core.management import call_command
+
+        call_command("map_seed", verbosity=0)
+
+    def _entry(self, client: Client, slug: str, **params: str) -> dict[str, Any]:
+        payload = client.get("/v1/map/layers", {"lang": "en", **params}).json()
+        return next(layer for layer in payload["data"] if layer["slug"] == slug)
+
+    def test_token_rotates_on_row_edit(self):
+        """A row edit re-keys the versioned URL (requirement a)."""
+        from datetime import timedelta
+
+        from django.core.cache import cache
+
+        self._seed()
+        client = Client()
+        first = self._entry(client, "world-topo")
+        token = first["style_version"]
+        assert token
+        # update() bypasses the NOW()-pinned modified trigger, so the
+        # timestamp provably moves inside one test transaction.
+        MapLayer.objects.filter(slug="world-topo", spec=first["spec"]).update(
+            modified=timezone.now() + timedelta(seconds=1)
+        )
+        cache.clear()
+        second = self._entry(client, "world-topo")
+        assert second["style_version"] != token
+        assert second["style_url"] != first["style_url"]
+
+    def test_token_rotates_on_asset_publish_and_env_edit(self):
+        """Content changes without row edits re-key the URL (requirement a)."""
+        from django.core.cache import cache
+
+        from server.apps.basemaps.models import TileAssetVersion
+
+        self._seed()
+        client = Client()
+        token = self._entry(client, "huts")["style_version"]
+        # Published asset version the style consumes (huts ships
+        # sprites) — the token folds the consumed asset-version digest.
+        TileAssetVersion.objects.update_or_create(
+            key="sprites",
+            defaults={
+                "version": "probe0001",
+                "origin": TileAssetVersion.Origin.martin_sync,
+            },
+        )
+        cache.clear()
+        bumped = self._entry(client, "huts")["style_version"]
+        assert bumped != token
+        # Any env-registry edit re-keys the render epoch — registry
+        # values are baked into rendered bodies.
+        _env_row("WODORE_VERSION_PROBE")
+        cache.clear()
+        assert self._entry(client, "huts")["style_version"] != bumped
+
+    def test_token_folds_serve_date_for_runtime_date_layers(self):
+        """Resolved bodies bake today's date — their URL must rotate daily."""
+        from server.apps.basemaps.api import style_version
+
+        self._seed()
+        huts = MapLayer.objects.filter(slug="huts").first()
+        topo = MapLayer.objects.filter(slug="world-topo", spec="high").first()
+        assert huts is not None and topo is not None
+        # huts has the runtime ``date`` parameter; world-topo has none.
+        yesterday = style_version(huts, today="2026-01-01")
+        today = style_version(huts, today="2026-01-02")
+        assert yesterday != today
+        assert style_version(topo, today="2026-01-01") == style_version(
+            topo, today="2026-01-02"
+        )
+
+    def test_versioned_fetch_is_immutable(self):
+        """Matching ``?v=`` → 1 y immutable + strong ETag (requirement b)."""
+        self._seed()
+        client = Client()
+        entry = self._entry(client, "huts")
+        token = entry["style_version"]
+        response = client.get(entry["style_url"])
+        assert response.status_code == 200
+        assert response.headers["Cache-Control"] == self.IMMUTABLE
+        assert response.headers["X-Map-Style-Version"] == token
+        etag = response.headers["ETag"]
+        assert etag
+        # Conditional revalidation keeps the immutable policy (the
+        # stored 200 owns the TTL; the 304 re-asserts it).
+        again = client.get(entry["style_url"], HTTP_IF_NONE_MATCH=etag)
+        assert again.status_code == 304
+        assert again.headers["Cache-Control"] == self.IMMUTABLE
+
+    def test_unversioned_fetch_keeps_old_semantics(self):
+        """No ``?v=`` → current content, bounded-staleness policy (req c)."""
+        self._seed()
+        client = Client()
+        versioned = client.get("/v1/map/styles/huts.json")
+        assert versioned.status_code == 200
+        assert versioned.headers["Cache-Control"] == self.EDGE
+        assert versioned.json()["metadata"]["wd:served_spec"]
+        assert versioned.headers["X-Map-Style-Version"]
+        # Stale token: current content, never immutable — and the fresh
+        # token is visible so a client can re-key.
+        stale = client.get("/v1/map/styles/huts.json", {"v": "000000000000"})
+        assert stale.status_code == 200
+        assert stale.headers["Cache-Control"] == self.EDGE
+        assert re.fullmatch(r"[0-9a-f]{12}", stale.headers["X-Map-Style-Version"])
+        assert stale.json() == versioned.json()
+
+    def test_spec_and_mode_variants_get_distinct_immutable_urls(self):
+        """Each variant is its own cache entry, all immutable (req e)."""
+        self._seed()
+        client = Client()
+        low = self._entry(client, "ch-swisstopo-light", spec="low")
+        plain = self._entry(client, "ch-swisstopo-light")
+        # The default catalog resolves the external high variant…
+        assert plain["style_version"] is None
+        assert plain["style_url"].startswith("https://vectortiles.geo.admin.ch/")
+        # …while ``?spec=low`` resolves the owned raster variant with a
+        # versioned style URL — same slug, distinct documents, distinct
+        # URLs (and no shared version key to confuse them).
+        assert low["style_url"].startswith(
+            "/v1/map/styles/ch-swisstopo-light.json?spec=low&v="
+        )
+        # The client-built variant dimension (``mode``) appends to the
+        # versioned URL and stays immutable — huts has parameters, so
+        # the tokenized document is genuinely different content.
+        huts = self._entry(client, "huts")
+        resolved = client.get(huts["style_url"])
+        tokenized = client.get(huts["style_url"] + "&mode=tokenized")
+        assert resolved.status_code == tokenized.status_code == 200
+        assert resolved.headers["Cache-Control"] == self.IMMUTABLE
+        assert tokenized.headers["Cache-Control"] == self.IMMUTABLE
+        assert "{{huts.icon_scale}}" in tokenized.content.decode()
+        assert "{{huts.icon_scale}}" not in resolved.content.decode()
+
+    def test_layers_and_slots_edge_ttl(self):
+        """Catalog documents: 60 s edge staleness, browser revalidation."""
+        self._seed()
+        client = Client()
+        for url in ("/v1/map/layers", "/v1/map/slots"):
+            response = client.get(url, {"lang": "en"})
+            assert response.status_code == 200
+            assert response.headers["Cache-Control"] == self.EDGE
+            assert response.headers["ETag"]
+            revalidated = client.get(
+                url, {"lang": "en"}, HTTP_IF_NONE_MATCH=response.headers["ETag"]
+            )
+            assert revalidated.status_code == 304
+            assert revalidated.headers["Cache-Control"] == self.EDGE
 
 
 # ── Env-gated layers ─────────────────────────────────────────────
