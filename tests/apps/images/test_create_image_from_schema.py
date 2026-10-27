@@ -41,14 +41,14 @@ def _photo(url: str) -> PhotoSchema:
 
 
 def _patch_download(monkeypatch: pytest.MonkeyPatch, content: bytes) -> None:
-    monkeypatch.setattr(
-        "server.apps.images.models.requests.get",
-        lambda *args, **kwargs: _FakeResponse(content),
-    )
+    def _fake_get(*args: object, **kwargs: object) -> _FakeResponse:
+        return _FakeResponse(content)
+
+    monkeypatch.setattr("server.apps.images.models.requests.get", _fake_get)
 
 
 class TestCreateImageFromSchemaFormats:
-    def test_bmp_content_is_skipped(self, monkeypatch):
+    def test_bmp_content_is_skipped(self, monkeypatch: pytest.MonkeyPatch) -> None:
         buf = io.BytesIO()
         PILImage.new("RGB", (1, 1)).save(buf, format="BMP")
         _patch_download(monkeypatch, buf.getvalue())
@@ -61,7 +61,7 @@ class TestCreateImageFromSchemaFormats:
         )
         assert img is None
 
-    def test_gif_content_is_skipped(self, monkeypatch):
+    def test_gif_content_is_skipped(self, monkeypatch: pytest.MonkeyPatch) -> None:
         buf = io.BytesIO()
         PILImage.new("RGB", (1, 1)).save(buf, format="GIF")
         _patch_download(monkeypatch, buf.getvalue())
@@ -74,7 +74,7 @@ class TestCreateImageFromSchemaFormats:
         )
         assert img is None
 
-    def test_jpeg_content_still_imports(self, monkeypatch):
+    def test_jpeg_content_still_imports(self, monkeypatch: pytest.MonkeyPatch) -> None:
         buf = io.BytesIO()
         PILImage.new("RGB", (1, 1)).save(buf, format="JPEG")
         _patch_download(monkeypatch, buf.getvalue())
