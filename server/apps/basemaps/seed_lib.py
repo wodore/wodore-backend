@@ -723,6 +723,9 @@ HUTS_STYLE_SUBSET: dict[str, Any] = _huts_style_subset()
 
 # ── Transport stops overlay (external geojson) ────────────────────────
 
+#: The FULL profile (WebGL/MapLibre sessions) stays UNCLUSTERED
+#: (owner decision 2026-10): plain source, one circle layer — the
+#: pre-clustering document.
 TRANSPORT_STYLE: dict[str, Any] = {
     "version": 8,
     "name": "transport-stops",
@@ -815,26 +818,159 @@ TRANSPORT_STYLE: dict[str, Any] = {
 }
 
 
+#: Clustering for the SUBSET twin only (no-WebGL fallback sessions):
+#: the fallback renders the ~26k-stop list client-side and needs
+#: aggregated bubbles at the far zooms — the WebGL/MapLibre profile
+#: never reads these keys (owner decision 2026-10: clustering is a
+#: subset-profile feature).
+#:
+#: Clusters on z5/z6 only — MapLibre/supercluster semantics render
+#: clusters AT clusterMaxZoom and raw points above it, so 6 unclusters
+#: everything from z7 (verified empirically against the bav_list
+#: geojson: 26k stops, clusters at z5/z6, 0 at z7+).
+_TRANSPORT_CLUSTER_SOURCE: dict[str, Any] = {
+    "cluster": True,
+    "clusterMaxZoom": 6,
+    # Minimal aggregation ("almost as small as none cluster"): the
+    # smallest sensible screen radius — clusters form essentially only
+    # where stops (nearly) coincide (station platforms, interchange
+    # stops) or the far zoom squeezes the country together; the default
+    # radius (50) would lump whole regions.
+    "clusterRadius": 20,
+    # "Grouped by" category breakdown: per-cluster counts of the
+    # categories the unclustered paint colors on (train first, then
+    # bus, else other). Declared in MapLibre's expression form; the
+    # fallback's supercluster mirror computes the same counts via its
+    # map/reduce functions (supercluster 8 has no expression
+    # evaluator — the semantics are mirrored, not evaluated).
+    "clusterProperties": {
+        "train_count": [
+            "+",
+            ["case", ["in", "train", ["get", "types"]], 1, 0],
+        ],
+        "bus_count": [
+            "+",
+            ["case", ["in", "bus", ["get", "types"]], 1, 0],
+        ],
+    },
+}
+
+#: Cluster render layers for the subset twin (z5–z6 only: minzoom 5 =
+#: the overlay floor, maxzoom 7 is exclusive so z7+ is raw — the
+#: bounds mirror clusterMaxZoom = 6 belt-and-braces). Colored by the
+#: same category semantics as the stops (any train → red, any bus →
+#: dark blue, else light blue) via the clusterProperties counts, sized
+#: by member count, faded by the overlay's own zoom ramp. Authored
+#: walker-clean: no ``layout.visibility`` (not subset-whitelisted) —
+#: the fallback renders bubbles from its own band gating. The count
+#: badge id suffix ``-cluster-count`` is the frontend's convention
+#: hook (isClusterCountLayer); the frontend user setting
+#: ``ui.overlayClusterCounts`` toggles ONLY the badge text
+#: (bubbles always render).
+_TRANSPORT_CLUSTER_LAYERS: list[dict[str, Any]] = [
+    {
+        "id": "transport-stops-clusters",
+        "type": "circle",
+        "source": "transport-stops",
+        "minzoom": 5,
+        "maxzoom": 7,
+        "filter": ["has", "point_count"],
+        "paint": {
+            "circle-color": [
+                "case",
+                [">", ["get", "train_count"], 0],
+                "#C60018",
+                [">", ["get", "bus_count"], 0],
+                "#2d327d",
+                "#0079C7",
+            ],
+            "circle-stroke-color": "#F6F6F6",
+            "circle-stroke-width": 1,
+            "circle-radius": [
+                "interpolate",
+                ["linear"],
+                ["get", "point_count"],
+                2,
+                5,
+                10,
+                7,
+                50,
+                9,
+                200,
+                11,
+                1000,
+                14,
+            ],
+            "circle-opacity": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                4,
+                0,
+                5,
+                0.3,
+                8,
+                0.6,
+                12,
+                1,
+            ],
+        },
+    },
+    {
+        "id": "transport-stops-cluster-count",
+        "type": "symbol",
+        "source": "transport-stops",
+        "minzoom": 5,
+        "maxzoom": 7,
+        "filter": ["has", "point_count"],
+        "layout": {
+            "text-field": ["get", "point_count_abbreviated"],
+            "text-font": ["Barlow Semi Condensed SemiBold", "Noto Sans Bold"],
+            "text-size": 11,
+        },
+        "paint": {
+            "text-color": "#F6F6F6",
+            "text-halo-color": "rgba(45, 50, 125, 0.45)",
+            "text-halo-width": 0.8,
+            "text-opacity": 1,
+        },
+    },
+]
+
+
+#: Source keys the subset twin drops from the full document
+#: (``promoteId``: clients key features by the geojson-provided id;
+#: not subset-whitelisted).
+_TRANSPORT_SUBSET_SOURCE_EXCLUDES = frozenset({"promoteId"})
+
 #: Subset twin of TRANSPORT_STYLE (Leaflet fallback, profile=subset):
-#: the full document minus the non-whitelisted bits — ``promoteId``
-#: (source key: clients key features by the geojson-provided id) and
-#: the default ``layout.visibility`` — plus a ``minzoom`` floor the full
-#: style lacks: the BAV list is 20k+ stops and the fallback map runs on
-#: low-spec devices, where sub-z10 circles are invisible clutter anyway
-#: (the full style's opacity only reaches 0.6 at z8). Derived on purpose:
+#: the full document minus ``promoteId`` and the raw layer's default
+#: ``layout`` — plus the clustering source config and cluster render
+#: layers (the fallback's supercluster rendering reads those keys;
+#: see ``_TRANSPORT_CLUSTER_SOURCE`` above) and the raw layer's
+#: ``minzoom: 10`` floor + not-a-cluster ``filter`` (the BAV list is
+#: 20k+ stops and the fallback runs on low-spec devices — raw circles
+#: below z10 are invisible clutter; the floor predates clustering and
+#: z7–z9 stay empty on the fallback, by design). Derived on purpose:
 #: if the full style ever grows keys outside the subset whitelist, the
 #: seed gate fails loudly instead of the subset twin silently drifting.
 TRANSPORT_STYLE_SUBSET: dict[str, Any] = {
     **deepcopy(TRANSPORT_STYLE),
     "sources": {
-        source_id: {key: value for key, value in source.items() if key != "promoteId"}
+        source_id: {
+            key: value
+            for key, value in source.items()
+            if key not in _TRANSPORT_SUBSET_SOURCE_EXCLUDES
+        }
+        | deepcopy(_TRANSPORT_CLUSTER_SOURCE)
         for source_id, source in TRANSPORT_STYLE["sources"].items()
     },
     "layers": [
         {key: deepcopy(value) for key, value in layer.items() if key != "layout"}
-        | {"minzoom": 10}
+        | {"minzoom": 10, "filter": ["!", ["has", "point_count"]]}
         for layer in TRANSPORT_STYLE["layers"]
-    ],
+    ]
+    + deepcopy(_TRANSPORT_CLUSTER_LAYERS),
 }
 
 
