@@ -223,19 +223,44 @@ SUBSET_TOP_LEVEL_KEYS = frozenset(
 #: Closed source key sets per type. ``encoding`` (value ``mlt``) is the
 #: wodore/Martin MapLibre decoder marker — the one extension beyond the
 #: stock style spec (unknown source keys are ignored by validators).
+#: The geojson ``cluster*`` keys declare the no-WebGL fallback's
+#: client-side clustering (supercluster over the fetched document;
+#: the MapLibre full profile never reads them — clustering lives on
+#: the subset twin only).
 SUBSET_SOURCE_KEYS: dict[str, frozenset[str]] = {
     "raster": frozenset({"type", "tiles", "maxzoom", "tileSize", "attribution"}),
     "vector": frozenset(
         {"type", "tiles", "minzoom", "maxzoom", "attribution", "encoding"}
     ),
-    "geojson": frozenset({"type", "data"}),
+    "geojson": frozenset(
+        {
+            "type",
+            "data",
+            "cluster",
+            "clusterMaxZoom",
+            "clusterRadius",
+            "clusterProperties",
+        }
+    ),
 }
 
 SUBSET_LAYER_TYPES = frozenset({"raster", "circle", "symbol"})
 
-#: Permitted layer keys (minzoom/maxzoom carry the zoom gating).
+#: Permitted layer keys (minzoom/maxzoom carry the zoom gating;
+#: ``filter`` walks as an expression — the clustered subset twin
+#: splits raw points (``!has point_count``) from cluster bubbles).
 SUBSET_LAYER_KEYS = frozenset(
-    {"id", "type", "source", "source-layer", "minzoom", "maxzoom", "paint", "layout"}
+    {
+        "id",
+        "type",
+        "source",
+        "source-layer",
+        "minzoom",
+        "maxzoom",
+        "paint",
+        "layout",
+        "filter",
+    }
 )
 
 #: Layout keys per layer type — circle/raster carry none; symbols get
@@ -283,10 +308,13 @@ SUBSET_PAINT_KEYS = frozenset(
     }
 )
 
-#: Recursive expression operator whitelist — ``interpolate`` accepts the
-#: zoom input only (enforced in the walker, not just listed here).
+#: Recursive expression operator whitelist. ``interpolate`` accepts
+#: the ``['zoom']`` input or a ``['get', '<property>']`` input (both
+#: enforced in the walker, not just listed here); ``>``/``!`` join
+#: ``==`` as the non-identifier-shaped listed operators (cluster
+#: paints compare aggregated counts; filters negate a ``has``).
 SUBSET_EXPRESSION_OPS = frozenset(
-    {"get", "has", "match", "case", "in", "==", "interpolate", "literal"}
+    {"get", "has", "match", "case", "in", "==", ">", "!", "interpolate", "literal"}
 )
 
 #: MapLibre distinguishes expressions from literal array values by the
@@ -437,21 +465,35 @@ def _check_subset_in(expr: list[Any], path: str, errors: list[str]) -> None:
 
 
 def _check_subset_interpolate(expr: list[Any], path: str, errors: list[str]) -> None:
-    """``['interpolate', ['linear'], ['zoom'], z, v, …]`` — zoom input only."""
+    """``['interpolate', ['linear'], input, t, v, …]`` — the input is
+    ``['zoom']`` or ``['get', '<property>']`` (cluster bubble sizes
+    interpolate on the aggregated ``point_count``)."""
     if len(expr) < 5 or len(expr) % 2 == 0:
-        _subset_error(errors, path, "interpolate needs (zoom, value) stop pairs")
+        _subset_error(errors, path, "interpolate needs (input, value) stop pairs")
         return
     if expr[1] != ["linear"]:
         _subset_error(
             errors, f"{path}[1]", "only ['linear'] interpolation is whitelisted"
         )
-    if expr[2] != ["zoom"]:
-        _subset_error(errors, f"{path}[2]", "interpolate input must be ['zoom']")
+    interpolation_input = expr[2]
+    if interpolation_input != ["zoom"] and not (
+        isinstance(interpolation_input, list)
+        and len(interpolation_input) == 2
+        and interpolation_input[0] == "get"
+        and isinstance(interpolation_input[1], str)
+    ):
+        _subset_error(
+            errors,
+            f"{path}[2]",
+            "interpolate input must be ['zoom'] or ['get', '<property>']",
+        )
     for index in range(3, len(expr), 2):
         stop = expr[index]
         if isinstance(stop, bool) or not isinstance(stop, (int, float)):
             _subset_error(
-                errors, f"{path}[{index}]", "zoom stops must be literal numbers"
+                errors,
+                f"{path}[{index}]",
+                "interpolation stops must be literal numbers",
             )
         _check_subset_expression(expr[index + 1], f"{path}[{index + 1}]", errors)
 
@@ -516,6 +558,9 @@ def _check_subset_layers(style: dict[str, Any], errors: list[str]) -> None:
             continue
         for key in sorted(set(layer) - SUBSET_LAYER_KEYS):
             _subset_error(errors, f"{path}.{key}", "layer key is not whitelisted")
+        layer_filter = layer.get("filter")
+        if layer_filter is not None:
+            _check_subset_expression(layer_filter, f"{path}.filter", errors)
         layout = layer.get("layout") or {}
         allowed_layout = SUBSET_LAYOUT_KEYS.get(layer_type, frozenset())
         if isinstance(layout, dict):
