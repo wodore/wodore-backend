@@ -475,13 +475,25 @@ Serving: `GET /v1/map/catalog` (dmr) and
 `GET /v1/map/styles/{slug}.json` (plain view; resolved by default,
 `?mode=tokenized` for customizing clients, `?spec=` variant selection,
 `?profile=full|subset` capability — omitted stays profile-agnostic and
-byte-identical; subset clients never receive full variants). Validation:
-subset rows pass the pure-Python walker at admin `clean()`, in the
-`map_seed` upsert (update_or_create bypasses clean()) and via the
-`validate_map_styles` CI sweep; full rows are styl-validated in CI
-(`map-style-spec` job over `dump_map_styles` output). New subset rows
-are tagged manually in `map_seed` (one-time tagging table: openspec
-style-profiles-subset design D6) — never auto-tagged.
+byte-identical; subset clients never receive full variants).
+
+**Style validation flow** (full detail: `docs/map-style-subset-spec.md`):
+- **Saves** gate in `MapLayer.clean()`: structural + parameter-token
+  checks → subset walker (`profile=subset` rows) → styl as a subprocess
+  when a binary is on PATH (absent = silent skip). E-codes block unless
+  listed in the row's `styl_ignored_rules` (JSON codes, `["*"]` skips
+  styl entirely — external-derived styles); W-codes never block, they
+  surface only alongside a blocking error.
+- **Seed** (`map_seed`): the upsert calls the walker + styl directly
+  (update_or_create bypasses clean()); external-derived rows carry
+  `styl_ignored_rules: ["*"]` (redundant with the CI workflow skip
+  list on purpose — defense in depth).
+- **CI**: `validate_map_styles` sweep in the tests job (no styl binary
+  required; W-codes always reported) + the `map-style-spec` job
+  (styl over `dump_map_styles` output + `fixtures/styles/`, external-
+  derived skip list).
+- New subset rows are tagged manually in `map_seed` (one-time tagging
+  table: openspec style-profiles-subset design D6) — never auto-tagged.
 Caching: layer entries carry `style_version` (also appended to
 `style_url` as `&v=`) — a matching `?v=` on any style URL serves
 immutable (1 y); `layers`/`slots` and unversioned style fetches allow

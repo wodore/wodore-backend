@@ -15,8 +15,15 @@ the spec is huge/brittle). What we enforce:
 
 from __future__ import annotations
 
+import contextlib
+import json
+import os
 import re
-from typing import Any
+import shutil
+import subprocess
+import tempfile
+from collections.abc import Sequence
+from typing import Any, NamedTuple
 from urllib.parse import urlparse
 
 import pydantic
@@ -28,6 +35,15 @@ ENV_TOKEN_RE = re.compile(r"\{\{env:([A-Z0-9_]+)\}\}")
 
 #: Rules-version shape — dotted decimals (``26.4.4``, ``0.1``).
 VERSION_RE = re.compile(r"^\d+(\.\d+)*$")
+
+#: One save-time styl run may take this long before degrading to a
+#: warning (never a hard failure — a save must not brick on tool slowness).
+STYL_TIMEOUT_SECONDS = 10.0
+
+#: styl diagnostic lines: ``error[E003] sources.roads: …`` /
+#: ``warning[W002] layers[9].layout.visibility: …`` (continuation lines
+#: — ``-->``, ``hint:`` — are ignored; the first line carries the gist).
+_STYL_LINE_RE = re.compile(r"^(error|warning)\[([EW]\d{3})\]\s*(.*)$")
 
 
 class StyleValidationError(ValueError):
@@ -499,3 +515,120 @@ def validate_clustering_config(clustering: Any) -> None:
                     errors.append(f"clustering.bubble.{key}: must be a string")
     if errors:
         raise StyleValidationError("; ".join(errors))
+
+
+# ── styl — the MapLibre style-spec reference validator (Rust binary) ──
+
+
+class StylResult(NamedTuple):
+    """Findings from one save-time styl run.
+
+    ``errors``: E-code violations NOT on the row's ignore list — these
+    block saves. ``warnings``: W-code findings (plus degraded runs —
+    timeouts, tool errors, unparsable output) which never block; they
+    surface next to a blocking error in ``clean()`` and always in the
+    ``validate_map_styles`` sweep.
+    """
+
+    errors: list[str]
+    warnings: list[str]
+
+
+def _styl_binary() -> str | None:
+    """Absolute styl path when a binary is on PATH (test seam)."""
+    return shutil.which("styl")
+
+
+def _parse_styl_output(output: str) -> tuple[list[str], list[str]]:
+    """Split styl diagnostics into (``E-code`` messages, ``W-code`` messages).
+
+    Only first lines count — ``error[E003] sources.x: …``; continuation
+    lines (``-->``, ``hint:``) are dropped, the first line carries the
+    gist for display.
+    """
+    errors: list[str] = []
+    warnings: list[str] = []
+    for line in output.splitlines():
+        match = _STYL_LINE_RE.match(line.strip())
+        if match is None:
+            continue
+        severity, code, text = match.groups()
+        message = f"{code} {text}".strip()
+        if severity == "error":
+            errors.append(message)
+        else:
+            warnings.append(message)
+    return errors, warnings
+
+
+def run_styl(
+    style: dict[str, Any],
+    ignored_rules: Sequence[str] | None = None,
+) -> StylResult | None:
+    """Best-effort ``styl validate`` on an inline style document.
+
+    Returns ``None`` when styl cannot run (no binary on PATH, or the
+    row ignores it wholesale via ``"*"``) — callers skip silently;
+    dev machines and the server runtime keep working and the CI tests
+    job never requires the binary. Never raises: a timeout, a tool
+    error (exit 2) or unparsable output degrades to a warning, so a
+    styl upgrade can never brick a save.
+
+    E-code violations block unless their code is on the row's ignore
+    list; W-code findings never block (surfaced by the caller).
+    """
+    if _styl_binary() is None:
+        return None
+    ignored = set(ignored_rules or ())
+    if "*" in ignored:
+        return None
+    with tempfile.NamedTemporaryFile(
+        "w", suffix=".json", encoding="utf-8", delete=False
+    ) as handle:
+        json.dump(style, handle)
+        path = handle.name
+    try:
+        completed = subprocess.run(
+            ["styl", "validate", path],
+            capture_output=True,
+            text=True,
+            timeout=STYL_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return StylResult(
+            [],
+            [
+                (
+                    f"styl timed out after {STYL_TIMEOUT_SECONDS:.0f}s — "
+                    "validation skipped (warning only)"
+                )
+            ],
+        )
+    except OSError:
+        # Binary vanished between which() and run — same as absent.
+        return None
+    finally:
+        with contextlib.suppress(OSError):
+            os.unlink(path)
+    if completed.returncode == 0:
+        return StylResult([], [])
+    if completed.returncode == 2:
+        detail = (completed.stderr or completed.stdout or "").strip()[:200]
+        return StylResult([], [f"styl tool error (exit 2): {detail or 'no output'}"])
+    errors, warnings = _parse_styl_output(f"{completed.stdout}\n{completed.stderr}")
+    if not errors and not warnings:
+        detail = (completed.stdout or completed.stderr or "").strip()[:200]
+        return StylResult(
+            [],
+            [
+                (
+                    f"styl exited {completed.returncode} with unparsable "
+                    f"output — treated as warning: {detail or 'no output'}"
+                )
+            ],
+        )
+    return StylResult(
+        [message for message in errors if message.split(" ", 1)[0] not in ignored],
+        [message for message in warnings if message.split(" ", 1)[0] not in ignored],
+    )

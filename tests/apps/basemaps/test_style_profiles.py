@@ -22,7 +22,10 @@ Covers the openspec change ``style-profiles-subset``:
 from __future__ import annotations
 
 import json
+import subprocess
 from copy import deepcopy
+from io import StringIO
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -33,6 +36,7 @@ from django.core.management.base import CommandError
 from django.db import IntegrityError
 from django.test import Client, SimpleTestCase
 
+from server.apps.basemaps import validation
 from server.apps.basemaps.management.commands.dump_map_styles import (
     Command as DumpCommand,
 )
@@ -409,8 +413,26 @@ def _make(
     )
 
 
+def _unsaved(
+    slug: str,
+    spec: str = "medium",
+    profile: str = "full",
+    style: dict[str, Any] | None = None,
+) -> MapLayer:
+    """An UNSAVED instance for ``clean()``-path tests — the attribution
+    requirement only fires on saved rows (``self.pk`` gate), so clean()
+    tests avoid it by never touching the DB."""
+    return MapLayer(
+        slug=slug,
+        spec=spec,
+        profile=profile,
+        style=style if style is not None else deepcopy(SUBSET_RASTER),
+        version=SUBSET_REVISION if profile == "subset" else STYLE_SPEC_VERSION,
+    )
+
+
 @pytest.mark.django_db
-class ModelContractTests:
+class TestModelContract:
     def test_unique_slug_spec_profile(self) -> None:
         _make("dup", "medium", "full")
         with pytest.raises(IntegrityError):
@@ -463,7 +485,9 @@ class ModelContractTests:
         assert "style" in excinfo.value.message_dict
 
     def test_clean_accepts_valid_subset(self) -> None:
-        layer = _make("sok", profile="subset")
+        style = deepcopy(SUBSET_RASTER)
+        style["layers"][0]["paint"] = {"raster-opacity": 0.8}  # token-free
+        layer = _unsaved("sok", profile="subset", style=style)
         layer.clean()
 
     def test_clean_validates_clustering_config(self) -> None:
@@ -478,7 +502,7 @@ class ModelContractTests:
 
 
 @pytest.mark.django_db
-class SeedTaggingTests:
+class TestSeedTagging:
     def test_one_time_tagging(self) -> None:
         call_command("map_seed", verbosity=0)
         mtb = MapLayer.objects.get(slug="mtb", spec="medium")
@@ -541,7 +565,7 @@ class SeedTaggingTests:
 
 
 @pytest.mark.django_db
-class SweepCommandTests:
+class TestSweepCommand:
     def test_sweep_passes_after_seed(self) -> None:
         call_command("map_seed", verbosity=0)
         call_command("validate_map_styles")
@@ -561,7 +585,7 @@ class SweepCommandTests:
 
 
 @pytest.mark.django_db
-class DumpCommandTests:
+class TestDumpCommand:
     def test_dump_writes_full_skips_subset(self, tmp_path: Any) -> None:
         call_command(DumpCommand(), out=str(tmp_path))
         names = sorted(path.name for path in tmp_path.iterdir())
@@ -576,12 +600,20 @@ class DumpCommandTests:
 
 
 @pytest.mark.django_db
-class ApiProfileTests:
+class TestApiProfile:
     def _seed_variants(self) -> None:
+        """Same-tier pair (medium full+subset) + a full-only slug — the
+        omitted-profile resolution picks the first row by (role, order,
+        slug, spec, profile): medium/full, full preferred within the
+        tier."""
         _make("hybrid", "medium", "full", style=deepcopy(FULL_CIRCLE))
         _make("hybrid", "medium", "subset")
-        _make("hybrid", "high", "subset")
         _make("onlyfull", "medium", "full", style=deepcopy(FULL_CIRCLE))
+
+    def _seed_tier_variants(self) -> None:
+        """Cross-tier pair for the tier-before-richness walk."""
+        _make("hybrid", "high", "subset")
+        _make("hybrid", "medium", "full", style=deepcopy(FULL_CIRCLE))
 
     def _entry(self, client: Client, slug: str, query: str = "") -> dict[str, Any]:
         response = client.get(f"/v1/map/layers/{slug}{query}")
@@ -604,7 +636,7 @@ class ApiProfileTests:
         assert "profile=subset" in entry["style_url"]
 
     def test_tier_respected_before_richness(self) -> None:
-        self._seed_variants()
+        self._seed_tier_variants()
         entry = self._entry(Client(), "hybrid", "?spec=high&profile=full")
         assert entry["spec"] == "high"
         assert entry["profile"] == "subset"  # subset@high beats full@medium
@@ -650,3 +682,240 @@ class StyleEndpointUrlTests(SimpleTestCase):
             style_endpoint_url("x", None, "subset")
             == "/v1/map/styles/x.json?profile=subset"
         )
+
+
+# ── styl save-time integration (mocked subprocess — no binary needed) ─
+
+#: Realistic styl diagnostics (first lines; ``-->``/``hint:`` dropped).
+_STYL_E003 = (
+    "error[E003] sources.roads: vector source missing required field "
+    '"url" or "tiles"\n'
+    "  --> style.json\n"
+)
+_STYL_W002 = (
+    'warning[W002] layers[0].layout.visibility: layer "x" is permanently invisible\n'
+)
+
+
+def _fake_run(result: Any) -> Any:
+    """A subprocess.run stand-in returning a canned completion."""
+
+    def run(*args: Any, **kwargs: Any) -> Any:
+        return result
+
+    return run
+
+
+def _explode(*args: Any, **kwargs: Any) -> Any:
+    """Sentinel: subprocess.run must never be reached."""
+    raise AssertionError("subprocess.run must not be called")
+
+
+class TestStylRunner:
+    """run_styl semantics: graceful absence, E/W split, ignore list
+    (plain pytest class — the ``monkeypatch`` fixture needs pytest-style
+    injection, not unittest-style)."""
+
+    def test_absent_binary_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(validation, "_styl_binary", lambda: None)
+        assert validation.run_styl(deepcopy(SUBSET_RASTER)) is None
+
+    def test_clean_exit_means_no_findings(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(validation, "_styl_binary", lambda: "/usr/bin/styl")
+        monkeypatch.setattr(
+            validation.subprocess,
+            "run",
+            _fake_run(SimpleNamespace(returncode=0, stdout="", stderr="")),
+        )
+        assert validation.run_styl(deepcopy(SUBSET_RASTER)) == validation.StylResult(
+            [], []
+        )
+
+    def test_e_code_violations_are_errors(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(validation, "_styl_binary", lambda: "/usr/bin/styl")
+        monkeypatch.setattr(
+            validation.subprocess,
+            "run",
+            _fake_run(SimpleNamespace(returncode=1, stdout=_STYL_E003, stderr="")),
+        )
+        result = validation.run_styl(deepcopy(SUBSET_RASTER))
+        assert result is not None
+        assert result.errors == [
+            (
+                "E003 sources.roads: vector source missing required field "
+                '"url" or "tiles"'
+            )
+        ]
+        assert result.warnings == []
+
+    def test_ignored_codes_are_filtered(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(validation, "_styl_binary", lambda: "/usr/bin/styl")
+        monkeypatch.setattr(
+            validation.subprocess,
+            "run",
+            _fake_run(
+                SimpleNamespace(returncode=1, stdout=_STYL_E003 + _STYL_W002, stderr="")
+            ),
+        )
+        result = validation.run_styl(
+            deepcopy(SUBSET_RASTER), ignored_rules=("E003", "W002")
+        )
+        assert result == validation.StylResult([], [])
+
+    def test_star_skips_entirely(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(validation, "_styl_binary", lambda: "/usr/bin/styl")
+        monkeypatch.setattr(validation.subprocess, "run", _explode)
+        assert (
+            validation.run_styl(deepcopy(SUBSET_RASTER), ignored_rules=("*",)) is None
+        )
+
+    def test_timeout_degrades_to_warning(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(validation, "_styl_binary", lambda: "/usr/bin/styl")
+
+        def run(command: Any, **kwargs: Any) -> Any:
+            raise subprocess.TimeoutExpired(cmd=command, timeout=10)
+
+        monkeypatch.setattr(validation.subprocess, "run", run)
+        result = validation.run_styl(deepcopy(SUBSET_RASTER))
+        assert result is not None
+        assert result.errors == []
+        assert any("timed out" in warning for warning in result.warnings)
+
+    def test_tool_error_degrades_to_warning(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(validation, "_styl_binary", lambda: "/usr/bin/styl")
+        monkeypatch.setattr(
+            validation.subprocess,
+            "run",
+            _fake_run(SimpleNamespace(returncode=2, stdout="", stderr="boom")),
+        )
+        result = validation.run_styl(deepcopy(SUBSET_RASTER))
+        assert result is not None
+        assert result.errors == []
+        assert any("tool error" in warning for warning in result.warnings)
+
+    def test_unparsable_output_degrades_to_warning(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(validation, "_styl_binary", lambda: "/usr/bin/styl")
+        monkeypatch.setattr(
+            validation.subprocess,
+            "run",
+            _fake_run(SimpleNamespace(returncode=1, stdout="total garbage", stderr="")),
+        )
+        result = validation.run_styl(deepcopy(SUBSET_RASTER))
+        assert result is not None
+        assert result.errors == []
+        assert any("unparsable" in warning for warning in result.warnings)
+
+
+@pytest.mark.django_db
+class TestStylSaveGate:
+    """MapLayer.clean() and the seed upsert block on non-ignored E-codes."""
+
+    def _with_styl(
+        self, monkeypatch: pytest.MonkeyPatch, stdout: str, returncode: int = 1
+    ) -> None:
+        monkeypatch.setattr(validation, "_styl_binary", lambda: "/usr/bin/styl")
+        monkeypatch.setattr(
+            validation.subprocess,
+            "run",
+            _fake_run(SimpleNamespace(returncode=returncode, stdout=stdout, stderr="")),
+        )
+
+    def test_e_code_blocks_save(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._with_styl(monkeypatch, _STYL_E003)
+        layer = _unsaved("stye", profile="full", style=deepcopy(FULL_CIRCLE))
+        with pytest.raises(ValidationError) as excinfo:
+            layer.clean()
+        message = str(excinfo.value.message_dict["style"])
+        assert "styl:" in message
+        assert "E003" in message
+
+    def test_ignore_list_bypasses(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._with_styl(monkeypatch, _STYL_E003)
+        layer = _unsaved("styi", profile="full", style=deepcopy(FULL_CIRCLE))
+        layer.styl_ignored_rules = ["E003"]
+        layer.clean()
+
+    def test_star_skips_subprocess(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(validation, "_styl_binary", lambda: "/usr/bin/styl")
+        monkeypatch.setattr(validation.subprocess, "run", _explode)
+        layer = _unsaved("stys", profile="full", style=deepcopy(FULL_CIRCLE))
+        layer.styl_ignored_rules = ["*"]
+        layer.clean()
+
+    def test_w_codes_surface_next_to_blocking_e(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._with_styl(monkeypatch, _STYL_E003 + _STYL_W002)
+        layer = _unsaved("styw", profile="full", style=deepcopy(FULL_CIRCLE))
+        with pytest.raises(ValidationError) as excinfo:
+            layer.clean()
+        message = str(excinfo.value.message_dict["style"])
+        assert "E003" in message
+        assert "warnings:" in message
+        assert "W002" in message
+
+    def test_w_codes_alone_never_block(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._with_styl(monkeypatch, _STYL_W002)
+        layer = _unsaved("styw2", profile="full", style=deepcopy(FULL_CIRCLE))
+        layer.clean()
+
+    def test_absent_binary_skips_silently(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(validation, "_styl_binary", lambda: None)
+        monkeypatch.setattr(validation.subprocess, "run", _explode)
+        layer = _unsaved("styn", profile="full", style=deepcopy(FULL_CIRCLE))
+        layer.clean()
+
+    def test_seed_gate_blocks_on_styl_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._with_styl(monkeypatch, _STYL_E003)
+        command = Command()
+        parent = {
+            "slug": "styseed",
+            "role": MapLayer.Role.overlay,
+            "name": "StySeed",
+            "style": deepcopy(FULL_CIRCLE),
+        }
+        with pytest.raises(CommandError, match="E003"):
+            command._seed_layer(parent, parent, {}, {}, {}, MapCoverage())
+
+    def test_seed_star_ignores_styl(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(validation, "_styl_binary", lambda: "/usr/bin/styl")
+        monkeypatch.setattr(validation.subprocess, "run", _explode)
+        command = Command()
+        parent = {
+            "slug": "styseed2",
+            "role": MapLayer.Role.overlay,
+            "name": "StySeed2",
+            "style": deepcopy(SUBSET_RASTER),
+            "profile": MapLayer.Profile.subset,
+            "version": SUBSET_REVISION,
+            "styl_ignored_rules": ["*"],
+        }
+        created, _ = command._seed_layer(parent, parent, {}, {}, {}, MapCoverage())
+        assert created == 1
+
+    def test_sweep_fails_on_styl_e_code(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._with_styl(monkeypatch, _STYL_E003)
+        _make("stysweep", profile="full", style=deepcopy(FULL_CIRCLE))
+        stderr = StringIO()
+        with pytest.raises(CommandError, match="style violation"):
+            call_command("validate_map_styles", stderr=stderr)
+        assert "E003" in stderr.getvalue()  # details name the row and code
+
+    def test_sweep_passes_on_w_codes_only(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._with_styl(monkeypatch, _STYL_W002)
+        _make("stysweep2", profile="full", style=deepcopy(FULL_CIRCLE))
+        call_command("validate_map_styles")  # W-codes never block

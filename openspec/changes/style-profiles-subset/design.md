@@ -262,17 +262,33 @@ existing `config.filters`.
 
 ### D6 — Validation story and one-time tagging
 
-**Full rows — `styl` in CI (no server-runtime dependency).** The
-`@maplibre/maplibre-gl-style-spec` reference validation is a Node
-toolchain; the server runtime has no Node. `styl`
-(github.com/navidnabavi/styl — a Rust linter/validator/formatter for
-MapLibre GL style JSON) runs where Node-less validation is needed:
-locally via `cargo install styl`, in CI via the GitHub Action
-`navidnabavi/styl@v0.0.4` with a `.stylrc` config, over every inline
-`full` style fixture/seed document. The style-spec release it validates
-against is what `version` records on `full` rows. Serve time never
-invokes it — full rows keep today's structural `validate_style_spec`
-checks only.
+**Full rows — `styl` at save time (best-effort) + the hard CI gate.**
+The `@maplibre/maplibre-gl-style-spec` reference validation is a Node
+toolchain; the server runtime has no Node and never REQUIRES it.
+`styl` (github.com/navidnabavi/styl — a Rust linter/validator/formatter
+for MapLibre GL style JSON) runs as a subprocess whenever a `styl`
+binary is on PATH (absent → silent skip; dev machines and the CI tests
+job keep working; the style ENDPOINT never invokes it):
+
+1. `MapLayer.clean()` — E-code violations block the save unless their
+   code is on the row's `styl_ignored_rules` (JSON list of rule codes,
+   e.g. `["E022"]`; `["*"]` skips styl entirely — the list subsumes a
+   bool; internal validation config, never served by the API).
+   W-code findings never block; they surface in the error message only
+   when an E already blocks (`clean()` cannot show non-blocking
+   warnings elegantly). Timeouts (~10 s), tool errors (exit 2) and
+   unparsable output degrade to warnings — a styl upgrade can never
+   brick a save.
+2. the seed upsert — same graceful rules; the external-derived rows
+   carry `styl_ignored_rules: ["*"]` (one row-level mechanism that
+   eventually replaces the CI workflow's skip list, kept for now as
+   defense in depth).
+3. CI — the tests-job `validate_map_styles` sweep (absent binary =
+   skip; W-codes always reported) and the `map-style-spec` job
+   hard-gating authored full styles over the `dump_map_styles` output
+   + `fixtures/styles/` with the external-derived skip list; `.stylrc`
+   config committed. The style-spec release it validates against is
+   what `version` records on `full` rows.
 
 **Subset rows — pure-Python walker in the Django app.** ~100 lines in
 `validation.py`: the D4 whitelists as module constants (source keys per

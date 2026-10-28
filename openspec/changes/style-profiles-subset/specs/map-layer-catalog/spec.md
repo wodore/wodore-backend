@@ -139,20 +139,30 @@ seeded with `profile=subset` (see *Style document validation*).
 
 The system SHALL validate style documents per profile. `full` inline
 styles SHALL be validated against the MapLibre style spec by the `styl`
-Rust binary (github.com/navidnabavi/styl) in CI — locally via `cargo
-install styl`, in CI via the GitHub Action `navidnabavi/styl@v0.0.4`
-with `.stylrc` configuration — and NEVER in the server runtime (no
-Node.js or Rust dependency at serve time; serve-time checks stay
-structural). `subset` styles SHALL be validated by a pure-Python subset
-walker inside the Django app implementing the *Subset profile
+Rust binary (github.com/navidnabavi/styl) in three places, always as a
+subprocess when a binary is on PATH (absent binary: silent skip — the
+server runtime and the CI tests job never require it; the style
+endpoint never invokes styl): best-effort at save time
+(`MapLayer.clean()`), in the seed upsert under the same graceful rules,
+and as the hard CI gate (`map-style-spec` job over the dumped seed
+styles and authored fixtures with the external-derived skip list;
+`.stylrc` committed). E-code violations SHALL block saves unless their
+code is on the row's `styl_ignored_rules` (JSON list of rule codes;
+`["*"]` skips styl entirely; internal validation config never served
+by the API). W-code findings SHALL never block — they surface in the
+error message only when an E-code already blocks, and always in the
+`validate_map_styles` sweep output. styl timeouts, tool errors and
+unparsable output SHALL degrade to warnings (a styl upgrade can never
+brick a save). `subset` styles SHALL be validated by a pure-Python
+subset walker inside the Django app implementing the *Subset profile
 definition* whitelist, running at model validation (admin saves), at
 seed ingest — the seed upsert calls the walker directly on the prepared
 defaults before writing (`update_or_create` bypasses `clean()`; seed
 gating must be real, not CI-only) — and as a CI sweep over every
 `profile=subset` row. Structural checks (`version == 8`, sources object,
-`{id, type}`
-layers) SHALL apply to both profiles. The style-spec release validated
-against SHALL be recorded as the row's rules `version`.
+`{id, type}` layers) SHALL apply to both profiles. The style-spec
+release validated against SHALL be recorded as the row's rules
+`version`.
 
 #### Scenario: Subset violation blocks seed ingest
 
@@ -168,6 +178,16 @@ against SHALL be recorded as the row's rules `version`.
 
 - **WHEN** CI runs the styl job over the inline `full` seed fixtures and one violates the MapLibre style spec
 - **THEN** the job fails; the server runtime remains free of any styl/Node dependency
+
+#### Scenario: Save-time styl blocks an invalid full style
+
+- **WHEN** a styl binary is on PATH and a `full` inline style with an E-code violation is saved
+- **THEN** the save is rejected naming the code — and when the binary is absent, the same save proceeds (graceful skip)
+
+#### Scenario: Per-row ignore list
+
+- **WHEN** the blocking E-code is listed in the row's `styl_ignored_rules` (or the list is `["*"]`)
+- **THEN** the save passes — with `["*"]`, styl is not invoked at all — and the codes stay invisible to the served API
 
 ### Requirement: Clustering rendering hints
 

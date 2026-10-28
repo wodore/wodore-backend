@@ -217,6 +217,7 @@ class MapLayerAdmin(ModelAdmin):
                 "fields": (
                     "style",
                     "style_url",
+                    "styl_ignored_rules",
                     "min_zoom",
                     "max_zoom",
                     "style_serving_url",

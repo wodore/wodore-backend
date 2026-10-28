@@ -541,6 +541,15 @@ class MapLayer(TimeStampedModel):
             'document\'s internal "version": 8 field.'
         ),
     )
+    styl_ignored_rules = models.JSONField(
+        null=True,
+        blank=True,
+        help_text=_(
+            "Internal validation config (never served by the API): styl "
+            'rule codes to ignore for this row, e.g. ["E022"]; ["*"] '
+            "skips styl entirely (external-derived styles)."
+        ),
+    )
     role = models.CharField(
         max_length=10,
         choices=Role.choices,
@@ -792,7 +801,15 @@ class MapLayer(TimeStampedModel):
 
     @override
     def clean(self) -> None:
-        """Structural + token + attribution validation (admin & factory)."""
+        """Full save-time validation stack (admin & factory).
+
+        Order: structural style checks → parameter-token check → subset
+        walker (``profile=subset`` rows) → styl (best-effort subprocess
+        when a binary is on PATH; E-codes block unless ignored, W-codes
+        surface only alongside a blocking error) → rules-``version``
+        requirements → ``config.clustering`` shape → env-token and
+        attribution checks.
+        """
         super().clean()
         errors: dict[str, str] = {}
 
@@ -818,6 +835,25 @@ class MapLayer(TimeStampedModel):
                     validation.validate_subset_style(self.style)
                 except validation.StyleValidationError as exc:
                     errors["style"] = str(exc)
+
+            # styl (save-time, best-effort): when a styl binary is on
+            # PATH, run the full style-spec validation as a subprocess.
+            # E-codes block unless on the row's ignore list; W-codes
+            # never block — they surface in the error message only when
+            # an E already blocks (the ``validate_map_styles`` sweep
+            # reports them always). Absent binary / ``"*"`` / tool
+            # failures degrade to a silent skip or a warning — saves
+            # must not brick on a styl upgrade. The style ENDPOINT
+            # never invokes styl.
+            if "style" not in errors:
+                styl_result = validation.run_styl(
+                    self.style, ignored_rules=self.styl_ignored_rules or ()
+                )
+                if styl_result is not None and styl_result.errors:
+                    message = "styl: " + "; ".join(styl_result.errors)
+                    if styl_result.warnings:
+                        message += " | warnings: " + "; ".join(styl_result.warnings)
+                    errors["style"] = message
 
         if self.style is not None and not self.version.strip():
             errors["version"] = (

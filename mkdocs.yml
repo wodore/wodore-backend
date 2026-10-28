@@ -9,6 +9,7 @@ nav:
   - "Links": infos.md
   - "API": api.md
   - "API Versioning": api-versioning.md
+  - "Map Style Subset Spec": map-style-subset-spec.md
   - "Backups & Staging Data": backups.md
   - Packages: packages.md
   #- API Reference:

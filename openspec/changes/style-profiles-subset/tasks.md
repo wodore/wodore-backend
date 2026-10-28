@@ -137,3 +137,28 @@
       defaults)
 - [x] 6.3 Docs: `AGENTS.md` basemaps section gains a paragraph on
       profile/version semantics and the subset tagging convention
+
+## 7. Save-time styl integration + subset spec docs (follow-up round)
+
+- [x] 7.1 `run_styl` in `validation.py`: subprocess `styl validate`
+      (temp file, ~10 s timeout), output parsing for `[Exxx]`/`[Wxxx]`
+      markers (first lines; `-->`/`hint:` dropped), ignore-list
+      filtering, graceful degradation (absent binary → skip; timeout /
+      exit 2 / unparsable output → warning, never a hard fail)
+- [x] 7.2 `MapLayer.styl_ignored_rules` JSON field (codes list, `["*"]`
+      skips entirely; internal — never served), migration 0013, admin
+      editor; `clean()` blocks on non-ignored E-codes, W-codes surface
+      only alongside a blocking error
+- [x] 7.3 Seed upsert: styl under the same graceful rules;
+      external-derived rows (the CI workflow's skip list) carry
+      `styl_ignored_rules: ["*"]` — one row-level mechanism that
+      eventually replaces the workflow list (kept as defense in depth)
+- [x] 7.4 `validate_map_styles` sweep: styl per inline row with its
+      ignore list — E-codes fail, W-codes always reported
+- [x] 7.5 Tests (mocked subprocess): present-binary blocking, ignore
+      bypass, `["*"]` skip, absent-binary skip, W-code paths, timeout,
+      tool error, unparsable output, seed gate, sweep
+- [x] 7.6 `docs/map-style-subset-spec.md` (whitelist with maplibre
+      spec links, worked examples incl. one rejection, clustering
+      schema, versioning) + mkdocs nav + AGENTS.md validation-flow
+      section; design.md D6 + spec delta updated for save-time styl

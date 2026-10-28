@@ -31,7 +31,11 @@ from server.apps.basemaps.models import (
     MapParameter,
     MapSlot,
 )
-from server.apps.basemaps.validation import SUBSET_REVISION, validate_subset_style
+from server.apps.basemaps.validation import (
+    SUBSET_REVISION,
+    run_styl,
+    validate_subset_style,
+)
 from server.apps.external_links.models import ExternalLink
 from server.apps.organizations.models import Organization
 
@@ -42,6 +46,12 @@ FIXTURES = Path(__file__).resolve().parent.parent.parent / "fixtures" / "styles"
 #: rules ``version`` recorded on ``full`` inline rows. Subset rows carry
 #: ``SUBSET_REVISION`` from ``basemaps.validation`` instead.
 STYLE_SPEC_VERSION = "26.4.4"
+
+#: External-derived styles (vendored upstream documents) skip styl
+#: wholesale via ``styl_ignored_rules: ["*"]`` — one row-level
+#: mechanism that eventually replaces the CI workflow's EXTERNAL_DERIVED
+#: skip list (kept for now as defense in depth; same slugs, see
+#: ``.github/workflows/test.yml``).
 
 SLOTS = [
     {"slug": "background", "label": "Background (area overlays)", "order": 0},
@@ -606,6 +616,7 @@ LAYERS: list[dict[str, Any]] = [
         "order": 0,  # the product slot (plain non-hill pair retired)
         "show": True,
         "style": _fixture_style("wd-outdoor-base-mtk-hill"),
+        "styl_ignored_rules": ["*"],  # external-derived: styl skips wholesale
         "attributions": ["maptoolkit"],
     },
     {
@@ -625,6 +636,7 @@ LAYERS: list[dict[str, Any]] = [
         "order": 1,
         "show": False,  # A/B variant — not a picker product
         "style": _fixture_style("wd-outdoor-base-mtk"),
+        "styl_ignored_rules": ["*"],  # external-derived: styl skips wholesale
         "attributions": ["maptoolkit"],
     },
     {
@@ -636,6 +648,7 @@ LAYERS: list[dict[str, Any]] = [
         "order": 7,
         "show": False,  # A/B variant of the hidden fallback
         "style": _fixture_style("wd-outdoor-base-ofm-hill"),
+        "styl_ignored_rules": ["*"],  # external-derived: styl skips wholesale
         "attributions": ["openfreemap"],
     },
     {
@@ -650,6 +663,7 @@ LAYERS: list[dict[str, Any]] = [
         "order": 8,
         "show": False,  # upstream visual reference, not shipped
         "style": _fixture_style("mtk-outdoor"),
+        "styl_ignored_rules": ["*"],  # external-derived: styl skips wholesale
         "attributions": ["maptoolkit"],
     },
     {
@@ -675,6 +689,7 @@ LAYERS: list[dict[str, Any]] = [
         "spec": MapLayer.Spec.high,
         "order": 2,
         "style": _fixture_style("world-satellite-hybrid"),
+        "styl_ignored_rules": ["*"],  # external-derived: styl skips wholesale
         "attributions": ["openstreetmap", "openfreemap"],
     },
     {
@@ -697,6 +712,7 @@ LAYERS: list[dict[str, Any]] = [
             {
                 "spec": MapLayer.Spec.low,
                 "style": lib.osm_raster_style(),
+                "styl_ignored_rules": ["*"],  # external-derived (variant-level)
             }
         ],
         "attributions": ["swisstopo", "openstreetmap"],
@@ -712,6 +728,7 @@ LAYERS: list[dict[str, Any]] = [
         "coverage": "ch",
         "fallback_min_zoom": 7,
         "style": lib.swisstopo_pixelkarte_style(),
+        "styl_ignored_rules": ["*"],  # external-derived: styl skips wholesale
         "attributions": ["swisstopo"],
     },
     {
@@ -755,6 +772,7 @@ LAYERS: list[dict[str, Any]] = [
         "order": 11,
         "show": False,  # reference/compare entry, not a product basemap
         "style": _fixture_style("mapy-outdoor"),
+        "styl_ignored_rules": ["*"],  # external-derived: styl skips wholesale
         "attributions": ["mapy"],
     },
 ]
@@ -956,11 +974,25 @@ class Command(BaseCommand):
         # fails the seed loudly instead of drifting in via CI sweep
         # only. Token/attribution checks need the M2M syncs below and
         # stay with the sweep (``validate_map_styles``).
+        styl_ignored = variant.get(
+            "styl_ignored_rules", parent.get("styl_ignored_rules")
+        )
         if style_source["style"] is not None:
             if profile == MapLayer.Profile.subset:
                 validate_subset_style(style_source["style"])
             if not version:
                 msg = f"{slug} [{spec}/{profile}]: inline styles need a rules version"
+                raise CommandError(msg)
+            # styl: same graceful rules as ``clean()`` — an absent binary
+            # skips silently; a present binary's E-codes (minus this
+            # row's ignore list) fail the seed loudly.
+            styl_result = run_styl(
+                style_source["style"], ignored_rules=styl_ignored or ()
+            )
+            if styl_result is not None and styl_result.errors:
+                msg = f"{slug} [{spec}/{profile}]: styl: " + "; ".join(
+                    styl_result.errors
+                )
                 raise CommandError(msg)
 
         defaults = {
@@ -979,6 +1011,7 @@ class Command(BaseCommand):
             "style_url": style_source["style_url"],
             "profile": profile,
             "version": version,
+            "styl_ignored_rules": styl_ignored,
             "config": parent.get("config"),
             "interaction": parent.get("interaction"),
             "coverage": coverage if parent.get("coverage") == "ch" else None,
