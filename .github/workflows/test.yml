@@ -277,9 +277,21 @@ jobs:
       - name: Validate styles (E-code spec violations)
         run: |
           shopt -s nullglob
+          # styl hard-gates AUTHORED styles only. Vendored/external-derived
+          # styles (openfreemap-based basemaps, the satellite label stack,
+          # swisstopo/mapy references) use legacy filter + expression forms
+          # that MapLibre itself accepts but styl v0.0.6's expression
+          # validator rejects — validating them would hard-fail on legal
+          # documents. Tracked for upstream: navidnabavi/styl legacy filters.
+          EXTERNAL_DERIVED='world-satellite-hybrid|wd-outdoor-base-mtk-hill|wd-outdoor-base-mtk|wd-outdoor-base-ofm-hill|wd-outdoor-base-ofm|mtk-outdoor|mapy-outdoor|ch-swisstopo-full|ch-swisstopo-light|openfreemap-liberty|maptiler-hybrid'
           fail=0
           for f in .style-dump/*.json \
                    server/apps/basemaps/fixtures/styles/*.json; do
+            base="$(basename "$f")"
+            if echo "$base" | grep -qE "^(${EXTERNAL_DERIVED})(--|\.)"; then
+              echo "skip (external-derived): $base"
+              continue
+            fi
             echo "styl validate $f"
             styl validate "$f" || fail=1
           done
