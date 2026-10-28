@@ -1929,7 +1929,7 @@ wheels = [
 [[package]]
 name = "hut-services"
 version = "0.5.1"
-source = { git = "https://github.com/wodore/hut-services?branch=photos-mode#4399210239e5c3d25eaca05b5906982c7f6ded33" }
+source = { git = "https://github.com/wodore/hut-services?branch=main#9f4b4a1c0a330166d30d8a4a1330a0744b27e0ce" }
 dependencies = [
     { name = "bs4" },
     { name = "dateparser" },
@@ -1952,7 +1952,7 @@ dependencies = [
 [[package]]
 name = "hut-services-private"
 version = "0.5.0"
-source = { git = "ssh://git@github.com/wodore/hut-services-private?branch=photos-mode#ed516c3c80834f57d58da9391fbd2c7b34c37f65" }
+source = { git = "ssh://git@github.com/wodore/hut-services-private?branch=main#c9c089703f1385210cb0144d210a53ea00326905" }
 dependencies = [
     { name = "httpx" },
     { name = "hut-services" },
@@ -5430,8 +5430,8 @@ requires-dist = [
     { name = "geojson-pydantic", specifier = "==1.*" },
     { name = "gunicorn", specifier = "==25.*" },
     { name = "httpx", specifier = ">=0.25.0" },
-    { name = "hut-services", git = "https://github.com/wodore/hut-services?branch=photos-mode" },
-    { name = "hut-services-private", marker = "extra == 'private'", git = "ssh://git@github.com/wodore/hut-services-private?branch=photos-mode" },
+    { name = "hut-services", git = "https://github.com/wodore/hut-services?branch=main" },
+    { name = "hut-services-private", marker = "extra == 'private'", git = "ssh://git@github.com/wodore/hut-services-private?branch=main" },
     { name = "jinja2", specifier = "==3.*" },
     { name = "load-dotenv", specifier = "==0.1.*" },
     { name = "mozilla-django-oidc", specifier = "==5.*" },

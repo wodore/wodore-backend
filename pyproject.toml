@@ -164,12 +164,12 @@ dev = [
 [tool.uv.sources]
 django-postgres-extra = { git = "https://github.com/armonge/django-postgres-extra.git", branch = "feat/django-6" }
 # hut-services-private = { path = "/home/tobias/git/wodore/hut-services-private", editable = true }
-# hut-services / hut-services-private: TEMPORARILY pinned to the `photos-mode` branches
-# (tri-state include_photos: none/embedded/all, convert default embedded). Flip both back
-# to `branch = "main"` and re-lock once those PRs merge; revert hut-services to PyPI at
-# the next release.
-hut-services = { git = "https://github.com/wodore/hut-services", branch = "photos-mode" }
-hut-services-private = { git = "ssh://git@github.com/wodore/hut-services-private", branch = "photos-mode" }
+# hut-services / hut-services-private: tracked as git main (PhotosMode tri-state,
+# #39/#37) - revert hut-services to PyPI at the next release (>= 0.6.0). Previously
+ # pinned to the photos-mode branches until both PRs merged; revert hut-services
+# to PyPI at the next release.
+hut-services = { git = "https://github.com/wodore/hut-services", branch = "main" }
+hut-services-private = { git = "ssh://git@github.com/wodore/hut-services-private", branch = "main" }
 # hut-services = { path = "/home/tobias/git/wodore/hut-services", editable = true } # local DEV
 # django-admin-runner = { path = "/home/tobias/git/burgdev/django-admin-runner", editable = true }
 
