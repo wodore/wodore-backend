@@ -214,6 +214,14 @@ test -f /code/static/local_auth/css/account.css
 # parseable on every supported Python.
 printf 'export BUILD_TIMESTAMP=%s\n' "$(python -c 'from datetime import datetime, timezone; print(datetime.now(timezone.utc).isoformat())')" > /code/.build_timestamp
 chmod 644 /code/.build_timestamp
+# Own the hut-services file-cache tree LAST (see Dockerfile.alpine):
+# importing hut_services during the root-run manage.py steps above
+# mkdirs /tmp/py_file_cache(/kv) root-owned, which breaks the library's
+# file-cache fallback for the runtime web user (uid 1001, EACCES).
+# mkdir -p is idempotent here (the lib already created the dir on import).
+mkdir -p /tmp/py_file_cache
+touch /tmp/py_file_cache/.gitignore
+chown -R web:web /tmp/py_file_cache
 EOF
 
 # Running as non-root user:

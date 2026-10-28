@@ -200,7 +200,6 @@ RUN <<EOF
 set -e
 mkdir -p /tmp/py_file_cache
 touch /tmp/py_file_cache/.gitignore
-chown -R web:web /tmp/py_file_cache
 mkdir -p /code/static
 chown web:web /code/static
 chmod +x '/docker-entrypoint.sh'
@@ -227,6 +226,14 @@ test -f /code/static/local_auth/css/account.css
 # and parseable on every supported Python.
 printf 'export BUILD_TIMESTAMP=%s\n' "$(python -c 'from datetime import datetime, timezone; print(datetime.now(timezone.utc).isoformat())')" > /code/.build_timestamp
 chmod 644 /code/.build_timestamp
+# Own the hut-services file-cache tree LAST: importing hut_services (any
+# manage.py step above, still root) instantiates its default
+# FileCacheBackend, which mkdirs /tmp/py_file_cache/kv root-owned. The
+# app runs as web (uid 1001) — a root-owned kv dir breaks the library's
+# file-cache fallback with EACCES on the first cache write (seen on
+# staging: bare-python tooling and the non-DatabaseCache fallback path).
+# chown-ing earlier is futile: the root-run steps recreate the dir after.
+chown -R web:web /tmp/py_file_cache
 EOF
 
 # Running as non-root user:
