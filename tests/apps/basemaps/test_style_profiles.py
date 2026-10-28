@@ -627,6 +627,17 @@ class TestSeedTagging:
             "wd-huts-occupation",
             "wd-huts",
         ]
+        # Parameter precedence (variant replaces the parent list): the
+        # twin drops the inert icon-scale slider — its baked icon-size
+        # ladder never reads the token — and keeps {{date}} for the
+        # wd-bookings template; the full row keeps both knobs.
+        assert set(full.layer_parameters.values_list("parameter__slug", flat=True)) == {
+            "huts.icon_scale",
+            "date",
+        }
+        assert set(
+            subset.layer_parameters.values_list("parameter__slug", flat=True)
+        ) == {"date"}
 
     def test_seed_idempotent_profiles(self) -> None:
         call_command("map_seed", verbosity=0)

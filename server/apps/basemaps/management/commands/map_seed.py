@@ -361,6 +361,11 @@ LAYERS: list[dict[str, Any]] = [
                 "profile": MapLayer.Profile.subset,
                 "version": SUBSET_REVISION,
                 "style": lib.HUTS_STYLE_SUBSET,
+                # Variant parameters REPLACE the parent list (see
+                # _seed_layer): the twin drops the inert icon-scale slider
+                # (its baked icon-size ladder never reads the token) but
+                # keeps {{date}} for the wd-bookings tile template.
+                "parameters": {"date": None},
             }
         ],
         "attributions": [],
@@ -1058,7 +1063,12 @@ class Command(BaseCommand):
                 layer.fallback = fallback
                 layer.save(update_fields=["fallback"])
 
-        self._sync_parameters(layer, parent, params)
+        # Parameter precedence: a variant's own ``parameters`` replace
+        # the parent's list for that row (the parent list stays the
+        # default for variants without one) — subset twins drop inert
+        # knobs the trimmed document never references.
+        wanted_parameters = variant.get("parameters", parent.get("parameters", {}))
+        self._sync_parameters(layer, wanted_parameters, params)
         self._sync_categories(layer, parent)
         self._sync_attributions(layer, parent, orgs)
 
@@ -1140,9 +1150,13 @@ class Command(BaseCommand):
         return link
 
     def _sync_parameters(
-        self, layer: MapLayer, parent: dict[str, Any], params: dict[str, MapParameter]
+        self,
+        layer: MapLayer,
+        wanted: dict[str, Any],
+        params: dict[str, MapParameter],
     ) -> None:
-        wanted = parent.get("parameters", {})
+        """Sync the layer's parameter links to ``wanted`` (already
+        variant-resolved — see ``_seed_layer``)."""
         wanted_slugs = set(wanted)
         existing = {
             link.parameter.slug: link
