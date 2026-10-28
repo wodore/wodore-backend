@@ -267,6 +267,10 @@ jobs:
           chmod +x /usr/local/bin/styl
           styl --help > /dev/null && echo "styl ${STYL_VERSION} installed"
 
+      - name: Install GDAL
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gdal-bin
       - name: Dump seed styles
         run: uv run python manage.py dump_map_styles --out .style-dump
 
