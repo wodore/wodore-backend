@@ -21,15 +21,17 @@ Covers the openspec change ``style-profiles-subset``:
 
 from __future__ import annotations
 
+import io
 import json
 import subprocess
+from collections.abc import Generator
 from copy import deepcopy
-from io import StringIO
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -37,6 +39,7 @@ from django.db import IntegrityError
 from django.test import Client, SimpleTestCase
 
 from server.apps.basemaps import validation
+from server.apps.basemaps.api import CATALOG_VERSION_CACHE_KEY, STYLE_BODIES_EPOCH_KEY
 from server.apps.basemaps.management.commands.dump_map_styles import (
     Command as DumpCommand,
 )
@@ -46,7 +49,11 @@ from server.apps.basemaps.management.commands.map_seed import (
 )
 from server.apps.basemaps.models import MapCoverage, MapLayer
 from server.apps.basemaps.resolution import style_endpoint_url
-from server.apps.basemaps.seed_lib import raster_style, swisstopo_overlay_style
+from server.apps.basemaps.seed_lib import (
+    TRANSPORT_STYLE_SUBSET,
+    raster_style,
+    swisstopo_overlay_style,
+)
 from server.apps.basemaps.validation import (
     SUBSET_REVISION,
     StyleValidationError,
@@ -239,6 +246,12 @@ class SubsetWalkerAccepts(SimpleTestCase):
 
     def test_vector_encoding_mlt_passes(self) -> None:
         validate_subset_style(_occupation_subset())
+
+    def test_transport_stops_subset_twin_passes_walker(self) -> None:
+        """The seeded subset variant (promoteId/layout stripped, minzoom
+        floor added) is walker-clean — the FULL document deliberately
+        still is not (see the rejection test: it keeps promoteId)."""
+        validate_subset_style(TRANSPORT_STYLE_SUBSET)
 
     def test_equality_operator_with_nested_get_passes(self) -> None:
         """``==`` is whitelisted but NOT identifier-shaped — it must be
@@ -562,6 +575,24 @@ class TestSeedTagging:
         # Retagged in place — no orphan full twins beside the subset rows.
         assert not MapLayer.objects.filter(slug="mtb", profile="full").exists()
 
+    def test_transport_stops_subset_variant_seeded(self) -> None:
+        """The overlay serves BOTH profiles at the same tier: the authored
+        full row (unchanged) plus the walker-clean subset twin for the
+        Leaflet fallback."""
+        call_command("map_seed", verbosity=0)
+        full = MapLayer.objects.get(
+            slug="transport-stops", spec="medium", profile="full"
+        )
+        assert full.version == STYLE_SPEC_VERSION
+        subset = MapLayer.objects.get(
+            slug="transport-stops", spec="medium", profile="subset"
+        )
+        assert subset.version == SUBSET_REVISION
+        assert subset.style is not None
+        assert "promoteId" not in subset.style["sources"]["transport-stops"]
+        assert all("layout" not in layer for layer in subset.style["layers"])
+        assert subset.style["layers"][0]["minzoom"] == 10
+
     def test_seed_idempotent_profiles(self) -> None:
         call_command("map_seed", verbosity=0)
         before = sorted(
@@ -659,6 +690,20 @@ class TestDumpCommand:
 
 @pytest.mark.django_db
 class TestApiProfile:
+    @pytest.fixture(autouse=True)
+    def _clear_catalog_memos(self) -> Generator[None, None, None]:
+        """Catalog memos and rendered bodies outlive the DB transaction —
+        a prior test's cached body (keyed by an ETag folding the same
+        memoized version + query string) can leak into this test's
+        response and break exact-list assertions. Clear the memos around
+        every test so each computes fresh keys (the same pattern as
+        test_style_cache_epoch's ``_clean_epoch``)."""
+        cache.delete(CATALOG_VERSION_CACHE_KEY)
+        cache.delete(STYLE_BODIES_EPOCH_KEY)
+        yield
+        cache.delete(CATALOG_VERSION_CACHE_KEY)
+        cache.delete(STYLE_BODIES_EPOCH_KEY)
+
     def _seed_variants(self) -> None:
         """Same-tier pair (medium full+subset) + a full-only slug — the
         omitted-profile resolution picks the first row by (role, order,
@@ -672,6 +717,27 @@ class TestApiProfile:
         """Cross-tier pair for the tier-before-richness walk."""
         _make("hybrid", "high", "subset")
         _make("hybrid", "medium", "full", style=deepcopy(FULL_CIRCLE))
+
+    def test_seeded_subset_catalog_includes_transport_stops(self) -> None:
+        """Owner report: 'public transport does not work' on the Leaflet
+        fallback — the subset twin makes the overlay subset-servable at
+        the same tier, and unprofiled clients keep the full row."""
+        call_command("map_seed", verbosity=0)
+        response = Client().get("/v1/map/layers?profile=subset")
+        assert response.status_code == 200
+        entries = {entry["slug"]: entry for entry in response.json()["data"]}
+        assert "transport-stops" in entries
+        entry = entries["transport-stops"]
+        assert entry["profile"] == "subset"
+        assert entry["version"] == SUBSET_REVISION
+        assert "profile=subset" in entry["style_url"]
+        # The style endpoint serves the subset document (no promoteId).
+        style = Client().get("/v1/map/styles/transport-stops.json?profile=subset")
+        assert style.status_code == 200
+        assert "promoteId" not in style.json()["sources"]["transport-stops"]
+        # Unprofiled requests keep today's behavior: the full row.
+        unprofiled = Client().get("/v1/map/layers/transport-stops")
+        assert unprofiled.json()["profile"] == "full"
 
     def _entry(self, client: Client, slug: str, query: str = "") -> dict[str, Any]:
         response = client.get(f"/v1/map/layers/{slug}{query}")
@@ -966,7 +1032,7 @@ class TestStylSaveGate:
     def test_sweep_fails_on_styl_e_code(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._with_styl(monkeypatch, _STYL_E003)
         _make("stysweep", profile="full", style=deepcopy(FULL_CIRCLE))
-        stderr = StringIO()
+        stderr = io.StringIO()
         with pytest.raises(CommandError, match="style violation"):
             call_command("validate_map_styles", stderr=stderr)
         assert "E003" in stderr.getvalue()  # details name the row and code

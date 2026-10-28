@@ -10,6 +10,7 @@ fixture JSON files (``fixtures/styles/``).
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 from server.apps.envvars.registry import resolve_setting
@@ -710,6 +711,29 @@ TRANSPORT_STYLE: dict[str, Any] = {
                 ],
             },
         },
+    ],
+}
+
+
+#: Subset twin of TRANSPORT_STYLE (Leaflet fallback, profile=subset):
+#: the full document minus the non-whitelisted bits — ``promoteId``
+#: (source key: clients key features by the geojson-provided id) and
+#: the default ``layout.visibility`` — plus a ``minzoom`` floor the full
+#: style lacks: the BAV list is 20k+ stops and the fallback map runs on
+#: low-spec devices, where sub-z10 circles are invisible clutter anyway
+#: (the full style's opacity only reaches 0.6 at z8). Derived on purpose:
+#: if the full style ever grows keys outside the subset whitelist, the
+#: seed gate fails loudly instead of the subset twin silently drifting.
+TRANSPORT_STYLE_SUBSET: dict[str, Any] = {
+    **deepcopy(TRANSPORT_STYLE),
+    "sources": {
+        source_id: {key: value for key, value in source.items() if key != "promoteId"}
+        for source_id, source in TRANSPORT_STYLE["sources"].items()
+    },
+    "layers": [
+        {key: deepcopy(value) for key, value in layer.items() if key != "layout"}
+        | {"minzoom": 10}
+        for layer in TRANSPORT_STYLE["layers"]
     ],
 }
 

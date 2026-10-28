@@ -405,6 +405,17 @@ LAYERS: list[dict[str, Any]] = [
         "slot": "ways",
         "order": 2,
         "style": lib.TRANSPORT_STYLE,
+        "variants": [
+            # Subset twin for the Leaflet fallback (no-WebGL map): the
+            # full circle layer is subset-expressible once promoteId and
+            # the default layout.visibility drop (see
+            # seed_lib.TRANSPORT_STYLE_SUBSET); same tier, subset profile.
+            {
+                "profile": MapLayer.Profile.subset,
+                "version": SUBSET_REVISION,
+                "style": lib.TRANSPORT_STYLE_SUBSET,
+            }
+        ],
         "attributions": ["bav", "openstreetmap"],
     },
     {
