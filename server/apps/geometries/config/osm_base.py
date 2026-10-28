@@ -154,7 +154,10 @@ class CategoryMappings:
     """List of OSM tag mappings for this category"""
 
     detail_type: str = "amenity"
-    """GeoPlace detail_type (amenity, transport, admin, natural, accommodation)"""
+    """Legacy declaration — IGNORED since detail_type is derived on
+    write from the kind registry (geoplace-kinds-operations-graph
+    D2); retained only until the detail models retire. Never
+    'accommodation' (not a valid detail_type value)."""
 
     enabled: bool = True
     """Whether this category is enabled for import"""

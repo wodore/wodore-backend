@@ -241,13 +241,20 @@ class GeoPlaceCategoryInline(unfold_admin.TabularInline):
         request: HttpRequest,
         **kwargs: Any,
     ):
-        """Scope the classifier autocomplete to the mode.* subtree."""
+        """Scope the classifier autocomplete to the kind registry's
+        allowed subtrees (PLACE_KINDS — today mode.*; registry-driven
+        instead of hardcoded, geoplace-kinds task 1.4)."""
         from server.apps.categories.models import Category
 
+        from ..kinds import PLACE_KINDS
+
         if db_field.name == "classifier":
-            kwargs["queryset"] = Category.objects.filter(parent__slug="mode").order_by(
-                "order"
+            allowed_roots = sorted(
+                {root for kind in PLACE_KINDS.values() for root in kind.classifiers}
             )
+            kwargs["queryset"] = Category.objects.filter(
+                parent__slug__in=allowed_roots
+            ).order_by("order")
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     @override

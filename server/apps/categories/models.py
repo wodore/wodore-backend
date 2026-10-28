@@ -11,6 +11,7 @@ from django_cleanup import cleanup
 from modeltrans.fields import TranslationField
 
 from django.contrib.postgres.indexes import GinIndex
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
@@ -172,6 +173,20 @@ class Category(ComputedFieldsModel, TimeStampedModel):
         help_text=_("Whether this category is currently active"),
     )
 
+    # Code-coupled vocabulary (mode.*, role.*, kind roots, uri kinds)
+    # seeded from migrations: deletion is blocked (code references
+    # the slugs), presentation — names, colors, symbols — stays
+    # freely editable (OpenSpec geoplace-kinds-operations-graph).
+    is_protected = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name=_("Protected"),
+        help_text=_(
+            "Code-coupled vocabulary category — cannot be deleted; "
+            "names, colors and symbols remain editable"
+        ),
+    )
+
     # SEO / sitemap policy for places in this category (tri-state):
     #   "include" / "exclude" decide for this category and (via
     #   inheritance) its children; empty (None) inherits the parent's
@@ -255,6 +270,23 @@ class Category(ComputedFieldsModel, TimeStampedModel):
         if not self.slug and self.name_i18n:
             self.slug = slugify(self.name_i18n)
         super().save(*args, **kwargs)
+
+    @override
+    def delete(
+        self,
+        using: Any = None,
+        keep_parents: bool = False,
+    ) -> tuple[int, dict[str, int]]:
+        """Protected vocabulary cannot be deleted (names/colors stay
+        editable) — code couples to these slugs
+        (geoplace-kinds-operations-graph task 1.2)."""
+        if getattr(self, "is_protected", False):
+            msg = (
+                f"Category '{self.slug}' is protected vocabulary and "
+                f"cannot be deleted (deactivate it instead)."
+            )
+            raise ValidationError(msg)
+        return super().delete(using=using, keep_parents=keep_parents)
 
     # Hierarchy helper methods
 

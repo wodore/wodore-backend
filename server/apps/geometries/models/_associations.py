@@ -322,20 +322,26 @@ class GeoPlaceCategory(TimeStampedModel):
 
         ``clean()`` (admin forms), the schema upsert and the wodore
         import all funnel through here — Django calls ``clean()`` on
-        none of the latter two paths. The classifier must be a
-        ``mode.*`` child; ``extra`` is validated against the category
-        subtree's ``CategoryExtraSchema`` (no schema → free-form;
-        corrupt stored schema → fail open, logged).
+        none of the latter two paths. The classifier must be a child
+        of one of the **kind's allowed classifier subtrees**
+        (``PLACE_KINDS`` — today ``mode`` for accommodation only);
+        ``extra`` is validated against the category subtree's
+        ``CategoryExtraSchema`` (no schema → free-form; corrupt
+        stored schema → fail open, logged).
         """
+        from ..kinds import kind_for
+
         if classifier is not None:
             parent = classifier.parent
-            if parent is None or parent.slug != "mode":
+            allowed = kind_for(category).classifiers
+            if parent is None or parent.slug not in allowed:
                 raise ValidationError(
                     {
                         "classifier": _(
-                            "Classifier must be a mode.* category "
-                            "(a child of the 'mode' parent)."
+                            "Classifier must be a child of one of this "
+                            "kind's allowed categories (allowed: %(allowed)s)."
                         )
+                        % {"allowed": ", ".join(allowed) or _("none")}
                     }
                 )
         cls.validate_extra(category, extra)

@@ -27,6 +27,7 @@ from server.core.models import TimeStampedModel
 from server.core.utils import UpdateCreateStatus
 
 from ..converters import RESERVED_URL_SEGMENTS, SLUG_GRAMMAR_RE
+from ..kinds import place_detail_type
 
 if TYPE_CHECKING:
     from server.apps.geometries.schemas import (
@@ -1085,13 +1086,18 @@ class GeoPlace(TimeStampedModel):
         name_dict = schema.get_name_dict()
         description_dict = schema.get_description_dict()
 
+        # detail_type is derived on write from the kind contract
+        # (geoplace-kinds-operations-graph D2) — the input schema no
+        # longer declares it.
+        derived_detail_type = place_detail_type([spec.category for spec in place_types])
+
         # Build place data
         place_data = {
             "name": name_dict.get(settings.LANGUAGE_CODE, ""),
             "main_language": detect_main_language(name_dict) or settings.LANGUAGE_CODE,
             "location": location,
             "country_code": schema.country_code,
-            "detail_type": schema.detail_type,
+            "detail_type": derived_detail_type,
             "elevation": schema.elevation,
             "importance": schema.importance,
             "review_status": schema.review_status.value,
@@ -1155,7 +1161,7 @@ class GeoPlace(TimeStampedModel):
         # Create detail model based on type (flattened structure)
         from ..schemas import DetailType
 
-        if schema.detail_type == DetailType.AMENITY and schema.operating_status:
+        if derived_detail_type == DetailType.AMENITY and schema.operating_status:
             amenity_kwargs = {
                 "geo_place": place,
                 "operating_status": schema.operating_status.value,
@@ -1171,7 +1177,7 @@ class GeoPlace(TimeStampedModel):
 
             AmenityDetail.objects.create(**amenity_kwargs)
 
-        elif schema.detail_type == DetailType.ADMIN and schema.admin_level:
+        elif derived_detail_type == DetailType.ADMIN and schema.admin_level:
             AdminDetail.objects.create(
                 geo_place=place,
                 admin_level=schema.admin_level,
@@ -1334,6 +1340,14 @@ class GeoPlace(TimeStampedModel):
                     assoc.save(update_fields=["extra", "modified"])
                     categories_updated = True
 
+        # detail_type derived on write from the kind contract
+        # (geoplace-kinds-operations-graph D2).
+        derived_detail_type = place_detail_type([spec.category for spec in place_types])
+        if "detail_type" not in protected and place.detail_type != derived_detail_type:
+            place.detail_type = derived_detail_type
+            update_fields.append("detail_type")
+            place_updated = True
+
         # Update name translations
         if "name" not in protected:
             name_dict = schema.get_name_dict()
@@ -1422,7 +1436,7 @@ class GeoPlace(TimeStampedModel):
         from ..schemas import DetailType
 
         detail_updated = False
-        if schema.detail_type == DetailType.AMENITY and schema.operating_status:
+        if derived_detail_type == DetailType.AMENITY and schema.operating_status:
             # Build amenity detail data from flattened schema
             try:
                 amenity_detail = place.amenity_detail  # type: ignore  # dynamic attr: plugin-less inference gap
@@ -1460,7 +1474,7 @@ class GeoPlace(TimeStampedModel):
             elif update_fields:
                 amenity_detail.save(update_fields=update_fields)
 
-        elif schema.detail_type == DetailType.ADMIN and schema.admin_level:
+        elif derived_detail_type == DetailType.ADMIN and schema.admin_level:
             admin_detail, created = AdminDetail.objects.update_or_create(
                 geo_place=place,
                 defaults={
