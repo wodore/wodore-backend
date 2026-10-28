@@ -337,6 +337,14 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             AutocompleteSelectMultipleFilter,
         ),  # Filter by categories with autocomplete
         (
+            "categories__parent",
+            AutocompleteSelectMultipleFilter,
+        ),  # Filter by category parent (e.g. all accommodations)
+        (
+            "source_set",
+            AutocompleteSelectMultipleFilter,
+        ),  # Filter by source organization (geonames, osm, wodore, ...)
+        (
             "country_code",
             ChoicesDropdownFilter,
         ),  # Filter by country with dropdown
