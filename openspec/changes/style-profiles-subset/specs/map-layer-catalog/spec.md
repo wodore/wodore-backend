@@ -145,7 +145,9 @@ server runtime and the CI tests job never require it; the style
 endpoint never invokes styl): best-effort at save time
 (`MapLayer.clean()`), in the seed upsert under the same graceful rules,
 and as the hard CI gate (`map-style-spec` job over the dumped seed
-styles and authored fixtures with the external-derived skip list;
+styles and authored fixtures — styl-ignored rows skip the dump via
+the seed's own ignore list, and the emitted skip manifest also gates
+the fixture files;
 `.stylrc` committed). E-code violations SHALL block saves unless their
 code is on the row's `styl_ignored_rules` (JSON list of rule codes;
 `["*"]` skips styl entirely; internal validation config never served

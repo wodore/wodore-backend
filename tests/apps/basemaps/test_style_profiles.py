@@ -240,6 +240,49 @@ class SubsetWalkerAccepts(SimpleTestCase):
     def test_vector_encoding_mlt_passes(self) -> None:
         validate_subset_style(_occupation_subset())
 
+    def test_equality_operator_with_nested_get_passes(self) -> None:
+        """``==`` is whitelisted but NOT identifier-shaped — it must be
+        honored via the operator list (review fix #1), with nested
+        expression operands still walked."""
+        style = deepcopy(_circle_subset())
+        style["layers"][0]["paint"]["circle-opacity"] = [
+            "case",
+            ["==", ["get", "kind"], "station"],
+            1,
+            ["==", ["get", "kind"], "halt"],
+            0.6,
+            0.3,
+        ]
+        validate_subset_style(style)
+
+    def test_match_with_label_set_passes(self) -> None:
+        """``match`` labels may be literal scalar arrays — the operator-shape
+        heuristic must not misread ``["residential", …]`` as an expression
+        head (review fix #3)."""
+        style = deepcopy(_circle_subset())
+        style["layers"][0]["paint"]["circle-color"] = [
+            "match",
+            ["get", "road_class"],
+            ["residential", "service"],
+            "#cccccc",
+            "trunk",
+            "#ff0000",
+            "#888888",
+        ]
+        validate_subset_style(style)
+
+    def test_in_with_literal_set_haystack_passes(self) -> None:
+        """``in`` haystacks may be literal scalar arrays too (expression
+        haystacks like transport-stops' stay expression-checked)."""
+        style = deepcopy(_circle_subset())
+        style["layers"][0]["paint"]["circle-color"] = [
+            "case",
+            ["in", ["get", "kind"], ["bus", "tram"]],
+            "#2d327d",
+            "#0079C7",
+        ]
+        validate_subset_style(style)
+
 
 class SubsetWalkerRejects(SimpleTestCase):
     def _reject(self, style: dict[str, Any], match: str) -> None:
@@ -586,14 +629,29 @@ class TestSweepCommand:
 
 @pytest.mark.django_db
 class TestDumpCommand:
-    def test_dump_writes_full_skips_subset(self, tmp_path: Any) -> None:
+    """dump_map_styles CI-input behavior: written files, walker-owned
+    subset skips, and the _skipped.txt manifest for styl-ignored rows."""
+
+    def test_dump_writes_full_skips_subset_and_ignored(self, tmp_path: Any) -> None:
         call_command(DumpCommand(), out=str(tmp_path))
         names = sorted(path.name for path in tmp_path.iterdir())
+        # Authored full styles without an ignore list are dumped.
         assert "huts--medium--full.json" in names
-        assert "world-topo--high--subset.json" not in names
-        assert "mtb--medium--subset.json" not in names
+        assert "transport-stops--medium--full.json" in names
         body = json.loads((tmp_path / "huts--medium--full.json").read_text())
         assert body["version"] == 8
+        # Subset rows are walker-owned (never dumped) …
+        assert "world-topo--high--subset.json" not in names
+        assert "mtb--medium--subset.json" not in names
+        # … and styl-ignored (["*"]) full rows are skipped + manifested —
+        # the seed list is the single source of truth the CI job reads.
+        assert "world-satellite-hybrid--high--full.json" not in names
+        manifest = (tmp_path / "_skipped.txt").read_text().split()
+        assert "world-satellite-hybrid" in manifest
+        assert "ch-swisstopo-light" in manifest  # variant-level ["*"]
+        assert "ch-swisstopo-full" in manifest
+        assert "wd-outdoor-base-ofm-hill" in manifest
+        assert "huts" not in manifest
 
 
 # ── API surface ───────────────────────────────────────────────────────

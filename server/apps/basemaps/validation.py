@@ -311,25 +311,74 @@ def _subset_error(errors: list[str], path: str, message: str) -> None:
     errors.append(f"{path}: {message} (subset v{SUBSET_REVISION})")
 
 
-def _check_subset_expression(value: Any, path: str, errors: list[str]) -> None:
-    """Recursive whitelist check for one expression subtree.
+def _is_expression_head(value: list[Any]) -> bool:
+    """MapLibre's expression test, by shape — plus the listed
+    non-identifier operators (``==``) that the shape heuristic alone
+    would miss (review fix: ``==`` is whitelisted but not
+    identifier-shaped, so it must be honored via the list)."""
+    head = value[0]
+    return isinstance(head, str) and (
+        head in SUBSET_EXPRESSION_OPS or _OPERATOR_SHAPE_RE.match(head) is not None
+    )
 
-    Strings pass (literals and standalone ``{{token}}`` parameter
-    nodes); lists are expressions only when their first element looks
-    like an operator name (MapLibre's own expression test, by shape) —
-    other arrays are literal values (``text-font`` stacks, numeric
-    pairs) and must contain scalars only; objects are never subset
-    expressions. ``['linear']``/``['zoom']`` outside an ``interpolate``
-    slot read as unknown operators — the error names the path, which
-    is the point.
+
+def _is_scalar_array(value: list[Any]) -> bool:
+    """A literal array value — scalars only, never nested expressions."""
+    return all(
+        entry is None or isinstance(entry, (str, bool, int, float)) for entry in value
+    )
+
+
+def _check_label_set(value: Any, path: str, errors: list[str]) -> None:
+    """``match`` label / ``in`` haystack positions.
+
+    These positions accept an expression, a scalar, or a literal SET
+    of scalars (``["residential", "service"]``) — the operator-shape
+    heuristic does not apply, because a plain label string is the
+    common case and is indistinguishable from an unknown operator
+    name (review fix: label sets mis-detected as expressions). Only
+    whitelisted heads count as expressions here; anything else must
+    be a scalar or a scalar array.
     """
     if value is None or isinstance(value, (str, bool, int, float)):
         return
     if isinstance(value, list):
         if not value:
             return
-        op = value[0]
-        if not isinstance(op, str) or not _OPERATOR_SHAPE_RE.match(op):
+        head = value[0]
+        if isinstance(head, str) and head in SUBSET_EXPRESSION_OPS:
+            _check_subset_expression(value, path, errors)
+            return
+        if _is_scalar_array(value):
+            return
+    _subset_error(
+        errors,
+        path,
+        "labels must be scalars, scalar arrays, or expressions "
+        "with a whitelisted operator head",
+    )
+
+
+def _check_subset_expression(value: Any, path: str, errors: list[str]) -> None:
+    """Recursive whitelist check for one expression subtree.
+
+    Strings pass (literals and standalone ``{{token}}`` parameter
+    nodes); lists are expressions when their head is a whitelisted
+    operator (``==`` included — not identifier-shaped, but listed) or
+    an identifier-shaped string (MapLibre's own expression test, by
+    shape — unknown identifier heads error as non-whitelisted
+    operators); other arrays are literal values (``text-font`` stacks,
+    numeric pairs) and must contain scalars only; objects are never
+    subset expressions. ``['linear']``/``['zoom']`` outside an
+    ``interpolate`` slot read as unknown operators — the error names
+    the path, which is the point.
+    """
+    if value is None or isinstance(value, (str, bool, int, float)):
+        return
+    if isinstance(value, list):
+        if not value:
+            return
+        if not _is_expression_head(value):
             # Literal array value (font stacks, offsets, rgb triples) —
             # scalar entries only, never nested expressions.
             for index, entry in enumerate(value):
@@ -341,16 +390,50 @@ def _check_subset_expression(value: Any, path: str, errors: list[str]) -> None:
                         "(nested expressions need an operator head)",
                     )
             return
+        op = value[0]
         if op not in SUBSET_EXPRESSION_OPS:
             _subset_error(errors, path, f"operator {op!r} is not whitelisted")
             return
         if op == "interpolate":
             _check_subset_interpolate(value, path, errors)
             return
+        if op == "match":
+            _check_subset_match(value, path, errors)
+            return
+        if op == "in":
+            _check_subset_in(value, path, errors)
+            return
         for index, child in enumerate(value[1:], start=1):
             _check_subset_expression(child, f"{path}[{index}]", errors)
         return
     _subset_error(errors, path, "object expressions are not whitelisted")
+
+
+def _check_subset_match(expr: list[Any], path: str, errors: list[str]) -> None:
+    """``['match', input, label, output, …, fallback]`` — labels are
+    label-set positions (scalar or scalar array); outputs and the
+    fallback are value positions."""
+    if len(expr) < 5 or len(expr) % 2 == 0:
+        _subset_error(errors, path, "match needs (label, output) pairs plus a fallback")
+        return
+    _check_subset_expression(expr[1], f"{path}[1]", errors)
+    for index in range(2, len(expr) - 1, 2):
+        _check_label_set(expr[index], f"{path}[{index}]", errors)
+    for index in range(3, len(expr) - 1, 2):
+        _check_subset_expression(expr[index], f"{path}[{index}]", errors)
+    fallback = len(expr) - 1
+    _check_subset_expression(expr[fallback], f"{path}[{fallback}]", errors)
+
+
+def _check_subset_in(expr: list[Any], path: str, errors: list[str]) -> None:
+    """``['in', needle, haystack]`` — the haystack is a label-set
+    position (``['get', 'types']`` stays an expression; ``['a', 'b']``
+    is a literal set)."""
+    if len(expr) != 3:
+        _subset_error(errors, path, "in takes exactly (needle, haystack)")
+        return
+    _check_subset_expression(expr[1], f"{path}[1]", errors)
+    _check_label_set(expr[2], f"{path}[2]", errors)
 
 
 def _check_subset_interpolate(expr: list[Any], path: str, errors: list[str]) -> None:
@@ -582,12 +665,13 @@ def run_styl(
     ignored = set(ignored_rules or ())
     if "*" in ignored:
         return None
-    with tempfile.NamedTemporaryFile(
-        "w", suffix=".json", encoding="utf-8", delete=False
-    ) as handle:
-        json.dump(style, handle)
-        path = handle.name
+    path = ""
     try:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".json", encoding="utf-8", delete=False
+        ) as handle:
+            path = handle.name
+            json.dump(style, handle)
         completed = subprocess.run(
             ["styl", "validate", path],
             capture_output=True,

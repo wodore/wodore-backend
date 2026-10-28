@@ -82,6 +82,10 @@ Recursive, any depth (see the
   (operator name shape) is an expression — anything else
   (`["Noto Sans Regular"]` for `text-font`, numeric pairs) is a literal
   array and must contain scalars only.
+- `match` labels and `in` haystacks accept a scalar, a literal SET of
+  scalars (`["residential", "service"]`) or an expression with a
+  whitelisted operator head — plain label strings are the common case
+  and are not misread as operator names in these positions.
 - Standalone `"{{slug}}"` parameter token nodes are valid wherever a
   value is expected.
 - Out: `feature-state`, `image`, `coalesce`, data-driven paint outside
@@ -278,8 +282,10 @@ clients at the same tier).
   `styl_ignored_rules: ["*"]`.
 - **CI**: `validate_map_styles` sweep in the tests job (no styl binary
   required); the `map-style-spec` job hard-gates authored full styles
-  with styl over the `dump_map_styles` output + fixtures
-  (external-derived skip list — redundant with the seed `["*"]` rows,
-  on purpose).
+  with styl over the `dump_map_styles` output + fixtures. The seed's
+  `["*"]` rows are the single source of truth: the dump skips them and
+  writes `_skipped.txt`, which also gates the static fixture files (the
+  one fixture without a seed row — `wd-outdoor-base-ofm`, retired by
+  migration 0007 — is skipped explicitly).
 
 See the basemaps section in `AGENTS.md` for the one-paragraph flow.
