@@ -10,6 +10,7 @@ from ._associations import (
     UpdatePolicy,
 )
 from ._base_detail import GeoPlaceDetailBase
+from ._category_extra_schema import CategoryExtraSchema, resolve_extra_schema
 from ._geoplace import DetailType, GeoPlace
 
 __all__ = [
@@ -19,6 +20,8 @@ __all__ = [
     "DetailType",
     "GeoPlace",
     "GeoPlaceCategory",
+    "CategoryExtraSchema",
+    "resolve_extra_schema",
     "GeoPlaceDetailBase",
     "GeoPlaceExternalLink",
     "GeoPlaceImageAssociation",

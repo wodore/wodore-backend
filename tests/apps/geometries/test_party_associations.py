@@ -385,7 +385,7 @@ class TestRoleScopedPartyProtection:
         )
 
         shop = Category.objects.create(slug="shop", name="Shop")
-        kiosk = Category.objects.create(slug="kiosk", parent=shop, name="Kiosk")
+        Category.objects.create(slug="kiosk", parent=shop, name="Kiosk")
 
         place = GeoPlaceFactory(
             detail_type="amenity",
@@ -406,7 +406,7 @@ class TestRoleScopedPartyProtection:
 
         # The exact import entry that used to raise TypeError.
         updated_place, _status = GeoPlace._update_from_schema(
-            place, schema, [kiosk], None, None
+            place, schema, GeoPlace._resolve_place_types(["shop.kiosk"]), None, None
         )
 
         assert updated_place.pk == place.pk

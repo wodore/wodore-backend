@@ -76,12 +76,20 @@ class CategorySchema(pydantic.BaseModel):
 
 
 class CategoryPlaceTypeSchema(pydantic.BaseModel):
-    """Schema for category place type with symbols (used in GeoPlace)."""
+    """Schema for category place type with symbols (used in GeoPlace).
+
+    ``classifier`` and ``extra`` are association-level attributes
+    (OpenSpec ``geoplace-capacity-and-types-via-categories``): the
+    season classification (``season.*`` identifier) and typed
+    per-association attributes (bed capacities).
+    """
 
     slug: str
     name: str
     description: str = ""
     symbol: dict[str, str] | None = None
+    classifier: str | None = None
+    extra: dict[str, Any] = pydantic.Field(default_factory=dict)
 
 
 class PartyLinkSchema(pydantic.BaseModel):
