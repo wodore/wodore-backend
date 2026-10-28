@@ -405,7 +405,7 @@ LAYERS: list[dict[str, Any]] = [
                 "source": "wd-huts",
                 "groupByProperty": "type_standard_slug",
                 "radius": 48,
-                "maxZoom": 11,
+                "maxZoom": 10,
                 "bubble": {
                     "colorProperty": "type_standard_color",
                     "iconProperty": "type_standard_identifier",
