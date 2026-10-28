@@ -261,7 +261,8 @@ jobs:
           curl -fsSL \
             https://raw.githubusercontent.com/navidnabavi/styl/main/install.sh \
             | bash
-          styl --version
+          # styl has no --version flag (subcommand-only CLI) — smoke via --help
+          styl --help > /dev/null && echo "styl installed"
 
       - name: Dump seed styles
         run: uv run python manage.py dump_map_styles --out .style-dump
