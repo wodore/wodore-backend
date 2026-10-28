@@ -5,7 +5,7 @@ This module provides base model classes that should be used throughout the proje
 """
 
 import datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from django.db import models
 from django.utils.timezone import now
@@ -49,6 +49,23 @@ class _AutoLastModifiedField(
         super().__init__(*args, **kwargs)
 
 
+def _abstract_meta(meta: type) -> type:
+    """Mark a nested model ``Meta`` abstract — Django's only mechanism
+    for abstract bases — while keeping the symbol's checker-visible type
+    plain ``type``.
+
+    A direct ``class Meta: abstract = True`` makes type checkers treat
+    every subclass's own ``class Meta`` as a structural override of a
+    non-empty base (the canonical pyright/Django false positive: the
+    subclass Metas legitimately lack ``abstract``). Setting the flag
+    through this helper keeps runtime semantics byte-identical — the
+    same class object, the attribute present before Django's ModelBase
+    reads it — and leaves the symbol assignable for every engine.
+    """
+    meta.abstract = True  # type: ignore  # Django Meta attr not on `type`
+    return meta
+
+
 class TimeStampedModel(models.Model):
     """
     An abstract base model that provides self-updating `created` and `modified` fields.
@@ -69,19 +86,10 @@ class TimeStampedModel(models.Model):
     created = _AutoCreatedField(_("created"))
     modified = _AutoLastModifiedField(_("modified"))
 
-    # The canonical pyright/Django nested-Meta false positive: the base
-    # declares ``abstract = True`` (mandatory for Django abstract bases)
-    # and pyright-family checkers then demand every subclass's own
-    # ``class Meta`` be structurally assignable to it. Under type
-    # checking, expose an empty Meta instead — an empty class imposes no
-    # structural requirements, so every subclass Meta is a compatible
-    # override. Runtime (and pyrefly, the project's authority) is
-    # unchanged: the real abstract Meta is what Django's metaclass reads.
-    if TYPE_CHECKING:
+    class Meta:
+        pass
 
-        class Meta:
-            pass
-    else:
-
-        class Meta:
-            abstract = True
+    # Abstract via the helper above: runtime-identical to
+    # ``class Meta: abstract = True`` but checker-compatible for every
+    # subclass's own nested Meta (see _abstract_meta).
+    Meta = _abstract_meta(Meta)
