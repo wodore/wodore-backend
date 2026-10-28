@@ -377,12 +377,16 @@ cwd-scoped discovery (`pgrep -f '.?venv/bin/python3? manage.py
 django-q2 hangs on SIGTERM in this stack, so every stop is TERM → ~5 s →
 SIGKILL. Make qcluster optional with `QCLUSTER=0` in `.env.local` (outside
 the workz managed block, like `FRONTEND_DOMAIN`) or one-off
-`QCLUSTER=0 scripts/lane-dev.sh fg`. `start`/`stop` wrap detached
-`workz run`/`workz run --stop` (workz-provisioned lanes only — `workz run`
-cannot resolve paseo-created worktrees); `attach` prints recent runserver
-output (the paseo service terminal via `paseo terminal capture`, else the
-last detached workz run log — live view: open the terminal in the Paseo
-app); `kill` hard-stops runserver + qcluster (note: paseo's lifecycle badge
+`QCLUSTER=0 scripts/lane-dev.sh fg`. `start` prefers detached `workz run`
+and falls back to a detached local supervisor (logs to `.lane-dev.log`)
+when workz can't resolve the lane — paseo-created worktrees, and branches
+renamed after `workz sync` (workz keys its run registry on branch name and
+never refreshes it); `stop` is cwd-scoped (TERM → KILL of runserver +
+qcluster) and works in every mode; `attach` prints recent runserver output
+(the paseo service terminal via `paseo terminal capture`, else
+`.lane-dev.log` when the local supervisor ran, else the last detached workz
+run log — live view: open the terminal in the Paseo app); `kill` hard-stops
+runserver + qcluster (note: paseo's lifecycle badge
 may keep saying "running" until it reaps the pane — use `paseo script stop`
 when the supervisor is healthy). paseo.json exposes all of this as
 `runserver` (service), `runserver:attach` and `runserver:kill`.

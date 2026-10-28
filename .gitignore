@@ -203,3 +203,6 @@ cython_debug/
 
 # Agent/worktree lanes (pi, Paseo, workz)
 .worktrees/
+
+# lane-dev.sh detached local supervisor log (start fallback)
+.lane-dev.log
