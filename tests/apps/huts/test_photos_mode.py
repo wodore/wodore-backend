@@ -2,8 +2,9 @@
 
 `app huts` defaults to `PhotosMode.EMBEDDED` (only photos already part of the
 stored `HutSource.source_data` - no extra provider requests). `--photos
-none|all` overrides; the `--add-all` sequence pins `photos=all` for the
-sources whose photos only exist behind extra requests (wikidata, refuges).
+none|all` overrides; the `--add-all` sequence uses the default (embedded)
+for every source - photos needing extra requests are enriched separately by
+the geoimages pin service.
 """
 
 from types import SimpleNamespace

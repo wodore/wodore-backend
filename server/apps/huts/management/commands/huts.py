@@ -282,15 +282,15 @@ class Command(CRUDCommand[Hut]):
             # Note: Hut categories are now created via migration (0002_migrate_huttype_data)
             # No need to call the old hut_types command anymore
             limit = options.get("limit")
+            # All sources import with embedded photos (PhotosMode.EMBEDDED):
+            # photos that would need extra provider requests are enriched
+            # separately by the geoimages pin service, not by this bulk import.
             for params in [
                 {"source": "sac", "no_review": True},
                 {
                     "source": "wikidata",
                     "include": "location,photos,photos_attribution",
                     "no_review": True,
-                    # wikidata photos only exist via an extra wikicommons request
-                    # (PhotosMode.ALL) - the embedded mode would silently drop them
-                    "photos": "all",
                 },
                 {"source": "osm", "no_review": True},
                 {"source": "hrs", "no_review": True},
@@ -298,12 +298,7 @@ class Command(CRUDCommand[Hut]):
                 {"source": "tmb", "no_review": True},
                 {"source": "unico", "no_review": True},
                 {"source": "prenota", "no_review": True},
-                {
-                    "source": "refuges",
-                    "no_review": False,
-                    # refuges.info photos are scraped per hut (PhotosMode.ALL)
-                    "photos": "all",
-                },
+                {"source": "refuges", "no_review": False},
                 {
                     "source": "wodore",
                     "no_review": True,
