@@ -178,19 +178,96 @@ def _format_categories_list(categories: Sequence[Category]) -> str:
     )
 
 
+class GeoPlaceCategoryInlineForm(forms.ModelForm[GeoPlaceCategory]):
+    """Category association form with labeled capacity fields.
+
+    The two defined ``extra`` keys render as plain numeric fields and
+    write back into ``extra`` on save — unknown keys on the instance
+    are preserved (imports never write them, admins may).
+    Validation funnels through ``GeoPlaceCategory.validate_attributes``
+    (the same helper ``clean()`` and the import use — D3).
+    """
+
+    capacity_open = forms.IntegerField(
+        required=False,
+        min_value=0,
+        label=_("Capacity open"),
+        help_text=_("Beds when the category is in open operation"),
+    )
+    capacity_closed = forms.IntegerField(
+        required=False,
+        min_value=0,
+        label=_("Capacity closed"),
+        help_text=_("Beds when the category is in closed operation"),
+    )
+
+    class Meta:
+        model = GeoPlaceCategory
+        fields = ("category", "classifier")
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        extra = self.instance.extra or {}
+        self.fields["capacity_open"].initial = extra.get("capacity_open")
+        self.fields["capacity_closed"].initial = extra.get("capacity_closed")
+
+    @override
+    def clean(self) -> dict[str, Any]:
+        cleaned: dict[str, Any] = super().clean() or {}
+        extra = {
+            key: value
+            for key, value in (self.instance.extra or {}).items()
+            if key not in GeoPlaceCategory.CAPACITY_KEYS
+        }
+        for key in GeoPlaceCategory.CAPACITY_KEYS:
+            value = cleaned.get(key)
+            if value is not None:
+                extra[key] = value
+        GeoPlaceCategory.validate_attributes(cleaned.get("classifier"), extra)
+        cleaned["extra"] = extra
+        return cleaned
+
+    @override
+    def save(self, commit: bool = True) -> GeoPlaceCategory:
+        instance: GeoPlaceCategory = super().save(commit=False)
+        instance.extra = self.cleaned_data.get("extra", instance.extra or {})
+        if commit:
+            instance.save()
+        return instance
+
+
 class GeoPlaceCategoryInline(unfold_admin.TabularInline):
     """GeoPlace category association inline with optional classifier."""
 
     model = GeoPlaceCategory
+    form = GeoPlaceCategoryInlineForm
     tab = True
     fields = (
         "category",
         "classifier",
+        "capacity_open",
+        "capacity_closed",
     )
     autocomplete_fields = ("category", "classifier")
     extra = 1
     show_change_link = True
     verbose_name = _("Category")
+
+    @override
+    def formfield_for_foreignkey(
+        self,
+        db_field: db_models.ForeignKey[Any, Any],
+        request: HttpRequest,
+        **kwargs: Any,
+    ):
+        """Scope the classifier autocomplete to the season.* subtree."""
+        from server.apps.categories.models import Category
+
+        if db_field.name == "classifier":
+            kwargs["queryset"] = Category.objects.filter(
+                parent__slug="season"
+            ).order_by("order")
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     @override
     def has_add_permission(self, request: HttpRequest, obj: Any) -> bool:  # type: ignore  # inline-admin default-param drift, plugin-less

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, Any, NamedTuple, override
 
 from django_countries.fields import CountryField
 from modeltrans.fields import TranslationField
@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from server.apps.geometries.schemas import (
         DedupOptions,
         GeoPlaceBaseInput,
+        PlaceTypeInput,
         SourceInput,
     )
 
@@ -62,6 +63,21 @@ class _ReviewStatusChoices(models.TextChoices):
     review = "review", _("Review Needed")
     rework = "rework", _("needs rework")
     done = "done", _("Reviewed")
+
+
+class PlaceTypeSpec(NamedTuple):
+    """Resolved category plus its association attributes.
+
+    The schema write path (``GeoPlace.update_or_create``) resolves
+    ``place_type_identifiers`` — plain strings or ``PlaceTypeInput``
+    entries — into these specs before creating/updating the
+    ``GeoPlaceCategory`` rows (OpenSpec
+    ``geoplace-capacity-and-types-via-categories``).
+    """
+
+    category: Category
+    classifier: Category | None
+    extra: dict[str, Any]
 
 
 class GeoPlace(TimeStampedModel):
@@ -765,10 +781,12 @@ class GeoPlace(TimeStampedModel):
         # Convert location to Point
         location = Point(schema.location.lon, schema.location.lat, srid=4326)
 
-        # Resolve categories (validate identifiers once)
-        categories = cls._resolve_categories_from_identifiers(
-            schema.place_type_identifiers
-        )
+        # Resolve categories (validate identifiers once) — plain
+        # strings and PlaceTypeInput entries alike; the latter carry
+        # association classifier/extra (validated by the same helper
+        # GeoPlaceCategory.clean() uses).
+        place_types = cls._resolve_place_types(schema.place_type_identifiers)
+        categories = [spec.category for spec in place_types]
 
         # Resolve source organization
         source_obj = None
@@ -787,7 +805,7 @@ class GeoPlace(TimeStampedModel):
             return cls._update_from_schema(
                 existing_place,
                 schema,
-                categories,
+                place_types,
                 source_obj,
                 from_source,
             )
@@ -795,7 +813,7 @@ class GeoPlace(TimeStampedModel):
             # CREATE PATH
             return cls._create_from_schema(
                 schema,
-                categories,
+                place_types,
                 location,
                 source_obj,
                 from_source,
@@ -981,15 +999,58 @@ class GeoPlace(TimeStampedModel):
             return Category.objects.get(identifier=identifier)
 
     @classmethod
+    def _resolve_place_types(
+        cls, identifiers: list[str | PlaceTypeInput]
+    ) -> list[PlaceTypeSpec]:
+        """Resolve place-type entries into category + association attrs.
+
+        Plain identifiers resolve to bare specs (no classifier, empty
+        extra); ``PlaceTypeInput`` entries resolve their ``classifier``
+        and normalized ``extra`` through the shared
+        ``GeoPlaceCategory.validate_attributes`` — the same checks
+        ``clean()`` enforces (Django never calls ``clean()`` here).
+        """
+        from ._associations import GeoPlaceCategory
+
+        specs: list[PlaceTypeSpec] = []
+        seen_ids: set[int] = set()
+        for entry in identifiers:
+            if isinstance(entry, str):
+                category = cls._resolve_category_from_identifier(entry)
+                spec = PlaceTypeSpec(category, None, {})
+            else:
+                category = cls._resolve_category_from_identifier(entry.identifier)
+                classifier = (
+                    cls._resolve_category_from_identifier(entry.classifier)
+                    if entry.classifier
+                    else None
+                )
+                extra = GeoPlaceCategory.normalize_extra(entry.extra)
+                GeoPlaceCategory.validate_attributes(classifier, extra)
+                spec = PlaceTypeSpec(category, classifier, extra)
+            if category.pk in seen_ids:
+                continue
+            specs.append(spec)
+            seen_ids.add(category.pk)
+        return specs
+
+    @classmethod
     def _resolve_categories_from_identifiers(
-        cls, identifiers: list[str]
+        cls, identifiers: list[str | PlaceTypeInput]
     ) -> list[Category]:
-        if not identifiers:
+        # Accepts plain identifiers and PlaceTypeInput entries (the
+        # latter contribute only their category — association
+        # attributes go through _resolve_place_types).
+        plain = [
+            entry if isinstance(entry, str) else entry.identifier
+            for entry in identifiers
+        ]
+        if not plain:
             raise Category.DoesNotExist("No category identifiers provided")
 
         categories: list[Category] = []
         seen_ids: set[int] = set()
-        for identifier in identifiers:
+        for identifier in plain:
             category = cls._resolve_category_from_identifier(identifier)
             if category.id in seen_ids:
                 continue
@@ -1001,7 +1062,7 @@ class GeoPlace(TimeStampedModel):
     def _create_from_schema(
         cls,
         schema: GeoPlaceBaseInput,
-        categories: list[Category],
+        place_types: list[PlaceTypeSpec],
         location: Point,
         source_obj: Organization | None,
         from_source: SourceInput | None,
@@ -1068,15 +1129,20 @@ class GeoPlace(TimeStampedModel):
         # Create the place (track_modifications=False for imports)
         # Slug is auto-generated in save() with UUID-based uniqueness (no DB check needed)
         # Pass first category slug as fallback for empty names
-        fallback_slug = categories[0].slug if categories else None
+        fallback_slug = place_types[0].category.slug if place_types else None
         place = cls(**place_data)
         place.save(track_modifications=False, fallback_slug=fallback_slug)
 
-        if categories:
+        if place_types:
             GeoPlaceCategory.objects.bulk_create(
                 [
-                    GeoPlaceCategory(geo_place=place, category=category)
-                    for category in categories
+                    GeoPlaceCategory(
+                        geo_place=place,
+                        category=spec.category,
+                        classifier=spec.classifier,
+                        extra=spec.extra,
+                    )
+                    for spec in place_types
                 ],
                 ignore_conflicts=True,
             )
@@ -1130,7 +1196,7 @@ class GeoPlace(TimeStampedModel):
         cls,
         place: GeoPlace,
         schema: GeoPlaceBaseInput,
-        categories: list[Category],
+        place_types: list[PlaceTypeSpec],
         source_obj: Organization | None,
         from_source: SourceInput | None,
     ) -> tuple[GeoPlace, UpdateCreateStatus]:
@@ -1208,21 +1274,51 @@ class GeoPlace(TimeStampedModel):
         update_fields = []
         i18n_dirty = False
 
-        # Update categories (additive only for now)
-        if "categories" not in protected and categories:
-            existing_ids = set(place.categories.values_list("id", flat=True))
-            new_categories = [
-                category for category in categories if category.id not in existing_ids
-            ]
-            if new_categories:
-                GeoPlaceCategory.objects.bulk_create(
-                    [
-                        GeoPlaceCategory(geo_place=place, category=category)
-                        for category in new_categories
-                    ],
-                    ignore_conflicts=True,
+        # Update categories: create missing associations AND refresh
+        # classifier/extra on existing rows — the wodore backfill's
+        # core guarantee (additive-only used to leave existing
+        # associations untouched, silently dropping closed types and
+        # capacities). Stale associations (category no longer claimed
+        # by this source) are not removed — reconciliation is a
+        # documented follow-up.
+        if "categories" not in protected and place_types:
+            existing = {
+                assoc.category_id: assoc
+                for assoc in GeoPlaceCategory.objects.filter(geo_place=place)
+            }
+            for spec in place_types:
+                assoc = existing.get(spec.category.pk)
+                if assoc is None:
+                    GeoPlaceCategory.objects.create(
+                        geo_place=place,
+                        category=spec.category,
+                        classifier=spec.classifier,
+                        extra=spec.extra,
+                    )
+                    categories_updated = True
+                    continue
+                changed_fields: list[str] = []
+                new_classifier_id = (
+                    spec.classifier.pk if spec.classifier is not None else None
                 )
-                categories_updated = True
+                if assoc.classifier_id != new_classifier_id:
+                    assoc.classifier = spec.classifier
+                    changed_fields.append("classifier")
+                # Capacity keys are source truth (replaced or dropped);
+                # unknown keys on the row are preserved — imports never
+                # write them.
+                merged_extra = {
+                    key: value
+                    for key, value in assoc.extra.items()
+                    if key not in GeoPlaceCategory.CAPACITY_KEYS
+                }
+                merged_extra.update(spec.extra)
+                if assoc.extra != merged_extra:
+                    assoc.extra = merged_extra
+                    changed_fields.append("extra")
+                if changed_fields:
+                    assoc.save(update_fields=[*changed_fields, "modified"])
+                    categories_updated = True
 
         # Update name translations
         if "name" not in protected:

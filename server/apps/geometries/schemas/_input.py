@@ -71,6 +71,21 @@ class PartyInput(BaseModel):
     review_status: str | None = None  # Review status for newly minted parties
 
 
+class PlaceTypeInput(BaseModel):
+    """Per-category association attributes on the schema path.
+
+    OpenSpec ``geoplace-capacity-and-types-via-categories``: a plain
+    identifier string keeps its old meaning (category only); this
+    richer entry additionally carries the association ``classifier``
+    (a ``season.*`` category identifier) and typed ``extra``
+    attributes (``capacity_open``/``capacity_closed``).
+    """
+
+    identifier: str  # Category identifier (e.g., "accommodation.hut")
+    classifier: str | None = None  # season.* category identifier
+    extra: dict[str, Any] = Field(default_factory=dict)
+
+
 class SourceInput(BaseModel):
     """Source information for GeoPlace association."""
 
@@ -113,7 +128,9 @@ class GeoPlaceBaseInput(BaseModel):
     country_code: str
 
     # Classification
-    place_type_identifiers: list[str]  # Category identifiers (e.g., ["shop.bakery"])
+    place_type_identifiers: list[
+        str | PlaceTypeInput
+    ]  # Category identifiers (e.g., ["shop.bakery"]) or rich entries with association attributes
     detail_type: DetailType = DetailType.NONE
 
     # Optional fields

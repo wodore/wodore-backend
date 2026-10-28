@@ -1,4 +1,4 @@
-from typing import override
+from typing import Any, override
 
 from computedfields.models import ComputedFieldsModel
 
@@ -224,7 +224,20 @@ class GeoPlaceExternalLink(models.Model):
 
 
 class GeoPlaceCategory(TimeStampedModel):
-    """Through model for GeoPlace <-> Category with optional classifier."""
+    """Through model for GeoPlace <-> Category with optional classifier.
+
+    OpenSpec ``geoplace-capacity-and-types-via-categories``: the
+    ``classifier`` qualifies *how* the place operates relative to the
+    associated category (today: closed-season operation, a
+    ``season.*`` child); ``extra`` carries typed per-association
+    attributes — bed capacities under ``capacity_open``/
+    ``capacity_closed`` (non-negative ints, omitted when the source
+    does not publish them). Unknown ``extra`` keys are preserved but
+    never written by imports.
+    """
+
+    #: ``extra`` keys with defined semantics (non-negative integers).
+    CAPACITY_KEYS = ("capacity_open", "capacity_closed")
 
     geo_place = models.ForeignKey(
         "GeoPlace",
@@ -245,13 +258,18 @@ class GeoPlaceCategory(TimeStampedModel):
         blank=True,
         db_index=True,
         related_name="classifications",
-        help_text=_("Optional classifier for this association (e.g., seasonal status)"),
+        help_text=_(
+            "Season classification for this association (a season.* child category)"
+        ),
     )
     extra = models.JSONField(
         default=dict,
         blank=True,
         verbose_name=_("Extra"),
-        help_text=_("Category-specific overflow data (JSON)"),
+        help_text=_(
+            "Per-association attributes: capacity_open/capacity_closed "
+            "(bed counts, non-negative integers)"
+        ),
     )
 
     class Meta:
@@ -282,6 +300,69 @@ class GeoPlaceCategory(TimeStampedModel):
         return (
             f"{self.geo_place.name_i18n} -> {self.category.identifier}{classifier_str}"
         )
+
+    @override
+    def clean(self) -> None:
+        super().clean()
+        self.validate_attributes(self.classifier, self.extra)
+
+    @classmethod
+    def validate_attributes(
+        cls, classifier: "Category | None", extra: dict[str, Any]
+    ) -> None:
+        """Shared validation for every write path (D3).
+
+        ``clean()`` (admin forms), the schema upsert and the wodore
+        import all funnel through here — Django calls ``clean()`` on
+        none of the latter two paths.
+        """
+        if classifier is not None:
+            parent = classifier.parent
+            if parent is None or parent.slug != "season":
+                raise ValidationError(
+                    {
+                        "classifier": _(
+                            "Classifier must be a season.* category "
+                            "(a child of the 'season' parent)."
+                        )
+                    }
+                )
+        cls.validate_extra(extra)
+
+    @classmethod
+    def validate_extra(cls, extra: dict[str, Any]) -> None:
+        """Validate the defined capacity keys in ``extra``.
+
+        Shared validation for every write path (``clean()``, the
+        schema upsert, the admin form — Django calls ``clean()`` on
+        none of the latter two; OpenSpec
+        ``geoplace-capacity-and-types-via-categories`` D3).
+        """
+        for key in cls.CAPACITY_KEYS:
+            if key in extra and extra[key] is not None:
+                value = extra[key]
+                if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                    raise ValidationError(
+                        {
+                            "extra": _("%(key)s must be a non-negative integer.")
+                            % {"key": key}
+                        }
+                    )
+
+    @classmethod
+    def normalize_extra(cls, extra: dict[str, Any] | None) -> dict[str, Any]:
+        """Drop ``None``-valued capacity keys (unknown keys preserved).
+
+        A capacity the source does not publish is omitted, not stored
+        as ``null`` — an empty dict means no capacity data.
+        """
+        if not extra:
+            return {}
+        return {
+            key: value
+            for key, value in extra.items()
+            if not (key in cls.CAPACITY_KEYS and value is None)
+        }
 
 
 class GeoPlaceParty(TimeStampedModel):

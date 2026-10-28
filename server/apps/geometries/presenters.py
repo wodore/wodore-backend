@@ -52,6 +52,10 @@ def prefetch_categories(queryset: QuerySet[GeoPlace]) -> QuerySet[GeoPlace]:
         "categories__symbol_color",
         "categories__symbol_primitive",
         "categories__symbol_mono",
+        # Association rows carry the classifier/extra attributes
+        # (geoplace-capacity-and-types-via-categories) — build_categories_data
+        # maps them onto the category entries.
+        "category_associations__classifier",
     )
 
 
@@ -79,12 +83,29 @@ def build_categories_data(
 ) -> list[dict[str, Any]]:
     from server.apps.symbols.utils import resolve_symbol_urls
 
+    # Association-level attributes (classifier/extra) keyed by category
+    # id — prefetched by prefetch_categories (reverse through-model
+    # accessor: plugin-less inference gap).
+    associations = {
+        association.category_id: association
+        for association in place.category_associations.all()  # type: ignore  # reverse through-model accessor
+    }
+
     categories_data = []
     for category in place.categories.all():
+        association = associations.get(category.pk)
         category_data: dict[str, Any] = {
             "slug": category.slug,
             "name": category.name_i18n,  # noqa: WPS308  # modeltranslation
             "description": category.description_i18n,  # noqa: WPS308
+            # season classification (season.* identifier) and typed
+            # per-association attributes, when set
+            "classifier": (
+                association.classifier.identifier
+                if association and association.classifier
+                else None
+            ),
+            "extra": (association.extra or {}) if association else {},
         }
         symbol_data = resolve_symbol_urls(category, {"request": request})
         if symbol_data:

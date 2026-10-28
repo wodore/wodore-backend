@@ -323,7 +323,8 @@ class GeoPlacesForTilesView(PostgresViewModel):
               {name_columns},
 
               -- Categories (JSON array with all categories for this place)
-              -- Each category has: slug, identifier, order, color, parent_slug, parent_name, extra
+              -- Each category has: slug, identifier, order, color, parent_slug,
+              -- parent_name, classifier (season.* identifier), extra
               COALESCE(
                 (
                   SELECT jsonb_agg(
@@ -334,6 +335,7 @@ class GeoPlacesForTilesView(PostgresViewModel):
                       'color', cat.color,
                       'parent_slug', parent.slug,
                       'parent_name', parent.name,
+                      'classifier', clf.identifier,
                       'extra', gpc.extra
                     )
                     ORDER BY cat."order"
@@ -341,6 +343,7 @@ class GeoPlacesForTilesView(PostgresViewModel):
                   FROM geometries_geoplace_category gpc
                   LEFT JOIN categories_category cat ON gpc.category_id = cat.id
                   LEFT JOIN categories_category parent ON cat.parent_id = parent.id
+                  LEFT JOIN categories_category clf ON gpc.classifier_id = clf.id
                   WHERE gpc.geo_place_id = gp.id AND cat.id IS NOT NULL
                 ),
                 '[]'::jsonb
