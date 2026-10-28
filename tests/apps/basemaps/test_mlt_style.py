@@ -15,12 +15,15 @@ the pre-unification ``{TILE_SERVER_URL}`` placeholder is gone entirely
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from typing import Any
 
 import pytest
 
+from django.core.cache import cache
 from django.test import SimpleTestCase, override_settings
 
+from server.apps.basemaps.api import STYLE_BODIES_EPOCH_KEY
 from server.apps.basemaps.resolution import resolve_style
 from server.apps.basemaps.seed_lib import HUTS_STYLE
 from server.apps.basemaps.validation import validate_style_spec
@@ -69,6 +72,22 @@ def _style() -> dict[str, Any]:
 
 @pytest.mark.django_db
 class TestEncodingPreservation:
+    @pytest.fixture(autouse=True)
+    def _clean_env(self) -> Generator[None, None, None]:
+        """Rendering must be independent of leftover registry state: a
+        prior test's EnvVar rows (and the process-global registry rows
+        memo they invalidate-rebuild mid-transaction) can outlive its
+        rollback, and a stored MARTIN_TILE_URL value overrides
+        ``override_settings``. Reset to exactly one empty row (the
+        epoch-test pattern) so the tile origin resolves from settings."""
+        from server.apps.envvars.models import EnvVar
+
+        EnvVar.objects.all().delete()
+        EnvVar.objects.create(name="MARTIN_TILE_URL", description="tile origin")
+        cache.delete(STYLE_BODIES_EPOCH_KEY)
+        yield
+        cache.delete(STYLE_BODIES_EPOCH_KEY)
+
     """`encoding` survives the serve-time pipeline (map-style-api delta).
 
     django_db: rendering resolves the tile-origin env token through the

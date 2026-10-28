@@ -50,6 +50,8 @@ from server.apps.basemaps.management.commands.map_seed import (
 from server.apps.basemaps.models import MapCoverage, MapLayer
 from server.apps.basemaps.resolution import style_endpoint_url
 from server.apps.basemaps.seed_lib import (
+    HUTS_STYLE,
+    HUTS_STYLE_SUBSET,
     TRANSPORT_STYLE_SUBSET,
     raster_style,
     swisstopo_overlay_style,
@@ -252,6 +254,15 @@ class SubsetWalkerAccepts(SimpleTestCase):
         floor added) is walker-clean — the FULL document deliberately
         still is not (see the rejection test: it keeps promoteId)."""
         validate_subset_style(TRANSPORT_STYLE_SUBSET)
+
+    def test_huts_subset_twin_passes_walker(self) -> None:
+        """The huts twin (availability disc + trimmed symbol) is
+        walker-clean; the FULL document still fails — day-strip
+        concat/image/to-string, the feature-state selection circle and
+        the text-field ``>`` comparison are all outside v0.1."""
+        validate_subset_style(HUTS_STYLE_SUBSET)
+        with pytest.raises(StyleValidationError):
+            validate_subset_style(HUTS_STYLE)
 
     def test_equality_operator_with_nested_get_passes(self) -> None:
         """``==`` is whitelisted but NOT identifier-shaped — it must be
@@ -566,7 +577,7 @@ class TestSeedTagging:
         assert mtb.version == SUBSET_REVISION
         world_topo = MapLayer.objects.get(slug="world-topo", spec="high")
         assert world_topo.profile == "subset"
-        huts = MapLayer.objects.get(slug="huts", spec="medium")
+        huts = MapLayer.objects.get(slug="huts", spec="medium", profile="full")
         assert huts.profile == "full"
         assert huts.version == STYLE_SPEC_VERSION
         maptiler = MapLayer.objects.get(slug="maptiler-hybrid", spec="high")
@@ -593,6 +604,41 @@ class TestSeedTagging:
         assert all("layout" not in layer for layer in subset.style["layers"])
         assert subset.style["layers"][0]["minzoom"] == 10
 
+    def test_huts_subset_variant_seeded(self) -> None:
+        """Both huts rows at the same tier; the slug-level config (filters
+        + clustering) rides both rows — clustering feeds the fallback's
+        own marker rendering; the twin drops the day-strip and selection
+        layers and strips promoteId from both sources."""
+        call_command("map_seed", verbosity=0)
+        full = MapLayer.objects.get(slug="huts", spec="medium", profile="full")
+        assert full.version == STYLE_SPEC_VERSION
+        subset = MapLayer.objects.get(slug="huts", spec="medium", profile="subset")
+        assert subset.version == SUBSET_REVISION
+        for row in (full, subset):
+            assert row.config is not None
+            assert "clustering" in row.config
+            assert "filters" in row.config
+        assert subset.style is not None
+        assert set(subset.style["sources"]) == {"wd-huts", "wd-bookings"}
+        assert all(
+            "promoteId" not in source for source in subset.style["sources"].values()
+        )
+        assert [layer["id"] for layer in subset.style["layers"]] == [
+            "wd-huts-occupation",
+            "wd-huts",
+        ]
+        # Parameter precedence (variant replaces the parent list): the
+        # twin drops the inert icon-scale slider — its baked icon-size
+        # ladder never reads the token — and keeps {{date}} for the
+        # wd-bookings template; the full row keeps both knobs.
+        assert set(full.layer_parameters.values_list("parameter__slug", flat=True)) == {
+            "huts.icon_scale",
+            "date",
+        }
+        assert set(
+            subset.layer_parameters.values_list("parameter__slug", flat=True)
+        ) == {"date"}
+
     def test_seed_idempotent_profiles(self) -> None:
         call_command("map_seed", verbosity=0)
         before = sorted(
@@ -606,7 +652,7 @@ class TestSeedTagging:
 
     def test_huts_config_carries_clustering(self) -> None:
         call_command("map_seed", verbosity=0)
-        huts = MapLayer.objects.get(slug="huts", spec="medium")
+        huts = MapLayer.objects.get(slug="huts", spec="medium", profile="full")
         assert huts.config is not None
         assert huts.config["clustering"] == CLUSTERING_CONFIG
         assert "filters" in huts.config
@@ -737,6 +783,31 @@ class TestApiProfile:
         assert "promoteId" not in style.json()["sources"]["transport-stops"]
         # Unprofiled requests keep today's behavior: the full row.
         unprofiled = Client().get("/v1/map/layers/transport-stops")
+        assert unprofiled.json()["profile"] == "full"
+
+    def test_seeded_subset_catalog_includes_huts(self) -> None:
+        """Owner decision: the huts overlay appears in the subset catalog
+        and becomes menu-toggleable on the Leaflet fallback — the twin
+        carries BOTH sources (the fallback reads wd-bookings for
+        availability); unprofiled clients keep the full row."""
+        call_command("map_seed", verbosity=0)
+        response = Client().get("/v1/map/layers?profile=subset")
+        assert response.status_code == 200
+        entries = {entry["slug"]: entry for entry in response.json()["data"]}
+        assert "huts" in entries
+        entry = entries["huts"]
+        assert entry["profile"] == "subset"
+        assert entry["version"] == SUBSET_REVISION
+        assert "profile=subset" in entry["style_url"]
+        style = Client().get("/v1/map/styles/huts.json?profile=subset")
+        assert style.status_code == 200
+        body = style.json()
+        assert [layer["id"] for layer in body["layers"]] == [
+            "wd-huts-occupation",
+            "wd-huts",
+        ]
+        assert set(body["sources"]) == {"wd-huts", "wd-bookings"}
+        unprofiled = Client().get("/v1/map/layers/huts")
         assert unprofiled.json()["profile"] == "full"
 
     def _entry(self, client: Client, slug: str, query: str = "") -> dict[str, Any]:
