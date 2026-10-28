@@ -24,6 +24,9 @@ UNFOLD: dict[str, Any] = {
     "SITE_TITLE": "wodo.re",
     "SITE_HEADER": "Wodore Admin",
     "SITE_URL": "/",
+    # Required by UnfoldAdminJSONSchemaWidget (get_setting_value("FORMS")
+    # must resolve to a dict — schema-driven extra editing).
+    "FORMS": {},
     "SITE_ICON": lambda request: static(
         "main/images/favicon-32x32.png"
     ),  # both modes, optimise for 32px height

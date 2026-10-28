@@ -30,6 +30,7 @@ from typing import Any, override
 
 import yaml
 from django_admin_runner import register_command
+from hut_services import LocationSchema
 
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.measure import D
@@ -40,8 +41,14 @@ from server.apps.external_geonames.management.commands._country_groups import (
 )
 from server.apps.external_geonames.models import Feature, GeoName
 from server.apps.geometries.models import GeoPlace
-from server.apps.huts.models import Hut
+from server.apps.geometries.schemas import (
+    GeoPlaceBaseInput,
+    PlaceTypeInput,
+    SourceInput,
+)
+from server.apps.huts.models import Hut, HutTypeHelper
 from server.apps.organizations.models import Organization
+from server.core import UpdateCreateStatus
 
 
 @register_command(group="Geometries", timeout=21600)
@@ -514,7 +521,16 @@ class Command(BaseCommand):
         dry_run: bool,
         continue_import: bool = False,
     ) -> tuple[int, int, int]:
-        """Import from huts into GeoPlace for search.
+        """Import from huts into GeoPlace (schema path).
+
+        OpenSpec ``geoplace-capacity-and-types-via-categories`` task
+        2.2: every active Hut rides ``GeoPlace.update_or_create`` —
+        category from ``hut_type_open``, season classifier from
+        ``hut_type_closed`` (mapping above), capacities in association
+        ``extra``. The owner party keeps riding ``_ensure_hut_party``
+        (``merge_owner`` dedups by owner slug — the schema party path
+        would dedup by name and duplicate existing merged parties).
+        Re-imports respect the protected-fields policy (AUTO_PROTECT).
 
         Args:
             countries: Filter by country codes
@@ -524,7 +540,9 @@ class Command(BaseCommand):
             dry_run: Show what would be done without making changes
             continue_import: Not used for wodore source (kept for signature compatibility)
         """
-        queryset = Hut.objects.filter(is_active=True).select_related("hut_type_open")
+        queryset = Hut.objects.filter(is_active=True).select_related(
+            "hut_type_open", "hut_type_closed", "hut_owner"
+        )
 
         if countries:
             queryset = queryset.filter(country_field__in=[c.upper() for c in countries])
@@ -552,7 +570,9 @@ class Command(BaseCommand):
 
             existing_place = self._find_place_by_source("wodore", hut.slug)
 
-            if existing_place and not update:
+            # ``--continue`` skips already-imported places even with
+            # ``--update`` (same semantics as the geonames handler).
+            if existing_place and (not update or continue_import):
                 skipped_count += 1
                 if processed % self.batch_size == 0:
                     self.stdout.write(
@@ -571,21 +591,21 @@ class Command(BaseCommand):
                         f"  [DRY RUN] Would create: {hut.name} ({hut.slug}, importance={importance})"
                     )
                     created_count += 1
+                continue
+
+            schema = self._hut_to_place_input(hut, importance)
+            place, status = GeoPlace.update_or_create(
+                schema=schema,
+                from_source=SourceInput(slug="wodore", source_id=hut.slug),
+            )
+            self._ensure_hut_party(place, hut)
+
+            if status == UpdateCreateStatus.created:
+                created_count += 1
+            elif status == UpdateCreateStatus.updated:
+                updated_count += 1
             else:
-                if existing_place:
-                    if update:
-                        was_updated = self._update_place_from_hut(
-                            existing_place, hut, importance
-                        )
-                        if was_updated:
-                            updated_count += 1
-                        else:
-                            skipped_count += 1
-                    else:
-                        skipped_count += 1
-                else:
-                    self._create_place_from_hut(hut, importance)
-                    created_count += 1
+                skipped_count += 1
 
             if processed % self.batch_size == 0:
                 self.stdout.write(
@@ -594,7 +614,59 @@ class Command(BaseCommand):
 
         return created_count, updated_count, skipped_count
 
-    def _calculate_hut_importance(self, hut: Hut) -> int:
+    def _hut_to_place_input(self, hut: Hut, importance: int) -> GeoPlaceBaseInput:
+        """Build the geoplace schema input for a hut (task 2.2).
+
+        One mode = one association = its own capacity (revised
+        design): the open type pairs with ``mode.standard``, the
+        closed state with ``mode.reduced``. The reduced association
+        exists when the closed type is known, or when only a closed
+        capacity is published (category = the accommodation default/
+        unknown type, so the value is not lost). Hut.update_or_create
+        derives selfhut/bivouac closed types from ``capacity_closed``
+        (_hut.py) — this reads the *resolved* FK.
+        """
+        place_types: list[str | PlaceTypeInput] = []
+        if hut.hut_type_open is not None:
+            place_types.append(
+                PlaceTypeInput(
+                    identifier=hut.hut_type_open.identifier,
+                    classifier="mode.standard",
+                    extra={"capacity": hut.capacity_open}
+                    if hut.capacity_open is not None
+                    else {},
+                )
+            )
+        if hut.hut_type_closed is not None and hut.hut_type_closed.slug != "unknown":
+            place_types.append(
+                PlaceTypeInput(
+                    identifier=hut.hut_type_closed.identifier,
+                    classifier="mode.reduced",
+                    extra={"capacity": hut.capacity_closed}
+                    if hut.capacity_closed is not None
+                    else {},
+                )
+            )
+        elif hut.capacity_closed is not None:
+            place_types.append(
+                PlaceTypeInput(
+                    identifier=HutTypeHelper.get("unknown").identifier,
+                    classifier="mode.reduced",
+                    extra={"capacity": hut.capacity_closed},
+                )
+            )
+        return GeoPlaceBaseInput(
+            name=hut.name,
+            location=LocationSchema(lon=hut.location.x, lat=hut.location.y),
+            elevation=self._normalize_elevation(hut.elevation),  # type: ignore  # argument typing drift vs stubs
+            country_code=str(hut.country_field),
+            importance=importance,
+            is_active=hut.is_active,
+            is_public=hut.is_public,
+            place_type_identifiers=place_types,
+        )
+
+    def _calculate_hut_importance(self, _hut: Hut) -> int:
         return self.default_hut_importance
 
     def _find_place_by_source(self, source: str, source_id: str) -> GeoPlace | None:
@@ -781,81 +853,3 @@ class Command(BaseCommand):
 
         party, _created, _linked = merge_owner(hut.hut_owner)
         GeoPlaceParty.objects.get_or_create(geo_place=place, party=party, role=role)
-
-    def _create_place_from_hut(self, hut: Hut, importance: int) -> GeoPlace:
-        place = GeoPlace.create_with_source(
-            source="wodore",
-            source_id=hut.slug,
-            name=hut.name,
-            location=hut.location,
-            elevation=self._normalize_elevation(hut.elevation),  # type: ignore  # argument typing drift vs stubs
-            country_code=hut.country_field,
-            importance=importance,
-            is_active=hut.is_active,
-            is_public=hut.is_public,
-            is_modified=hut.is_modified,
-        )
-        if hut.hut_type_open:
-            place.categories.add(hut.hut_type_open)
-        self._ensure_hut_party(place, hut)
-        return place
-
-    def _update_place_from_hut(
-        self, place: GeoPlace, hut: Hut, importance: int
-    ) -> bool:
-        if place.is_modified:
-            return False
-
-        place.add_source(source="wodore", source_id=hut.slug)
-
-        self._ensure_hut_party(place, hut)
-
-        changed = False
-        if place.name != hut.name:
-            place.name = hut.name
-            changed = True
-        if (
-            hut.hut_type_open
-            and not place.categories.filter(id=hut.hut_type_open.pk).exists()
-        ):
-            place.categories.add(hut.hut_type_open)
-            changed = True
-        if place.location != hut.location:
-            place.location = hut.location
-            changed = True
-        new_elevation = self._normalize_elevation(hut.elevation)  # type: ignore  # argument typing drift vs stubs
-        if place.elevation != new_elevation:
-            place.elevation = new_elevation
-            changed = True
-        if place.country_code != hut.country_field:
-            place.country_code = hut.country_field
-            changed = True
-        if place.importance != importance:
-            place.importance = importance
-            changed = True
-        if place.is_active != hut.is_active:
-            place.is_active = hut.is_active
-            changed = True
-        if place.is_public != hut.is_public:
-            place.is_public = hut.is_public
-            changed = True
-        if place.is_modified != hut.is_modified:
-            place.is_modified = hut.is_modified
-            changed = True
-
-        if changed:
-            place.save(
-                update_fields=[
-                    "name",
-                    "location",
-                    "elevation",
-                    "country_code",
-                    "importance",
-                    "is_active",
-                    "is_public",
-                    "is_modified",
-                    "modified",
-                ]
-            )
-            return True
-        return False

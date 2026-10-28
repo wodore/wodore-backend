@@ -1146,11 +1146,9 @@ class Command(BaseCommand):
         cache_key = f"osm_{source_id}"
         cached_place = place_cache.get(cache_key)
         if cached_place:
-            categories = GeoPlace._resolve_categories_from_identifiers(
-                schema.place_type_identifiers
-            )
+            place_types = GeoPlace._resolve_place_types(schema.place_type_identifiers)
             place, status = GeoPlace._update_from_schema(
-                cached_place, schema, categories, osm_org, source_input
+                cached_place, schema, place_types, osm_org, source_input
             )
         else:
             place, status = GeoPlace.update_or_create(

@@ -37,6 +37,7 @@ dependencies = [
   "django-extensions==4.*",    # https://pypi.org/project/django-extensions/
   #"django-unfold==0.43.*",            # https://pypi.org/project/django-unfold/
   "django-unfold==0.108.*",                # https://pypi.org/project/django-unfold/
+  "jsonschema>=4.23",                       # https://pypi.org/project/jsonschema/ — JSON Schema validation (category extra attributes)
   "django-q2>=1.11.0",                     # https://pypi.org/project/django-q2/
   "django-admin-runner[django-q2,unfold]", # https://github.com/burgdev/django-admin-runner
   "msgspec==0.22.*",                       # https://pypi.org/project/msgspec/
