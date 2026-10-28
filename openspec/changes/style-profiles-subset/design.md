@@ -159,7 +159,9 @@ Rules:
 
 ### D4 — Subset profile v0.1: the strict whitelist
 
-A `subset` v0.1 document is a MapLibre style (`version: 8`) restricted to:
+A `subset` v0.1 document is a MapLibre style (`version: 8`) restricted
+to — the human-readable mirror with worked examples and maplibre
+spec-links is [`docs/map-style-subset-spec.md`](../../../docs/map-style-subset-spec.md):
 
 **Top-level keys** — `version`, `name`, `metadata`, `sources`, `sprite`,
 `glyphs`, `layers` (glyphs/sprite may be present even when unused —
