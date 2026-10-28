@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, override
 
 from django.contrib.gis.geos import MultiPolygon, Polygon
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Q
 
 from server.apps.basemaps import seed_lib as lib
@@ -31,10 +31,27 @@ from server.apps.basemaps.models import (
     MapParameter,
     MapSlot,
 )
+from server.apps.basemaps.validation import (
+    SUBSET_REVISION,
+    run_styl,
+    validate_subset_style,
+)
 from server.apps.external_links.models import ExternalLink
 from server.apps.organizations.models import Organization
 
 FIXTURES = Path(__file__).resolve().parent.parent.parent / "fixtures" / "styles"
+
+#: The @maplibre/maplibre-gl-style-spec release the CI styl validation
+#: targets (``.github/workflows/test.yml`` — map-style-spec job) — the
+#: rules ``version`` recorded on ``full`` inline rows. Subset rows carry
+#: ``SUBSET_REVISION`` from ``basemaps.validation`` instead.
+STYLE_SPEC_VERSION = "26.4.4"
+
+#: External-derived styles (vendored upstream documents) skip styl
+#: wholesale via ``styl_ignored_rules: ["*"]`` — one row-level
+#: mechanism that eventually replaces the CI workflow's EXTERNAL_DERIVED
+#: skip list (kept for now as defense in depth; same slugs, see
+#: ``.github/workflows/test.yml``).
 
 SLOTS = [
     {"slug": "background", "label": "Background (area overlays)", "order": 0},
@@ -357,6 +374,23 @@ LAYERS: list[dict[str, Any]] = [
                     "filterExpression": "in",
                 }
             ],
+            # Clustering rendering hint (style-profiles-subset D5): never
+            # inside the style document (MapLibre allows ``cluster`` only
+            # on geojson sources) — one config serves client-side
+            # clustering today and precomputed DB clusters later. Features
+            # lacking ``groupByProperty`` form one null bucket.
+            "clustering": {
+                "enabled": True,
+                "source": "wd-huts",
+                "groupByProperty": "type_standard_slug",
+                "radius": 48,
+                "maxZoom": 11,
+                "bubble": {
+                    "colorProperty": "type_standard_color",
+                    "iconProperty": "type_standard_identifier",
+                    "countProperty": "point_count",
+                },
+            },
         },
         "interaction": {
             "click": {"layers": ["wd-huts"], "behavior": "hut-detail", "min_zoom": 8}
@@ -387,6 +421,8 @@ LAYERS: list[dict[str, Any]] = [
             "ch.swisstopo.swisstlm3d-wanderwege",
             opacity_token="hiking.opacity",
         ),
+        "profile": MapLayer.Profile.subset,
+        "version": SUBSET_REVISION,
         "parameters": {"hiking.opacity": None},
         "attributions": ["swisstopo"],
         "config": _links_legend(
@@ -415,6 +451,8 @@ LAYERS: list[dict[str, Any]] = [
         "style": lib.raster_style(
             "mtb", lib.waymarkedtrails_urls("mtb"), opacity_token="mtb.opacity"
         ),
+        "profile": MapLayer.Profile.subset,
+        "version": SUBSET_REVISION,
         "parameters": {"mtb.opacity": None},
         "attributions": ["openstreetmap", "waymarkedtrails"],
     },
@@ -431,6 +469,8 @@ LAYERS: list[dict[str, Any]] = [
             lib.waymarkedtrails_urls("cycling"),
             opacity_token="cycling.opacity",
         ),
+        "profile": MapLayer.Profile.subset,
+        "version": SUBSET_REVISION,
         "parameters": {"cycling.opacity": None},
         "attributions": ["openstreetmap", "waymarkedtrails"],
     },
@@ -449,6 +489,8 @@ LAYERS: list[dict[str, Any]] = [
             min_zoom=8,
             opacity_token="slopes.opacity",
         ),
+        "profile": MapLayer.Profile.subset,
+        "version": SUBSET_REVISION,
         "parameters": {"slopes.opacity": None},
         "attributions": ["openstreetmap", "waymarkedtrails"],
     },
@@ -468,6 +510,8 @@ LAYERS: list[dict[str, Any]] = [
             opacity_token="skitouren.opacity",
             min_zoom=8,
         ),
+        "profile": MapLayer.Profile.subset,
+        "version": SUBSET_REVISION,
         "parameters": {"skitouren.opacity": None},
         "attributions": ["swisstopo"],
     },
@@ -487,6 +531,8 @@ LAYERS: list[dict[str, Any]] = [
             opacity_token="snowshoes.opacity",
             min_zoom=8,
         ),
+        "profile": MapLayer.Profile.subset,
+        "version": SUBSET_REVISION,
         "parameters": {"snowshoes.opacity": None},
         "attributions": ["swisstopo"],
     },
@@ -506,6 +552,8 @@ LAYERS: list[dict[str, Any]] = [
             opacity_token="hillslope.opacity",
             min_zoom=10,
         ),
+        "profile": MapLayer.Profile.subset,
+        "version": SUBSET_REVISION,
         "parameters": {"hillslope.opacity": None},
         "attributions": ["swisstopo"],
     },
@@ -526,6 +574,8 @@ LAYERS: list[dict[str, Any]] = [
             ],
             opacity_token="nature.opacity",
         ),
+        "profile": MapLayer.Profile.subset,
+        "version": SUBSET_REVISION,
         "parameters": {"nature.opacity": None},
         "attributions": ["bafu", "swisstopo"],
     },
@@ -543,6 +593,8 @@ LAYERS: list[dict[str, Any]] = [
             "ch.bafu.alpweiden-herdenschutzhunde",
             opacity_token="sheepdogs.opacity",
         ),
+        "profile": MapLayer.Profile.subset,
+        "version": SUBSET_REVISION,
         "parameters": {"sheepdogs.opacity": None},
         "attributions": ["bafu", "swisstopo"],
     },
@@ -564,6 +616,7 @@ LAYERS: list[dict[str, Any]] = [
         "order": 0,  # the product slot (plain non-hill pair retired)
         "show": True,
         "style": _fixture_style("wd-outdoor-base-mtk-hill"),
+        "styl_ignored_rules": ["*"],  # external-derived: styl skips wholesale
         "attributions": ["maptoolkit"],
     },
     {
@@ -583,6 +636,7 @@ LAYERS: list[dict[str, Any]] = [
         "order": 1,
         "show": False,  # A/B variant — not a picker product
         "style": _fixture_style("wd-outdoor-base-mtk"),
+        "styl_ignored_rules": ["*"],  # external-derived: styl skips wholesale
         "attributions": ["maptoolkit"],
     },
     {
@@ -594,6 +648,7 @@ LAYERS: list[dict[str, Any]] = [
         "order": 7,
         "show": False,  # A/B variant of the hidden fallback
         "style": _fixture_style("wd-outdoor-base-ofm-hill"),
+        "styl_ignored_rules": ["*"],  # external-derived: styl skips wholesale
         "attributions": ["openfreemap"],
     },
     {
@@ -608,6 +663,7 @@ LAYERS: list[dict[str, Any]] = [
         "order": 8,
         "show": False,  # upstream visual reference, not shipped
         "style": _fixture_style("mtk-outdoor"),
+        "styl_ignored_rules": ["*"],  # external-derived: styl skips wholesale
         "attributions": ["maptoolkit"],
     },
     {
@@ -618,6 +674,8 @@ LAYERS: list[dict[str, Any]] = [
         "spec": MapLayer.Spec.high,
         "order": 1,
         "style": _fixture_style("world-topo"),
+        "profile": MapLayer.Profile.subset,
+        "version": SUBSET_REVISION,
         "attributions": ["openstreetmap"],
     },
     {
@@ -631,6 +689,7 @@ LAYERS: list[dict[str, Any]] = [
         "spec": MapLayer.Spec.high,
         "order": 2,
         "style": _fixture_style("world-satellite-hybrid"),
+        "styl_ignored_rules": ["*"],  # external-derived: styl skips wholesale
         "attributions": ["openstreetmap", "openfreemap"],
     },
     {
@@ -653,6 +712,7 @@ LAYERS: list[dict[str, Any]] = [
             {
                 "spec": MapLayer.Spec.low,
                 "style": lib.osm_raster_style(),
+                "styl_ignored_rules": ["*"],  # external-derived (variant-level)
             }
         ],
         "attributions": ["swisstopo", "openstreetmap"],
@@ -668,6 +728,7 @@ LAYERS: list[dict[str, Any]] = [
         "coverage": "ch",
         "fallback_min_zoom": 7,
         "style": lib.swisstopo_pixelkarte_style(),
+        "styl_ignored_rules": ["*"],  # external-derived: styl skips wholesale
         "attributions": ["swisstopo"],
     },
     {
@@ -711,6 +772,7 @@ LAYERS: list[dict[str, Any]] = [
         "order": 11,
         "show": False,  # reference/compare entry, not a product basemap
         "style": _fixture_style("mapy-outdoor"),
+        "styl_ignored_rules": ["*"],  # external-derived: styl skips wholesale
         "attributions": ["mapy"],
     },
 ]
@@ -882,6 +944,7 @@ class Command(BaseCommand):
     ) -> tuple[int, int]:
         slug = parent["slug"]
         spec = variant.get("spec", MapLayer.Spec.medium)
+        profile = variant.get("profile", parent.get("profile", MapLayer.Profile.full))
         # Explicit variants own their style source outright (a low-spec
         # raster variant must not inherit the parent's style_url — the
         # style XOR constraint would fire).
@@ -895,6 +958,43 @@ class Command(BaseCommand):
                 "style": parent.get("style"),
                 "style_url": parent.get("style_url"),
             }
+        # Rules version default: explicit per-entry overrides win;
+        # inline rows record the styl-validated style-spec release,
+        # external style_url rows stay empty (not our document).
+        if "version" in variant or "version" in parent:
+            version = variant.get("version", parent.get("version", ""))
+        elif style_source["style_url"]:
+            version = ""
+        else:
+            version = STYLE_SPEC_VERSION
+
+        # Seed gating (style-profiles-subset D6): ``update_or_create``
+        # bypasses ``clean()`` — the profile-relevant invariants are
+        # validated directly, BEFORE the write, so a bad definition
+        # fails the seed loudly instead of drifting in via CI sweep
+        # only. Token/attribution checks need the M2M syncs below and
+        # stay with the sweep (``validate_map_styles``).
+        styl_ignored = variant.get(
+            "styl_ignored_rules", parent.get("styl_ignored_rules")
+        )
+        if style_source["style"] is not None:
+            if profile == MapLayer.Profile.subset:
+                validate_subset_style(style_source["style"])
+            if not version:
+                msg = f"{slug} [{spec}/{profile}]: inline styles need a rules version"
+                raise CommandError(msg)
+            # styl: same graceful rules as ``clean()`` — an absent binary
+            # skips silently; a present binary's E-codes (minus this
+            # row's ignore list) fail the seed loudly.
+            styl_result = run_styl(
+                style_source["style"], ignored_rules=styl_ignored or ()
+            )
+            if styl_result is not None and styl_result.errors:
+                msg = f"{slug} [{spec}/{profile}]: styl: " + "; ".join(
+                    styl_result.errors
+                )
+                raise CommandError(msg)
+
         defaults = {
             "role": parent["role"],
             "name": parent["name"],
@@ -909,6 +1009,9 @@ class Command(BaseCommand):
             "max_zoom": variant.get("max_zoom", parent.get("max_zoom")),
             "style": style_source["style"],
             "style_url": style_source["style_url"],
+            "profile": profile,
+            "version": version,
+            "styl_ignored_rules": styl_ignored,
             "config": parent.get("config"),
             "interaction": parent.get("interaction"),
             "coverage": coverage if parent.get("coverage") == "ch" else None,
@@ -918,7 +1021,7 @@ class Command(BaseCommand):
         }
 
         layer, was_created = MapLayer.objects.update_or_create(
-            slug=slug, spec=spec, defaults=defaults
+            slug=slug, spec=spec, profile=profile, defaults=defaults
         )
         changed = int(not was_created)  # update_or_create reports nothing finer
 

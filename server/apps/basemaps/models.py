@@ -5,9 +5,11 @@ Design references: ``openspec/changes/map-layer-catalog/`` and
 
 Key invariants enforced here:
 
-* ``(slug, spec)`` is unique — the same logical layer may exist as
-  device-tier variants (``low`` / ``medium`` / ``high``); the slug alone
-  stays the identity for groups and (later) user preferences.
+* ``(slug, spec, profile)`` is unique — the same logical layer may
+  exist as device-tier variants (``low`` / ``medium`` / ``high``) ×
+  capability profiles (``full`` / ``subset`` — openspec
+  style-profiles-subset); the slug alone stays the identity for groups
+  and (later) user preferences.
 * Exactly one style source per layer: inline ``style`` JSONB (MapLibre
   ``StyleSpecification``) XOR ``style_url`` (externally authored style).
 * Styles reference parameters as standalone JSON token nodes
@@ -476,6 +478,10 @@ class MapLayer(TimeStampedModel):
         medium = "medium", _("medium")
         high = "high", _("high (vector-capable)")
 
+    class Profile(models.TextChoices):
+        full = "full", _("full (complete MapLibre style)")
+        subset = "subset", _("subset (Leaflet-class renderable)")
+
     #: Explicit device-tier fallback chains (map-layers-api): exact
     #: match first, then the chain, then the single remaining variant.
     #: ``medium`` degrades to the cheaper tier — a mid-tier device is
@@ -484,6 +490,15 @@ class MapLayer(TimeStampedModel):
         ("low", ("medium", "high")),
         ("medium", ("low", "high")),
         ("high", ("medium", "low")),
+    )
+
+    #: Capability preference within one tier for full-capable clients
+    #: (style-profiles-subset D3): a subset document is a valid full
+    #: style by construction, so it is the in-tier fallback — the tier
+    #: (a device constraint) is respected before format richness.
+    PROFILE_PREFERENCE: ClassVar[tuple[str, str]] = (
+        Profile.full,
+        Profile.subset,
     )
 
     slug = models.CharField(
@@ -501,6 +516,39 @@ class MapLayer(TimeStampedModel):
         default=Spec.medium,
         db_index=True,
         help_text=_("Device tier this variant targets"),
+    )
+    profile = models.CharField(
+        max_length=10,
+        choices=Profile.choices,
+        default=Profile.full,
+        db_index=True,
+        help_text=_(
+            "Format richness of this variant's style document: 'full' "
+            "is a complete MapLibre style; 'subset' is restricted to the "
+            "subset whitelist — valid as a full style by construction, "
+            "renderable by Leaflet-class engines."
+        ),
+    )
+    version = models.CharField(
+        max_length=16,
+        blank=True,
+        default="",
+        help_text=_(
+            "Rules this document was validated against — the maplibre "
+            "style-spec release for full rows (e.g. '26.4.4'), the subset "
+            "revision for subset rows (e.g. '0.1'); empty for externally "
+            "authored style_url rows. Not to be confused with the style "
+            'document\'s internal "version": 8 field.'
+        ),
+    )
+    styl_ignored_rules = models.JSONField(
+        null=True,
+        blank=True,
+        help_text=_(
+            "Internal validation config (never served by the API): styl "
+            'rule codes to ignore for this row, e.g. ["E022"]; ["*"] '
+            "skips styl entirely (external-derived styles)."
+        ),
     )
     role = models.CharField(
         max_length=10,
@@ -714,11 +762,11 @@ class MapLayer(TimeStampedModel):
     class Meta:
         verbose_name = _("Map layer")
         verbose_name_plural = _("Map layers")
-        ordering = ("role", "order", "slug", "spec")
+        ordering = ("role", "order", "slug", "spec", "profile")
         constraints = [
             models.UniqueConstraint(
-                fields=("slug", "spec"),
-                name="unique_slug_spec_variant",
+                fields=("slug", "spec", "profile"),
+                name="unique_slug_spec_profile_variant",
             ),
             models.CheckConstraint(
                 condition=(
@@ -737,19 +785,31 @@ class MapLayer(TimeStampedModel):
                 condition=models.Q(spec__in=["low", "medium", "high"]),
                 name="basemaps_maplayer_spec_valid",
             ),
+            models.CheckConstraint(
+                condition=models.Q(profile__in=["full", "subset"]),
+                name="basemaps_maplayer_profile_valid",
+            ),
         ]
         indexes = [
             models.Index(fields=("role", "is_active", "order")),
         ]
 
     def __str__(self) -> str:
-        return f"{self.slug} [{self.spec}] ({self.role})"
+        return f"{self.slug} [{self.spec}/{self.profile}] ({self.role})"
 
     # ── Validation ────────────────────────────────────────────────────────
 
     @override
     def clean(self) -> None:
-        """Structural + token + attribution validation (admin & factory)."""
+        """Full save-time validation stack (admin & factory).
+
+        Order: structural style checks → parameter-token check → subset
+        walker (``profile=subset`` rows) → styl (best-effort subprocess
+        when a binary is on PATH; E-codes block unless ignored, W-codes
+        surface only alongside a blocking error) → rules-``version``
+        requirements → ``config.clustering`` shape → env-token and
+        attribution checks.
+        """
         super().clean()
         errors: dict[str, str] = {}
 
@@ -766,6 +826,51 @@ class MapLayer(TimeStampedModel):
                     f"Unknown parameter token(s): "
                     f"{', '.join(sorted('{{' + t + '}}' for t in unknown))}"
                 )
+
+            # Subset rows gate on the whitelist walker (admin edits; the
+            # seed upsert calls it directly — update_or_create bypasses
+            # clean(), see map_seed._seed_layer_variant).
+            if self.profile == self.Profile.subset and "style" not in errors:
+                try:
+                    validation.validate_subset_style(self.style)
+                except validation.StyleValidationError as exc:
+                    errors["style"] = str(exc)
+
+            # styl (save-time, best-effort): when a styl binary is on
+            # PATH, run the full style-spec validation as a subprocess.
+            # E-codes block unless on the row's ignore list; W-codes
+            # never block — they surface in the error message only when
+            # an E already blocks (the ``validate_map_styles`` sweep
+            # reports them always). Absent binary / ``"*"`` / tool
+            # failures degrade to a silent skip or a warning — saves
+            # must not brick on a styl upgrade. The style ENDPOINT
+            # never invokes styl.
+            if "style" not in errors:
+                styl_result = validation.run_styl(
+                    self.style, ignored_rules=self.styl_ignored_rules or ()
+                )
+                if styl_result is not None and styl_result.errors:
+                    message = "styl: " + "; ".join(styl_result.errors)
+                    if styl_result.warnings:
+                        message += " | warnings: " + "; ".join(styl_result.warnings)
+                    errors["style"] = message
+
+        if self.style is not None and not self.version.strip():
+            errors["version"] = (
+                "Inline styles must record the rules version they were "
+                "validated against (style-spec release or subset revision)."
+            )
+        if self.version and not validation.VERSION_RE.match(self.version):
+            errors["version"] = (
+                f"Version must be dotted decimals (e.g. '26.4.4', '0.1'), "
+                f"got {self.version!r}."
+            )
+
+        if isinstance(self.config, dict) and "clustering" in self.config:
+            try:
+                validation.validate_clustering_config(self.config["clustering"])
+            except validation.StyleValidationError as exc:
+                errors["config"] = str(exc)
 
         if self.style_url and validation.unknown_env_tokens(self.style_url):
             errors["style_url"] = "Malformed env token (expected {{env:NAME}})"
@@ -849,30 +954,61 @@ class MapLayer(TimeStampedModel):
     def pick_variant(
         cls,
         queryset: QuerySet[MapLayer] | Sequence[MapLayer],
-        spec: str | None,
+        spec: str | None = None,
+        profile: str | None = None,
     ) -> MapLayer | None:
-        """Select the device-tier variant: exact → explicit chain → single.
+        """Select the variant: tier chain × capability profile.
 
-        Chains (cheap-first for ``medium``): ``low → medium → high``,
+        Tier walk (cheap-first for ``medium``): ``low → medium → high``,
         ``medium → low → high``, ``high → medium → low``. With no
         requested spec the first row serves; an unknown spec falls back
         to the single/first variant (query models reject invalid values
         before this point).
+
+        The capability profile (style-profiles-subset D3):
+
+        * ``None`` — today's behavior: profile-agnostic tier walk,
+          preferring ``full`` when both profiles exist at a tier.
+        * ``"full"`` — per tier prefer ``full`` then ``subset`` (a
+          subset document is a valid full style by construction); the
+          tier is respected before format richness.
+        * ``"subset"`` — subset rows only, walking the same tier
+          order; ``None`` when the slug has no subset variant (the
+          slug is then absent from subset-resolved views).
         """
         if isinstance(queryset, QuerySet):
             layers = list(queryset.filter(is_active=True))
         else:
             layers = [layer for layer in queryset if layer.is_active]
+        if profile == cls.Profile.subset:
+            layers = [layer for layer in layers if layer.profile == cls.Profile.subset]
         if not layers:
             return None
         if spec is None:
             return layers[0]
-        by_spec = {layer.spec: layer for layer in layers}
-        if spec in by_spec:
-            return by_spec[spec]
-        for candidate in dict(cls.SPEC_FALLBACKS).get(spec, ()):
-            if candidate in by_spec:
-                return by_spec[candidate]
+        by_pair = {(layer.spec, layer.profile): layer for layer in layers}
+        tiers = (spec, *dict(cls.SPEC_FALLBACKS).get(spec, ()))
+        if profile == cls.Profile.full:
+            for tier in tiers:
+                for candidate in cls.PROFILE_PREFERENCE:
+                    picked = by_pair.get((tier, candidate))
+                    if picked is not None:
+                        return picked
+            return layers[0]
+        # Profile-agnostic (today) or subset (already filtered): the
+        # plain tier walk, preferring full over subset within a tier.
+        by_spec: dict[str, MapLayer] = {}
+        for layer in layers:
+            current = by_spec.get(layer.spec)
+            if current is None or (
+                current.profile == cls.Profile.subset
+                and layer.profile == cls.Profile.full
+            ):
+                by_spec[layer.spec] = layer
+        for tier in tiers:
+            picked = by_spec.get(tier)
+            if picked is not None:
+                return picked
         return layers[0]
 
 

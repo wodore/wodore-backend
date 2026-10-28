@@ -15,8 +15,15 @@ the spec is huge/brittle). What we enforce:
 
 from __future__ import annotations
 
+import contextlib
+import json
+import os
 import re
-from typing import Any
+import shutil
+import subprocess
+import tempfile
+from collections.abc import Sequence
+from typing import Any, NamedTuple
 from urllib.parse import urlparse
 
 import pydantic
@@ -25,6 +32,18 @@ from server.apps.envvars.registry import resolve_setting
 
 TOKEN_RE = re.compile(r"^\{\{([a-z0-9][a-z0-9_.\-]*)\}\}$")
 ENV_TOKEN_RE = re.compile(r"\{\{env:([A-Z0-9_]+)\}\}")
+
+#: Rules-version shape — dotted decimals (``26.4.4``, ``0.1``).
+VERSION_RE = re.compile(r"^\d+(\.\d+)*$")
+
+#: One save-time styl run may take this long before degrading to a
+#: warning (never a hard failure — a save must not brick on tool slowness).
+STYL_TIMEOUT_SECONDS = 10.0
+
+#: styl diagnostic lines: ``error[E003] sources.roads: …`` /
+#: ``warning[W002] layers[9].layout.visibility: …`` (continuation lines
+#: — ``-->``, ``hint:`` — are ignored; the first line carries the gist).
+_STYL_LINE_RE = re.compile(r"^(error|warning)\[([EW]\d{3})\]\s*(.*)$")
 
 
 class StyleValidationError(ValueError):
@@ -186,3 +205,514 @@ def _is_external_url(value: str, local_hosts: set[str]) -> bool:
     if parsed.scheme not in ("http", "https"):
         return False
     return parsed.hostname not in local_hosts
+
+
+# ── Subset profile v0.1 (openspec style-profiles-subset, design D4) ────
+
+#: Revision of the subset whitelist — the ``version`` recorded on
+#: ``profile=subset`` rows. Widening the whitelist bumps this and rows
+#: re-validate against the new rules.
+SUBSET_REVISION = "0.1"
+
+#: Allowed top-level style keys. ``glyphs``/``sprite`` may sit unused on
+#: raster-only documents (the seeded raster styles carry one).
+SUBSET_TOP_LEVEL_KEYS = frozenset(
+    {"version", "name", "metadata", "sources", "sprite", "glyphs", "layers"}
+)
+
+#: Closed source key sets per type. ``encoding`` (value ``mlt``) is the
+#: wodore/Martin MapLibre decoder marker — the one extension beyond the
+#: stock style spec (unknown source keys are ignored by validators).
+SUBSET_SOURCE_KEYS: dict[str, frozenset[str]] = {
+    "raster": frozenset({"type", "tiles", "maxzoom", "tileSize", "attribution"}),
+    "vector": frozenset(
+        {"type", "tiles", "minzoom", "maxzoom", "attribution", "encoding"}
+    ),
+    "geojson": frozenset({"type", "data"}),
+}
+
+SUBSET_LAYER_TYPES = frozenset({"raster", "circle", "symbol"})
+
+#: Permitted layer keys (minzoom/maxzoom carry the zoom gating).
+SUBSET_LAYER_KEYS = frozenset(
+    {"id", "type", "source", "source-layer", "minzoom", "maxzoom", "paint", "layout"}
+)
+
+#: Layout keys per layer type — circle/raster carry none; symbols get
+#: "sprite-pack icon + simple text" positioning only (SDF text layout
+#: props like variable anchors or letter spacing are out).
+SUBSET_LAYOUT_KEYS: dict[str, frozenset[str]] = {
+    "raster": frozenset(),
+    "circle": frozenset(),
+    "symbol": frozenset(
+        {
+            "icon-image",
+            "icon-size",
+            "icon-allow-overlap",
+            "text-field",
+            "text-font",
+            "text-size",
+            "text-anchor",
+            "text-offset",
+        }
+    ),
+}
+
+#: Closed paint set. ``icon-size``/``text-size`` are layout properties in
+#: the MapLibre spec but are accepted in either slot (design D4 — listed
+#: once; the symbol layout whitelist carries them too).
+SUBSET_PAINT_KEYS = frozenset(
+    {
+        "circle-color",
+        "circle-radius",
+        "circle-opacity",
+        "circle-stroke-color",
+        "circle-stroke-width",
+        "raster-opacity",
+        "raster-fade-duration",
+        "icon-size",
+        "icon-color",
+        "icon-opacity",
+        "icon-translate",
+        "text-size",
+        "text-color",
+        "text-opacity",
+        "text-halo-color",
+        "text-halo-width",
+        "text-translate",
+    }
+)
+
+#: Recursive expression operator whitelist — ``interpolate`` accepts the
+#: zoom input only (enforced in the walker, not just listed here).
+SUBSET_EXPRESSION_OPS = frozenset(
+    {"get", "has", "match", "case", "in", "==", "interpolate", "literal"}
+)
+
+#: MapLibre distinguishes expressions from literal array values by the
+#: first element: a string that IS an operator name marks an expression
+#: (``["feature-state", …]``), anything else (``["Noto Sans Regular"]``
+#: for ``text-font``) is a literal array. The subset walker approximates
+#: the operator-name test by shape — lowercase/hyphenated identifiers.
+_OPERATOR_SHAPE_RE = re.compile(r"^[a-z][a-z0-9-]*$")
+
+#: ``config.clustering`` shape (design D5) — renderer hints, never style
+#: document content (``cluster`` is only legal on geojson sources in the
+#: MapLibre spec; on a vector source it would break subset validity).
+CLUSTERING_KEYS = frozenset(
+    {"enabled", "source", "groupByProperty", "radius", "maxZoom", "bubble"}
+)
+CLUSTERING_BUBBLE_KEYS = frozenset(
+    {"colorProperty", "iconProperty", "countProperty", "color", "icon"}
+)
+
+
+def _subset_error(errors: list[str], path: str, message: str) -> None:
+    errors.append(f"{path}: {message} (subset v{SUBSET_REVISION})")
+
+
+def _is_expression_head(value: list[Any]) -> bool:
+    """MapLibre's expression test, by shape — plus the listed
+    non-identifier operators (``==``) that the shape heuristic alone
+    would miss (review fix: ``==`` is whitelisted but not
+    identifier-shaped, so it must be honored via the list)."""
+    head = value[0]
+    return isinstance(head, str) and (
+        head in SUBSET_EXPRESSION_OPS or _OPERATOR_SHAPE_RE.match(head) is not None
+    )
+
+
+def _is_scalar_array(value: list[Any]) -> bool:
+    """A literal array value — scalars only, never nested expressions."""
+    return all(
+        entry is None or isinstance(entry, (str, bool, int, float)) for entry in value
+    )
+
+
+def _check_label_set(value: Any, path: str, errors: list[str]) -> None:
+    """``match`` label / ``in`` haystack positions.
+
+    These positions accept an expression, a scalar, or a literal SET
+    of scalars (``["residential", "service"]``) — the operator-shape
+    heuristic does not apply, because a plain label string is the
+    common case and is indistinguishable from an unknown operator
+    name (review fix: label sets mis-detected as expressions). Only
+    whitelisted heads count as expressions here; anything else must
+    be a scalar or a scalar array.
+    """
+    if value is None or isinstance(value, (str, bool, int, float)):
+        return
+    if isinstance(value, list):
+        if not value:
+            return
+        head = value[0]
+        if isinstance(head, str) and head in SUBSET_EXPRESSION_OPS:
+            _check_subset_expression(value, path, errors)
+            return
+        if _is_scalar_array(value):
+            return
+    _subset_error(
+        errors,
+        path,
+        "labels must be scalars, scalar arrays, or expressions "
+        "with a whitelisted operator head",
+    )
+
+
+def _check_subset_expression(value: Any, path: str, errors: list[str]) -> None:
+    """Recursive whitelist check for one expression subtree.
+
+    Strings pass (literals and standalone ``{{token}}`` parameter
+    nodes); lists are expressions when their head is a whitelisted
+    operator (``==`` included — not identifier-shaped, but listed) or
+    an identifier-shaped string (MapLibre's own expression test, by
+    shape — unknown identifier heads error as non-whitelisted
+    operators); other arrays are literal values (``text-font`` stacks,
+    numeric pairs) and must contain scalars only; objects are never
+    subset expressions. ``['linear']``/``['zoom']`` outside an
+    ``interpolate`` slot read as unknown operators — the error names
+    the path, which is the point.
+    """
+    if value is None or isinstance(value, (str, bool, int, float)):
+        return
+    if isinstance(value, list):
+        if not value:
+            return
+        if not _is_expression_head(value):
+            # Literal array value (font stacks, offsets, rgb triples) —
+            # scalar entries only, never nested expressions.
+            for index, entry in enumerate(value):
+                if not (entry is None or isinstance(entry, (str, bool, int, float))):
+                    _subset_error(
+                        errors,
+                        f"{path}[{index}]",
+                        "literal array entries must be scalars "
+                        "(nested expressions need an operator head)",
+                    )
+            return
+        op = value[0]
+        if op not in SUBSET_EXPRESSION_OPS:
+            _subset_error(errors, path, f"operator {op!r} is not whitelisted")
+            return
+        if op == "interpolate":
+            _check_subset_interpolate(value, path, errors)
+            return
+        if op == "match":
+            _check_subset_match(value, path, errors)
+            return
+        if op == "in":
+            _check_subset_in(value, path, errors)
+            return
+        for index, child in enumerate(value[1:], start=1):
+            _check_subset_expression(child, f"{path}[{index}]", errors)
+        return
+    _subset_error(errors, path, "object expressions are not whitelisted")
+
+
+def _check_subset_match(expr: list[Any], path: str, errors: list[str]) -> None:
+    """``['match', input, label, output, …, fallback]`` — labels are
+    label-set positions (scalar or scalar array); outputs and the
+    fallback are value positions."""
+    if len(expr) < 5 or len(expr) % 2 == 0:
+        _subset_error(errors, path, "match needs (label, output) pairs plus a fallback")
+        return
+    _check_subset_expression(expr[1], f"{path}[1]", errors)
+    for index in range(2, len(expr) - 1, 2):
+        _check_label_set(expr[index], f"{path}[{index}]", errors)
+    for index in range(3, len(expr) - 1, 2):
+        _check_subset_expression(expr[index], f"{path}[{index}]", errors)
+    fallback = len(expr) - 1
+    _check_subset_expression(expr[fallback], f"{path}[{fallback}]", errors)
+
+
+def _check_subset_in(expr: list[Any], path: str, errors: list[str]) -> None:
+    """``['in', needle, haystack]`` — the haystack is a label-set
+    position (``['get', 'types']`` stays an expression; ``['a', 'b']``
+    is a literal set)."""
+    if len(expr) != 3:
+        _subset_error(errors, path, "in takes exactly (needle, haystack)")
+        return
+    _check_subset_expression(expr[1], f"{path}[1]", errors)
+    _check_label_set(expr[2], f"{path}[2]", errors)
+
+
+def _check_subset_interpolate(expr: list[Any], path: str, errors: list[str]) -> None:
+    """``['interpolate', ['linear'], ['zoom'], z, v, …]`` — zoom input only."""
+    if len(expr) < 5 or len(expr) % 2 == 0:
+        _subset_error(errors, path, "interpolate needs (zoom, value) stop pairs")
+        return
+    if expr[1] != ["linear"]:
+        _subset_error(
+            errors, f"{path}[1]", "only ['linear'] interpolation is whitelisted"
+        )
+    if expr[2] != ["zoom"]:
+        _subset_error(errors, f"{path}[2]", "interpolate input must be ['zoom']")
+    for index in range(3, len(expr), 2):
+        stop = expr[index]
+        if isinstance(stop, bool) or not isinstance(stop, (int, float)):
+            _subset_error(
+                errors, f"{path}[{index}]", "zoom stops must be literal numbers"
+            )
+        _check_subset_expression(expr[index + 1], f"{path}[{index + 1}]", errors)
+
+
+def _is_string_list(value: Any) -> bool:
+    if isinstance(value, str):
+        return True
+    return isinstance(value, list) and all(isinstance(entry, str) for entry in value)
+
+
+def _check_subset_sources(style: dict[str, Any], errors: list[str]) -> None:
+    sources = style.get("sources") or {}
+    if not isinstance(sources, dict):
+        _subset_error(errors, "sources", "must be an object")
+        return
+    for source_id, source in sources.items():
+        path = f"sources.{source_id}"
+        if not isinstance(source, dict):
+            _subset_error(errors, path, "must be an object")
+            continue
+        source_type = source.get("type")
+        if not isinstance(source_type, str) or source_type not in SUBSET_SOURCE_KEYS:
+            _subset_error(
+                errors,
+                path,
+                f"source type {source_type!r} is not whitelisted "
+                f"(allowed: {', '.join(sorted(SUBSET_SOURCE_KEYS))})",
+            )
+            continue
+        allowed = SUBSET_SOURCE_KEYS[source_type]
+        for key in sorted(set(source) - allowed):
+            _subset_error(errors, f"{path}.{key}", "source key is not whitelisted")
+        tiles = source.get("tiles")
+        if tiles is not None and not _is_string_list(tiles):
+            _subset_error(
+                errors, f"{path}.tiles", "must be a string or list of strings"
+            )
+        if source_type == "vector" and source.get("encoding") not in (None, "mlt"):
+            _subset_error(
+                errors, f"{path}.encoding", "only the value 'mlt' is whitelisted"
+            )
+        if source_type == "geojson" and not isinstance(source.get("data"), str):
+            _subset_error(
+                errors, f"{path}.data", "must be a data URL string (inline data is out)"
+            )
+
+
+def _check_subset_layers(style: dict[str, Any], errors: list[str]) -> None:
+    for index, layer in enumerate(style.get("layers") or []):
+        path = f"layers[{index}]"
+        if not isinstance(layer, dict):
+            _subset_error(errors, path, "must be an object")
+            continue
+        layer_type = layer.get("type")
+        if not isinstance(layer_type, str) or layer_type not in SUBSET_LAYER_TYPES:
+            _subset_error(
+                errors,
+                f"{path}.type",
+                f"layer type {layer_type!r} is not whitelisted "
+                f"(allowed: {', '.join(sorted(SUBSET_LAYER_TYPES))})",
+            )
+            continue
+        for key in sorted(set(layer) - SUBSET_LAYER_KEYS):
+            _subset_error(errors, f"{path}.{key}", "layer key is not whitelisted")
+        layout = layer.get("layout") or {}
+        allowed_layout = SUBSET_LAYOUT_KEYS.get(layer_type, frozenset())
+        if isinstance(layout, dict):
+            for key in sorted(set(layout) - allowed_layout):
+                _subset_error(
+                    errors, f"{path}.layout.{key}", "layout key is not whitelisted"
+                )
+            for key, value in layout.items():
+                _check_subset_expression(value, f"{path}.layout.{key}", errors)
+        else:
+            _subset_error(errors, f"{path}.layout", "must be an object")
+        paint = layer.get("paint") or {}
+        if isinstance(paint, dict):
+            for key in sorted(set(paint) - SUBSET_PAINT_KEYS):
+                _subset_error(
+                    errors, f"{path}.paint.{key}", "paint property is not whitelisted"
+                )
+            for key, value in paint.items():
+                _check_subset_expression(value, f"{path}.paint.{key}", errors)
+        else:
+            _subset_error(errors, f"{path}.paint", "must be an object")
+
+
+def validate_subset_style(style: Any) -> None:
+    """Validate an inline style against the subset profile (v0.1).
+
+    A subset document is a valid full MapLibre style by construction
+    (structural checks run first) restricted to the whitelists above —
+    renderable by a Leaflet-class engine. Raises
+    :class:`StyleValidationError` with path-precise messages.
+    """
+    validate_style_spec(style)  # version 8, sources object, layer shapes
+    errors: list[str] = []
+    for key in sorted(set(style) - SUBSET_TOP_LEVEL_KEYS):
+        _subset_error(errors, key, "top-level key is not whitelisted")
+    _check_subset_sources(style, errors)
+    _check_subset_layers(style, errors)
+    if errors:
+        raise StyleValidationError("; ".join(errors))
+
+
+def validate_clustering_config(clustering: Any) -> None:
+    """Shape-check a ``config.clustering`` block (design D5).
+
+    Lightweight on purpose — known keys, value types, bubble carrying
+    either property references or literal fallbacks. Property NAMES are
+    free-form strings (they reference tile features, not this schema).
+    """
+    errors: list[str] = []
+    if not isinstance(clustering, dict):
+        raise StyleValidationError("clustering: must be an object")
+    for key in sorted(set(clustering) - CLUSTERING_KEYS):
+        errors.append(
+            f"clustering.{key}: unknown key "
+            f"(allowed: {', '.join(sorted(CLUSTERING_KEYS))})"
+        )
+    if "enabled" in clustering and not isinstance(clustering["enabled"], bool):
+        errors.append("clustering.enabled: must be a boolean")
+    for key in ("source", "groupByProperty"):
+        if key in clustering and not isinstance(clustering[key], str):
+            errors.append(f"clustering.{key}: must be a string")
+    for key in ("radius", "maxZoom"):
+        value = clustering.get(key)
+        if key in clustering and (
+            isinstance(value, bool) or not isinstance(value, (int, float))
+        ):
+            errors.append(f"clustering.{key}: must be a number")
+    bubble = clustering.get("bubble")
+    if bubble is not None:
+        if not isinstance(bubble, dict):
+            errors.append("clustering.bubble: must be an object")
+        else:
+            for key in sorted(set(bubble) - CLUSTERING_BUBBLE_KEYS):
+                errors.append(
+                    f"clustering.bubble.{key}: unknown key "
+                    "(property references or literal fallbacks only)"
+                )
+            for key, value in bubble.items():
+                if not isinstance(value, str):
+                    errors.append(f"clustering.bubble.{key}: must be a string")
+    if errors:
+        raise StyleValidationError("; ".join(errors))
+
+
+# ── styl — the MapLibre style-spec reference validator (Rust binary) ──
+
+
+class StylResult(NamedTuple):
+    """Findings from one save-time styl run.
+
+    ``errors``: E-code violations NOT on the row's ignore list — these
+    block saves. ``warnings``: W-code findings (plus degraded runs —
+    timeouts, tool errors, unparsable output) which never block; they
+    surface next to a blocking error in ``clean()`` and always in the
+    ``validate_map_styles`` sweep.
+    """
+
+    errors: list[str]
+    warnings: list[str]
+
+
+def _styl_binary() -> str | None:
+    """Absolute styl path when a binary is on PATH (test seam)."""
+    return shutil.which("styl")
+
+
+def _parse_styl_output(output: str) -> tuple[list[str], list[str]]:
+    """Split styl diagnostics into (``E-code`` messages, ``W-code`` messages).
+
+    Only first lines count — ``error[E003] sources.x: …``; continuation
+    lines (``-->``, ``hint:``) are dropped, the first line carries the
+    gist for display.
+    """
+    errors: list[str] = []
+    warnings: list[str] = []
+    for line in output.splitlines():
+        match = _STYL_LINE_RE.match(line.strip())
+        if match is None:
+            continue
+        severity, code, text = match.groups()
+        message = f"{code} {text}".strip()
+        if severity == "error":
+            errors.append(message)
+        else:
+            warnings.append(message)
+    return errors, warnings
+
+
+def run_styl(
+    style: dict[str, Any],
+    ignored_rules: Sequence[str] | None = None,
+) -> StylResult | None:
+    """Best-effort ``styl validate`` on an inline style document.
+
+    Returns ``None`` when styl cannot run (no binary on PATH, or the
+    row ignores it wholesale via ``"*"``) — callers skip silently;
+    dev machines and the server runtime keep working and the CI tests
+    job never requires the binary. Never raises: a timeout, a tool
+    error (exit 2) or unparsable output degrades to a warning, so a
+    styl upgrade can never brick a save.
+
+    E-code violations block unless their code is on the row's ignore
+    list; W-code findings never block (surfaced by the caller).
+    """
+    if _styl_binary() is None:
+        return None
+    ignored = set(ignored_rules or ())
+    if "*" in ignored:
+        return None
+    path = ""
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".json", encoding="utf-8", delete=False
+        ) as handle:
+            path = handle.name
+            json.dump(style, handle)
+        completed = subprocess.run(
+            ["styl", "validate", path],
+            capture_output=True,
+            text=True,
+            timeout=STYL_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return StylResult(
+            [],
+            [
+                (
+                    f"styl timed out after {STYL_TIMEOUT_SECONDS:.0f}s — "
+                    "validation skipped (warning only)"
+                )
+            ],
+        )
+    except OSError:
+        # Binary vanished between which() and run — same as absent.
+        return None
+    finally:
+        with contextlib.suppress(OSError):
+            os.unlink(path)
+    if completed.returncode == 0:
+        return StylResult([], [])
+    if completed.returncode == 2:
+        detail = (completed.stderr or completed.stdout or "").strip()[:200]
+        return StylResult([], [f"styl tool error (exit 2): {detail or 'no output'}"])
+    errors, warnings = _parse_styl_output(f"{completed.stdout}\n{completed.stderr}")
+    if not errors and not warnings:
+        detail = (completed.stdout or completed.stderr or "").strip()[:200]
+        return StylResult(
+            [],
+            [
+                (
+                    f"styl exited {completed.returncode} with unparsable "
+                    f"output — treated as warning: {detail or 'no output'}"
+                )
+            ],
+        )
+    return StylResult(
+        [message for message in errors if message.split(" ", 1)[0] not in ignored],
+        [message for message in warnings if message.split(" ", 1)[0] not in ignored],
+    )

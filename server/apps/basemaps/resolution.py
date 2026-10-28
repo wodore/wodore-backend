@@ -248,11 +248,26 @@ def _walk_strings(value: Any):
             yield from _walk_strings(child)
 
 
-def style_endpoint_url(slug: str, spec: str | None = None) -> str:
-    """Canonical style endpoint path for a layer slug."""
+def style_endpoint_url(
+    slug: str, spec: str | None = None, profile: str | None = None
+) -> str:
+    """Canonical style endpoint path for a layer slug.
+
+    ``profile`` echoes the client's capability parameter: appended only
+    when the request carried one — omitted stays byte-identical to the
+    pre-profile URL (#331 compat, style-profiles-subset D3).
+    """
     url = f"/v1/map/styles/{slug}.json"
-    if spec:
-        url = f"{url}?spec={spec}"
+    params = [
+        param
+        for param in (
+            f"spec={spec}" if spec else None,
+            f"profile={profile}" if profile else None,
+        )
+        if param
+    ]
+    if params:
+        url = f"{url}?{'&'.join(params)}"
     return url
 
 

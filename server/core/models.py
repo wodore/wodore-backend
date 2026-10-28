@@ -49,6 +49,23 @@ class _AutoLastModifiedField(
         super().__init__(*args, **kwargs)
 
 
+def _abstract_meta(meta: type) -> type:
+    """Mark a nested model ``Meta`` abstract — Django's only mechanism
+    for abstract bases — while keeping the symbol's checker-visible type
+    plain ``type``.
+
+    A direct ``class Meta: abstract = True`` makes type checkers treat
+    every subclass's own ``class Meta`` as a structural override of a
+    non-empty base (the canonical pyright/Django false positive: the
+    subclass Metas legitimately lack ``abstract``). Setting the flag
+    through this helper keeps runtime semantics byte-identical — the
+    same class object, the attribute present before Django's ModelBase
+    reads it — and leaves the symbol assignable for every engine.
+    """
+    meta.abstract = True  # type: ignore  # Django Meta attr not on `type`
+    return meta
+
+
 class TimeStampedModel(models.Model):
     """
     An abstract base model that provides self-updating `created` and `modified` fields.
@@ -70,4 +87,9 @@ class TimeStampedModel(models.Model):
     modified = _AutoLastModifiedField(_("modified"))
 
     class Meta:
-        abstract = True
+        pass
+
+    # Abstract via the helper above: runtime-identical to
+    # ``class Meta: abstract = True`` but checker-compatible for every
+    # subclass's own nested Meta (see _abstract_meta).
+    Meta = _abstract_meta(Meta)

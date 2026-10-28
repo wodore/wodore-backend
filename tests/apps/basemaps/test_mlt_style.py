@@ -68,7 +68,7 @@ def _style() -> dict[str, Any]:
 
 
 @pytest.mark.django_db
-class EncodingPreservationTests:
+class TestEncodingPreservation:
     """`encoding` survives the serve-time pipeline (map-style-api delta).
 
     django_db: rendering resolves the tile-origin env token through the

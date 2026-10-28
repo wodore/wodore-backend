@@ -137,6 +137,14 @@ class MapStylesQuery(LanguageQuery):
         description="Device-tier spec (low | medium | high); resolved into path",
         pattern="^(low|medium|high)$",
     )
+    profile: str | None = Field(
+        None,
+        description=(
+            "Renderer capability (full | subset); resolved into path. "
+            "Omitted: today's profile-agnostic resolution."
+        ),
+        pattern="^(full|subset)$",
+    )
 
 
 class MapLayerEntry(pydantic.BaseModel):
@@ -171,6 +179,17 @@ class MapLayerEntry(pydantic.BaseModel):
 
     # Served variant (spec-scoped)
     spec: str = ""
+    profile: str = "full"
+    version: str | None = Field(
+        None,
+        description=(
+            "Rules the served variant's style document was validated "
+            "against — the maplibre style-spec release for full profiles "
+            "(e.g. '26.4.4') or the subset revision for subset profiles "
+            "(e.g. '0.1'). null for externally authored styles. NOT the "
+            "cache-busting token — that is ``style_version``."
+        ),
+    )
     style_url: str = ""
     style_version: str | None = Field(
         None,
@@ -217,6 +236,18 @@ class LayersQuery(LanguageQuery, MapLayerFields):
             "reports the served spec per entry"
         ),
         pattern="^(low|medium|high)$",
+    )
+    profile: str | None = Field(
+        None,
+        description=(
+            "Renderer capability the client DECLARES (full | subset): "
+            "full walks full→subset within each tier (tier respected "
+            "before format richness); subset never receives full "
+            "variants — slugs without a subset variant drop out. "
+            "Omitted: today's profile-agnostic resolution (backward "
+            "compatible)."
+        ),
+        pattern="^(full|subset)$",
     )
     role: str | None = Field(
         None,
@@ -365,17 +396,21 @@ def _detail_version(_request: HttpRequest, slug: str = "", **_: Any) -> str:
 # ── Resolved-layer serialization ──────────────────────────────────────
 
 
-def _style_url(layer: MapLayer, token: str | None = None) -> str:
+def _style_url(
+    layer: MapLayer, token: str | None = None, profile: str | None = None
+) -> str:
     """Serving URL of the resolved variant's style document.
 
     Owned styles carry the layer's ``?v=`` version token (immutable,
     self-busting at every cache that keys the query string — the hub
     CDN zone provably does); externally authored styles resolve env
     tokens server-side and stay unversioned (their target is not ours
-    to version).
+    to version). ``profile`` echoes the client's capability parameter
+    — appended only when the request carried one (#331 byte-compat;
+    style-profiles-subset D3).
     """
     if layer.style is not None:
-        url = style_endpoint_url(layer.slug, layer.spec)
+        url = style_endpoint_url(layer.slug, layer.spec, profile=profile)
         if token is None:
             token = style_version(layer)
         if token:
@@ -439,8 +474,14 @@ def style_version(
     return hashlib.sha256(source.encode()).hexdigest()[:12]
 
 
-def _resolved_entry(layer: MapLayer) -> dict[str, Any]:
-    """One resolved layer as a wire-shaped dict (i18n active)."""
+def _resolved_entry(layer: MapLayer, profile: str | None = None) -> dict[str, Any]:
+    """One resolved layer as a wire-shaped dict (i18n active).
+
+    ``profile`` is the client's capability parameter echo (``None`` =
+    the request carried none → ``style_url`` stays byte-identical to
+    the pre-profile URL); the entry always reports the resolved row's
+    own ``profile``/``version``.
+    """
     token = style_version(layer)
     coverage_bbox = None
     if layer.coverage and layer.coverage.bbox:
@@ -501,7 +542,9 @@ def _resolved_entry(layer: MapLayer) -> dict[str, Any]:
         "fallback": layer.fallback.slug if layer.fallback else None,
         "preview_url": layer.preview_url or None,
         "spec": layer.spec,
-        "style_url": _style_url(layer, token),
+        "profile": layer.profile,
+        "version": layer.version or None,
+        "style_url": _style_url(layer, token, profile),
         "style_version": token,
         "modified": layer.modified.isoformat(),
         "config": layer.config,
@@ -677,23 +720,27 @@ def _prefetched_layers(**filters: Any) -> list[MapLayer]:
                 queryset=Category.objects.filter(is_active=True),
             ),
         )
-        .order_by("role", "order", "slug", "spec")
+        .order_by("role", "order", "slug", "spec", "profile")
     )
     return _env_servable(layers)
 
 
-def _resolved_layers(layers: list[MapLayer], spec: str | None) -> list[dict[str, Any]]:
-    """One resolved entry per slug (server-side spec resolution)."""
+def _resolved_layers(
+    layers: list[MapLayer], spec: str | None, profile: str | None = None
+) -> list[dict[str, Any]]:
+    """One resolved entry per slug (server-side spec × profile resolution)."""
     by_slug: dict[str, list[MapLayer]] = {}
     for layer in layers:
         by_slug.setdefault(layer.slug, []).append(layer)
     resolved = [
         picked
-        for picked in (MapLayer.pick_variant(group, spec) for group in by_slug.values())
+        for picked in (
+            MapLayer.pick_variant(group, spec, profile) for group in by_slug.values()
+        )
         if picked is not None
     ]
     resolved.sort(key=lambda layer: (layer.role, layer.order, layer.slug))
-    return [_resolved_entry(layer) for layer in resolved]
+    return [_resolved_entry(layer, profile) for layer in resolved]
 
 
 # ── Controllers ────────────────────────────────────────────────────────
@@ -714,7 +761,9 @@ class MapLayersController(ApiController):
 
         The backend resolves the wanted ``spec`` per layer (exact →
         explicit chain → single) and reports the served tier — clients
-        never select among variants. Sparse fieldsets narrow entries.
+        never select among variants. ``profile`` declares the client's
+        renderer capability (subset clients never receive full
+        variants). Sparse fieldsets narrow entries.
         """
         filters: dict[str, Any] = {}
         if parsed_query.role:
@@ -722,7 +771,9 @@ class MapLayersController(ApiController):
         if parsed_query.show is not None:
             filters["show"] = parsed_query.show
         with override(parsed_query.lang):
-            entries = _resolved_layers(_prefetched_layers(**filters), parsed_query.spec)
+            entries = _resolved_layers(
+                _prefetched_layers(**filters), parsed_query.spec, parsed_query.profile
+            )
         data = dump_sparse_list(
             MapLayerEntry, entries, parsed_query, "map_layers", "__all__"
         )
@@ -747,12 +798,14 @@ class MapLayerDetailController(ApiController):
         ``spec`` and ``lang`` — unchanged layers answer 304.
         """
         layer = MapLayer.pick_variant(
-            _prefetched_layers(slug=parsed_path.slug), parsed_query.spec
+            _prefetched_layers(slug=parsed_path.slug),
+            parsed_query.spec,
+            parsed_query.profile,
         )
         if layer is None:
             raise_not_found(f"No active map layer with slug {parsed_path.slug!r}.")
         with override(parsed_query.lang):
-            entry = _resolved_entry(layer)
+            entry = _resolved_entry(layer, parsed_query.profile)
         return dump_sparse(MapLayerEntry, entry, parsed_query, "map_layers", "__all__")  # type: ignore[no-any-return]
 
 
@@ -794,7 +847,9 @@ class MapCatalogController(ApiController):
         """Martin-parity catalog: slug → {name, path} only."""
         styles: dict[str, Any] = {}
         with override(parsed_query.lang):
-            for entry in _resolved_layers(_prefetched_layers(), parsed_query.spec):
+            for entry in _resolved_layers(
+                _prefetched_layers(), parsed_query.spec, parsed_query.profile
+            ):
                 styles[entry["slug"]] = {
                     "name": entry["name"],
                     "path": entry["style_url"],
@@ -809,15 +864,21 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
     """Serve a layer style — resolved by default, tokenized opt-in.
 
     ``?spec=`` picks the device-tier variant (exact → explicit chain →
-    single — the response reports the served spec); ``?v=`` with the
+    single — the response reports the served spec); ``?profile=``
+    narrows by renderer capability (full walks full→subset per tier,
+    subset never receives full variants — omitted stays
+    profile-agnostic, like ``spec``); ``?v=`` with the
     layer's current ``style_version`` token (from ``/v1/map/layers`` or
     this endpoint's ``X-Map-Style-Version`` header) serves the response
     as immutable — the token changes exactly when the content does.
     A stale or missing token still serves the current content, under
     the bounded-staleness catalog policy.
     """
+    profile = request.GET.get("profile")
+    if profile not in (None, MapLayer.Profile.full, MapLayer.Profile.subset):
+        profile = None  # unknown values degrade to profile-agnostic (like spec)
     layer = MapLayer.pick_variant(
-        MapLayer.objects.filter(slug=slug), request.GET.get("spec")
+        MapLayer.objects.filter(slug=slug), request.GET.get("spec"), profile
     )
     if layer is None:
         return _style_error(

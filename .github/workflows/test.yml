@@ -237,6 +237,72 @@ jobs:
   # (the same generator `yarn gen:api` uses) and typecheck a smoke
   # consumer. Catches schema shapes that break the wodore_v1.d.ts build
   # before the frontend repo notices.
+  # -- Map style spec validation (styl) -------------------------------
+  # Full-profile inline seed styles are validated against the real
+  # MapLibre style spec by the styl Rust binary (github.com/navidnabavi/styl)
+  # -- the reference implementation is a Node toolchain, so the server
+  # runtime never depends on it; only CI does (style-profiles-subset D6).
+  # Subset rows are walker-owned and gated in the test suite (pure
+  # Python, no external binary).
+  map-style-spec:
+    name: Map style spec (styl)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v6
+
+      - name: Set up the environment
+        uses: ./.github/actions/setup-venv
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install styl
+        run: |
+          # NOTE: styl's install.sh self-verifies with `styl --version`,
+          # which the CLI rejects (upstream bug) — install the pinned
+          # release binary directly instead (also pins CI reproducibly).
+          STYL_VERSION=v0.0.6
+          curl -fsSL -o /usr/local/bin/styl \
+            "https://github.com/navidnabavi/styl/releases/download/${STYL_VERSION}/styl-${STYL_VERSION}-x86_64-unknown-linux-gnu"
+          chmod +x /usr/local/bin/styl
+          styl --help > /dev/null && echo "styl ${STYL_VERSION} installed"
+
+      - name: Install GDAL
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gdal-bin
+      - name: Dump seed styles
+        run: uv run python manage.py dump_map_styles --out .style-dump
+
+      - name: Validate styles (E-code spec violations)
+        run: |
+          shopt -s nullglob
+          # styl hard-gates AUTHORED styles only. The seed definitions are
+          # the single source of truth: dump_map_styles skips
+          # styl-ignored rows (["*"] — external-derived styles using
+          # legacy filter/expression forms that MapLibre itself accepts
+          # but styl v0.0.6's expression validator rejects) and writes
+          # their slugs to _skipped.txt; the same manifest gates the
+          # static fixture files (which carry no seed metadata). The one
+          # fixture without a seed row (wd-outdoor-base-ofm — retired by
+          # basemaps migration 0007) is skipped explicitly. Tracked for
+          # upstream: navidnabavi/styl legacy filters.
+          SKIPPED="$(cat .style-dump/_skipped.txt 2>/dev/null || true)"
+          fail=0
+          for f in .style-dump/*.json \
+                   server/apps/basemaps/fixtures/styles/*.json; do
+            slug="$(basename "$f" .json)"
+            slug="${slug%%--*}"
+            if [ "$slug" = "wd-outdoor-base-ofm" ] \
+               || printf '%s\n' "$SKIPPED" | grep -qx "$slug"; then
+              echo "skip (styl-ignored): $f"
+              continue
+            fi
+            echo "styl validate $f"
+            styl validate "$f" || fail=1
+          done
+          exit $fail
+
   api-types:
     runs-on: ubuntu-latest
     needs: tests
