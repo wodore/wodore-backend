@@ -258,11 +258,14 @@ jobs:
 
       - name: Install styl
         run: |
-          curl -fsSL \
-            https://raw.githubusercontent.com/navidnabavi/styl/main/install.sh \
-            | bash
-          # styl has no --version flag (subcommand-only CLI) — smoke via --help
-          styl --help > /dev/null && echo "styl installed"
+          # NOTE: styl's install.sh self-verifies with `styl --version`,
+          # which the CLI rejects (upstream bug) — install the pinned
+          # release binary directly instead (also pins CI reproducibly).
+          STYL_VERSION=v0.0.6
+          curl -fsSL -o /usr/local/bin/styl \
+            "https://github.com/navidnabavi/styl/releases/download/${STYL_VERSION}/styl-${STYL_VERSION}-x86_64-unknown-linux-gnu"
+          chmod +x /usr/local/bin/styl
+          styl --help > /dev/null && echo "styl ${STYL_VERSION} installed"
 
       - name: Dump seed styles
         run: uv run python manage.py dump_map_styles --out .style-dump
