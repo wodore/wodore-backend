@@ -50,9 +50,16 @@
       from association-extra writes **and the accommodation
       CategoryExtraSchema seed loses the `capacity` key** (no second
       home)
-- [ ] 2.4 Wodore import retarget: capacities → operation rows per
-      mode; `open_monthly` → seasonality (fuzzy mapping
-      yes=100 … unknown=NULL; closed-semantics per design D4)
+- [ ] 2.4 Wodore import retarget (explicit sub-items, GO-review):
+      (a) capacities → operation rows per mode
+      (`GeoPlaceOperation(mode, capacity)`);
+      (b) `open_monthly` → seasonality via the fuzzy mapping
+      (yes=100, yesish=75, maybe=50, noish=25, no=0, unknown=NULL);
+      (c) months below 100 with **no reduced type** resolve the
+      reduced mode to `accommodation.unknown` (association
+      materialized or implicit — design D4, PO confirmed);
+      (d) scope: the wodore (hut) handler only — geonames writes
+      neither operations nor seasonality
 - [ ] 2.5 OSM import retarget: opening_hours → operation row
       (standard mode); months where present → seasonality
 - [ ] 2.6 Place-level extra validation: `resolve_extra_schema`
@@ -83,9 +90,13 @@
       `_track_field_modifications` simple_fields entry, input-schema
       `parent_id` drop (API changelog note); no output payload
       referenced parent (verified)
-- [ ] 3.5 Import auto-generation hooks: containment → part_of,
-      proximity → serves; confidence < 1.0; idempotent re-imports;
-      bounded to configured types; configurable thresholds
+- [ ] 3.5 Relation auto-generation as a standalone management
+      command (`generate_place_relations --types part_of,serves`, GO
+      review: cheaper than an import hook — same end-state):
+      containment → part_of, proximity → serves; confidence < 1.0;
+      idempotent re-runs (same triple replaced, curated edges
+      preserved); bounded to configured types; configurable
+      thresholds; run post-import
 - [ ] 3.6 Tests: constraints (incl. self-loop), helpers, reverse
       traversal, auto-generation idempotence, parent migration
       fidelity

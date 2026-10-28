@@ -73,13 +73,14 @@ changelog); no output payload ever serialized `parent` — verified.
 - **WHEN** a place had `parent = municipality`
 - **THEN** a `part_of` edge to the municipality exists post-migration
 
-### Requirement: Relation auto-generation during import
+### Requirement: Relation auto-generation after import
 
-The import pipeline SHALL optionally auto-generate relations: spatial
-containment → `part_of`, proximity below a configured threshold →
-`serves`, with `confidence < 1.0`, idempotent across re-imports
-(same triple replaced, curated confidence-1.0 edges preserved), and
-bounded to configured place types.
+The system SHALL provide relation auto-generation as a standalone
+management command (run post-import): spatial containment → `part_of`,
+proximity below a configured threshold → `serves`, with
+`confidence < 1.0`, idempotent across re-runs (same triple replaced,
+curated confidence-1.0 edges preserved), and bounded to configured
+place types.
 
 #### Scenario: Containment generates part_of
 - **WHEN** an imported place lies within a municipality geometry
