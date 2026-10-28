@@ -734,15 +734,50 @@ TRANSPORT_STYLE: dict[str, Any] = {
                 "main/static/bav_list.geojson"
             ),
             "promoteId": "id",
+            # Cluster the overlay's FIRST TWO visible zoom levels only
+            # (the frontend fades overlays in from OVERLAY_MIN_ZOOM = 5).
+            # MapLibre/supercluster renders clusters AT clusterMaxZoom and
+            # raw points above it, so 6 means clusters on z5/z6 and every
+            # stop unclustered from z7 — verified empirically against the
+            # bav_list geojson (26k stops: clusters at z5/z6, 0 at z7+).
+            "cluster": True,
+            "clusterMaxZoom": 6,
+            # Minimal aggregation ("almost as small as none cluster"): the
+            # smallest sensible screen radius — clusters form essentially
+            # only where stops (nearly) coincide (station platforms,
+            # interchange stops) or the far zoom squeezes the country
+            # together; the default radius (50) would lump whole regions.
+            "clusterRadius": 20,
+            # "Grouped by" category breakdown: per-cluster counts of the
+            # categories the unclustered paint keys on (train first, then
+            # bus, else other) — cluster leaves carry train_count/bus_count
+            # alongside MapLibre's point_count for badge/tooltip use.
+            "clusterProperties": {
+                "train_count": [
+                    "+",
+                    ["case", ["in", "train", ["get", "types"]], 1, 0],
+                ],
+                "bus_count": [
+                    "+",
+                    ["case", ["in", "bus", ["get", "types"]], 1, 0],
+                ],
+            },
         },
     },
     "glyphs": GLYPHS,
     "layers": [
+        # Unclustered stops FIRST: the Leaflet fallback adapter picks the
+        # first circle layer over a geojson source (frontend
+        # circleSpecFor), and the cluster layers' filters are disjoint
+        # from this one anyway, so the order costs nothing visually.
         {
             "id": "transport-stops",
             "type": "circle",
             "source": "transport-stops",
             "layout": {"visibility": "visible"},
+            # Raw points only — supercluster leaves (cluster features)
+            # render on the cluster layers below.
+            "filter": ["!", ["has", "point_count"]],
             "paint": {
                 "circle-color": [
                     "case",
@@ -811,29 +846,146 @@ TRANSPORT_STYLE: dict[str, Any] = {
                 ],
             },
         },
+        # Cluster bubbles (z5–z6 only: minzoom 5 = the overlay floor,
+        # maxzoom 7 is exclusive so z7+ renders raw points — the bounds
+        # mirror clusterMaxZoom = 6 belt-and-braces). Colored by the same
+        # category semantics as the stops (any train → red, any bus → dark
+        # blue, else light blue) via the clusterProperties counts, sized
+        # by member count, faded by the overlay's own zoom ramp.
+        {
+            "id": "transport-stops-clusters",
+            "type": "circle",
+            "source": "transport-stops",
+            "minzoom": 5,
+            "maxzoom": 7,
+            "filter": ["has", "point_count"],
+            "layout": {"visibility": "visible"},
+            "paint": {
+                "circle-color": [
+                    "case",
+                    [">", ["get", "train_count"], 0],
+                    "#C60018",
+                    [">", ["get", "bus_count"], 0],
+                    "#2d327d",
+                    "#0079C7",
+                ],
+                "circle-stroke-color": "#F6F6F6",
+                "circle-stroke-width": 1,
+                "circle-radius": [
+                    "interpolate",
+                    ["linear"],
+                    ["get", "point_count"],
+                    2,
+                    5,
+                    10,
+                    7,
+                    50,
+                    9,
+                    200,
+                    11,
+                    1000,
+                    14,
+                ],
+                "circle-opacity": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    4,
+                    0,
+                    5,
+                    0.3,
+                    8,
+                    0.6,
+                    12,
+                    1,
+                ],
+            },
+        },
+        # Cluster count badge — the frontend user setting
+        # ui.overlayClusterCounts toggles ONLY this layer's visibility
+        # (clusters themselves always render); the id suffix
+        # ``-cluster-count`` is the frontend's convention hook
+        # (isClusterCountLayer).
+        {
+            "id": "transport-stops-cluster-count",
+            "type": "symbol",
+            "source": "transport-stops",
+            "minzoom": 5,
+            "maxzoom": 7,
+            "filter": ["has", "point_count"],
+            "layout": {
+                "visibility": "visible",
+                "text-field": ["get", "point_count_abbreviated"],
+                "text-font": ["Barlow Semi Condensed SemiBold", "Noto Sans Bold"],
+                "text-size": 11,
+            },
+            "paint": {
+                "text-color": "#F6F6F6",
+                "text-halo-color": "rgba(45, 50, 125, 0.45)",
+                "text-halo-width": 0.8,
+                # explicit so the frontend's addOverlayLayer default
+                # opacity ramp never lands on the badge text
+                "text-opacity": 1,
+            },
+        },
     ],
 }
 
 
+#: Geojson source keys that drive MapLibre's in-browser clustering —
+#: meaningless to the Leaflet fallback (raw geojson fetch, no
+#: supercluster), and ``cluster``/``promoteId`` etc. are outside the
+#: subset whitelist anyway.
+_TRANSPORT_CLUSTER_SOURCE_KEYS = frozenset(
+    {"promoteId", "cluster", "clusterMaxZoom", "clusterRadius", "clusterProperties"}
+)
+
+#: Layer keys that only matter to MapLibre's clustered rendering — the
+#: fallback renders every feature as-is (no supercluster → the
+#: ``point_count`` filters never match, and ``layout`` is not
+#: whitelisted at all).
+_TRANSPORT_CLUSTER_LAYER_KEYS = frozenset({"layout", "filter"})
+
+
+def _is_cluster_layer(layer: dict[str, Any]) -> bool:
+    """Cluster render layers — they only ever match supercluster
+    features (``['has', 'point_count']``) the fallback never produces,
+    and their paints (interpolate on ``point_count``) are outside the
+    subset whitelist."""
+    return layer.get("filter") == ["has", "point_count"]
+
+
 #: Subset twin of TRANSPORT_STYLE (Leaflet fallback, profile=subset):
 #: the full document minus the non-whitelisted bits — ``promoteId``
-#: (source key: clients key features by the geojson-provided id) and
-#: the default ``layout.visibility`` — plus a ``minzoom`` floor the full
-#: style lacks: the BAV list is 20k+ stops and the fallback map runs on
-#: low-spec devices, where sub-z10 circles are invisible clutter anyway
-#: (the full style's opacity only reaches 0.6 at z8). Derived on purpose:
-#: if the full style ever grows keys outside the subset whitelist, the
-#: seed gate fails loudly instead of the subset twin silently drifting.
+#: and the clustering source keys (source key: clients key features by
+#: the geojson-provided id; clustering is MapLibre-geojson-only, the
+#: fallback fetches the raw list), the cluster render layers, and the
+#: surviving layer's cluster ``filter`` — plus a ``minzoom`` floor the
+#: full style lacks: the BAV list is 20k+ stops and the fallback map
+#: runs on low-spec devices, where sub-z10 circles are invisible clutter
+#: anyway (the full style's opacity only reaches 0.6 at z8). Derived on
+#: purpose: if the full style ever grows keys outside the subset
+#: whitelist, the seed gate fails loudly instead of the subset twin
+#: silently drifting.
 TRANSPORT_STYLE_SUBSET: dict[str, Any] = {
     **deepcopy(TRANSPORT_STYLE),
     "sources": {
-        source_id: {key: value for key, value in source.items() if key != "promoteId"}
+        source_id: {
+            key: value
+            for key, value in source.items()
+            if key not in _TRANSPORT_CLUSTER_SOURCE_KEYS
+        }
         for source_id, source in TRANSPORT_STYLE["sources"].items()
     },
     "layers": [
-        {key: deepcopy(value) for key, value in layer.items() if key != "layout"}
+        {
+            key: deepcopy(value)
+            for key, value in layer.items()
+            if key not in _TRANSPORT_CLUSTER_LAYER_KEYS
+        }
         | {"minzoom": 10}
         for layer in TRANSPORT_STYLE["layers"]
+        if not _is_cluster_layer(layer)
     ],
 }
 
