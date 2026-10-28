@@ -1013,7 +1013,7 @@ class GeoPlace(TimeStampedModel):
         from ._associations import GeoPlaceCategory
 
         specs: list[PlaceTypeSpec] = []
-        seen_ids: set[int] = set()
+        seen: set[tuple[int, int | None]] = set()
         for entry in identifiers:
             if isinstance(entry, str):
                 category = cls._resolve_category_from_identifier(entry)
@@ -1026,12 +1026,17 @@ class GeoPlace(TimeStampedModel):
                     else None
                 )
                 extra = GeoPlaceCategory.normalize_extra(entry.extra)
-                GeoPlaceCategory.validate_attributes(classifier, extra)
+                GeoPlaceCategory.validate_attributes(category, classifier, extra)
                 spec = PlaceTypeSpec(category, classifier, extra)
-            if category.pk in seen_ids:
+            # Dedupe per (category, mode) — the two-association
+            # operating-mode model legitimately pairs one category
+            # with mode.standard AND mode.reduced (e.g. open and
+            # closed type both unknown).
+            key = (category.pk, spec.classifier.pk if spec.classifier else None)
+            if key in seen:
                 continue
             specs.append(spec)
-            seen_ids.add(category.pk)
+            seen.add(key)
         return specs
 
     @classmethod
@@ -1282,12 +1287,20 @@ class GeoPlace(TimeStampedModel):
         # by this source) are not removed — reconciliation is a
         # documented follow-up.
         if "categories" not in protected and place_types:
+            from ._category_extra_schema import resolve_extra_schema
+
+            # Keyed per (category, mode) — the two-association model
+            # legitimately holds one category under both modes.
             existing = {
-                assoc.category_id: assoc
+                (assoc.category_id, assoc.classifier_id): assoc
                 for assoc in GeoPlaceCategory.objects.filter(geo_place=place)
             }
             for spec in place_types:
-                assoc = existing.get(spec.category.pk)
+                key = (
+                    spec.category.pk,
+                    spec.classifier.pk if spec.classifier is not None else None,
+                )
+                assoc = existing.get(key)
                 if assoc is None:
                     GeoPlaceCategory.objects.create(
                         geo_place=place,
@@ -1297,27 +1310,28 @@ class GeoPlace(TimeStampedModel):
                     )
                     categories_updated = True
                     continue
-                changed_fields: list[str] = []
-                new_classifier_id = (
-                    spec.classifier.pk if spec.classifier is not None else None
+                # Schema-defined keys are source truth (replaced or
+                # dropped); keys outside the schema are preserved —
+                # imports never write those. Without a schema the
+                # merge is additive only.
+                schema_row = resolve_extra_schema(spec.category)
+                schema_keys = (
+                    set((schema_row.schema or {}).get("properties") or {})
+                    if schema_row is not None
+                    else set()
                 )
-                if assoc.classifier_id != new_classifier_id:
-                    assoc.classifier = spec.classifier
-                    changed_fields.append("classifier")
-                # Capacity keys are source truth (replaced or dropped);
-                # unknown keys on the row are preserved — imports never
-                # write them.
-                merged_extra = {
-                    key: value
-                    for key, value in assoc.extra.items()
-                    if key not in GeoPlaceCategory.CAPACITY_KEYS
-                }
-                merged_extra.update(spec.extra)
+                if schema_keys:
+                    merged_extra = {
+                        key_: value
+                        for key_, value in assoc.extra.items()
+                        if key_ not in schema_keys
+                    }
+                    merged_extra.update(spec.extra)
+                else:
+                    merged_extra = {**assoc.extra, **spec.extra}
                 if assoc.extra != merged_extra:
                     assoc.extra = merged_extra
-                    changed_fields.append("extra")
-                if changed_fields:
-                    assoc.save(update_fields=[*changed_fields, "modified"])
+                    assoc.save(update_fields=["extra", "modified"])
                     categories_updated = True
 
         # Update name translations

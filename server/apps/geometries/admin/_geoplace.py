@@ -179,65 +179,47 @@ def _format_categories_list(categories: Sequence[Category]) -> str:
 
 
 class GeoPlaceCategoryInlineForm(forms.ModelForm[GeoPlaceCategory]):
-    """Category association form with labeled capacity fields.
+    """Category association form with a schema-driven extra editor.
 
-    The two defined ``extra`` keys render as plain numeric fields and
-    write back into ``extra`` on save — unknown keys on the instance
-    are preserved (imports never write them, admins may).
-    Validation funnels through ``GeoPlaceCategory.validate_attributes``
-    (the same helper ``clean()`` and the import use — D3).
+    The ``extra`` field renders through Unfold's jedison-based
+    ``UnfoldAdminJSONSchemaWidget`` with the schema resolved for the
+    row's category (own category first, else parent) — the editor UI
+    is generated from the JSON Schema. Rows without a schema keep
+    the plain JSON textarea. Validation funnels through
+    ``GeoPlaceCategory.validate_attributes`` — the same helper
+    ``clean()`` and the import use (D3).
     """
-
-    capacity_open = forms.IntegerField(
-        required=False,
-        min_value=0,
-        label=_("Capacity open"),
-        help_text=_("Beds when the category is in open operation"),
-    )
-    capacity_closed = forms.IntegerField(
-        required=False,
-        min_value=0,
-        label=_("Capacity closed"),
-        help_text=_("Beds when the category is in closed operation"),
-    )
 
     class Meta:
         model = GeoPlaceCategory
-        fields = ("category", "classifier")
+        fields = ("category", "classifier", "extra")
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        extra = self.instance.extra or {}
-        self.fields["capacity_open"].initial = extra.get("capacity_open")
-        self.fields["capacity_closed"].initial = extra.get("capacity_closed")
+        from unfold.widgets import UnfoldAdminJSONSchemaWidget
+
+        from server.apps.geometries.models import resolve_extra_schema
+
+        if self.instance.category_id:
+            schema_row = resolve_extra_schema(self.instance.category)
+            if schema_row is not None and schema_row.schema:
+                self.fields["extra"].widget = UnfoldAdminJSONSchemaWidget(
+                    attrs={"schema": schema_row.schema}
+                )
 
     @override
     def clean(self) -> dict[str, Any]:
         cleaned: dict[str, Any] = super().clean() or {}
-        extra = {
-            key: value
-            for key, value in (self.instance.extra or {}).items()
-            if key not in GeoPlaceCategory.CAPACITY_KEYS
-        }
-        for key in GeoPlaceCategory.CAPACITY_KEYS:
-            value = cleaned.get(key)
-            if value is not None:
-                extra[key] = value
-        GeoPlaceCategory.validate_attributes(cleaned.get("classifier"), extra)
-        cleaned["extra"] = extra
+        extra = cleaned.get("extra") or {}
+        if not isinstance(extra, dict):
+            raise forms.ValidationError({"extra": _("Extra must be a JSON object")})
+        category = cleaned.get("category") or self.instance.category
+        GeoPlaceCategory.validate_attributes(category, cleaned.get("classifier"), extra)
         return cleaned
-
-    @override
-    def save(self, commit: bool = True) -> GeoPlaceCategory:
-        instance: GeoPlaceCategory = super().save(commit=False)
-        instance.extra = self.cleaned_data.get("extra", instance.extra or {})
-        if commit:
-            instance.save()
-        return instance
 
 
 class GeoPlaceCategoryInline(unfold_admin.TabularInline):
-    """GeoPlace category association inline with optional classifier."""
+    """GeoPlace category association inline with operation mode."""
 
     model = GeoPlaceCategory
     form = GeoPlaceCategoryInlineForm
@@ -245,8 +227,7 @@ class GeoPlaceCategoryInline(unfold_admin.TabularInline):
     fields = (
         "category",
         "classifier",
-        "capacity_open",
-        "capacity_closed",
+        "extra",
     )
     autocomplete_fields = ("category", "classifier")
     extra = 1
@@ -260,13 +241,13 @@ class GeoPlaceCategoryInline(unfold_admin.TabularInline):
         request: HttpRequest,
         **kwargs: Any,
     ):
-        """Scope the classifier autocomplete to the season.* subtree."""
+        """Scope the classifier autocomplete to the mode.* subtree."""
         from server.apps.categories.models import Category
 
         if db_field.name == "classifier":
-            kwargs["queryset"] = Category.objects.filter(
-                parent__slug="season"
-            ).order_by("order")
+            kwargs["queryset"] = Category.objects.filter(parent__slug="mode").order_by(
+                "order"
+            )
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     @override

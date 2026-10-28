@@ -26,7 +26,7 @@ Usage:
 
 import math
 from pathlib import Path
-from typing import Any, ClassVar, override
+from typing import Any, override
 
 import yaml
 from django_admin_runner import register_command
@@ -46,7 +46,7 @@ from server.apps.geometries.schemas import (
     PlaceTypeInput,
     SourceInput,
 )
-from server.apps.huts.models import Hut
+from server.apps.huts.models import Hut, HutTypeHelper
 from server.apps.organizations.models import Organization
 from server.core import UpdateCreateStatus
 
@@ -56,42 +56,6 @@ class Command(BaseCommand):
     help = "Import GeoPlace data from external GeoNames"
     batch_size = 500  # Increased from 100 for better VPS performance
     default_hut_importance = 80
-
-    #: Exhaustive ``hut_type_closed`` → season-classifier mapping
-    #: (OpenSpec geoplace-capacity-and-types-via-categories, design D2
-    #: + advisor review finding 2 — every HutTypeEnum value has an
-    #: explicit entry; ``None`` means no classifier = unknown season).
-    #: Live-data distribution (active huts): selfhut 212, closed 55,
-    #: bivouac 4, unknown 41 — the rest never occur as closed types.
-    _CLOSED_TYPE_TO_SEASON: ClassVar[dict[str, str | None]] = {
-        "unknown": None,  # unknown season (advisor: explicit, not silent)
-        "closed": "season.closed",
-        # basic shelter doubles as winter accommodation (hut-services
-        # CapacitySchema hint: "shelter, winterroom")
-        "shelter": "season.winter_room",
-        "bivouac": "season.winter_room",
-        "selfhut": "season.self_service",
-        "camping": "season.summer_only",
-        "campgr": None,  # unattended campground — no clear season semantics yet
-        # staffed / summer-season family (design D2 "hotel-family")
-        "bhotel": "season.summer_only",
-        "hostel": "season.summer_only",
-        "hotel": "season.summer_only",
-        "resta": "season.summer_only",
-        "hut": None,  # a closed hut is still a hut — no season claim
-        "alp": None,  # alp: seasonal by nature, source states nothing
-        "special": None,  # design open question resolved: unknown
-    }
-
-    #: Open types that keep operating unstaffed year-round when the
-    #: source sets no closed type (proposal: "unstaffed year-round →
-    #: season.year_round"). Hut.update_or_create derives selfhut/
-    #: bivouac closed types from ``capacity_closed`` (_hut.py) — the
-    #: import reads the *resolved* FK, so the derivation rule is
-    #: honored automatically.
-    _YEAR_ROUND_OPEN_TYPES: ClassVar[frozenset[str]] = frozenset(
-        {"shelter", "selfhut", "bivouac"}
-    )
 
     @staticmethod
     def _truncate_name(name: str, max_length: int = 200) -> str:
@@ -651,21 +615,44 @@ class Command(BaseCommand):
         return created_count, updated_count, skipped_count
 
     def _hut_to_place_input(self, hut: Hut, importance: int) -> GeoPlaceBaseInput:
-        """Build the geoplace schema input for a hut (task 2.2)."""
+        """Build the geoplace schema input for a hut (task 2.2).
+
+        One mode = one association = its own capacity (revised
+        design): the open type pairs with ``mode.standard``, the
+        closed state with ``mode.reduced``. The reduced association
+        exists when the closed type is known, or when only a closed
+        capacity is published (category = the accommodation default/
+        unknown type, so the value is not lost). Hut.update_or_create
+        derives selfhut/bivouac closed types from ``capacity_closed``
+        (_hut.py) — this reads the *resolved* FK.
+        """
         place_types: list[str | PlaceTypeInput] = []
         if hut.hut_type_open is not None:
             place_types.append(
                 PlaceTypeInput(
                     identifier=hut.hut_type_open.identifier,
-                    classifier=self._season_classifier_identifier(hut),
-                    extra={
-                        key: value
-                        for key, value in {
-                            "capacity_open": hut.capacity_open,
-                            "capacity_closed": hut.capacity_closed,
-                        }.items()
-                        if value is not None
-                    },
+                    classifier="mode.standard",
+                    extra={"capacity": hut.capacity_open}
+                    if hut.capacity_open is not None
+                    else {},
+                )
+            )
+        if hut.hut_type_closed is not None and hut.hut_type_closed.slug != "unknown":
+            place_types.append(
+                PlaceTypeInput(
+                    identifier=hut.hut_type_closed.identifier,
+                    classifier="mode.reduced",
+                    extra={"capacity": hut.capacity_closed}
+                    if hut.capacity_closed is not None
+                    else {},
+                )
+            )
+        elif hut.capacity_closed is not None:
+            place_types.append(
+                PlaceTypeInput(
+                    identifier=HutTypeHelper.get("unknown").identifier,
+                    classifier="mode.reduced",
+                    extra={"capacity": hut.capacity_closed},
                 )
             )
         return GeoPlaceBaseInput(
@@ -678,17 +665,6 @@ class Command(BaseCommand):
             is_public=hut.is_public,
             place_type_identifiers=place_types,
         )
-
-    def _season_classifier_identifier(self, hut: Hut) -> str | None:
-        """Map a hut's types onto the season classifier identifier."""
-        if hut.hut_type_closed is not None:
-            return self._CLOSED_TYPE_TO_SEASON.get(hut.hut_type_closed.slug)
-        if (
-            hut.hut_type_open is not None
-            and hut.hut_type_open.slug in self._YEAR_ROUND_OPEN_TYPES
-        ):
-            return "season.year_round"
-        return None
 
     def _calculate_hut_importance(self, _hut: Hut) -> int:
         return self.default_hut_importance

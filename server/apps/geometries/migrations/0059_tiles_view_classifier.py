@@ -2,7 +2,7 @@
 
 OpenSpec ``geoplace-capacity-and-types-via-categories`` (task 3.2):
 each category entry in the tiles JSON additionally exposes the
-``classifier`` identifier (``season.*``) next to the existing
+``classifier`` identifier (``mode.*``) next to the existing
 ``extra`` — one more ``LEFT JOIN`` on ``gpc.classifier_id``, no model
 or martin config change (the key lives inside the categories JSON).
 
@@ -21,8 +21,8 @@ def recreate_view(apps: Any, _schema_editor: Any) -> None:
     sql, params = GeoPlacesForTilesView.ViewMeta.query()
 
     # ``sql`` is the model's compile-time view definition (same trusted
-    # pattern as migrations 0027/0030 and huts 0054–0057) — DDL cannot be
-    # parameterized.
+    # pattern as migrations 0027/0030 and huts 0054–0057) — DDL cannot
+    # be parameterized.
     with _schema_editor.connection.cursor() as cursor:
         cursor.execute("DROP VIEW IF EXISTS geoplaces_for_tiles CASCADE")
         cursor.execute(f"CREATE VIEW geoplaces_for_tiles AS {sql}", params)
@@ -30,7 +30,7 @@ def recreate_view(apps: Any, _schema_editor: Any) -> None:
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("geometries", "0057_seed_season_vocabulary"),
+        ("geometries", "0058_seed_mode_vocabulary_and_schema"),
     ]
 
     operations = [

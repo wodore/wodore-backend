@@ -224,20 +224,20 @@ class GeoPlaceExternalLink(models.Model):
 
 
 class GeoPlaceCategory(TimeStampedModel):
-    """Through model for GeoPlace <-> Category with optional classifier.
+    """Through model for GeoPlace <-> Category with operation modes.
 
-    OpenSpec ``geoplace-capacity-and-types-via-categories``: the
-    ``classifier`` qualifies *how* the place operates relative to the
-    associated category (today: closed-season operation, a
-    ``season.*`` child); ``extra`` carries typed per-association
-    attributes — bed capacities under ``capacity_open``/
-    ``capacity_closed`` (non-negative ints, omitted when the source
-    does not publish them). Unknown ``extra`` keys are preserved but
-    never written by imports.
+    OpenSpec ``geoplace-capacity-and-types-via-categories`` (revised
+    design): an association pairs a category with an operation mode —
+    the ``classifier`` references a ``mode.*`` child (today
+    ``mode.standard`` / ``mode.reduced``). A hut imports as up to two
+    associations (standard operation, reduced operation), each
+    carrying its mode's typed attributes in ``extra`` (the
+    accommodation schema: ``capacity``). ``extra`` is validated
+    against the category subtree's ``CategoryExtraSchema`` (JSON
+    Schema, admin-manageable); values the source does not publish are
+    omitted (``None``-valued keys dropped, never stored as null),
+    unknown keys are preserved.
     """
-
-    #: ``extra`` keys with defined semantics (non-negative integers).
-    CAPACITY_KEYS = ("capacity_open", "capacity_closed")
 
     geo_place = models.ForeignKey(
         "GeoPlace",
@@ -258,17 +258,15 @@ class GeoPlaceCategory(TimeStampedModel):
         blank=True,
         db_index=True,
         related_name="classifications",
-        help_text=_(
-            "Season classification for this association (a season.* child category)"
-        ),
+        help_text=_("Operation mode for this association (a mode.* child category)"),
     )
     extra = models.JSONField(
         default=dict,
         blank=True,
         verbose_name=_("Extra"),
         help_text=_(
-            "Per-association attributes: capacity_open/capacity_closed "
-            "(bed counts, non-negative integers)"
+            "Per-association attributes — validated against the "
+            "category's extra schema (JSON Schema)"
         ),
     )
 
@@ -289,9 +287,16 @@ class GeoPlaceCategory(TimeStampedModel):
             models.Index(fields=["classifier"], name="gpc_classifier_idx"),
         ]
         constraints = [
+            # One association per (place, category, mode) — the
+            # two-association operating-mode model pairs a category
+            # with mode.standard AND mode.reduced when open and closed
+            # types coincide (e.g. unknown/unknown). NULL classifiers
+            # are not distinct (PG15+ ``nulls_distinct``) so a NULL row
+            # stays unique per category too.
             models.UniqueConstraint(
-                fields=["geo_place", "category"],
-                name="geoplacecategory_unique_place_category",
+                fields=["geo_place", "category", "classifier"],
+                nulls_distinct=False,
+                name="geoplacecategory_unique_place_category_mode",
             ),
         ]
 
@@ -304,65 +309,74 @@ class GeoPlaceCategory(TimeStampedModel):
     @override
     def clean(self) -> None:
         super().clean()
-        self.validate_attributes(self.classifier, self.extra)
+        self.validate_attributes(self.category, self.classifier, self.extra)
 
     @classmethod
     def validate_attributes(
-        cls, classifier: "Category | None", extra: dict[str, Any]
+        cls,
+        category: "Category | None",
+        classifier: "Category | None",
+        extra: dict[str, Any],
     ) -> None:
         """Shared validation for every write path (D3).
 
         ``clean()`` (admin forms), the schema upsert and the wodore
         import all funnel through here — Django calls ``clean()`` on
-        none of the latter two paths.
+        none of the latter two paths. The classifier must be a
+        ``mode.*`` child; ``extra`` is validated against the category
+        subtree's ``CategoryExtraSchema`` (no schema → free-form;
+        corrupt stored schema → fail open, logged).
         """
         if classifier is not None:
             parent = classifier.parent
-            if parent is None or parent.slug != "season":
+            if parent is None or parent.slug != "mode":
                 raise ValidationError(
                     {
                         "classifier": _(
-                            "Classifier must be a season.* category "
-                            "(a child of the 'season' parent)."
+                            "Classifier must be a mode.* category "
+                            "(a child of the 'mode' parent)."
                         )
                     }
                 )
-        cls.validate_extra(extra)
+        cls.validate_extra(category, extra)
 
     @classmethod
-    def validate_extra(cls, extra: dict[str, Any]) -> None:
-        """Validate the defined capacity keys in ``extra``.
+    def validate_extra(cls, category: "Category | None", extra: dict[str, Any]) -> None:
+        """Validate ``extra`` against the category's extra schema.
 
-        Shared validation for every write path (``clean()``, the
-        schema upsert, the admin form — Django calls ``clean()`` on
-        none of the latter two; OpenSpec
-        ``geoplace-capacity-and-types-via-categories`` D3).
+        No schema on the category subtree → free-form (forward-
+        compatible); a corrupt stored schema fails open (loud log at
+        compile time, no validation) — writes never brick.
         """
-        for key in cls.CAPACITY_KEYS:
-            if key in extra and extra[key] is not None:
-                value = extra[key]
-                if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-                    raise ValidationError(
-                        {
-                            "extra": _("%(key)s must be a non-negative integer.")
-                            % {"key": key}
-                        }
+        from ._category_extra_schema import resolve_extra_schema
+
+        schema_row = resolve_extra_schema(category)
+        if schema_row is None:
+            return
+        validator = schema_row.compiled_validator()
+        if validator is None:
+            return
+        error = next(validator.iter_errors(extra), None) if extra else None
+        if error is not None:
+            raise ValidationError(
+                {
+                    "extra": _(
+                        "Value does not match the category's extra schema: %(error)s"
                     )
+                    % {"error": error.message}
+                }
+            )
 
     @classmethod
     def normalize_extra(cls, extra: dict[str, Any] | None) -> dict[str, Any]:
-        """Drop ``None``-valued capacity keys (unknown keys preserved).
+        """Drop ``None``-valued keys (unknown keys preserved).
 
-        A capacity the source does not publish is omitted, not stored
-        as ``null`` — an empty dict means no capacity data.
+        A value the source does not publish is omitted, not stored
+        as ``null`` — an empty dict means no published attributes.
         """
         if not extra:
             return {}
-        return {
-            key: value
-            for key, value in extra.items()
-            if not (key in cls.CAPACITY_KEYS and value is None)
-        }
+        return {key: value for key, value in extra.items() if value is not None}
 
 
 class GeoPlaceParty(TimeStampedModel):
