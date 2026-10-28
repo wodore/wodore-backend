@@ -308,6 +308,40 @@ class SubsetWalkerAccepts(SimpleTestCase):
         ]
         validate_subset_style(style)
 
+    def test_clustered_transport_subset_shape_passes(self) -> None:
+        """Clustering bits the subset whitelist admits for the fallback:
+        geojson ``cluster*`` source keys, the layer ``filter`` key
+        (including ``!``), ``>`` comparisons and interpolate on a
+        ``['get', '<property>']`` input (cluster bubble sizing)."""
+        style = deepcopy(_circle_subset())
+        style["sources"]["stops"] = {
+            "type": "geojson",
+            "data": "https://example.org/stops.geojson",
+            "cluster": True,
+            "clusterMaxZoom": 6,
+            "clusterRadius": 20,
+            "clusterProperties": {
+                "train_count": ["+", ["case", ["in", "train", ["get", "types"]], 1, 0]],
+            },
+        }
+        style["layers"][0]["filter"] = ["!", ["has", "point_count"]]
+        style["layers"][0]["paint"]["circle-color"] = [
+            "case",
+            [">", ["get", "train_count"], 0],
+            "#C60018",
+            "#0079C7",
+        ]
+        style["layers"][0]["paint"]["circle-radius"] = [
+            "interpolate",
+            ["linear"],
+            ["get", "point_count"],
+            2,
+            5,
+            100,
+            10,
+        ]
+        validate_subset_style(style)
+
 
 class SubsetWalkerRejects(SimpleTestCase):
     def _reject(self, style: dict[str, Any], match: str) -> None:
@@ -327,17 +361,43 @@ class SubsetWalkerRejects(SimpleTestCase):
         self._reject(style, r"operator 'image'")
 
     def test_non_zoom_interpolate_rejected(self) -> None:
+        """Interpolate on an arbitrary EXPRESSION input stays out —
+        only ['zoom'] and ['get', '<property>'] are whitelisted."""
         style = deepcopy(_circle_subset())
         style["layers"][0]["paint"]["circle-radius"] = [
             "interpolate",
             ["linear"],
-            ["get", "population"],
+            [">", ["get", "population"], 0],
             0,
             2,
             100000,
             10,
         ]
-        self._reject(style, r"input must be \['zoom'\]")
+        self._reject(style, r"interpolate input must be \['zoom'\] or \['get'")
+
+    def test_interpolate_nested_expression_input_rejected(self) -> None:
+        """The widened interpolate input admits ONLY ['zoom'] and
+        ['get', '<literal property>'] — a nested expression input stays
+        out."""
+        style = deepcopy(_circle_subset())
+        style["layers"][0]["paint"]["circle-radius"] = [
+            "interpolate",
+            ["linear"],
+            ["get", ["get", "prop"]],
+            0,
+            2,
+            10,
+            10,
+        ]
+        self._reject(style, r"interpolate input must be")
+
+    def test_filter_with_non_whitelisted_operator_rejected(self) -> None:
+        """``!=`` is not whitelisted — the filter array is not
+        expression-headed, so the walker reads it as a literal array and
+        rejects the nested expression entry."""
+        style = deepcopy(_circle_subset())
+        style["layers"][0]["filter"] = ["!=", ["get", "kind"], "station"]
+        self._reject(style, r"literal array entries must be scalars")
 
     def test_promote_id_source_key_rejected(self) -> None:
         style = deepcopy(_circle_subset())
@@ -383,35 +443,48 @@ class SubsetWalkerRejects(SimpleTestCase):
 
 
 class TransportClusteringTests(SimpleTestCase):
-    """transport-stops clustering: the overlay's geojson source is the
-    one place style-level clustering is allowed (MapLibre geojson only —
-    the huts overlay clusters client-side via ``config.clustering``).
+    """transport-stops clustering lives on the SUBSET profile only
+    (owner decision 2026-10: the no-WebGL fallback renders the ~26k
+    stops client-side and needs aggregated bubbles at the far zooms;
+    the WebGL/MapLibre full profile stays unclustered).
 
     Contract (owner: "cluster the first 2 zoom levels, keep clusters
     almost as small as none, grouped by category"):
 
-    * clusters render on the overlay's first two visible zoom levels
-      only (frontend ``OVERLAY_MIN_ZOOM = 5`` → z5/z6); from z7 every
-      stop renders unclustered,
-    * minimal aggregation (``clusterRadius`` ≤ 25 vs. the default 50),
-    * ``clusterProperties`` grouped by the geojson ``types`` categories
-      the unclustered paint colors on (train/bus/other),
-    * the unclustered layer keeps its paint and gains the standard
-      ``!has point_count`` filter; cluster layers use ``has point_count``.
+    * the FULL document is the pre-clustering shape (clean source, one
+      layer, no filters),
+    * the SUBSET twin declares clustering: bubbles on z5/z6 only
+      (clusterMaxZoom 6 — supercluster renders clusters AT clusterMaxZoom,
+      raw points above), minimal aggregation (radius ≤ 25 vs. the
+      default 50), clusterProperties grouped by the geojson ``types``
+      categories the paint colors on,
+    * the raw layer keeps its paint behind a ``!has point_count``
+      filter; cluster layers use ``has point_count`` and stay
+      walker-clean.
     """
 
-    def test_source_clusters_low_zoom_only(self) -> None:
+    def test_full_style_stays_unclustered(self) -> None:
         src = TRANSPORT_STYLE["sources"]["transport-stops"]
+        for key in ("cluster", "clusterMaxZoom", "clusterRadius", "clusterProperties"):
+            assert key not in src, key
+        layers = TRANSPORT_STYLE["layers"]
+        assert [layer["id"] for layer in layers] == ["transport-stops"]
+        assert "filter" not in layers[0]
+
+    def test_subset_source_clusters_low_zoom_only(self) -> None:
+        src = TRANSPORT_STYLE_SUBSET["sources"]["transport-stops"]
         assert src["cluster"] is True
         # supercluster renders clusters AT clusterMaxZoom and raw points
-        # above it: 6 → clusters on z5/z6, all stops unclustered from z7
-        # (verified empirically against the 26k-stop bav_list geojson).
+        # above it: 6 → bubbles on z5/z6, unclustered from z7 (verified
+        # empirically against the 26k-stop bav_list geojson)
         assert src["clusterMaxZoom"] == 6
         # minimal aggregation — the default radius is 50
         assert src["clusterRadius"] <= 25
 
-    def test_cluster_properties_group_by_category(self) -> None:
-        props = TRANSPORT_STYLE["sources"]["transport-stops"]["clusterProperties"]
+    def test_subset_cluster_properties_group_by_category(self) -> None:
+        props = TRANSPORT_STYLE_SUBSET["sources"]["transport-stops"][
+            "clusterProperties"
+        ]
         # counts grouped by the geojson `types` categories, matching the
         # unclustered color semantics (train first, then bus, else other)
         assert props["train_count"] == [
@@ -423,23 +496,31 @@ class TransportClusteringTests(SimpleTestCase):
             ["case", ["in", "bus", ["get", "types"]], 1, 0],
         ]
 
-    def test_layer_filters_split_clustered_and_unclustered(self) -> None:
-        layers = {layer["id"]: layer for layer in TRANSPORT_STYLE["layers"]}
-        # unclustered stops FIRST — the Leaflet fallback adapter picks the
-        # first circle layer over a geojson source (frontend circleSpecFor)
-        assert TRANSPORT_STYLE["layers"][0]["id"] == "transport-stops"
+    def test_subset_layer_filters_split_clustered_and_unclustered(self) -> None:
+        layers = {layer["id"]: layer for layer in TRANSPORT_STYLE_SUBSET["layers"]}
+        # raw stops FIRST — the Leaflet fallback adapter picks the first
+        # non-cluster circle layer over the geojson source
+        assert TRANSPORT_STYLE_SUBSET["layers"][0]["id"] == "transport-stops"
         assert layers["transport-stops"]["filter"] == ["!", ["has", "point_count"]]
+        assert (
+            layers["transport-stops"]["minzoom"] == 10
+        )  # raw floor predates clustering
         # cluster render layers bound to the clustered zooms (maxzoom is
         # exclusive: z5–z6 only)
         for layer_id in ("transport-stops-clusters", "transport-stops-cluster-count"):
             assert layers[layer_id]["filter"] == ["has", "point_count"]
             assert layers[layer_id]["minzoom"] == 5
             assert layers[layer_id]["maxzoom"] == 7
-        # cluster bubbles keep the overlay's category palette
+        # cluster bubbles keep the overlay's category palette (>) and
+        # size by member count (interpolate on point_count)
         assert layers["transport-stops-clusters"]["paint"]["circle-color"][1] == [
             ">",
             ["get", "train_count"],
             0,
+        ]
+        assert layers["transport-stops-clusters"]["paint"]["circle-radius"][2] == [
+            "get",
+            "point_count",
         ]
         # the count badge is the id-convention hook the frontend user
         # setting toggles (isClusterCountLayer: '…-cluster-count')
@@ -448,25 +529,10 @@ class TransportClusteringTests(SimpleTestCase):
             "point_count_abbreviated",
         ]
 
-    def test_subset_twin_strips_clustering(self) -> None:
-        """Clustering is MapLibre-geojson-only: the Leaflet fallback twin
-        carries neither the source keys nor the cluster render layers
-        (raw circle rendering unchanged) — and stays walker-clean."""
-        src = TRANSPORT_STYLE_SUBSET["sources"]["transport-stops"]
-        for key in (
-            "promoteId",
-            "cluster",
-            "clusterMaxZoom",
-            "clusterRadius",
-            "clusterProperties",
-        ):
-            assert key not in src, key
-        assert [layer["id"] for layer in TRANSPORT_STYLE_SUBSET["layers"]] == [
-            "transport-stops"
-        ]
-        # the surviving layer keeps its paint but drops the cluster
-        # filter (not whitelisted, and meaningless without supercluster)
-        assert "filter" not in TRANSPORT_STYLE_SUBSET["layers"][0]
+    def test_subset_twin_passes_walker(self) -> None:
+        """The clustered twin stays walker-clean — the whitelist admits
+        the clustering bits (source keys, filter key, ``>``/``!``
+        operators, interpolate on ['get', prop])."""
         validate_subset_style(TRANSPORT_STYLE_SUBSET)
 
 
@@ -676,29 +742,36 @@ class TestSeedTagging:
         assert not MapLayer.objects.filter(slug="mtb", profile="full").exists()
 
     def test_transport_stops_subset_variant_seeded(self) -> None:
-        """The overlay serves BOTH profiles at the same tier: the authored
-        full row (unchanged) plus the walker-clean subset twin for the
-        Leaflet fallback."""
+        """The overlay serves BOTH profiles at the same tier: the
+        unclustered full row (WebGL/MapLibre sessions) plus the
+        CLUSTERED subset twin for the no-WebGL fallback."""
         call_command("map_seed", verbosity=0)
         full = MapLayer.objects.get(
             slug="transport-stops", spec="medium", profile="full"
         )
         assert full.version == STYLE_SPEC_VERSION
+        assert full.style is not None
+        # the full document stays unclustered (clean source, one layer)
+        assert "cluster" not in full.style["sources"]["transport-stops"]
+        assert [layer["id"] for layer in full.style["layers"]] == ["transport-stops"]
         subset = MapLayer.objects.get(
             slug="transport-stops", spec="medium", profile="subset"
         )
         assert subset.version == SUBSET_REVISION
         assert subset.style is not None
+        # the subset twin carries the clustering declaration
+        assert subset.style["sources"]["transport-stops"]["cluster"] is True
         assert "promoteId" not in subset.style["sources"]["transport-stops"]
-        # clustering never reaches the fallback: no cluster source keys,
-        # no cluster render layers
-        assert "cluster" not in subset.style["sources"]["transport-stops"]
-        assert [layer["id"] for layer in subset.style["layers"]] == ["transport-stops"]
-        assert all("layout" not in layer for layer in subset.style["layers"])
+        assert [layer["id"] for layer in subset.style["layers"]] == [
+            "transport-stops",
+            "transport-stops-clusters",
+            "transport-stops-cluster-count",
+        ]
+        assert all(
+            "visibility" not in layer.get("layout", {})
+            for layer in subset.style["layers"]
+        )
         assert subset.style["layers"][0]["minzoom"] == 10
-        # the full row keeps the clustered document
-        assert full.style is not None
-        assert full.style["sources"]["transport-stops"]["cluster"] is True
 
     def test_huts_subset_variant_seeded(self) -> None:
         """Both huts rows at the same tier; the slug-level config (filters
