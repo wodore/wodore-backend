@@ -347,6 +347,22 @@ LAYERS: list[dict[str, Any]] = [
         "min_zoom": 5,
         "style": lib.HUTS_STYLE,
         "parameters": {"huts.icon_scale": None, "date": None},
+        "variants": [
+            # Subset twin for the Leaflet fallback (menu-toggleable there
+            # instead of the fallback's own always-on rendering): the
+            # availability disc (wd-huts-occupation) plus a trimmed
+            # wd-huts symbol — the day-strip columns and the
+            # feature-state selection circle are outside subset v0.1
+            # (see seed_lib._huts_style_subset for the layer-by-layer
+            # rationale). config (filters + clustering) is slug-level and
+            # rides both rows; parameters sync per row, so the {{date}}
+            # token in the wd-bookings tiles stays resolvable.
+            {
+                "profile": MapLayer.Profile.subset,
+                "version": SUBSET_REVISION,
+                "style": lib.HUTS_STYLE_SUBSET,
+            }
+        ],
         "attributions": [],
         "categories": [
             {"slug": "accommodation", "use": "filter"},
