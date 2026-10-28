@@ -136,8 +136,19 @@ class HutSource(TimeStampedModel):
                 ignore_type_in_groups=[DeepDiff.numbers, (list, tuple)],
             )
             loc_diff = ""
-            if other_hut_src.location.distance(hut_source.location) > 0.00005:  # type: ignore  # dynamic attr: plugin-less inference gap
-                loc_diff = f"Location changed from '{other_hut_src.location.tuple}' to '{hut_source.location.tuple}'"  # type: ignore  # dynamic attr: plugin-less inference gap
+            old_loc, new_loc = other_hut_src.location, hut_source.location
+            if old_loc is None or new_loc is None:
+                # location can be empty (coordinate-less source): None <-> Point
+                # is a location change, None <-> None is not
+                if (old_loc is None) != (new_loc is None):
+                    loc_diff = (
+                        f"Location changed from '{None if old_loc is None else old_loc.tuple}' "
+                        f"to '{None if new_loc is None else new_loc.tuple}'"
+                    )
+            elif old_loc.distance(new_loc) > 0.00005:
+                loc_diff = (
+                    f"Location changed from '{old_loc.tuple}' to '{new_loc.tuple}'"
+                )
             if diff or loc_diff:  # something changed, add a new entry:
                 diff_comment = (
                     diff.pretty()
