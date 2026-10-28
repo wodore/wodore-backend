@@ -10,6 +10,7 @@ fixture JSON files (``fixtures/styles/``).
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 from server.apps.envvars.registry import resolve_setting
@@ -620,6 +621,106 @@ HUTS_STYLE: dict[str, Any] = {
 }
 
 
+def _huts_style_subset() -> dict[str, Any]:
+    """Build the subset twin of ``HUTS_STYLE`` (Leaflet fallback).
+
+    Deliberate surgery, not a blanket copy — the full document's seven
+    layers sort into three classes against subset v0.1:
+
+    * **kept verbatim** (minus the default ``layout.visibility``):
+      ``wd-huts-occupation`` — the availability disc, whose
+      ``match``-on-``d0_status`` color is the proven-expressible core
+      the fallback's status palette consumes. Both vector MLT sources
+      stay (the fallback reads ``wd-bookings`` for availability), with
+      ``promoteId`` stripped (clients key features by the
+      tile-provided id).
+    * **kept trimmed**: ``wd-huts`` — the per-category icon ladder
+      (``step``/``coalesce``/``image``/``concat``), the label text
+      (``>`` comparison in ``text-field``) and SDF halo paints are
+      outside the whitelist. The twin keeps a STATIC fallback sprite
+      (``wd-sdf:mono/accommodation.unknown``, runtime-tinted per type
+      via a ``case``/``has``/``get`` ``icon-color``), bakes the
+      ``icon-size`` zoom ladder at the default multiplier (the
+      ``huts.icon_scale`` parameter rides on ``*``, not whitelisted),
+      and drops text entirely — the fallback draws labels itself via
+      canvas fonts, and per-category icons client-side
+      (``config.clustering``'s ``iconProperty``).
+    * **dropped**: the ``wd-huts-occupation-day0..3`` strip columns
+      (``<``/``concat``/``to-string``/``image`` — the fallback renders
+      the per-day detail in its own panel) and ``wd-huts-selected``
+      (``feature-state`` — selection is app-driven client state, not
+      style).
+    """
+    occupation = next(
+        layer for layer in HUTS_STYLE["layers"] if layer["id"] == "wd-huts-occupation"
+    )
+    huts = next(layer for layer in HUTS_STYLE["layers"] if layer["id"] == "wd-huts")
+    return {
+        "version": 8,
+        "name": "huts",
+        "sources": {
+            source_id: {
+                key: value for key, value in source.items() if key != "promoteId"
+            }
+            for source_id, source in HUTS_STYLE["sources"].items()
+        },
+        "sprite": deepcopy(HUTS_STYLE["sprite"]),
+        "glyphs": GLYPHS,
+        "layers": [
+            {
+                key: deepcopy(value)
+                for key, value in occupation.items()
+                if key != "layout"
+            },
+            {
+                **{
+                    key: deepcopy(value)
+                    for key, value in huts.items()
+                    if key not in ("layout", "paint")
+                },
+                "layout": {
+                    "icon-allow-overlap": True,
+                    "icon-image": "wd-sdf:mono/accommodation.unknown",
+                    "icon-size": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        7,
+                        0.1,
+                        9,
+                        0.3,
+                        11,
+                        0.55,
+                        13,
+                        0.75,
+                        16,
+                        1.0,
+                        20,
+                        1.25,
+                    ],
+                },
+                "paint": {
+                    "icon-color": [
+                        "case",
+                        ["has", "type_standard_color"],
+                        ["get", "type_standard_color"],
+                        "#718096",
+                    ],
+                    "icon-opacity": deepcopy(huts["paint"]["icon-opacity"]),
+                },
+            },
+        ],
+        "metadata": {"wd:slot_layers": ["wd-huts-occupation", "wd-huts"]},
+    }
+
+
+#: Subset twin of HUTS_STYLE — derived once at import so a future
+#: non-whitelisted key in the surviving layers fails the seed gate
+#: loudly instead of the twin silently drifting (transport-stops
+#: pattern, #443).
+HUTS_STYLE_SUBSET: dict[str, Any] = _huts_style_subset()
+
+
 # ── Transport stops overlay (external geojson) ────────────────────────
 
 TRANSPORT_STYLE: dict[str, Any] = {
@@ -710,6 +811,29 @@ TRANSPORT_STYLE: dict[str, Any] = {
                 ],
             },
         },
+    ],
+}
+
+
+#: Subset twin of TRANSPORT_STYLE (Leaflet fallback, profile=subset):
+#: the full document minus the non-whitelisted bits — ``promoteId``
+#: (source key: clients key features by the geojson-provided id) and
+#: the default ``layout.visibility`` — plus a ``minzoom`` floor the full
+#: style lacks: the BAV list is 20k+ stops and the fallback map runs on
+#: low-spec devices, where sub-z10 circles are invisible clutter anyway
+#: (the full style's opacity only reaches 0.6 at z8). Derived on purpose:
+#: if the full style ever grows keys outside the subset whitelist, the
+#: seed gate fails loudly instead of the subset twin silently drifting.
+TRANSPORT_STYLE_SUBSET: dict[str, Any] = {
+    **deepcopy(TRANSPORT_STYLE),
+    "sources": {
+        source_id: {key: value for key, value in source.items() if key != "promoteId"}
+        for source_id, source in TRANSPORT_STYLE["sources"].items()
+    },
+    "layers": [
+        {key: deepcopy(value) for key, value in layer.items() if key != "layout"}
+        | {"minzoom": 10}
+        for layer in TRANSPORT_STYLE["layers"]
     ],
 }
 

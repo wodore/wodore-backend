@@ -347,6 +347,27 @@ LAYERS: list[dict[str, Any]] = [
         "min_zoom": 5,
         "style": lib.HUTS_STYLE,
         "parameters": {"huts.icon_scale": None, "date": None},
+        "variants": [
+            # Subset twin for the Leaflet fallback (menu-toggleable there
+            # instead of the fallback's own always-on rendering): the
+            # availability disc (wd-huts-occupation) plus a trimmed
+            # wd-huts symbol — the day-strip columns and the
+            # feature-state selection circle are outside subset v0.1
+            # (see seed_lib._huts_style_subset for the layer-by-layer
+            # rationale). config (filters + clustering) is slug-level and
+            # rides both rows; parameters sync per row, so the {{date}}
+            # token in the wd-bookings tiles stays resolvable.
+            {
+                "profile": MapLayer.Profile.subset,
+                "version": SUBSET_REVISION,
+                "style": lib.HUTS_STYLE_SUBSET,
+                # Variant parameters REPLACE the parent list (see
+                # _seed_layer): the twin drops the inert icon-scale slider
+                # (its baked icon-size ladder never reads the token) but
+                # keeps {{date}} for the wd-bookings tile template.
+                "parameters": {"date": None},
+            }
+        ],
         "attributions": [],
         "categories": [
             {"slug": "accommodation", "use": "filter"},
@@ -384,7 +405,7 @@ LAYERS: list[dict[str, Any]] = [
                 "source": "wd-huts",
                 "groupByProperty": "type_standard_slug",
                 "radius": 48,
-                "maxZoom": 11,
+                "maxZoom": 10,
                 "bubble": {
                     "colorProperty": "type_standard_color",
                     "iconProperty": "type_standard_identifier",
@@ -405,6 +426,17 @@ LAYERS: list[dict[str, Any]] = [
         "slot": "ways",
         "order": 2,
         "style": lib.TRANSPORT_STYLE,
+        "variants": [
+            # Subset twin for the Leaflet fallback (no-WebGL map): the
+            # full circle layer is subset-expressible once promoteId and
+            # the default layout.visibility drop (see
+            # seed_lib.TRANSPORT_STYLE_SUBSET); same tier, subset profile.
+            {
+                "profile": MapLayer.Profile.subset,
+                "version": SUBSET_REVISION,
+                "style": lib.TRANSPORT_STYLE_SUBSET,
+            }
+        ],
         "attributions": ["bav", "openstreetmap"],
     },
     {
@@ -1031,7 +1063,12 @@ class Command(BaseCommand):
                 layer.fallback = fallback
                 layer.save(update_fields=["fallback"])
 
-        self._sync_parameters(layer, parent, params)
+        # Parameter precedence: a variant's own ``parameters`` replace
+        # the parent's list for that row (the parent list stays the
+        # default for variants without one) — subset twins drop inert
+        # knobs the trimmed document never references.
+        wanted_parameters = variant.get("parameters", parent.get("parameters", {}))
+        self._sync_parameters(layer, wanted_parameters, params)
         self._sync_categories(layer, parent)
         self._sync_attributions(layer, parent, orgs)
 
@@ -1113,9 +1150,13 @@ class Command(BaseCommand):
         return link
 
     def _sync_parameters(
-        self, layer: MapLayer, parent: dict[str, Any], params: dict[str, MapParameter]
+        self,
+        layer: MapLayer,
+        wanted: dict[str, Any],
+        params: dict[str, MapParameter],
     ) -> None:
-        wanted = parent.get("parameters", {})
+        """Sync the layer's parameter links to ``wanted`` (already
+        variant-resolved — see ``_seed_layer``)."""
         wanted_slugs = set(wanted)
         existing = {
             link.parameter.slug: link

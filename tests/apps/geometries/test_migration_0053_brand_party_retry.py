@@ -88,7 +88,7 @@ class TestBrandPartySlugRetry:
         detail = MagicMock()
         detail.brand.slug = "a-brand-category-slug-longer-than-fifteen"
         detail.brand.name = "Long Brand"
-        detail.brand.i18n = {}
+        detail.brand.i18n = {"name_en": "Long Brand"}
         detail.geo_place_id = 1
 
         detail_model = MagicMock()
