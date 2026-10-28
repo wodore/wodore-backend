@@ -440,9 +440,12 @@ class TestWodoreImport:
         )
 
     def _associations(self, place: GeoPlace) -> dict[tuple[str, str], dict[str, Any]]:
+        # Mode associations only — foreign rows (no classifier, e.g.
+        # from other sources) are asserted on separately.
         return {
             (a.category.slug, a.classifier.identifier): a.extra  # type: ignore[union-attr]
             for a in place.category_associations.all()  # type: ignore  # reverse FK: plugin-less inference gap
+            if a.classifier_id
         }
 
     def test_full_hut_two_mode_associations(
@@ -535,6 +538,65 @@ class TestWodoreImport:
         place = self._imported_place(hut)
         assert place.category_associations.count() == 2  # type: ignore  # reverse FK: plugin-less inference gap
         assert self._associations(place)[("hut", "mode.standard")] == {"capacity": 44}
+
+    def test_rerun_dropped_mode_keeps_old_row(
+        self, hut_category: Category, selfhut_category: Category
+    ):
+        """Additive semantics (review P1): a hut that stops publishing
+        its reduced fact keeps the old reduced row — reconciliation is
+        a documented follow-up."""
+        hut = HutFactory(
+            hut_type_open=hut_category,
+            hut_type_closed=selfhut_category,
+            capacity_open=40,
+            capacity_closed=12,
+        )
+        call_command("import_geoplaces", "-s", "wodore", stdout=self._out())
+        Hut.objects.filter(pk=hut.pk).update(hut_type_closed=None, capacity_closed=None)
+        call_command("import_geoplaces", "-s", "wodore", "--update", stdout=self._out())
+
+        place = self._imported_place(hut)
+        assert self._associations(place) == {
+            ("hut", "mode.standard"): {"capacity": 40},
+            ("selfhut", "mode.reduced"): {"capacity": 12},  # stale, kept
+        }
+
+    def test_rerun_category_change_keeps_old_row(self, hut_category: Category):
+        """Additive semantics (review P1): a type change accumulates
+        the old association alongside the new one."""
+        hut = HutFactory(hut_type_open=hut_category, capacity_open=40)
+        call_command("import_geoplaces", "-s", "wodore", stdout=self._out())
+        alp, _created = Category.objects.get_or_create(
+            slug="alp", parent=hut_category.parent, defaults={"name": "Alphütte"}
+        )
+        Hut.objects.filter(pk=hut.pk).update(hut_type_open=alp)
+        call_command("import_geoplaces", "-s", "wodore", "--update", stdout=self._out())
+
+        place = self._imported_place(hut)
+        assert self._associations(place) == {
+            ("hut", "mode.standard"): {"capacity": 40},  # stale, kept
+            ("alp", "mode.standard"): {"capacity": 40},
+        }
+
+    def test_foreign_association_untouched(self, hut_category: Category):
+        """Associations from other sources/paths (e.g. OSM) are never
+        pruned or rewritten by the wodore import."""
+        hut = HutFactory(hut_type_open=hut_category, capacity_open=40)
+        call_command("import_geoplaces", "-s", "wodore", stdout=self._out())
+        place = self._imported_place(hut)
+        restaurant, _created = Category.objects.get_or_create(
+            slug="restaurant", defaults={"name": "Restaurant"}
+        )
+        foreign = GeoPlaceCategory.objects.create(
+            geo_place=place, category=restaurant, extra={"note": "osm"}
+        )
+
+        Hut.objects.filter(pk=hut.pk).update(capacity_open=50)
+        call_command("import_geoplaces", "-s", "wodore", "--update", stdout=self._out())
+
+        foreign.refresh_from_db()
+        assert foreign.extra == {"note": "osm"}  # untouched
+        assert self._associations(place)[("hut", "mode.standard")] == {"capacity": 50}
 
     def test_rerun_update_respects_protection(self, hut_category: Category):
         hut = HutFactory(hut_type_open=hut_category, capacity_open=40)
