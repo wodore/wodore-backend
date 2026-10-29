@@ -75,6 +75,14 @@ class TestImportParties:
         ).exists()
 
 
+@pytest.fixture(autouse=True)
+def _clear_identifier_caches() -> None:
+    """GeoPlace._resolve_category_from_identifier is a process-wide
+    lru cache — stale categories from rolled-back tests poison it."""
+    GeoPlace._resolve_category_from_identifier.cache_clear()
+    GeoPlace._get_organization_by_slug.cache_clear()
+
+
 class TestWodoreHutImport:
     def test_hut_import_links_operator_party(self):
         owner = OwnerFactory(name="SAC Bern")
