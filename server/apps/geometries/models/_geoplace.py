@@ -200,7 +200,10 @@ class GeoPlace(TimeStampedModel):
     kind_slug = models.CharField(
         max_length=100,
         default=KIND_NONE,
-        db_index=True,
+        # indexed via Meta (geometries__kind_sl_c6f402_idx); db_index
+        # would create a duplicate auto index (the rename from
+        # detail_type carried the old auto pair along — dropped in
+        # 0069, geoplace-read-performance)
         verbose_name=_("Kind Slug"),
         help_text=_("Super-root identifier of the place's kind (derived)"),
     )

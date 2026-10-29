@@ -229,7 +229,13 @@ REGISTRY: list[VersionChange] = [
             "super-root identifier (map.amenity / map.admin / "
             "map.natural / none) replaces the flat enum "
             "(geoplace-category-tree); pinned clients receive the legacy "
-            "detail_type member with legacy values via downgrade."
+            "detail_type member with legacy values via downgrade. "
+            "ALSO: place search pre-filters candidates through the "
+            "trigram indexes before similarity ranking (read-performance "
+            "follow-up) — queries below the default threshold of 0.2 may "
+            "see fewer sub-threshold fuzzy matches (trigram-similarity "
+            "cutoff), substring matches and the default threshold are "
+            "unaffected."
         ),
         responses={
             "images_for_hut": _strip_static_map_fallback,

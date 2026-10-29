@@ -243,6 +243,7 @@ class GeoSearchController(ApiController):
             F,
             FloatField,
             Func,
+            Q,
             Value,
             When,
             Window,
@@ -303,9 +304,52 @@ class GeoSearchController(ApiController):
         if wants_parties:
             queryset = prefetch_parties(queryset)
 
-        # Fuzzy search using trigram similarity
+        # Fuzzy search — two-stage (geoplace-read-performance):
+        # stage 1 narrows to candidates through index-servable
+        # lookups (ILIKE containment and the % similarity operator
+        # both use the gin_trgm_ops GINs per language); stage 2 runs
+        # the similarity annotations and ranking over the candidates
+        # only — the old shape computed TrigramSimilarity over EVERY
+        # active/public row, linear in total places (~750 ms at 440k
+        # rows). The % arm only runs for queries of 5+ chars:
+        # trigram similarity on short strings is noise anyway, and %
+        # on common short tokens ("Berg") makes the GIN fetch a
+        # lossy 74k-row recheck set (~1.1 s) — containment alone is
+        # 6× faster there. Coverage: with pg_trgm.similarity_threshold
+        # = 0.2 (set DB-wide by migration 0069, matching the API's
+        # default threshold), every row passing
+        # ``similarity__gte=threshold`` is caught by % on the ranked
+        # column or by containment.
         requested_language = query.lang
         translated_name = None
+
+        # Prefilter arms: the % (trigram_similar) operator is served by
+        # the gin_trgm_ops GINs — on the base name directly, on the
+        # i18n translation through an annotated KeyTextTransform whose
+        # expression (i18n ->> 'name_xx') matches the expression
+        # indexes verbatim. Django's icontains renders UPPER() LIKE
+        # (not ILIKE) and the i18n__name_xx lookup path nests the key
+        # twice (#>> '{i18n,name_xx}' — always NULL) — both unusable
+        # here; containment runs only for short queries where its
+        # cheap non-indexed predicate beats the % lossy recheck set.
+        if requested_language != default_language:
+            queryset = queryset.annotate(
+                _candidate_name=Cast(
+                    KeyTextTransform(f"name_{requested_language}", "i18n"),
+                    output_field=CharField(),
+                )
+            )
+            if len(q) >= 5:
+                candidate_q = Q(name__trigram_similar=q) | Q(
+                    _candidate_name__trigram_similar=q
+                )
+            else:
+                candidate_q = Q(name__icontains=q) | Q(_candidate_name__icontains=q)
+        elif len(q) >= 5:
+            candidate_q = Q(name__trigram_similar=q)
+        else:
+            candidate_q = Q(name__icontains=q)
+        queryset = queryset.filter(candidate_q)
 
         if requested_language != default_language:
             translated_name = Cast(
