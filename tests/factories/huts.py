@@ -27,7 +27,7 @@ class HutFactory(factory.django.DjangoModelFactory[Hut]):
     def hut_type_open(self):  # type: ignore[no-untyped-def]
         from server.apps.categories.models import Category
 
-        parent = Category.objects.get(slug="accommodation", parent__isnull=True)
+        parent = Category.objects.get(slug="accommodation", parent__slug="amenity")
         category, _created = Category.objects.get_or_create(
             slug="factory-hut", parent=parent, defaults={"name": "Factory Hütte"}
         )

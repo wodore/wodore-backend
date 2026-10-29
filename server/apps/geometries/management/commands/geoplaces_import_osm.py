@@ -1608,7 +1608,10 @@ class Command(BaseCommand):
             stray = Category.objects.filter(slug=group_slug, parent=None).first()
             if stray is not None:
                 stray.parent = super_root
-                stray.save(update_fields=["parent"])  # identifier refreshes
+                # attname (parent_id) — matches the computed-field
+                # dependency key so `identifier` recomputes; the field
+                # name "parent" would skip the refresh (review P1)
+                stray.save(update_fields=["parent_id"])
                 group = stray
             else:
                 group = Category.objects.create(
@@ -3913,6 +3916,15 @@ class Command(BaseCommand):
                     GeoPlaceCategory.objects.bulk_create(
                         associations, ignore_conflicts=True
                     )
+
+                # Derive kind_slug from the just-attached categories —
+                # bulk_create bypasses save(), the schema-path
+                # derivation never runs on this PBF branch (review P1)
+                from server.apps.geometries.kinds import place_kind_slug
+
+                for place, categories in zip(created_geoplaces, categories_to_create):
+                    place.kind_slug = place_kind_slug(categories)
+                GeoPlace.objects.bulk_update(created_geoplaces, ["kind_slug"])
 
                 # Now create details with proper references
                 for place, detail in zip(created_geoplaces, amenity_details_to_create):

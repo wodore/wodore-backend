@@ -607,12 +607,29 @@
         "type": "object"
       },
       "CategoryPlaceTypeSchema": {
-        "description": "Schema for category place type with symbols (used in GeoPlace).",
+        "description": "Schema for category place type with symbols (used in GeoPlace).\n\n``classifier`` and ``extra`` are association-level attributes\n(OpenSpec ``geoplace-capacity-and-types-via-categories``): the\nseason classification (``season.*`` identifier) and typed\nper-association attributes (bed capacities).",
         "properties": {
+          "classifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Classifier"
+          },
           "description": {
             "default": "",
             "title": "Description",
             "type": "string"
+          },
+          "extra": {
+            "additionalProperties": true,
+            "title": "Extra",
+            "type": "object"
           },
           "name": {
             "title": "Name",
@@ -1800,7 +1817,7 @@
         "type": "object"
       },
       "GeoPlaceDetailSchema": {
-        "description": "Unified place detail (place-detail-endpoint).\n\nRequired members: ``slug``, ``name``, ``detail_type`` (the type\ndiscriminator clients switch on), ``location``, ``importance``.\nEverything else is an optional member under the ``fields[places]``\nsparse-fieldset selection; detail blocks appear as sibling members\nnamed exactly after their ``detail_type`` value (``amenity`` now,\n``admin``/``transport``/``natural`` later) and only for places of\nthat type with a detail row.",
+        "description": "Unified place detail (place-detail-endpoint).\n\nRequired members: ``slug``, ``name``, ``kind_slug`` (the type\ndiscriminator clients switch on), ``location``, ``importance``.\nEverything else is an optional member under the ``fields[places]``\nsparse-fieldset selection; detail blocks appear as sibling members\nnamed exactly after their super-root (``amenity`` now,\n``admin``/``natural`` later) and only for places of that type\nwith a detail row.",
         "properties": {
           "amenity": {
             "anyOf": [
@@ -1858,10 +1875,6 @@
             "default": null,
             "title": "Description"
           },
-          "detail_type": {
-            "title": "Detail Type",
-            "type": "string"
-          },
           "elevation": {
             "anyOf": [
               {
@@ -1877,6 +1890,10 @@
           "importance": {
             "title": "Importance",
             "type": "integer"
+          },
+          "kind_slug": {
+            "title": "Kind Slug",
+            "type": "string"
           },
           "links": {
             "anyOf": [
@@ -1953,7 +1970,7 @@
             "title": "Sources"
           }
         },
-        "required": ["slug", "name", "importance", "location", "detail_type"],
+        "required": ["slug", "name", "importance", "location", "kind_slug"],
         "title": "GeoPlaceDetailSchema",
         "type": "object"
       },
@@ -9938,6 +9955,25 @@
               "description": "Device-tier spec (low | medium | high); resolved into path",
               "title": "Spec"
             }
+          },
+          {
+            "description": "Renderer capability (full | subset); resolved into path. Omitted: today's profile-agnostic resolution.",
+            "in": "query",
+            "name": "profile",
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(full|subset)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Renderer capability (full | subset); resolved into path. Omitted: today's profile-agnostic resolution.",
+              "title": "Profile"
+            }
           }
         ],
         "responses": {
@@ -9998,7 +10034,7 @@
     },
     "/v1/map/layers": {
       "get": {
-        "description": "The backend resolves the wanted ``spec`` per layer (exact \u2192\nexplicit chain \u2192 single) and reports the served tier \u2014 clients\nnever select among variants. Sparse fieldsets narrow entries.",
+        "description": "The backend resolves the wanted ``spec`` per layer (exact \u2192\nexplicit chain \u2192 single) and reports the served tier \u2014 clients\nnever select among variants. ``profile`` declares the client's\nrenderer capability (subset clients never receive full\nvariants). Sparse fieldsets narrow entries.",
         "operationId": "map-layers",
         "parameters": [
           {
@@ -10053,6 +10089,25 @@
               "default": null,
               "description": "Device-tier spec the client WANTS (low | medium | high); the backend resolves exact \u2192 explicit chain \u2192 single and reports the served spec per entry",
               "title": "Spec"
+            }
+          },
+          {
+            "description": "Renderer capability the client DECLARES (full | subset): full walks full\u2192subset within each tier (tier respected before format richness); subset never receives full variants \u2014 slugs without a subset variant drop out. Omitted: today's profile-agnostic resolution (backward compatible).",
+            "in": "query",
+            "name": "profile",
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(full|subset)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Renderer capability the client DECLARES (full | subset): full walks full\u2192subset within each tier (tier respected before format richness); subset never receives full variants \u2014 slugs without a subset variant drop out. Omitted: today's profile-agnostic resolution (backward compatible).",
+              "title": "Profile"
             }
           },
           {
@@ -10215,6 +10270,25 @@
               "default": null,
               "description": "Device-tier spec the client WANTS (low | medium | high); the backend resolves exact \u2192 explicit chain \u2192 single and reports the served spec per entry",
               "title": "Spec"
+            }
+          },
+          {
+            "description": "Renderer capability the client DECLARES (full | subset): full walks full\u2192subset within each tier (tier respected before format richness); subset never receives full variants \u2014 slugs without a subset variant drop out. Omitted: today's profile-agnostic resolution (backward compatible).",
+            "in": "query",
+            "name": "profile",
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(full|subset)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Renderer capability the client DECLARES (full | subset): full walks full\u2192subset within each tier (tier respected before format richness); subset never receives full variants \u2014 slugs without a subset variant drop out. Omitted: today's profile-agnostic resolution (backward compatible).",
+              "title": "Profile"
             }
           },
           {
@@ -11606,7 +11680,15 @@
                 }
               }
             },
-            "description": "OK"
+            "description": "OK",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "406": {
             "content": {

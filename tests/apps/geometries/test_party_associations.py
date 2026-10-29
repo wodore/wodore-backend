@@ -386,15 +386,19 @@ class TestRoleScopedPartyProtection:
         set() crashed with TypeError before the fix. Called directly:
         dedup is orthogonal to the regression (note: category
         resolution is lru_cached, so each test needs its own slugs)."""
+        # Map-tree shape: contract groups live under the amenity
+        # super-root (kind derivation needs the full ancestry).
+        from server.apps.categories.models import Category as _Category
         from server.apps.geometries.schemas import (
             GeoPlaceAmenityInput as Schema,
         )
 
-        shop = Category.objects.create(slug="shop", name="Shop")
-        Category.objects.create(slug="kiosk", parent=shop, name="Kiosk")
+        amenity = _Category.objects.get(slug="amenity", parent__slug="map")
+        shop = _Category.objects.create(slug="shop", name="Shop", parent=amenity)
+        _Category.objects.create(slug="kiosk", parent=shop, name="Kiosk")
 
         place = GeoPlaceFactory(
-            detail_type="amenity",
+            kind_slug="map.amenity",
             protected_fields=[{"parties": ["role.brand"]}],
         )
 
@@ -441,12 +445,17 @@ class TestRoleScopedPartyProtection:
         dedup reimports by the ``extra.osm_name`` identity — the old
         ``slug__in=[None]`` filter never matched and minted duplicate
         places."""
+        # Map-tree shape (see shop/kiosk above).
+        from server.apps.categories.models import Category as _Category
         from server.apps.geometries.schemas import (
             GeoPlaceAmenityInput as Schema,
         )
 
-        tourism = Category.objects.create(slug="tourism", name="Tourism")
-        Category.objects.create(slug="hotel", parent=tourism, name="Hotel")
+        amenity = _Category.objects.get(slug="amenity", parent__slug="map")
+        tourism = _Category.objects.create(
+            slug="tourism", name="Tourism", parent=amenity
+        )
+        _Category.objects.create(slug="hotel", parent=tourism, name="Hotel")
 
         def schema_with_brand() -> Schema:
             return Schema(

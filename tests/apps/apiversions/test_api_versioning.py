@@ -416,6 +416,23 @@ class TestBackwardTransforms:
         finally:
             registry.REGISTRY.remove(change)
 
+    def test_kind_slug_downgrade_transform(self):
+        """get_place downgrade: kind_slug → detail_type with legacy
+        enum values (geoplace-category-tree)."""
+        from server.apps.apiversions.registry import _downgrade_kind_slug
+
+        # super-root identifiers map back to the legacy enum
+        out = _downgrade_kind_slug({"kind_slug": "map.amenity", "slug": "x"})
+        assert out == {"slug": "x", "detail_type": "amenity"}
+        out = _downgrade_kind_slug({"kind_slug": "map.admin"})
+        assert out == {"detail_type": "admin"}
+        out = _downgrade_kind_slug({"kind_slug": "map.natural"})
+        assert out == {"detail_type": "natural"}
+        # none stays none; absent key → untouched; non-dict passes through
+        assert _downgrade_kind_slug({"kind_slug": "none"}) == {"detail_type": "none"}
+        assert _downgrade_kind_slug({"slug": "x"}) == {"slug": "x"}
+        assert _downgrade_kind_slug(None) is None
+
     def test_changes_chain_in_reverse_order(self, pinned_old_version: VersionChange):
         from server.apps.apiversions.registry import changes_after
 

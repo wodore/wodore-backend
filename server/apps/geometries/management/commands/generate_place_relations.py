@@ -87,6 +87,10 @@ class Command(BaseCommand):
         places = GeoPlace.objects.filter(
             is_active=True,
             kind_slug__in=[KIND_AMENITY, KIND_NATURAL],
+            # NOTE (geoplace-category-tree): transport stops are now
+            # map.amenity (under the amenity super-root) and thus
+            # included in part_of — a bus stop IS part of a municipality
+            # (pre-tree detail_type="transport" excluded them).
         )
         if limit:
             places = places[:limit]

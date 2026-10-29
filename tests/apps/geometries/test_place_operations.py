@@ -45,7 +45,7 @@ def _clear_identifier_caches() -> None:
 
 @pytest.fixture
 def hut_category() -> Category:
-    parent = Category.objects.get(slug="accommodation", parent__isnull=True)
+    parent = Category.objects.get(slug="accommodation", parent__slug="amenity")
     category, _created = Category.objects.get_or_create(
         slug="hut", parent=parent, defaults={"name": "Hütte"}
     )
@@ -59,7 +59,7 @@ def mode(slug: str) -> Category:
 def _schema(
     operations: list[OperationInput], seasonality: Any = None
 ) -> GeoPlaceBaseInput:
-    parent = Category.objects.get(slug="accommodation", parent__isnull=True)
+    parent = Category.objects.get(slug="accommodation", parent__slug="amenity")
     hut, _created = Category.objects.get_or_create(
         slug="hut", parent=parent, defaults={"name": "Hütte"}
     )
