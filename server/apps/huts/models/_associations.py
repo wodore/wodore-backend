@@ -100,7 +100,7 @@ class HutOrganizationAssociation(TimeStampedModel, ComputedFieldsModel):
         "Hut", on_delete=models.CASCADE, db_index=True, related_name="orgs_source"
     )
     props = models.JSONField(
-        help_text=_("Organization dependend properties."), blank=True, default=dict
+        help_text=_("Organization dependent properties."), blank=True, default=dict
     )
     source_id = models.CharField(
         max_length=40, blank=True, null=True, default="", help_text="Source id"
@@ -138,6 +138,7 @@ class HutOrganizationAssociation(TimeStampedModel, ComputedFieldsModel):
     def link(self):
         lang = get_language() or settings.LANGUAGE_CODE  # TODO lang replace by query
         link_pattern = self.organization.link_hut_pattern
+        # pi-lens-ignore: python.flask.security.xss.audit.direct-use-of-jinja2.direct-use-of-jinja2, Semgrep:python.flask.security.xss.audit.direct-use-of-jinja2.direct-use-of-jinja2 -- deliberate: renders org-admin-configured link_hut_pattern templates (Django, not Flask; pattern source is admin-controlled)
         _tmpl = Environment().from_string(link_pattern)
         return _tmpl.render(
             lang=lang,

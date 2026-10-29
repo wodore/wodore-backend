@@ -87,7 +87,7 @@ class ContactHutAssociationEditInline(unfold_admin.TabularInline):
 
     model = Hut.contact_set.through
     tab = True
-    fields = ("hut",)  # hot to acces "hut__name"
+    fields = ("hut",)  # how to access "hut__name"
     autocomplete_fields = ("hut",)
     extra = 0
     verbose_name = _("Hut")
