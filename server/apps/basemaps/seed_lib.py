@@ -745,7 +745,11 @@ TRANSPORT_SOURCE_ID = "transitland_stops"
 #: ``route_types_basic`` can carry (0 tram, 1 subway/metro, 2 rail,
 #: 3 bus, 4 ferry, 5 cable tram, 6 aerial lift, 7 funicular,
 #: 11 trolleybus, 12 monorail — extended codes like 700 arrive reduced
-#: to these). Paint priority is rarest/most infrastructural mode first:
+#: to these). This code-side table is the AUTHORITATIVE fast path (no
+#: DB round-trip); ``categories.0022`` mirrors the same pairing into
+#: each mode child's ``extra`` (``gtfs_route_type``) as data-side
+#: documentation — parity is test-pinned. Paint priority is
+#: rarest/most infrastructural mode first:
 #: a multi-mode interchange reads as its most defining mode (rail >
 #: tram > metro > lifts > ferry > trolleybus > bus — the spiritual
 #: successor of the old BAV layer's train-before-bus rule). Category-less

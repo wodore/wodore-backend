@@ -1344,3 +1344,29 @@ class TestStylSaveGate:
         self._with_styl(monkeypatch, _STYL_W002)
         _make("stysweep2", profile="full", style=deepcopy(FULL_CIRCLE))
         call_command("validate_map_styles")  # W-codes never block
+
+
+class TransportModeExtrasParityTests(SimpleTestCase):
+    """The GTFS↔category pairing exists twice ON PURPOSE: code-side
+    (``seed_lib.TRANSPORT_MODES`` — the fast path the style builds from,
+    no DB round-trip) and data-side (``categories.0022`` mirrors the
+    basic route type into each mode child's ``extra`` under
+    ``gtfs_route_type`` — admin/other apps can read it). This test keeps
+    the two from drifting apart.
+    """
+
+    def test_migration_modes_match_seed_lib_table(self) -> None:
+        import importlib
+
+        from server.apps.basemaps.seed_lib import TRANSPORT_MODES
+
+        # digit-leading module name — plain import syntax cannot express it
+        migration = importlib.import_module(
+            "server.apps.categories.migrations.0022_transport_mode_colors"
+        )
+
+        assert {slug: code for slug, code in TRANSPORT_MODES} == {
+            slug: codes[1] for slug, codes in migration.MODES.items()
+        }
+        # the extras key name is stable API for other readers
+        assert migration.GTFS_EXTRA_KEY == "gtfs_route_type"
