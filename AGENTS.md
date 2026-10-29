@@ -295,6 +295,11 @@ inv check.types        # or: uv run pyrefly check
 - pi-lens may report pyright-family "unresolved import" blockers from a
   venv-less runner (`ready=0/N`): environmental noise — pyrefly is the only
   authority; verify with `pyrefly check` and runtime imports, never chase them.
+- A conclusively-determined pre-existing lens finding gets exactly one triage —
+  `lens_diagnostic_mark` (`false-positive`/`suppress`, with reason) or a
+  `# pi-lens-ignore: <rule>` source comment — never a per-turn re-justification.
+  The turn-end advisory honors marks on its live arm; its stale-history replay is
+  bounded and retires on its own — ignore repeats of already-marked findings.
 - CI quirk: workflow events sometimes don't fire for a branch — proactively
   merge `origin/main` before pushing (merge-pushes trigger), or recreate the
   PR from a fresh branch name. Prefer fresh branch names per PR.
