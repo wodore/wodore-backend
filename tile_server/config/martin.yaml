@@ -336,13 +336,14 @@ passthrough:
       headers:
         apikey: ${TRANSITLAND_API_KEY:-}
       format: mvt
-      # z5 = the overlay floor (full-country views request z5 tiles
-      # and overzoom); z14 = the upstream ceiling (deeper zooms
-      # overzoom client-side, no further requests).
-      minzoom: 5
+      # z11 = the overlay floor (the style renders nothing below —
+      # owner decision: close-up aid, not a country-scale wash);
+      # z14 = the upstream ceiling (deeper zooms overzoom client-side,
+      # no further requests).
+      minzoom: 11
       maxzoom: 14
       cache:
-        minzoom: 5
+        minzoom: 11
         maxzoom: 14
       cache_control: >-
         public, max-age=345600, stale-while-revalidate=345600

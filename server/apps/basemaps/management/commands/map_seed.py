@@ -441,20 +441,15 @@ LAYERS: list[dict[str, Any]] = [
         "icon": "transport",
         "slot": "ways",
         "order": 2,
-        "min_zoom": 5,
+        "min_zoom": 11,
+        # Single SUBSET-profile row (owner decision): the document is
+        # subset-clean end to end — small colored circles z11–z13.99,
+        # mono category icons from z14 — and a subset document is a
+        # valid full style by construction, so ONE row serves WebGL and
+        # fallback sessions alike. Nothing below z11.
+        "profile": MapLayer.Profile.subset,
+        "version": SUBSET_REVISION,
         "style": lib.TRANSPORT_STYLE,
-        "variants": [
-            # Subset twin for the Leaflet fallback (no-WebGL map): the
-            # same vector document minus promoteId and the default
-            # layout.visibility — no clustering anymore (vector tiles
-            # sample server-side below z12; the old client-side
-            # clustering existed because the BAV geojson was one blob).
-            {
-                "profile": MapLayer.Profile.subset,
-                "version": SUBSET_REVISION,
-                "style": lib.TRANSPORT_STYLE_SUBSET,
-            }
-        ],
         "attributions": ["transitland", "openstreetmap"],
         "categories": [
             {"slug": "transport", "use": "filter"},
@@ -963,6 +958,19 @@ class Command(BaseCommand):
             # Legends orphaned by the merge (no layer references them anymore)
             MapLegend.objects.filter(pk__in=legend_ids, layers__isnull=True).delete()
 
+        # transport-stops became a single SUBSET-profile row (owner
+        # decision — the document is subset-clean; see the LAYERS entry):
+        # drop the seed's own former full-profile twin so capable clients
+        # resolve to the subset row too (PROFILE_PREFERENCE prefers full
+        # whenever one exists). Same rationale as ``retired`` above: only
+        # the seed's own former identity goes, never curator rows. The
+        # slug-level legend/config stay with the surviving subset row.
+        gone, _ = MapLayer.objects.filter(
+            slug="transport-stops", profile=MapLayer.Profile.full
+        ).delete()
+        if gone:
+            self.stdout.write("  Removed superseded full-profile row: transport-stops")
+
     def _seed_slots(self) -> dict[str, MapSlot]:
         slots: dict[str, MapSlot] = {}
         for data in SLOTS:
@@ -1042,12 +1050,8 @@ class Command(BaseCommand):
             if category and category.color != "#4B8E43":
                 colors[slug] = category.color
         for definition in LAYERS:
-            if definition.get("slug") != "transport-stops":
-                continue
-            definition["style"] = lib.transport_style(colors)
-            for variant in definition.get("variants", []):
-                if "style" in variant:
-                    variant["style"] = lib.transport_style_subset(colors)
+            if definition.get("slug") == "transport-stops":
+                definition["style"] = lib.transport_style(colors)
 
     def _seed_layer(
         self,

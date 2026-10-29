@@ -102,9 +102,9 @@ def set_transport_mode_categories(apps: Any, _schema_editor: Any) -> None:
     parent = Category.objects.filter(slug="transport", parent=None).first()
 
     for slug, (color, gtfs_type) in MODES.items():
-        for child in Category.objects.filter(
-            slug=slug, parent__slug="transport"
-        ).only("color", "extra"):
+        for child in Category.objects.filter(slug=slug, parent__slug="transport").only(
+            "color", "extra"
+        ):
             if child.color == MODEL_DEFAULT:
                 child.color = color
                 print(f"✓ transport.{slug}: color → {color}")
@@ -133,9 +133,7 @@ def set_transport_mode_categories(apps: Any, _schema_editor: Any) -> None:
             if created:
                 child.i18n = i18n
                 child.save()
-                print(
-                    f"✓ transport.{slug}: created (color {MODE_COLORS[slug]})"
-                )
+                print(f"✓ transport.{slug}: created (color {MODE_COLORS[slug]})")
     else:
         print("⚠ transport root missing — skipping new children")
 
@@ -145,9 +143,9 @@ def restore_defaults(apps: Any, _schema_editor: Any) -> None:
 
     Category = apps.get_model("categories", "Category")
     for slug, color in MODE_COLORS.items():
-        for child in Category.objects.filter(
-            slug=slug, parent__slug="transport"
-        ).only("color", "extra"):
+        for child in Category.objects.filter(slug=slug, parent__slug="transport").only(
+            "color", "extra"
+        ):
             if child.color == color:
                 child.color = MODEL_DEFAULT
             extras = dict(child.extra or {})

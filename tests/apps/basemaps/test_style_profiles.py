@@ -53,7 +53,6 @@ from server.apps.basemaps.seed_lib import (
     HUTS_STYLE,
     HUTS_STYLE_SUBSET,
     TRANSPORT_STYLE,
-    TRANSPORT_STYLE_SUBSET,
     raster_style,
     swisstopo_overlay_style,
 )
@@ -250,11 +249,10 @@ class SubsetWalkerAccepts(SimpleTestCase):
     def test_vector_encoding_mlt_passes(self) -> None:
         validate_subset_style(_occupation_subset())
 
-    def test_transport_stops_subset_twin_passes_walker(self) -> None:
-        """The seeded subset variant (promoteId/layout stripped, minzoom
-        floor added) is walker-clean — the FULL document deliberately
-        still is not (see the rejection test: it keeps promoteId)."""
-        validate_subset_style(TRANSPORT_STYLE_SUBSET)
+    def test_transport_stops_style_passes_walker(self) -> None:
+        """The transport document is subset-clean by construction (owner
+        decision: a single subset-profile row serves every client)."""
+        validate_subset_style(TRANSPORT_STYLE)
 
     def test_huts_subset_twin_passes_walker(self) -> None:
         """The huts twin (availability disc + trimmed symbol) is
@@ -432,34 +430,26 @@ class SubsetWalkerRejects(SimpleTestCase):
         style["sources"]["stops"]["data"] = {"type": "FeatureCollection"}
         self._reject(style, r"data")
 
-    def test_transport_stops_seed_style_is_not_yet_subset(self) -> None:
-        """The FULL document intentionally carries promoteId + default
-        layout.visibility (WebGL/MapLibre niceties the whitelist omits) —
-        the subset twin is the derived same-document-minus-those (see
-        TransportVectorContractTests)."""
-        from server.apps.basemaps.seed_lib import TRANSPORT_STYLE
-
-        with pytest.raises(StyleValidationError):
-            validate_subset_style(TRANSPORT_STYLE)
-
 
 class TransportVectorContractTests(SimpleTestCase):
     """transport-stops on Transitland vector tiles (Martin passthrough,
     MLT URL space): the style contract beyond the generic walker.
 
+    * ONE subset-clean document (owner decision: a single subset-profile
+      row serves WebGL and fallback sessions alike — a subset document
+      is a valid full style by construction, and the full profile had
+      nothing functional to add: promoteId was the only full-only key
+      and nothing keyed features by id).
     * one vector source — the Martin proxy of the Transitland stops
       tileset — on the explicit ``.mlt`` URL space with the MapLibre
-      decoder marker (pairing contract: a ``.mlt`` template always
-      ships with ``encoding: mlt``), z5–z14 (upstream ceiling), no
-      clustering keys anywhere (vector tiles sample server-side below
-      z12; the old client-side clustering existed because the BAV
-      geojson was one fetched blob),
-    * one circle layer on source-layer ``stops`` filtering to stops +
-      stations (``location_type`` 0/1), category-colored in the
-      seed_lib.TRANSPORT_MODES priority order (rail > tram > metro >
-      ferry > bus, else the neutral "other"),
-    * the subset twin = the full document minus ``promoteId`` and the
-      default ``layout`` — walker-clean by construction.
+      decoder marker (pairing contract: a ``.mlt`` template always ships
+      with ``encoding: mlt``), z11–z14 (upstream ceiling; nothing
+      renders below z11 — owner decision), no clustering keys anywhere
+      (vector tiles sample server-side).
+    * a circle layer (z11–z13.99, small, category-colored in the
+      seed_lib.TRANSPORT_MODES priority order) hand over to a mono-icon
+      symbol layer at z14 (per-mode sprite names where the category tree
+      carries a symbol, the generic root silhouette otherwise).
     """
 
     def test_source_is_mlt_vector_via_martin(self) -> None:
@@ -471,103 +461,107 @@ class TransportVectorContractTests(SimpleTestCase):
         # pairing contract (tested for wd-huts/wd-bookings too): a .mlt
         # tiles template always ships with the decoder marker
         assert src["encoding"] == "mlt"
-        # z5 = the overlay floor; z14 = the Transitland ceiling (deeper
-        # zooms overzoom client-side)
-        assert src["minzoom"] == 5
+        # z11 = the owner-set floor (nothing renders below); z14 = the
+        # Transitland ceiling (deeper zooms overzoom client-side)
+        assert src["minzoom"] == 11
         assert src["maxzoom"] == 14
-        # underscore-only source id: the tile-router's .mlt location and
-        # the CDN-Tag map match [A-Za-z0-9_,] first segments
-        assert "transitland_stops".isidentifier()
+        # no full-only keys — the document IS the subset document
+        assert set(src) == {"type", "tiles", "encoding", "minzoom", "maxzoom"}
 
-    def test_layer_contract(self) -> None:
-        layers = TRANSPORT_STYLE["layers"]
-        assert [layer["id"] for layer in layers] == ["transport-stops"]
-        layer = layers[0]
-        assert layer["source-layer"] == "stops"
-        assert layer["minzoom"] == 5
-        # stops + stations only — entrances (2), generic nodes (3) and
-        # boarding areas (4) stay off the map
-        assert layer["filter"] == [
+    def test_sprite_pack_referenced_for_the_icons(self) -> None:
+        sprite = TRANSPORT_STYLE["sprite"]
+        assert sprite == [
+            {"id": "wd", "url": "{{env:MARTIN_TILE_URL}}/sprite/transport"}
+        ]
+        # per-mode icons only for modes with a category symbol, the
+        # generic root silhouette as fallback
+        from server.apps.basemaps.seed_lib import (
+            TRANSPORT_ICON_FALLBACK,
+            TRANSPORT_ICONS,
+        )
+
+        assert set(TRANSPORT_ICONS) == {
+            "train_station",
+            "tram_stop",
+            "metro_station",
+            "ferry",
+            "bus_stop",
+        }
+        assert TRANSPORT_ICON_FALLBACK == "wd:mono/root.transport"
+
+    def test_circle_layer_contract(self) -> None:
+        circle = TRANSPORT_STYLE["layers"][0]
+        assert circle["id"] == "transport-stops"
+        assert circle["type"] == "circle"
+        assert circle["source-layer"] == "stops"
+        # nothing below z11; icons take over exactly at z14 (exclusive)
+        assert circle["minzoom"] == 11
+        assert circle["maxzoom"] == 14
+        assert circle["filter"] == [
             "match",
             ["get", "location_type"],
             [0, 1],
             True,
             False,
         ]
+        # SMALL zoomed-out dots (z11 1.5/2 → z13 3/4), stations larger
+        radius = circle["paint"]["circle-radius"]
+        assert radius[0] == "interpolate"
+        assert radius[3] == 11
+        assert radius[4] == ["case", ["==", ["get", "location_type"], 1], 2.0, 1.5]
+        assert radius[5] == 13
+        assert radius[6] == ["case", ["==", ["get", "location_type"], 1], 4.0, 3.0]
 
-    def test_no_clustering_anywhere(self) -> None:
-        for style in (TRANSPORT_STYLE, TRANSPORT_STYLE_SUBSET):
-            for source in style["sources"].values():
-                for key in (
-                    "cluster",
-                    "clusterMaxZoom",
-                    "clusterRadius",
-                    "clusterProperties",
-                ):
-                    assert key not in source, key
-            assert all("cluster" not in layer["id"] for layer in style["layers"])
+    def test_icon_layer_contract(self) -> None:
+        icons = TRANSPORT_STYLE["layers"][1]
+        assert icons["id"] == "transport-stops-icons"
+        assert icons["type"] == "symbol"
+        assert icons["minzoom"] == 14
+        assert icons["filter"] == TRANSPORT_STYLE["layers"][0]["filter"]
+        layout = icons["layout"]
+        assert layout["icon-allow-overlap"] is True
+        assert layout["icon-size"][3] == 14  # ramp starts at the handover
 
-    def test_mode_table_covers_all_basic_gtfs_types(self) -> None:
-        """Review contract: the mapping supports EXACTLY what Transitland's
-        ``route_types_basic`` can carry — all ten basic GTFS types, no
-        more (nothing else exists in the data), no less."""
+    def test_icon_image_case_chain_uses_literal_names(self) -> None:
+        """Per-mode whole literal sprite names (concat is not in the
+        subset whitelist) in TRANSPORT_MODES priority order, generic
+        root silhouette as the fallback."""
         from server.apps.basemaps.seed_lib import (
             TRANSPORT_FALLBACK_COLORS,
+            TRANSPORT_ICON_FALLBACK,
+            TRANSPORT_ICONS,
             TRANSPORT_MODES,
         )
 
-        assert {basic for _slug, basic in TRANSPORT_MODES} == {
-            0,
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            7,
-            11,
-            12,
-        }
-        assert all(slug in TRANSPORT_FALLBACK_COLORS for slug, _ in TRANSPORT_MODES)
-
-    def test_category_paint_priority(self) -> None:
-        """Colors follow the TRANSPORT_MODES order (rarest mode wins an
-        interchange) and each condition tests route_types_basic presence
-        via the four exact position needles."""
-        from server.apps.basemaps.seed_lib import (
-            TRANSPORT_FALLBACK_COLORS,
-            TRANSPORT_MODES,
-        )
-
-        color_expr = TRANSPORT_STYLE["layers"][0]["paint"]["circle-color"]
-        assert color_expr[0] == "case"
-        # condition/output pairs in priority order, neutral fallback last
-        # (the fallback has no condition — slice around it)
-        conditions = color_expr[1:-1:2]
-        values = color_expr[2:-1:2]
+        icon_expr = TRANSPORT_STYLE["layers"][1]["layout"]["icon-image"]
+        assert icon_expr[0] == "case"
+        conditions = icon_expr[1:-1:2]
+        values = icon_expr[2:-1:2]
         assert len(conditions) == len(values) == len(TRANSPORT_MODES)
-        for (slug, basic_type), condition, color in zip(
+        haystack = ["get", "route_types_basic"]
+        for (slug, basic_type), condition, icon in zip(
             TRANSPORT_MODES, conditions, values, strict=True
         ):
-            assert color == TRANSPORT_FALLBACK_COLORS[slug]
-            # EXACT presence needles for the four JSON positions:
-            # "[N]" (only), "[N, " (first), ", N, " (middle), ", N]"
-            # (last) — the position delimiters keep metro (1) from
-            # matching trolleybus (11) / monorail (12) strings.
-            haystack = ["get", "route_types_basic"]
-            assert condition == [
-                "case",
-                ["in", f"[{basic_type}]", haystack],
-                True,
-                ["in", f"[{basic_type}, ", haystack],
-                True,
-                ["in", f", {basic_type}, ", haystack],
-                True,
-                ["in", f", {basic_type}]", haystack],
-                True,
-                False,
-            ]
+            assert icon == TRANSPORT_ICONS.get(slug, TRANSPORT_ICON_FALLBACK)
+            assert condition[1] == ["in", f"[{basic_type}]", haystack]
+        assert icon_expr[-1] == TRANSPORT_ICON_FALLBACK
+        # the color chain (circles) keeps the full palette mapping
+        color_expr = TRANSPORT_STYLE["layers"][0]["paint"]["circle-color"]
+        assert color_expr[2:-1:2] == [
+            TRANSPORT_FALLBACK_COLORS[slug] for slug, _ in TRANSPORT_MODES
+        ]
         assert color_expr[-1] == TRANSPORT_FALLBACK_COLORS["other"]
+
+    def test_no_clustering_anywhere(self) -> None:
+        for source in TRANSPORT_STYLE["sources"].values():
+            for key in (
+                "cluster",
+                "clusterMaxZoom",
+                "clusterRadius",
+                "clusterProperties",
+            ):
+                assert key not in source, key
+        assert all("cluster" not in layer["id"] for layer in TRANSPORT_STYLE["layers"])
 
     def test_db_colors_overlay_the_fallback_palette(self) -> None:
         """map_seed bakes the live transport category rows' colors into
@@ -579,23 +573,11 @@ class TransportVectorContractTests(SimpleTestCase):
         assert color_expr[2] == "#ff0000"  # rail (first mode) overridden
         assert color_expr[4] != "#ff0000"  # tram keeps the fallback
 
-    def test_subset_twin_derivation(self) -> None:
-        src = TRANSPORT_STYLE_SUBSET["sources"]["transitland_stops"]
-        assert "promoteId" not in src
-        # the same tiles template + encoding survive the derivation
-        full_src = TRANSPORT_STYLE["sources"]["transitland_stops"]
-        assert src["tiles"] == full_src["tiles"]
-        assert src["encoding"] == "mlt"
-        assert [layer["id"] for layer in TRANSPORT_STYLE_SUBSET["layers"]] == [
-            "transport-stops"
-        ]
-        assert all("layout" not in layer for layer in TRANSPORT_STYLE_SUBSET["layers"])
-
-    def test_subset_twin_passes_walker(self) -> None:
-        """The derived twin stays walker-clean — the whitelist admits
-        the vector source keys, the match filter and the case/in/get
-        presence paints."""
-        validate_subset_style(TRANSPORT_STYLE_SUBSET)
+    def test_style_passes_walker(self) -> None:
+        """The single document is walker-clean — the whitelist admits
+        the vector source keys, the match filter, the case/in/get
+        presence paints and the symbol layer's literal icon chain."""
+        validate_subset_style(TRANSPORT_STYLE)
 
 
 class ClusteringConfigTests(SimpleTestCase):
@@ -803,36 +785,31 @@ class TestSeedTagging:
         # Retagged in place — no orphan full twins beside the subset rows.
         assert not MapLayer.objects.filter(slug="mtb", profile="full").exists()
 
-    def test_transport_stops_subset_variant_seeded(self) -> None:
-        """The overlay serves BOTH profiles at the same tier: the full
-        row (promoteId + default visibility, WebGL/MapLibre sessions)
-        plus the derived subset twin for the no-WebGL fallback — the
-        same vector document, no clustering anywhere."""
+    def test_transport_stops_single_subset_row_seeded(self) -> None:
+        """Owner decision: the overlay serves ONE subset-profile row —
+        the document is subset-clean and a subset document is a valid
+        full style by construction, so capable and fallback clients
+        resolve the same row (no full twin may linger: the seed retires
+        its own former full-profile identity)."""
         call_command("map_seed", verbosity=0)
-        full = MapLayer.objects.get(
-            slug="transport-stops", spec="medium", profile="full"
-        )
-        assert full.version == STYLE_SPEC_VERSION
-        assert full.style is not None
-        # the full document: one MLT vector source, one circle layer
-        assert "cluster" not in full.style["sources"]["transitland_stops"]
-        assert [layer["id"] for layer in full.style["layers"]] == ["transport-stops"]
-        subset = MapLayer.objects.get(
-            slug="transport-stops", spec="medium", profile="subset"
-        )
-        assert subset.version == SUBSET_REVISION
-        assert subset.style is not None
-        # the derived twin: promoteId dropped, same single layer
-        assert "promoteId" not in subset.style["sources"]["transitland_stops"]
-        assert [layer["id"] for layer in subset.style["layers"]] == ["transport-stops"]
-        assert all(
-            "visibility" not in layer.get("layout", {})
-            for layer in subset.style["layers"]
-        )
-        # slug-level config (filter) rides both rows
-        for row in (full, subset):
-            assert row.config is not None
-            assert "filters" in row.config
+        rows = MapLayer.objects.filter(slug="transport-stops")
+        assert rows.count() == 1
+        row = rows.get()
+        assert (row.spec, row.profile) == ("medium", "subset")
+        assert row.version == SUBSET_REVISION
+        assert row.style is not None
+        assert row.min_zoom == 11
+        # small circles z11-z13.99 hand over to mono icons at z14
+        assert [layer["id"] for layer in row.style["layers"]] == [
+            "transport-stops",
+            "transport-stops-icons",
+        ]
+        assert row.style["layers"][0]["minzoom"] == 11
+        assert row.style["layers"][0]["maxzoom"] == 14
+        assert row.style["layers"][1]["minzoom"] == 14
+        # slug-level config (filter) rides the row
+        assert row.config is not None
+        assert "filters" in row.config
 
     def test_huts_subset_variant_seeded(self) -> None:
         """Both huts rows at the same tier; the slug-level config (filters
@@ -944,12 +921,15 @@ class TestDumpCommand:
         names = sorted(path.name for path in tmp_path.iterdir())
         # Authored full styles without an ignore list are dumped.
         assert "huts--medium--full.json" in names
-        assert "transport-stops--medium--full.json" in names
+        # transport-stops is a single SUBSET row now (walker-owned,
+        # never dumped — see TransportVectorContractTests)
+        assert "transport-stops--medium--full.json" not in names
         body = json.loads((tmp_path / "huts--medium--full.json").read_text())
         assert body["version"] == 8
         # Subset rows are walker-owned (never dumped) …
         assert "world-topo--high--subset.json" not in names
         assert "mtb--medium--subset.json" not in names
+        assert "transport-stops--medium--subset.json" not in names
         # … and styl-ignored (["*"]) full rows are skipped + manifested —
         # the seed list is the single source of truth the CI job reads.
         assert "world-satellite-hybrid--high--full.json" not in names
@@ -1011,9 +991,13 @@ class TestApiProfile:
         style = Client().get("/v1/map/styles/transport-stops.json?profile=subset")
         assert style.status_code == 200
         assert "promoteId" not in style.json()["sources"]["transitland_stops"]
-        # Unprofiled requests keep today's behavior: the full row.
+        assert "transport-stops-icons" in [
+            layer["id"] for layer in style.json()["layers"]
+        ]
+        # Unprofiled requests resolve the single subset row too (a
+        # subset document is a valid full style by construction).
         unprofiled = Client().get("/v1/map/layers/transport-stops")
-        assert unprofiled.json()["profile"] == "full"
+        assert unprofiled.json()["profile"] == "subset"
 
     def test_seeded_subset_catalog_includes_huts(self) -> None:
         """Owner decision: the huts overlay appears in the subset catalog
