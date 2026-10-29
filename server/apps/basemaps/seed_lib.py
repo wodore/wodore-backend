@@ -843,21 +843,29 @@ _TRANSPORT_STOP_FILTER: list[Any] = [
     False,
 ]
 
-#: Mono sprite icons for the z14+ symbol layer (whole literal names —
-#: the sprite id prefix "wd:" matches the shared huts sprite id so the
-#: frontend unions the packs). Only modes whose category tree actually
-#: carries a symbol get their own icon (verified against the staging
+#: Mono sprite icons for the z14+ symbol layer (whole literal names).
+#: The sprite id is UNIQUE PER LAYER on purpose (``wd-transport``, in
+#: the ``wd``/``wd-sdf`` naming family): a shared id would collide on
+#: the frontend — sprites are added once per id and the first URL wins,
+#: so a late-arriving pack under a shared id never loads (the huts'
+#: ``wd`` pack is already present at boot; the transport icons
+#: silently resolved to nothing and stops vanished at z14+). A unique
+#: id makes this overlay's pack load independently, no union merge
+#: needed. Only modes whose category tree actually carries a symbol
+#: get their own icon (verified against the staging
 #: ``/sprite/transport`` pack); everything else — the lifts (cable_car,
 #: gondola, funicular), trolleybus, monorail and unmatched stops —
 #: falls back to the generic root silhouette.
+TRANSPORT_SPRITE_ID = "wd-transport"
+
 TRANSPORT_ICONS: dict[str, str] = {
-    "train_station": "wd:mono/transport.train_station",
-    "tram_stop": "wd:mono/transport.tram_stop",
-    "metro_station": "wd:mono/transport.metro_station",
-    "ferry": "wd:mono/transport.ferry",
-    "bus_stop": "wd:mono/transport.bus_stop",
+    "train_station": "wd-transport:mono/transport.train_station",
+    "tram_stop": "wd-transport:mono/transport.tram_stop",
+    "metro_station": "wd-transport:mono/transport.metro_station",
+    "ferry": "wd-transport:mono/transport.ferry",
+    "bus_stop": "wd-transport:mono/transport.bus_stop",
 }
-TRANSPORT_ICON_FALLBACK = "wd:mono/root.transport"
+TRANSPORT_ICON_FALLBACK = "wd-transport:mono/root.transport"
 
 
 def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
@@ -879,9 +887,11 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
       exclusive — the icon layer takes over exactly at z14), stations
       one notch larger than plain stops;
     * z14+: MONO category icons from the Martin sprite pack
-      (``/sprite/transport``, merged client-side into the shared ``wd``
-      sprite id) — per-mode where the tree has a symbol, the generic
-      ``mono/root.transport`` silhouette for the rest.
+      (``/sprite/transport`` under the overlay's OWN sprite id
+      ``wd-transport`` — unique per layer so the pack always loads,
+      independent of sprite-id collisions) — per-mode where the tree
+      has a symbol, the generic ``mono/root.transport`` silhouette for
+      the rest.
 
     Deliberately subset-clean end to end (owner decision: the full
     profile gained nothing here — no feature-state, no day strips; a
@@ -934,10 +944,15 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
             },
         },
         "sprite": [
-            # Martin serves the DB-synced category sprite pack; the "wd"
-            # id matches the huts packs so the frontend unions them into
-            # one combined sprite URL (catalog-mapping mergeSpritePacks).
-            {"id": "wd", "url": "{{env:MARTIN_TILE_URL}}/sprite/transport"},
+            # Martin serves the DB-synced category sprite pack under the
+            # overlay's OWN id (unique per layer — see TRANSPORT_ICONS:
+            # frontend sprite ids are add-once, a shared id would let a
+            # first-added pack shadow this one and the icons would
+            # silently resolve to nothing).
+            {
+                "id": TRANSPORT_SPRITE_ID,
+                "url": "{{env:MARTIN_TILE_URL}}/sprite/transport",
+            },
         ],
         "glyphs": GLYPHS,
         "layers": [

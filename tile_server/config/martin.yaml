@@ -129,7 +129,7 @@ postgres:
     # Recommended for: Simple use cases, backward compatibility
     # Alternative: Use geoplaces_fn for advanced filtering
     # (language, categories, fields)
-    geoplaces_view:
+    geoplaces_for_tiles:
       # Layer ID (used in vector tiles)
       layer_id: geoplaces
       id_columns: slug

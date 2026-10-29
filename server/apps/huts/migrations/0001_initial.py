@@ -135,7 +135,7 @@ class Migration(migrations.Migration):
                         default=django.utils.timezone.now, editable=False, verbose_name="modified"
                     ),
                 ),
-                ("props", models.JSONField(blank=True, default=dict, help_text="Organization dependend properties.")),
+                ("props", models.JSONField(blank=True, default=dict, help_text="Organization dependent properties.")),
                 (
                     "source_id",
                     models.CharField(blank=True, default="", help_text="Source id", max_length=40, null=True),
