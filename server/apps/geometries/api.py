@@ -9,7 +9,12 @@ from pydantic import Field
 
 from django.views.decorators.cache import cache_page
 
-from server.apps.api.controller import ApiController, cache_headers, raise_not_found
+from server.apps.api.controller import (
+    ApiController,
+    APIError,
+    cache_headers,
+    raise_not_found,
+)
 from server.apps.api.projection import field_selected, project_fields
 from server.apps.api.query import BboxQuery, bbox_polygon, sparse_fields_query
 from server.apps.geometries.presenters import (
@@ -114,6 +119,22 @@ class GeoSearchQuery(_GeoSearchQuery, BboxQuery):
             "Remove near-identical places that share a name and a very "
             "close location before pagination."
         ),
+    )
+    lat: float | None = Field(
+        None,
+        ge=-90,
+        le=90,
+        description=(
+            "Optional proximity bias: prefer results near this latitude "
+            "(pairs with lon; blends a distance decay into the ranking — "
+            "closer places win ties without hiding distant matches)"
+        ),
+    )
+    lon: float | None = Field(
+        None,
+        ge=-180,
+        le=180,
+        description="Optional proximity bias longitude (pairs with lat)",
     )
 
 
@@ -232,9 +253,7 @@ class GeoSearchController(ApiController):
         """
         from django.conf import settings
         from django.contrib.gis.db.models import PointField
-        from django.contrib.gis.db.models.functions import (
-            Distance,  # noqa: F401  # parity
-        )
+        from django.contrib.gis.db.models.functions import Distance
         from django.contrib.postgres.search import TrigramSimilarity
         from django.db.models import (
             Case,
@@ -304,34 +323,27 @@ class GeoSearchController(ApiController):
         if wants_parties:
             queryset = prefetch_parties(queryset)
 
-        # Fuzzy search — two-stage (geoplace-read-performance):
-        # stage 1 narrows to candidates through index-servable
-        # lookups (ILIKE containment and the % similarity operator
-        # both use the gin_trgm_ops GINs per language); stage 2 runs
-        # the similarity annotations and ranking over the candidates
-        # only — the old shape computed TrigramSimilarity over EVERY
-        # active/public row, linear in total places (~750 ms at 440k
-        # rows). The % arm only runs for queries of 5+ chars:
-        # trigram similarity on short strings is noise anyway, and %
-        # on common short tokens ("Berg") makes the GIN fetch a
-        # lossy 74k-row recheck set (~1.1 s) — containment alone is
-        # 6× faster there. Coverage: with pg_trgm.similarity_threshold
-        # = 0.2 (set DB-wide by migration 0069, matching the API's
-        # default threshold), every row passing
-        # ``similarity__gte=threshold`` is caught by % on the ranked
-        # column or by containment.
+        # Fuzzy search — two-stage with length strategies
+        # (geoplace-read-performance). Stage 1 narrows to candidates
+        # through index-servable lookups only:
+        #
+        # - prefix arm: ``LOWER(name) LIKE 'q%'`` — btree range scan
+        #   (migration 0070); the cheapest arm, powers the first
+        #   autocomplete keystrokes
+        # - containment arm: ``ILIKE '%q%'`` (the custom ``ilike``
+        #   lookup — Django's icontains renders UPPER() LIKE, which
+        #   the gin_trgm_ops GINs cannot serve)
+        # - typo arm: ``%`` similarity operator (len >= 5; lossy GIN
+        #   recheck is too broad on short common tokens)
+        #
+        # Stage 2 (similarity annotations + ranking) then runs over
+        # the candidates only — the pre-change shape computed
+        # TrigramSimilarity over EVERY active/public row, linear in
+        # total places (~750 ms at 440k rows).
         requested_language = query.lang
         translated_name = None
+        qlen = len(q)
 
-        # Prefilter arms: the % (trigram_similar) operator is served by
-        # the gin_trgm_ops GINs — on the base name directly, on the
-        # i18n translation through an annotated KeyTextTransform whose
-        # expression (i18n ->> 'name_xx') matches the expression
-        # indexes verbatim. Django's icontains renders UPPER() LIKE
-        # (not ILIKE) and the i18n__name_xx lookup path nests the key
-        # twice (#>> '{i18n,name_xx}' — always NULL) — both unusable
-        # here; containment runs only for short queries where its
-        # cheap non-indexed predicate beats the % lossy recheck set.
         if requested_language != default_language:
             queryset = queryset.annotate(
                 _candidate_name=Cast(
@@ -339,16 +351,25 @@ class GeoSearchController(ApiController):
                     output_field=CharField(),
                 )
             )
-            if len(q) >= 5:
-                candidate_q = Q(name__trigram_similar=q) | Q(
+
+        queryset = queryset.annotate(_name_lower=Lower("name"))
+        prefix_q = Q(_name_lower__startswith=q.lower())
+
+        if qlen <= 2:
+            # Autocomplete start — prefix on the base name only:
+            # trigram similarity is noise this short and the
+            # per-language arms have too few trigrams for the GINs.
+            candidate_q = prefix_q
+        elif qlen <= 4:
+            candidate_q = prefix_q | Q(name__ilike=f"%{q}%")
+            if requested_language != default_language:
+                candidate_q |= Q(_candidate_name__ilike=f"%{q}%")
+        else:
+            candidate_q = Q(name__ilike=f"%{q}%") | Q(name__trigram_similar=q)
+            if requested_language != default_language:
+                candidate_q |= Q(_candidate_name__ilike=f"%{q}%") | Q(
                     _candidate_name__trigram_similar=q
                 )
-            else:
-                candidate_q = Q(name__icontains=q) | Q(_candidate_name__icontains=q)
-        elif len(q) >= 5:
-            candidate_q = Q(name__trigram_similar=q)
-        else:
-            candidate_q = Q(name__icontains=q)
         queryset = queryset.filter(candidate_q)
 
         if requested_language != default_language:
@@ -406,10 +427,47 @@ class GeoSearchController(ApiController):
             default=Coalesce(F("importance"), Value(0)) / Value(100.0),
             output_field=FloatField(),
         )
-        rank_score = ExpressionWrapper(
-            Value(0.8) * similarity_expr + Value(0.2) * normalized_importance,
-            output_field=FloatField(),
-        )
+
+        # Optional proximity bias (geoplace-read-performance): blend
+        # a distance decay (1 → 0 over 100 km) into the rank — closer
+        # places win ties without hiding distant matches entirely.
+        # Computed on the prefetched candidate set only, never a scan.
+        proximity_expr: Any | None = None
+        if query.lat is not None and query.lon is not None:
+            from django.contrib.gis.geos import Point
+
+            bias_point = Point(query.lon, query.lat, srid=4326)
+            queryset = queryset.annotate(_distance_m=Distance("location", bias_point))
+            proximity_expr = ExpressionWrapper(
+                Greatest(
+                    Value(0.0),
+                    Value(1.0) - F("_distance_m") / Value(100_000.0),
+                ),
+                output_field=FloatField(),
+            )
+        elif (query.lat is None) != (query.lon is None):
+            from http import HTTPStatus
+
+            raise APIError(
+                {
+                    "code": "invalid_parameter",
+                    "detail": "lat and lon must be passed together",
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        if proximity_expr is not None:
+            rank_score = ExpressionWrapper(
+                Value(0.6) * similarity_expr
+                + Value(0.15) * normalized_importance
+                + Value(0.25) * proximity_expr,
+                output_field=FloatField(),
+            )
+        else:
+            rank_score = ExpressionWrapper(
+                Value(0.8) * similarity_expr + Value(0.2) * normalized_importance,
+                output_field=FloatField(),
+            )
 
         queryset = queryset.annotate(
             similarity=similarity_expr,
@@ -417,7 +475,13 @@ class GeoSearchController(ApiController):
             prefix_match=prefix_match,
             fts_rank=fts_rank,
             token_match=token_match,
-        ).filter(similarity__gte=query.threshold)
+        )
+        if qlen >= 5:
+            # Short queries (autocomplete mode): trigram similarity
+            # against full place names is structurally low — the
+            # prefix-first ordering and rank carry relevance, and the
+            # threshold would starve the dropdown of results.
+            queryset = queryset.filter(similarity__gte=query.threshold)
 
         if query.deduplicate:
             grid_size = Value(0.00005)

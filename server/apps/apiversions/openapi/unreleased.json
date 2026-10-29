@@ -7639,6 +7639,46 @@
               "title": "Deduplicate",
               "type": "boolean"
             }
+          },
+          {
+            "description": "Optional proximity bias: prefer results near this latitude (pairs with lon; blends a distance decay into the ranking \u2014 closer places win ties without hiding distant matches)",
+            "in": "query",
+            "name": "lat",
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 90,
+                  "minimum": -90,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Optional proximity bias: prefer results near this latitude (pairs with lon; blends a distance decay into the ranking \u2014 closer places win ties without hiding distant matches)",
+              "title": "Lat"
+            }
+          },
+          {
+            "description": "Optional proximity bias longitude (pairs with lat)",
+            "in": "query",
+            "name": "lon",
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 180,
+                  "minimum": -180,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Optional proximity bias longitude (pairs with lat)",
+              "title": "Lon"
+            }
           }
         ],
         "responses": {

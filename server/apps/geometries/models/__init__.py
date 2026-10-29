@@ -1,3 +1,5 @@
+# registers the ilike lookup on CharField (search prefilter — read-performance)
+from .. import lookups as _lookups
 from ._admin_detail import AdminDetail
 from ._amenity_detail import AmenityDetail, MonthStatus, OperatingStatus
 from ._associations import (
