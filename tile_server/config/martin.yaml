@@ -167,8 +167,10 @@ postgres:
         # Categories (JSON array)
         categories: jsonb
 
-        # Detail type
-        detail_type: text
+        # Kind slug — replaces detail_type (geometries.0068 renamed the
+        # view column; a configured property missing from the view makes
+        # Martin abort startup: "Failed to merge config info for table …")
+        kind_slug: text
 
         # Extra data
         extra: jsonb
