@@ -740,19 +740,27 @@ TRANSPORT_SOURCE_ID = "transitland_stops"
 
 #: GTFS basic route type → ``transport`` category child — the tree the
 #: legend and the filter resolve from, and the rows whose ``color`` the
-#: seed bakes into the paint (see :func:`transport_style`). Paint
-#: priority is rarest-mode-first: a multi-mode interchange reads as its
-#: most infrastructural mode (rail > tram > metro > ferry > bus — the
-#: spiritual successor of the old BAV layer's train-before-bus rule).
-#: Types 5 (cable tram), 6 (aerial lift), 7 (funicular), 11 (trolleybus)
-#: and 12 (monorail) exist in GTFS but not in the Swiss feeds' basic
-#: mapping — they (and category-less stops) fall through to the neutral
-#: ``other`` color.
+#: seed bakes into the paint (see :func:`transport_style`). ALL TEN
+#: basic GTFS types are covered — exactly what Transitland's
+#: ``route_types_basic`` can carry (0 tram, 1 subway/metro, 2 rail,
+#: 3 bus, 4 ferry, 5 cable tram, 6 aerial lift, 7 funicular,
+#: 11 trolleybus, 12 monorail — extended codes like 700 arrive reduced
+#: to these). Paint priority is rarest/most infrastructural mode first:
+#: a multi-mode interchange reads as its most defining mode (rail >
+#: tram > metro > lifts > ferry > trolleybus > bus — the spiritual
+#: successor of the old BAV layer's train-before-bus rule). Category-less
+#: stops (``route_types_basic`` absent or empty) fall through to the
+#: neutral ``other`` color.
 TRANSPORT_MODES: tuple[tuple[str, int], ...] = (
     ("train_station", 2),
     ("tram_stop", 0),
     ("metro_station", 1),
+    ("monorail", 12),
+    ("funicular", 7),
+    ("gondola", 6),
+    ("cable_car", 5),
     ("ferry", 4),
+    ("trolleybus", 11),
     ("bus_stop", 3),
 )
 
@@ -764,7 +772,12 @@ TRANSPORT_FALLBACK_COLORS: dict[str, str] = {
     "train_station": "#C60018",  # SBB red (the old layer's "Train")
     "tram_stop": "#00838F",
     "metro_station": "#7B1FA2",
+    "monorail": "#455A64",
+    "funicular": "#795548",
+    "gondola": "#D81B60",  # aerial lift
+    "cable_car": "#FF8F00",  # cable tram
     "ferry": "#0079C7",  # the old layer's "Other" blue → ferry
+    "trolleybus": "#9E9D24",
     "bus_stop": "#2d327d",  # Post blue (the old layer's "Bus")
     "other": "#6D6D6C",
 }
@@ -775,20 +788,27 @@ def _route_type_present(basic_type: int) -> list[Any]:
     carries the given basic GTFS type.
 
     Transitland serializes the sorted distinct codes comma-space
-    separated (``"[2, 3]"``, ``"[3]"``) — a code is present iff the
-    string contains ``"[<code>"`` (first or only element) or
-    ``", <code>"`` (middle or last). The separator makes the needles
-    unambiguous for the single-digit basic codes the palette
-    distinguishes; no regex (MapLibre has none) and no ``any``/``all``
-    (not in the subset whitelist) — a two-branch ``case`` folds the OR.
+    separated (``"[2, 3]"``, ``"[3]"``, ``"[0, 2, 11]"``) — a code is
+    present iff the string contains one of the four EXACT positions:
+    ``"[<code>]"`` (only element), ``"[<code>, "`` (first of several),
+    ``", <code>, "`` (middle) or ``", <code>]"`` (last). The
+    position-delimited needles are unambiguous across ALL basic codes
+    — shorter ``"[<code>"``/``", <code>"`` prefixes would make metro (1)
+    false-match trolleybus (11) and monorail (12) strings.
+    No regex (MapLibre has none) and no ``any``/``all`` (not in the
+    subset whitelist) — a four-branch ``case`` folds the OR.
     Subset walker-safe operators only (``case``/``in``/``get``).
     """
     haystack = ["get", "route_types_basic"]
     return [
         "case",
-        ["in", f"[{basic_type}", haystack],
+        ["in", f"[{basic_type}]", haystack],
         True,
-        ["in", f", {basic_type}", haystack],
+        ["in", f"[{basic_type}, ", haystack],
+        True,
+        ["in", f", {basic_type}, ", haystack],
+        True,
+        ["in", f", {basic_type}]", haystack],
         True,
         False,
     ]

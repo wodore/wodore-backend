@@ -507,10 +507,33 @@ class TransportVectorContractTests(SimpleTestCase):
                     assert key not in source, key
             assert all("cluster" not in layer["id"] for layer in style["layers"])
 
+    def test_mode_table_covers_all_basic_gtfs_types(self) -> None:
+        """Review contract: the mapping supports EXACTLY what Transitland's
+        ``route_types_basic`` can carry — all ten basic GTFS types, no
+        more (nothing else exists in the data), no less."""
+        from server.apps.basemaps.seed_lib import (
+            TRANSPORT_FALLBACK_COLORS,
+            TRANSPORT_MODES,
+        )
+
+        assert {basic for _slug, basic in TRANSPORT_MODES} == {
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            11,
+            12,
+        }
+        assert all(slug in TRANSPORT_FALLBACK_COLORS for slug, _ in TRANSPORT_MODES)
+
     def test_category_paint_priority(self) -> None:
         """Colors follow the TRANSPORT_MODES order (rarest mode wins an
         interchange) and each condition tests route_types_basic presence
-        via the two unambiguous JSON-string needles."""
+        via the four exact position needles."""
         from server.apps.basemaps.seed_lib import (
             TRANSPORT_FALLBACK_COLORS,
             TRANSPORT_MODES,
@@ -527,13 +550,20 @@ class TransportVectorContractTests(SimpleTestCase):
             TRANSPORT_MODES, conditions, values, strict=True
         ):
             assert color == TRANSPORT_FALLBACK_COLORS[slug]
-            # presence needles: "[<code>" (first/only element) and
-            # ", <code>" (middle/last) against the JSON string property
+            # EXACT presence needles for the four JSON positions:
+            # "[N]" (only), "[N, " (first), ", N, " (middle), ", N]"
+            # (last) — the position delimiters keep metro (1) from
+            # matching trolleybus (11) / monorail (12) strings.
+            haystack = ["get", "route_types_basic"]
             assert condition == [
                 "case",
-                ["in", f"[{basic_type}", ["get", "route_types_basic"]],
+                ["in", f"[{basic_type}]", haystack],
                 True,
-                ["in", f", {basic_type}", ["get", "route_types_basic"]],
+                ["in", f"[{basic_type}, ", haystack],
+                True,
+                ["in", f", {basic_type}, ", haystack],
+                True,
+                ["in", f", {basic_type}]", haystack],
                 True,
                 False,
             ]
