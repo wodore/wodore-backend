@@ -27,16 +27,6 @@ class ReviewStatus(str, Enum):
     DONE = "done"
 
 
-class DetailType(str, Enum):
-    """Detail model types."""
-
-    AMENITY = "amenity"
-    TRANSPORT = "transport"
-    ADMIN = "admin"
-    NATURAL = "natural"
-    NONE = "none"
-
-
 class UpdatePolicyEnum(str, Enum):
     """How a source may update records."""
 
@@ -156,7 +146,8 @@ class GeoPlaceBaseInput(BaseModel):
     place_type_identifiers: list[
         str | PlaceTypeInput
     ]  # Category identifiers (e.g., ["shop.bakery"]) or rich entries with association attributes
-    detail_type: DetailType = DetailType.NONE
+    # kind_slug is derived on write from the category tree
+    # (geoplace-category-tree) — no input field.
 
     # Optional fields
     description: str | TranslationSchema | None = None
@@ -228,32 +219,9 @@ class GeoPlaceBaseInput(BaseModel):
 
 
 # Convenience aliases for specific types
-class GeoPlaceAmenityInput(GeoPlaceBaseInput):
-    """Input schema for amenity places.
-
-    This is just an alias with detail_type pre-set to AMENITY.
-    All amenity fields are in the base schema.
-    """
-
-    detail_type: DetailType = DetailType.AMENITY
-
-
-class GeoPlaceTransportInput(GeoPlaceBaseInput):
-    """Input schema for transport places.
-
-    Note: TransportDetail model not yet implemented.
-    """
-
-    detail_type: DetailType = DetailType.TRANSPORT
-
-
-class GeoPlaceAdminInput(GeoPlaceBaseInput):
-    """Input schema for admin areas."""
-
-    detail_type: DetailType = DetailType.ADMIN
-
-
-class GeoPlaceNaturalInput(GeoPlaceBaseInput):
-    """Input schema for natural features (peaks, passes, lakes, etc.)."""
-
-    detail_type: DetailType = DetailType.NATURAL
+# (kind_slug is derived on write from the category tree — the
+# per-type presets retired with detail_type)
+GeoPlaceAmenityInput = GeoPlaceBaseInput
+GeoPlaceTransportInput = GeoPlaceBaseInput
+GeoPlaceAdminInput = GeoPlaceBaseInput
+GeoPlaceNaturalInput = GeoPlaceBaseInput

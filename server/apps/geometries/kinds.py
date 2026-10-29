@@ -1,18 +1,22 @@
-"""Place kinds — the category-taxonomy contract registry.
+"""Place kinds — seed registry + DB-contract runtime.
 
-OpenSpec ``geoplace-kinds-operations-graph``: a place's kind is its
-anchoring category (the parent of the first category by
-``(order, slug)`` — the rule ``GeoPlace.__str__`` already uses); the
-root parents double as overlay groups. This registry (code, not DB —
-structure belongs in git, data schemas in ``CategoryExtraSchema``)
-maps each root parent to its contract: the stored-but-derived
-``detail_type`` (consumed by tile/clustering SQL) and the classifier
-subtrees allowed on associations under that parent.
+OpenSpec ``geoplace-category-tree``: a place's kind is its anchoring
+category (first category by ``(order, slug)``); the **contract group**
+is that category's parent (``accommodation`` for a hut); the
+super-roots (``amenity`` / ``admin`` / ``natural``) sit above the
+contract groups under the ``map`` namespace root. The stored
+``GeoPlace.kind_slug`` is the super-root's identifier — ``map.amenity``,
+``map.admin``, ``map.natural`` — derived on write (consumed by
+tile/clustering SQL).
 
-Registry values are asserted ⊆ the ``GeoPlace.detail_type`` check
-constraint (amenity/transport/admin/natural/none). Vocabulary roots
-(mode, role, relations, external_link, link_type) are excluded from
-kind resolution — they classify associations, never places.
+The contract itself lives in the DB (``CategoryKindContract`` on the
+contract group — admin-editable, ``CategoryExtraSchema`` parity): the
+classifier subtrees allowed on associations and whether
+operations/seasonality rows may exist. This module is the **seed
+source** for those rows (migrations copy it verbatim) plus the
+depth-guarded runtime derivation helpers. Vocabulary roots (mode,
+role, relations, external_link, link_type) are excluded from kind
+resolution — they classify associations, never places.
 """
 
 from __future__ import annotations
@@ -20,42 +24,66 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+#: Namespace root separating map categories from vocabulary trees.
+MAP_ROOT_SLUG: str = "map"
+
+#: Super-roots directly under ``map`` (kind_slug = f"map.{slug}").
+SUPER_ROOT_SLUGS: frozenset[str] = frozenset({"amenity", "admin", "natural"})
+
+#: Stored ``GeoPlace.kind_slug`` values (super-root identifiers).
+KIND_AMENITY: str = "map.amenity"
+KIND_ADMIN: str = "map.admin"
+KIND_NATURAL: str = "map.natural"
+KIND_NONE: str = "none"
+
+_VALID_KIND_SLUGS: frozenset[str] = frozenset(
+    {KIND_AMENITY, KIND_ADMIN, KIND_NATURAL, KIND_NONE}
+)
+
 
 @dataclass(frozen=True)
 class PlaceKind:
-    """Contract for one category-root group of places."""
+    """Seed contract for one contract-group category (kinds registry)."""
 
-    #: Stored ``GeoPlace.detail_type`` (derived on write)
-    detail_type: str
-    #: Classifier subtrees (root parent slugs) allowed on associations
-    #: under this kind — e.g. ``("mode",)`` for accommodation only.
+    #: Super-root slug the group lives under (kind group parent).
+    super_root: str
+    #: Classifier subtree root slugs allowed on associations under
+    #: this group — e.g. ``("mode",)`` for accommodation only.
     classifiers: tuple[str, ...] = field(default_factory=tuple)
+    #: Places under this group may carry GeoPlaceOperation rows.
+    has_operations: bool = False
+    #: Places under this group may carry GeoPlaceSeasonality rows.
+    has_seasonality: bool = False
+
+    @property
+    def kind_slug(self) -> str:
+        """Stored kind_slug — the super-root's identifier."""
+        return f"{MAP_ROOT_SLUG}.{self.super_root}"
 
 
-_AMENITY = PlaceKind("amenity")
-_AMENITY_WITH_MODE = PlaceKind("amenity", classifiers=("mode",))
-
-#: Root-parent slug → contract. Pinned against the live category tree
-#: (openspec geoplace-kinds: gaps intentionally fall to the default).
+#: Contract-group slug → seed contract. Pinned against the live
+#: category tree (gaps intentionally fall to the empty contract).
 PLACE_KINDS: dict[str, PlaceKind] = {
-    # accommodation carries operating modes; everything amenity-ish else
-    # has no classifier contracts yet
-    "accommodation": _AMENITY_WITH_MODE,
-    "tourism": _AMENITY,
-    "sport": _AMENITY,
-    "shopping": _AMENITY,
-    "food_supply": _AMENITY,
-    "restaurant": _AMENITY,
-    "groceries": _AMENITY,
-    "services": _AMENITY,
-    "finance": _AMENITY,
-    "health_and_emergency": _AMENITY,
-    "outdoor_services": _AMENITY,
-    "utilities": _AMENITY,
-    "automotive": _AMENITY,
-    "meteo": _AMENITY,
-    "availability": _AMENITY,
-    "transport": PlaceKind("transport"),
+    # accommodation carries operating modes, operations + seasonality
+    "accommodation": PlaceKind(
+        "amenity", classifiers=("mode",), has_operations=True, has_seasonality=True
+    ),
+    # amenity-ish groups without classifier contracts yet
+    "tourism": PlaceKind("amenity"),
+    "sport": PlaceKind("amenity"),
+    "shopping": PlaceKind("amenity"),
+    "food_supply": PlaceKind("amenity"),
+    "restaurant": PlaceKind("amenity"),
+    "groceries": PlaceKind("amenity"),
+    "services": PlaceKind("amenity"),
+    "finance": PlaceKind("amenity"),
+    "health_and_emergency": PlaceKind("amenity"),
+    "outdoor_services": PlaceKind("amenity"),
+    "utilities": PlaceKind("amenity"),
+    "automotive": PlaceKind("amenity"),
+    "meteo": PlaceKind("amenity"),
+    "availability": PlaceKind("amenity"),
+    "transport": PlaceKind("amenity"),
     "administrative": PlaceKind("admin"),
     "populated_place": PlaceKind("admin"),
     "terrain": PlaceKind("natural"),
@@ -63,49 +91,18 @@ PLACE_KINDS: dict[str, PlaceKind] = {
 }
 
 #: Vocabulary roots never anchor a kind (association classifiers, uri
-#: kinds, link trees) — a place mis-anchored to one falls to DEFAULT.
+#: kinds, link trees).
 KIND_VOCABULARY_ROOTS: frozenset[str] = frozenset(
     {"mode", "role", "relations", "external_link", "link_type"}
 )
 
-#: Fallback for unmapped and vocabulary roots.
-DEFAULT_KIND: PlaceKind = _AMENITY
-
-#: Detail types the GeoPlace check constraint permits — the registry
-#: asserts its values against this (test-pinned).
-#: GeoPlace.detail_type check-constraint values (GeoPlace._ReviewStatusChoices
-# -style TextChoices; literals avoid a circular models import).
-_DETAIL_TYPES: frozenset[str] = frozenset(
-    {"amenity", "transport", "admin", "natural", "none"}
-)
-
-
-def kind_for_root(root_slug: str | None) -> PlaceKind:
-    """Contract for a category root parent slug."""
-    if root_slug is None or root_slug in KIND_VOCABULARY_ROOTS:
-        return DEFAULT_KIND
-    return PLACE_KINDS.get(root_slug, DEFAULT_KIND)
-
-
-def kind_for(category: Any) -> PlaceKind:
-    """Contract for a place's anchoring category.
-
-    Resolves through the category's parent (the root group); a root
-    category itself anchors directly.
-    """
-    if category is None:
-        return DEFAULT_KIND
-    parent = getattr(category, "parent", None)
-    root_slug = parent.slug if parent is not None else getattr(category, "slug", None)
-    return kind_for_root(root_slug)
-
 
 def kind_root_category(categories: Any) -> Any:
-    """The root category anchoring a place's kind.
+    """The contract-group category anchoring a place's kind.
 
     The parent of the first category by ``(order, slug)`` —
-    deterministic, the rule ``GeoPlace.__str__`` uses. Root categories
-    anchor directly.
+    deterministic, the rule ``GeoPlace.__str__`` uses. A root category
+    itself anchors directly (vocabulary edge — no contract group).
     """
     ordered = sorted(
         (c for c in categories if c is not None),
@@ -117,23 +114,64 @@ def kind_root_category(categories: Any) -> Any:
     return first.parent if first.parent is not None else first
 
 
-def place_detail_type(categories: Any) -> str:
-    """Derived ``detail_type`` for a place's categories."""
-    root = kind_root_category(categories)
-    if root is None:
-        return "none"
-    return kind_for(root).detail_type
+def kind_contract_for(category: Any) -> Any:
+    """The DB contract for a place's anchoring category.
+
+    Resolves the contract group (the category's parent — the root
+    group in the map tree) and returns its ``CategoryKindContract``,
+    or ``None`` when the category has no parent or the group carries
+    no contract row (empty contract: no classifiers, no operations,
+    no seasonality). Admin edits apply immediately — no caching.
+    """
+    if category is None:
+        return None
+    parent = getattr(category, "parent", None)
+    if parent is None:
+        return None
+    from .models._kind_contract import CategoryKindContract
+
+    return (
+        CategoryKindContract.objects.filter(category=parent)
+        .select_related("category")
+        .first()
+    )
+
+
+def place_kind_slug(categories: Any) -> str:
+    """Derived ``kind_slug`` for a place's categories (map.<super>).
+
+    Depth-guarded walk: only a kind-level category (parent = contract
+    group, grandparent = super-root, great-grandparent = ``map``)
+    anchors a kind. Shallower anchors (contract groups, super-roots,
+    vocabulary) are skipped — never "map" or a partial path.
+    """
+    ordered = sorted(
+        (c for c in categories if c is not None),
+        key=lambda c: (c.order, c.slug),
+    )
+    for cat in ordered:
+        group = getattr(cat, "parent", None)
+        super_root = getattr(group, "parent", None) if group is not None else None
+        namespace = (
+            getattr(super_root, "parent", None) if super_root is not None else None
+        )
+        if (
+            namespace is not None
+            and namespace.slug == MAP_ROOT_SLUG
+            and super_root is not None
+            and super_root.slug in SUPER_ROOT_SLUGS
+        ):
+            return f"{namespace.slug}.{super_root.slug}"
+    return KIND_NONE
 
 
 def assert_registry_valid() -> None:
-    """Registry values ⊆ the detail_type check-constraint set
-    (asserted at import by tests: test asserts PLACE_KINDS values ⊆
-    the GeoPlace detail_type constraint)."""
+    """Registry super-roots ⊆ the seeded super-root set (test-pinned)."""
     invalid = {
-        root: kind.detail_type
+        root: kind.super_root
         for root, kind in PLACE_KINDS.items()
-        if kind.detail_type not in _DETAIL_TYPES
+        if kind.super_root not in SUPER_ROOT_SLUGS
     }
     if invalid:
-        msg = f"PLACE_KINDS detail_type values outside the DB constraint: {invalid}"
+        msg = f"PLACE_KINDS super_roots outside the seeded set: {invalid}"
         raise ValueError(msg)

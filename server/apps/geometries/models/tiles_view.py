@@ -217,8 +217,8 @@ class GeoPlacesForTilesView(PostgresViewModel):
     # Each category has: slug, identifier, order, color, parent_slug, extra
     categories = models.JSONField(default=list)
 
-    # Detail type
-    detail_type = models.CharField(max_length=50)
+    # Kind slug (super-root identifier, e.g. map.amenity)
+    kind_slug = models.CharField(max_length=100)
 
     # Extra data (category-specific overflow)
     extra = models.JSONField(default=dict)
@@ -313,7 +313,7 @@ class GeoPlacesForTilesView(PostgresViewModel):
               gp.elevation,
               gp.country_code,
               gp.importance,
-              gp.detail_type,
+              gp.kind_slug,
               gp.extra,
 
               -- Default language name with fallbacks (based on MODELTRANS_FALLBACK)

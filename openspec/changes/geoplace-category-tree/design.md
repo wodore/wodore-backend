@@ -41,12 +41,15 @@ categories from vocabulary trees. The contract belongs in the DB
    `service.express` classifier to transport, enable operations for
    tourism, disable seasonality for shopping — without a deploy.
 
-3. **`GeoPlace.detail_type` → `GeoPlace.kind_slug`** — the super-root
-   slug replaces the 5-value enum. Same derive-but-store pattern:
-   derived on write from the first category's ancestry (category →
-   parent → parent = super-root), stored as a CharField for tiles SQL.
-   No check constraint on values (the tree validates); indexed for
-   tile filtering.
+3. **`GeoPlace.detail_type` → `GeoPlace.kind_slug`** — the
+   super-root's identifier (`map.amenity` / `map.admin` /
+   `map.natural` — the `map.` prefix namespaces the value, PO-
+   confirmed) replaces the 5-value enum. Same derive-but-store
+   pattern: derived on write from the first category's ancestry
+   (kind → contract group → super-root → map), stored as a CharField
+   for tiles SQL. No check constraint on values (the tree validates);
+   indexed for tile filtering. Places with no valid kind anchor keep
+   `none`.
 
 4. **Namespace root (`map`)** — separates map categories from
    vocabulary trees (`mode.*`, `role.*`, `relations.*`, `link_type.*`,

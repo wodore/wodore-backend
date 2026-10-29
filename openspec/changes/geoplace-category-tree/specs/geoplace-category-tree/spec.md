@@ -55,17 +55,25 @@ when the place's contract group does not enable them
 ### Requirement: kind_slug replaces detail_type
 
 `GeoPlace.detail_type` SHALL be replaced by `GeoPlace.kind_slug`
-(CharField, indexed) — the super-root slug derived on write from the
-place's first category's ancestry (category → parent → parent).
-Stored for tiles SQL; no enum check constraint (the tree validates).
+(CharField, indexed) — the super-root's identifier (`map.amenity` /
+`map.admin` / `map.natural`; `none` for places with no valid kind
+anchor) derived on write from the place's first category's ancestry
+(kind → contract group → super-root → map, depth-guarded). Stored
+for tiles SQL; no enum check constraint (the tree validates).
 
 #### Scenario: Hut place derives amenity
 - **WHEN** a place is categorized as `accommodation.hut`
-- **THEN** `kind_slug = "amenity"` (hut → accommodation → amenity)
+- **THEN** `kind_slug = "map.amenity"` (hut → accommodation → amenity)
 
 #### Scenario: Municipality derives admin
 - **WHEN** a place is categorized as `administrative.municipality`
-- **THEN** `kind_slug = "admin"`
+- **THEN** `kind_slug = "map.admin"`
+
+#### Scenario: Vocabulary or off-depth anchor stays none
+- **WHEN** a place's categories include only vocabulary children
+  (mode.standard) or a contract group (accommodation itself)
+- **THEN** `kind_slug = "none"` — the depth guard skips anchors that
+  would leak "map" or a partial path
 
 ## MODIFIED Requirements
 
