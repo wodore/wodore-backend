@@ -63,7 +63,14 @@ def resolve_passthrough_headers(config: dict[str, Any]) -> list[str]:
     sources = (config.get("passthrough") or {}).get("sources") or {}
     if not isinstance(sources, dict):
         return resolved_names
-    snapshot = registry_rows()
+    try:
+        snapshot = registry_rows()
+    except Exception:
+        # Degraded registry (SimpleTestCase tests, early boot, cache/DB
+        # failure — same rationale as registry.resolve_setting): no
+        # substitution, tokens stay verbatim for Martin's own env
+        # expansion. Never let a registry hiccup break config generation.
+        return resolved_names
     for source in sources.values():
         if not isinstance(source, dict):
             continue  # shorthand URL (string/list) — no headers
