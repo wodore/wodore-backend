@@ -135,6 +135,12 @@ ORGS = [
         "attribution": "Bundesamt für Verkehr (BAV)",
         "url": "https://www.bav.admin.ch",
     },
+    {
+        "slug": "transitland",
+        "name": "Transitland",
+        "attribution": "Transitland · © OpenStreetMap contributors",
+        "url": "https://www.transit.land",
+    },
 ]
 
 # CH + border strips (frontend ch-swisstopo-full bbox parity)
@@ -164,14 +170,21 @@ LEGENDS: dict[str, dict[str, Any]] = {
         "sections": [
             {
                 "title": "Transport stops",
-                "type": "point",
-                "items": [
-                    {"label": "Train", "color": "#C60018"},
-                    {"label": "Bus", "color": "#2d327d"},
-                    {"label": "Other", "color": "#0079C7"},
-                ],
+                "description": "Stops by transit mode (Transitland).",
+                "type": "symbol_mono",
+                "category": "transport",
             }
-        ]
+        ],
+        "links": [
+            {
+                "name": "Transitland",
+                "url": "https://www.transit.land",
+            },
+            {
+                "name": "GTFS route types",
+                "url": "https://gtfs.org/documentation/schedule/reference/#routetype",
+            },
+        ],
     },
     "ch.swisstopo.swisstlm3d-wanderwege": {
         "sections": [
@@ -421,23 +434,55 @@ LAYERS: list[dict[str, Any]] = [
         "slug": "transport-stops",
         "role": MapLayer.Role.overlay,
         "name": "Public transport stops",
-        "description": "Train, bus and other stops (BAV list).",
+        "description": (
+            "Train, bus, tram, metro and ferry stops (Transitland vector "
+            "tiles, served as MLT through Martin)."
+        ),
         "icon": "transport",
         "slot": "ways",
         "order": 2,
+        "min_zoom": 5,
         "style": lib.TRANSPORT_STYLE,
         "variants": [
             # Subset twin for the Leaflet fallback (no-WebGL map): the
-            # full circle layer is subset-expressible once promoteId and
-            # the default layout.visibility drop (see
-            # seed_lib.TRANSPORT_STYLE_SUBSET); same tier, subset profile.
+            # same vector document minus promoteId and the default
+            # layout.visibility — no clustering anymore (vector tiles
+            # sample server-side below z12; the old client-side
+            # clustering existed because the BAV geojson was one blob).
             {
                 "profile": MapLayer.Profile.subset,
                 "version": SUBSET_REVISION,
                 "style": lib.TRANSPORT_STYLE_SUBSET,
             }
         ],
-        "attributions": ["bav", "openstreetmap"],
+        "attributions": ["transitland", "openstreetmap"],
+        "categories": [
+            {"slug": "transport", "use": "filter"},
+            {"slug": "transport", "use": "legend"},
+        ],
+        "config": {
+            "filters": [
+                {
+                    "id": "transportTypes",
+                    "label": "Transit modes",
+                    "type": "multi-select",
+                    "category": "transport",
+                    "defaultValue": [],
+                    "mapLayers": ["transport-stops"],
+                    # route_types_basic is Transitland's JSON-string array
+                    # ("[2, 3]" — basic GTFS types); option values are the
+                    # category identifiers. PRESENCE semantics: a stop
+                    # matches a mode when the array contains it — the
+                    # frontend's generic filter applies exact membership
+                    # on the whole property value, so this needs its
+                    # presence mode (`filterExpression: in`, currently
+                    # ignored by applyFilter) — frontend follow-up, the
+                    # catalog data is final.
+                    "mapProperty": "route_types_basic",
+                    "filterExpression": "in",
+                }
+            ]
+        },
     },
     {
         "slug": "ch.swisstopo.swisstlm3d-wanderwege",
@@ -824,6 +869,14 @@ ENV_REGISTRY_ENTRIES: list[dict[str, str]] = [
         "name": "MAPY_COM_API_KEY",
         "description": "Mapy.com outdoor reference basemap (mapy-outdoor layer)",
     },
+    {
+        "name": "TRANSITLAND_API_KEY",
+        "description": (
+            "Transitland v2 vector tiles API key — the transport-stops "
+            "overlay's Martin passthrough upstream auth (server-side "
+            "apikey header; never appears in a client-visible URL)"
+        ),
+    },
 ]
 
 
@@ -843,6 +896,11 @@ class Command(BaseCommand):
         self._seed_env_registry()
 
         self._retire_merged_layers()
+
+        # transport-stops paint follows the live `transport` category
+        # tree (the legend/filter resolve from the same rows) — rebuild
+        # the two style documents with the DB colors before seeding.
+        self._apply_transport_palette()
 
         for definition in LAYERS:
             variants = [definition] + definition.get("variants", [])
@@ -964,6 +1022,32 @@ class Command(BaseCommand):
             },
         )
         return coverage
+
+    def _apply_transport_palette(self) -> None:
+        """Rebuild the transport-stops styles from the live category rows.
+
+        The legend is category-driven and reads ``transport`` children
+        colors at serve time — baking the same colors into the paint at
+        seed time keeps map and legend from drifting apart. Missing
+        rows (or the model-default green) keep the seed_lib fallback
+        palette.
+        """
+        from server.apps.categories.models import Category
+
+        colors: dict[str, str] = {}
+        for slug, _basic in lib.TRANSPORT_MODES:
+            category = Category.objects.filter(
+                slug=slug, parent__slug="transport", is_active=True
+            ).first()
+            if category and category.color != "#4B8E43":
+                colors[slug] = category.color
+        for definition in LAYERS:
+            if definition.get("slug") != "transport-stops":
+                continue
+            definition["style"] = lib.transport_style(colors)
+            for variant in definition.get("variants", []):
+                if "style" in variant:
+                    variant["style"] = lib.transport_style_subset(colors)
 
     def _seed_layer(
         self,

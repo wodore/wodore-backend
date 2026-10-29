@@ -4,8 +4,13 @@
 #   scripts/lane-dev.sh fg      # guarded foreground supervisor: runserver
 #                               # + qcluster (see below) — used by the paseo
 #                               # 'runserver' service and by `workz run`
-#   scripts/lane-dev.sh start   # detached via workz run (logs: lane-dev.sh logs)
-#   scripts/lane-dev.sh stop    # workz run --stop (SIGTERM, then --force)
+#   scripts/lane-dev.sh start   # detached: `workz run` first; when workz
+#                               # can't resolve the lane (branch renamed
+#                               # after sync, paseo-created worktree) fall
+#                               # back to a detached local supervisor,
+#                               # logging to .lane-dev.log
+#   scripts/lane-dev.sh stop    # cwd-scoped TERM → KILL of this lane's
+#                               # runserver + qcluster (every mode)
 #   scripts/lane-dev.sh status  # port listening? ours? URL? qcluster up?
 #   scripts/lane-dev.sh attach  # print recent runserver output: the paseo
 #                               # service terminal via `paseo terminal capture`,
@@ -18,6 +23,16 @@
 # invisible to workz run/reap/preview/done, so paseo.json's `runserver`
 # service
 # wraps `fg` instead of using its own port.
+#
+# Why `start` has a local fallback: workz's run path resolves the lane
+# through its port registry by BRANCH NAME, falling back to the
+# <repo>--<branch> naming convention. Both break after `git branch -m`
+# (routine in paseo lanes), because the registry's branch field is only
+# written at allocation time — `workz sync` rewrites DB_NAME from the
+# current branch but never refreshes the registry record. `stop` is
+# deliberately cwd-scoped instead: workz's stop resolves via cwd and works
+# everywhere, but it only manages what it started; stop_lane_servers covers
+# paseo services, detached `fg` supervisors and workz runs alike.
 #
 # `fg` guards double starts: a listener already on the port that belongs to
 # THIS worktree is a friendly no-op (exit 0 — supervised services may
@@ -55,6 +70,9 @@ if [ -z "$PORT" ]; then
     exit 1
 fi
 WORKTREE_ROOT="$(pwd -P)"
+# Log of the detached local supervisor (start fallback). Truncated per
+# start — same "last run only" semantics as `workz run --logs`.
+LOCAL_LOG=".lane-dev.log"
 
 listener_pids() { lsof -t -iTCP:"$PORT" -sTCP:LISTEN 2>/dev/null || true; }
 
@@ -185,10 +203,57 @@ fg)
     wait "$RPID"
     ;;
 start)
-    exec workz run
+    # Primary: workz run — integrates with workz preview/logs/reap. Its
+    # resolution is branch-registry-based (see header), so a renamed branch
+    # makes it fail with "worktree not found at <convention path>". Fall
+    # back to the same guarded `fg` under setsid instead of failing.
+    if workz run; then
+        exit 0
+    fi
+    echo "lane-dev: workz can't resolve this lane — starting detached local supervisor" >&2
+    PIDS="$(listener_pids)"
+    if [ -n "$PIDS" ]; then
+        if ours_listening; then
+            echo "lane-dev: already running at http://localhost:$PORT — nothing to do"
+            exit 0
+        fi
+        echo "lane-dev: port :$PORT held by a foreign process (pid $(echo "$PIDS" | tr '\n' ' '))— refusing to start" >&2
+        exit 1
+    fi
+    {
+        # shellcheck disable=SC2016  # expansions must run in the detached shell, not at detach time
+        setsid bash -c '
+            echo "=== lane-dev: detached local start $(date -Is) (branch $(git branch --show-current 2>/dev/null || echo ?)) ==="
+            exec scripts/lane-dev.sh fg
+        ' >"$LOCAL_LOG" 2>&1 </dev/null
+    } &
+    disown
+    # Bounded readiness probe: runserver binding can take ~10 s (infisical
+    # + settings); qcluster usually registers first. Either one means the
+    # supervisor is alive; a silent death shows up in the log tail.
+    for _ in $(seq 1 15); do
+        if [ -n "$(listener_pids)" ] || [ -n "$(lane_server_pids)" ]; then
+            echo "lane-dev: detached supervisor up — http://localhost:$PORT (log: $LOCAL_LOG)"
+            exit 0
+        fi
+        sleep 1
+    done
+    echo "lane-dev: detached start produced no server — last log lines:" >&2
+    tail -n 10 "$LOCAL_LOG" >&2 || true
+    exit 1
     ;;
 stop)
-    exec workz run --stop
+    # cwd-scoped process-tree stop — NOT `workz run --stop`: workz only
+    # manages runs it started itself, while this covers paseo `runserver`
+    # services, detached `fg` supervisors and workz runs alike (all keep
+    # cwd == this worktree, which is how lane_server_pids finds them).
+    PIDS="$(lane_server_pids)"
+    if [ -n "$PIDS" ]; then
+        echo "lane-dev: stopping (pid $(echo "$PIDS" | tr '\n' ' '))"
+        stop_lane_servers
+    else
+        echo "lane-dev: nothing running for this lane"
+    fi
     ;;
 attach)
     LINES="${2:-200}"
@@ -201,6 +266,9 @@ attach)
     if [ -n "$TID" ]; then
         echo "lane-dev: runserver output — paseo terminal $TID, last $LINES lines (live view: open the runserver terminal in the Paseo app)"
         paseo terminal capture "$TID" --scrollback | tail -n "$LINES"
+    elif [ -f "$LOCAL_LOG" ]; then
+        echo "lane-dev: runserver output — local supervisor log ($LOCAL_LOG), last $LINES lines"
+        tail -n "$LINES" "$LOCAL_LOG"
     elif ours_listening; then
         echo "lane-dev: runserver is up on :$PORT but running unsupervised (bare terminal?) — no readable output" >&2
         exit 1
@@ -234,7 +302,13 @@ kill)
     fi
     ;;
 logs)
-    exec workz run --logs
+    LINES="${2:-40}"
+    if [ -f "$LOCAL_LOG" ]; then
+        echo "lane-dev: local supervisor log ($LOCAL_LOG), last $LINES lines:"
+        tail -n "$LINES" "$LOCAL_LOG"
+    else
+        exec workz run --logs
+    fi
     ;;
 status)
     PIDS="$(listener_pids)"

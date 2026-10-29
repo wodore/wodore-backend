@@ -151,13 +151,25 @@ Services are defined in `docker-compose.yml`:
     suffix and asks Martin to convert at serve time (implicit on
     Martin ≥ 1.16; `convert_to_mlt` in martin.yaml covers older). Only the
     literal `.mlt` suffix selects MLT — extension-less/`.pbf`/`.mvt` stay MVT.
-    Opt-in is style-side (`encoding: mlt` + `.mlt` tiles template; the huts
-    and availability overlays opted in). nginx (tile-router/edge) is required for `.mlt` URLs — it
+    Opt-in is style-side (`encoding: mlt` + `.mlt` tiles template; the huts,
+    availability and transport overlays opted in). Source ids must be
+    underscore-only — the tile-router's `.mlt` location and the CDN-Tag map
+    match `[A-Za-z0-9_,]` first path segments (hyphens break MLT serving
+    and purge tagging). nginx (tile-router/edge) is required for `.mlt` URLs — it
     already is the single tile origin in dev and prod; lane Martin
     (`scripts/lane-martin.sh`) has no router in front, so `.mlt` works there
     only via extension-less URL + explicit `Accept: application/vnd.maplibre-tile`
     header. Adding a source = style opt-in (+ martin.yaml entry for
     Martin < 1.16) — no router change.
+  - **Transitland passthrough** (`transitland_stops` in martin.yaml): Martin
+    proxies the Transitland v2 stops tileset (transport-stops overlay) with a
+    server-side `apikey` header, serve-time MVT→MLT conversion and a 4-day
+    stale-while-revalidate `cache_control`. The `TRANSITLAND_API_KEY` lives in
+    the env registry (envvars EnvVar row — value in the DB, never committed);
+    `martin_sync` bakes it into the generated config
+    (`resolve_passthrough_headers`), compose/lane-martin pass the env var as
+    fallback. The key never appears in a client-visible URL. Full story:
+    `_work/261029_transitland_transport_layer.md`.
 - **Tile-router** (`tile_server/tile-router.conf.template`, nginx) - Port 8075
   - Single-origin tile routing: `/raster/*` → the mapproxy facades
     (rewritten to mapproxy's internal `/mapproxy/` prefix), `*.mlt` →
@@ -377,12 +389,16 @@ cwd-scoped discovery (`pgrep -f '.?venv/bin/python3? manage.py
 django-q2 hangs on SIGTERM in this stack, so every stop is TERM → ~5 s →
 SIGKILL. Make qcluster optional with `QCLUSTER=0` in `.env.local` (outside
 the workz managed block, like `FRONTEND_DOMAIN`) or one-off
-`QCLUSTER=0 scripts/lane-dev.sh fg`. `start`/`stop` wrap detached
-`workz run`/`workz run --stop` (workz-provisioned lanes only — `workz run`
-cannot resolve paseo-created worktrees); `attach` prints recent runserver
-output (the paseo service terminal via `paseo terminal capture`, else the
-last detached workz run log — live view: open the terminal in the Paseo
-app); `kill` hard-stops runserver + qcluster (note: paseo's lifecycle badge
+`QCLUSTER=0 scripts/lane-dev.sh fg`. `start` prefers detached `workz run`
+and falls back to a detached local supervisor (logs to `.lane-dev.log`)
+when workz can't resolve the lane — paseo-created worktrees, and branches
+renamed after `workz sync` (workz keys its run registry on branch name and
+never refreshes it); `stop` is cwd-scoped (TERM → KILL of runserver +
+qcluster) and works in every mode; `attach` prints recent runserver output
+(the paseo service terminal via `paseo terminal capture`, else
+`.lane-dev.log` when the local supervisor ran, else the last detached workz
+run log — live view: open the terminal in the Paseo app); `kill` hard-stops
+runserver + qcluster (note: paseo's lifecycle badge
 may keep saying "running" until it reaps the pane — use `paseo script stop`
 when the supervisor is healthy). paseo.json exposes all of this as
 `runserver` (service), `runserver:attach` and `runserver:kill`.
