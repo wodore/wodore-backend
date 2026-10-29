@@ -15,7 +15,8 @@ from ._category_extra_schema import (
     resolve_extra_schema,
     validate_place_extra,
 )
-from ._geoplace import DetailType, GeoPlace
+from ._geoplace import GeoPlace
+from ._kind_contract import CategoryKindContract
 from ._operation import GeoPlaceOperation
 from ._relation import GeoPlaceRelation
 from ._seasonality import (
@@ -29,10 +30,10 @@ __all__ = [
     "AdminDetail",
     "AmenityDetail",
     "DeletePolicy",
-    "DetailType",
+    "CategoryKindContract",
+    "CategoryExtraSchema",
     "GeoPlace",
     "GeoPlaceCategory",
-    "CategoryExtraSchema",
     "GeoPlaceOperation",
     "GeoPlaceRelation",
     "GeoPlaceSeasonality",

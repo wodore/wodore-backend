@@ -16,6 +16,7 @@ from django.contrib.gis.db.models.functions import Distance
 from django.core.management.base import BaseCommand, CommandParser
 from django.db import transaction
 
+from server.apps.geometries.kinds import KIND_ADMIN, KIND_AMENITY, KIND_NATURAL
 from server.apps.geometries.models import GeoPlace, GeoPlaceRelation
 from server.apps.geometries.models._relation import GENERATED_CONFIDENCE
 
@@ -80,12 +81,16 @@ class Command(BaseCommand):
 
         municipalities = GeoPlace.objects.filter(
             shape__isnull=False,
-            detail_type="admin",
+            kind_slug=KIND_ADMIN,
             is_active=True,
         )
         places = GeoPlace.objects.filter(
             is_active=True,
-            detail_type__in=["amenity", "natural"],
+            kind_slug__in=[KIND_AMENITY, KIND_NATURAL],
+            # NOTE (geoplace-category-tree): transport stops are now
+            # map.amenity (under the amenity super-root) and thus
+            # included in part_of — a bus stop IS part of a municipality
+            # (pre-tree detail_type="transport" excluded them).
         )
         if limit:
             places = places[:limit]
@@ -112,7 +117,7 @@ class Command(BaseCommand):
         ).distinct()
         nearby = GeoPlace.objects.filter(
             is_active=True,
-            detail_type="amenity",
+            kind_slug=KIND_AMENITY,
         ).exclude(categories__parent__slug="accommodation")
         if limit:
             nearby = nearby[:limit]

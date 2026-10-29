@@ -32,10 +32,20 @@ def _hut_type_categories():
     migration depends on HutType rows) — same on-the-fly creation as the
     seed loader. The helper caches parent/values, so clear before/after.
     """
-    parent = Category.objects.filter(slug="accommodation", parent=None).first()
+    # Map-tree aware (geoplace-category-tree): accommodation lives
+    # under the amenity super-root; a parentless creation would be a
+    # stray duplicate breaking HutTypeHelper's ambiguity-free lookup.
+    parent = (
+        Category.objects.filter(slug="accommodation", parent__slug="amenity").first()
+        or Category.objects.filter(slug="accommodation", parent=None).first()
+    )
     if parent is None:
+        amenity = Category.objects.filter(slug="amenity", parent__slug="map").first()
         parent = Category.objects.create(
-            slug="accommodation", name="Accommodation", is_active=True
+            slug="accommodation",
+            name="Accommodation",
+            is_active=True,
+            parent=amenity,
         )
     if not Category.objects.filter(slug="unknown").exists():
         Category.objects.create(

@@ -143,7 +143,6 @@ class CategoryMappings:
                 OSMMapping(osm_filters=["shop=supermarket"], category_slug="groceries.supermarket"),
                 OSMMapping(osm_filters=["shop=bakery"], category_slug="groceries.bakery"),
             ],
-            detail_type="amenity",
         )
     """
 
@@ -152,12 +151,6 @@ class CategoryMappings:
 
     mappings: list[OSMMapping]
     """List of OSM tag mappings for this category"""
-
-    detail_type: str = "amenity"
-    """Legacy declaration — IGNORED since detail_type is derived on
-    write from the kind registry (geoplace-kinds-operations-graph
-    D2); retained only until the detail models retire. Never
-    'accommodation' (not a valid detail_type value)."""
 
     enabled: bool = True
     """Whether this category is enabled for import"""

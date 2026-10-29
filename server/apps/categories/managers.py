@@ -19,6 +19,16 @@ class CategoryQuerySet(MultilingualQuerySet):
         """Filter to only root-level categories (no parent)."""
         return self.filter(parent__isnull=True)
 
+    def contract_groups(self):
+        """Contract groups in the map tree (children of super-roots).
+
+        The map-tree shape is ``map → super-root → contract group →
+        kind`` — these groups (accommodation, shopping, …) are the
+        pre-tree "root" categories; use this instead of ``roots()``
+        when resolving them (geoplace-category-tree).
+        """
+        return self.filter(parent__parent__slug="map")
+
     def children_of(self, parent: "Category | None"):
         """Filter to children of a specific parent."""
         return self.filter(parent=parent)
@@ -80,9 +90,14 @@ class CategoryQuerySet(MultilingualQuerySet):
                 parent = qs.get(slug=parent_slug, parent__isnull=True)
                 category = qs.get(slug=child_slug, parent=parent)
                 return category, []
-            except self.model.DoesNotExist:
-                return None, []
-            except self.model.MultipleObjectsReturned:
+            except (self.model.DoesNotExist, self.model.MultipleObjectsReturned):
+                pass
+            # Depth-agnostic fallback (map tree): match by the stored
+            # identifier column — contract groups have parents under
+            # super-roots, so the root-level parent lookup misses.
+            try:
+                return qs.get(identifier=f"{parent_slug}.{child_slug}"), []
+            except (self.model.DoesNotExist, self.model.MultipleObjectsReturned):
                 return None, []
 
     def find_by_slug(
@@ -147,6 +162,10 @@ class CategoryManager(BaseMutlilingualManager):
     def resolve_slug(self, slug_path: str, is_active: bool = True):
         """Resolve a dot-notation slug path to a category."""
         return self.get_queryset().resolve_slug(slug_path, is_active)
+
+    def contract_groups(self):
+        """Map-tree contract groups (children of super-roots)."""
+        return self.get_queryset().contract_groups()
 
     def find_by_slug(self, slug: str, is_active: bool = True):
         """Find category by slug, handling ambiguity."""

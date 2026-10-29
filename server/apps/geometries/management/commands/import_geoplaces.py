@@ -563,57 +563,60 @@ class Command(BaseCommand):
         skipped_count = 0
         processed = 0
 
-        for hut in queryset.iterator(chunk_size=self.batch_size):
-            processed += 1
-            importance = self._calculate_hut_importance(hut)
+        from server.apps.geometries.kinds import contract_cache
 
-            if importance < min_importance:
-                skipped_count += 1
-                continue
+        with contract_cache():
+            for hut in queryset.iterator(chunk_size=self.batch_size):
+                processed += 1
+                importance = self._calculate_hut_importance(hut)
 
-            existing_place = self._find_place_by_source("wodore", hut.slug)
+                if importance < min_importance:
+                    skipped_count += 1
+                    continue
 
-            # ``--continue`` skips already-imported places even with
-            # ``--update`` (same semantics as the geonames handler).
-            if existing_place and (not update or continue_import):
-                skipped_count += 1
-                if processed % self.batch_size == 0:
-                    self.stdout.write(
-                        f"  Processed {processed}/{total_count} (skipped existing: {existing_place.name_i18n})"
-                    )
-                continue
+                existing_place = self._find_place_by_source("wodore", hut.slug)
 
-            if dry_run:
-                if existing_place:
-                    self.stdout.write(
-                        f"  [DRY RUN] Would update: {hut.name} ({hut.slug})"
-                    )
+                # ``--continue`` skips already-imported places even with
+                # ``--update`` (same semantics as the geonames handler).
+                if existing_place and (not update or continue_import):
+                    skipped_count += 1
+                    if processed % self.batch_size == 0:
+                        self.stdout.write(
+                            f"  Processed {processed}/{total_count} (skipped existing: {existing_place.name_i18n})"
+                        )
+                    continue
+
+                if dry_run:
+                    if existing_place:
+                        self.stdout.write(
+                            f"  [DRY RUN] Would update: {hut.name} ({hut.slug})"
+                        )
+                        updated_count += 1
+                    else:
+                        self.stdout.write(
+                            f"  [DRY RUN] Would create: {hut.name} ({hut.slug}, importance={importance})"
+                        )
+                        created_count += 1
+                    continue
+
+                schema = self._hut_to_place_input(hut, importance)
+                place, status = GeoPlace.update_or_create(
+                    schema=schema,
+                    from_source=SourceInput(slug="wodore", source_id=hut.slug),
+                )
+                self._ensure_hut_party(place, hut)
+
+                if status == UpdateCreateStatus.created:
+                    created_count += 1
+                elif status == UpdateCreateStatus.updated:
                     updated_count += 1
                 else:
+                    skipped_count += 1
+
+                if processed % self.batch_size == 0:
                     self.stdout.write(
-                        f"  [DRY RUN] Would create: {hut.name} ({hut.slug}, importance={importance})"
+                        f"  Processed {processed}/{total_count} ({created_count} created, {updated_count} updated, {skipped_count} skipped)"
                     )
-                    created_count += 1
-                continue
-
-            schema = self._hut_to_place_input(hut, importance)
-            place, status = GeoPlace.update_or_create(
-                schema=schema,
-                from_source=SourceInput(slug="wodore", source_id=hut.slug),
-            )
-            self._ensure_hut_party(place, hut)
-
-            if status == UpdateCreateStatus.created:
-                created_count += 1
-            elif status == UpdateCreateStatus.updated:
-                updated_count += 1
-            else:
-                skipped_count += 1
-
-            if processed % self.batch_size == 0:
-                self.stdout.write(
-                    f"  Processed {processed}/{total_count} ({created_count} created, {updated_count} updated, {skipped_count} skipped)"
-                )
 
         return created_count, updated_count, skipped_count
 
@@ -683,9 +686,13 @@ class Command(BaseCommand):
             # accommodation default/unknown category (design D4).
             # get_or_create under accommodation (HutTypeHelper may
             # return a root-level category — kind guard rejects it).
-            accommodation_parent = Category.objects.filter(
-                slug="accommodation", parent__isnull=True
-            ).first()
+            # accommodation lives under the amenity super-root in the
+            # map tree (identifier amenity.accommodation) — the
+            # parentless lookup misses (task 2.5).
+            accommodation_parent = (
+                Category.objects.filter(identifier="amenity.accommodation").first()
+                or Category.objects.filter(slug="accommodation").first()
+            )
             if accommodation_parent is not None:
                 unknown_type, _created = Category.objects.get_or_create(
                     slug="unknown",
@@ -713,7 +720,10 @@ class Command(BaseCommand):
             is_public=hut.is_public,
             place_type_identifiers=place_types,
             operations=operations,
-            seasonality=seasonality,
+            # Orphaned seasonality guard (review P1): without a place
+            # type there is no kind anchor — the seasonality contract
+            # gate would reject the write.
+            seasonality=seasonality if place_types else None,
         )
 
     def _calculate_hut_importance(self, _hut: Hut) -> int:

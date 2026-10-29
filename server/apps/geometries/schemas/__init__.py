@@ -26,7 +26,6 @@ from ._images import (
 from ._input import (
     DedupOptions,
     DeletePolicyEnum,
-    DetailType,
     GeoPlaceAdminInput,
     GeoPlaceAmenityInput,
     GeoPlaceBaseInput,
@@ -61,7 +60,6 @@ __all__ = [
     "CategorySchema",
     "DedupOptions",
     "DeletePolicyEnum",
-    "DetailType",
     "GeoPlaceAdminInput",
     "GeoPlaceAmenityInput",
     "GeoPlaceBaseInput",

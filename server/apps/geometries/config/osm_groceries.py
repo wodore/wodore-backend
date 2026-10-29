@@ -14,7 +14,6 @@ def _vending_machine_condition(tags: dict[str, str]) -> bool:
 
 GROCERIES = CategoryMappings(
     category="groceries",
-    detail_type="amenity",
     mappings=[
         OSMMapping(
             osm_filters=["shop=supermarket"],

@@ -7,7 +7,6 @@ from .osm_base import CategoryMappings, OSMMapping
 
 SHOPPING = CategoryMappings(
     category="shopping",
-    detail_type="amenity",
     enabled=True,
     mappings=[
         OSMMapping(

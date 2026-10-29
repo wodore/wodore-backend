@@ -97,6 +97,9 @@ def _load_category_tree(is_active: bool):
     """
     qs = Category.objects.select_related(
         "parent",
+        "parent__parent",
+        "parent__parent__parent",
+        "parent__parent__parent__parent",
         "symbol_color",
         "symbol_primitive",
         "symbol_mono",

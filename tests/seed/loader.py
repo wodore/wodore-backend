@@ -41,7 +41,11 @@ def _get_or_create_category(slug: str) -> Category | None:
         return cat
 
     # Not found — create under 'accommodation' parent
-    parent = Category.objects.filter(slug="accommodation", parent=None).first()
+    # (map tree: accommodation lives under the amenity super-root)
+    parent = (
+        Category.objects.filter(slug="accommodation", parent__slug="amenity").first()
+        or Category.objects.filter(slug="accommodation").first()
+    )
     cat = Category.objects.create(
         slug=slug,
         name=slug.replace("_", " ").replace("-", " ").title(),
@@ -169,7 +173,7 @@ def load_geoplaces(seed_file: str = "geoplaces.yaml") -> int:
             elevation=place_data.get("elevation"),
             country_code=place_data.get("country", "CH"),
             importance=place_data.get("importance", 25),
-            detail_type=place_data.get("detail_type", "none"),
+            kind_slug=place_data.get("kind_slug", "none"),
             is_active=True,
             is_public=True,
             review_status="done",

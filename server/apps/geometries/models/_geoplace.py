@@ -27,7 +27,14 @@ from server.core.models import TimeStampedModel
 from server.core.utils import UpdateCreateStatus
 
 from ..converters import RESERVED_URL_SEGMENTS, SLUG_GRAMMAR_RE
-from ..kinds import place_detail_type
+from ..kinds import (
+    KIND_ADMIN,
+    KIND_AMENITY,
+    KIND_NONE,
+    contract_for_group,
+    kind_root_category,
+    place_kind_slug,
+)
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -50,16 +57,6 @@ RETRYABLE_DB_MESSAGES = (
     "could not serialize",
     "database error",
 )
-
-
-class DetailType(models.TextChoices):
-    """Detail model types for GeoPlace."""
-
-    AMENITY = "amenity", _("Amenity")
-    TRANSPORT = "transport", _("Transport")
-    ADMIN = "admin", _("Admin")
-    NATURAL = "natural", _("Natural")
-    NONE = "none", _("None")
 
 
 class _ReviewStatusChoices(models.TextChoices):
@@ -198,14 +195,14 @@ class GeoPlace(TimeStampedModel):
         help_text=_("Internal reviewer note"),
     )
 
-    # Detail model type
-    detail_type = models.CharField(
-        max_length=20,
-        choices=DetailType.choices,
-        default=DetailType.NONE,
+    # Kind slug (super-root identifier — map.amenity / map.admin /
+    # map.natural — derived on write from the category tree)
+    kind_slug = models.CharField(
+        max_length=100,
+        default=KIND_NONE,
         db_index=True,
-        verbose_name=_("Detail Type"),
-        help_text=_("Which detail model is attached"),
+        verbose_name=_("Kind Slug"),
+        help_text=_("Super-root identifier of the place's kind (derived)"),
     )
 
     # Protected fields (manual edits)
@@ -294,7 +291,7 @@ class GeoPlace(TimeStampedModel):
                 name="geoplaces_act_pub_cnt_idx",
             ),
             models.Index(fields=["-importance"]),
-            models.Index(fields=["detail_type"]),
+            models.Index(fields=["kind_slug"]),
             # GIN index for trigram similarity search (critical for search performance)
             GinIndex(
                 fields=["name"],
@@ -314,12 +311,6 @@ class GeoPlace(TimeStampedModel):
             models.CheckConstraint(
                 name="%(app_label)s_%(class)s_main_language_valid",
                 condition=models.Q(main_language__in=settings.LANGUAGE_CODES),
-            ),
-            models.CheckConstraint(
-                name="%(app_label)s_%(class)s_detail_type_valid",
-                condition=models.Q(
-                    detail_type__in=["amenity", "transport", "admin", "natural", "none"]
-                ),
             ),
             models.CheckConstraint(
                 name="%(app_label)s_%(class)s_slug_grammar_valid",
@@ -964,7 +955,7 @@ class GeoPlace(TimeStampedModel):
         return Organization.objects.get(slug=slug)
 
     @staticmethod
-    @lru_cache(maxsize=512)
+    @lru_cache(maxsize=4096)  # global identifier space (group.child pairs)
     def _resolve_category_from_identifier(identifier: str) -> Category:
         """Resolve Category from identifier with fallbacks for legacy trees."""
         parts = identifier.split(".")
@@ -982,6 +973,13 @@ class GeoPlace(TimeStampedModel):
                 return Category.objects.get(identifier=identifier)
 
         parent_slug, child_slug = parts[0], parts[1]
+        # Stored-identifier column first — depth-agnostic and indexed
+        # (contract groups gained parents under super-roots in the
+        # map tree, so root-level parent lookups miss).
+        try:
+            return Category.objects.get(identifier=f"{parent_slug}.{child_slug}")
+        except (Category.DoesNotExist, Category.MultipleObjectsReturned):
+            pass
         try:
             parent = Category.objects.get(slug=parent_slug, parent=None)
             return Category.objects.get(slug=child_slug, parent=parent)
@@ -991,7 +989,9 @@ class GeoPlace(TimeStampedModel):
             ).first()
             if category:
                 return category
-            return Category.objects.get(identifier=identifier)
+            raise Category.DoesNotExist(
+                f"Unknown category identifier: {identifier}"
+            ) from None
 
     @classmethod
     def _resolve_place_types(
@@ -1059,14 +1059,32 @@ class GeoPlace(TimeStampedModel):
         return categories
 
     @classmethod
-    def _write_operations(cls, place: GeoPlace, operations: Any) -> bool:
+    def _write_operations(
+        cls, place: GeoPlace, operations: Any, place_types: list[PlaceTypeSpec]
+    ) -> bool:
         """Upsert GeoPlaceOperation rows per (place, mode) (task 2.3).
+
+        Gated by the kind contract (task 2.2): the place's contract
+        group must enable operations — a group without a contract (or
+        with ``has_operations`` off) rejects the write.
 
         The mode identifier must resolve to a ``mode.*`` child;
         same-mode re-writes refresh capacity/hours (the per-mode
         capacity invariant holds by construction — one row per mode).
         """
         from ._operation import GeoPlaceOperation
+
+        contract = contract_for_group(
+            kind_root_category([spec.category for spec in place_types])
+        )
+        if contract is None or not contract.has_operations:
+            raise ValidationError(
+                {
+                    "operations": _(
+                        "Places under this kind's group carry no operations contract."
+                    )
+                }
+            )
 
         changed_any = False
         for entry in operations:
@@ -1093,14 +1111,30 @@ class GeoPlace(TimeStampedModel):
         return changed_any
 
     @classmethod
-    def _write_seasonality(cls, place: GeoPlace, seasonality: Any) -> bool:
+    def _write_seasonality(
+        cls, place: GeoPlace, seasonality: Any, place_types: list[PlaceTypeSpec]
+    ) -> bool:
         """Upsert the place's GeoPlaceSeasonality row (task 2.3).
+
+        Gated by the kind contract (task 2.2): the place's contract
+        group must enable seasonality.
 
         Absent months stay untouched (unknown = NULL preserved);
         shares are range-checked by the accessor and the DB.
         """
         from ._seasonality import GeoPlaceSeasonality, Month
 
+        contract = contract_for_group(
+            kind_root_category([spec.category for spec in place_types])
+        )
+        if contract is None or not contract.has_seasonality:
+            raise ValidationError(
+                {
+                    "seasonality": _(
+                        "Places under this kind's group carry no seasonality contract."
+                    )
+                }
+            )
         if seasonality is None:
             return False
         row, _created = GeoPlaceSeasonality.objects.get_or_create(geo_place=place)
@@ -1132,10 +1166,10 @@ class GeoPlace(TimeStampedModel):
         name_dict = schema.get_name_dict()
         description_dict = schema.get_description_dict()
 
-        # detail_type is derived on write from the kind contract
-        # (geoplace-kinds-operations-graph D2) — the input schema no
-        # longer declares it.
-        derived_detail_type = place_detail_type([spec.category for spec in place_types])
+        # kind_slug is derived on write from the category tree
+        # (geoplace-category-tree D3) — the input schema no longer
+        # declares it.
+        derived_kind_slug = place_kind_slug([spec.category for spec in place_types])
 
         # Build place data
         place_data = {
@@ -1143,7 +1177,7 @@ class GeoPlace(TimeStampedModel):
             "main_language": detect_main_language(name_dict) or settings.LANGUAGE_CODE,
             "location": location,
             "country_code": schema.country_code,
-            "detail_type": derived_detail_type,
+            "kind_slug": derived_kind_slug,
             "elevation": schema.elevation,
             "importance": schema.importance,
             "review_status": schema.review_status.value,
@@ -1202,14 +1236,12 @@ class GeoPlace(TimeStampedModel):
 
         # Typed operating facts + seasonality (task 2.3)
         if schema.operations:
-            cls._write_operations(place, schema.operations)
+            cls._write_operations(place, schema.operations, place_types)
         if schema.seasonality is not None:
-            cls._write_seasonality(place, schema.seasonality)
+            cls._write_seasonality(place, schema.seasonality, place_types)
 
         # Create detail model based on type (flattened structure)
-        from ..schemas import DetailType
-
-        if derived_detail_type == DetailType.AMENITY and schema.operating_status:
+        if derived_kind_slug == KIND_AMENITY and schema.operating_status:
             amenity_kwargs = {
                 "geo_place": place,
                 "operating_status": schema.operating_status.value,
@@ -1225,7 +1257,7 @@ class GeoPlace(TimeStampedModel):
 
             AmenityDetail.objects.create(**amenity_kwargs)
 
-        elif derived_detail_type == DetailType.ADMIN and schema.admin_level:
+        elif derived_kind_slug == KIND_ADMIN and schema.admin_level:
             AdminDetail.objects.create(
                 geo_place=place,
                 admin_level=schema.admin_level,
@@ -1388,12 +1420,12 @@ class GeoPlace(TimeStampedModel):
                     assoc.save(update_fields=["extra", "modified"])
                     categories_updated = True
 
-        # detail_type derived on write from the kind contract
-        # (geoplace-kinds-operations-graph D2).
-        derived_detail_type = place_detail_type([spec.category for spec in place_types])
-        if "detail_type" not in protected and place.detail_type != derived_detail_type:
-            place.detail_type = derived_detail_type
-            update_fields.append("detail_type")
+        # kind_slug derived on write from the category tree
+        # (geoplace-category-tree D3).
+        derived_kind_slug = place_kind_slug([spec.category for spec in place_types])
+        if "kind_slug" not in protected and place.kind_slug != derived_kind_slug:
+            place.kind_slug = derived_kind_slug
+            update_fields.append("kind_slug")
             place_updated = True
 
         # Typed operating facts + seasonality (task 2.3) — own
@@ -1401,9 +1433,11 @@ class GeoPlace(TimeStampedModel):
         ops_changed = False
         seasonality_changed = False
         if "operations" not in protected and schema.operations:
-            ops_changed = cls._write_operations(place, schema.operations)
+            ops_changed = cls._write_operations(place, schema.operations, place_types)
         if "seasonality" not in protected and schema.seasonality is not None:
-            seasonality_changed = cls._write_seasonality(place, schema.seasonality)
+            seasonality_changed = cls._write_seasonality(
+                place, schema.seasonality, place_types
+            )
         operations_updated = ops_changed or seasonality_changed
 
         # Update name translations
@@ -1495,10 +1529,8 @@ class GeoPlace(TimeStampedModel):
             place.save(update_fields=update_fields, track_modifications=False)
 
         # Update or create detail model (flattened structure)
-        from ..schemas import DetailType
-
         detail_updated = False
-        if derived_detail_type == DetailType.AMENITY and schema.operating_status:
+        if derived_kind_slug == KIND_AMENITY and schema.operating_status:
             # Build amenity detail data from flattened schema
             try:
                 amenity_detail = place.amenity_detail  # type: ignore  # dynamic attr: plugin-less inference gap
@@ -1536,7 +1568,7 @@ class GeoPlace(TimeStampedModel):
             elif update_fields:
                 amenity_detail.save(update_fields=update_fields)
 
-        elif derived_detail_type == DetailType.ADMIN and schema.admin_level:
+        elif derived_kind_slug == KIND_ADMIN and schema.admin_level:
             admin_detail, created = AdminDetail.objects.update_or_create(
                 geo_place=place,
                 defaults={

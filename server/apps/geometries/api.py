@@ -30,6 +30,7 @@ from server.apps.organizations.schema import OrganizationSourceIdSlugSchema
 from server.apps.translations import LanguageQuery
 
 from .converters import GeoPlaceSlugConverter  # noqa: F401  # registers <geoplace:slug>
+from .kinds import KIND_AMENITY
 from .models import GeoPlace
 from .schemas import (
     GeoPlaceDetailSchema,
@@ -169,13 +170,14 @@ class OverlayCategoriesController(ApiController):
         category_slugs = [cat.category for cat in CATEGORY_REGISTRY]
 
         categories = (
-            Category.objects.select_related(
+            Category.objects.contract_groups()
+            .select_related(
                 "parent",
                 "symbol_color",
                 "symbol_primitive",
                 "symbol_mono",
             )
-            .filter(parent__isnull=True, slug__in=category_slugs, is_active=True)
+            .filter(slug__in=category_slugs, is_active=True)
             .order_by("order", "slug")
         )
 
@@ -635,7 +637,7 @@ class PlaceController(ApiController):
         with override(query.lang):
             result = base_result(place, media_url)
             result["description"] = place.description_i18n  # noqa: WPS308
-            result["detail_type"] = place.detail_type
+            result["kind_slug"] = place.kind_slug
             result["review_status"] = place.review_status
 
             # Always seed the block member so it stays a valid selection
@@ -643,7 +645,7 @@ class PlaceController(ApiController):
             # missing", never a 400 (see _narrow_place_detail).
             result["amenity"] = (
                 build_amenity_detail(place)
-                if wants_amenity and place.detail_type == "amenity"
+                if wants_amenity and place.kind_slug == KIND_AMENITY
                 else None
             )
 

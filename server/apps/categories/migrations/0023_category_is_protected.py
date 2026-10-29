@@ -4,15 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('categories', '0022_transport_mode_colors'),
+        ("categories", "0022_transport_mode_colors"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='category',
-            name='is_protected',
-            field=models.BooleanField(db_index=True, default=False, help_text='Code-coupled vocabulary category — cannot be deleted; names, colors and symbols remain editable', verbose_name='Protected'),
+            model_name="category",
+            name="is_protected",
+            field=models.BooleanField(
+                db_index=True,
+                default=False,
+                help_text="Code-coupled vocabulary category — cannot be deleted; names, colors and symbols remain editable",
+                verbose_name="Protected",
+            ),
         ),
     ]

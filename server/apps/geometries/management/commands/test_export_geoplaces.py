@@ -58,7 +58,7 @@ class Command(BaseCommand):
                 "elevation": place.elevation,
                 "country": place.country_code.code,  # type: ignore  # dynamic attr: plugin-less inference gap
                 "importance": place.importance,
-                "detail_type": place.detail_type,
+                "kind_slug": place.kind_slug,
             }
 
             category_slugs = [cat.slug for cat in place.categories.all()]

@@ -71,7 +71,7 @@ def _operations_of(place: GeoPlace) -> dict[str, int | None]:
 
 @pytest.fixture
 def accommodation_root() -> Category:
-    return Category.objects.get(slug="accommodation", parent__isnull=True)
+    return Category.objects.get(slug="accommodation", parent__slug="amenity")
 
 
 @pytest.fixture
@@ -177,7 +177,7 @@ class TestCategoryExtraSchema:
         assert schema_row.schema["properties"] == {}
 
         # the administrative root carries the folded AdminDetail scalars
-        admin_root = Category.objects.get(slug="administrative", parent__isnull=True)
+        admin_root = Category.objects.get(slug="administrative", parent__slug="admin")
         admin_props = CategoryExtraSchema.objects.get(category=admin_root).schema[
             "properties"
         ]
