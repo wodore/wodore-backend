@@ -124,12 +124,18 @@ class TestGeoPlaceParty:
         with pytest.raises(RestrictedError):
             association.party.delete()
 
-    def test_role_delete_restricted_while_in_use(self):
+    def test_role_delete_blocked_as_protected_vocabulary(self):
+        """role.* is code-coupled vocabulary (migration 0060 marks it
+        is_protected) — deletion raises before the DB RESTRICT can
+        fire (geoplace-kinds-operations-graph task 1.2). The DB
+        constraint remains as a bulk-delete backstop."""
         association = GeoPlaceParty.objects.create(
             geo_place=GeoPlaceFactory(), party=PartyFactory(), role=role("brand")
         )
 
-        with pytest.raises(RestrictedError):
+        from django.core.exceptions import ValidationError
+
+        with pytest.raises(ValidationError, match="protected vocabulary"):
             association.role.delete()
 
 

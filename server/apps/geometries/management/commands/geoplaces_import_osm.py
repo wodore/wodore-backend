@@ -1042,6 +1042,7 @@ class Command(BaseCommand):
         from server.apps.geometries.schemas import (
             DedupOptions,
             GeoPlaceAmenityInput,
+            OperationInput,
             PartyInput,
             SourceInput,
         )
@@ -1119,6 +1120,14 @@ class Command(BaseCommand):
             operating_status=OperatingStatus.OPEN,
             opening_hours=opening_hours_data,
             parties=party_inputs,
+            # geoplace-kinds task 2.5: hours also ride a standard-mode
+            # operation row (typed home; the detail write retires in
+            # group 4)
+            operations=(
+                [OperationInput(mode="mode.standard", opening_hours=opening_hours_data)]
+                if opening_hours_data
+                else []
+            ),
         )
 
         # Build source input

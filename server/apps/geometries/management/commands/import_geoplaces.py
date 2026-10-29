@@ -36,6 +36,7 @@ from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.measure import D
 from django.core.management.base import BaseCommand, CommandParser
 
+from server.apps.categories.models import Category
 from server.apps.external_geonames.management.commands._country_groups import (
     expand_countries,
 )
@@ -43,10 +44,12 @@ from server.apps.external_geonames.models import Feature, GeoName
 from server.apps.geometries.models import GeoPlace
 from server.apps.geometries.schemas import (
     GeoPlaceBaseInput,
+    OperationInput,
     PlaceTypeInput,
+    SeasonalityInput,
     SourceInput,
 )
-from server.apps.huts.models import Hut, HutTypeHelper
+from server.apps.huts.models import Hut
 from server.apps.organizations.models import Organization
 from server.core import UpdateCreateStatus
 
@@ -614,47 +617,92 @@ class Command(BaseCommand):
 
         return created_count, updated_count, skipped_count
 
-    def _hut_to_place_input(self, hut: Hut, importance: int) -> GeoPlaceBaseInput:
-        """Build the geoplace schema input for a hut (task 2.2).
+    @staticmethod
+    def _hut_seasonality(hut: Hut) -> SeasonalityInput | None:
+        """``open_monthly`` fuzzy values → monthly standard share.
 
-        One mode = one association = its own capacity (revised
-        design): the open type pairs with ``mode.standard``, the
-        closed state with ``mode.reduced``. The reduced association
-        exists when the closed type is known, or when only a closed
-        capacity is published (category = the accommodation default/
-        unknown type, so the value is not lost). Hut.update_or_create
-        derives selfhut/bivouac closed types from ``capacity_closed``
-        (_hut.py) — this reads the *resolved* FK.
+        Unknown/unmapped statuses stay absent (NULL); the fuzzy map
+        is design D4 (yes=100 … no=0).
         """
+        from server.apps.geometries.models import FUZZY_MONTH_SHARE
+
+        open_monthly: dict[str, Any] = hut.open_monthly or {}
+        months: dict[int, int | None] = {}
+        for month in range(1, 13):
+            status = open_monthly.get(f"month_{month:02d}")
+            share = FUZZY_MONTH_SHARE.get(str(status)) if status is not None else None
+            if share is not None:
+                months[month] = share
+        return SeasonalityInput(months=months) if months else None
+
+    def _hut_to_place_input(self, hut: Hut, importance: int) -> GeoPlaceBaseInput:
+        """Build the geoplace schema input for a hut (tasks 2.3/2.4).
+
+        Associations are pure classification (category × mode); typed
+        facts ride ``operations`` (capacity per mode) and
+        ``seasonality`` (open_monthly fuzzy map). The reduced mode
+        exists when a reduced fact is published — a closed type
+        (unknown included), a closed capacity, or months below 100;
+        without a known closed type the reduced category resolves to
+        ``accommodation.unknown`` (PO-confirmed, design D4). Scope:
+        the wodore handler only — geonames writes neither.
+        """
+        seasonality = self._hut_seasonality(hut)
+        months_below_100 = any(
+            share is not None and share < 100
+            for share in (seasonality.months.values() if seasonality else [])
+        )
+
+        closed = hut.hut_type_closed
+        known_reduced = closed is not None and closed.slug != "unknown"
+        reduced_fact = (
+            closed is not None or hut.capacity_closed is not None or months_below_100
+        )
+
         place_types: list[str | PlaceTypeInput] = []
+        operations: list[OperationInput] = []
         if hut.hut_type_open is not None:
             place_types.append(
                 PlaceTypeInput(
                     identifier=hut.hut_type_open.identifier,
                     classifier="mode.standard",
-                    extra={"capacity": hut.capacity_open}
-                    if hut.capacity_open is not None
-                    else {},
                 )
             )
-        if hut.hut_type_closed is not None and hut.hut_type_closed.slug != "unknown":
+            operations.append(
+                OperationInput(mode="mode.standard", capacity=hut.capacity_open)
+            )
+        if known_reduced:
             place_types.append(
                 PlaceTypeInput(
-                    identifier=hut.hut_type_closed.identifier,
+                    identifier=closed.identifier,  # type: ignore[union-attr]  # known_reduced guards
                     classifier="mode.reduced",
-                    extra={"capacity": hut.capacity_closed}
-                    if hut.capacity_closed is not None
-                    else {},
                 )
             )
-        elif hut.capacity_closed is not None:
-            place_types.append(
-                PlaceTypeInput(
-                    identifier=HutTypeHelper.get("unknown").identifier,
-                    classifier="mode.reduced",
-                    extra={"capacity": hut.capacity_closed},
+        elif reduced_fact:
+            # No known closed type — the reduced mode resolves to the
+            # accommodation default/unknown category (design D4).
+            # get_or_create under accommodation (HutTypeHelper may
+            # return a root-level category — kind guard rejects it).
+            accommodation_parent = Category.objects.filter(
+                slug="accommodation", parent__isnull=True
+            ).first()
+            if accommodation_parent is not None:
+                unknown_type, _created = Category.objects.get_or_create(
+                    slug="unknown",
+                    parent=accommodation_parent,
+                    defaults={"name": "Unbekannt"},
                 )
+                place_types.append(
+                    PlaceTypeInput(
+                        identifier=unknown_type.identifier,
+                        classifier="mode.reduced",
+                    )
+                )
+        if reduced_fact or known_reduced:
+            operations.append(
+                OperationInput(mode="mode.reduced", capacity=hut.capacity_closed)
             )
+
         return GeoPlaceBaseInput(
             name=hut.name,
             location=LocationSchema(lon=hut.location.x, lat=hut.location.y),
@@ -664,6 +712,8 @@ class Command(BaseCommand):
             is_active=hut.is_active,
             is_public=hut.is_public,
             place_type_identifiers=place_types,
+            operations=operations,
+            seasonality=seasonality,
         )
 
     def _calculate_hut_importance(self, _hut: Hut) -> int:

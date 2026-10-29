@@ -65,9 +65,29 @@ def mode(slug: str) -> Category:
     return Category.objects.get(slug=slug, parent__slug="mode")
 
 
+def _operations_of(place: GeoPlace) -> dict[str, int | None]:
+    return {o.mode.identifier: o.capacity for o in place.operations.all()}  # type: ignore  # reverse FK: plugin-less inference gap
+
+
 @pytest.fixture
 def accommodation_root() -> Category:
     return Category.objects.get(slug="accommodation", parent__isnull=True)
+
+
+@pytest.fixture
+def capacity_schema(hut_category: Category) -> CategoryExtraSchema:
+    """Explicit typed key on the hut category — the accommodation
+    seed no longer carries capacity (operations do)."""
+    return CategoryExtraSchema.objects.update_or_create(
+        category=hut_category,
+        defaults={
+            "schema": {
+                "type": "object",
+                "properties": {"capacity": {"type": ["integer", "null"], "minimum": 0}},
+                "additionalProperties": True,
+            }
+        },
+    )[0]
 
 
 @pytest.fixture
@@ -99,6 +119,8 @@ def unknown_category(accommodation_root: Category) -> Category:
 def schema_for(
     *place_types: PlaceTypeInput,
     name: str = "Test Hut",
+    operations: list[Any] | None = None,
+    seasonality: Any | None = None,
 ) -> GeoPlaceBaseInput:
     return GeoPlaceBaseInput(
         name=name,
@@ -106,6 +128,8 @@ def schema_for(
         country_code="CH",
         importance=80,
         place_type_identifiers=list(place_types),
+        operations=operations or [],
+        seasonality=seasonality,
     )
 
 
@@ -147,10 +171,17 @@ class TestCategoryExtraSchema:
     def test_accommodation_schema_seeded_by_migration(
         self, accommodation_root: Category
     ):
+        # capacity moved to GeoPlaceOperation — the accommodation
+        # schema stays as the (empty) admin-editable home
         schema_row = CategoryExtraSchema.objects.get(category=accommodation_root)
-        props = schema_row.schema["properties"]
-        assert "capacity" in props
-        assert props["capacity"]["type"] == ["integer", "null"]
+        assert schema_row.schema["properties"] == {}
+
+        # the administrative root carries the folded AdminDetail scalars
+        admin_root = Category.objects.get(slug="administrative", parent__isnull=True)
+        admin_props = CategoryExtraSchema.objects.get(category=admin_root).schema[
+            "properties"
+        ]
+        assert set(admin_props) == {"population", "postal_code", "iso_code"}
 
     def test_valid_schema_passes_clean(self, hut_category: Category):
         row = CategoryExtraSchema(
@@ -221,7 +252,9 @@ class TestCategoryExtraSchema:
 
 
 class TestGeoPlaceCategoryValidation:
-    def test_valid_association_passes_clean(self, hut_category: Category):
+    def test_valid_association_passes_clean(
+        self, hut_category: Category, capacity_schema: CategoryExtraSchema
+    ):
         association = GeoPlaceCategory(
             geo_place=GeoPlaceFactory(),
             category=hut_category,
@@ -253,7 +286,9 @@ class TestGeoPlaceCategoryValidation:
             association.clean()
 
     @pytest.mark.parametrize("value", [-1, "40", 1.5, True])
-    def test_schema_violations_rejected(self, hut_category: Category, value: Any):
+    def test_schema_violations_rejected(
+        self, hut_category: Category, capacity_schema: CategoryExtraSchema, value: Any
+    ):
         with pytest.raises(ValidationError):
             GeoPlaceCategory.validate_extra(hut_category, {"capacity": value})
 
@@ -277,10 +312,16 @@ class TestSchemaWritePath:
     def test_create_writes_both_modes(
         self, hut_category: Category, selfhut_category: Category
     ):
+        from server.apps.geometries.schemas import OperationInput
+
         place, status = GeoPlace.update_or_create(
             schema=schema_for(
                 standard(hut_category, capacity=40),
                 reduced(selfhut_category, capacity=12),
+                operations=[
+                    OperationInput(mode="mode.standard", capacity=40),
+                    OperationInput(mode="mode.reduced", capacity=12),
+                ],
             ),
             from_source=self._source(),
         )
@@ -290,10 +331,14 @@ class TestSchemaWritePath:
             (a.category.slug, a.classifier.identifier): a.extra  # type: ignore  # reverse FK prefetch gap
             for a in place.category_associations.all()  # type: ignore  # reverse FK: plugin-less inference gap
         }
+        # association extra is the flexible layer — faithfully written
+        # (capacity is still a valid schema key; the wodore import no
+        # longer uses it, operations do)
         assert associations == {
             ("hut", "mode.standard"): {"capacity": 40},
             ("selfhut", "mode.reduced"): {"capacity": 12},
         }
+        assert _operations_of(place) == {"mode.standard": 40, "mode.reduced": 12}
 
     def test_same_category_both_modes_allowed(self, unknown_category: Category):
         """Advisor P0: open and closed type can coincide — the
@@ -332,12 +377,17 @@ class TestSchemaWritePath:
             (a.category.slug, a.classifier.identifier): a.extra  # type: ignore  # reverse FK prefetch gap
             for a in place.category_associations.all()  # type: ignore  # reverse FK: plugin-less inference gap
         }
+        # association extra is the flexible layer — faithfully written
+        # (capacity is still a valid schema key; the wodore import no
+        # longer uses it, operations do)
         assert associations == {
             ("hut", "mode.standard"): {"capacity": 40},
             ("selfhut", "mode.reduced"): {"capacity": 12},
         }
 
-    def test_update_schema_keys_replaced_others_preserved(self, hut_category: Category):
+    def test_update_schema_keys_replaced_others_preserved(
+        self, hut_category: Category, capacity_schema: CategoryExtraSchema
+    ):
         place, _status = GeoPlace.update_or_create(
             schema=schema_for(standard(hut_category, capacity=30)),
             from_source=self._source(),
@@ -355,7 +405,9 @@ class TestSchemaWritePath:
         # schema key dropped (unpublished), non-schema key preserved
         assert association.extra == {"note": "curated"}
 
-    def test_import_path_validates_too(self, hut_category: Category):
+    def test_import_path_validates_too(
+        self, hut_category: Category, capacity_schema: CategoryExtraSchema
+    ):
         with pytest.raises(ValidationError):
             GeoPlace.update_or_create(
                 schema=schema_for(
@@ -372,7 +424,9 @@ class TestSchemaWritePath:
                 from_source=self._source(),
             )
 
-    def test_protected_place_untouched(self, hut_category: Category):
+    def test_protected_place_untouched(
+        self, hut_category: Category, capacity_schema: CategoryExtraSchema
+    ):
         place, _status = GeoPlace.update_or_create(
             schema=schema_for(standard(hut_category, capacity=30)),
             from_source=self._source(),
@@ -463,9 +517,10 @@ class TestWodoreImport:
 
         place = self._imported_place(hut)
         assert self._associations(place) == {
-            ("hut", "mode.standard"): {"capacity": 40},
-            ("selfhut", "mode.reduced"): {"capacity": 12},
+            ("hut", "mode.standard"): {},
+            ("selfhut", "mode.reduced"): {},
         }
+        assert _operations_of(place) == {"mode.standard": 40, "mode.reduced": 12}
         # the owner party still rides merge_owner (role.operator)
         assert place.party_associations.filter(  # type: ignore  # reverse FK: plugin-less inference gap
             role__identifier="role.operator"
@@ -484,10 +539,12 @@ class TestWodoreImport:
 
         call_command("import_geoplaces", "-s", "wodore", stdout=self._out())
 
-        assert self._associations(self._imported_place(hut)) == {
+        place = self._imported_place(hut)
+        assert self._associations(place) == {
             ("hut", "mode.standard"): {},
-            ("unknown", "mode.reduced"): {"capacity": 10},
+            ("unknown", "mode.reduced"): {},
         }
+        assert _operations_of(place) == {"mode.standard": None, "mode.reduced": 10}
 
     def test_no_closed_type_but_capacity_carries_reduced(
         self, hut_category: Category, unknown_category: Category
@@ -504,10 +561,12 @@ class TestWodoreImport:
 
         call_command("import_geoplaces", "-s", "wodore", stdout=self._out())
 
-        assert self._associations(self._imported_place(hut)) == {
+        place = self._imported_place(hut)
+        assert self._associations(place) == {
             ("hut", "mode.standard"): {},
-            ("unknown", "mode.reduced"): {"capacity": 8},
+            ("unknown", "mode.reduced"): {},
         }
+        assert _operations_of(place) == {"mode.standard": None, "mode.reduced": 8}
 
     def test_no_closed_info_single_association(self, hut_category: Category):
         hut = HutFactory(
@@ -537,7 +596,7 @@ class TestWodoreImport:
 
         place = self._imported_place(hut)
         assert place.category_associations.count() == 2  # type: ignore  # reverse FK: plugin-less inference gap
-        assert self._associations(place)[("hut", "mode.standard")] == {"capacity": 44}
+        assert _operations_of(place) == {"mode.standard": 44, "mode.reduced": None}
 
     def test_rerun_dropped_mode_keeps_old_row(
         self, hut_category: Category, selfhut_category: Category
@@ -557,9 +616,10 @@ class TestWodoreImport:
 
         place = self._imported_place(hut)
         assert self._associations(place) == {
-            ("hut", "mode.standard"): {"capacity": 40},
-            ("selfhut", "mode.reduced"): {"capacity": 12},  # stale, kept
+            ("hut", "mode.standard"): {},
+            ("selfhut", "mode.reduced"): {},  # stale, kept
         }
+        assert _operations_of(place) == {"mode.standard": 40, "mode.reduced": 12}
 
     def test_rerun_category_change_keeps_old_row(self, hut_category: Category):
         """Additive semantics (review P1): a type change accumulates
@@ -574,9 +634,10 @@ class TestWodoreImport:
 
         place = self._imported_place(hut)
         assert self._associations(place) == {
-            ("hut", "mode.standard"): {"capacity": 40},  # stale, kept
-            ("alp", "mode.standard"): {"capacity": 40},
+            ("hut", "mode.standard"): {},  # stale, kept
+            ("alp", "mode.standard"): {},
         }
+        assert _operations_of(place) == {"mode.standard": 40}
 
     def test_foreign_association_untouched(self, hut_category: Category):
         """Associations from other sources/paths (e.g. OSM) are never
@@ -596,7 +657,7 @@ class TestWodoreImport:
 
         foreign.refresh_from_db()
         assert foreign.extra == {"note": "osm"}  # untouched
-        assert self._associations(place)[("hut", "mode.standard")] == {"capacity": 50}
+        assert _operations_of(place) == {"mode.standard": 50}
 
     def test_rerun_update_respects_protection(self, hut_category: Category):
         hut = HutFactory(hut_type_open=hut_category, capacity_open=40)
@@ -604,15 +665,14 @@ class TestWodoreImport:
         place = self._imported_place(hut)
 
         place.is_modified = True
-        place.protected_fields = ["categories"]
+        place.protected_fields = ["categories", "operations"]
         place.save(update_fields=["is_modified", "protected_fields"])
 
         Hut.objects.filter(pk=hut.pk).update(capacity_open=99)
         call_command("import_geoplaces", "-s", "wodore", "--update", stdout=self._out())
 
         place.refresh_from_db()
-        association = place.category_associations.get()  # type: ignore  # reverse FK: plugin-less inference gap
-        assert association.extra == {"capacity": 40}  # untouched
+        assert _operations_of(place) == {"mode.standard": 40}  # untouched
 
     @staticmethod
     def _out() -> Any:
@@ -714,7 +774,9 @@ class TestAdminInline:
             bound_form.fields["extra"].widget, UnfoldAdminJSONSchemaWidget
         )
 
-    def test_invalid_capacity_rejected(self, hut_category: Category):
+    def test_invalid_capacity_rejected(
+        self, hut_category: Category, capacity_schema: CategoryExtraSchema
+    ):
         place = GeoPlaceFactory()
         FormSet = self._formset_class()
         data = {
@@ -730,7 +792,10 @@ class TestAdminInline:
         assert not formset.is_valid()
 
     def test_formset_save_marks_place_modified(
-        self, hut_category: Category, rf: RequestFactory
+        self,
+        hut_category: Category,
+        capacity_schema: CategoryExtraSchema,
+        rf: RequestFactory,
     ):
         """Pre-existing flat protection (save_formset): a category
         formset edit marks is_modified + protects 'categories'."""

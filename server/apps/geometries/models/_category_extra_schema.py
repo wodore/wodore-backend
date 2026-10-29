@@ -136,3 +136,33 @@ def resolve_extra_schema(category: Any) -> CategoryExtraSchema | None:
     if parent is not None and parent.pk is not None:
         return getattr(parent, "extra_schema", None)
     return None
+
+
+def validate_place_extra(categories: Any, extra: dict[str, Any]) -> None:
+    """Validate ``GeoPlace.extra`` against the kind-root schema (task 2.6).
+
+    Same resolution and guardrails as association extra: the kind
+    root's own ``CategoryExtraSchema`` (explicit row) with no deeper
+    fallback — no schema → free-form; corrupt → fail open, logged.
+    """
+    from ..kinds import kind_root_category
+
+    root = kind_root_category(categories)
+    if root is None:
+        return
+    schema_row = resolve_extra_schema(root)
+    if schema_row is None:
+        return
+    validator = schema_row.compiled_validator()
+    if validator is None:
+        return
+    error = next(validator.iter_errors(extra), None) if extra else None
+    if error is not None:
+        raise ValidationError(
+            {
+                "extra": _(
+                    "Value does not match the place kind's extra schema: %(error)s"
+                )
+                % {"error": error.message}
+            }
+        )

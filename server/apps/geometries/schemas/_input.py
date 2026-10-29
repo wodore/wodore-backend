@@ -74,16 +74,41 @@ class PartyInput(BaseModel):
 class PlaceTypeInput(BaseModel):
     """Per-category association attributes on the schema path.
 
-    OpenSpec ``geoplace-capacity-and-types-via-categories``: a plain
-    identifier string keeps its old meaning (category only); this
-    richer entry additionally carries the association ``classifier``
-    (a ``season.*`` category identifier) and typed ``extra``
-    attributes (``capacity_open``/``capacity_closed``).
+    OpenSpec ``geoplace-capacity-and-types-via-categories`` (revised):
+    a plain identifier string keeps its old meaning (category only);
+    this richer entry additionally carries the association
+    ``classifier`` (a ``mode.*`` category identifier) and typed
+    ``extra`` attributes (schema-validated overflow — capacity moved
+    to ``GeoPlaceOperation`` via ``OperationInput``).
     """
 
     identifier: str  # Category identifier (e.g., "accommodation.hut")
-    classifier: str | None = None  # season.* category identifier
+    classifier: str | None = None  # mode.* category identifier
     extra: dict[str, Any] = Field(default_factory=dict)
+
+
+class OperationInput(BaseModel):
+    """Typed operating facts of one mode (task 2.1).
+
+    OpenSpec ``geoplace-kinds-operations-graph``: written to a
+    ``GeoPlaceOperation`` row per ``(place, mode)``.
+    """
+
+    mode: str  # mode.* category identifier (mode.standard / mode.reduced)
+    capacity: int | None = None  # non-negative; unknown stays empty
+    opening_hours: dict[str, Any] = Field(default_factory=dict)
+
+
+class SeasonalityInput(BaseModel):
+    """Monthly standard share (task 2.2).
+
+    ``months`` maps 1–12 (or ``Month`` values) to the standard share
+    0–100; absent months are unknown (NULL). The importer applies
+    the fuzzy mapping and the below-100-no-reduced-type →
+    ``accommodation.unknown`` rule before building this.
+    """
+
+    months: dict[int, int | None] = Field(default_factory=dict)
 
 
 class SourceInput(BaseModel):
@@ -138,7 +163,6 @@ class GeoPlaceBaseInput(BaseModel):
     importance: int = 25
     review_status: ReviewStatus = ReviewStatus.NEW
     shape: Any | None = None  # Polygon geometry (GeoJSON or WKT)
-    parent_id: int | None = None
 
     # Data fields
     osm_tags: dict[str, Any] = Field(default_factory=dict)
@@ -158,6 +182,12 @@ class GeoPlaceBaseInput(BaseModel):
     # phones retired (external-link-uris): numbers live as uri.phone
     # external links on the place, not on the detail input
     parties: list[PartyInput] = Field(default_factory=list)
+
+    # Typed operating facts (geoplace-kinds-operations-graph): written
+    # to GeoPlaceOperation rows per (place, mode) + place-level
+    # seasonality. Capacity no longer rides association extra.
+    operations: list[OperationInput] = Field(default_factory=list)
+    seasonality: SeasonalityInput | None = None
 
     # Admin-specific fields (flattened)
     admin_level: int | None = None

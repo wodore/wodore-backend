@@ -1,5 +1,5 @@
 import contextlib
-from typing import ClassVar, override
+from typing import Any, ClassVar, override
 
 from django.conf import settings
 from django.contrib import admin
@@ -132,6 +132,16 @@ class CategoryAdmin(ModelAdmin):
         "created",
         "modified",
     )
+
+    @override
+    def get_readonly_fields(self, request: Any, obj: Any = None) -> Any:
+        """Protected vocabulary: slug and parent are read-only — code
+        couples to the slugs and subtree placement (geoplace-kinds
+        task 1.2). Names, colors, symbols stay freely editable."""
+        readonly = list(self.readonly_fields)
+        if obj is not None and getattr(obj, "is_protected", False):
+            readonly.extend(["slug", "parent"])
+        return readonly
 
     fieldsets = (
         (

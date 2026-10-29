@@ -10,8 +10,20 @@ from ._associations import (
     UpdatePolicy,
 )
 from ._base_detail import GeoPlaceDetailBase
-from ._category_extra_schema import CategoryExtraSchema, resolve_extra_schema
+from ._category_extra_schema import (
+    CategoryExtraSchema,
+    resolve_extra_schema,
+    validate_place_extra,
+)
 from ._geoplace import DetailType, GeoPlace
+from ._operation import GeoPlaceOperation
+from ._relation import GeoPlaceRelation
+from ._seasonality import (
+    FUZZY_MONTH_SHARE,
+    GeoPlaceSeasonality,
+    Month,
+    MonthAccessor,
+)
 
 __all__ = [
     "AdminDetail",
@@ -21,7 +33,14 @@ __all__ = [
     "GeoPlace",
     "GeoPlaceCategory",
     "CategoryExtraSchema",
+    "GeoPlaceOperation",
+    "GeoPlaceRelation",
+    "GeoPlaceSeasonality",
+    "Month",
+    "MonthAccessor",
+    "FUZZY_MONTH_SHARE",
     "resolve_extra_schema",
+    "validate_place_extra",
     "GeoPlaceDetailBase",
     "GeoPlaceExternalLink",
     "GeoPlaceImageAssociation",

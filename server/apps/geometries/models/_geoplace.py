@@ -27,8 +27,11 @@ from server.core.models import TimeStampedModel
 from server.core.utils import UpdateCreateStatus
 
 from ..converters import RESERVED_URL_SEGMENTS, SLUG_GRAMMAR_RE
+from ..kinds import place_detail_type
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
+
     from server.apps.geometries.schemas import (
         DedupOptions,
         GeoPlaceBaseInput,
@@ -37,6 +40,7 @@ if TYPE_CHECKING:
     )
 
     from ._associations import GeoPlaceSourceAssociation
+    from ._relation import GeoPlaceRelation
 
 
 # Substrings of database errors that are worth retrying (locks, deadlocks).
@@ -142,14 +146,6 @@ class GeoPlace(TimeStampedModel):
     )
     elevation = models.IntegerField(null=True, blank=True)
     country_code = CountryField(db_index=True)
-
-    parent = models.ForeignKey(
-        "self",
-        on_delete=models.RESTRICT,
-        null=True,
-        blank=True,
-        related_name="children",
-    )
 
     importance = models.SmallIntegerField(
         default=25,
@@ -512,7 +508,6 @@ class GeoPlace(TimeStampedModel):
             "elevation",
             "country_code",
             "importance",
-            "parent",
             "location",
             "shape",
             "osm_tags",
@@ -1064,6 +1059,58 @@ class GeoPlace(TimeStampedModel):
         return categories
 
     @classmethod
+    def _write_operations(cls, place: GeoPlace, operations: Any) -> bool:
+        """Upsert GeoPlaceOperation rows per (place, mode) (task 2.3).
+
+        The mode identifier must resolve to a ``mode.*`` child;
+        same-mode re-writes refresh capacity/hours (the per-mode
+        capacity invariant holds by construction — one row per mode).
+        """
+        from ._operation import GeoPlaceOperation
+
+        changed_any = False
+        for entry in operations:
+            mode = cls._resolve_category_from_identifier(entry.mode)
+            if mode.parent is None or mode.parent.slug != "mode":
+                msg = f"Invalid operation mode identifier: {entry.mode}"
+                raise ValueError(msg)
+            defaults = {
+                "capacity": entry.capacity,
+                "opening_hours": entry.opening_hours or {},
+            }
+            existing = GeoPlaceOperation.objects.filter(
+                geo_place=place, mode=mode
+            ).first()
+            if existing is None:
+                GeoPlaceOperation.objects.create(geo_place=place, mode=mode, **defaults)
+                changed_any = True
+            elif (
+                existing.capacity != defaults["capacity"]
+                or existing.opening_hours != defaults["opening_hours"]
+            ):
+                GeoPlaceOperation.objects.filter(pk=existing.pk).update(**defaults)
+                changed_any = True
+        return changed_any
+
+    @classmethod
+    def _write_seasonality(cls, place: GeoPlace, seasonality: Any) -> bool:
+        """Upsert the place's GeoPlaceSeasonality row (task 2.3).
+
+        Absent months stay untouched (unknown = NULL preserved);
+        shares are range-checked by the accessor and the DB.
+        """
+        from ._seasonality import GeoPlaceSeasonality, Month
+
+        if seasonality is None:
+            return False
+        row, _created = GeoPlaceSeasonality.objects.get_or_create(geo_place=place)
+        for key, share in dict(seasonality.months).items():
+            month = key if isinstance(key, Month) else Month(int(key))
+            row.months[month] = share
+        row.save()
+        return True
+
+    @classmethod
     def _create_from_schema(
         cls,
         schema: GeoPlaceBaseInput,
@@ -1085,13 +1132,18 @@ class GeoPlace(TimeStampedModel):
         name_dict = schema.get_name_dict()
         description_dict = schema.get_description_dict()
 
+        # detail_type is derived on write from the kind contract
+        # (geoplace-kinds-operations-graph D2) — the input schema no
+        # longer declares it.
+        derived_detail_type = place_detail_type([spec.category for spec in place_types])
+
         # Build place data
         place_data = {
             "name": name_dict.get(settings.LANGUAGE_CODE, ""),
             "main_language": detect_main_language(name_dict) or settings.LANGUAGE_CODE,
             "location": location,
             "country_code": schema.country_code,
-            "detail_type": schema.detail_type,
+            "detail_type": derived_detail_type,
             "elevation": schema.elevation,
             "importance": schema.importance,
             "review_status": schema.review_status.value,
@@ -1105,10 +1157,6 @@ class GeoPlace(TimeStampedModel):
         # Add slug if provided
         if schema.slug:
             place_data["slug"] = schema.slug
-
-        # Add parent if provided
-        if schema.parent_id:
-            place_data["parent_id"] = schema.parent_id
 
         # Add shape if provided
         if schema.shape:
@@ -1152,10 +1200,16 @@ class GeoPlace(TimeStampedModel):
                 ignore_conflicts=True,
             )
 
+        # Typed operating facts + seasonality (task 2.3)
+        if schema.operations:
+            cls._write_operations(place, schema.operations)
+        if schema.seasonality is not None:
+            cls._write_seasonality(place, schema.seasonality)
+
         # Create detail model based on type (flattened structure)
         from ..schemas import DetailType
 
-        if schema.detail_type == DetailType.AMENITY and schema.operating_status:
+        if derived_detail_type == DetailType.AMENITY and schema.operating_status:
             amenity_kwargs = {
                 "geo_place": place,
                 "operating_status": schema.operating_status.value,
@@ -1171,7 +1225,7 @@ class GeoPlace(TimeStampedModel):
 
             AmenityDetail.objects.create(**amenity_kwargs)
 
-        elif schema.detail_type == DetailType.ADMIN and schema.admin_level:
+        elif derived_detail_type == DetailType.ADMIN and schema.admin_level:
             AdminDetail.objects.create(
                 geo_place=place,
                 admin_level=schema.admin_level,
@@ -1334,6 +1388,24 @@ class GeoPlace(TimeStampedModel):
                     assoc.save(update_fields=["extra", "modified"])
                     categories_updated = True
 
+        # detail_type derived on write from the kind contract
+        # (geoplace-kinds-operations-graph D2).
+        derived_detail_type = place_detail_type([spec.category for spec in place_types])
+        if "detail_type" not in protected and place.detail_type != derived_detail_type:
+            place.detail_type = derived_detail_type
+            update_fields.append("detail_type")
+            place_updated = True
+
+        # Typed operating facts + seasonality (task 2.3) — own
+        # protection keys (admin edits mark them like categories).
+        ops_changed = False
+        seasonality_changed = False
+        if "operations" not in protected and schema.operations:
+            ops_changed = cls._write_operations(place, schema.operations)
+        if "seasonality" not in protected and schema.seasonality is not None:
+            seasonality_changed = cls._write_seasonality(place, schema.seasonality)
+        operations_updated = ops_changed or seasonality_changed
+
         # Update name translations
         if "name" not in protected:
             name_dict = schema.get_name_dict()
@@ -1405,8 +1477,12 @@ class GeoPlace(TimeStampedModel):
                 update_fields.append("osm_tags")
                 place_updated = True
 
-        # Update extra data (merge strategy)
+        # Update extra data (merge strategy) — validated against the
+        # kind-root schema first (task 2.6, same fail-open guardrails)
         if "extra" not in protected and schema.extra:
+            from ._category_extra_schema import validate_place_extra
+
+            validate_place_extra([spec.category for spec in place_types], schema.extra)
             if place.extra != schema.extra:
                 place.extra = {**place.extra, **schema.extra}
                 update_fields.append("extra")
@@ -1422,7 +1498,7 @@ class GeoPlace(TimeStampedModel):
         from ..schemas import DetailType
 
         detail_updated = False
-        if schema.detail_type == DetailType.AMENITY and schema.operating_status:
+        if derived_detail_type == DetailType.AMENITY and schema.operating_status:
             # Build amenity detail data from flattened schema
             try:
                 amenity_detail = place.amenity_detail  # type: ignore  # dynamic attr: plugin-less inference gap
@@ -1460,7 +1536,7 @@ class GeoPlace(TimeStampedModel):
             elif update_fields:
                 amenity_detail.save(update_fields=update_fields)
 
-        elif schema.detail_type == DetailType.ADMIN and schema.admin_level:
+        elif derived_detail_type == DetailType.ADMIN and schema.admin_level:
             admin_detail, created = AdminDetail.objects.update_or_create(
                 geo_place=place,
                 defaults={
@@ -1473,9 +1549,60 @@ class GeoPlace(TimeStampedModel):
                 detail_updated = True
 
         # Return appropriate status
-        if place_updated or categories_updated or detail_updated:
+        if place_updated or categories_updated or detail_updated or operations_updated:
             return place, UpdateCreateStatus.updated
         return place, UpdateCreateStatus.no_change
+
+    def add_relation(
+        self,
+        to_place: GeoPlace,
+        relation_slug: str = "part_of",
+        **kwargs: Any,
+    ) -> GeoPlaceRelation:
+        """Idempotently add a semantic edge to another place (task 3.3).
+
+        Curated by default (confidence 1.0); pass ``confidence < 1.0``
+        for generated edges — re-runs replace them, curated edges win
+        (same triple, higher confidence preserved).
+        """
+        from ._relation import GeoPlaceRelation
+
+        relation_category = Category.objects.get(
+            slug=relation_slug, parent__slug="relations"
+        )
+        # Curated edges win: only update confidence if the new value
+        # is HIGHER (generated 0.8 never overwrites curated 1.0).
+        new_confidence = kwargs.pop("confidence", 1.0)
+        edge, created = GeoPlaceRelation.objects.get_or_create(
+            from_place=self,
+            to_place=to_place,
+            relation=relation_category,
+            defaults={"confidence": new_confidence, **(kwargs or {})},
+        )
+        if not created and new_confidence > edge.confidence:
+            edge.confidence = new_confidence
+            edge.save(update_fields=["confidence"])
+        return edge
+
+    def get_related_places(
+        self,
+        relation_slug: str | None = None,
+        direction: str = "outgoing",
+    ) -> QuerySet[GeoPlace]:
+        """Places related by a given edge type (direction-aware)."""
+
+        qs = GeoPlace.objects.all()  # type: ignore[no-any-return]  # QuerySet typing drift
+        if direction == "outgoing":
+            filter_kwargs: dict[str, Any] = {
+                "outgoing_relations__from_place": self,
+            }
+            if relation_slug:
+                filter_kwargs["outgoing_relations__relation__slug"] = relation_slug
+            return qs.filter(**filter_kwargs).distinct()
+        filter_kwargs = {"incoming_relations__to_place": self}
+        if relation_slug:
+            filter_kwargs["incoming_relations__relation__slug"] = relation_slug
+        return qs.filter(**filter_kwargs).distinct()
 
     def add_source(
         self,

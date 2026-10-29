@@ -1042,7 +1042,6 @@ async def fetch_images_for_place(
                     "image_associations__image__license",  # For WodoreProvider
                     "image_associations__image__source_org",  # For WodoreProvider
                 )
-                .select_related("parent")  # Optimize FK access
                 .first()
             )
 

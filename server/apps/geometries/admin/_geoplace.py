@@ -241,13 +241,20 @@ class GeoPlaceCategoryInline(unfold_admin.TabularInline):
         request: HttpRequest,
         **kwargs: Any,
     ):
-        """Scope the classifier autocomplete to the mode.* subtree."""
+        """Scope the classifier autocomplete to the kind registry's
+        allowed subtrees (PLACE_KINDS — today mode.*; registry-driven
+        instead of hardcoded, geoplace-kinds task 1.4)."""
         from server.apps.categories.models import Category
 
+        from ..kinds import PLACE_KINDS
+
         if db_field.name == "classifier":
-            kwargs["queryset"] = Category.objects.filter(parent__slug="mode").order_by(
-                "order"
+            allowed_roots = sorted(
+                {root for kind in PLACE_KINDS.values() for root in kind.classifiers}
             )
+            kwargs["queryset"] = Category.objects.filter(
+                parent__slug__in=allowed_roots
+            ).order_by("order")
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     @override
@@ -299,6 +306,34 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
     """
 
     form = required_i18n_fields_form_factory("name")
+
+    @override
+    def get_form(
+        self,
+        request: HttpRequest,
+        obj: Any = None,
+        change: bool = False,
+        **kwargs: Any,
+    ) -> Any:
+        """Render ``GeoPlace.extra`` through the JSON-Schema widget with
+        the place's kind-root schema (task 2.6) — same editor as the
+        association extra."""
+        form_class = super().get_form(request, obj=obj, change=change, **kwargs)
+        if obj is not None and getattr(obj, "pk", None):
+            from ..kinds import kind_root_category
+            from ..models import resolve_extra_schema
+
+            categories = list(obj.categories.all())
+            root = kind_root_category(categories)
+            schema_row = resolve_extra_schema(root) if root is not None else None
+            if schema_row is not None and schema_row.schema.get("properties"):
+                from unfold.widgets import UnfoldAdminJSONSchemaWidget
+
+                form_class.base_fields["extra"].widget = UnfoldAdminJSONSchemaWidget(
+                    attrs={"schema": schema_row.schema}
+                )
+        return form_class
+
     list_filter_submit = True  # Add submit button for filters
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
 
@@ -357,8 +392,6 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         "categories__name_i18n",
         "categories__slug",
     )
-
-    autocomplete_fields = ("parent",)
 
     readonly_fields = (
         "slug",
