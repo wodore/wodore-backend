@@ -1398,13 +1398,13 @@ class GeoPlace(TimeStampedModel):
 
         # Typed operating facts + seasonality (task 2.3) — own
         # protection keys (admin edits mark them like categories).
-        operations_updated = False
+        ops_changed = False
+        seasonality_changed = False
         if "operations" not in protected and schema.operations:
-            operations_updated = cls._write_operations(place, schema.operations)
+            ops_changed = cls._write_operations(place, schema.operations)
         if "seasonality" not in protected and schema.seasonality is not None:
-            operations_updated = (
-                cls._write_seasonality(place, schema.seasonality) or operations_updated
-            )
+            seasonality_changed = cls._write_seasonality(place, schema.seasonality)
+        operations_updated = ops_changed or seasonality_changed
 
         # Update name translations
         if "name" not in protected:
@@ -1570,12 +1570,18 @@ class GeoPlace(TimeStampedModel):
         relation_category = Category.objects.get(
             slug=relation_slug, parent__slug="relations"
         )
-        edge, _created = GeoPlaceRelation.objects.update_or_create(
+        # Curated edges win: only update confidence if the new value
+        # is HIGHER (generated 0.8 never overwrites curated 1.0).
+        new_confidence = kwargs.pop("confidence", 1.0)
+        edge, created = GeoPlaceRelation.objects.get_or_create(
             from_place=self,
             to_place=to_place,
             relation=relation_category,
-            defaults=kwargs or {},
+            defaults={"confidence": new_confidence, **(kwargs or {})},
         )
+        if not created and new_confidence > edge.confidence:
+            edge.confidence = new_confidence
+            edge.save(update_fields=["confidence"])
         return edge
 
     def get_related_places(
