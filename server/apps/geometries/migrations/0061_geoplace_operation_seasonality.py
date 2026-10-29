@@ -11,7 +11,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('categories', '0022_category_is_protected'),
+        ('categories', '0023_category_is_protected'),
         ('geometries', '0060_mark_protected_vocabulary'),
     ]
 
