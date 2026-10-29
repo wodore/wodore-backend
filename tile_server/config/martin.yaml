@@ -124,6 +124,12 @@ postgres:
       # instead of queueing behind basemap/terrain tiles.
       maxzoom: 9
 
+  # Function sources — SQL functions serving tiles with dynamic
+  # parameters. NOTE: the "functions:" key is LOAD-BEARING structure:
+  # #459's source removal accidentally swallowed it, which folded the
+  # function sources under "tables:" and crashed Martin at startup
+  # ("missing field `table`").
+  functions:
     #   - Cache hits tracked (hits counter)
     #   - First request: ~1.8s (generates tile)
     #   - Subsequent requests: ~10ms (cache hit)
